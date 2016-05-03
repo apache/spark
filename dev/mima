@@ -24,23 +24,19 @@ set -e
 FWDIR="$(cd "`dirname "$0"`"/..; pwd)"
 cd "$FWDIR"
 
-TOOLS_CLASSPATH="$(build/sbt "export tools/fullClasspath" | tail -n1)"
+SPARK_PROFILES="-Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"
+TOOLS_CLASSPATH="$(build/sbt -DcopyDependencies=false "export tools/fullClasspath" | tail -n1)"
+OLD_DEPS_CLASSPATH="$(build/sbt -DcopyDependencies=false $SPARK_PROFILES "export oldDeps/fullClasspath" | tail -n1)"
 
 rm -f .generated-mima*
 
-generate_mima_ignore() {
-    java \
-      -XX:MaxPermSize=1g \
-      -Xmx2g \
-      -cp "$TOOLS_CLASSPATH:$1" \
-      org.apache.spark.tools.GenerateMIMAIgnore
-}
+java \
+  -XX:MaxPermSize=1g \
+  -Xmx2g \
+  -cp "$TOOLS_CLASSPATH:$OLD_DEPS_CLASSPATH" \
+  org.apache.spark.tools.GenerateMIMAIgnore
 
-SPARK_PROFILES="-Pyarn -Pspark-ganglia-lgpl -Pkinesis-asl -Phive-thriftserver -Phive"
-generate_mima_ignore "$(build/sbt $SPARK_PROFILES "export assembly/fullClasspath" | tail -n1)"
-generate_mima_ignore "$(build/sbt $SPARK_PROFILES "export oldDeps/fullClasspath" | tail -n1)"
-
-echo -e "q\n" | build/sbt mima-report-binary-issues | grep -v -e "info.*Resolving"
+echo -e "q\n" | build/sbt -DcopyDependencies=false "$@" mimaReportBinaryIssues | grep -v -e "info.*Resolving"
 ret_val=$?
 
 if [ $ret_val != 0 ]; then

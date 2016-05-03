@@ -28,6 +28,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     sql("DROP TABLE IF EXISTS part")
     sql(
       """
@@ -50,7 +51,11 @@ class WindowQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   override def afterAll(): Unit = {
-    sql("DROP TABLE IF EXISTS part")
+    try {
+      sql("DROP TABLE IF EXISTS part")
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("windowing.q -- 15. testExpressions") {

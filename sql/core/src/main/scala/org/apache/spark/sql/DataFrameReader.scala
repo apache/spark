@@ -21,9 +21,10 @@ import java.util.Properties
 
 import scala.collection.JavaConverters._
 
-import org.apache.spark.{Logging, Partition}
+import org.apache.spark.Partition
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
@@ -35,12 +36,12 @@ import org.apache.spark.sql.types.StructType
 /**
  * :: Experimental ::
  * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[SQLContext.read]] to access this.
+ * key-value stores, etc) or data streams. Use [[SparkSession.read]] to access this.
  *
  * @since 1.4.0
  */
 @Experimental
-class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
+class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
    * Specifies the input data source format.
@@ -124,11 +125,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def load(): DataFrame = {
     val dataSource =
       DataSource(
-        sqlContext,
+        sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.newDataFrame(sqlContext, LogicalRelation(dataSource.resolveRelation()))
+    Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation()))
   }
 
   /**
@@ -150,11 +151,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   @scala.annotation.varargs
   def load(paths: String*): DataFrame = {
     if (paths.isEmpty) {
-      sqlContext.emptyDataFrame
+      sparkSession.emptyDataFrame
     } else {
-      sqlContext.baseRelationToDataFrame(
+      sparkSession.baseRelationToDataFrame(
         DataSource.apply(
-          sqlContext,
+          sparkSession,
           paths = paths,
           userSpecifiedSchema = userSpecifiedSchema,
           className = source,
@@ -171,11 +172,11 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
   def stream(): DataFrame = {
     val dataSource =
       DataSource(
-        sqlContext,
+        sparkSession,
         userSpecifiedSchema = userSpecifiedSchema,
         className = source,
         options = extraOptions.toMap)
-    Dataset.newDataFrame(sqlContext, StreamingRelation(dataSource.createSource()))
+    Dataset.ofRows(sparkSession, StreamingRelation(dataSource))
   }
 
   /**
@@ -270,8 +271,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
     }
     // connectionProperties should override settings in extraOptions
     props.putAll(connectionProperties)
-    val relation = JDBCRelation(url, table, parts, props)(sqlContext)
-    sqlContext.baseRelationToDataFrame(relation)
+    val relation = JDBCRelation(url, table, parts, props)(sparkSession)
+    sparkSession.baseRelationToDataFrame(relation)
   }
 
   /**
@@ -288,6 +289,18 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   * during parsing.</li>
+   * <ul>
+   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
+   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *  a schema is set by user, it sets `null` for extra fields.</li>
+   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   * </ul>
+   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
+   * having malformed string created by `PERMISSIVE` mode. This overrides
+   * `spark.sql.columnNameOfCorruptRecord`.</li>
    *
    * @since 1.4.0
    */
@@ -302,8 +315,8 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
-   * <li>`floatAsBigDecimal` (default `false`): infers all floating-point values as a decimal
-   * type</li>
+   * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
+   * type. If the values do not fit in decimal, then it infers them as doubles.</li>
    * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
    * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
    * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
@@ -312,6 +325,18 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * (e.g. 00012)</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   * during parsing.</li>
+   * <ul>
+   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
+   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
+   *  a schema is set by user, it sets `null` for extra fields.</li>
+   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   * </ul>
+   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
+   * having malformed string created by `PERMISSIVE` mode. This overrides
+   * `spark.sql.columnNameOfCorruptRecord`.</li>
    *
    * @since 1.6.0
    */
@@ -341,19 +366,25 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    */
   def json(jsonRDD: RDD[String]): DataFrame = {
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
+    val columnNameOfCorruptRecord =
+      parsedOptions.columnNameOfCorruptRecord
+        .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
-      InferSchema.infer(jsonRDD, sqlContext.conf.columnNameOfCorruptRecord, parsedOptions)
+      InferSchema.infer(
+        jsonRDD,
+        columnNameOfCorruptRecord,
+        parsedOptions)
     }
 
-    Dataset.newDataFrame(
-      sqlContext,
+    Dataset.ofRows(
+      sparkSession,
       LogicalRDD(
         schema.toAttributes,
         JacksonParser.parse(
           jsonRDD,
           schema,
-          sqlContext.conf.columnNameOfCorruptRecord,
-          parsedOptions))(sqlContext))
+          columnNameOfCorruptRecord,
+          parsedOptions))(sparkSession))
   }
 
   /**
@@ -361,6 +392,45 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    *
    * This function goes through the input once to determine the input schema. To avoid going
    * through the entire data once, specify the schema explicitly using [[schema]].
+   *
+   * You can set the following CSV-specific options to deal with CSV files:
+   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * field and value.</li>
+   * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
+   * type.</li>
+   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * the separator can be part of the value.</li>
+   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * an already quoted value.</li>
+   * <li>`comment` (default empty string): sets the single character used for skipping lines
+   * beginning with this character. By default, it is disabled.</li>
+   * <li>`header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
+   * from values being read should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `fDataFraalse`): defines whether or not trailing
+   * whitespaces from values being read should be skipped.</li>
+   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
+   * <li>`nanValue` (default `NaN`): sets the string representation of a non-number" value.</li>
+   * <li>`positiveInf` (default `Inf`): sets the string representation of a positive infinity
+   * value.</li>
+   * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
+   * value.</li>
+   * <li>`dateFormat` (default `null`): sets the string that indicates a date format. Custom date
+   * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
+   * and timestamp type. By default, it is `null` which means trying to parse times and date by
+   * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()`.</li>
+   * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
+   * a record can have.</li>
+   * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
+   * for any given value being read.</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   *    during parsing.</li>
+   * <ul>
+   *   <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *   <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *   <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -393,13 +463,16 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * @since 1.4.0
    */
   def table(tableName: String): DataFrame = {
-    Dataset.newDataFrame(sqlContext,
-      sqlContext.catalog.lookupRelation(sqlContext.sqlParser.parseTableIdentifier(tableName)))
+    Dataset.ofRows(sparkSession,
+      sparkSession.sessionState.catalog.lookupRelation(
+        sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)))
   }
 
   /**
-   * Loads a text file and returns a [[DataFrame]] with a single string column named "value".
-   * Each line in the text file is a new row in the resulting DataFrame. For example:
+   * Loads a text file and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * Each line in the text file is a new row in the resulting Dataset. For example:
    * {{{
    *   // Scala:
    *   sqlContext.read.text("/path/to/spark/README.md")
@@ -409,16 +482,18 @@ class DataFrameReader private[sql](sqlContext: SQLContext) extends Logging {
    * }}}
    *
    * @param paths input path
-   * @since 1.6.0
+   * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+  def text(paths: String*): Dataset[String] = {
+    format("text").load(paths : _*).as[String](sparkSession.implicits.newStringEncoder)
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Builder pattern config options
   ///////////////////////////////////////////////////////////////////////////////////////
 
-  private var source: String = sqlContext.conf.defaultDataSourceName
+  private var source: String = sparkSession.sessionState.conf.defaultDataSourceName
 
   private var userSpecifiedSchema: Option[StructType] = None
 

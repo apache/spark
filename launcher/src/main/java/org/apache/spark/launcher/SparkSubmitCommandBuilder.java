@@ -30,7 +30,8 @@ import static org.apache.spark.launcher.CommandBuilderUtils.*;
  * driver-side options and special parsing behavior needed for the special-casing certain internal
  * Spark applications.
  * <p>
- * This class has also some special features to aid launching pyspark.
+ * This class has also some special features to aid launching shells (pyspark and sparkR) and also
+ * examples.
  */
 class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
@@ -63,6 +64,17 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   static final String SPARKR_SHELL_RESOURCE = "sparkr-shell";
 
   /**
+   * Name of app resource used to identify examples. When running examples, args[0] should be
+   * this name. The app resource will identify the example class to run.
+   */
+  static final String RUN_EXAMPLE = "run-example";
+
+  /**
+   * Prefix for example class names.
+   */
+  static final String EXAMPLE_CLASS_PREFIX = "org.apache.spark.examples.";
+
+  /**
    * This map must match the class names for available special classes, since this modifies the way
    * command line parsing works. This maps the class name to the resource to use when calling
    * spark-submit.
@@ -78,6 +90,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   final List<String> sparkArgs;
   private final boolean printInfo;
+  private final boolean isExample;
 
   /**
    * Controls whether mixing spark-submit arguments with app arguments is allowed. This is needed
@@ -89,10 +102,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<>();
     this.printInfo = false;
+    this.isExample = false;
   }
 
   SparkSubmitCommandBuilder(List<String> args) {
-    this.sparkArgs = new ArrayList<>();
+    this.allowsMixedArguments = false;
+
+    boolean isExample = false;
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
       this.allowsMixedArguments = true;
@@ -102,9 +118,13 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       this.allowsMixedArguments = true;
       appResource = SPARKR_SHELL_RESOURCE;
       submitArgs = args.subList(1, args.size());
-    } else {
-      this.allowsMixedArguments = false;
+    } else if (args.size() > 0 && args.get(0).equals(RUN_EXAMPLE)) {
+      isExample = true;
+      submitArgs = args.subList(1, args.size());
     }
+
+    this.sparkArgs = new ArrayList<>();
+    this.isExample = isExample;
 
     OptionParser parser = new OptionParser();
     parser.parse(submitArgs);
@@ -112,7 +132,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   @Override
-  public List<String> buildCommand(Map<String, String> env) throws IOException {
+  public List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException {
     if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printInfo) {
       return buildPySparkShellCommand(env);
     } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printInfo) {
@@ -155,6 +176,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(propertiesFile);
     }
 
+    if (isExample) {
+      jars.addAll(findExamplesJars());
+    }
+
     if (!jars.isEmpty()) {
       args.add(parser.JARS);
       args.add(join(",", jars));
@@ -170,6 +195,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(join(",", pyFiles));
     }
 
+    if (!printInfo) {
+      checkArgument(!isExample || mainClass != null, "Missing example class name.");
+    }
     if (mainClass != null) {
       args.add(parser.CLASS);
       args.add(mainClass);
@@ -184,7 +212,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     return args;
   }
 
-  private List<String> buildSparkSubmitCommand(Map<String, String> env) throws IOException {
+  private List<String> buildSparkSubmitCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException {
     // Load the properties file and check whether spark-submit will be running the app's driver
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
@@ -200,6 +229,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
     addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
 
+    // We don't want the client to specify Xmx. These have to be set by their corresponding
+    // memory flag --driver-memory or configuration entry spark.driver.memory
+    String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
+    if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
+      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
+                   "java options (was %s). Use the corresponding --driver-memory or " +
+                   "spark.driver.memory configuration instead.", driverExtraJavaOptions);
+      throw new IllegalArgumentException(msg);
+    }
+
     if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.
       // Precedence is observed in the following order:
@@ -213,9 +252,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
-      cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
-      addOptionString(cmd, config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS));
+      addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
@@ -308,6 +346,30 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       mainClass.equals("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2"));
   }
 
+  private List<String> findExamplesJars() {
+    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
+    List<String> examplesJars = new ArrayList<>();
+    String sparkHome = getSparkHome();
+
+    File jarsDir;
+    if (new File(sparkHome, "RELEASE").isFile()) {
+      jarsDir = new File(sparkHome, "examples/jars");
+    } else {
+      jarsDir = new File(sparkHome,
+        String.format("examples/target/scala-%s/jars", getScalaVersion()));
+    }
+
+    boolean foundDir = jarsDir.isDirectory();
+    checkState(isTesting || foundDir, "Examples jars directory '%s' does not exist.",
+        jarsDir.getAbsolutePath());
+
+    if (foundDir) {
+      for (File f: jarsDir.listFiles()) {
+        examplesJars.add(f.getAbsolutePath());
+      }
+    }
+    return examplesJars;
+  }
 
   private class OptionParser extends SparkSubmitOptionParser {
 
@@ -367,6 +429,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       if (allowsMixedArguments) {
         appArgs.add(opt);
         return true;
+      } else if (isExample) {
+        String className = opt;
+        if (!className.startsWith(EXAMPLE_CLASS_PREFIX)) {
+          className = EXAMPLE_CLASS_PREFIX + className;
+        }
+        mainClass = className;
+        appResource = "spark-internal";
+        return false;
       } else {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);
         sparkArgs.add(opt);
@@ -376,8 +446,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     @Override
     protected void handleExtraArgs(List<String> extra) {
-      for (String arg : extra) {
-        sparkArgs.add(arg);
+      if (isExample) {
+        appArgs.addAll(extra);
+      } else {
+        sparkArgs.addAll(extra);
       }
     }
 

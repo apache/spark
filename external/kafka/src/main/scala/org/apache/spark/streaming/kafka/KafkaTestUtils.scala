@@ -37,7 +37,8 @@ import kafka.utils.{ZKStringSerializer, ZkUtils}
 import org.I0Itec.zkclient.ZkClient
 import org.apache.zookeeper.server.{NIOServerCnxnFactory, ZooKeeperServer}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.Time
 import org.apache.spark.util.Utils
 

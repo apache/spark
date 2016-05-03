@@ -19,7 +19,7 @@ package org.apache.spark.ml.evaluation
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
@@ -67,5 +67,10 @@ class BinaryClassificationEvaluatorSuite
     assert(thrown.getMessage.replace("\n", "") contains "Column rawPrediction must be of type " +
       "equal to one of the following types: [DoubleType, ")
     assert(thrown.getMessage.replace("\n", "") contains "but was actually of type StringType.")
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val evaluator = new BinaryClassificationEvaluator().setRawPredictionCol("prediction")
+    MLTestingUtils.checkNumericTypes(evaluator, sqlContext)
   }
 }

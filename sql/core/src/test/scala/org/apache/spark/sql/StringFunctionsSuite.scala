@@ -272,12 +272,12 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("initcap function") {
-    val df = Seq(("ab", "a B")).toDF("l", "r")
+    val df = Seq(("ab", "a B", "sParK")).toDF("x", "y", "z")
     checkAnswer(
-      df.select(initcap($"l"), initcap($"r")), Row("Ab", "A B"))
+      df.select(initcap($"x"), initcap($"y"), initcap($"z")), Row("Ab", "A B", "Spark"))
 
     checkAnswer(
-      df.selectExpr("InitCap(l)", "InitCap(r)"), Row("Ab", "A B"))
+      df.selectExpr("InitCap(x)", "InitCap(y)", "InitCap(z)"), Row("Ab", "A B", "Spark"))
   }
 
   test("number format function") {

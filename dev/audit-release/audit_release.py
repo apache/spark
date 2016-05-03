@@ -117,7 +117,6 @@ original_dir = os.getcwd()
 modules = [
     "spark-core", "spark-mllib", "spark-streaming", "spark-repl",
     "spark-graphx", "spark-streaming-flume", "spark-streaming-kafka",
-    "spark-streaming-mqtt", "spark-streaming-twitter", "spark-streaming-zeromq",
     "spark-catalyst", "spark-sql", "spark-hive", "spark-streaming-kinesis-asl"
 ]
 modules = map(lambda m: "%s_%s" % (m, SCALA_BINARY_VERSION), modules)

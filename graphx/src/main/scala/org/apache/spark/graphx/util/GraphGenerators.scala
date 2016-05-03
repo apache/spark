@@ -23,6 +23,7 @@ import scala.util._
 
 import org.apache.spark._
 import org.apache.spark.graphx._
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /** A collection of graph generating functions. */
@@ -208,7 +209,6 @@ object GraphGenerators extends Logging {
     }
   }
 
-  // TODO(crankshaw) turn result into an enum (or case class for pattern matching}
   private def pickQuadrant(a: Double, b: Double, c: Double, d: Double): Int = {
     if (a + b + c + d != 1.0) {
       throw new IllegalArgumentException("R-MAT probability parameters sum to " + (a + b + c + d)

@@ -20,6 +20,7 @@ package org.apache.spark.graphx
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStreamWriter
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils
@@ -30,7 +31,7 @@ class GraphLoaderSuite extends SparkFunSuite with LocalSparkContext {
     withSpark { sc =>
       val tmpDir = Utils.createTempDir()
       val graphFile = new File(tmpDir.getAbsolutePath, "graph.txt")
-      val writer = new OutputStreamWriter(new FileOutputStream(graphFile))
+      val writer = new OutputStreamWriter(new FileOutputStream(graphFile), StandardCharsets.UTF_8)
       for (i <- (1 until 101)) writer.write(s"$i 0\n")
       writer.close()
       try {

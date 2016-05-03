@@ -18,13 +18,20 @@
 package org.apache.spark.sql.catalyst.expressions.codegen
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.util._
 
 
 class CodeFormatterSuite extends SparkFunSuite {
 
   def testCase(name: String)(input: String)(expected: String): Unit = {
     test(name) {
-      assert(CodeFormatter.format(input).trim === expected.trim)
+      if (CodeFormatter.format(input).trim !== expected.trim) {
+        fail(
+          s"""
+             |== FAIL: Formatted code doesn't match ===
+             |${sideBySide(CodeFormatter.format(input).trim, expected.trim).mkString("\n")}
+           """.stripMargin)
+      }
     }
   }
 
@@ -91,6 +98,52 @@ class CodeFormatterSuite extends SparkFunSuite {
       |/* 002 */   a,
       |/* 003 */   b,
       |/* 004 */   c)
+    """.stripMargin
+  }
+
+  testCase("single line comments") {
+    """// This is a comment about class A { { { ( (
+      |class A {
+      |class body;
+      |}""".stripMargin
+  }{
+    """
+      |/* 001 */ // This is a comment about class A { { { ( (
+      |/* 002 */ class A {
+      |/* 003 */   class body;
+      |/* 004 */ }
+    """.stripMargin
+  }
+
+  testCase("single line comments /* */ ") {
+    """/** This is a comment about class A { { { ( ( */
+      |class A {
+      |class body;
+      |}""".stripMargin
+  }{
+    """
+      |/* 001 */ /** This is a comment about class A { { { ( ( */
+      |/* 002 */ class A {
+      |/* 003 */   class body;
+      |/* 004 */ }
+    """.stripMargin
+  }
+
+  testCase("multi-line comments") {
+    """  /* This is a comment about
+      |class A {
+      |class body; ...*/
+      |class A {
+      |class body;
+      |}""".stripMargin
+  }{
+    """
+      |/* 001 */ /* This is a comment about
+      |/* 002 */ class A {
+      |/* 003 */   class body; ...*/
+      |/* 004 */ class A {
+      |/* 005 */   class body;
+      |/* 006 */ }
     """.stripMargin
   }
 }

@@ -382,6 +382,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(InitCap(Literal("a b")), "A B")
     checkEvaluation(InitCap(Literal(" a")), " A")
     checkEvaluation(InitCap(Literal("the test")), "The Test")
+    checkEvaluation(InitCap(Literal("sParK")), "Spark")
     // scalastyle:off
     // non ascii characters are not allowed in the code, so we disable the scalastyle here.
     checkEvaluation(InitCap(Literal("世界")), "世界")

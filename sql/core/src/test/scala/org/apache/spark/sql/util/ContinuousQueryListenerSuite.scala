@@ -19,8 +19,6 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.util.control.NonFatal
-
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
 import org.scalatest.concurrent.AsyncAssertions.Waiter
@@ -61,7 +59,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
           // The source and sink offsets must be None as this must be called before the
           // batches have started
           assert(status.sourceStatuses(0).offset === None)
-          assert(status.sinkStatus.offset === None)
+          assert(status.sinkStatus.offset === CompositeOffset(None :: Nil))
 
           // No progress events or termination events
           assert(listener.progressStatuses.isEmpty)
@@ -78,7 +76,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
             assert(status != null)
             assert(status.active == true)
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(0))))
+            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
 
             // No termination events
             assert(listener.terminationStatus === null)
@@ -92,7 +90,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
             assert(status.active === false) // must be inactive by the time onQueryTerm is called
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === Some(CompositeOffset.fill(LongOffset(0))))
+            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
           }
           listener.checkAsyncErrors()
         }
@@ -146,7 +144,6 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
 
   private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
-    @volatile var query: StreamExecution = null
     try {
       failAfter(1 minute) {
         sqlContext.streams.addListener(listener)
@@ -165,8 +162,8 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
   }
 
   class QueryStatusCollector extends ContinuousQueryListener {
-
-    private val asyncTestWaiter = new Waiter  // to catch errors in the async listener events
+    // to catch errors in the async listener events
+    @volatile private var asyncTestWaiter = new Waiter
 
     @volatile var startStatus: QueryStatus = null
     @volatile var terminationStatus: QueryStatus = null
@@ -176,11 +173,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
       startStatus = null
       terminationStatus = null
       progressStatuses.clear()
-
-      // To reset the waiter
-      try asyncTestWaiter.await(timeout(1 milliseconds)) catch {
-        case NonFatal(e) =>
-      }
+      asyncTestWaiter = new Waiter
     }
 
     def checkAsyncErrors(): Unit = {
@@ -212,7 +205,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
   case class QueryStatus(
     active: Boolean,
-    expection: Option[Exception],
+    exception: Option[Exception],
     sourceStatuses: Array[SourceStatus],
     sinkStatus: SinkStatus)
 

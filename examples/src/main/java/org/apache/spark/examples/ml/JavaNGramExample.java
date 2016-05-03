@@ -60,7 +60,7 @@ public class JavaNGramExample {
 
     Dataset<Row> ngramDataFrame = ngramTransformer.transform(wordDataFrame);
 
-    for (Row r : ngramDataFrame.select("ngrams", "label").takeRows(3)) {
+    for (Row r : ngramDataFrame.select("ngrams", "label").takeAsList(3)) {
       java.util.List<String> ngrams = r.getList(0);
       for (String ngram : ngrams) System.out.print(ngram + " --- ");
       System.out.println();

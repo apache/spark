@@ -19,8 +19,8 @@ package org.apache.spark.mllib.stat.test
 
 import scala.beans.BeanInfo
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.streaming.api.java.JavaDStream
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.util.StatCounter

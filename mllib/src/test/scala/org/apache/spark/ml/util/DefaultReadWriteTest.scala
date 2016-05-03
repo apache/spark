@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dataset
 
 trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
@@ -33,6 +33,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    * Checks "overwrite" option and params.
    * This saves to and loads from [[tempDir]], but creates a subdirectory with a random name
    * in order to avoid conflicts from multiple calls to this method.
+   *
    * @param instance ML instance to test saving/loading
    * @param testParams  If true, then test values of Params.  Otherwise, just test overwrite option.
    * @tparam T ML instance type
@@ -85,6 +86,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
    *  - Compare model data
    *
    * This requires that the [[Estimator]] and [[Model]] share the same set of [[Param]]s.
+   *
    * @param estimator  Estimator to test
    * @param dataset  Dataset to pass to [[Estimator.fit()]]
    * @param testParams  Set of [[Param]] values to set in estimator
@@ -96,7 +98,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
   def testEstimatorAndModelReadWrite[
     E <: Estimator[M] with MLWritable, M <: Model[M] with MLWritable](
       estimator: E,
-      dataset: DataFrame,
+      dataset: Dataset[_],
       testParams: Map[String, Any],
       checkModelData: (M, M) => Unit): Unit = {
     // Set some Params to make sure set Params are serialized.

@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.sasl;
 
-import java.lang.Override;
 import java.nio.ByteBuffer;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -38,7 +37,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   private static final String SPARK_SASL_USER = "sparkSaslUser";
 
   public ShuffleSecretManager() {
-    shuffleSecretMap = new ConcurrentHashMap<String, String>();
+    shuffleSecretMap = new ConcurrentHashMap<>();
   }
 
   /**

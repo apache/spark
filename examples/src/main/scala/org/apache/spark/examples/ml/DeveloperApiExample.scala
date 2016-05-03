@@ -24,7 +24,7 @@ import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 
 /**
  * A simple example demonstrating how to write your own learning algorithm using Estimator,
@@ -120,7 +120,7 @@ private class MyLogisticRegression(override val uid: String)
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   // This method is used by fit()
-  override protected def train(dataset: DataFrame): MyLogisticRegressionModel = {
+  override protected def train(dataset: Dataset[_]): MyLogisticRegressionModel = {
     // Extract columns from data using helper method.
     val oldDataset = extractLabeledPoints(dataset)
 

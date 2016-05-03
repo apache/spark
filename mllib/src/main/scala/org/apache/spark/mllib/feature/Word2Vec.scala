@@ -21,17 +21,16 @@ import java.lang.{Iterable => JavaIterable}
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuilder
 
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.Logging
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd._
@@ -85,6 +84,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("2.0.0")
   def setMaxSentenceLength(maxSentenceLength: Int): this.type = {
+    require(maxSentenceLength > 0,
+      s"Maximum length of sentences must be positive but got ${maxSentenceLength}")
     this.maxSentenceLength = maxSentenceLength
     this
   }
@@ -94,6 +95,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setVectorSize(vectorSize: Int): this.type = {
+    require(vectorSize > 0,
+      s"vector size must be positive but got ${vectorSize}")
     this.vectorSize = vectorSize
     this
   }
@@ -103,6 +106,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setLearningRate(learningRate: Double): this.type = {
+    require(learningRate > 0,
+      s"Initial learning rate must be positive but got ${learningRate}")
     this.learningRate = learningRate
     this
   }
@@ -112,7 +117,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setNumPartitions(numPartitions: Int): this.type = {
-    require(numPartitions > 0, s"numPartitions must be greater than 0 but got $numPartitions")
+    require(numPartitions > 0,
+      s"Number of partitions must be positive but got ${numPartitions}")
     this.numPartitions = numPartitions
     this
   }
@@ -123,6 +129,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.1.0")
   def setNumIterations(numIterations: Int): this.type = {
+    require(numIterations >= 0,
+      s"Number of iterations must be nonnegative but got ${numIterations}")
     this.numIterations = numIterations
     this
   }
@@ -141,6 +149,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.6.0")
   def setWindowSize(window: Int): this.type = {
+    require(window > 0,
+      s"Window of words must be positive but got ${window}")
     this.window = window
     this
   }
@@ -151,6 +161,8 @@ class Word2Vec extends Serializable with Logging {
    */
   @Since("1.3.0")
   def setMinCount(minCount: Int): this.type = {
+    require(minCount >= 0,
+      s"Minimum number of times must be nonnegative but got ${minCount}")
     this.minCount = minCount
     this
   }
@@ -528,14 +540,16 @@ class Word2VecModel private[spark] (
     val cosineVec = Array.fill[Float](numWords)(0)
     val alpha: Float = 1
     val beta: Float = 0
-
+    // Normalize input vector before blas.sgemv to avoid Inf value
+    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
+    if (vecNorm != 0.0f) {
+      blas.sscal(vectorSize, 1 / vecNorm, fVector, 0, 1)
+    }
     blas.sgemv(
       "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
 
-    // Need not divide with the norm of the given vector since it is constant.
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
-    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
     while (ind < numWords) {
       val norm = wordVecNorms(ind)
       if (norm == 0.0) {
@@ -545,17 +559,13 @@ class Word2VecModel private[spark] (
       }
       ind += 1
     }
-    var topResults = wordList.zip(cosVec)
+
+    wordList.zip(cosVec)
       .toSeq
       .sortBy(-_._2)
       .take(num + 1)
       .tail
-    if (vecNorm != 0.0f) {
-      topResults = topResults.map { case (word, cosVal) =>
-        (word, cosVal / vecNorm)
-      }
-    }
-    topResults.toArray
+      .toArray
   }
 
   /**

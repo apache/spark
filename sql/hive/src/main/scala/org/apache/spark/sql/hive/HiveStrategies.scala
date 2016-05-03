@@ -23,21 +23,19 @@ import org.apache.spark.sql.catalyst.planning._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.{DescribeCommand => RunnableDescribeCommand, _}
-import org.apache.spark.sql.execution.datasources.{CreateTableUsing, CreateTableUsingAsSelect,
-  DescribeCommand}
 import org.apache.spark.sql.hive.execution._
 
 private[hive] trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
   self: SparkPlanner =>
 
-  val hiveContext: HiveContext
+  val sparkSession: SparkSession
 
   object Scripts extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.ScriptTransformation(input, script, output, child, schema: HiveScriptIOSchema) =>
-        ScriptTransformation(input, script, output, planLater(child), schema)(hiveContext) :: Nil
+      case logical.ScriptTransformation(input, script, output, child, ioschema) =>
+        val hiveIoSchema = HiveScriptIOSchema(ioschema)
+        ScriptTransformation(input, script, output, planLater(child), hiveIoSchema) :: Nil
       case _ => Nil
     }
   }
@@ -75,46 +73,9 @@ private[hive] trait HiveStrategies {
           projectList,
           otherPredicates,
           identity[Seq[Expression]],
-          HiveTableScan(_, relation, pruningPredicates)(hiveContext)) :: Nil
+          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
       case _ =>
         Nil
-    }
-  }
-
-  object HiveDDLStrategy extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(
-        tableIdent, userSpecifiedSchema, provider, false, opts, allowExisting, managedIfNoPath) =>
-        val cmd =
-          CreateMetastoreDataSource(
-            tableIdent, userSpecifiedSchema, provider, opts, allowExisting, managedIfNoPath)
-        ExecutedCommand(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect =>
-        val cmd = CreateMetastoreDataSourceAsSelect(c.tableIdent, c.provider, c.partitionColumns,
-          c.bucketSpec, c.mode, c.options, c.child)
-        ExecutedCommand(cmd) :: Nil
-
-      case _ => Nil
-    }
-  }
-
-  case class HiveCommandStrategy(context: HiveContext) extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case describe: DescribeCommand =>
-        val resolvedTable = context.executePlan(describe.table).analyzed
-        resolvedTable match {
-          case t: MetastoreRelation =>
-            ExecutedCommand(
-              DescribeHiveTableCommand(t, describe.output, describe.isExtended)) :: Nil
-
-          case o: LogicalPlan =>
-            val resultPlan = context.executePlan(o).executedPlan
-            ExecutedCommand(RunnableDescribeCommand(
-              resultPlan, describe.output, describe.isExtended)) :: Nil
-        }
-
-      case _ => Nil
     }
   }
 }

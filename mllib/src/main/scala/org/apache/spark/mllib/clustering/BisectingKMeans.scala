@@ -22,9 +22,9 @@ import java.util.Random
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -411,7 +411,7 @@ private object BisectingKMeans extends Serializable {
 private[clustering] class ClusteringTreeNode private[clustering] (
     val index: Int,
     val size: Long,
-    private val centerWithNorm: VectorWithNorm,
+    private[clustering] val centerWithNorm: VectorWithNorm,
     val cost: Double,
     val height: Double,
     val children: Array[ClusteringTreeNode]) extends Serializable {

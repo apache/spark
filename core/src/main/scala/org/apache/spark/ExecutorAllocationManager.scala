@@ -24,6 +24,7 @@ import scala.util.control.ControlThrowable
 
 import com.codahale.metrics.{Gauge, MetricRegistry}
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.source.Source
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{Clock, SystemClock, ThreadUtils}

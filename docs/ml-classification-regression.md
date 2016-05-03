@@ -302,6 +302,40 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 </div>
 </div>
 
+## Naive Bayes
+
+[Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
+probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence 
+assumptions between the features. The spark.ml implementation currently supports both [multinomial
+naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
+and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
+More information can be found in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
+
+**Example**
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.classification.NaiveBayes) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/NaiveBayesExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+
+Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/NaiveBayes.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaNaiveBayesExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.NaiveBayes) for more details.
+
+{% include_example python/ml/naive_bayes_example.py %}
+</div>
+</div>
+
 
 # Regression
 

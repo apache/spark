@@ -23,8 +23,10 @@ import java.nio.channels.FileChannel.MapMode
 
 import com.google.common.io.Closeables
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 /**
  * Stores BlockManager blocks on disk.
@@ -70,23 +72,18 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
       finishTime - startTime))
   }
 
-  def putBytes(blockId: BlockId, _bytes: ByteBuffer): Unit = {
-    // So that we do not modify the input offsets !
-    // duplicate does not copy buffer, so inexpensive
-    val bytes = _bytes.duplicate()
+  def putBytes(blockId: BlockId, bytes: ChunkedByteBuffer): Unit = {
     put(blockId) { fileOutputStream =>
       val channel = fileOutputStream.getChannel
       Utils.tryWithSafeFinally {
-        while (bytes.remaining > 0) {
-          channel.write(bytes)
-        }
+        bytes.writeFully(channel)
       } {
         channel.close()
       }
     }
   }
 
-  def getBytes(blockId: BlockId): ByteBuffer = {
+  def getBytes(blockId: BlockId): ChunkedByteBuffer = {
     val file = diskManager.getFile(blockId.name)
     val channel = new RandomAccessFile(file, "r").getChannel
     Utils.tryWithSafeFinally {
@@ -101,9 +98,9 @@ private[spark] class DiskStore(conf: SparkConf, diskManager: DiskBlockManager) e
           }
         }
         buf.flip()
-        buf
+        new ChunkedByteBuffer(buf)
       } else {
-        channel.map(MapMode.READ_ONLY, 0, file.length)
+        new ChunkedByteBuffer(channel.map(MapMode.READ_ONLY, 0, file.length))
       }
     } {
       channel.close()

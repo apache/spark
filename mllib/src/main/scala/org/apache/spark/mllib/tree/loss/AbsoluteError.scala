@@ -45,7 +45,7 @@ object AbsoluteError extends Loss {
     if (label - prediction < 0) 1.0 else -1.0
   }
 
-  override private[mllib] def computeError(prediction: Double, label: Double): Double = {
+  override private[spark] def computeError(prediction: Double, label: Double): Double = {
     val err = label - prediction
     math.abs(err)
   }

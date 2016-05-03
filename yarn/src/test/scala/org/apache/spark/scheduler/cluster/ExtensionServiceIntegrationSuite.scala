@@ -19,8 +19,9 @@ package org.apache.spark.scheduler.cluster
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{LocalSparkContext, Logging, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
 
 /**
  * Test the integration with [[SchedulerExtensionServices]]
