@@ -32,9 +32,9 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import since
 from pyspark.rdd import RDD, ignore_unicode_prefix
-from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import (
+from pyspark.ml.linalg import (
     Vector, Vectors, DenseVector, SparseVector, _convert_to_vector)
+from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
