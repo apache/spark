@@ -287,36 +287,24 @@ trait FileCatalog {
 }
 
 /**
- * A file catalog that caches metadata gathered by scanning all the files present in `paths`
- * recursively.
+ * An abstract class that represents [[FileCatalog]]s that are aware of partitioned tables.
+ * It provides the necessary methods to parse partition data based on a set of files.
  *
- * @param parameters as set of options to control discovery
- * @param paths a list of paths to scan
+ * @param parameters as set of options to control partition discovery
  * @param partitionSchema an optional partition schema that will be use to provide types for the
  *                        discovered partitions
- */
-class HDFSFileCatalog(
+*/
+abstract class PartitioningAwareFileCatalog(
     sparkSession: SparkSession,
     parameters: Map[String, String],
-    override val paths: Seq[Path],
     partitionSchema: Option[StructType])
   extends FileCatalog with Logging {
 
   private val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
 
-  var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
-  var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
-  var cachedPartitionSpec: PartitionSpec = _
+  protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus]
 
-  def partitionSpec(): PartitionSpec = {
-    if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning(partitionSchema)
-    }
-
-    cachedPartitionSpec
-  }
-
-  refresh()
+  protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
     if (partitionSpec().partitionColumns.isEmpty) {
@@ -331,45 +319,11 @@ class HDFSFileCatalog(
     }
   }
 
-  protected def prunePartitions(
-      predicates: Seq[Expression],
-      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
-    val PartitionSpec(partitionColumns, partitions) = partitionSpec
-    val partitionColumnNames = partitionColumns.map(_.name).toSet
-    val partitionPruningPredicates = predicates.filter {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
+  override def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
 
-    if (partitionPruningPredicates.nonEmpty) {
-      val predicate = partitionPruningPredicates.reduce(expressions.And)
+  override def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
 
-      val boundPredicate = InterpretedPredicate.create(predicate.transform {
-        case a: AttributeReference =>
-          val index = partitionColumns.indexWhere(a.name == _.name)
-          BoundReference(index, partitionColumns(index).dataType, nullable = true)
-      })
-
-      val selected = partitions.filter {
-        case PartitionDirectory(values, _) => boundPredicate(values)
-      }
-      logInfo {
-        val total = partitions.length
-        val selectedSize = selected.length
-        val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
-        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
-      }
-
-      selected
-    } else {
-      partitions
-    }
-  }
-
-  def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
-
-  def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
-
-  private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
+  protected def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
     } else {
@@ -415,10 +369,10 @@ class HDFSFileCatalog(
     }
   }
 
-  def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
+  protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
     val leafDirs = leafDirToChildrenFiles.keys.toSeq
-    schema match {
+    partitionSchema match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
         val spec = PartitioningUtils.parsePartitions(
           leafDirs,
@@ -448,6 +402,41 @@ class HDFSFileCatalog(
     }
   }
 
+  private def prunePartitions(
+      predicates: Seq[Expression],
+      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
+    val PartitionSpec(partitionColumns, partitions) = partitionSpec
+    val partitionColumnNames = partitionColumns.map(_.name).toSet
+    val partitionPruningPredicates = predicates.filter {
+      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
+    }
+
+    if (partitionPruningPredicates.nonEmpty) {
+      val predicate = partitionPruningPredicates.reduce(expressions.And)
+
+      val boundPredicate = InterpretedPredicate.create(
+        predicate.transform {
+          case a: AttributeReference =>
+            val index = partitionColumns.indexWhere(a.name == _.name)
+            BoundReference(index, partitionColumns(index).dataType, nullable = true)
+        })
+
+      val selected = partitions.filter {
+        case PartitionDirectory(values, _) => boundPredicate(values)
+      }
+      logInfo {
+        val total = partitions.length
+        val selectedSize = selected.length
+        val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
+        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
+      }
+
+      selected
+    } else {
+      partitions
+    }
+  }
+
   /**
    * Contains a set of paths that are considered as the base dirs of the input datasets.
    * The partitioning discovery logic will make sure it will stop when it reaches any
@@ -470,16 +459,51 @@ class HDFSFileCatalog(
       hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
     }
   }
+}
 
-  def refresh(): Unit = {
+
+/**
+ * A file catalog that caches metadata gathered by scanning all the files present in `paths`
+ * recursively.
+ *
+ * @param parameters as set of options to control discovery
+ * @param paths a list of paths to scan
+ * @param partitionSchema an optional partition schema that will be use to provide types for the
+ *                        discovered partitions
+ */
+class HDFSFileCatalog(
+    sparkSession: SparkSession,
+    parameters: Map[String, String],
+    override val paths: Seq[Path],
+    partitionSchema: Option[StructType])
+  extends PartitioningAwareFileCatalog(sparkSession, parameters, partitionSchema) {
+
+  @volatile private var cachedLeafFiles: mutable.LinkedHashMap[Path, FileStatus] = _
+  @volatile private var cachedLeafDirToChildrenFiles: Map[Path, Array[FileStatus]] = _
+  @volatile private var cachedPartitionSpec: PartitionSpec = _
+
+  refresh()
+
+  override def partitionSpec(): PartitionSpec = {
+    if (cachedPartitionSpec == null) {
+      cachedPartitionSpec = inferPartitioning()
+    }
+    cachedPartitionSpec
+  }
+
+  override protected def leafFiles: mutable.LinkedHashMap[Path, FileStatus] = {
+    cachedLeafFiles
+  }
+
+  override protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]] = {
+    cachedLeafDirToChildrenFiles
+  }
+
+  override def refresh(): Unit = {
     val files = listLeafFiles(paths)
-
-    leafFiles.clear()
-    leafDirToChildrenFiles.clear()
-
-    leafFiles ++= files.map(f => f.getPath -> f)
-    leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
-
+    cachedLeafFiles =
+      new mutable.LinkedHashMap[Path, FileStatus]() ++= files.map(f => f.getPath -> f)
+    cachedLeafDirToChildrenFiles = files.toArray.groupBy(_.getPath.getParent)
     cachedPartitionSpec = null
   }
 

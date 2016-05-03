@@ -17,42 +17,40 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import scala.collection.mutable
+
 import org.apache.hadoop.fs.{FileStatus, Path}
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.execution.datasources.{FileCatalog, Partition, PartitionSpec}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.execution.datasources._
 
-class StreamFileCatalog(sparkSession: SparkSession, path: Path) extends FileCatalog with Logging {
-  val metadataDirectory = new Path(path, FileStreamSink.metadataDir)
+
+class StreamFileCatalog(sparkSession: SparkSession, path: Path)
+  extends PartitioningAwareFileCatalog(sparkSession, Map.empty, None) {
+
+  private val metadataDirectory = new Path(path, FileStreamSink.metadataDir)
   logInfo(s"Reading streaming file log from $metadataDirectory")
-  val metadataLog = new FileStreamSinkLog(sparkSession, metadataDirectory.toUri.toString)
-  val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+  private val metadataLog = new FileStreamSinkLog(sparkSession, metadataDirectory.toUri.toString)
+  private val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+  private val allFilesFromLog = metadataLog.allFiles().map(_.toFileStatus).filterNot(_.isDirectory)
+  private var cachedPartitionSpec: PartitionSpec = _
+
+  override protected val leafFiles: mutable.LinkedHashMap[Path, FileStatus] = {
+    new mutable.LinkedHashMap ++= allFilesFromLog.map(f => f.getPath -> f)
+  }
+
+  override protected val leafDirToChildrenFiles: Map[Path, Array[FileStatus]] = {
+    allFilesFromLog.toArray.groupBy(_.getPath.getParent)
+  }
 
   override def paths: Seq[Path] = path :: Nil
 
-  override def partitionSpec(): PartitionSpec = PartitionSpec(StructType(Nil), Nil)
+  override def refresh(): Unit = { }
 
-  /**
-   * Returns all valid files grouped into partitions when the data is partitioned. If the data is
-   * unpartitioned, this will return a single partition with not partition values.
-   *
-   * @param filters the filters used to prune which partitions are returned.  These filters must
-   *                only refer to partition columns and this method will only return files
-   *                where these predicates are guaranteed to evaluate to `true`.  Thus, these
-   *                filters will not need to be evaluated again on the returned data.
-   */
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] =
-    Partition(InternalRow.empty, allFiles()) :: Nil
-
-  override def getStatus(path: Path): Array[FileStatus] = fs.listStatus(path)
-
-  override def refresh(): Unit = {}
-
-  override def allFiles(): Seq[FileStatus] = {
-    metadataLog.allFiles().map(_.toFileStatus)
+  override def partitionSpec(): PartitionSpec = {
+    if (cachedPartitionSpec == null) {
+      cachedPartitionSpec = inferPartitioning()
+    }
+    cachedPartitionSpec
   }
 }

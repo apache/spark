@@ -147,7 +147,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  test("FileStreamSink - partitioned writing and batch reading [IGNORES PARTITION COLUMN]") {
+  test("FileStreamSink - partitioned writing and batch reading") {
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
 
@@ -171,11 +171,10 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         query.processAllAvailable()
       }
 
-      // TODO (tdas): Test partition column can be read or not
       val outputDf = sqlContext.read.parquet(outputDir)
       checkDataset(
-        outputDf.as[Int],
-        1000, 2000, 3000)
+        outputDf.as[(Int, Int)],
+        (1000, 1), (2000, 2), (3000, 3))
 
     } finally {
       if (query != null) {
