@@ -140,7 +140,7 @@ object Imputer extends DefaultParamsReadable[Imputer] {
  * :: Experimental ::
  * Model fitted by [[Imputer]].
  *
- * @param surrogate statistics value for each feature during fitting
+ * @param surrogate Value by which missing values in the input column will be replaced.
  */
 @Experimental
 class ImputerModel private[ml](
