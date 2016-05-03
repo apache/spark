@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -84,10 +85,13 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       AddParquetFileData(seq.toDS().toDF(), src, tmp)
     }
 
+    /** Write parquet files in a temp dir, and move the individual files to the 'src' dir */
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
-      val file = Utils.tempFileWith(new File(tmp, "parquet"))
-      df.write.parquet(file.getCanonicalPath)
-      file.renameTo(new File(src, file.getName))
+      val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
+      df.write.parquet(tmpDir.getCanonicalPath)
+      tmpDir.listFiles().foreach { f =>
+        f.renameTo(new File(src, s"${f.getName}"))
+      }
     }
   }
 
