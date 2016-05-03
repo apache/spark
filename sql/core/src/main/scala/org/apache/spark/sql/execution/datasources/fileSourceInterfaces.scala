@@ -368,12 +368,11 @@ abstract class PartitioningAwareFileCatalog(
     if (partitionPruningPredicates.nonEmpty) {
       val predicate = partitionPruningPredicates.reduce(expressions.And)
 
-      val boundPredicate = InterpretedPredicate.create(
-        predicate.transform {
-          case a: AttributeReference =>
-            val index = partitionColumns.indexWhere(a.name == _.name)
-            BoundReference(index, partitionColumns(index).dataType, nullable = true)
-        })
+      val boundPredicate = InterpretedPredicate.create(predicate.transform {
+        case a: AttributeReference =>
+          val index = partitionColumns.indexWhere(a.name == _.name)
+          BoundReference(index, partitionColumns(index).dataType, nullable = true)
+      })
 
       val selected = partitions.filter {
         case PartitionDirectory(values, _) => boundPredicate(values)
