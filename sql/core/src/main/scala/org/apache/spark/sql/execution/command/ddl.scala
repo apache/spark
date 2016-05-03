@@ -230,8 +230,8 @@ case class AlterTableSetProperties(
     val table = catalog.getTableMetadata(tableName)
     val newProperties = table.properties ++ properties
     if (DDLUtils.isDatasourceTable(newProperties)) {
-      throw new AnalysisException(
-        "alter table properties is not supported for tables defined using the datasource API")
+      throw new AnalysisException("ALTER TABLE SET TBLPROPERTIES is not supported for " +
+        "tables defined using the datasource API")
     }
     val newTable = table.copy(properties = newProperties)
     catalog.alterTable(newTable)
@@ -298,15 +298,14 @@ case class AlterTableSerDeProperties(
 
   // should never happen if we parsed things correctly
   require(serdeClassName.isDefined || serdeProperties.isDefined,
-    "alter table attempted to set neither serde class name nor serde properties")
+    "ALTER TABLE attempted to set neither serde class name nor serde properties")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     // Do not support setting serde for datasource tables
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        "alter table serde is not supported for datasource tables")
+      throw new AnalysisException("ALTER TABLE SET SERDE is not supported for datasource tables")
     }
     val newTable = table.withNewStorage(
       serde = serdeClassName.orElse(table.storage.serde),
@@ -340,7 +339,7 @@ case class AlterTableAddPartition(
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        "alter table add partition is not allowed for tables defined using the datasource API")
+        "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
     }
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       // inherit table storage format (possibly except for location)
@@ -399,7 +398,7 @@ case class AlterTableDropPartition(
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        "alter table drop partition is not allowed for tables defined using the datasource API")
+        "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
     catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
     Seq.empty[Row]
@@ -435,7 +434,7 @@ case class AlterTableSetLocation(
         val newPart =
           if (DDLUtils.isDatasourceTable(table)) {
             throw new AnalysisException(
-              "alter table set location for partition is not allowed for tables defined " +
+              "ALTER TABLE SET LOCATION for partition is not allowed for tables defined " +
               "using the datasource API")
           } else {
             part.copy(storage = part.storage.copy(locationUri = Some(location)))
