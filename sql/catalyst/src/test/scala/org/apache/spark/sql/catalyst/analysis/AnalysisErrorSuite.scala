@@ -338,7 +338,7 @@ class AnalysisErrorSuite extends AnalysisTest {
   errorTest(
     "generator appears in operator which is not Project",
     listRelation.sortBy(Explode('list).asc),
-    "Generators are not supported outside the SELECT clause, but got: 'Sort" :: Nil
+    "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
   )
 
   errorTest(
