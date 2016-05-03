@@ -1,0 +1,106 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.datasources.parquet.tpcds
+
+import java.io.File
+
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.Benchmark
+
+/**
+ * Benchmark to measure TPCDS query performance.
+ * To run this:
+ *  spark-submit --class <this class> --jars <spark sql test jar>
+ */
+object TPCDSQueryBenchmark {
+  val conf = new SparkConf()
+  conf.set("spark.sql.parquet.compression.codec", "snappy")
+  conf.set("spark.sql.shuffle.partitions", "4")
+  conf.set("spark.driver.memory", "3g")
+  conf.set("spark.executor.memory", "3g")
+  conf.set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
+
+  val sc = new SparkContext("local[1]", "test-sql-context", conf)
+  val sqlContext = new SQLContext(sc)
+
+  // modified q9
+
+  val queries = Seq(
+    "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11",
+    "q12", "q13", "q14a", "q14b", "q15", "q16", "q17", "q18", "q19", "q20",
+    "q21", "q22", "q23a", "q23b", "q24a", "q24b", "q25", "q26", "q27", "q28", "q29", "q30",
+    "q31", "q32", "q33", "q34", "q35", "q36", "q37", "q38", "q39a", "q39b", "q40",
+    "q41", "q42", "q43", "q44", "q45", "q46", "q47", "q48", "q49", "q50",
+    "q51", "q52", "q53", "q54", "q55", "q56", "q57", "q58", "q59", "q60",
+    "q61", "q62", "q63", "q64", "q65", "q66", "q67", "q68", "q69", "q70",
+    "q71", "q72", "q73", "q74", "q75", "q76", "q77", "q78", "q79", "q80",
+    "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
+    "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99", "ss_max")
+    .filter(_ != "q41") // Exclude 41; 72 is long!
+
+  val tables = Seq("catalog_page", "catalog_returns", "customer", "customer_address",
+    "customer_demographics", "date_dim", "household_demographics", "inventory", "item",
+    "promotion", "store", "store_returns", "catalog_sales", "web_sales", "store_sales",
+    "web_returns", "web_site", "reason", "call_center", "warehouse", "ship_mode", "income_band",
+    "time_dim", "web_page")
+
+  def setupTables(dataLocation: String): Map[String, Long] = {
+    tables.map { tableName =>
+      sqlContext.read.parquet(s"$dataLocation/$tableName").registerTempTable(tableName)
+      tableName -> sqlContext.table(tableName).count()
+    }.toMap
+  }
+
+  def tpcdsAll(dataLocation: String): Unit = {
+    require(dataLocation.nonEmpty,
+      "please modify the value of dataLocation to point to your local TPCDS data")
+    val tableSizes = setupTables(dataLocation)
+    sqlContext.conf.setConfString(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+    sqlContext.conf.setConfString(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+    queries.foreach { name =>
+      val queriesString = fileToString(new File(s"sql/core/src/test/scala/org/apache/spark/sql/" +
+        s"execution/datasources/parquet/tpcds/queries/$name.sql"))
+      val numRows = sqlContext.sql(queriesString).queryExecution.logical.map {
+        case ur@UnresolvedRelation(t: TableIdentifier, _) =>
+          tableSizes.getOrElse(t.table, 0L)
+        case _ => 0L
+      }.sum
+      val benchmark = new Benchmark("TPCDS Snappy (scale = 5)", numRows, 1)
+      benchmark.addCase(name) { i =>
+        sqlContext.sql(queriesString).collect()
+      }
+      benchmark.run()
+    }
+  }
+
+  def main(args: Array[String]): Unit = {
+
+    // In order to run this benchmark, please follow the instructions at
+    // https://github.com/databricks/spark-sql-perf/blob/master/README.md to generate the TPCDS data
+    // locally (preferably with a scale factor of 5 for benchmarking). Thereafter, the value of
+    // dataLocation below needs to be set to the location where the generated data is stored.
+    val dataLocation = "/Users/sameer/tpcds"
+
+    tpcdsAll(dataLocation)
+  }
+}

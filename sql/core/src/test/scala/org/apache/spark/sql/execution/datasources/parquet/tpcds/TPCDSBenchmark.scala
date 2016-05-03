@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet
+package org.apache.spark.sql.execution.datasources.parquet.tpcds
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
