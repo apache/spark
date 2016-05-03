@@ -36,40 +36,62 @@ import org.apache.spark.sql.types.{DataType, DoubleType, Metadata, StructType}
 private[spark] trait ClassifierParams
   extends PredictorParams with HasRawPredictionCol {
 
-  override protected def validateAndTransformSchema(
+  /**
+   * Validates and transforms the input schema with the provided param map.
+   *
+   * We do not override `PredictorParams.validateAndTransformSchema` but use a new one
+   * which takes a `numClasses` argument. This function adds metadata to prediction column
+   * if `numClasses` can be extracted from metadata of label column or it was provided
+   * by passing in argument.
+   *
+   * @param schema input schema
+   * @param fitting whether this is in fitting
+   * @param featuresDataType  SQL DataType for FeaturesType.
+   *                          E.g., [[org.apache.spark.mllib.linalg.VectorUDT]] for vector features.
+   * @param numClasses number of classes if provided.
+   * @return output schema
+   */
+  private[classification] def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
-      featuresDataType: DataType): StructType = {
-    // TODO: Support casting Array[Double] and Array[Float] to Vector when FeaturesType = Vector
+      featuresDataType: DataType,
+      numClasses: Option[Int]): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), featuresDataType)
     if (fitting) {
       SchemaUtils.checkNumericType(schema, $(labelCol))
     }
     val newSchema = SchemaUtils.appendColumn(schema, $(predictionCol), DoubleType,
-      nullable = false, generatePredictionMetadata(schema))
+      nullable = false, generatePredictionMetadata(schema, numClasses))
     SchemaUtils.appendColumn(newSchema, $(rawPredictionCol), new VectorUDT)
   }
 
-  private[classification] def generatePredictionMetadata(schema: StructType): Metadata = {
+  private[classification] def generatePredictionMetadata(
+      schema: StructType,
+      numClasses: Option[Int]): Metadata = {
     // The label column for base binary classifier of OneVsRest will not be retained during
     // model transformation, so we should not handle label column metadata as well.
     if (schema.fieldNames.contains($(labelCol))) {
       // determine number of classes from metadata if provided.
       val labelSchema = schema($(labelCol))
-      MetadataUtils.getNumClasses(labelSchema) match {
-        case Some(numClasses) =>
+      val predictionAttribute = MetadataUtils.getNumClasses(labelSchema) match {
+        case Some(num) =>
           // extract label metadata from label column if present, or create a nominal attribute
           // to output the number of labels
-          val labelAttribute = Attribute.fromStructField(labelSchema) match {
+          Attribute.fromStructField(labelSchema) match {
             case _: NumericAttribute | UnresolvedAttribute =>
-              NominalAttribute.defaultAttr.withName(getPredictionCol).withNumValues(numClasses)
+              NominalAttribute.defaultAttr.withNumValues(num)
             case attr: Attribute =>
-              attr.withName(getPredictionCol)
+              attr
           }
-          labelAttribute.toMetadata()
         case None =>
-          NominalAttribute.defaultAttr.withName(getPredictionCol).toMetadata()
+          numClasses match {
+            case Some(num) =>
+              NominalAttribute.defaultAttr.withNumValues(num)
+            case None =>
+              NominalAttribute.defaultAttr
+          }
       }
+      predictionAttribute.withName(getPredictionCol).toMetadata()
     } else {
       NominalAttribute.defaultAttr.withName(getPredictionCol).toMetadata()
     }
@@ -100,8 +122,14 @@ abstract class Classifier[
     // This handles a few items such as schema validation.
     // Developers only need to implement train().
     transformSchema(dataset.schema, logging = true)
-    copyValues(train(dataset).setParent(this))
-      .setPredictionMetadata(generatePredictionMetadata(dataset.schema))
+    val model = copyValues(train(dataset).setParent(this))
+    val numClasses = model.numClasses
+    model.setPredictionMetadata(generatePredictionMetadata(dataset.schema, Some(numClasses)))
+    model
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema, fitting = true, featuresDataType, None)
   }
 
   // TODO: defaultEvaluator (follow-up PR)
@@ -196,6 +224,10 @@ abstract class ClassificationModel[FeaturesType, M <: ClassificationModel[Featur
   private[ml] def setPredictionMetadata(metadata: Metadata): M = {
     predictionMetadata = metadata
     this.asInstanceOf[M]
+  }
+
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema, fitting = false, featuresDataType, Some(numClasses))
   }
 
   /**

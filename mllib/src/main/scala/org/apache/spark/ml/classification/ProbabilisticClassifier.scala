@@ -31,11 +31,13 @@ import org.apache.spark.sql.types.{DataType, StructType}
  */
 private[classification] trait ProbabilisticClassifierParams
   extends ClassifierParams with HasProbabilityCol with HasThresholds {
-  override protected def validateAndTransformSchema(
+  override def validateAndTransformSchema(
       schema: StructType,
       fitting: Boolean,
-      featuresDataType: DataType): StructType = {
-    val parentSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+      featuresDataType: DataType,
+      numClasses: Option[Int]): StructType = {
+    val parentSchema = super.validateAndTransformSchema(schema,
+      fitting, featuresDataType, numClasses)
     SchemaUtils.appendColumn(parentSchema, $(probabilityCol), new VectorUDT)
   }
 }
