@@ -364,7 +364,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     schema.foreach { column =>
       val comment =
         if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
-      buffer += Row(column.name, column.dataType.sql.toLowerCase, comment)
+      buffer += Row(column.name, column.dataType.simpleString, comment)
     }
   }
 
