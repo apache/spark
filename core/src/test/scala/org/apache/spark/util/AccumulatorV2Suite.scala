@@ -87,7 +87,7 @@ class AccumulatorV2Suite extends SparkFunSuite with LocalSparkContext {
     assert(acc.avg == 1.25)
   }
 
-  test("ListAccumulator isZero/add/merge/setValue") {
+  test("ListAccumulator") {
     val maxI = 1000
     for (nThreads <- List(1, 10)) {
       // test single & multi-threaded
