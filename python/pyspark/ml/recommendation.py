@@ -220,7 +220,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         Sets both :py:attr:`numUserBlocks` and :py:attr:`numItemBlocks` to the specific value.
         """
         self._set(numUserBlocks=value)
-        self._set(numItemBlocks=value)
+        return self._set(numItemBlocks=value)
 
     @since("1.4.0")
     def setImplicitPrefs(self, value):
@@ -311,8 +311,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`intermediateStorageLevel`.
         """
-        self._set(intermediateStorageLevel=value)
-        return self
+        return self._set(intermediateStorageLevel=value)
 
     @since("2.0.0")
     def getIntermediateStorageLevel(self):
@@ -326,8 +325,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`finalStorageLevel`.
         """
-        self._set(finalStorageLevel=value)
-        return self
+        return self._set(finalStorageLevel=value)
 
     @since("2.0.0")
     def getFinalStorageLevel(self):
