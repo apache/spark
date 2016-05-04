@@ -2095,6 +2095,19 @@ test_that("repartitionByColumn on DataFrame", {
   # since we cannot access the number of partitions from dataframe, checking
   # that at least the dimensions are identical
   expect_identical(dim(df), dim(actual))
+
+  # a test case with dapply
+  schema <-  structType(structField("a", "integer"), structField("avg", "double"))
+  df <- repartitionByColumn(df, df$"a")
+  df1 <- dapply(
+    df,
+    function(x) {
+      y <- (data.frame(x$a[1], mean(x$b)))
+    },
+    schema)
+
+  # Number of partitions partitions is equal to 2
+  expect_equal(nrow(df1), 2)
 })
 
 unlink(parquetPath)
