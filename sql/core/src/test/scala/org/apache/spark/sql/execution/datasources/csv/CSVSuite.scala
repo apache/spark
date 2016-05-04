@@ -23,9 +23,6 @@ import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
@@ -145,8 +142,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("inferSchema", "true")
       .load(testFile(decimalFile))
     val expectedSchema = StructType(List(
-      StructField("decimal-precision", DecimalType(20, 0), nullable = true),
-      StructField("decimal-scale", DoubleType, nullable = true)))
+      StructField("decimal", DecimalType(20, 0), nullable = true),
+      StructField("long", LongType, nullable = true),
+      StructField("double", DoubleType, nullable = true)))
     assert(result.schema === expectedSchema)
   }
 
@@ -377,13 +375,10 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(commentsFile))
       .collect()
 
-    val decimalOne = new BigDecimal(5.01D.toString)
-    val decimalTwo = new BigDecimal(0.toString).setScale(2)
-    val decimalThree = new BigDecimal(5.toString).setScale(2)
     val expected =
-      Seq(Seq(1, 2, 3, 4, decimalOne, Timestamp.valueOf("2015-08-20 15:57:00")),
-          Seq(6, 7, 8, 9, decimalTwo, Timestamp.valueOf("2015-08-21 16:58:01")),
-          Seq(1, 2, 3, 4, decimalThree, Timestamp.valueOf("2015-08-23 18:00:42")))
+      Seq(Seq(1, 2, 3, 4, 5.01D, Timestamp.valueOf("2015-08-20 15:57:00")),
+          Seq(6, 7, 8, 9, 0D, Timestamp.valueOf("2015-08-21 16:58:01")),
+          Seq(1, 2, 3, 4, 5D, Timestamp.valueOf("2015-08-23 18:00:42")))
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 

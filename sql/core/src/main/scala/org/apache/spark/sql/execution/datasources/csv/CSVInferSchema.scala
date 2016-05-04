@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.text.{NumberFormat, SimpleDateFormat}
+import java.text.NumberFormat
 import java.util.Locale
 
 import scala.util.control.Exception._
@@ -116,17 +116,20 @@ private[csv] object CSVInferSchema {
     val decimalTry = allCatch opt {
       // `BigDecimal` conversion can fail when the `field` is not a form of number.
       val bigDecimal = new BigDecimal(field)
-      // `DecimalType` conversion can fail when
-      //   1. The precision is bigger than 38.
-      //   2. scale is bigger than precision.
-      DecimalType(bigDecimal.precision, bigDecimal.scale)
+      // Because many other formats do not support decimal, it reduces the cases for
+      // decimals by disallowing values having scale (eg. `1.1`).
+      if (bigDecimal.scale <= 0) {
+        // `DecimalType` conversion can fail when
+        //   1. The precision is bigger than 38.
+        //   2. scale is bigger than precision.
+        DecimalType(bigDecimal.precision, bigDecimal.scale)
+      } else {
+        tryParseDouble(field, options)
+      }
     }
-    if (decimalTry.isDefined) {
-      decimalTry.get
-    } else {
-      tryParseDouble(field, options)
-    }
+    decimalTry.getOrElse(tryParseDouble(field, options))
   }
+
   private def tryParseDouble(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toDouble).isDefined) {
       DoubleType
