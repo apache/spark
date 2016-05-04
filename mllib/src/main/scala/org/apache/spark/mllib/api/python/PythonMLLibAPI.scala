@@ -1221,10 +1221,6 @@ private[spark] object SerDe extends Serializable {
     private val module = packageName + "." + cls.getName.split('.')(4)
     private val name = cls.getSimpleName
 
-    println(s"PYSPARK_PACKAGE: $PYSPARK_PACKAGE")
-    println(s"packageName: $packageName")
-    println(s"BasePickler module: $module")
-
     // register this to Pickler and Unpickler
     def register(): Unit = {
       Pickler.registerCustomPickler(this.getClass, this)
