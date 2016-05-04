@@ -75,6 +75,14 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(e.message.contains("It is not allowed to add database prefix"))
   }
 
+  test("error handling: disallow IF NOT EXISTS for CREATE TEMPORARY VIEW") {
+    // Full qualified table name is not allowed
+    val e = intercept[AnalysisException] {
+      sql("CREATE TEMPORARY VIEW IF NOT EXISTS default.myabcdview AS SELECT * FROM jt").collect()
+    }
+    assert(e.message.contains("It is not allowed to define a TEMPORARY view with IF NOT EXISTS"))
+  }
+
   test("error handling: fail if the temp view sql itself is invalid") {
      // A table that does not exist for temporary view
     intercept[AnalysisException] {
@@ -103,7 +111,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("correctly parse CREATE TEMPORARY VIEW statement") {
     withView("testView") {
       sql(
-        """CREATE TEMPORARY VIEW IF NOT EXISTS
+        """CREATE TEMPORARY VIEW
         |testView (c1 COMMENT 'blabla', c2 COMMENT 'blabla')
         |TBLPROPERTIES ('a' = 'b')
         |AS SELECT * FROM jt""".stripMargin)
@@ -119,7 +127,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt").collect()
       }
 
-      assert(e.message.contains("Temporary view") && e.message.contains("already exists"))
+      assert(e.message.contains("Temporary table") && e.message.contains("already exists"))
     }
   }
 
@@ -154,21 +162,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("correctly handle CREATE TEMPORARY VIEW IF NOT EXISTS") {
-    withTable("jt2") {
-      withView("testView") {
-        sql("CREATE TEMPORARY VIEW testView AS SELECT id FROM jt")
-
-        val df = (1 until 10).map(i => i -> i).toDF("i", "j")
-        df.write.format("json").saveAsTable("jt2")
-        sql("CREATE TEMPORARY VIEW IF NOT EXISTS testView AS SELECT * FROM jt2")
-
-        // make sure our view doesn't change.
-        checkAnswer(sql("SELECT * FROM testView ORDER BY id"), (1 to 9).map(i => Row(i)))
-      }
-    }
-  }
-
   test(s"correctly handle CREATE OR REPLACE TEMPORARY VIEW") {
     withTable("jt2") {
       withView("testView") {
@@ -180,13 +173,6 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("CREATE OR REPLACE TEMPORARY VIEW testView AS SELECT * FROM jt2")
         // make sure the view has been changed.
         checkAnswer(sql("SELECT * FROM testView ORDER BY i"), (1 to 9).map(i => Row(i, i)))
-
-        sql("DROP VIEW testView")
-
-        val e = intercept[AnalysisException] {
-          sql("CREATE OR REPLACE TEMPORARY VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
-        }
-        assert(e.message.contains("not allowed to define a view"))
       }
     }
   }

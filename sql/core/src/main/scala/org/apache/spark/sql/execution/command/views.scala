@@ -65,6 +65,12 @@ case class CreateViewCommand(
       "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
   }
 
+  // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
+  if (allowExisting && isTemporary) {
+    throw new AnalysisException(
+      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
+  }
+
   // Temporary view names should NOT contain database prefix like "database.table"
   if (isTemporary && tableDesc.identifier.database.isDefined) {
     val database = tableDesc.identifier.database.get
@@ -113,8 +119,8 @@ case class CreateViewCommand(
     Seq.empty[Row]
   }
 
-  private def createTemporaryView(table: TableIdentifier, sparkSession: SparkSession,
-      analyzedPlan: LogicalPlan): Unit = {
+  private def createTemporaryView(
+      table: TableIdentifier, sparkSession: SparkSession, analyzedPlan: LogicalPlan): Unit = {
 
     val sessionState = sparkSession.sessionState
     val catalog = sessionState.catalog
@@ -131,19 +137,7 @@ case class CreateViewCommand(
       }
     }
 
-    if (catalog.tableExists(table) && catalog.isTemporaryTable(table)) {
-      if (allowExisting) {
-        // Does nothing when the target view already exists.
-      } else if (replace) {
-        // Replaces the temp view if it exists
-        catalog.createTempTable(table.table, logicalPlan, replace)
-      } else {
-        throw new AnalysisException(s"Temporary view $table already exists. ")
-      }
-    } else {
-      // Creates a temp view
-      catalog.createTempTable(table.table, logicalPlan, overrideIfExists = false)
-    }
+    catalog.createTempTable(table.table, logicalPlan, replace)
   }
 
   /**
