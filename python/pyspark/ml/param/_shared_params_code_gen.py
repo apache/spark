@@ -111,7 +111,8 @@ if __name__ == "__main__":
         ("regParam", "regularization parameter (>= 0).", None, None, "TypeConverters.toFloat"),
         ("featuresCol", "features column name.", "'features'", None, "TypeConverters.toString"),
         ("labelCol", "label column name.", "'label'", None, "TypeConverters.toString"),
-        ("predictionCol", "prediction column name.", "'prediction'", None, "TypeConverters.toString"),
+        ("predictionCol", "prediction column name.", "'prediction'", None,
+         "TypeConverters.toString"),
         ("probabilityCol", "Column name for predicted class conditional probabilities. " +
          "Note: Not all models output well-calibrated probability estimates! These probabilities " +
          "should be treated as confidences, not precise probabilities.", "'probability'",
@@ -120,12 +121,14 @@ if __name__ == "__main__":
          None, "TypeConverters.toString"),
         ("inputCol", "input column name.", None, None, "TypeConverters.toString"),
         ("inputCols", "input column names.", None, None, "TypeConverters.toListString"),
-        ("outputCol", "output column name.", "self.uid + '__output'", None, "TypeConverters.toString"),
+        ("outputCol", "output column name.", "self.uid + '__output'", None,
+         "TypeConverters.toString"),
         ("numFeatures", "number of features.", None, None, "TypeConverters.toInt"),
         ("checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). " +
          "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None,
          None, "TypeConverters.toInt"),
-        ("seed", "random seed.", "hash(type(self).__name__)", "hash of type name", "TypeConverters.toInt"),
+        ("seed", "random seed.", "hash(type(self).__name__)", "hash of type name",
+         "TypeConverters.toInt"),
         ("tol", "the convergence tolerance for iterative algorithms.", None,
          None, "TypeConverters.toFloat"),
         ("stepSize", "Step size to be used for each iteration of optimization.", None,
@@ -136,7 +139,8 @@ if __name__ == "__main__":
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
          "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0",
          None, "TypeConverters.toFloat"),
-        ("fitIntercept", "whether to fit an intercept term.", "True", None, "TypeConverters.toBoolean"),
+        ("fitIntercept", "whether to fit an intercept term.", "True", None,
+         "TypeConverters.toBoolean"),
         ("standardization", "whether to standardize the training features before fitting the " +
          "model.", "True", None, "TypeConverters.toBoolean"),
         ("thresholds", "Thresholds in multi-class classification to adjust the probability of " +
@@ -146,7 +150,8 @@ if __name__ == "__main__":
          None, "TypeConverters.toListFloat"),
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None, None, "TypeConverters.toString"),
-        ("solver", "the solver algorithm for optimization.", "'auto'", None, "TypeConverters.toString"),
+        ("solver", "the solver algorithm for optimization.", "'auto'", None,
+         "TypeConverters.toString"),
         ("varianceCol", "column name for the biased sample variance of prediction.",
          None, None, "TypeConverters.toString")]
 
