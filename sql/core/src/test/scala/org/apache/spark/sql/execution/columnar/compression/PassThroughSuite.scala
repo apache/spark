@@ -25,10 +25,6 @@ import org.apache.spark.sql.types.{AtomicType, IntegralType}
 
 class PassThroughSuite extends SparkFunSuite {
   val nullValue = -1
-  testPassThrough(new ByteColumnStats, BYTE)
-  testPassThrough(new ShortColumnStats, SHORT)
-  testPassThrough(new IntColumnStats, INT)
-  testPassThrough(new LongColumnStats, LONG)
   testPassThrough(new FloatColumnStats, FLOAT)
   testPassThrough(new DoubleColumnStats, DOUBLE)
 
@@ -182,10 +178,6 @@ class PassThroughSuite extends SparkFunSuite {
 
     test(s"$PassThrough with $typeName: simple case with null for decompress()") {
       val input = columnType match {
-        case BYTE => Seq(2: Byte, 1: Byte, 2: Byte, nullValue.toByte: Byte, 5: Byte)
-        case SHORT => Seq(2: Short, 1: Short, 2: Short, nullValue.toShort: Short, 5: Short)
-        case INT => Seq(2: Int, 1: Int, 2: Int, nullValue: Int, 5: Int)
-        case LONG => Seq(2: Long, 1: Long, 2: Long, nullValue: Long, 5: Long)
         case FLOAT => Seq(2: Float, 1: Float, 2: Float, nullValue: Float, 5: Float)
         case DOUBLE => Seq(2: Double, 1: Double, 2: Double, nullValue: Double, 5: Double)
       }
