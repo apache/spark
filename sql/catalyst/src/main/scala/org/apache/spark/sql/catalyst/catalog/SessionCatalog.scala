@@ -146,9 +146,12 @@ class SessionCatalog(
     currentDb = db
   }
 
-  def getDefaultDBPath(db: String): String = {
+  /** Get the path for creating a non-default database. */
+  def createDatabasePath(db: String, path: Option[String]): String = {
     val database = if (conf.caseSensitiveAnalysis) db else db.toLowerCase
-    new Path(new Path(conf.warehousePath), database + ".db").toString
+    path.map(new Path(_)).getOrElse {
+      new Path(new Path(conf.warehousePath), database + ".db")
+    }.toString
   }
 
   // ----------------------------------------------------------------------------
