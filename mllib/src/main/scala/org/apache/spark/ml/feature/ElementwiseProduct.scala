@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.Param
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql.types.DataType
@@ -57,7 +57,7 @@ class ElementwiseProduct(override val uid: String)
 
   override protected def validateInputType(inputType: DataType): Unit = {
     super.validateInputType(inputType)
-    require(inputType.isInstanceOf[VectorUDT], s"Input type must be VectorUDT but got $inputType.")
+    SchemaUtils.checkDataTypeEquality(inputType, outputDataType)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()

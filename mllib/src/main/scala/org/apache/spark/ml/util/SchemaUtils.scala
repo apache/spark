@@ -75,6 +75,16 @@ private[spark] object SchemaUtils {
   }
 
   /**
+    * Check data types equality
+    * @param dataType  actual data type
+    * @param expectedDataType  expected data type
+    */
+  def checkDataTypeEquality(dataType: DataType, expectedDataType: DataType): Unit = {
+    require(dataType.getClass.equals(expectedDataType.getClass),
+      s"Input type must be ${expectedDataType.getClass.getSimpleName} but got $dataType.")
+  }
+
+  /**
    * Appends a new column to the input schema. This fails if the given output column already exists.
    * @param schema input schema
    * @param colName new column name. If this column name is an empty string "", this method returns

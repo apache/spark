@@ -23,7 +23,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.{IntParam, ParamMap, ParamValidators}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg._
+import org.apache.spark.mllib.linalg.{VectorUDT, _}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -62,7 +62,7 @@ class PolynomialExpansion(override val uid: String)
 
   override protected def validateInputType(inputType: DataType): Unit = {
     super.validateInputType(inputType)
-    require(inputType.isInstanceOf[VectorUDT], s"Input type must be VectorUDT but got $inputType.")
+    SchemaUtils.checkDataTypeEquality(inputType, outputDataType)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
