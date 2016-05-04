@@ -50,7 +50,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
       AddData(inputData, 3, 2),
       CheckLastBatch((3, 2), (2, 1)),
       StopStream,
-      StartStream,
+      StartStream(),
       AddData(inputData, 3, 2, 1),
       CheckLastBatch((3, 3), (2, 2), (1, 1)),
       // By default we run in new tuple mode.
@@ -113,10 +113,10 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
           .as[(Int, Long)]
 
     testStream(aggregated)(
-      StartStream,
+      StartStream(),
       AddData(inputData, 1, 2, 3, 4),
       ExpectFailure[SparkException](),
-      StartStream,
+      StartStream(),
       CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1))
     )
   }
