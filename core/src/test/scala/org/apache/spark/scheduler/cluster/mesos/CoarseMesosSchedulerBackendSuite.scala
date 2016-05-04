@@ -147,7 +147,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     verifyDeclinedOffer(driver, createOfferId("o1"), true)
   }
 
-  test("mesos declines offers for a long time when reached spark.cores.max") {
+  test("mesos declines offers with a filter when reached spark.cores.max") {
     val maxCores = 3
     setBackend(Map("spark.cores.max" -> maxCores.toString))
 
