@@ -125,19 +125,23 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     finalStorageLevel = Param(Params._dummy(), "finalStorageLevel",
                               "StorageLevel for ALS model factors.",
                               typeConverter=TypeConverters.toString)
+    unknownStrategy = Param(Params._dummy(), "unknownStrategy",
+                            "strategy for dealing with unknown users or items at prediction " +
+                            "time. Supported values: 'nan', 'drop'.",
+                            typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10,
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                  ratingCol="rating", nonnegative=False, checkpointInterval=10,
                  intermediateStorageLevel="MEMORY_AND_DISK",
-                 finalStorageLevel="MEMORY_AND_DISK"):
+                 finalStorageLevel="MEMORY_AND_DISK", unknownStrategy="nan"):
         """
         __init__(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=false, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=false, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK")
+                 finalStorageLevel="MEMORY_AND_DISK", unknownStrategy="nan")
         """
         super(ALS, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.recommendation.ALS", self.uid)
@@ -145,7 +149,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                          implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item",
                          ratingCol="rating", nonnegative=False, checkpointInterval=10,
                          intermediateStorageLevel="MEMORY_AND_DISK",
-                         finalStorageLevel="MEMORY_AND_DISK")
+                         finalStorageLevel="MEMORY_AND_DISK", unknownStrategy="nan")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -155,13 +159,13 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                   implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None,
                   ratingCol="rating", nonnegative=False, checkpointInterval=10,
                   intermediateStorageLevel="MEMORY_AND_DISK",
-                  finalStorageLevel="MEMORY_AND_DISK"):
+                  finalStorageLevel="MEMORY_AND_DISK", unknownStrategy="nan"):
         """
         setParams(self, rank=10, maxIter=10, regParam=0.1, numUserBlocks=10, numItemBlocks=10, \
                  implicitPrefs=False, alpha=1.0, userCol="user", itemCol="item", seed=None, \
                  ratingCol="rating", nonnegative=False, checkpointInterval=10, \
                  intermediateStorageLevel="MEMORY_AND_DISK", \
-                 finalStorageLevel="MEMORY_AND_DISK")
+                 finalStorageLevel="MEMORY_AND_DISK", unknownStrategy="nan")
         Sets params for ALS.
         """
         kwargs = self.setParams._input_kwargs
@@ -331,6 +335,20 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         Gets the value of finalStorageLevel or its default value.
         """
         return self.getOrDefault(self.finalStorageLevel)
+
+    @since("2.0.0")
+    def setUnknownStrategy(self, value):
+        """
+        Sets the value of :py:attr:`unknownStrategy`.
+        """
+        return self._set(unknownStrategy=value)
+
+    @since("2.0.0")
+    def getUnknownStrategy(self):
+        """
+        Gets the value of unknownStrategy or its default value.
+        """
+        return self.getOrDefault(self.unknownStrategy)
 
 
 class ALSModel(JavaModel, JavaMLWritable, JavaMLReadable):
