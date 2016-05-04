@@ -101,6 +101,11 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
 
       val createCode = dt match {
         case t if ctx.isPrimitiveType(dt) =>
+          dt match {
+            case FloatType =>
+            case DoubleType =>
+            case _ => _isSupportColumnarCodeGen = false
+          }
           s"$accessorName = new $accessorCls(ByteBuffer.wrap(buffers[$index]).order(nativeOrder));"
         case NullType | StringType | BinaryType =>
           _isSupportColumnarCodeGen = false

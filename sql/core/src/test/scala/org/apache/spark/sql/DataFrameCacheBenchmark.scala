@@ -52,145 +52,6 @@ object DataFrameCacheBenchmark {
     }
   }
 
-  def intSumBenchmark(values: Int, iters: Int = 5): Unit = {
-    val suites = Seq(("InternalRow", "false"), ("ColumnVector", "true"))
-
-    val benchmarkPT = new Benchmark("Int Sum with PassThrough cache", values, iters)
-    val rand1 = new Random(511)
-    val dfPassThrough = sc.parallelize(0 to values - 1, 1).map(i => rand1.nextInt()).toDF.cache()
-    dfPassThrough.count()       // force to create df.cache()
-    suites.foreach {
-      case (str, value) =>
-        benchmarkPT.addCase(s"$str codegen") { iter =>
-          withSQLConf(SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
-            dfPassThrough.agg(sum("value")).collect
-          }
-        }
-    }
-
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 2.6.32-504.el6.x86_64
-    Intel(R) Xeon(R) CPU E5-2667 v2 @ 3.30GHz
-    Int Sum with PassThrough cache:     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    InternalRow codegen                       462 /  466         68.1          14.7       1.0X
-    ColumnVector codegen                       94 /  100        336.3           3.0       4.9X
-    */
-
-    benchmarkPT.run()
-    dfPassThrough.unpersist(true)
-    System.gc()
-
-    val benchmarkRL = new Benchmark("Int Sum with RunLength cache", values, iters)
-    val dfRunLength = sc.parallelize(0 to values - 1, 1)
-      .map(i => (i, (i / 1024).toInt)).toDF("k", "v").cache()
-    dfRunLength.count()         // force to create df.cache()
-    suites.foreach {
-      case (str, value) =>
-        benchmarkRL.addCase(s"$str codegen") { iter =>
-          withSQLConf(SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
-            dfRunLength.agg(sum("v")).collect()
-          }
-        }
-    }
-
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 2.6.32-504.el6.x86_64
-    Intel(R) Xeon(R) CPU E5-2667 v2 @ 3.30GHz
-    Int Sum with RunLength cache:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    InternalRow codegen                       492 /  553         63.9          15.7       1.0X
-    ColumnVector codegen                      175 /  180        179.5           5.6       2.8X
-    */
-
-    benchmarkRL.run()
-    dfRunLength.unpersist(true)
-    System.gc()
-
-    val rand2 = new Random(42)
-    val benchmarkDIC = new Benchmark("Int Sum with Dictionary cache", values, iters)
-    val dfDictionary = sc.parallelize(0 to values - 1, 1)
-      .map(i => (i, (rand2.nextInt() % 1023))).toDF("k", "v").cache()
-    dfDictionary.count()        // force to create df.cache()
-    suites.foreach {
-      case (str, value) =>
-        benchmarkDIC.addCase(s"$str codegen") { iter =>
-          withSQLConf(SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
-            dfDictionary.agg(sum("v")).collect()
-          }
-        }
-    }
-
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 2.6.32-504.el6.x86_64
-    Intel(R) Xeon(R) CPU E5-2667 v2 @ 3.30GHz
-    Int Sum with Dictionary cache:      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    InternalRow codegen                       599 /  610         52.5          19.0       1.0X
-    ColumnVector codegen                      320 /  327         98.3          10.2       1.9X
-    */
-
-    benchmarkDIC.run()
-    dfDictionary.unpersist(true)
-    System.gc()
-
-    val benchmarkIDelta = new Benchmark("Int Sum with Delta cache", values, iters)
-    val dfIntDelta = sc.parallelize(0 to values - 1, 1)
-      .map(i => (i, i)).toDF("k", "v").cache()
-    dfIntDelta.count()          // force to create df.cache()
-    suites.foreach {
-      case (str, value) =>
-        benchmarkIDelta.addCase(s"$str codegen") { iter =>
-          withSQLConf(SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
-            dfIntDelta.agg(sum("v")).collect()
-          }
-        }
-    }
-
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 2.6.32-504.el6.x86_64
-    Intel(R) Xeon(R) CPU E5-2667 v2 @ 3.30GHz
-    Int Sum with Delta cache:           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    InternalRow codegen                       467 /  512         67.4          14.8       1.0X
-    ColumnVector codegen                      247 /  250        127.4           7.8       1.9X
-    */
-
-    benchmarkIDelta.run()
-    dfIntDelta.unpersist(true)
-    System.gc()
-  }
-
-  def longSumBenchmark(values: Int, iters: Int = 5): Unit = {
-    val suites = Seq(("InternalRow", "false"), ("ColumnVector", "true"))
-
-    val benchmarkPT = new Benchmark("Long Sum with PassThrough cache", values, iters)
-    val rand1 = new Random(511)
-    val dfPassThrough = sc.parallelize(0 to values - 1, 1).map(i => rand1.nextLong()).toDF().cache()
-    dfPassThrough.count()       // force to create df.cache()
-    suites.foreach {
-      case (str, value) =>
-        benchmarkPT.addCase(s"$str codegen") { iter =>
-          withSQLConf(SQLConf. COLUMN_VECTOR_CODEGEN.key -> value) {
-            dfPassThrough.agg(sum("value")).collect
-          }
-        }
-    }
-
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 2.6.32-504.el6.x86_64
-    Intel(R) Xeon(R) CPU E5-2667 v2 @ 3.30GHz
-    Long Sum with PassThrough cache:    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    InternalRow codegen                       382 /  420         41.2          24.3       1.0X
-    ColumnVector codegen                       89 /  101        176.2           5.7       4.3X
-    */
-
-    benchmarkPT.run()
-    dfPassThrough.unpersist(true)
-    System.gc()
-  }
-
   def floatSumBenchmark(values: Int, iters: Int = 5): Unit = {
     val suites = Seq(("InternalRow", "false"), ("ColumnVector", "true"))
 
@@ -254,9 +115,8 @@ object DataFrameCacheBenchmark {
   }
 
   def main(args: Array[String]): Unit = {
-    longSumBenchmark(1024 * 1024 * 15)
     doubleSumBenchmark(1024 * 1024 * 15)
     floatSumBenchmark(1024 * 1024 * 30)
-    intSumBenchmark(1024 * 1024 * 30)
   }
 }
+

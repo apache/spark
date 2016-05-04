@@ -27,9 +27,9 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   test("range/filter should be combined with column codegen") {
-    val df = sparkContext.parallelize(0 to 9, 1).toDF().cache()
+    val df = sparkContext.parallelize(0 to 9, 1).map(i => i.toFloat).toDF().cache()
       .filter("value = 1").selectExpr("value + 1")
-    assert(df.collect() === Array(Row(2)))
+    assert(df.collect() === Array(Row(2.0)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -37,9 +37,9 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
   }
 
   test("filters should be combined with column codegen") {
-    val df = sparkContext.parallelize(0 to 9, 1).toDF().cache()
-      .filter("value % 2 == 0").filter("value % 3 == 0")
-    assert(df.collect() === Array(Row(0), Row(6)))
+    val df = sparkContext.parallelize(0 to 9, 1).map(i => i.toFloat).toDF().cache()
+      .filter("value % 2.0 == 0").filter("value % 3.0 == 0")
+    assert(df.collect() === Array(Row(0), Row(6.0)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -47,11 +47,11 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
   }
 
   test("filter with null should be included in WholeStageCodegen with column codegen") {
-    val toInt = udf[java.lang.Integer, String] { s => if (s == "2") null else s.toInt }
+    val toFloat = udf[java.lang.Float, String] { s => if (s == "2") null else s.toFloat }
     val df0 = sparkContext.parallelize(0 to 4, 1).map(i => i.toString).toDF()
-    val df = df0.withColumn("i", toInt(df0("value"))).select("i").toDF().cache()
-      .filter("i % 2 == 0")
-    assert(df.collect() === Array(Row(0), Row(4)))
+    val df = df0.withColumn("i", toFloat(df0("value"))).select("i").toDF().cache()
+      .filter("i % 2.0 == 0")
+    assert(df.collect() === Array(Row(0), Row(4.0)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -59,7 +59,7 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Aggregate should be included in WholeStageCodegen with column codegen") {
-    val df = sparkContext.parallelize(0 to 9, 1).toDF().cache()
+    val df = sparkContext.parallelize(0 to 9, 1).map(i => i.toFloat).toDF().cache()
       .groupBy().agg(max(col("value")), avg(col("value")))
     assert(df.collect() === Array(Row(9, 4.5)))
     val plan = df.queryExecution.executedPlan
@@ -70,9 +70,9 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen with column codegen") {
-    val df = sparkContext.parallelize(0 to 2, 1).toDF().cache()
+    val df = sparkContext.parallelize(0 to 2, 1).map(i => i.toFloat).toDF().cache()
       .groupBy("value").count().orderBy("value")
-    assert(df.collect() === Array(Row(0, 1), Row(1, 1), Row(2, 1)))
+    assert(df.collect() === Array(Row(0.0, 1), Row(1.0, 1), Row(2.0, 1)))
     val plan = df.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
@@ -92,9 +92,9 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Sort should be included in WholeStageCodegen without column codegen") {
-    val df = sqlContext.range(3, 0, -1).toDF().sort(col("id"))
+    val df = sqlContext.range(3, 0, -1).map(i => i.toFloat).toDF().sort(col("value"))
     val plan = df.queryExecution.executedPlan
-    assert(df.collect() === Array(Row(1), Row(2), Row(3)))
+    assert(df.collect() === Array(Row(1.0), Row(2.0), Row(3.0)))
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         !p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&

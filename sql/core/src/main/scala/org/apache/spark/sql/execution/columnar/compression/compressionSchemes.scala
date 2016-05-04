@@ -72,11 +72,6 @@ private[columnar] case object PassThrough extends CompressionScheme {
         (buffer.duplicate().order(ByteOrder.nativeOrder()), nullsBuffer)
       } else {
         val unitSize = columnType.dataType match {
-          case _: BooleanType => 1
-          case _: ByteType => 1
-          case _: ShortType => 2
-          case _: IntegerType => 4
-          case _: LongType => 8
           case _: FloatType => 4
           case _: DoubleType => 8
           case _ => throw new IllegalStateException("Not supported type in PassThru.")
@@ -217,142 +212,7 @@ private[columnar] case object RunLengthEncoding extends CompressionScheme {
     override def hasNext: Boolean = valueCount < run || buffer.hasRemaining
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
-      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
-      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
-      var pos = 0
-      var seenNulls = 0
-      var runLocal = 0
-      var valueCountLocal = 0
-      columnType.dataType match {
-        case _: BooleanType =>
-          val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
-          var currentValueLocal: Boolean = false
-          while (valueCountLocal < runLocal || buffer.hasRemaining) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.get() == 1
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              out.put(if (currentValueLocal) 1: Byte else 0: Byte)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              out.position(out.position + 1)
-            }
-            pos += 1
-          }
-          out.rewind()
-          nullsBuffer.rewind()
-          (out, nullsBuffer)
-        case _: ByteType =>
-          val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
-          var currentValueLocal: Byte = 0
-          while (valueCountLocal < runLocal || buffer.hasRemaining) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.get()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              out.put(currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              out.position(out.position + 1)
-            }
-            pos += 1
-          }
-          out.rewind()
-          nullsBuffer.rewind()
-          (out, nullsBuffer)
-        case _: ShortType =>
-          val out = ByteBuffer.allocate(capacity * 2).order(ByteOrder.nativeOrder())
-          var currentValueLocal: Short = 0
-          while (valueCountLocal < runLocal || buffer.hasRemaining) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.getShort()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              ByteBufferHelper.putShort(out, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              out.position(out.position + 2)
-            }
-            pos += 1
-          }
-          out.rewind()
-          nullsBuffer.rewind()
-          (out, nullsBuffer)
-        case _: IntegerType =>
-          val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
-          var currentValueLocal: Int = 0
-          while (valueCountLocal < runLocal || buffer.hasRemaining) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.getInt()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              ByteBufferHelper.putInt(out, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              out.position(out.position + 4)
-            }
-          }
-          out.rewind()
-          nullsBuffer.rewind()
-          (out, nullsBuffer)
-        case _: LongType =>
-          val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-          val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
-          var currentValueLocal: Long = 0
-          while (valueCountLocal < runLocal || buffer.hasRemaining) {
-            if (pos != nextNullIndex) {
-              if (valueCountLocal == runLocal) {
-                currentValueLocal = buffer.getLong()
-                runLocal = ByteBufferHelper.getInt(buffer)
-                valueCountLocal = 1
-              } else {
-                valueCountLocal += 1
-              }
-              ByteBufferHelper.putLong(out, currentValueLocal)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              out.position(out.position + 8)
-            }
-            pos += 1
-          }
-          out.rewind()
-          nullsBuffer.rewind()
-          (out, nullsBuffer)
-        case _ => throw new IllegalStateException("Not supported type in RunLengthEncoding.")
-      }
+      throw new IllegalStateException("Not support in RunLengthEncoding.")
     }
   }
 }
@@ -465,51 +325,7 @@ private[columnar] case object DictionaryEncoding extends CompressionScheme {
     override def hasNext: Boolean = buffer.hasRemaining
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
-      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
-      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
-      var pos = 0
-      var seenNulls = 0
-      columnType.dataType match {
-        case _: IntegerType =>
-          val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
-          while (buffer.hasRemaining) {
-            if (pos != nextNullIndex) {
-              val value = dictionary(buffer.getShort()).asInstanceOf[Int]
-              ByteBufferHelper.putInt(out, value)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              out.position(out.position + 4)
-            }
-            pos += 1
-          }
-          out.rewind()
-          nullsBuffer.rewind()
-          (out, nullsBuffer)
-        case _: LongType =>
-          val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
-          while (buffer.hasRemaining) {
-            if (pos != nextNullIndex) {
-              val value = dictionary(buffer.getShort()).asInstanceOf[Long]
-              ByteBufferHelper.putLong(out, value)
-            } else {
-              seenNulls += 1
-              if (seenNulls < nullCount) {
-                nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-              }
-              out.position(out.position + 8)
-            }
-            pos += 1
-          }
-          out.rewind()
-          nullsBuffer.rewind()
-          (out, nullsBuffer)
-        case _ => throw new IllegalStateException("Not supported type in DictionaryEncoding.")
-      }
+      throw new IllegalStateException("Not support in DictionaryEncoding.")
     }
   }
 }
@@ -603,39 +419,7 @@ private[columnar] case object BooleanBitSet extends CompressionScheme {
     override def hasNext: Boolean = visited < count
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
-      val countLocal = count
-      var currentWordLocal: Long = 0
-      var visitedLocal: Int = 0
-      val out = ByteBuffer.allocate(capacity).order(ByteOrder.nativeOrder())
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
-      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
-      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
-      var pos = 0
-      var seenNulls = 0
-
-      while (visitedLocal < countLocal) {
-        if (pos != nextNullIndex) {
-          val bit = visitedLocal % BITS_PER_LONG
-
-          visitedLocal += 1
-          if (bit == 0) {
-            currentWordLocal = ByteBufferHelper.getLong(buffer)
-          }
-
-          out.put(if (((currentWordLocal >> bit) & 1) != 0) 1: Byte else 0: Byte)
-        } else {
-          seenNulls += 1
-          if (seenNulls < nullCount) {
-            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-          }
-          out.position(out.position + 1)
-        }
-        pos += 1
-      }
-      out.rewind()
-      nullsBuffer.rewind()
-      (out, nullsBuffer)
+      throw new IllegalStateException("Not support in BooleanBitSet")
     }
   }
 }
@@ -719,34 +503,7 @@ private[columnar] case object IntDelta extends CompressionScheme {
     }
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
-      var prevLocal: Int = 0
-      val out = ByteBuffer.allocate(capacity * 4).order(ByteOrder.nativeOrder())
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind()
-      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
-      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
-      var pos = 0
-      var seenNulls = 0
-
-      while (buffer.hasRemaining) {
-        if (pos != nextNullIndex) {
-          val delta = buffer.get
-          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
-            { ByteBufferHelper.getInt(buffer) }
-          val p = out.position
-          ByteBufferHelper.putInt(out, prevLocal)
-        } else {
-          seenNulls += 1
-          if (seenNulls < nullCount) {
-            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-          }
-          out.position(out.position + 4)
-        }
-        pos += 1
-      }
-      out.rewind()
-      nullsBuffer.rewind()
-      (out, nullsBuffer)
+      throw new IllegalStateException("Not support in IntDelta")
     }
   }
 }
@@ -830,33 +587,7 @@ private[columnar] case object LongDelta extends CompressionScheme {
     }
 
     override def decompress(capacity: Int): (ByteBuffer, ByteBuffer) = {
-      var prevLocal: Long = 0
-      val out = ByteBuffer.allocate(capacity * 8).order(ByteOrder.nativeOrder())
-      val nullsBuffer = buffer.duplicate().order(ByteOrder.nativeOrder())
-      nullsBuffer.rewind
-      val nullCount = ByteBufferHelper.getInt(nullsBuffer)
-      var nextNullIndex = if (nullCount > 0) ByteBufferHelper.getInt(nullsBuffer) else -1
-      var pos = 0
-      var seenNulls = 0
-
-      while (buffer.hasRemaining) {
-        if (pos != nextNullIndex) {
-          val delta = buffer.get()
-          prevLocal = if (delta > Byte.MinValue) { prevLocal + delta } else
-            { ByteBufferHelper.getLong(buffer) }
-          ByteBufferHelper.putLong(out, prevLocal)
-        } else {
-          seenNulls += 1
-          if (seenNulls < nullCount) {
-            nextNullIndex = ByteBufferHelper.getInt(nullsBuffer)
-          }
-          out.position(out.position + 8)
-        }
-        pos += 1
-      }
-      out.rewind()
-      nullsBuffer.rewind()
-      (out, nullsBuffer)
+      throw new IllegalStateException("Not support in LongDelta")
     }
   }
 }
