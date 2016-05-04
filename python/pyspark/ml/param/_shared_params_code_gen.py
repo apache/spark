@@ -44,6 +44,9 @@ def _gen_param_header(name, doc, defaultValueStr, friendlyDefault, typeConverter
 
     :param name: param name
     :param doc: param doc
+    :param defaultValueStr: string of the default value (or None for no default)
+    :param friendlyDefault: human readable default value, uses defaultValueStr if None
+    :param typeConverter: param type converter.
     """
     template = '''class Has$Name(Params):
     """
