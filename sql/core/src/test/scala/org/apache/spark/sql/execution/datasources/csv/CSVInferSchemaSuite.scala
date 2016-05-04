@@ -44,6 +44,7 @@ class CSVInferSchemaSuite extends SparkFunSuite {
     val options = new CSVOptions(Map.empty[String, String])
     assert(CSVInferSchema.inferField(LongType, "1.0", options) == DoubleType)
     assert(CSVInferSchema.inferField(LongType, "test", options) == StringType)
+    assert(CSVInferSchema.inferField(IntegerType, "1.0", options) == DoubleType)
     assert(CSVInferSchema.inferField(DoubleType, null, options) == DoubleType)
     assert(CSVInferSchema.inferField(DoubleType, "test", options) == StringType)
     assert(CSVInferSchema.inferField(LongType, "2015-08-20 14:57:00", options) == TimestampType)
