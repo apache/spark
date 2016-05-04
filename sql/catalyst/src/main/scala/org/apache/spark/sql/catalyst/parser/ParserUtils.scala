@@ -71,7 +71,7 @@ object ParserUtils {
   }
 
   /** Assert if a condition holds. If it doesn't throw a parse exception. */
-  def assert(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
+  def assert(f: => Boolean, message: => String, ctx: ParserRuleContext): Unit = {
     if (!f) {
       throw new ParseException(message, ctx)
     }

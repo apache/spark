@@ -800,7 +800,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitNamedExpression(ctx: NamedExpressionContext): Expression = withOrigin(ctx) {
     val e = expression(ctx.expression)
     if (ctx.identifier != null) {
-      Alias(e, ctx.identifier.getText)()
+      val alias = ctx.identifier.getText
+
+      // Make sure the expression and its alias are clearly demarcated. An clear demarcation is
+      // either a ' ', ')', ']' or a '>' character.
+      val adjacent = ctx.expression.stop.getStopIndex + 1 == ctx.identifier.start.getStartIndex
+      val stopChar = ctx.expression.stop.getText.last
+      assert(!adjacent || stopChar == ')' || stopChar == ']' || stopChar == '>',
+        s"Ambiguous alias '$alias' encountered; " +
+          s"Please add a space between the expression and the alias",
+        ctx.identifier)
+
+      Alias(e, alias)()
     } else if (ctx.identifierList != null) {
       MultiAlias(e, visitIdentifierList(ctx.identifierList))
     } else {
@@ -1290,10 +1301,13 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   }
 
   /** Create a numeric literal expression. */
-  private def numericLiteral(ctx: NumberContext)(f: String => Any): Literal = withOrigin(ctx) {
+  private def numericLiteral(
+      ctx: NumberContext,
+      suffixSize: Int = 1)(
+      f: String => Any): Literal = withOrigin(ctx) {
     val raw = ctx.getText
     try {
-      Literal(f(raw.substring(0, raw.length - 1)))
+      Literal(f(raw.substring(0, raw.length - suffixSize)))
     } catch {
       case e: NumberFormatException =>
         throw new ParseException(e.getMessage, ctx)
@@ -1326,6 +1340,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitDoubleLiteral(ctx: DoubleLiteralContext): Literal = numericLiteral(ctx) {
     _.toDouble
+  }
+
+  /**
+   * Create a BigDecimal Literal expression.
+   */
+  override def visitBigDecimalLiteral(ctx: BigDecimalLiteralContext): Literal = {
+    numericLiteral(ctx, 2) {
+      BigDecimal(_).underlying
+    }
   }
 
   /**

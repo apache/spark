@@ -76,8 +76,8 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("1SL", Symbol("1SL"))
     assertEqual("1 asL", Literal(1).as("asL"))
     assertEqual("1as L", Symbol("1as").as("L"))
-    intercept("1.0L", "no viable alternative at input")
-    intercept("(1.0 + 1)L", "no viable alternative at input")
+    assertEqual("(1E0 + 1)L", (Literal(1.0) + Literal(1)).as("L"))
+    intercept("1.0L", "Ambiguous alias 'L' encountered")
 
     // Aliased star is allowed.
     assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as 'b)
@@ -392,6 +392,11 @@ class ExpressionParserSuite extends PlanTest {
     assertEqual("10.0D", Literal(10.0D))
     // TODO we need to figure out if we should throw an exception here!
     assertEqual("1E309", Literal(Double.PositiveInfinity))
+
+    // Big Decimal Literal
+    assertEqual("1BD", Literal(BigDecimal("1").underlying()))
+    assertEqual("7873247234798249279371.2334BD",
+      Literal(BigDecimal("7873247234798249279371.2334").underlying()))
   }
 
   test("strings") {

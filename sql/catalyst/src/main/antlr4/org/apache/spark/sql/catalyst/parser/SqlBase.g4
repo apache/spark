@@ -438,11 +438,7 @@ tableIdentifier
     ;
 
 namedExpression
-    : expression (ws (AS ws)? (identifier | identifierList))?
-    ;
-
-ws
-    : {_input.get(_input.index() - 1).getType() == WS}?
+    : expression (AS? (identifier | identifierList))?
     ;
 
 namedExpressionSeq
@@ -627,6 +623,7 @@ number
     | SMALLINT_LITERAL         #smallIntLiteral
     | TINYINT_LITERAL          #tinyIntLiteral
     | DOUBLE_LITERAL           #doubleLiteral
+    | BIG_DECIMAL_LITERAL      #bigDecimalLiteral
     ;
 
 nonReserved
@@ -908,9 +905,12 @@ SCIENTIFIC_DECIMAL_VALUE
     | '.' DIGIT+ EXPONENT
     ;
 
+BIG_DECIMAL_LITERAL
+    : (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'B' 'D'
+    ;
+
 DOUBLE_LITERAL
-    :
-    (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
+    : (INTEGER_VALUE | DECIMAL_VALUE | SCIENTIFIC_DECIMAL_VALUE) 'D'
     ;
 
 IDENTIFIER
