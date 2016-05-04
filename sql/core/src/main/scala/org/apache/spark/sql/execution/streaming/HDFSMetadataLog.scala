@@ -31,7 +31,7 @@ import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 
 /**
@@ -45,14 +45,13 @@ import org.apache.spark.sql.SQLContext
  * Note: [[HDFSMetadataLog]] doesn't support S3-like file systems as they don't guarantee listing
  * files in a directory always shows the latest files.
  */
-class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
-  extends MetadataLog[T]
-  with Logging {
+class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
+  extends MetadataLog[T] with Logging {
 
   import HDFSMetadataLog._
 
-  private val metadataPath = new Path(path)
-  private val fileManager = createFileManager()
+  val metadataPath = new Path(path)
+  protected val fileManager = createFileManager()
 
   if (!fileManager.exists(metadataPath)) {
     fileManager.mkdirs(metadataPath)
@@ -62,7 +61,21 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
    * A `PathFilter` to filter only batch files
    */
   private val batchFilesFilter = new PathFilter {
-    override def accept(path: Path): Boolean = try {
+    override def accept(path: Path): Boolean = isBatchFile(path)
+  }
+
+  private val serializer = new JavaSerializer(sparkSession.sparkContext.conf).newInstance()
+
+  protected def batchIdToPath(batchId: Long): Path = {
+    new Path(metadataPath, batchId.toString)
+  }
+
+  protected def pathToBatchId(path: Path) = {
+    path.getName.toLong
+  }
+
+  protected def isBatchFile(path: Path) = {
+    try {
       path.getName.toLong
       true
     } catch {
@@ -70,18 +83,19 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
     }
   }
 
-  private val serializer = new JavaSerializer(sqlContext.sparkContext.conf).newInstance()
+  protected def serialize(metadata: T): Array[Byte] = {
+    JavaUtils.bufferToArray(serializer.serialize(metadata))
+  }
 
-  private def batchFile(batchId: Long): Path = {
-    new Path(metadataPath, batchId.toString)
+  protected def deserialize(bytes: Array[Byte]): T = {
+    serializer.deserialize[T](ByteBuffer.wrap(bytes))
   }
 
   override def add(batchId: Long, metadata: T): Boolean = {
     get(batchId).map(_ => false).getOrElse {
       // Only write metadata when the batch has not yet been written.
-      val buffer = serializer.serialize(metadata)
       try {
-        writeBatch(batchId, JavaUtils.bufferToArray(buffer))
+        writeBatch(batchId, serialize(metadata))
         true
       } catch {
         case e: IOException if "java.lang.InterruptedException" == e.getMessage =>
@@ -113,8 +127,8 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
         try {
           // Try to commit the batch
           // It will fail if there is an existing file (someone has committed the batch)
-          logDebug(s"Attempting to write log #${batchFile(batchId)}")
-          fileManager.rename(tempPath, batchFile(batchId))
+          logDebug(s"Attempting to write log #${batchIdToPath(batchId)}")
+          fileManager.rename(tempPath, batchIdToPath(batchId))
           return
         } catch {
           case e: IOException if isFileAlreadyExistsException(e) =>
@@ -158,11 +172,11 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
   }
 
   override def get(batchId: Long): Option[T] = {
-    val batchMetadataFile = batchFile(batchId)
+    val batchMetadataFile = batchIdToPath(batchId)
     if (fileManager.exists(batchMetadataFile)) {
       val input = fileManager.open(batchMetadataFile)
       val bytes = IOUtils.toByteArray(input)
-      Some(serializer.deserialize[T](ByteBuffer.wrap(bytes)))
+      Some(deserialize(bytes))
     } else {
       logDebug(s"Unable to find batch $batchMetadataFile")
       None
@@ -172,7 +186,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
   override def get(startId: Option[Long], endId: Option[Long]): Array[(Long, T)] = {
     val files = fileManager.list(metadataPath, batchFilesFilter)
     val batchIds = files
-      .map(_.getPath.getName.toLong)
+      .map(f => pathToBatchId(f.getPath))
       .filter { batchId =>
         (endId.isEmpty || batchId <= endId.get) && (startId.isEmpty || batchId >= startId.get)
     }
@@ -184,7 +198,7 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
 
   override def getLatest(): Option[(Long, T)] = {
     val batchIds = fileManager.list(metadataPath, batchFilesFilter)
-      .map(_.getPath.getName.toLong)
+      .map(f => pathToBatchId(f.getPath))
       .sorted
       .reverse
     for (batchId <- batchIds) {
@@ -197,13 +211,14 @@ class HDFSMetadataLog[T: ClassTag](sqlContext: SQLContext, path: String)
   }
 
   private def createFileManager(): FileManager = {
-    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
     try {
       new FileContextManager(metadataPath, hadoopConf)
     } catch {
       case e: UnsupportedFileSystemException =>
-        logWarning("Could not use FileContext API for managing metadata log file. The log may be" +
-          "inconsistent under failures.", e)
+        logWarning("Could not use FileContext API for managing metadata log files at path " +
+          s"$metadataPath. Using FileSystem API instead for managing log files. The log may be " +
+          s"inconsistent under failures.")
         new FileSystemManager(metadataPath, hadoopConf)
     }
   }

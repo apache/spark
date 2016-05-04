@@ -130,7 +130,8 @@ class LDA private (
    */
   @Since("1.5.0")
   def setDocConcentration(docConcentration: Vector): this.type = {
-    require(docConcentration.size > 0, "docConcentration must have > 0 elements")
+    require(docConcentration.size == 1 || docConcentration.size == k,
+      s"Size of docConcentration must be 1 or ${k} but got ${docConcentration.size}")
     this.docConcentration = docConcentration
     this
   }
@@ -260,15 +261,18 @@ class LDA private (
   def getCheckpointInterval: Int = checkpointInterval
 
   /**
-   * Period (in iterations) between checkpoints (default = 10). Checkpointing helps with recovery
+   * Parameter for set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that
+   * the cache will get checkpointed every 10 iterations. Checkpointing helps with recovery
    * (when nodes fail). It also helps with eliminating temporary shuffle files on disk, which can be
    * important when LDA is run for many iterations. If the checkpoint directory is not set in
-   * [[org.apache.spark.SparkContext]], this setting is ignored.
+   * [[org.apache.spark.SparkContext]], this setting is ignored. (default = 10)
    *
    * @see [[org.apache.spark.SparkContext#setCheckpointDir]]
    */
   @Since("1.3.0")
   def setCheckpointInterval(checkpointInterval: Int): this.type = {
+    require(checkpointInterval == -1 || checkpointInterval > 0,
+      s"Period between checkpoints must be -1 or positive but got ${checkpointInterval}")
     this.checkpointInterval = checkpointInterval
     this
   }

@@ -17,11 +17,13 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
+
 
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
@@ -51,7 +53,7 @@ class PlanParserSuite extends PlanTest {
     assertEqual("show functions foo", ShowFunctions(None, Some("foo")))
     assertEqual("show functions foo.bar", ShowFunctions(Some("foo"), Some("bar")))
     assertEqual("show functions 'foo\\\\.*'", ShowFunctions(None, Some("foo\\.*")))
-    intercept("show functions foo.bar.baz", "SHOW FUNCTIONS unsupported name")
+    intercept("show functions foo.bar.baz", "Unsupported function name")
   }
 
   test("describe function") {
@@ -107,7 +109,7 @@ class PlanParserSuite extends PlanTest {
     assertEqual("select a, b from db.c where x < 1", table("db", "c").where('x < 1).select('a, 'b))
     assertEqual(
       "select a, b from db.c having x < 1",
-      table("db", "c").select('a, 'b).where(('x < 1).cast(BooleanType)))
+      table("db", "c").select('a, 'b).where('x < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
   }
@@ -261,11 +263,14 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("lateral view") {
+    val explode = UnresolvedGenerator(FunctionIdentifier("explode"), Seq('x))
+    val jsonTuple = UnresolvedGenerator(FunctionIdentifier("json_tuple"), Seq('x, 'y))
+
     // Single lateral view
     assertEqual(
       "select * from t lateral view explode(x) expl as x",
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+        .generate(explode, join = true, outer = false, Some("expl"), Seq("x"))
         .select(star()))
 
     // Multiple lateral views
@@ -275,12 +280,12 @@ class PlanParserSuite extends PlanTest {
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq.empty)
-        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = true, Some("jtup"), Seq("q", "z"))
+        .generate(explode, join = true, outer = false, Some("expl"), Seq.empty)
+        .generate(jsonTuple, join = true, outer = true, Some("jtup"), Seq("q", "z"))
         .select(star()))
 
     // Multi-Insert lateral views.
-    val from = table("t1").generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+    val from = table("t1").generate(explode, join = true, outer = false, Some("expl"), Seq("x"))
     assertEqual(
       """from t1
         |lateral view explode(x) expl as x
@@ -292,7 +297,7 @@ class PlanParserSuite extends PlanTest {
         |where s < 10
       """.stripMargin,
       Union(from
-        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = false, Some("jtup"), Seq("q", "z"))
+        .generate(jsonTuple, join = true, outer = false, Some("jtup"), Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
         from.where('s < 10).select(star()).insertInto("t3")))
@@ -300,7 +305,7 @@ class PlanParserSuite extends PlanTest {
     // Unresolved generator.
     val expected = table("t")
       .generate(
-        UnresolvedGenerator("posexplode", Seq('x)),
+        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
         join = true,
         outer = false,
         Some("posexpl"),
@@ -334,7 +339,7 @@ class PlanParserSuite extends PlanTest {
         table("t").join(table("u"), UsingJoin(jt, Seq('a.attr, 'b.attr)), None).select(star()))
     }
     val testAll = Seq(testUnconditionalJoin, testConditionalJoin, testNaturalJoin, testUsingJoin)
-
+    val testExistence = Seq(testUnconditionalJoin, testConditionalJoin, testUsingJoin)
     def test(sql: String, jt: JoinType, tests: Seq[(String, JoinType) => Unit]): Unit = {
       tests.foreach(_(sql, jt))
     }
@@ -348,6 +353,9 @@ class PlanParserSuite extends PlanTest {
     test("right outer join", RightOuter, testAll)
     test("full join", FullOuter, testAll)
     test("full outer join", FullOuter, testAll)
+    test("left semi join", LeftSemi, testExistence)
+    test("left anti join", LeftAnti, testExistence)
+    test("anti join", LeftAnti, testExistence)
 
     // Test multiple consecutive joins
     assertEqual(
@@ -364,9 +372,13 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
       Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
     intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
-      "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
+      "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported")
     intercept(s"$sql tablesample(bucket 11 out of 10) as x",
       s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(300M) s",
+      "TABLESAMPLE(byteLengthLiteral) is not supported")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(BUCKET 3 OUT OF 32 ON rand()) s",
+      "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported")
   }
 
   test("sub-query") {
@@ -402,7 +414,7 @@ class PlanParserSuite extends PlanTest {
       "select g from t group by g having a > (select b from s)",
       table("t")
         .groupBy('g)('g)
-        .where(('a > ScalarSubquery(table("s").select('b))).cast(BooleanType)))
+        .where('a > ScalarSubquery(table("s").select('b))))
   }
 
   test("table reference") {
@@ -424,5 +436,14 @@ class PlanParserSuite extends PlanTest {
     intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
       "Number of aliases must match the number of fields in an inline table.")
     intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+  }
+
+  test("simple select query with !> and !<") {
+    // !< is equivalent to >=
+    assertEqual("select a, b from db.c where x !< 1",
+      table("db", "c").where('x >= 1).select('a, 'b))
+    // !> is equivalent to <=
+    assertEqual("select a, b from db.c where x !> 1",
+      table("db", "c").where('x <= 1).select('a, 'b))
   }
 }

@@ -12,19 +12,23 @@ export("print.jobj")
 
 # MLlib integration
 exportMethods("glm",
+              "spark.glm",
               "predict",
               "summary",
-              "kmeans",
+              "spark.kmeans",
               "fitted",
-              "naiveBayes",
-              "survreg")
+              "spark.naiveBayes",
+              "spark.survreg")
 
 # Job group lifecycle management methods
 export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup")
 
-exportClasses("DataFrame")
+# Export Utility methods
+export("setLogLevel")
+
+exportClasses("SparkDataFrame")
 
 exportMethods("arrange",
               "as.data.frame",
@@ -42,6 +46,7 @@ exportMethods("arrange",
               "covar_samp",
               "covar_pop",
               "crosstab",
+              "dapply",
               "describe",
               "dim",
               "distinct",
@@ -101,9 +106,11 @@ exportMethods("arrange",
               "withColumn",
               "withColumnRenamed",
               "write.df",
+              "write.jdbc",
               "write.json",
               "write.parquet",
-              "write.text")
+              "write.text",
+              "write.ml")
 
 exportClasses("Column")
 
@@ -125,6 +132,7 @@ exportMethods("%in%",
               "between",
               "bin",
               "bitwiseNOT",
+              "bround",
               "cast",
               "cbrt",
               "ceil",
@@ -167,6 +175,7 @@ exportMethods("%in%",
               "getItem",
               "greatest",
               "hex",
+              "histogram",
               "hour",
               "hypot",
               "ifelse",
@@ -284,15 +293,19 @@ export("as.DataFrame",
        "loadDF",
        "parquetFile",
        "read.df",
+       "read.jdbc",
        "read.json",
        "read.parquet",
        "read.text",
+       "spark.lapply",
        "sql",
        "str",
        "tableToDF",
        "tableNames",
        "tables",
-       "uncacheTable")
+       "uncacheTable",
+       "print.summary.GeneralizedLinearRegressionModel",
+       "read.ml")
 
 export("structField",
        "structField.jobj",

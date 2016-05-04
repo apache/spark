@@ -28,16 +28,15 @@ class BoundedDouble(val mean: Double, val confidence: Double, val low: Double, v
     this.mean.hashCode ^ this.confidence.hashCode ^ this.low.hashCode ^ this.high.hashCode
 
   /**
-    * Note that consistent with Double, any NaN value will make equality false
-    */
+   * Note that consistent with Double, any NaN value will make equality false
+   */
   override def equals(that: Any): Boolean =
     that match {
-      case that: BoundedDouble => {
+      case that: BoundedDouble =>
         this.mean == that.mean &&
         this.confidence == that.confidence &&
         this.low == that.low &&
         this.high == that.high
-      }
       case _ => false
     }
 }

@@ -23,13 +23,14 @@ import java.nio.charset.StandardCharsets
 import com.google.common.io.Files
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.SaveMode
+import org.apache.spark.sql.{Row, SaveMode}
 import org.apache.spark.util.Utils
 
+
 class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
-  var tempDir: File = _
+  // Path for dataset
   var path: String = _
 
   override def beforeAll(): Unit = {
@@ -40,15 +41,15 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
         |0
         |0 2:4.0 4:5.0 6:6.0
       """.stripMargin
-    tempDir = Utils.createTempDir()
-    val file = new File(tempDir, "part-00000")
+    val dir = Utils.createDirectory(tempDir.getCanonicalPath, "data")
+    val file = new File(dir, "part-00000")
     Files.write(lines, file, StandardCharsets.UTF_8)
-    path = tempDir.toURI.toString
+    path = dir.toURI.toString
   }
 
   override def afterAll(): Unit = {
     try {
-      Utils.deleteRecursively(tempDir)
+      Utils.deleteRecursively(new File(path))
     } finally {
       super.afterAll()
     }
@@ -86,7 +87,7 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data and read it again") {
     val df = sqlContext.read.format("libsvm").load(path)
-    val tempDir2 = Utils.createTempDir()
+    val tempDir2 = new File(tempDir, "read_write_test")
     val writepath = tempDir2.toURI.toString
     // TODO: Remove requirement to coalesce by supporting multiple reads.
     df.coalesce(1).write.format("libsvm").mode(SaveMode.Overwrite).save(writepath)
@@ -99,8 +100,13 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("write libsvm data failed due to invalid schema") {
     val df = sqlContext.read.format("text").load(path)
-    val e = intercept[SparkException] {
+    intercept[SparkException] {
       df.write.format("libsvm").save(path + "_2")
     }
+  }
+
+  test("select features from libsvm relation") {
+    val df = sqlContext.read.format("libsvm").load(path)
+    df.select("features").rdd.map { case Row(d: Vector) => d }.first
   }
 }
