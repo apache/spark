@@ -149,14 +149,9 @@ class SessionCatalog(
   /** Get the path for creating a non-default database. */
   def createDatabasePath(db: String, path: Option[String]): String = {
     val database = if (conf.caseSensitiveAnalysis) db else db.toLowerCase
-    val dbPath = path.map(new Path(_)).getOrElse {
-      val defaultPath = conf.warehousePath
-      if (org.apache.commons.lang.StringUtils.isBlank(defaultPath)) {
-        throw new AnalysisException("spark.sql.warehouse.dir is blank")
-      }
-      new Path(new Path(defaultPath), database + ".db")
-    }
-    dbPath.toString.stripSuffix(File.separator)
+    path.map(new Path(_)).getOrElse {
+      new Path(new Path(conf.warehousePath), database + ".db")
+    }.toString
   }
 
   // ----------------------------------------------------------------------------
