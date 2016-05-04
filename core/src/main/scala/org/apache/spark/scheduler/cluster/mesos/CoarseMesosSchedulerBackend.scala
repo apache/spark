@@ -289,7 +289,10 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  private def declineOffer(d: SchedulerDriver, offer: Offer, reason: Option[String] = None,
+  private def declineOffer(
+      d: SchedulerDriver,
+      offer: Offer,
+      reason: Option[String] = None,
       refuseSeconds: Option[Long] = None): Unit = {
 
     val id = offer.getId.getValue
@@ -297,8 +300,9 @@ private[spark] class CoarseMesosSchedulerBackend(
     val mem = getResource(offer.getResourcesList, "mem")
     val cpus = getResource(offer.getResourcesList, "cpus")
 
-    logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem"
-      + s" cpu: $cpus for $refuseSeconds seconds" + reason.fold("")(r => s" (reason: $r)"))
+    logDebug(s"Declining offer: $id with attributes: $offerAttributes mem: $mem" +
+      s" cpu: $cpus for $refuseSeconds seconds" +
+      reason.map(r => s" (reason: $r)").getOrElse(""))
 
     refuseSeconds match {
       case Some(seconds) =>
