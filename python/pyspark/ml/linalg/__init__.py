@@ -71,6 +71,7 @@ def _convert_to_vector(l):
     if isinstance(l, Vector):
         return l
     # this is for compatiblity because Scala mllib codes still use mllib.linalg Vector
+    # todo: remove this when mllib.linalg Vector is removed.
     elif isinstance(l, OldVector):
         return l
     elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
@@ -155,6 +156,9 @@ class VectorUDT(UserDefinedType):
 
     @classmethod
     def scalaUDT(cls):
+        # we can't change this to org.apache.spark.ml.linalg.VectorUDT before Scala mllib/ml codes
+        # use ml VectorUDT.
+        # todo: change this to org.apache.spark.ml.linalg.VectorUDT
         return "org.apache.spark.mllib.linalg.VectorUDT"
 
     def serialize(self, obj):
@@ -205,6 +209,9 @@ class MatrixUDT(UserDefinedType):
 
     @classmethod
     def scalaUDT(cls):
+        # we can't change this to org.apache.spark.ml.linalg.MatrixUDT before Scala mllib/ml codes
+        # use ml MatrixUDT.
+        # todo: change this to org.apache.spark.ml.linalg.MatrixUDT
         return "org.apache.spark.mllib.linalg.MatrixUDT"
 
     def serialize(self, obj):

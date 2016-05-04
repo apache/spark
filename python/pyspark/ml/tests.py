@@ -1406,6 +1406,7 @@ class VectorUDTTests(MLlibTestCase):
                 self.assertEqual(v, self.dv1)
             # Following two conditions are for compatibility, because Scala mllib codes still
             # use mllib.linalg Vector.
+            # todo: remove this when mllib.linalg Vector is removed.
             elif isinstance(v, OldSparseVector):
                 self.assertTrue(array_equal(v.toArray(), self.sv1.toArray()))
             elif isinstance(v, OldDenseVector):
@@ -1444,6 +1445,7 @@ class MatrixUDTTests(MLlibTestCase):
                 self.assertTrue(m, self.sm1)
             # Following two conditions are for compatibility, because Scala mllib codes still
             # use mllib.linalg Matrix.
+            # todo: remove this when mllib.linalg Matrix is removed.
             elif isinstance(m, OldDenseMatrix):
                 self.assertTrue(m, self.dm1)
             elif isinstance(m, OldSparseMatrix):
