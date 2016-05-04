@@ -21,14 +21,12 @@ import java.io.{Externalizable, ObjectInput, ObjectOutput}
 import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
-import scala.reflect.ClassTag
 
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
