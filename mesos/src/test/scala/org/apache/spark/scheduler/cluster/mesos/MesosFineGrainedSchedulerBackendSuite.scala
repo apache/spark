@@ -291,7 +291,7 @@ class MesosFineGrainedSchedulerBackendSuite
     verify(driver, times(1)).declineOffer(mesosOffers2.get(0).getId)
   }
 
-  test("can handle multiple roles") {
+  test("accept all roles by default") {
     val driver = mock[SchedulerDriver]
     val taskScheduler = mock[TaskSchedulerImpl]
 
@@ -299,11 +299,14 @@ class MesosFineGrainedSchedulerBackendSuite
     listenerBus.post(
       SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
 
+    val conf = new SparkConf
+    conf.set("spark.mesos.role", "dev")
+
     val sc = mock[SparkContext]
     when(sc.executorMemory).thenReturn(100)
     when(sc.getSparkHome()).thenReturn(Option("/path"))
     when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
-    when(sc.conf).thenReturn(new SparkConf)
+    when(sc.conf).thenReturn(conf)
     when(sc.listenerBus).thenReturn(listenerBus)
 
     val id = 1
@@ -311,11 +314,11 @@ class MesosFineGrainedSchedulerBackendSuite
     builder.addResourcesBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
-      .setRole("prod")
+      .setRole("*")
       .setScalar(Scalar.newBuilder().setValue(500))
     builder.addResourcesBuilder()
       .setName("cpus")
-      .setRole("prod")
+      .setRole("*")
       .setType(Value.Type.SCALAR)
       .setScalar(Scalar.newBuilder().setValue(1))
     builder.addResourcesBuilder()
@@ -339,11 +342,11 @@ class MesosFineGrainedSchedulerBackendSuite
     val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](1)
-    expectedWorkerOffers += new WorkerOffer(
+    expectedWorkerOffers.append(new WorkerOffer(
       mesosOffers.get(0).getSlaveId.getValue,
       mesosOffers.get(0).getHostname,
       2 // Deducting 1 for executor
-    )
+    ))
 
     val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
     when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
@@ -376,10 +379,106 @@ class MesosFineGrainedSchedulerBackendSuite
     assert(cpusDev.getRole.equals("dev"))
     val executorResources = taskInfo.getExecutor.getResourcesList.asScala
     assert(executorResources.exists { r =>
-      r.getName.equals("mem") && r.getScalar.getValue.equals(484.0) && r.getRole.equals("prod")
+      r.getName.equals("mem") && r.getScalar.getValue.equals(484.0) && r.getRole.equals("*")
     })
     assert(executorResources.exists { r =>
-      r.getName.equals("cpus") && r.getScalar.getValue.equals(1.0) && r.getRole.equals("prod")
+      r.getName.equals("cpus") && r.getScalar.getValue.equals(1.0) && r.getRole.equals("*")
+    })
+  }
+
+  test("can ignore default role") {
+    val driver = mock[SchedulerDriver]
+    val taskScheduler = mock[TaskSchedulerImpl]
+
+    val listenerBus = mock[LiveListenerBus]
+    listenerBus.post(
+      SparkListenerExecutorAdded(anyLong, "s1", new ExecutorInfo("host1", 2, Map.empty)))
+
+    val conf = new SparkConf
+    conf.set("spark.mesos.role", "dev")
+    conf.set("spark.mesos.ignoreDefaultRoleResources", "true")
+
+    val sc = mock[SparkContext]
+    when(sc.executorMemory).thenReturn(100)
+    when(sc.getSparkHome()).thenReturn(Option("/path"))
+    when(sc.executorEnvs).thenReturn(new mutable.HashMap[String, String])
+    when(sc.conf).thenReturn(conf)
+    when(sc.listenerBus).thenReturn(listenerBus)
+
+    val id = 1
+    val builder = Offer.newBuilder()
+    builder.addResourcesBuilder()
+      .setName("mem")
+      .setType(Value.Type.SCALAR)
+      .setRole("*")
+      .setScalar(Scalar.newBuilder().setValue(500))
+    builder.addResourcesBuilder()
+      .setName("cpus")
+      .setRole("*")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(1))
+    builder.addResourcesBuilder()
+      .setName("mem")
+      .setRole("dev")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(600))
+    builder.addResourcesBuilder()
+      .setName("cpus")
+      .setRole("dev")
+      .setType(Value.Type.SCALAR)
+      .setScalar(Scalar.newBuilder().setValue(2))
+    val offer = builder.setId(OfferID.newBuilder().setValue(s"o${id.toString}").build())
+      .setFrameworkId(FrameworkID.newBuilder().setValue("f1"))
+      .setSlaveId(SlaveID.newBuilder().setValue(s"s${id.toString}"))
+      .setHostname(s"host${id.toString}").build()
+
+    val mesosOffers = new java.util.ArrayList[Offer]
+    mesosOffers.add(offer)
+
+    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
+
+    val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](1)
+    expectedWorkerOffers.append(new WorkerOffer(
+      mesosOffers.get(0).getSlaveId.getValue,
+      mesosOffers.get(0).getHostname,
+      2 // Deducting 1 for executor
+    ))
+
+    val taskDesc = new TaskDescription(1L, 0, "s1", "n1", 0, ByteBuffer.wrap(new Array[Byte](0)))
+    when(taskScheduler.resourceOffers(expectedWorkerOffers)).thenReturn(Seq(Seq(taskDesc)))
+    when(taskScheduler.CPUS_PER_TASK).thenReturn(1)
+
+    val capture = ArgumentCaptor.forClass(classOf[Collection[TaskInfo]])
+    when(
+      driver.launchTasks(
+        Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+        capture.capture(),
+        any(classOf[Filters])
+      )
+    ).thenReturn(Status.valueOf(1))
+
+    backend.resourceOffers(driver, mesosOffers)
+
+    verify(driver, times(1)).launchTasks(
+      Matchers.eq(Collections.singleton(mesosOffers.get(0).getId)),
+      capture.capture(),
+      any(classOf[Filters])
+    )
+
+    assert(capture.getValue.size() === 1)
+    val taskInfo = capture.getValue.iterator().next()
+    assert(taskInfo.getName.equals("n1"))
+    assert(taskInfo.getResourcesCount === 1)
+    val cpusDev = taskInfo.getResourcesList.get(0)
+    assert(cpusDev.getName.equals("cpus"))
+    assert(cpusDev.getScalar.getValue.equals(1.0))
+    assert(cpusDev.getRole.equals("dev"))
+    val executorResources = taskInfo.getExecutor.getResourcesList.asScala
+    assert(executorResources.exists { r =>
+      r.getName.equals("mem") && r.getScalar.getValue.equals(484.0) && r.getRole.equals("*")
+    })
+    assert(executorResources.exists { r =>
+      r.getName.equals("cpus") && r.getScalar.getValue.equals(1.0) && r.getRole.equals("*")
     })
   }
 }

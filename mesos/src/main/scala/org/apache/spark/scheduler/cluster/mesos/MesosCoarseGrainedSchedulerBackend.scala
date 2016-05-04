@@ -382,6 +382,8 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
     val remainingResources = mutable.Map(offers.map(offer =>
       (offer.getId.getValue, offer.getResourcesList)): _*)
 
+    val acceptedResourceRoles = getAcceptedResourceRoles(sc.conf)
+
     var launchTasks = true
 
     // TODO(mgummelt): combine offers for a single slave
@@ -393,15 +395,19 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       for (offer <- offers) {
         val slaveId = offer.getSlaveId.getValue
         val offerId = offer.getId.getValue
-        val resources = remainingResources(offerId)
+        val resources =
+          remainingResources(offerId).asScala
+            .filter((r: Resource) => acceptedResourceRoles(r.getRole))
+            .asJava
 
-        if (canLaunchTask(slaveId, resources)) {
+        if (canLaunchTask(slaveId, resources, acceptedResourceRoles)) {
           // Create a task
           launchTasks = true
           val taskId = newMesosTaskId()
           val offerCPUs = getResource(resources, "cpus").toInt
           val taskGPUs = Math.min(
-            Math.max(0, maxGpus - totalGpusAcquired), getResource(resources, "gpus").toInt)
+            Math.max(0, maxGpus - totalGpusAcquired),
+            getResource(resources, "gpus").toInt)
 
           val taskCPUs = executorCores(offerCPUs)
           val taskMemory = executorMemory(sc)
@@ -466,7 +472,10 @@ private[spark] class MesosCoarseGrainedSchedulerBackend(
       cpuResourcesToUse ++ memResourcesToUse ++ portResourcesToUse ++ gpuResourcesToUse)
   }
 
-  private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {
+  private def canLaunchTask(
+      slaveId: String,
+      resources: JList[Resource],
+      acceptedResourceRoles: Set[String]): Boolean = {
     val offerMem = getResource(resources, "mem")
     val offerCPUs = getResource(resources, "cpus").toInt
     val cpus = executorCores(offerCPUs)

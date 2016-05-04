@@ -429,6 +429,13 @@ See the [configuration page](configuration.html) for information on Spark config
   </td>
 </tr>
 <tr>
+  <td><code>spark.mesos.ignoreDefaultRoleResources</code></td>
+  <td>false</td>
+  <td>
+    Only if `spark.mesos.role` has been set, ignore mesos resources with the role `*`.
+  </td>
+</tr>
+<tr>
   <td><code>spark.mesos.constraints</code></td>
   <td>(none)</td>
   <td>

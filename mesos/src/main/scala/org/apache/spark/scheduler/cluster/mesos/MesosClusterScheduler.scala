@@ -551,12 +551,16 @@ private[spark] class MesosClusterScheduler(
       currentOffers: List[ResourceOffer],
       tasks: mutable.HashMap[OfferID, ArrayBuffer[TaskInfo]]): Unit = {
     for (submission <- candidates) {
+      val acceptedResourceRoles = getAcceptedResourceRoles(submission.schedulerProperties)
       val driverCpu = submission.cores
       val driverMem = submission.mem
       logTrace(s"Finding offer to launch driver with cpu: $driverCpu, mem: $driverMem")
       val offerOption = currentOffers.find { o =>
-        getResource(o.resources, "cpus") >= driverCpu &&
-        getResource(o.resources, "mem") >= driverMem
+        val acceptableResources = o.resources.asScala
+          .filter((r: Resource) => acceptedResourceRoles(r.getRole))
+          .asJava
+        getResource(acceptableResources, "cpus") >= driverCpu &&
+        getResource(acceptableResources, "mem") >= driverMem
       }
       if (offerOption.isEmpty) {
         logDebug(s"Unable to find offer to launch driver id: ${submission.submissionId}, " +

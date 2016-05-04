@@ -249,10 +249,15 @@ private[spark] class MesosFineGrainedSchedulerBackend(
           .setRefuseSeconds(rejectOfferDurationForUnmetConstraints).build())
       }
 
+      val acceptedResourceRoles = getAcceptedResourceRoles(sc.conf)
+
       // Of the matching constraints, see which ones give us enough memory and cores
       val (usableOffers, unUsableOffers) = offersMatchingConstraints.partition { o =>
-        val mem = getResource(o.getResourcesList, "mem")
-        val cpus = getResource(o.getResourcesList, "cpus")
+        val acceptableResources = o.getResourcesList.asScala
+          .filter((r: Resource) => acceptedResourceRoles(r.getRole))
+          .asJava
+        val mem = getResource(acceptableResources, "mem")
+        val cpus = getResource(acceptableResources, "cpus")
         val slaveId = o.getSlaveId.getValue
         val offerAttributes = toAttributeMap(o.getAttributesList)
 

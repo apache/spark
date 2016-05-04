@@ -41,7 +41,7 @@ private[spark] class MesosDriverDescription(
     val cores: Double,
     val supervise: Boolean,
     val command: Command,
-    schedulerProperties: Map[String, String],
+    val schedulerProperties: Map[String, String],
     val submissionId: String,
     val submissionDate: Date,
     val retryState: Option[MesosClusterRetryState] = None)
