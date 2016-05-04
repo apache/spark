@@ -28,7 +28,10 @@ import org.apache.spark.sql.SparkSession
 
 object GradientBoostedTreeRegressorExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("GradientBoostedTreeRegressorExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("GradientBoostedTreeRegressorExample")
+      .getOrCreate()
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.

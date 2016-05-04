@@ -31,7 +31,10 @@ import org.apache.spark.sql.SparkSession
 
 object VectorSlicerExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("VectorSlicerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("VectorSlicerExample")
+      .getOrCreate()
 
     // $example on$
     val data = Arrays.asList(Row(Vectors.dense(-2.0, 2.3, 0.0)))

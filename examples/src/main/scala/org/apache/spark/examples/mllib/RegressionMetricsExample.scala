@@ -27,7 +27,10 @@ import org.apache.spark.sql.SparkSession
 
 object RegressionMetricsExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("RegressionMetricsExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("RegressionMetricsExample")
+      .getOrCreate()
     // $example on$
     // Load the data
     val data = spark

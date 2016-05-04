@@ -32,7 +32,10 @@ import org.apache.spark.sql.types.*;
 
 public class JavaWord2VecExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaWord2VecExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaWord2VecExample")
+      .getOrCreate();
 
     // $example on$
     // Input data: Each row is a bag of words from a sentence or document.
