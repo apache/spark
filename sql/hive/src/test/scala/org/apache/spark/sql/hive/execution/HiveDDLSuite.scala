@@ -365,34 +365,48 @@ class HiveDDLSuite
     }
   }
 
-  test("create/drop database - location") {
+  private def createDatabaseWithLocation(tmpDir: File, dirExists: Boolean): Unit = {
     val catalog = sqlContext.sessionState.catalog
-    withTempDir { tmpDir =>
-      val dbName = "db1"
-      val tabName = "tab1"
-      val path = "file:" + catalog.createDatabasePath(dbName, Option(tmpDir.toString))
-      val fs = new Path(path).getFileSystem(hiveContext.sessionState.newHadoopConf())
-      withTable(tabName) {
+    val dbName = "db1"
+    val tabName = "tab1"
+    val path = "file:" + catalog.createDatabasePath(dbName, Option(tmpDir.toString))
+    val fs = new Path(path).getFileSystem(hiveContext.sessionState.newHadoopConf())
+    withTable(tabName) {
+      if (dirExists) {
         assert(tmpDir.listFiles.isEmpty)
-        sql(s"CREATE DATABASE $dbName Location '$tmpDir'")
-        val db1 = catalog.getDatabaseMetadata(dbName)
-        assert(db1 == CatalogDatabase(
-          dbName,
-          "",
-          path,
-          Map.empty))
-        sql("USE db1")
-
-        sql(s"CREATE TABLE $tabName as SELECT 1")
-        assert(tableDirectoryExists(TableIdentifier(tabName), Option(tmpDir.toString)))
-
-        assert(tmpDir.listFiles.nonEmpty)
-        sql(s"DROP TABLE $tabName")
-
-        assert(tmpDir.listFiles.isEmpty)
-        sql(s"DROP DATABASE $dbName")
+      } else {
         assert(!fs.exists(new Path(tmpDir.toString)))
       }
+      sql(s"CREATE DATABASE $dbName Location '$tmpDir'")
+      val db1 = catalog.getDatabaseMetadata(dbName)
+      assert(db1 == CatalogDatabase(
+        dbName,
+        "",
+        path,
+        Map.empty))
+      sql("USE db1")
+
+      sql(s"CREATE TABLE $tabName as SELECT 1")
+      assert(tableDirectoryExists(TableIdentifier(tabName), Option(tmpDir.toString)))
+
+      assert(tmpDir.listFiles.nonEmpty)
+      sql(s"DROP TABLE $tabName")
+
+      assert(tmpDir.listFiles.isEmpty)
+      sql(s"DROP DATABASE $dbName")
+      assert(!fs.exists(new Path(tmpDir.toString)))
+    }
+  }
+
+  test("create/drop database - location without pre-created directory") {
+     withTempPath { tmpDir =>
+       createDatabaseWithLocation(tmpDir, dirExists = false)
+    }
+  }
+
+  test("create/drop database - location with pre-created directory") {
+    withTempDir { tmpDir =>
+      createDatabaseWithLocation(tmpDir, dirExists = true)
     }
   }
 
