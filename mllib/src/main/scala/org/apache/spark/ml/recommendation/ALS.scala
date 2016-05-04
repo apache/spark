@@ -79,11 +79,11 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
   def getItemCol: String = $(itemCol)
 
   /**
-   * Attempts to safely cast a Long user/item id to an Int. Throws an exception if the value is
+   * Attempts to safely cast a user/item id to an Int. Throws an exception if the value is
    * out of integer range.
    */
-  protected val checkedCast = udf { (n: Long) =>
-    if (n > Int.MaxValue.toLong || n < Int.MinValue.toLong) {
+  protected val checkedCast = udf { (n: Double) =>
+    if (n > Int.MaxValue || n < Int.MinValue) {
       throw new IllegalArgumentException(s"ALS only supports values in Integer range for columns " +
         s"${$(userCol)} and ${$(itemCol)}. Value $n was out of Integer range.")
     } else {
@@ -264,9 +264,9 @@ class ALSModel private[ml] (
     }
     dataset
       .join(userFactors,
-        checkedCast(dataset($(userCol)).cast(LongType)) === userFactors("id"), "left")
+        checkedCast(dataset($(userCol)).cast(DoubleType)) === userFactors("id"), "left")
       .join(itemFactors,
-        checkedCast(dataset($(itemCol)).cast(LongType)) === itemFactors("id"), "left")
+        checkedCast(dataset($(itemCol)).cast(DoubleType)) === itemFactors("id"), "left")
       .select(dataset("*"),
         predict(userFactors("features"), itemFactors("features")).as($(predictionCol)))
   }
@@ -459,11 +459,10 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
-      .select(checkedCast(col($(userCol)).cast(LongType)),
-        checkedCast(col($(itemCol)).cast(LongType)), r)
+      .select(checkedCast(col($(userCol)).cast(DoubleType)),
+        checkedCast(col($(itemCol)).cast(DoubleType)), r)
       .rdd
-      .map { row =>
-        Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
+      .map { row => Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
     val instrLog = Instrumentation.create(this, ratings)
     instrLog.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha,
