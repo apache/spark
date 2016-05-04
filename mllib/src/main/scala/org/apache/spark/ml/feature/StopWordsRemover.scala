@@ -47,7 +47,7 @@ class StopWordsRemover(override val uid: String)
   /**
    * The words to be filtered out.
    * Default: English stop words
-   * @see [[StopWordsRemover.loadStopWords()]]
+   * @see [[StopWordsRemover.loadDefaultStopWords()]]
    * @group param
    */
   val stopWords: StringArrayParam =
@@ -65,7 +65,7 @@ class StopWordsRemover(override val uid: String)
    * @group param
    */
   val caseSensitive: BooleanParam = new BooleanParam(this, "caseSensitive",
-    "whether to do a case-sensitive comparison over the stop stop words")
+    "whether to do a case-sensitive comparison over the stop words")
 
   /** @group setParam */
   def setCaseSensitive(value: Boolean): this.type = set(caseSensitive, value)
@@ -73,7 +73,7 @@ class StopWordsRemover(override val uid: String)
   /** @group getParam */
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWordsRemover.loadStopWords("english"), caseSensitive -> false)
+  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"), caseSensitive -> false)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -108,20 +108,21 @@ class StopWordsRemover(override val uid: String)
 @Since("1.6.0")
 object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
 
-  private val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
+  private[feature]
+  val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
     "hungarian", "italian", "norwegian", "portuguese", "russian", "spanish", "swedish", "turkish")
 
   @Since("1.6.0")
   override def load(path: String): StopWordsRemover = super.load(path)
 
   /**
-   * Load stop words for the language
+   * Loads the default stop words for the given language.
    * Supported languages: danish, dutch, english, finnish, french, german, hungarian,
    * italian, norwegian, portuguese, russian, spanish, swedish, turkish
    * @see [[http://anoncvs.postgresql.org/cvsweb.cgi/pgsql/src/backend/snowball/stopwords/]]
    */
   @Since("2.0.0")
-  def loadStopWords(language: String): Array[String] = {
+  def loadDefaultStopWords(language: String): Array[String] = {
     require(supportedLanguages.contains(language),
       s"$language is not in the supported language list: ${supportedLanguages.mkString(", ")}.")
     val is = getClass.getResourceAsStream(s"/org/apache/spark/ml/feature/stopwords/$language.txt")
