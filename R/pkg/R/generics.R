@@ -547,6 +547,14 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 #' @export
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
+# @rdname repartitionByColumns
+# @seealso repartition
+# @export
+setGeneric("repartitionByColumns",
+           function(x, col, ...) {
+             standardGeneric("repartitionByColumns")
+          })
+
 #' @rdname sample
 #' @export
 setGeneric("sample",

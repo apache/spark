@@ -594,6 +594,35 @@ setMethod("repartition",
             dataFrame(sdf)
           })
 
+#' RepartitionByColumns
+#'
+#' Return a new SparkDataFrame which has as many partitions as the number of unique
+#' groups identified by column(s) values which are being specified by the input.
+#'
+#' @param x A SparkDataFrame
+#' @param col The column by which the partitioning will be performed
+#'
+#' @family SparkDataFrame functions
+#' @rdname repartition
+#' @name repartition
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' sqlContext <- sparkRSQL.init(sc)
+#' path <- "path/to/file.json"
+#' df <- read.json(sqlContext, path)
+#' newDF <- repartitionByColumns(df, df$col1, df$col2)
+#'}
+setMethod("repartitionByColumns",
+          signature(x = "SparkDataFrame", col = "Column"),
+          function(x, col, ...) {
+            cols <- list(col, ...)
+            jcol <- lapply(cols, function(c) { c@jc })
+            sdf <- callJMethod(x@sdf, "repartition", jcol)
+            dataFrame(sdf)
+          })
+
 #' toJSON
 #'
 #' Convert the rows of a SparkDataFrame into JSON objects and return an RDD where
