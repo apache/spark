@@ -94,8 +94,8 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
   /**
    * Param for strategy for dealing with unknown users or items at prediction time.
    * Supported values:
-   * - "nan" prediction value for unknown ids will be NaN.
-   * - "drop" rows in the input DataFrame containing unknown ids will be dropped.
+   * - "nan": prediction value for unknown ids will be NaN.
+   * - "drop": rows in the input DataFrame containing unknown ids will be dropped.
    * Default: "nan".
    *
    * @group expertParam
