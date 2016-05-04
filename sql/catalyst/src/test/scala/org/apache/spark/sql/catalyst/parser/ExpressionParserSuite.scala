@@ -73,8 +73,11 @@ class ExpressionParserSuite extends PlanTest {
 
     // Numeric literals without a space between the literal qualifier and the alias, should not be
     // interpreted as such. An unresolved reference should be returned instead.
-    // TODO add the JIRA-ticket number.
     assertEqual("1SL", Symbol("1SL"))
+    assertEqual("1 asL", Literal(1).as("asL"))
+    assertEqual("1as L", Symbol("1as").as("L"))
+    intercept("1.0L", "no viable alternative at input")
+    intercept("(1.0 + 1)L", "no viable alternative at input")
 
     // Aliased star is allowed.
     assertEqual("a.* b", UnresolvedStar(Option(Seq("a"))) as 'b)

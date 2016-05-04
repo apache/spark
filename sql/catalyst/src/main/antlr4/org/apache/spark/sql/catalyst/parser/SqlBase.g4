@@ -438,7 +438,11 @@ tableIdentifier
     ;
 
 namedExpression
-    : expression (AS? (identifier | identifierList))?
+    : expression (ws (AS ws)? (identifier | identifierList))?
+    ;
+
+ws
+    : {_input.get(_input.index() - 1).getType() == WS}?
     ;
 
 namedExpressionSeq
