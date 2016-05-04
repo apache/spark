@@ -211,13 +211,14 @@ class HDFSMetadataLog[T: ClassTag](sparkSession: SparkSession, path: String)
   }
 
   private def createFileManager(): FileManager = {
-    val hadoopConf = new Configuration(sparkSession.sessionState.hadoopConf)
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
     try {
       new FileContextManager(metadataPath, hadoopConf)
     } catch {
       case e: UnsupportedFileSystemException =>
-        logWarning("Could not use FileContext API for managing metadata log file. The log may be" +
-          "inconsistent under failures.", e)
+        logWarning("Could not use FileContext API for managing metadata log files at path " +
+          s"$metadataPath. Using FileSystem API instead for managing log files. The log may be " +
+          s"inconsistent under failures.")
         new FileSystemManager(metadataPath, hadoopConf)
     }
   }

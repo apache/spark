@@ -127,17 +127,16 @@ case class DataSource(
   }
 
   private def inferFileFormatSchema(format: FileFormat): StructType = {
-    val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-    val allPaths = caseInsensitiveOptions.get("path")
-    val globbedPaths = allPaths.toSeq.flatMap { path =>
-      val hdfsPath = new Path(path)
-      val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
-      val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-      SparkHadoopUtil.get.globPathIfNecessary(qualified)
-    }.toArray
-
-    val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
     userSpecifiedSchema.orElse {
+      val caseInsensitiveOptions = new CaseInsensitiveMap(options)
+      val allPaths = caseInsensitiveOptions.get("path")
+      val globbedPaths = allPaths.toSeq.flatMap { path =>
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        SparkHadoopUtil.get.globPathIfNecessary(qualified)
+      }.toArray
+      val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
@@ -204,13 +203,14 @@ case class DataSource(
   def createSink(): Sink = {
     providingClass.newInstance() match {
       case s: StreamSinkProvider => s.createSink(sparkSession.wrapped, options, partitionColumns)
-      case format: FileFormat =>
+
+      case parquet: parquet.DefaultSource =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+        new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
 
-        new FileStreamSink(sparkSession, path, format)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed writing")
@@ -226,7 +226,7 @@ case class DataSource(
       case Seq(singlePath) =>
         try {
           val hdfsPath = new Path(singlePath)
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
           val metadataPath = new Path(hdfsPath, FileStreamSink.metadataDir)
           val res = fs.exists(metadataPath)
           res
@@ -284,7 +284,7 @@ case class DataSource(
         val allPaths = caseInsensitiveOptions.get("path") ++ paths
         val globbedPaths = allPaths.flatMap { path =>
           val hdfsPath = new Path(path)
-          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.hadoopConf)
+          val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
@@ -374,7 +374,7 @@ case class DataSource(
           val path = new Path(caseInsensitiveOptions.getOrElse("path", {
             throw new IllegalArgumentException("'path' is not specified")
           }))
-          val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
+          val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
           path.makeQualified(fs.getUri, fs.getWorkingDirectory)
         }
 

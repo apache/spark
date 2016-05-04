@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.apache.spark.sql.{Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
 
@@ -77,7 +77,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
           catalogTable.storage.locationUri.map { p =>
             val path = new Path(p)
             try {
-              val fs = path.getFileSystem(sparkSession.sessionState.hadoopConf)
+              val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
               calculateTableSize(fs, path)
             } catch {
               case NonFatal(e) =>
@@ -99,8 +99,8 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
         }
 
       case otherRelation =>
-        throw new UnsupportedOperationException(
-          s"Analyze only works for Hive tables, but $tableName is a ${otherRelation.nodeName}")
+        throw new AnalysisException(s"ANALYZE TABLE is only supported for Hive tables, " +
+          s"but '${tableIdent.unquotedString}' is a ${otherRelation.nodeName}.")
     }
     Seq.empty[Row]
   }

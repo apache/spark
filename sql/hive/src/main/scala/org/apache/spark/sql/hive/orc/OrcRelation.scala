@@ -57,7 +57,7 @@ private[sql] class DefaultSource
       files: Seq[FileStatus]): Option[StructType] = {
     OrcFileOperator.readSchema(
       files.map(_.getPath.toUri.toString),
-      Some(new Configuration(sparkSession.sessionState.hadoopConf))
+      Some(sparkSession.sessionState.newHadoopConf())
     )
   }
 
@@ -157,20 +157,11 @@ private[sql] class DefaultSource
         }
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
-        val unsafeRowIterator = OrcRelation.unwrapOrcStructs(
+        OrcRelation.unwrapOrcStructs(
           conf,
           requiredSchema,
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
           new RecordReaderIterator[OrcStruct](orcRecordReader))
-
-        // Appends partition values
-        val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-        val joinedRow = new JoinedRow()
-        val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
-
-        unsafeRowIterator.map { dataRow =>
-          appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
-        }
       }
     }
   }
@@ -278,7 +269,7 @@ private[orc] case class OrcTableScan(
   with HiveInspectors {
 
   def execute(): RDD[InternalRow] = {
-    val job = Job.getInstance(new Configuration(sparkSession.sessionState.hadoopConf))
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
     val conf = job.getConfiguration
 
     // Tries to push down filters if ORC filter push-down is enabled

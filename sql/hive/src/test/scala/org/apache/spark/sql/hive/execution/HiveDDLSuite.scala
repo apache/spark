@@ -36,7 +36,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     val expectedTablePath =
       hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
     val filesystemPath = new Path(expectedTablePath)
-    val fs = filesystemPath.getFileSystem(hiveContext.sessionState.hadoopConf)
+    val fs = filesystemPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }
 
@@ -73,7 +73,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           hiveContext.sessionState.catalog
             .getTableMetadata(TableIdentifier(tabName, Some("default")))
         // It is a managed table, although it uses external in SQL
-        assert(hiveTable.tableType == CatalogTableType.MANAGED_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.MANAGED)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
@@ -102,7 +102,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           hiveContext.sessionState.catalog
             .getTableMetadata(TableIdentifier(tabName, Some("default")))
         // This data source table is external table
-        assert(hiveTable.tableType == CatalogTableType.EXTERNAL_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
@@ -166,7 +166,7 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }
 
         val hiveTable = catalog.getTableMetadata(TableIdentifier(externalTab, Some("default")))
-        assert(hiveTable.tableType == CatalogTableType.EXTERNAL_TABLE)
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
         // After data insertion, all the directory are not empty
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
@@ -346,6 +346,23 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         }.getMessage
         assert(message.contains("Cannot drop a view with DROP TABLE. Please use DROP VIEW instead"))
       }
+    }
+  }
+
+  test("desc table") {
+    withTable("tab1") {
+      val tabName = "tab1"
+      sql(s"CREATE TABLE $tabName(c1 int)")
+
+      assert(sql(s"DESC $tabName").collect().length == 1)
+
+      assert(
+        sql(s"DESC FORMATTED $tabName").collect()
+          .exists(_.getString(0) == "# Storage Information"))
+
+      assert(
+        sql(s"DESC EXTENDED $tabName").collect()
+          .exists(_.getString(0) == "# Detailed Table Information"))
     }
   }
 }

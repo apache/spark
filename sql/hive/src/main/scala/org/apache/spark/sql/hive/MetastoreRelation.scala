@@ -30,7 +30,7 @@ import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.hive.client.HiveClient
@@ -77,10 +77,10 @@ private[hive] case class MetastoreRelation(
     catalogTable.properties.foreach { case (k, v) => tableParameters.put(k, v) }
 
     tTable.setTableType(catalogTable.tableType match {
-      case CatalogTableType.EXTERNAL_TABLE => HiveTableType.EXTERNAL_TABLE.toString
-      case CatalogTableType.MANAGED_TABLE => HiveTableType.MANAGED_TABLE.toString
-      case CatalogTableType.INDEX_TABLE => HiveTableType.INDEX_TABLE.toString
-      case CatalogTableType.VIRTUAL_VIEW => HiveTableType.VIRTUAL_VIEW.toString
+      case CatalogTableType.EXTERNAL => HiveTableType.EXTERNAL_TABLE.toString
+      case CatalogTableType.MANAGED => HiveTableType.MANAGED_TABLE.toString
+      case CatalogTableType.INDEX => HiveTableType.INDEX_TABLE.toString
+      case CatalogTableType.VIEW => HiveTableType.VIRTUAL_VIEW.toString
     })
 
     val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
@@ -130,7 +130,7 @@ private[hive] case class MetastoreRelation(
 
   // When metastore partition pruning is turned off, we cache the list of all partitions to
   // mimic the behavior of Spark < 1.5
-  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getAllPartitions(catalogTable)
+  private lazy val allPartitions: Seq[CatalogTablePartition] = client.getPartitions(catalogTable)
 
   def getHiveQlPartitions(predicates: Seq[Expression] = Nil): Seq[Partition] = {
     val rawPartitions = if (sparkSession.sessionState.conf.metastorePartitionPruning) {
@@ -188,7 +188,7 @@ private[hive] case class MetastoreRelation(
   implicit class SchemaAttribute(f: CatalogColumn) {
     def toAttribute: AttributeReference = AttributeReference(
       f.name,
-      DataTypeParser.parse(f.dataType),
+      CatalystSqlParser.parseDataType(f.dataType),
       // Since data can be dumped in randomly with no validation, everything is nullable.
       nullable = true
     )(qualifier = Some(alias.getOrElse(tableName)))

@@ -85,7 +85,7 @@ case class Generate(
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
-      generator.elementTypes.length == generatorOutput.length &&
+      generator.elementSchema.length == generatorOutput.length &&
       generatorOutput.forall(_.resolved)
   }
 
@@ -107,8 +107,11 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override def maxRows: Option[Long] = child.maxRows
 
-  override protected def validConstraints: Set[Expression] =
-    child.constraints.union(splitConjunctivePredicates(condition).toSet)
+  override protected def validConstraints: Set[Expression] = {
+    val predicates = splitConjunctivePredicates(condition)
+      .filterNot(SubqueryExpression.hasCorrelatedSubquery)
+    child.constraints.union(predicates.toSet)
+  }
 }
 
 abstract class SetOperation(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
@@ -165,6 +168,9 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
 }
 
 case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(left, right) {
+
+  def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
+
   /** We don't use right.output because those rows get excluded from the set. */
   override def output: Seq[Attribute] = left.output
 
@@ -173,7 +179,8 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
   override lazy val resolved: Boolean =
     childrenResolved &&
       left.output.length == right.output.length &&
-      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType }
+      left.output.zip(right.output).forall { case (l, r) => l.dataType == r.dataType } &&
+      duplicateResolved
 
   override def statistics: Statistics = {
     Statistics(sizeInBytes = left.statistics.sizeInBytes)
@@ -266,6 +273,8 @@ case class Join(
 
   override def output: Seq[Attribute] = {
     joinType match {
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case LeftOuter =>
@@ -288,6 +297,8 @@ case class Join(
       case LeftSemi if condition.isDefined =>
         left.constraints
           .union(splitConjunctivePredicates(condition.get).toSet)
+      case j: ExistenceJoin =>
+        left.constraints
       case Inner =>
         left.constraints.union(right.constraints)
       case LeftExistence(_) =>

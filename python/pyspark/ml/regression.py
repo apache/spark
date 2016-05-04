@@ -129,15 +129,6 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
 
     @property
-    @since("1.4.0")
-    def weights(self):
-        """
-        Model weights.
-        """
-        warnings.warn("weights is deprecated. Use coefficients instead.")
-        return self._call_java("weights")
-
-    @property
     @since("1.6.0")
     def coefficients(self):
         """
@@ -478,8 +469,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`isotonic`.
         """
-        self._set(isotonic=value)
-        return self
+        return self._set(isotonic=value)
 
     def getIsotonic(self):
         """
@@ -491,8 +481,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`featureIndex`.
         """
-        self._set(featureIndex=value)
-        return self
+        return self._set(featureIndex=value)
 
     def getFeatureIndex(self):
         """
@@ -541,8 +530,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self._set(subsamplingRate=value)
-        return self
+        return self._set(subsamplingRate=value)
 
     @since("1.4.0")
     def getSubsamplingRate(self):
@@ -571,8 +559,7 @@ class TreeRegressorParams(Params):
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self._set(impurity=value)
-        return self
+        return self._set(impurity=value)
 
     @since("1.4.0")
     def getImpurity(self):
@@ -604,8 +591,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`numTrees`.
         """
-        self._set(numTrees=value)
-        return self
+        return self._set(numTrees=value)
 
     @since("1.4.0")
     def getNumTrees(self):
@@ -619,8 +605,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
-        self._set(featureSubsetStrategy=value)
-        return self
+        return self._set(featureSubsetStrategy=value)
 
     @since("1.4.0")
     def getFeatureSubsetStrategy(self):
@@ -991,8 +976,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self._set(lossType=value)
-        return self
+        return self._set(lossType=value)
 
     @since("1.4.0")
     def getLossType(self):
@@ -1089,7 +1073,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                 quantileProbabilities=None, quantilesCol=None):
+                 quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                 quantilesCol=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
@@ -1100,7 +1085,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.AFTSurvivalRegression", self.uid)
         self._setDefault(censorCol="censor",
-                         quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99])
+                         quantileProbabilities=[0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
+                         maxIter=100, tol=1E-6)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1108,7 +1094,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     @since("1.6.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor",
-                  quantileProbabilities=None, quantilesCol=None):
+                  quantileProbabilities=list([0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99]),
+                  quantilesCol=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   fitIntercept=True, maxIter=100, tol=1E-6, censorCol="censor", \
@@ -1126,8 +1113,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`censorCol`.
         """
-        self._set(censorCol=value)
-        return self
+        return self._set(censorCol=value)
 
     @since("1.6.0")
     def getCensorCol(self):
@@ -1141,8 +1127,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantileProbabilities`.
         """
-        self._set(quantileProbabilities=value)
-        return self
+        return self._set(quantileProbabilities=value)
 
     @since("1.6.0")
     def getQuantileProbabilities(self):
@@ -1156,8 +1141,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantilesCol`.
         """
-        self._set(quantilesCol=value)
-        return self
+        return self._set(quantilesCol=value)
 
     @since("1.6.0")
     def getQuantilesCol(self):
@@ -1306,8 +1290,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`family`.
         """
-        self._set(family=value)
-        return self
+        return self._set(family=value)
 
     @since("2.0.0")
     def getFamily(self):
@@ -1321,8 +1304,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`link`.
         """
-        self._set(link=value)
-        return self
+        return self._set(link=value)
 
     @since("2.0.0")
     def getLink(self):

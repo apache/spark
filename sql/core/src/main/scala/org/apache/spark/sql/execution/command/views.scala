@@ -52,14 +52,13 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  require(tableDesc.tableType == CatalogTableType.VIRTUAL_VIEW)
+  require(tableDesc.tableType == CatalogTableType.VIEW)
   require(tableDesc.viewText.isDefined)
 
   private val tableIdentifier = tableDesc.identifier
 
   if (allowExisting && replace) {
-    throw new AnalysisException(
-      "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
+    throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {

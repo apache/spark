@@ -105,7 +105,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           val e = intercept[AnalysisException] {
             sql("CREATE OR REPLACE VIEW IF NOT EXISTS testView AS SELECT id FROM jt")
           }
-          assert(e.message.contains("not allowed to define a view"))
+          assert(e.message.contains(
+            "CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed"))
         }
       }
     }
