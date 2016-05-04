@@ -244,7 +244,7 @@ class RadixSortSuite extends SparkFunSuite with Logging {
       RadixSort.sortKeyPrefixArray(buf2, size, 0, 7, false, false)
       timer.stopTiming()
     }
-    benchmark.run
+    benchmark.run()
 
     /**
       Running benchmark: radix sort 25000000
