@@ -93,7 +93,7 @@ case class DescribeFunction(
 
   private def replaceFunctionName(usage: String, functionName: String): String = {
     if (usage == null) {
-      "To be added."
+      "N/A."
     } else {
       usage.replaceAll("_FUNC_", functionName)
     }
@@ -130,7 +130,16 @@ case class DescribeFunction(
             result
           }
 
-        case None => Seq(Row(s"Function: $functionName not found."))
+        case None =>
+          val currentDb = sparkSession.sessionState.catalog.getCurrentDatabase
+          if (sparkSession.externalCatalog.functionExists(currentDb, functionName)) {
+            val catalogFunction = sparkSession.externalCatalog.getFunction(currentDb, functionName)
+            Row(s"Function: ${catalogFunction.identifier}") ::
+              Row(s"Class: ${catalogFunction.className}") ::
+              Row(s"Usage: N/A") :: Nil
+          } else {
+            Seq(Row(s"Function: $functionName not found."))
+          }
       }
     }
   }
