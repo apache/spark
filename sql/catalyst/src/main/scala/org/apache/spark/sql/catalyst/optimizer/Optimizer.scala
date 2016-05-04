@@ -160,7 +160,7 @@ object SamplePushDown extends Rule[LogicalPlan] {
  * representation of data item.  For example back to back map operations.
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  private def eliminateSerialization(p: LogicalPlan): LogicalPlan = p transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
       // A workaround for SPARK-14803. Remove this after it is fixed.
@@ -172,6 +172,12 @@ object EliminateSerialization extends Rule[LogicalPlan] {
         val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
         Project(objAttr :: Nil, s.child)
       }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p if p.children.exists(_.isInstanceOf[DeserializeToObject]) =>
+      p.children.map(eliminateSerialization)
+      p
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)

@@ -29,17 +29,9 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
-case class Generic[T](id: T, value: Double)
 
 class DatasetSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
-
-  test("dataset.rdd with generic case class") {
-    val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS
-    val ds2 = ds.map(g => Generic(g.id, g.value))
-    ds.rdd.map(r => r.id).count
-    ds2.rdd.map(r => r.id).count
-  }
 
   test("toDS") {
     val data = Seq(("a", 1), ("b", 2), ("c", 3))
@@ -668,7 +660,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val dataset = Seq(1, 2, 3).toDS()
     checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
   }
+
+  test("dataset.rdd with generic case class") {
+    val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS
+    val ds2 = ds.map(g => Generic(g.id, g.value))
+    ds.rdd.map(r => r.id).count
+    ds2.rdd.map(r => r.id).count
+  }
 }
+
+case class Generic[T](id: T, value: Double)
 
 case class OtherTuple(_1: String, _2: Int)
 
