@@ -570,10 +570,17 @@ setMethod("unpersist",
 
 #' Repartition
 #'
-#' Return a new SparkDataFrame that has exactly numPartitions partitions.
+#' There are two different options for repartition
+#' Option 1
+#'   Return a new SparkDataFrame that has exactly numPartitions partitions.
+#' Option 2
+#'   Return a new SparkDataFrame which has as many partitions as the number of unique
+#'   groups identified by column(s) values which are being specified by the input.
+#' If both numPartitions and columns are specified, Option 1 will be chosen.
 #'
 #' @param x A SparkDataFrame
 #' @param numPartitions The number of partitions to use.
+#' @param col The column by which the partitioning will be performed.
 #'
 #' @family SparkDataFrame functions
 #' @rdname repartition
@@ -586,40 +593,22 @@ setMethod("unpersist",
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
 #' newDF <- repartition(df, 2L)
+#' newDF <- repartition(df, numPartitions = 2L)
+#' newDF <- repartition(df, col = df$"col1", df$"col2")
 #'}
 setMethod("repartition",
-          signature(x = "SparkDataFrame", numPartitions = "numeric"),
-          function(x, numPartitions) {
-            sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions))
-            dataFrame(sdf)
-          })
-
-#' RepartitionByColumn
-#'
-#' Return a new SparkDataFrame which has as many partitions as the number of unique
-#' groups identified by column(s) values which are being specified by the input.
-#'
-#' @param x A SparkDataFrame
-#' @param col The column by which the partitioning will be performed
-#'
-#' @family SparkDataFrame functions
-#' @rdname repartition
-#' @name repartition
-#' @export
-#' @examples
-#'\dontrun{
-#' sc <- sparkR.init()
-#' sqlContext <- sparkRSQL.init(sc)
-#' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
-#' newDF <- repartitionByColumn(df, df$col1, df$col2)
-#'}
-setMethod("repartitionByColumn",
-          signature(x = "SparkDataFrame", col = "Column"),
-          function(x, col, ...) {
-            cols <- list(col, ...)
-            jcol <- lapply(cols, function(c) { c@jc })
-            sdf <- callJMethod(x@sdf, "repartition", jcol)
+          signature(x = "SparkDataFrame"),
+          function(x, numPartitions = NULL, col = NULL, ...) {
+            if (!is.null(numPartitions) && (class(numPartitions) == "numeric"
+              || class(numPartitions) == "integer")) {
+              sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions))
+            } else if (!is.null(col) && class(col) == "Column") {
+              cols <- list(col, ...)
+              jcol <- lapply(cols, function(c) { c@jc })
+              sdf <- callJMethod(x@sdf, "repartition", jcol)
+            } else {
+              stop("Please specify numPartitions or at least one column")
+            }
             dataFrame(sdf)
           })
 

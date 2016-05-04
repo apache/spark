@@ -1023,9 +1023,14 @@ setMethod("keyBy",
 #' @aliases repartition,RDD
 #' @noRd
 setMethod("repartition",
-          signature(x = "RDD", numPartitions = "numeric"),
+          signature(x = "RDD"),
           function(x, numPartitions) {
-            coalesce(x, numPartitions, TRUE)
+            if (!is.null(numPartitions) && (class(numPartitions) == "numeric"
+              || class(numPartitions) == "integer")) {
+              coalesce(x, numPartitions, TRUE)
+            } else {
+              stop("Please, specify the number of partitions")
+            }
           })
 
 #' Return a new RDD that is reduced into numPartitions partitions.

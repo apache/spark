@@ -167,7 +167,7 @@ setGeneric("reduce", function(x, func) { standardGeneric("reduce") })
 # @rdname repartition
 # @seealso coalesce
 # @export
-setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
+setGeneric("repartition", function(x, ...) { standardGeneric("repartition") })
 
 # @rdname sampleRDD
 # @export
@@ -547,7 +547,7 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 #' @export
 setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
 
-# @rdname repartitionByColumns
+# @rdname repartitionByColumn
 # @seealso repartition
 # @export
 setGeneric("repartitionByColumn",
