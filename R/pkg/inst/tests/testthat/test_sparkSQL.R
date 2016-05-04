@@ -2106,7 +2106,7 @@ test_that("repartition by columns on DataFrame", {
     },
     schema)
 
-  # Number of partitions partitions is equal to 2
+  # Number of partitions is equal to 2
   expect_equal(nrow(df1), 2)
 })
 

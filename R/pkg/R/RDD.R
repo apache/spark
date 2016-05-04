@@ -1025,11 +1025,11 @@ setMethod("keyBy",
 setMethod("repartition",
           signature(x = "RDD"),
           function(x, numPartitions) {
-            if (!is.null(numPartitions) && (class(numPartitions) == "numeric"
-              || class(numPartitions) == "integer")) {
+            if (!is.null(numPartitions) && (class(numPartitions) == "numeric" ||
+              class(numPartitions) == "integer")) {
               coalesce(x, numPartitions, TRUE)
             } else {
-              stop("Please, specify the number of partitions")
+              coalesce(x, 200L)
             }
           })
 
