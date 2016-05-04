@@ -311,9 +311,8 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     describeSchema(relation.catalogTable.schema, buffer)
 
     if (relation.catalogTable.partitionColumns.nonEmpty) {
-      buffer += Row("# Partition Information", "", "")
-      buffer += Row(s"# ${output(0).name}", output(1).name, output(2).name)
-
+      append(buffer, "# Partition Information", "", "")
+      append(buffer, s"# ${output(0).name}", output(1).name, output(2).name)
       describeSchema(relation.catalogTable.partitionColumns, buffer)
     }
   }
@@ -321,8 +320,8 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   private def describeExtended(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
     describe(relation, buffer)
 
-    buffer += Row("", "", "")
-    buffer += Row("# Detailed Table Information", relation.catalogTable.toString, "")
+    append(buffer, "", "", "")
+    append(buffer, "# Detailed Table Information", relation.catalogTable.toString, "")
   }
 
   private def describeFormatted(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
@@ -330,33 +329,33 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
     val table = relation.catalogTable
 
-    buffer += Row("", "", "")
-    buffer += Row("# Detailed Table Information", "", "")
-    buffer += Row("Database:", table.database, "")
-    buffer += Row("Owner:", table.owner, "")
-    buffer += Row("Create Time:", new Date(table.createTime).toString, "")
-    buffer += Row("Last Access Time:", new Date(table.lastAccessTime).toString, "")
-    buffer += Row("Location:", table.storage.locationUri.getOrElse(""), "")
-    buffer += Row("Table Type:", table.tableType.name, "")
+    append(buffer, "", "", "")
+    append(buffer, "# Detailed Table Information", "", "")
+    append(buffer, "Database:", table.database, "")
+    append(buffer, "Owner:", table.owner, "")
+    append(buffer, "Create Time:", new Date(table.createTime).toString, "")
+    append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
+    append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Table Type:", table.tableType.name, "")
 
-    buffer += Row("Table Parameters:", "", "")
+    append(buffer, "Table Parameters:", "", "")
     table.properties.foreach { case (key, value) =>
-      buffer += Row(s"  $key", value, "")
+      append(buffer, s"  $key", value, "")
     }
 
-    buffer += Row("", "", "")
-    buffer += Row("# Storage Information", "", "")
-    table.storage.serde.foreach(serdeLib => buffer += Row("SerDe Library:", serdeLib, ""))
-    table.storage.inputFormat.foreach(format => buffer += Row("InputFormat:", format, ""))
-    table.storage.outputFormat.foreach(format => buffer += Row("OutputFormat:", format, ""))
-    buffer += Row("Compressed:", if (table.storage.compressed) "Yes" else "No", "")
-    buffer += Row("Num Buckets:", table.numBuckets.toString, "")
-    buffer += Row("Bucket Columns:", table.bucketColumnNames.mkString("[", ", ", "]"), "")
-    buffer += Row("Sort Columns:", table.sortColumnNames.mkString("[", ", ", "]"), "")
+    append(buffer, "", "", "")
+    append(buffer, "# Storage Information", "", "")
+    table.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
+    table.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
+    table.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
+    append(buffer, "Compressed:", if (table.storage.compressed) "Yes" else "No", "")
+    append(buffer, "Num Buckets:", table.numBuckets.toString, "")
+    append(buffer, "Bucket Columns:", table.bucketColumnNames.mkString("[", ", ", "]"), "")
+    append(buffer, "Sort Columns:", table.sortColumnNames.mkString("[", ", ", "]"), "")
 
-    buffer += Row("Storage Desc Parameters:", "", "")
+    append(buffer, "Storage Desc Parameters:", "", "")
     table.storage.serdeProperties.foreach { case (key, value) =>
-      buffer += Row(s"  $key", value, "")
+      append(buffer, s"  $key", value, "")
     }
   }
 
@@ -364,14 +363,19 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     schema.foreach { column =>
       val comment =
         if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
-      buffer += Row(column.name, column.dataType.simpleString, comment)
+      append(buffer, column.name, column.dataType.simpleString, comment)
     }
   }
 
   private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
-      buffer += Row(column.name, column.dataType.toLowerCase, column.comment.orNull)
+      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
     }
+  }
+
+  private def append(
+      buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
+    buffer += Row(column, dataType, comment)
   }
 }
 
