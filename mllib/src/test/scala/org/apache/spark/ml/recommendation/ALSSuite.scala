@@ -539,6 +539,39 @@ class ALSSuite
       }.getMessage.contains("was out of Integer range"))
     }
   }
+
+  test("ALS unknown user/item prediction strategy") {
+    val sqlContext = this.sqlContext
+    import sqlContext.implicits._
+    import org.apache.spark.sql.functions._
+
+    val (ratings, _) = genExplicitTestData(numUsers = 4, numItems = 4, rank = 1)
+    val data = ratings.toDF
+    val knownUser = data.select(max("user")).as[Int].first()
+    val unknownUser = knownUser + 10
+    val knownItem = data.select(max("item")).as[Int].first()
+    val unknownItem = knownItem + 20
+    val test = Seq(
+      (knownUser, unknownItem),
+      (unknownUser, knownItem),
+      (knownUser, knownItem)
+    ).toDF("user", "item")
+
+    val als = new ALS().setMaxIter(1).setRank(1)
+    // default is 'nan'
+    val defaultModel = als.fit(data)
+    val defaultPredictions = defaultModel.transform(test).select("prediction").as[Float].collect()
+    assert(defaultPredictions.length == 3)
+    assert(defaultPredictions(0).isNaN)
+    assert(defaultPredictions(1).isNaN)
+    assert(!defaultPredictions(2).isNaN)
+
+    // check 'drop' strategy should filter out rows with unknown users/items
+    val dropModel = als.setUnknownStrategy("drop").fit(data)
+    val dropPredictions = dropModel.transform(test).select("prediction").as[Float].collect()
+    assert(dropPredictions.length == 1)
+    assert(!dropPredictions(0).isNaN)
+  }
 }
 
 class ALSCleanerSuite extends SparkFunSuite {
