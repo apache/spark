@@ -68,6 +68,17 @@ class TypedColumn[-T, U](
     }
     new TypedColumn[T, U](newExpr, encoder)
   }
+
+  /** Creates a TypedColumn based on the given expression. */
+  private def withExpr(newExpr: Expression): TypedColumn[Any, String] =
+    new TypedColumn[Any, String](newExpr, ExpressionEncoder[String])
+
+  override def as(alias: String): TypedColumn[Any, String] = withExpr {
+    expr match {
+      case ne: NamedExpression => Alias (expr, alias)(explicitMetadata = Some(ne.metadata))
+      case other => Alias(other, alias)()
+    }
+  }
 }
 
 /**
