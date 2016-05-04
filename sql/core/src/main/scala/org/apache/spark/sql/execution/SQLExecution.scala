@@ -23,6 +23,7 @@ import org.apache.spark.SparkContext
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLExecutionEnd,
   SparkListenerSQLExecutionStart}
+import org.apache.spark.util.Utils
 
 private[sql] object SQLExecution {
 
@@ -48,7 +49,7 @@ private[sql] object SQLExecution {
         // sparkContext.getCallSite() would first try to pick up any call site that was previously
         // set, then fall back to Utils.getCallSite(); call Utils.getCallSite() directly on
         // continuous queries would give us call site like "run at <unknown>:0"
-        val callSite = Utils.getCallSite()
+        val callSite = sparkSession.sparkContext.getCallSite()
         val user = Utils.getCurrentUserName()
         sparkSession.sparkContext.listenerBus.post(
           SparkListenerSQLExecutionStart(
