@@ -155,7 +155,9 @@ private[spark] abstract class Task[T](
    */
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
-      context.taskMetrics.accumulators().filter { a => !taskFailed || a.countFailedValues }
+      context.taskMetrics.accumulators().filter { a =>
+        !a.isZero && (!taskFailed || a.countFailedValues)
+      }
     } else {
       Seq.empty
     }
