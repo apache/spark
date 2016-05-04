@@ -203,9 +203,8 @@ abstract class AccumulatorV2[@specialized(Int, Long, Double) IN, OUT] extends Se
    * merge-in-place. Developers should extend mergeImpl to customize the merge functionality.
    */
   final private[spark] lazy val merge: (AccumulatorV2[IN, OUT] => Unit) = {
-    assertMetadataNotNull()
     // Handle data property accumulators
-    if (metadata.dataProperty) {
+    if (metadata != null && metadata.dataProperty) {
       dataPropertyMerge _
     } else {
       mergeImpl _
