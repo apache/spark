@@ -291,6 +291,7 @@ object CreateDataSourceTableUtils extends Logging {
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
           serde = serde.serde,
+          compressed = false,
           serdeProperties = options
         )
         CatalogTablePartition(specs, storage)
