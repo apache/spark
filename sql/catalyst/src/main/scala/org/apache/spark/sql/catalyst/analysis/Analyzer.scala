@@ -1283,11 +1283,6 @@ class Analyzer(
     /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
     private object AliasedGenerator {
       def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name) if g.resolved && g.elementSchema.length > 1 =>
-          // If not given the default names, and the TGF with multiple output columns
-          failAnalysis(
-            s"""Expect multiple names given for ${g.getClass.getName},
-                |but only single name '$name' specified""".stripMargin)
         case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
         case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
         case _ => None
@@ -1301,7 +1296,7 @@ class Analyzer(
           "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
 
       case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
-        val generators = projectList.flatMap(_.find(_.isInstanceOf[Generator]))
+        val generators = projectList.filter(hasGenerator).map(trimAlias)
         throw new AnalysisException("Only one generator allowed per select clause but found " +
           generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
