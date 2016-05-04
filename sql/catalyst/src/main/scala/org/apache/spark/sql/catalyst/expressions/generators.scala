@@ -49,7 +49,6 @@ trait Generator extends Expression {
 
   /**
    * The output element schema.
-   * TODO we probably need to add more information like metadata etc.
    */
   def elementSchema: StructType
 
