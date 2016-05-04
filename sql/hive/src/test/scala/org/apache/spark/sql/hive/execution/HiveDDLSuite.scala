@@ -348,4 +348,21 @@ class HiveDDLSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
     }
   }
+
+  test("desc table") {
+    withTable("tab1") {
+      val tabName = "tab1"
+      sql(s"CREATE TABLE $tabName(c1 int)")
+
+      assert(sql(s"DESC $tabName").collect().length == 1)
+
+      assert(
+        sql(s"DESC FORMATTED $tabName").collect()
+          .exists(_.getString(0) == "# Storage Information"))
+
+      assert(
+        sql(s"DESC EXTENDED $tabName").collect()
+          .exists(_.getString(0) == "# Detailed Table Information"))
+    }
+  }
 }

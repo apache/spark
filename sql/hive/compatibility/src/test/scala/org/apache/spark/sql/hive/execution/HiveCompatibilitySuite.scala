@@ -503,7 +503,12 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // We have converted the useful parts of these tests to tests
     // in org.apache.spark.sql.hive.execution.SQLQuerySuite.
     "drop_database_removes_partition_dirs",
-    "drop_table_removes_partition_dirs"
+    "drop_table_removes_partition_dirs",
+
+    // These tests use EXPLAIN FORMATTED, which is not supported
+    "input4",
+    "join0",
+    "plan_json"
   )
 
   /**
@@ -699,7 +704,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "input26",
     "input28",
     "input2_limit",
-    "input4",
     "input40",
     "input41",
     "input49",
@@ -728,7 +732,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "insert1_overwrite_partitions",
     "insert2_overwrite_partitions",
     "insert_compressed",
-    "join0",
     "join1",
     "join10",
     "join11",
@@ -866,7 +869,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "partition_type_check",
     "partition_varchar1",
     "partition_wise_fileformat9",
-    "plan_json",
     "ppd1",
     "ppd2",
     "ppd_clusterby",

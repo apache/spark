@@ -30,29 +30,8 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
 
 
-
 // Note: The definition of these commands are based on the ones described in
 // https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
-
-/**
- * A DDL command that is not supported right now. Since we have already implemented
- * the parsing rules for some commands that are not allowed, we use this as the base class
- * of those commands.
- */
-abstract class UnsupportedCommand(exception: ParseException) extends RunnableCommand {
-
-  // Throws the ParseException when we create this command.
-  throw exception
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    Seq.empty[Row]
-  }
-
-  override val output: Seq[Attribute] = {
-    Seq(AttributeReference("result", StringType, nullable = false)())
-  }
-
-}
 
 /**
  * A command for users to create a new database.
@@ -251,8 +230,8 @@ case class AlterTableSetProperties(
     val table = catalog.getTableMetadata(tableName)
     val newProperties = table.properties ++ properties
     if (DDLUtils.isDatasourceTable(newProperties)) {
-      throw new AnalysisException(
-        "alter table properties is not supported for tables defined using the datasource API")
+      throw new AnalysisException("ALTER TABLE SET TBLPROPERTIES is not supported for " +
+        "tables defined using the datasource API")
     }
     val newTable = table.copy(properties = newProperties)
     catalog.alterTable(newTable)
@@ -319,15 +298,14 @@ case class AlterTableSerDeProperties(
 
   // should never happen if we parsed things correctly
   require(serdeClassName.isDefined || serdeProperties.isDefined,
-    "alter table attempted to set neither serde class name nor serde properties")
+    "ALTER TABLE attempted to set neither serde class name nor serde properties")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     // Do not support setting serde for datasource tables
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        "alter table serde is not supported for datasource tables")
+      throw new AnalysisException("ALTER TABLE SET SERDE is not supported for datasource tables")
     }
     val newTable = table.withNewStorage(
       serde = serdeClassName.orElse(table.storage.serde),
@@ -361,7 +339,7 @@ case class AlterTableAddPartition(
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        "alter table add partition is not allowed for tables defined using the datasource API")
+        "ALTER TABLE ADD PARTITION is not allowed for tables defined using the datasource API")
     }
     val parts = partitionSpecsAndLocs.map { case (spec, location) =>
       // inherit table storage format (possibly except for location)
@@ -420,7 +398,7 @@ case class AlterTableDropPartition(
     val table = catalog.getTableMetadata(tableName)
     if (DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException(
-        "alter table drop partition is not allowed for tables defined using the datasource API")
+        "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
     catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
     Seq.empty[Row]
@@ -428,12 +406,6 @@ case class AlterTableDropPartition(
 
 }
 
-case class AlterTableSetFileFormat(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    fileFormat: Seq[String],
-    genericFormat: Option[String])(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
 
 /**
  * A command that sets the location of a table or a partition.
@@ -462,7 +434,7 @@ case class AlterTableSetLocation(
         val newPart =
           if (DDLUtils.isDatasourceTable(table)) {
             throw new AnalysisException(
-              "alter table set location for partition is not allowed for tables defined " +
+              "ALTER TABLE SET LOCATION for partition is not allowed for tables defined " +
               "using the datasource API")
           } else {
             part.copy(storage = part.storage.copy(locationUri = Some(location)))
@@ -484,34 +456,6 @@ case class AlterTableSetLocation(
   }
 
 }
-
-case class AlterTableChangeCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    oldColName: String,
-    newColName: String,
-    dataType: DataType,
-    comment: Option[String],
-    afterColName: Option[String],
-    restrict: Boolean,
-    cascade: Boolean)(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
-
-case class AlterTableAddCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
-
-case class AlterTableReplaceCol(
-    tableName: TableIdentifier,
-    partitionSpec: Option[TablePartitionSpec],
-    columns: StructType,
-    restrict: Boolean,
-    cascade: Boolean)(exception: ParseException)
-  extends UnsupportedCommand(exception) with Logging
 
 
 private[sql] object DDLUtils {

@@ -653,6 +653,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     dataset.join(actual, dataset("user") === actual("id")).collect()
   }
+
+  test("SPARK-15097: implicits on dataset's sqlContext can be imported") {
+    val dataset = Seq(1, 2, 3).toDS()
+    checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
+  }
 }
 
 case class OtherTuple(_1: String, _2: Int)
@@ -712,4 +717,12 @@ class JavaData(val a: Int) extends Serializable {
 
 object JavaData {
   def apply(a: Int): JavaData = new JavaData(a)
+}
+
+/** Used to test importing dataset.sqlContext.implicits._ */
+object DatasetTransform {
+  def addOne(ds: Dataset[Int]): Dataset[Int] = {
+    import ds.sqlContext.implicits._
+    ds.map(_ + 1)
+  }
 }

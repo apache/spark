@@ -23,7 +23,7 @@ import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{AccumulatorV2, CallSite}
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue

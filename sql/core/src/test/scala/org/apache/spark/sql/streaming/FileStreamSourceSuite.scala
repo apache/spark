@@ -273,7 +273,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
@@ -297,7 +297,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
           "{'value': 'drop4'}\n{'value': 'keep5'}\n{'value': 'keep6'}",
           src,
           tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData(
           "{'value': 'drop7'}\n{'value': 'keep8'}\n{'value': 'keep9'}",
@@ -390,7 +390,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddParquetFileData(Seq("drop4", "keep5", "keep6"), src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddParquetFileData(Seq("drop7", "keep8", "keep9"), src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
@@ -454,7 +454,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")

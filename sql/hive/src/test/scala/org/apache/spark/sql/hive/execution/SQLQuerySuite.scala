@@ -1502,7 +1502,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         )
       }
 
-      assert(cause.getMessage.contains("Only ASC ordering is supported for sorting columns"))
+      assert(cause.getMessage.contains("Column ordering must be ASC, was 'DESC'"))
     }
   }
 }
