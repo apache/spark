@@ -410,7 +410,7 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(transformedDF.head().output, ["panda"])
         self.assertEqual(type(stopWordRemover.getStopWords()), list)
         self.assertTrue(isinstance(stopWordRemover.getStopWords()[0], basestring))
-        # with particular stop words list
+        # Custom
         stopwords = ["panda"]
         stopWordRemover.setStopWords(stopwords)
         self.assertEqual(stopWordRemover.getInputCol(), "input")
@@ -418,7 +418,7 @@ class FeatureTests(PySparkTestCase):
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, ["a"])
         # with language selection
-        stopwords = StopWordsRemover.loadStopWords("turkish")
+        stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
         dataset = sqlContext.createDataFrame([Row(input=["acaba", "ama", "biri"])])
         stopWordRemover.setStopWords(stopwords)
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)

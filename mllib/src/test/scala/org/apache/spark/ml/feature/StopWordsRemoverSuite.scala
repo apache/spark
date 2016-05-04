@@ -85,8 +85,15 @@ class StopWordsRemoverSuite
     testStopWordsRemover(remover, dataSet)
   }
 
+  test("default stop words of supported languages are not empty") {
+    StopWordsRemover.supportedLanguages.foreach { lang =>
+      assert(StopWordsRemover.loadDefaultStopWords(lang).nonEmpty,
+        s"The default stop words of $lang cannot be empty.")
+    }
+  }
+
   test("StopWordsRemover with language selection") {
-    val stopWords = StopWordsRemover.loadStopWords("turkish")
+    val stopWords = StopWordsRemover.loadDefaultStopWords("turkish")
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
@@ -100,7 +107,7 @@ class StopWordsRemoverSuite
   }
 
   test("StopWordsRemover with ignored words") {
-    val stopWords = StopWordsRemover.loadStopWords("english").toSet -- Set("a")
+    val stopWords = StopWordsRemover.loadDefaultStopWords("english").toSet -- Set("a")
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
@@ -114,7 +121,7 @@ class StopWordsRemoverSuite
   }
 
   test("StopWordsRemover with additional words") {
-    val stopWords = StopWordsRemover.loadStopWords("english").toSet ++ Set("python", "scala")
+    val stopWords = StopWordsRemover.loadDefaultStopWords("english").toSet ++ Set("python", "scala")
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")

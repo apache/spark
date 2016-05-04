@@ -1743,13 +1743,13 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     def __init__(self, inputCol=None, outputCol=None, stopWords=None,
                  caseSensitive=False, locale="en"):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None,\
-                 caseSensitive=false, locale="en")
+        __init__(self, inputCol=None, outputCol=None, stopWords=None, \
+                caseSensitive=false, locale="en")
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
-        self._setDefault(stopWords=StopWordsRemover.loadStopWords("english"),
+        self._setDefault(stopWords=StopWordsRemover.loadDefaultStopWords("english"),
                          caseSensitive=False, locale="en")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
@@ -1759,8 +1759,8 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     def setParams(self, inputCol=None, outputCol=None, stopWords=None,
                   caseSensitive=False, locale="en"):
         """
-        setParams(self, inputCol="input", outputCol="output", stopWords=None,
-                  caseSensitive=false, locale="en")
+        setParams(self, inputCol="input", outputCol="output", stopWords=None, \
+                 caseSensitive=false, locale="en")
         Sets params for this StopWordRemover.
         """
         kwargs = self.setParams._input_kwargs
@@ -1769,35 +1769,35 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     @since("1.6.0")
     def setStopWords(self, value):
         """
-        Specify the stopwords to be filtered.
+        Sets the value of :py:attr:`stopWords`.
         """
         return self._set(stopWords=value)
 
     @since("1.6.0")
     def getStopWords(self):
         """
-        Get the stopwords.
+        Gets the value of :py:attr:`stopWords` or its default value.
         """
         return self.getOrDefault(self.stopWords)
 
     @since("1.6.0")
     def setCaseSensitive(self, value):
         """
-        Set whether to do a case sensitive comparison over the stop words
+        Sets the value of :py:attr:`caseSensitive`.
         """
         return self._set(caseSensitive=value)
 
     @since("1.6.0")
     def getCaseSensitive(self):
         """
-        Get whether to do a case sensitive comparison over the stop words.
+        Gets the value of :py:attr:`caseSensitive` or its default value.
         """
         return self.getOrDefault(self.caseSensitive)
 
     @since("2.0.0")
     def setLocale(self, value):
         """
-        Set locale for doing a case sensitive comparison
+        Sets the value of :py:attr:`locale`.
         """
         self._set(caseSensitive=value)
         return self
@@ -1805,20 +1805,20 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     @since("2.0.0")
     def getLocale(self):
         """
-        Get locale for doing a case sensitive comparison
+        Gets the value of :py:attr:`locale`.
         """
         return self.getOrDefault(self.caseSensitive)
 
     @staticmethod
     @since("2.0.0")
-    def loadStopWords(language):
+    def loadDefaultStopWords(language):
         """
-        Load stop words for the language
+        Loads the default stop words for the given language.
         Supported languages: danish, dutch, english, finnish, french, german, hungarian,
         italian, norwegian, portuguese, russian, spanish, swedish, turkish
         """
         stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
-        return list(stopWordsObj.loadStopWords(language))
+        return list(stopWordsObj.loadDefaultStopWords(language))
 
 
 @inherit_doc
