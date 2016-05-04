@@ -489,9 +489,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("load() - with directory of unpartitioned data in nested subdirs") {
-    withTempPath { file =>
-      val dir = file.getCanonicalPath
-      val subdir = new File(dir, "subdir").getCanonicalPath
+    withTempPath { dir =>
+      val subdir = new File(dir, "subdir")
 
       val dataInDir = Seq(1, 2, 3).toDF("value")
       val dataInSubdir = Seq(4, 5, 6).toDF("value")
@@ -503,21 +502,24 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         dir
           |
           |___ [ files of dataInDir ]
-               |
-               |___ subsubdir
-                         |
-                         |___ [ files of dataInSubdir ]
+          |
+          |___ subsubdir
+                    |
+                    |___ [ files of dataInSubdir ]
       */
 
       // Generated dataInSubdir, not data in dir
-      partitionedTestDF1.write
+      dataInSubdir.write
         .format(dataSourceName)
         .mode(SaveMode.Overwrite)
-        .save(subdir)
+        .save(subdir.getCanonicalPath)
+
+      require(subdir.exists)
+      require(subdir.listFiles().exists(!_.isDirectory))
 
       // Inferring schema should throw error as it should not find any file to infer
       val e = intercept[Exception] {
-        sqlContext.read.format(dataSourceName).load(dir)
+        sqlContext.read.format(dataSourceName).load(dir.getCanonicalPath)
       }
 
       e match {
@@ -532,24 +534,25 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       }
 
       /** Test whether data is read with the given path matches the expected answer */
-      def testWithPath(path: String, expectedAnswer: Seq[Row]): Unit = {
+      def testWithPath(path: File, expectedAnswer: Seq[Row]): Unit = {
         val df = sqlContext.read
           .format(dataSourceName)
           .schema(dataInDir.schema) // avoid schema inference for any format
-          .load(path)
+          .load(path.getCanonicalPath)
         checkAnswer(df, expectedAnswer)
       }
 
-      // Reading by the path 'file/' *not by 'file/subdir') should give empty results
-      // as there are no files in 'file' and it should not pick up files in 'file/subdir'
+      // Verify that reading by path 'dir/' gives empty results as there are no files in 'file'
+      // and it should not pick up files in 'dir/subdir'
       testWithPath(dir, Seq.empty)
 
+      // Verify that if there is data in dir, then reading by path 'dir/' reads only dataInDir
       dataInDir.write
         .format(dataSourceName)
-        .mode(SaveMode.Overwrite)
-        .save(dir)
-
-      // Should give only rows from partitionedTestDF2
+        .mode(SaveMode.Ignore)
+        .save(dir.getCanonicalPath)
+      require(dir.listFiles().exists(!_.isDirectory))
+      require(subdir.listFiles().exists(!_.isDirectory))
       testWithPath(dir, dataInDir.collect())
     }
   }
@@ -558,10 +561,10 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
 
       val dir = file.getCanonicalPath
-      val subdir = new File(dir, "subdir").getCanonicalPath
-      val subsubdir = new File(subdir, "subsubdir").getCanonicalPath
+      val subdir = new File(dir, "subdir")
+      val subsubdir = new File(subdir, "subsubdir")
       val anotherSubsubdir =
-        new File(new File(dir, "another-subdir"), "another-subsubdir").getCanonicalPath
+        new File(new File(dir, "another-subdir"), "another-subsubdir")
 
       val dataInSubdir = Seq(1, 2, 3).toDF("value")
       val dataInSubsubdir = Seq(4, 5, 6).toDF("value")
@@ -570,20 +573,26 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       dataInSubdir.write
         .format (dataSourceName)
         .mode (SaveMode.Overwrite)
-        .save (subdir)
+        .save (subdir.getCanonicalPath)
 
       dataInSubsubdir.write
         .format (dataSourceName)
         .mode (SaveMode.Overwrite)
-        .save (subsubdir)
+        .save (subsubdir.getCanonicalPath)
 
       dataInAnotherSubsubdir.write
         .format (dataSourceName)
         .mode (SaveMode.Overwrite)
-        .save (anotherSubsubdir)
+        .save (anotherSubsubdir.getCanonicalPath)
+
+      require(subdir.exists)
+      require(subdir.listFiles().exists(!_.isDirectory))
+      require(subsubdir.exists)
+      require(subsubdir.listFiles().exists(!_.isDirectory))
+      require(anotherSubsubdir.exists)
+      require(anotherSubsubdir.listFiles().exists(!_.isDirectory))
 
       /*
-
         Directory structure generated
 
         dir
@@ -620,7 +629,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       testWithPath(s"$dir/another*/*", dataInAnotherSubsubdir)
       testWithPath(s"$dir/*/another*", dataInAnotherSubsubdir)
       testWithPath(s"$dir/*/*", dataInSubdir.union(dataInSubsubdir).union(dataInAnotherSubsubdir))
-
     }
   }
 
