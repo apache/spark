@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.internal.config.ConfigEntry
+import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
 
 
@@ -83,6 +83,10 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   @throws[NoSuchElementException]("if the key is not set")
   protected[sql] def get[T](entry: ConfigEntry[T]): T = {
+    sqlConf.getConf(entry)
+  }
+
+  protected[sql] def get[T](entry: OptionalConfigEntry[T]): Option[T] = {
     sqlConf.getConf(entry)
   }
 
