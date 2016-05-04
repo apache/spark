@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -236,6 +237,45 @@ trait FileFormat {
     // TODO: Remove this default implementation when the other formats have been ported
     // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
+  }
+
+  /**
+   * Exactly the same as [[buildReader]] except that the reader function returned by this method
+   * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
+   * returns.
+   */
+  private[sql] def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val dataReader = buildReader(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+
+    new (PartitionedFile => Iterator[InternalRow]) with Serializable {
+      private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+
+      private val joinedRow = new JoinedRow()
+
+      // Using lazy val to avoid serialization
+      private lazy val appendPartitionColumns =
+        GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+      override def apply(file: PartitionedFile): Iterator[InternalRow] = {
+        // Using local val to avoid per-row lazy val check (pre-mature optimization?...)
+        val converter = appendPartitionColumns
+
+        // Note that we have to apply the converter even though `file.partitionValues` is empty.
+        // This is because the converter is also responsible for converting safe `InternalRow`s into
+        // `UnsafeRow`s.
+        dataReader(file).map { dataRow =>
+          converter(joinedRow(dataRow, file.partitionValues))
+        }
+      }
+    }
   }
 
   /**
