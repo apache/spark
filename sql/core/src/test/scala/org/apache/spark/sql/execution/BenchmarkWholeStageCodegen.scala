@@ -684,9 +684,9 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
         val taskMemoryManager = new TaskMemoryManager(
           new StaticMemoryManager(
             new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-            Long.MaxValue,
-            Long.MaxValue,
-            1),
+            numCores = 1,
+            totalHeapMemory = Long.MaxValue,
+            totalOffHeapMemory = 0L),
           0)
         val map = new LongToUnsafeRowMap(taskMemoryManager, 64)
         while (i < 65536) {
@@ -716,9 +716,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
           new StaticMemoryManager(
             new SparkConf().set("spark.memory.offHeap.enabled", s"${heap == "off"}")
               .set("spark.memory.offHeap.size", "102400000"),
-            Long.MaxValue,
-            Long.MaxValue,
-            1),
+            numCores = 1),
           0)
         val map = new BytesToBytesMap(taskMemoryManager, 1024, 64L<<20)
         val keyBytes = new Array[Byte](16)

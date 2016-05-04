@@ -205,6 +205,11 @@ class ReceivedBlockHandlerSuite
     // Block Manager with 12000 * 0.4 = 4800 bytes of free space for unroll
     blockManager = createBlockManager(12000, sparkConf)
 
+    // Important note: as currently written, this test may be wrong. The following comments claim
+    // that the large IteratorBlock is too large to be stored, but the block actually _does_ fit.
+    // If we change the constants so that the block doesn't fit, these tests fail. See SPARK-14719
+    // for a discussion of this issue.
+
     // there is not enough space to store this block in MEMORY,
     // But BlockManager will be able to serialize this block to WAL
     // and hence count returns correct value.
@@ -265,7 +270,15 @@ class ReceivedBlockHandlerSuite
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    // Based on the git history, it seems that `maxMem` was intended to be the maximum amount of
+    // storage memory. Thus we use the following configuration to best match the original
+    // configuration when these tests were first written.
+    val memMgrConf = conf.clone()
+      .set("spark.shuffle.memoryFraction", "0")
+      .set("spark.storage.memoryFraction", "1")
+      .set("spark.storage.safetyFraction", "1")
+    val memManager = new StaticMemoryManager(
+      memMgrConf, numCores = 1, totalHeapMemory = maxMem, totalOffHeapMemory = 0)
     val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)

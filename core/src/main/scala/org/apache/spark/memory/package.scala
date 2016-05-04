@@ -35,27 +35,27 @@ package org.apache.spark
  *    correspond to individual operators and data structures within a task. The TaskMemoryManager
  *    receives memory allocation requests from MemoryConsumers and issues callbacks to consumers
  *    in order to trigger spilling when running low on memory.
- *  - [[org.apache.spark.memory.MemoryPool]]s are a bookkeeping abstraction used by the
- *    MemoryManager to track the division of memory between storage and execution.
+ *  - [[org.apache.spark.memory.MemoryPool]]s are an abstraction used by the MemoryManager in order
+ *    to avoid duplication between the bookeeping structures for tracking on- and off-heap memory.
  *
  * Diagrammatically:
  *
  * {{{
  *       +-------------+
  *       | MemConsumer |----+                                   +------------------------+
- *       +-------------+    |    +-------------------+          |     MemoryManager      |
- *                          +--->| TaskMemoryManager |----+     |                        |
- *       +-------------+    |    +-------------------+    |     |  +------------------+  |
- *       | MemConsumer |----+                             |     |  |  StorageMemPool  |  |
- *       +-------------+         +-------------------+    |     |  +------------------+  |
- *                               | TaskMemoryManager |----+     |                        |
+ *       +-------------+    |    +-------------------+          |                        |
+ *                          +--->| TaskMemoryManager |----+     |       MemoryManager    |
+ *       +-------------+    |    +-------------------+    |     |                        |
+ *       | MemConsumer |----+                             |     |  +------------------+  |
+ *       +-------------+         +-------------------+    |     |  |       Heap       |  |
+ *                               | TaskMemoryManager |----+     |  |    MemoryPool    |  |
  *                               +-------------------+    |     |  +------------------+  |
- *                                                        +---->|  |OnHeapExecMemPool |  |
+ *                                                        +---->|                        |
  *                                        *               |     |  +------------------+  |
- *                                        *               |     |                        |
- *       +-------------+                  *               |     |  +------------------+  |
- *       | MemConsumer |----+                             |     |  |OffHeapExecMemPool|  |
- *       +-------------+    |    +-------------------+    |     |  +------------------+  |
+ *                                        *               |     |  |     Off-heap     |  |
+ *       +-------------+                  *               |     |  |    MemoryPool    |  |
+ *       | MemConsumer |----+                             |     |  +------------------+  |
+ *       +-------------+    |    +-------------------+    |     |                        |
  *                          +--->| TaskMemoryManager |----+     |                        |
  *                               +-------------------+          +------------------------+
  * }}}

@@ -95,9 +95,9 @@ private[execution] object HashedRelation {
       new TaskMemoryManager(
         new StaticMemoryManager(
           new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-          Long.MaxValue,
-          Long.MaxValue,
-          1),
+          numCores = 1,
+          totalHeapMemory = Long.MaxValue,
+          totalOffHeapMemory = 0L),
         0)
     }
 
@@ -228,9 +228,9 @@ private[joins] class UnsafeHashedRelation(
     val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-        Long.MaxValue,
-        Long.MaxValue,
-        1),
+        numCores = 1,
+        totalHeapMemory = Long.MaxValue,
+        totalOffHeapMemory = 0L),
       0)
 
     val pageSizeBytes = Option(SparkEnv.get).map(_.memoryManager.pageSizeBytes)
@@ -391,9 +391,9 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       new TaskMemoryManager(
         new StaticMemoryManager(
           new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-          Long.MaxValue,
-          Long.MaxValue,
-          1),
+          numCores = 1,
+          totalHeapMemory = Long.MaxValue,
+          totalOffHeapMemory = 0),
         0),
       0)
   }

@@ -17,8 +17,6 @@
 
 package org.apache.spark.memory
 
-import javax.annotation.concurrent.GuardedBy
-
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.BlockId
@@ -27,6 +25,7 @@ import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.array.ByteArrayMethods
 import org.apache.spark.unsafe.memory.MemoryAllocator
 
+
 /**
  * An abstract memory manager that enforces how memory is shared between execution and storage.
  *
@@ -34,47 +33,25 @@ import org.apache.spark.unsafe.memory.MemoryAllocator
  * sorts and aggregations, while storage memory refers to that used for caching and propagating
  * internal data across the cluster. There exists one MemoryManager per JVM.
  */
-private[spark] abstract class MemoryManager(
-    conf: SparkConf,
-    numCores: Int,
-    onHeapStorageMemory: Long,
-    onHeapExecutionMemory: Long) extends Logging {
+private[spark] abstract class MemoryManager(conf: SparkConf, numCores: Int) extends Logging {
 
   // -- Methods related to memory allocation policies and bookkeeping ------------------------------
 
-  @GuardedBy("this")
-  protected val onHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.ON_HEAP)
-  @GuardedBy("this")
-  protected val offHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.OFF_HEAP)
-  @GuardedBy("this")
-  protected val onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.ON_HEAP)
-  @GuardedBy("this")
-  protected val offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.OFF_HEAP)
+  val heapMemoryPool: MemoryPool
+  val offHeapMemoryPool: MemoryPool
 
-  onHeapStorageMemoryPool.incrementPoolSize(onHeapStorageMemory)
-  onHeapExecutionMemoryPool.incrementPoolSize(onHeapExecutionMemory)
-
-  protected[this] val maxOffHeapMemory = conf.getSizeAsBytes("spark.memory.offHeap.size", 0)
-  protected[this] val offHeapStorageMemory =
-    (maxOffHeapMemory * conf.getDouble("spark.memory.storageFraction", 0.5)).toLong
-
-  offHeapExecutionMemoryPool.incrementPoolSize(maxOffHeapMemory - offHeapStorageMemory)
-  offHeapStorageMemoryPool.incrementPoolSize(offHeapStorageMemory)
-
-  /**
-   * Total available memory for storage, in bytes. This amount can vary over time, depending on
-   * the MemoryManager implementation.
-   * In this model, this is equivalent to the amount of memory not occupied by execution.
-   */
-  def maxOnHeapStorageMemory: Long
+  protected def pool(memoryMode: MemoryMode): MemoryPool = memoryMode match {
+    case MemoryMode.ON_HEAP => heapMemoryPool
+    case MemoryMode.OFF_HEAP => offHeapMemoryPool
+  }
 
   /**
    * Set the [[MemoryStore]] used by this manager to evict cached blocks.
    * This must be set after construction due to initialization ordering constraints.
    */
   final def setMemoryStore(store: MemoryStore): Unit = synchronized {
-    onHeapStorageMemoryPool.setMemoryStore(store)
-    offHeapStorageMemoryPool.setMemoryStore(store)
+    heapMemoryPool.setMemoryStore(store)
+    offHeapMemoryPool.setMemoryStore(store)
   }
 
   /**
@@ -82,7 +59,13 @@ private[spark] abstract class MemoryManager(
    *
    * @return whether all N bytes were successfully granted.
    */
-  def acquireStorageMemory(blockId: BlockId, numBytes: Long, memoryMode: MemoryMode): Boolean
+  def acquireStorageMemory(
+      blockId: BlockId,
+      numBytes: Long,
+      memoryMode: MemoryMode,
+      maxBytesToAttemptToFreeViaEviction: Long = Long.MaxValue): Boolean = {
+    pool(memoryMode).acquireStorageMemory(blockId, numBytes, maxBytesToAttemptToFreeViaEviction)
+  }
 
   /**
    * Acquire N bytes of memory to unroll the given block, evicting existing ones if necessary.
@@ -103,12 +86,22 @@ private[spark] abstract class MemoryManager(
    * task has a chance to ramp up to at least 1 / 2N of the total memory pool (where N is the # of
    * active tasks) before it is forced to spill. This can happen if the number of tasks increase
    * but an older task had a lot of memory already.
+   *
+   * Because N varies dynamically, we keep track of the set of active tasks and redo the
+   * calculations of 1 / 2N and 1 / N in waiting tasks whenever this set changes. This is all don
+   * by synchronizing access to mutable state and using wait() and notifyAll() to signal changes to
+   * callers. Prior to Spark 1.6, this arbitration of memory across tasks was performed by the
+   * ShuffleMemoryManager.
+   *
+   * @return the number of bytes granted to the task.
    */
   private[memory]
   def acquireExecutionMemory(
       numBytes: Long,
       taskAttemptId: Long,
-      memoryMode: MemoryMode): Long
+      memoryMode: MemoryMode): Long = {
+    pool(memoryMode).acquireExecutionMemory(numBytes, taskAttemptId)
+  }
 
   /**
    * Release numBytes of execution memory belonging to the given task.
@@ -118,10 +111,7 @@ private[spark] abstract class MemoryManager(
       numBytes: Long,
       taskAttemptId: Long,
       memoryMode: MemoryMode): Unit = synchronized {
-    memoryMode match {
-      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
-      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.releaseMemory(numBytes, taskAttemptId)
-    }
+    pool(memoryMode).releaseExecutionMemory(numBytes, taskAttemptId)
   }
 
   /**
@@ -129,27 +119,24 @@ private[spark] abstract class MemoryManager(
    *
    * @return the number of bytes freed.
    */
-  private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Long = synchronized {
-    onHeapExecutionMemoryPool.releaseAllMemoryForTask(taskAttemptId) +
-      offHeapExecutionMemoryPool.releaseAllMemoryForTask(taskAttemptId)
+  private[memory] def releaseAllExecutionMemoryForTask(taskAttemptId: Long): Long = {
+    heapMemoryPool.releaseAllExecutionMemoryForTask(taskAttemptId) +
+      offHeapMemoryPool.releaseAllExecutionMemoryForTask(taskAttemptId)
   }
 
   /**
    * Release N bytes of storage memory.
    */
-  def releaseStorageMemory(numBytes: Long, memoryMode: MemoryMode): Unit = synchronized {
-    memoryMode match {
-      case MemoryMode.ON_HEAP => onHeapStorageMemoryPool.releaseMemory(numBytes)
-      case MemoryMode.OFF_HEAP => offHeapStorageMemoryPool.releaseMemory(numBytes)
-    }
+  def releaseStorageMemory(numBytes: Long, memoryMode: MemoryMode): Unit = {
+    pool(memoryMode).releaseStorageMemory(numBytes)
   }
 
   /**
    * Release all storage memory acquired.
    */
   final def releaseAllStorageMemory(): Unit = synchronized {
-    onHeapStorageMemoryPool.releaseAllMemory()
-    offHeapStorageMemoryPool.releaseAllMemory()
+    heapMemoryPool.releaseAllStorageMemory()
+    offHeapMemoryPool.releaseAllStorageMemory()
   }
 
   /**
@@ -163,22 +150,22 @@ private[spark] abstract class MemoryManager(
    * Execution memory currently in use, in bytes.
    */
   final def executionMemoryUsed: Long = synchronized {
-    onHeapExecutionMemoryPool.memoryUsed + offHeapExecutionMemoryPool.memoryUsed
+    heapMemoryPool.executionMemoryUsed + offHeapMemoryPool.executionMemoryUsed
   }
 
   /**
    * Storage memory currently in use, in bytes.
    */
   final def storageMemoryUsed: Long = synchronized {
-    onHeapStorageMemoryPool.memoryUsed + offHeapStorageMemoryPool.memoryUsed
+    heapMemoryPool.storageMemoryUsed + offHeapMemoryPool.storageMemoryUsed
   }
 
   /**
    * Returns the execution memory consumption, in bytes, for the given task.
    */
   private[memory] def getExecutionMemoryUsageForTask(taskAttemptId: Long): Long = synchronized {
-    onHeapExecutionMemoryPool.getMemoryUsageForTask(taskAttemptId) +
-      offHeapExecutionMemoryPool.getMemoryUsageForTask(taskAttemptId)
+    heapMemoryPool.getExecutionMemoryUsageForTask(taskAttemptId) +
+      offHeapMemoryPool.getExecutionMemoryUsageForTask(taskAttemptId)
   }
 
   // -- Fields related to Tungsten managed memory -------------------------------------------------
@@ -206,15 +193,15 @@ private[spark] abstract class MemoryManager(
    * by looking at the number of cores available to the process, and the total amount of memory,
    * and then divide it by a factor of safety.
    */
-  val pageSizeBytes: Long = {
+  lazy val pageSizeBytes: Long = {
     val minPageSize = 1L * 1024 * 1024   // 1MB
     val maxPageSize = 64L * minPageSize  // 64MB
     val cores = if (numCores > 0) numCores else Runtime.getRuntime.availableProcessors()
     // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
     val safetyFactor = 16
     val maxTungstenMemory: Long = tungstenMemoryMode match {
-      case MemoryMode.ON_HEAP => onHeapExecutionMemoryPool.poolSize
-      case MemoryMode.OFF_HEAP => offHeapExecutionMemoryPool.poolSize
+      case MemoryMode.ON_HEAP => heapMemoryPool.maxExecutionMemory
+      case MemoryMode.OFF_HEAP => offHeapMemoryPool.maxExecutionMemory
     }
     val size = ByteArrayMethods.nextPowerOf2(maxTungstenMemory / cores / safetyFactor)
     val default = math.min(maxPageSize, math.max(minPageSize, size))

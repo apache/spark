@@ -35,9 +35,9 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
   val mm = new TaskMemoryManager(
     new StaticMemoryManager(
       new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-      Long.MaxValue,
-      Long.MaxValue,
-      1),
+      numCores = 1,
+      totalHeapMemory = Long.MaxValue,
+      totalOffHeapMemory = 0L),
     0)
 
   test("UnsafeHashedRelation") {
@@ -84,9 +84,9 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val taskMemoryManager = new TaskMemoryManager(
       new StaticMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
-        Long.MaxValue,
-        Long.MaxValue,
-        1),
+        numCores = 1,
+        totalHeapMemory = Long.MaxValue,
+        totalOffHeapMemory = 0L),
       0)
     val binaryMap = new BytesToBytesMap(taskMemoryManager, 1, 1)
     val os = new ByteArrayOutputStream()

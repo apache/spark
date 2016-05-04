@@ -30,9 +30,9 @@ public class TaskMemoryManagerSuite {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new StaticMemoryManager(
         new SparkConf().set("spark.memory.offHeap.enabled", "false"),
+        1,
         Long.MAX_VALUE,
-        Long.MAX_VALUE,
-        1),
+        0),
       0);
     manager.allocatePage(4096, null);  // leak memory
     Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
