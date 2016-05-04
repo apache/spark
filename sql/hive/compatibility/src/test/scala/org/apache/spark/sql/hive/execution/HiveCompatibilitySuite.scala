@@ -508,7 +508,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // These tests use EXPLAIN FORMATTED, which is not supported
     "input4",
     "join0",
-    "plan_json"
+    "plan_json",
+
+    // We do not support alter table drop partition on multiple partitions in a single command
+    "drop_multi_partitions"
   )
 
   /**
@@ -615,7 +618,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "disable_file_format_check",
     "distinct_stats",
     "drop_function",
-    "drop_multi_partitions",
     "drop_table",
     "drop_table2",
     "drop_view",
