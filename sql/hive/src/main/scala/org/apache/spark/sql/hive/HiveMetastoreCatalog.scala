@@ -536,16 +536,11 @@ private[hive] class MetaStoreFileCatalog(
     sparkSession: SparkSession,
     paths: Seq[Path],
     partitionSpecFromHive: PartitionSpec)
-  extends HDFSFileCatalog(
+  extends ListingFileCatalog(
     sparkSession,
-    Map.empty,
     paths,
+    Map.empty,
     Some(partitionSpecFromHive.partitionColumns)) {
-
-  override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    fs.listStatus(path)
-  }
 
   override def partitionSpec(): PartitionSpec = partitionSpecFromHive
 }
