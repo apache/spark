@@ -68,10 +68,10 @@ class HasRegParam(Params):
 
 class HasFeaturesCol(Params):
     """
-    Mixin for param featuresCol: features column name.
+    Mixin for param featuresCol: features column name.(Default 'features')
     """
 
-    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.", typeConverter=TypeConverters.toString)
+    featuresCol = Param(Params._dummy(), "featuresCol", "features column name.(Default 'features')", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
@@ -92,10 +92,10 @@ class HasFeaturesCol(Params):
 
 class HasLabelCol(Params):
     """
-    Mixin for param labelCol: label column name.
+    Mixin for param labelCol: label column name.(Default 'label')
     """
 
-    labelCol = Param(Params._dummy(), "labelCol", "label column name.", typeConverter=TypeConverters.toString)
+    labelCol = Param(Params._dummy(), "labelCol", "label column name.(Default 'label')", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasLabelCol, self).__init__()
@@ -116,10 +116,10 @@ class HasLabelCol(Params):
 
 class HasPredictionCol(Params):
     """
-    Mixin for param predictionCol: prediction column name.
+    Mixin for param predictionCol: prediction column name.(Default 'prediction')
     """
 
-    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.", typeConverter=TypeConverters.toString)
+    predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.(Default 'prediction')", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasPredictionCol, self).__init__()
@@ -140,10 +140,10 @@ class HasPredictionCol(Params):
 
 class HasProbabilityCol(Params):
     """
-    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.
+    Mixin for param probabilityCol: Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.(Default 'probability')
     """
 
-    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.", typeConverter=TypeConverters.toString)
+    probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.(Default 'probability')", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
@@ -164,10 +164,10 @@ class HasProbabilityCol(Params):
 
 class HasRawPredictionCol(Params):
     """
-    Mixin for param rawPredictionCol: raw prediction (a.k.a. confidence) column name.
+    Mixin for param rawPredictionCol: raw prediction (a.k.a. confidence) column name.(Default 'rawPrediction')
     """
 
-    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", typeConverter=TypeConverters.toString)
+    rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.(Default 'rawPrediction')", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasRawPredictionCol, self).__init__()
@@ -234,10 +234,10 @@ class HasInputCols(Params):
 
 class HasOutputCol(Params):
     """
-    Mixin for param outputCol: output column name.
+    Mixin for param outputCol: output column name.(Default self.uid + '__output')
     """
 
-    outputCol = Param(Params._dummy(), "outputCol", "output column name.", typeConverter=TypeConverters.toString)
+    outputCol = Param(Params._dummy(), "outputCol", "output column name.(Default self.uid + '__output')", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
@@ -304,10 +304,10 @@ class HasCheckpointInterval(Params):
 
 class HasSeed(Params):
     """
-    Mixin for param seed: random seed.
+    Mixin for param seed: random seed.(Default hash of type name)
     """
 
-    seed = Param(Params._dummy(), "seed", "random seed.", typeConverter=TypeConverters.toInt)
+    seed = Param(Params._dummy(), "seed", "random seed.(Default hash of type name)", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasSeed, self).__init__()
@@ -397,10 +397,10 @@ class HasHandleInvalid(Params):
 
 class HasElasticNetParam(Params):
     """
-    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.
+    Mixin for param elasticNetParam: the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.(Default 0.0)
     """
 
-    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", typeConverter=TypeConverters.toFloat)
+    elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.(Default 0.0)", typeConverter=TypeConverters.toFloat)
 
     def __init__(self):
         super(HasElasticNetParam, self).__init__()
@@ -421,10 +421,10 @@ class HasElasticNetParam(Params):
 
 class HasFitIntercept(Params):
     """
-    Mixin for param fitIntercept: whether to fit an intercept term.
+    Mixin for param fitIntercept: whether to fit an intercept term.(Default True)
     """
 
-    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.", typeConverter=TypeConverters.toBoolean)
+    fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.(Default True)", typeConverter=TypeConverters.toBoolean)
 
     def __init__(self):
         super(HasFitIntercept, self).__init__()
@@ -445,10 +445,10 @@ class HasFitIntercept(Params):
 
 class HasStandardization(Params):
     """
-    Mixin for param standardization: whether to standardize the training features before fitting the model.
+    Mixin for param standardization: whether to standardize the training features before fitting the model.(Default True)
     """
 
-    standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.", typeConverter=TypeConverters.toBoolean)
+    standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.(Default True)", typeConverter=TypeConverters.toBoolean)
 
     def __init__(self):
         super(HasStandardization, self).__init__()
@@ -515,10 +515,10 @@ class HasWeightCol(Params):
 
 class HasSolver(Params):
     """
-    Mixin for param solver: the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.
+    Mixin for param solver: the solver algorithm for optimization.(Default 'auto')
     """
 
-    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization. If this is not set or empty, default value is 'auto'.", typeConverter=TypeConverters.toString)
+    solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization.(Default 'auto')", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasSolver, self).__init__()
@@ -565,16 +565,17 @@ class DecisionTreeParams(Params):
     Mixin for Decision Tree parameters.
     """
 
-    maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.", typeConverter=TypeConverters.toInt)
-    maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.", typeConverter=TypeConverters.toInt)
-    minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.", typeConverter=TypeConverters.toInt)
-    minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.", typeConverter=TypeConverters.toFloat)
-    maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its aggregates may exceed this size.", typeConverter=TypeConverters.toInt)
-    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.", typeConverter=TypeConverters.toBoolean)
+    maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.(Default 5)", typeConverter=TypeConverters.toInt)
+    maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.(Default 32)", typeConverter=TypeConverters.toInt)
+    minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.(Default 1)", typeConverter=TypeConverters.toInt)
+    minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.(Default 0.0)", typeConverter=TypeConverters.toFloat)
+    maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its aggregates may exceed this size.(Default 256)", typeConverter=TypeConverters.toInt)
+    cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.(Default False)", typeConverter=TypeConverters.toBoolean)
     
 
     def __init__(self):
         super(DecisionTreeParams, self).__init__()
+        self._setDefault(cacheNodeIds=False)
 
     def setMaxDepth(self, value):
         """

@@ -314,7 +314,7 @@ class ParamTests(PySparkTestCase):
             testParams.explainParams(),
             "\n".join(["inputCol: input column name. (undefined)",
                        "maxIter: max number of iterations (>= 0). (default: 10, current: 100)",
-                       "seed: random seed. (default: 41, current: 43)"]))
+                       "seed: random seed.(Default hash of type name) (default: 41, current: 43)"]))
 
     def test_kmeans_param(self):
         algo = KMeans()
