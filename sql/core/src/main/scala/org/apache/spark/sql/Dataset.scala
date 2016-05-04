@@ -1578,16 +1578,13 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
-    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
+    val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
-    val elementTypes = schema.toAttributes.map {
-      attr => (attr.dataType, attr.nullable, attr.name) }
-    val names = schema.toAttributes.map(_.name)
-    val convert = CatalystTypeConverters.createToCatalystConverter(schema)
+    val convert = CatalystTypeConverters.createToCatalystConverter(elementSchema)
 
     val rowFunction =
       f.andThen(_.map(convert(_).asInstanceOf[InternalRow]))
-    val generator = UserDefinedGenerator(elementTypes, rowFunction, input.map(_.expr))
+    val generator = UserDefinedGenerator(elementSchema, rowFunction, input.map(_.expr))
 
     withPlan {
       Generate(generator, join = true, outer = false,
@@ -1614,13 +1611,13 @@ class Dataset[T] private[sql](
     val dataType = ScalaReflection.schemaFor[B].dataType
     val attributes = AttributeReference(outputColumn, dataType)() :: Nil
     // TODO handle the metadata?
-    val elementTypes = attributes.map { attr => (attr.dataType, attr.nullable, attr.name) }
+    val elementSchema = attributes.toStructType
 
     def rowFunction(row: Row): TraversableOnce[InternalRow] = {
       val convert = CatalystTypeConverters.createToCatalystConverter(dataType)
       f(row(0).asInstanceOf[A]).map(o => InternalRow(convert(o)))
     }
-    val generator = UserDefinedGenerator(elementTypes, rowFunction, apply(inputColumn).expr :: Nil)
+    val generator = UserDefinedGenerator(elementSchema, rowFunction, apply(inputColumn).expr :: Nil)
 
     withPlan {
       Generate(generator, join = true, outer = false,
