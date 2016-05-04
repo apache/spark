@@ -39,7 +39,6 @@ else:
 import numpy as np
 
 from pyspark import since
-from pyspark.mllib.linalg import Vector as OldVector
 from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayType, DoubleType, \
     IntegerType, ByteType, BooleanType
 
@@ -69,9 +68,6 @@ except:
 
 def _convert_to_vector(l):
     if isinstance(l, Vector):
-        return l
-    # this is for compatiblity because Scala mllib codes still use mllib.linalg Vector
-    elif isinstance(l, OldVector):
         return l
     elif type(l) in (array.array, np.array, np.ndarray, list, tuple, xrange):
         return DenseVector(l)
@@ -151,7 +147,7 @@ class VectorUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return "pyspark.ml.linalg"
+        return "pyspark.mllib.linalg"
 
     @classmethod
     def scalaUDT(cls):
@@ -201,7 +197,7 @@ class MatrixUDT(UserDefinedType):
 
     @classmethod
     def module(cls):
-        return "pyspark.ml.linalg"
+        return "pyspark.mllib.linalg"
 
     @classmethod
     def scalaUDT(cls):

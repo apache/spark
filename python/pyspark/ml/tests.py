@@ -18,7 +18,6 @@
 """
 Unit tests for Spark ML Python APIs.
 """
-import array
 import sys
 if sys.version > '3':
     xrange = range
@@ -40,10 +39,14 @@ else:
 
 from shutil import rmtree
 import tempfile
+import array as pyarray
 import numpy as np
+from numpy import (
+    array, array_equal, zeros, inf, random, exp, dot, all, mean, abs, arange, tile, ones)
+from numpy import sum as array_sum
 import inspect
 
-from pyspark import keyword_only
+from pyspark import keyword_only, SparkContext
 from pyspark.ml import Estimator, Model, Pipeline, PipelineModel, Transformer
 from pyspark.ml.classification import *
 from pyspark.ml.clustering import *
@@ -58,12 +61,25 @@ from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.common import _java2py
-from pyspark.mllib import MLlibTestCase
+from pyspark.mllib.linalg import SparseVector as OldSparseVector, DenseVector as OldDenseVector,\
+    DenseMatrix as OldDenseMatrix, SparseMatrix as OldSparseMatrix
+from pyspark.mllib.regression import LabeledPoint
+from pyspark.serializers import PickleSerializer
 from pyspark.sql import DataFrame, SQLContext, Row
 from pyspark.sql.functions import rand
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
+
+ser = PickleSerializer()
+
+
+class MLlibTestCase(unittest.TestCase):
+    def setUp(self):
+        self.sc = SparkContext('local[4]', "MLlib tests")
+
+    def tearDown(self):
+        self.sc.stop()
 
 
 class MockDataset(DataFrame):
@@ -139,7 +155,7 @@ class ParamTypeConversionTests(PySparkTestCase):
     def test_list(self):
         l = [0, 1]
         for lst_like in [l, np.array(l), DenseVector(l), SparseVector(len(l), range(len(l)), l),
-                         array.array('l', l), xrange(2), tuple(l)]:
+                         pyarray.array('l', l), xrange(2), tuple(l)]:
             converted = TypeConverters.toList(lst_like)
             self.assertEqual(type(converted), list)
             self.assertListEqual(converted, l)
@@ -147,7 +163,7 @@ class ParamTypeConversionTests(PySparkTestCase):
     def test_list_int(self):
         for indices in [[1.0, 2.0], np.array([1.0, 2.0]), DenseVector([1.0, 2.0]),
                         SparseVector(2, {0: 1.0, 1: 2.0}), xrange(1, 3), (1.0, 2.0),
-                        array.array('d', [1.0, 2.0])]:
+                        pyarray.array('d', [1.0, 2.0])]:
             vs = VectorSlicer(indices=indices)
             self.assertListEqual(vs.getIndices(), [1, 2])
             self.assertTrue(all([type(v) == int for v in vs.getIndices()]))
@@ -1074,6 +1090,13 @@ class DefaultValuesTests(PySparkTestCase):
                     self.check_params(cls())
 
 
+def _squared_distance(a, b):
+    if isinstance(a, Vector):
+        return a.squared_distance(b)
+    else:
+        return b.squared_distance(a)
+
+
 class VectorTests(MLlibTestCase):
 
     def _test_serialize(self, v):
@@ -1381,6 +1404,12 @@ class VectorUDTTests(MLlibTestCase):
                 self.assertEqual(v, self.sv1)
             elif isinstance(v, DenseVector):
                 self.assertEqual(v, self.dv1)
+            # Following two conditions are for compatibility, because Scala mllib codes still
+            # use mllib.linalg Vector.
+            elif isinstance(v, OldSparseVector):
+                self.assertTrue(array_equal(v.toArray(), self.sv1.toArray()))
+            elif isinstance(v, OldDenseVector):
+                self.assertTrue(array_equal(v.toArray(), self.dv1.toArray()))
             else:
                 raise TypeError("expecting a vector but got %r of type %r" % (v, type(v)))
 
@@ -1412,6 +1441,12 @@ class MatrixUDTTests(MLlibTestCase):
             if isinstance(m, DenseMatrix):
                 self.assertTrue(m, self.dm1)
             elif isinstance(m, SparseMatrix):
+                self.assertTrue(m, self.sm1)
+            # Following two conditions are for compatibility, because Scala mllib codes still
+            # use mllib.linalg Matrix.
+            elif isinstance(m, OldDenseMatrix):
+                self.assertTrue(m, self.dm1)
+            elif isinstance(m, OldSparseMatrix):
                 self.assertTrue(m, self.sm1)
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))

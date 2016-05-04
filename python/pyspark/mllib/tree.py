@@ -20,8 +20,8 @@ from __future__ import absolute_import
 import random
 
 from pyspark import SparkContext, RDD, since
+from pyspark.ml.linalg import _convert_to_vector
 from pyspark.mllib.common import callMLlibFunc, inherit_doc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.util import JavaLoader, JavaSaveable
 
@@ -258,7 +258,7 @@ class DecisionTree(object):
 
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import DecisionTree
-        >>> from pyspark.mllib.linalg import SparseVector
+        >>> from pyspark.ml.linalg import SparseVector
         >>>
         >>> sparse_data = [
         ...     LabeledPoint(0.0, SparseVector(2, {0: 0.0})),
@@ -457,7 +457,7 @@ class RandomForest(object):
 
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import RandomForest
-        >>> from pyspark.mllib.linalg import SparseVector
+        >>> from pyspark.ml.linalg import SparseVector
         >>>
         >>> sparse_data = [
         ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
@@ -627,7 +627,7 @@ class GradientBoostedTrees(object):
 
         >>> from pyspark.mllib.regression import LabeledPoint
         >>> from pyspark.mllib.tree import GradientBoostedTrees
-        >>> from pyspark.mllib.linalg import SparseVector
+        >>> from pyspark.ml.linalg import SparseVector
         >>>
         >>> sparse_data = [
         ...     LabeledPoint(0.0, SparseVector(2, {0: 1.0})),
