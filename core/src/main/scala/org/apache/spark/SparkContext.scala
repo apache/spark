@@ -1335,7 +1335,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def longAccumulator(): LongAccumulator = {
+  def longAccumulator: LongAccumulator = {
     val acc = new LongAccumulator
     register(acc, dataProperty = false)
     acc
@@ -1353,7 +1353,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def dataPropertyLongAccumulator(): LongAccumulator = {
+  def dataPropertyLongAccumulator: LongAccumulator = {
     val acc = new LongAccumulator
     register(acc, dataProperty = true)
     acc
