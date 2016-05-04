@@ -85,7 +85,7 @@ case class Generate(
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
-      generator.elementTypes.length == generatorOutput.length &&
+      generator.elementSchema.length == generatorOutput.length &&
       generatorOutput.forall(_.resolved)
   }
 
