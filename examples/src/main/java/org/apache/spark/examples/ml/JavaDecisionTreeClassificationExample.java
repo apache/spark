@@ -17,8 +17,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml;
 // $example on$
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
@@ -28,18 +26,17 @@ import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaDecisionTreeClassificationExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaDecisionTreeClassificationExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder().appName("JavaDecisionTreeClassificationExample").getOrCreate();
 
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
-    Dataset<Row> data = sqlContext
+    Dataset<Row> data = spark
       .read()
       .format("libsvm")
       .load("data/mllib/sample_libsvm_data.txt");
@@ -100,6 +97,6 @@ public class JavaDecisionTreeClassificationExample {
     System.out.println("Learned classification tree model:\n" + treeModel.toDebugString());
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }
