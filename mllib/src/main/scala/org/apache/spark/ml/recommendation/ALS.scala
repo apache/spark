@@ -97,7 +97,6 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    * - "nan": prediction value for unknown ids will be NaN.
    * - "drop": rows in the input DataFrame containing unknown ids will be dropped.
    * Default: "nan".
-   *
    * @group expertParam
    */
   val unknownStrategy = new Param[String](this, "unknownStrategy",
