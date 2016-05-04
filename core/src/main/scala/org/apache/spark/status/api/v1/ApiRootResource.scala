@@ -205,7 +205,7 @@ private[spark] object ApiRootResource {
 
 /**
  * This trait is shared by the all the root containers for application UI information --
- * the HistoryServer, the Master UI, and the application UI.  This provides the common
+ * the HistoryServer and the application UI.  This provides the common
  * interface needed for them all to expose application info as json.
  */
 private[spark] trait UIRoot {
