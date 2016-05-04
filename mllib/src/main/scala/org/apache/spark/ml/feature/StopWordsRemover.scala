@@ -94,15 +94,18 @@ class StopWordsRemover(override val uid: String)
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val stopWordsSet = if ($(caseSensitive)) {
-      $(stopWords).toSet
+    val outputSchema = transformSchema(dataset.schema)
+    val t = if ($(caseSensitive)) {
+      val stopWordsSet = $(stopWords).toSet
+      udf { terms: Seq[String] =>
+        terms.filterNot(stopWordsSet.contains)
+      }
     } else {
       val loadedLocale = StopWordsRemover.loadLocale($(locale))
-      $(stopWords).filterNot(_ == null).map(_.toLowerCase(loadedLocale)).toSet
-    }
-    val outputSchema = transformSchema(dataset.schema)
-    val t = udf { terms: Seq[String] =>
-      terms.filterNot(stopWordsSet.contains)
+      val stopWordsSet = $(stopWords).filterNot(_ == null).map(_.toLowerCase(loadedLocale)).toSet
+      udf { terms: Seq[String] =>
+        terms.filterNot(term => stopWordsSet.contains(term.toLowerCase(loadedLocale)))
+      }
     }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
