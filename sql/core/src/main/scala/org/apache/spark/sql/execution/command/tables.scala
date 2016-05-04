@@ -162,37 +162,36 @@ case class LoadData(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(table)) {
-      throw new AnalysisException(
-        s"Table in LOAD DATA does not exist: '$table'")
+      throw new AnalysisException(s"Target table in LOAD DATA does not exist: '$table'")
     }
-
     val targetTable = catalog.getTableMetadataOption(table).getOrElse {
-      throw new AnalysisException(
-        s"Table in LOAD DATA cannot be temporary: '$table'")
+      throw new AnalysisException(s"Target table in LOAD DATA cannot be temporary: '$table'")
     }
-
     if (DDLUtils.isDatasourceTable(targetTable)) {
-      throw new AnalysisException(
-        "LOAD DATA is not supported for datasource tables")
+      throw new AnalysisException(s"LOAD DATA is not supported for datasource tables: '$table'")
     }
-
     if (targetTable.partitionColumnNames.nonEmpty) {
-      if (partition.isEmpty || targetTable.partitionColumnNames.size != partition.get.size) {
-        throw new AnalysisException(
-          "LOAD DATA to partitioned table must specify a specific partition of " +
-          "the table by specifying values for all of the partitioning columns.")
+      if (partition.isEmpty) {
+        throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+          s"but no partition spec is provided")
       }
-
+      if (targetTable.partitionColumnNames.size != partition.get.size) {
+        throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+          s"but number of columns in provided partition spec (${partition.get.size}) " +
+          s"do not match number of partitioned columns in table " +
+          s"(s${targetTable.partitionColumnNames.size})")
+      }
       partition.get.keys.foreach { colName =>
         if (!targetTable.partitionColumnNames.contains(colName)) {
-          throw new AnalysisException(
-            s"LOAD DATA to partitioned table specifies a non-existing partition column: '$colName'")
+          throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+            s"but the specified partition spec refers to a column that is not partitioned: " +
+            s"'$colName'")
         }
       }
     } else {
       if (partition.nonEmpty) {
-        throw new AnalysisException(
-          "LOAD DATA to non-partitioned table cannot specify partition.")
+        throw new AnalysisException(s"LOAD DATA target table '$table' is not partitioned, " +
+          s"but a partition spec was provided.")
       }
     }
 
@@ -200,7 +199,7 @@ case class LoadData(
       if (isLocal) {
         val uri = Utils.resolveURI(path)
         if (!new File(uri.getPath()).exists()) {
-          throw new AnalysisException(s"LOAD DATA with non-existing path: $path")
+          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
         }
         uri
       } else {
@@ -231,7 +230,7 @@ case class LoadData(
 
           if (scheme == null) {
             throw new AnalysisException(
-              "LOAD DATA with non-local path must specify URI Scheme.")
+              s"LOAD DATA: URI scheme is required for non-local input paths: '$path'")
           }
 
           // Follow Hive's behavior:
