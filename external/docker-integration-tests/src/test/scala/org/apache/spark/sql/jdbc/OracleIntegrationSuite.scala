@@ -48,7 +48,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationSuite with SharedSQLCo
   import testImplicits._
 
   override val db = new DatabaseOnDocker {
-    override val imageName = "wnameless/oracle-xe-11g:latest"
+    override val imageName = "wnameless/oracle-xe-11g:14.04.4"
     override val env = Map(
       "ORACLE_ROOT_PASSWORD" -> "oracle"
     )
