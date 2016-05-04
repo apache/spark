@@ -328,7 +328,7 @@ Text file RDDs can be created using `SparkContext`'s `textFile` method. This met
 
 {% highlight scala %}
 scala> val distFile = sc.textFile("data.txt")
-distFile: RDD[String] = MappedRDD@1d4cee08
+distFile: org.apache.spark.rdd.RDD[String] = data.txt MapPartitionsRDD[10] at textFile at <console>:26
 {% endhighlight %}
 
 Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `distFile.map(s => s.length).reduce((a, b) => a + b)`.

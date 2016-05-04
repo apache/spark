@@ -147,8 +147,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._set(metricName=value)
-        return self
+        return self._set(metricName=value)
 
     @since("1.4.0")
     def getMetricName(self):
@@ -217,8 +216,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._set(metricName=value)
-        return self
+        return self._set(metricName=value)
 
     @since("1.4.0")
     def getMetricName(self):
@@ -284,8 +282,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._set(metricName=value)
-        return self
+        return self._set(metricName=value)
 
     @since("1.5.0")
     def getMetricName(self):

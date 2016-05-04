@@ -111,7 +111,8 @@ class AnalysisErrorSuite extends AnalysisTest {
     "scalar subquery with 2 columns",
      testRelation.select(
        (ScalarSubquery(testRelation.select('a, dateLit.as('b))) + Literal(1)).as('a)),
-     "Scalar subquery must return only one column, but got 2" :: Nil)
+       "The number of columns in the subquery (2)" ::
+       "does not match the required number of columns (1)":: Nil)
 
   errorTest(
     "scalar subquery with no column",
@@ -459,11 +460,14 @@ class AnalysisErrorSuite extends AnalysisTest {
     val a = AttributeReference("a", IntegerType)()
     val b = AttributeReference("b", IntegerType)()
     val c = AttributeReference("c", BooleanType)()
-    val plan1 = Filter(Cast(In(a, Seq(ListQuery(LocalRelation(b)))), BooleanType), LocalRelation(a))
-    assertAnalysisError(plan1, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+    val plan1 = Filter(Cast(Not(In(a, Seq(ListQuery(LocalRelation(b))))), BooleanType),
+      LocalRelation(a))
+    assertAnalysisError(plan1,
+      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
 
-    val plan2 = Filter(Or(In(a, Seq(ListQuery(LocalRelation(b)))), c), LocalRelation(a, c))
-    assertAnalysisError(plan2, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+    val plan2 = Filter(Or(Not(In(a, Seq(ListQuery(LocalRelation(b))))), c), LocalRelation(a, c))
+    assertAnalysisError(plan2,
+      "Null-aware predicate sub-queries cannot be used in nested conditions" :: Nil)
   }
 
   test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
@@ -495,13 +499,5 @@ class AnalysisErrorSuite extends AnalysisTest {
       Exists(Union(LocalRelation(b), Filter(EqualTo(OuterReference(a), c), LocalRelation(c)))),
       LocalRelation(a))
     assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
-  }
-
-  test("Correlated Scalar Subquery") {
-    val a = AttributeReference("a", IntegerType)()
-    val b = AttributeReference("b", IntegerType)()
-    val sub = Project(Seq(b), Filter(EqualTo(UnresolvedAttribute("a"), b), LocalRelation(b)))
-    val plan = Project(Seq(a, Alias(ScalarSubquery(sub), "b")()), LocalRelation(a))
-    assertAnalysisError(plan, "Correlated scalar subqueries are not supported." :: Nil)
   }
 }

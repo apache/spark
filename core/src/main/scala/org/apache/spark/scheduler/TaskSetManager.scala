@@ -32,7 +32,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.{Clock, SystemClock, Utils}
+import org.apache.spark.util.{AccumulatorV2, Clock, SystemClock, Utils}
 
 /**
  * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
@@ -479,7 +479,7 @@ private[spark] class TaskSetManager(
           // val timeTaken = clock.getTime() - startTime
           val taskName = s"task ${info.id} in stage ${taskSet.id}"
           logInfo(s"Starting $taskName (TID $taskId, $host, partition ${task.partitionId}," +
-            s"$taskLocality, ${serializedTask.limit} bytes)")
+            s" $taskLocality, ${serializedTask.limit} bytes)")
 
           sched.dagScheduler.taskStarted(task, info)
           return Some(new TaskDescription(taskId = taskId, attemptNumber = attemptNum, execId,
@@ -647,7 +647,7 @@ private[spark] class TaskSetManager(
     info.markFailed()
     val index = info.index
     copiesRunning(index) -= 1
-    var accumUpdates: Seq[NewAccumulator[_, _]] = Seq.empty
+    var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
     val failureReason = s"Lost task ${info.id} in stage ${taskSet.id} (TID $tid, ${info.host}): " +
       reason.asInstanceOf[TaskFailedReason].toErrorString
     val failureException: Option[Throwable] = reason match {

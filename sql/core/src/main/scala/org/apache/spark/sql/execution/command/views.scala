@@ -58,8 +58,7 @@ case class CreateViewCommand(
   private val tableIdentifier = tableDesc.identifier
 
   if (allowExisting && replace) {
-    throw new AnalysisException(
-      "It is not allowed to define a view with both IF NOT EXISTS and OR REPLACE.")
+    throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
