@@ -328,7 +328,7 @@ class DataPropertyAccumulatorSuite extends SparkFunSuite with Matchers with Loca
 
   test("async jobs same rdd with data property accumulator, new API") {
     sc = new SparkContext("local[2]", "test")
-    val acc = sc.dataPropertyLongAccumulator()
+    val acc = sc.dataPropertyLongAccumulator
     val a = sc.parallelize(1 to 20, 10)
     val b = a.map{x => acc.add(x)}
     val futures = List(b, b).map(_.countAsync)
