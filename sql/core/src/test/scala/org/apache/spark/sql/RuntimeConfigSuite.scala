@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.internal
+package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.RuntimeConfig
 
 class RuntimeConfigSuite extends SparkFunSuite {
 
@@ -26,10 +25,9 @@ class RuntimeConfigSuite extends SparkFunSuite {
 
   test("set and get") {
     val conf = newConf()
-    conf
-      .set("k1", "v1")
-      .set("k2", 2)
-      .set("k3", value = false)
+    conf.set("k1", "v1")
+    conf.set("k2", 2)
+    conf.set("k3", value = false)
 
     assert(conf.get("k1") == "v1")
     assert(conf.get("k2") == "2")
@@ -41,13 +39,15 @@ class RuntimeConfigSuite extends SparkFunSuite {
   }
 
   test("getOption") {
-    val conf = newConf().set("k1", "v1")
+    val conf = newConf()
+    conf.set("k1", "v1")
     assert(conf.getOption("k1") == Some("v1"))
     assert(conf.getOption("notset") == None)
   }
 
   test("unset") {
-    val conf = newConf().set("k1", "v1")
+    val conf = newConf()
+    conf.set("k1", "v1")
     assert(conf.get("k1") == "v1")
     conf.unset("k1")
     intercept[NoSuchElementException] {
