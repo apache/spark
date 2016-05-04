@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.io.File
-
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
@@ -284,10 +282,12 @@ class SessionCatalog(
    * This assumes the database specified in `oldName` matches the one specified in `newName`.
    */
   def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = {
-    if (oldName.database != newName.database) {
-      throw new AnalysisException("rename does not support moving tables across databases")
-    }
     val db = oldName.database.getOrElse(currentDb)
+    val newDb = newName.database.getOrElse(currentDb)
+    if (db != newDb) {
+      throw new AnalysisException(
+        s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
+    }
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
@@ -315,7 +315,7 @@ class SessionCatalog(
       if (externalCatalog.tableExists(db, table)) {
         externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
       } else if (!ignoreIfNotExists) {
-        logError(s"Table or View '${name.quotedString}' does not exist")
+        throw new AnalysisException(s"Table or view '${name.quotedString}' does not exist")
       }
     } else {
       tempTables.remove(table)
@@ -534,7 +534,7 @@ class SessionCatalog(
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new AnalysisException(s"function '$identifier' already exists in database '$db'")
+      throw new AnalysisException(s"Function '$identifier' already exists in database '$db'")
     }
   }
 
@@ -632,9 +632,9 @@ class SessionCatalog(
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
-    throw new AnalysisException(s"Undefined function: $name. This function is " +
+    throw new AnalysisException(s"Undefined function: '$name'. This function is " +
       s"neither a registered temporary function nor " +
-      s"a permanent function registered in the database $currentDb.")
+      s"a permanent function registered in the database '$currentDb'.")
   }
 
   /**
