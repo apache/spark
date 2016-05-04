@@ -180,7 +180,7 @@ class GeneralizedLinearRegressionSuite
     assert(glr.getPredictionCol === "prediction")
     assert(glr.getFitIntercept)
     assert(glr.getTol === 1E-6)
-    assert(glr.getWeightCol === "")
+    assert(!glr.isDefined(glr.weightCol))
     assert(glr.getRegParam === 0.0)
     assert(glr.getSolver == "irls")
     // TODO: Construct model directly instead of via fitting.

@@ -1030,10 +1030,10 @@ class SparkILoop(
   def createSparkSession(): SparkSession = {
     if (SparkSession.hiveClassesArePresent) {
       logInfo("Creating Spark session with Hive support")
-      SparkSession.withHiveSupport(sparkContext)
+      SparkSession.builder.enableHiveSupport().getOrCreate()
     } else {
       logInfo("Creating Spark session")
-      new SparkSession(sparkContext)
+      SparkSession.builder.getOrCreate()
     }
   }
 
