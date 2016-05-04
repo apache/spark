@@ -44,6 +44,23 @@ __all__ = ['LogisticRegression', 'LogisticRegressionModel',
 
 
 @inherit_doc
+class JavaClassificationModel(JavaPredictionModel):
+    """
+    (Private) Java Model produced by a ``Classifier``.
+    Classes are indexed {0, 1, ..., numClasses - 1}.
+    To be mixed in with class:`pyspark.ml.JavaModel`
+    """
+
+    @property
+    @since("2.0.0")
+    def numClasses(self):
+        """
+        Number of classes (values which the label can take).
+        """
+        return self._call_java("numClasses")
+
+
+@inherit_doc
 class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                          HasRegParam, HasTol, HasProbabilityCol, HasRawPredictionCol,
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
@@ -206,7 +223,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                                  " threshold (%g) and thresholds (equivalent to %g)" % (t2, t))
 
 
-class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class LogisticRegressionModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by LogisticRegression.
 
@@ -510,6 +527,10 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     1
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
+    >>> model.numFeatures
+    1
+    >>> model.numClasses
+    2
     >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> result = model.transform(test0).head()
     >>> result.prediction
@@ -581,8 +602,11 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 
 @inherit_doc
-class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
+class DecisionTreeClassificationModel(DecisionTreeModel, JavaClassificationModel, JavaMLWritable,
+                                      JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by DecisionTreeClassifier.
 
     .. versionadded:: 1.4.0
@@ -978,7 +1002,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
         return self.getOrDefault(self.modelType)
 
 
-class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class NaiveBayesModel(JavaModel, JavaClassificationModel, JavaMLWritable, JavaMLReadable):
     """
     Model fitted by NaiveBayes.
 
@@ -1118,7 +1142,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
+class MultilayerPerceptronClassificationModel(JavaModel, JavaClassificationModel, JavaMLWritable,
+                                              JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
 
