@@ -83,9 +83,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
-      "spark-internal");
+      SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
-      "spark-internal");
+      SparkLauncher.NO_RESOURCE);
   }
 
   final List<String> sparkArgs;
@@ -146,6 +146,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   List<String> buildSparkSubmitArgs() {
     List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
+
+    if (!allowsMixedArguments) {
+      checkArgument(appResource != null, "Missing application resource.");
+    }
 
     if (verbose) {
       args.add(parser.VERBOSE);
@@ -435,22 +439,19 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           className = EXAMPLE_CLASS_PREFIX + className;
         }
         mainClass = className;
-        appResource = "spark-internal";
+        appResource = SparkLauncher.NO_RESOURCE;
         return false;
       } else {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);
-        sparkArgs.add(opt);
+        checkState(appResource == null, "Found unrecognized argument but resource is already set.");
+        appResource = opt;
         return false;
       }
     }
 
     @Override
     protected void handleExtraArgs(List<String> extra) {
-      if (isExample) {
-        appArgs.addAll(extra);
-      } else {
-        sparkArgs.addAll(extra);
-      }
+      appArgs.addAll(extra);
     }
 
   }
