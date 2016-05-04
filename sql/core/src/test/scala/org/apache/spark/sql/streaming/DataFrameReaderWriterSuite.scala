@@ -368,4 +368,160 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       "org.apache.spark.sql.streaming.test",
       Map.empty)
   }
+
+  private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
+
+  test("check trigger() can only be called on continuous queries") {
+    val df = sqlContext.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.trigger(ProcessingTime("10 seconds")))
+    assert(e.getMessage == "trigger() can only be called on continuous queries;")
+  }
+
+  test("check queryName() can only be called on continuous queries") {
+    val df = sqlContext.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.queryName("queryName"))
+    assert(e.getMessage == "queryName() can only be called on continuous queries;")
+  }
+
+  test("check startStream() can only be called on continuous queries") {
+    val df = sqlContext.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.startStream())
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
+  }
+
+  test("check startStream(path) can only be called on continuous queries") {
+    val df = sqlContext.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.startStream("non_exist_path"))
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
+  }
+
+  test("check mode(SaveMode) can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.mode(SaveMode.Append))
+    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
+  }
+
+  test("check mode(string) can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.mode("append"))
+    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
+  }
+
+  test("check bucketBy() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[IllegalArgumentException](w.bucketBy(1, "text").startStream())
+    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+  }
+
+  test("check sortBy() can only be called on non-continuous queries;") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[IllegalArgumentException](w.sortBy("text").startStream())
+    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+  }
+
+  test("check save(path) can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.save("non_exist_path"))
+    assert(e.getMessage == "save() can only be called on non-continuous queries;")
+  }
+
+  test("check save() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.save())
+    assert(e.getMessage == "save() can only be called on non-continuous queries;")
+  }
+
+  test("check insertInto() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.insertInto("non_exsit_table"))
+    assert(e.getMessage == "insertInto() can only be called on non-continuous queries;")
+  }
+
+  test("check saveAsTable() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.saveAsTable("non_exsit_table"))
+    assert(e.getMessage == "saveAsTable() can only be called on non-continuous queries;")
+  }
+
+  test("check jdbc() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.jdbc(null, null, null))
+    assert(e.getMessage == "jdbc() can only be called on non-continuous queries;")
+  }
+
+  test("check json() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.json("non_exist_path"))
+    assert(e.getMessage == "json() can only be called on non-continuous queries;")
+  }
+
+  test("check parquet() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.parquet("non_exist_path"))
+    assert(e.getMessage == "parquet() can only be called on non-continuous queries;")
+  }
+
+  test("check orc() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.orc("non_exist_path"))
+    assert(e.getMessage == "orc() can only be called on non-continuous queries;")
+  }
+
+  test("check text() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.text("non_exist_path"))
+    assert(e.getMessage == "text() can only be called on non-continuous queries;")
+  }
+
+  test("check csv() can only be called on non-continuous queries") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.csv("non_exist_path"))
+    assert(e.getMessage == "csv() can only be called on non-continuous queries;")
+  }
 }

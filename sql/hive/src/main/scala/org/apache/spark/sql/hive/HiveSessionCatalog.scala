@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
@@ -44,8 +45,14 @@ private[sql] class HiveSessionCatalog(
     sparkSession: SparkSession,
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
-    conf: SQLConf)
-  extends SessionCatalog(externalCatalog, functionResourceLoader, functionRegistry, conf) {
+    conf: SQLConf,
+    hadoopConf: Configuration)
+  extends SessionCatalog(
+    externalCatalog,
+    functionResourceLoader,
+    functionRegistry,
+    conf,
+    hadoopConf) {
 
   override def setCurrentDatabase(db: String): Unit = {
     super.setCurrentDatabase(db)
