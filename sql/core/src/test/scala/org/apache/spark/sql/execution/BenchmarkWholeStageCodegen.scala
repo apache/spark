@@ -252,7 +252,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
   }
 
   ignore("aggregate with string key") {
-    val N = 20 << 21
+    val N = 20 << 20
 
     val benchmark = new Benchmark("Aggregate w string key", N)
     def f(): Unit = sqlContext.range(N).selectExpr("id", "cast(id & 1023 as string) as k")
