@@ -93,12 +93,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("1.5.0")
   override def isLargerBetter: Boolean = $(metricName) match {
-    case "f1" => true
-    case "precision" => true
-    case "recall" => true
-    case "weightedPrecision" => true
-    case "weightedRecall" => true
-    case "accuracy" => true
+    case "f1" | "precision" | "recall" | "weightedPrecision" | "weightedRecall" | "accuracy" => true
   }
 
   @Since("1.5.0")

@@ -138,32 +138,30 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
   /**
    * Returns precision
    */
-  @Since("1.1.0")
+  @deprecated("Use accuracy. This metric will be removed in 2.1.0.", "2.0.0")
   lazy val precision: Double = tpByClass.values.sum.toDouble / labelCount
 
   /**
    * Returns recall
-   * (equals to precision for multiclass classifier
+   * (equals to accuracy for multiclass classifier
    * because sum of all false positives is equal to sum
    * of all false negatives)
    */
   @Since("1.1.0")
-  lazy val recall: Double = precision
+  lazy val recall: Double = accuracy
 
   /**
    * Returns accuracy
-   * (equals to precision for multicalss classifier
-   * because it is tp/labelCount)
    */
   @Since("2.0.0")
-  lazy val accuracy: Double = precision
+  lazy val accuracy: Double = tpByClass.values.sum.toDouble / labelCount
 
   /**
    * Returns f-measure
    * (equals to precision and recall because precision equals recall)
    */
   @Since("1.1.0")
-  lazy val fMeasure: Double = precision
+  lazy val fMeasure: Double = accuracy
 
   /**
    * Returns weighted true positive rate
