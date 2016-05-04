@@ -25,6 +25,7 @@ import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.util.ContinuousQueryListener
+import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * :: Experimental ::
@@ -175,6 +176,7 @@ class ContinuousQueryManager(sparkSession: SparkSession) {
       df: DataFrame,
       sink: Sink,
       trigger: Trigger = ProcessingTime(0),
+      triggerClock: Clock = new SystemClock(),
       outputMode: OutputMode = Append): ContinuousQuery = {
     activeQueriesLock.synchronized {
       if (activeQueries.contains(name)) {
@@ -184,7 +186,7 @@ class ContinuousQueryManager(sparkSession: SparkSession) {
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
-      if (sparkSession.getConf(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
+      if (sparkSession.conf.get(SQLConf.UNSUPPORTED_OPERATION_CHECK_ENABLED)) {
         UnsupportedOperationChecker.checkForStreaming(analyzedPlan, outputMode)
       }
 
@@ -206,8 +208,9 @@ class ContinuousQueryManager(sparkSession: SparkSession) {
         checkpointLocation,
         logicalPlan,
         sink,
-        outputMode,
-        trigger)
+        trigger,
+        triggerClock,
+        outputMode)
       query.start()
       activeQueries.put(name, query)
       query

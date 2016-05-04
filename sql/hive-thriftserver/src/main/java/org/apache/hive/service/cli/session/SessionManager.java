@@ -151,7 +151,7 @@ public class SessionManager extends CompositeService {
   }
 
   private void startTimeoutChecker() {
-    final long interval = Math.max(checkInterval, 3000l);  // minimum 3 seconds
+    final long interval = Math.max(checkInterval, 3000L);  // minimum 3 seconds
     Runnable timeoutChecker = new Runnable() {
       @Override
       public void run() {
@@ -268,17 +268,6 @@ public class SessionManager extends CompositeService {
     if (isOperationLogEnabled) {
       session.setOperationLogSessionDir(operationLogRootDir);
     }
-    try {
-      executeSessionHooks(session);
-    } catch (Exception e) {
-      try {
-        session.close();
-      } catch (Throwable t) {
-        LOG.warn("Error closing session", t);
-      }
-      session = null;
-      throw new HiveSQLException("Failed to execute session hooks", e);
-    }
     handleToSession.put(session.getSessionHandle(), session);
     return session.getSessionHandle();
   }
@@ -359,15 +348,6 @@ public class SessionManager extends CompositeService {
 
   public static void clearProxyUserName() {
     threadLocalProxyUserName.remove();
-  }
-
-  // execute session hooks
-  private void executeSessionHooks(HiveSession session) throws Exception {
-    List<HiveSessionHook> sessionHooks = HookUtils.getHooks(hiveConf,
-        HiveConf.ConfVars.HIVE_SERVER2_SESSION_HOOK, HiveSessionHook.class);
-    for (HiveSessionHook sessionHook : sessionHooks) {
-      sessionHook.run(new HiveSessionHookContextImpl(session));
-    }
   }
 
   public Future<?> submitBackgroundOperation(Runnable r) {

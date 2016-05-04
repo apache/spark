@@ -72,7 +72,7 @@ public class JavaStatisticsSuite implements Serializable {
     Double corr1 = Statistics.corr(x, y);
     Double corr2 = Statistics.corr(x, y, "pearson");
     // Check default method
-    assertEquals(corr1, corr2);
+    assertEquals(corr1, corr2, 1e-5);
   }
 
   @Test

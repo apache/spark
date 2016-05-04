@@ -22,7 +22,7 @@ import javax.annotation.Nullable
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
 
@@ -48,6 +48,7 @@ case class CatalogStorageFormat(
     inputFormat: Option[String],
     outputFormat: Option[String],
     serde: Option[String],
+    compressed: Boolean,
     serdeProperties: Map[String, String])
 
 
@@ -89,6 +90,7 @@ case class CatalogTable(
     sortColumnNames: Seq[String] = Seq.empty,
     bucketColumnNames: Seq[String] = Seq.empty,
     numBuckets: Int = -1,
+    owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
@@ -123,10 +125,11 @@ case class CatalogTable(
       locationUri: Option[String] = storage.locationUri,
       inputFormat: Option[String] = storage.inputFormat,
       outputFormat: Option[String] = storage.outputFormat,
+      compressed: Boolean = false,
       serde: Option[String] = storage.serde,
       serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, serdeProperties))
+      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
   }
 
 }
@@ -189,7 +192,7 @@ case class SimpleCatalogRelation(
     (cols ++ catalogTable.partitionColumns).map { f =>
       AttributeReference(
         f.name,
-        DataTypeParser.parse(f.dataType),
+        CatalystSqlParser.parseDataType(f.dataType),
         // Since data can be dumped in randomly with no validation, everything is nullable.
         nullable = true
       )(qualifier = Some(alias.getOrElse(metadata.identifier.table)))

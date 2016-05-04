@@ -127,6 +127,7 @@ class TrainValidationSplitSuite
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
+    assert(tvs.getSeed === tvs2.getSeed)
   }
 
   test("read/write: TrainValidationSplitModel") {
@@ -149,6 +150,7 @@ class TrainValidationSplitSuite
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.validationMetrics === tvs2.validationMetrics)
+    assert(tvs.getSeed === tvs2.getSeed)
   }
 }
 

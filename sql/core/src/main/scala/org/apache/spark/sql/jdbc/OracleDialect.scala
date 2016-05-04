@@ -38,6 +38,12 @@ private case object OracleDialect extends JdbcDialect {
       // This is sub-optimal as we have to pick a precision/scale in advance whereas the data
       //  in Oracle is allowed to have different precision/scale for each value.
       Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+    } else if (sqlType == Types.NUMERIC && md.build().getLong("scale") == -127) {
+      // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
+      // this to NUMERIC with -127 scale
+      // Not sure if there is a more robust way to identify the field as a float (or other
+      // numeric types that do not specify a scale.
+      Option(DecimalType(DecimalType.MAX_PRECISION, 10))
     } else {
       None
     }

@@ -17,6 +17,10 @@
 
 from __future__ import print_function
 
+import sys
+if sys.version >= '3':
+    long = int
+
 from pyspark import SparkContext
 from pyspark.sql import SQLContext
 

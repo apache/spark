@@ -56,7 +56,8 @@ case class CreateTableAsSelect(
           outputFormat =
             tableDesc.storage.outputFormat
               .orElse(Some(classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]].getName)),
-          serde = tableDesc.storage.serde.orElse(Some(classOf[LazySimpleSerDe].getName)))
+          serde = tableDesc.storage.serde.orElse(Some(classOf[LazySimpleSerDe].getName)),
+          compressed = tableDesc.storage.compressed)
 
       val withSchema = if (withFormat.schema.isEmpty) {
         // Hive doesn't support specifying the column list for target table in CTAS

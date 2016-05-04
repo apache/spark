@@ -940,7 +940,7 @@ class SQLTests(ReusedPySparkTestCase):
             cq.processAllAvailable()
             output_files = []
             for _, _, files in os.walk(out):
-                output_files.extend([f for f in files if 'parquet' in f and not f.startswith('.')])
+                output_files.extend([f for f in files if not f.startswith('.')])
             self.assertTrue(len(output_files) > 0)
             self.assertTrue(len(os.listdir(chk)) > 0)
         finally:
@@ -967,7 +967,7 @@ class SQLTests(ReusedPySparkTestCase):
             cq.processAllAvailable()
             output_files = []
             for _, _, files in os.walk(out):
-                output_files.extend([f for f in files if 'parquet' in f and not f.startswith('.')])
+                output_files.extend([f for f in files if not f.startswith('.')])
             self.assertTrue(len(output_files) > 0)
             self.assertTrue(len(os.listdir(chk)) > 0)
             self.assertFalse(os.path.isdir(fake1))  # should not have been created
@@ -1397,9 +1397,9 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_conf(self):
         spark = self.sparkSession
-        spark.setConf("bogo", "sipeo")
+        spark.conf.set("bogo", "sipeo")
         self.assertEqual(self.sparkSession.conf.get("bogo"), "sipeo")
-        spark.setConf("bogo", "ta")
+        spark.conf.set("bogo", "ta")
         self.assertEqual(spark.conf.get("bogo"), "ta")
         self.assertEqual(spark.conf.get("bogo", "not.read"), "ta")
         self.assertEqual(spark.conf.get("not.set", "ta"), "ta")

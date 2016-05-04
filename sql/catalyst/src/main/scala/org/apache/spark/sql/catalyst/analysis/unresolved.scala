@@ -142,8 +142,7 @@ object UnresolvedAttribute {
 case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expression])
   extends Generator {
 
-  override def elementTypes: Seq[(DataType, Boolean, String)] =
-    throw new UnresolvedException(this, "elementTypes")
+  override def elementSchema: StructType = throw new UnresolvedException(this, "elementTypes")
   override def dataType: DataType = throw new UnresolvedException(this, "dataType")
   override def foldable: Boolean = throw new UnresolvedException(this, "foldable")
   override def nullable: Boolean = throw new UnresolvedException(this, "nullable")

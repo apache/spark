@@ -57,7 +57,7 @@ public class HiveSessionProxy implements InvocationHandler {
         return invoke(method, args);
       }
       return ugi.doAs(
-        new PrivilegedExceptionAction<Object> () {
+        new PrivilegedExceptionAction<Object>() {
           @Override
           public Object run() throws HiveSQLException {
             return invoke(method, args);

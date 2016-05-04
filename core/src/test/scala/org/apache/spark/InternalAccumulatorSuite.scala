@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
@@ -213,7 +214,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   private class SaveAccumContextCleaner(sc: SparkContext) extends ContextCleaner(sc) {
     private val accumsRegistered = new ArrayBuffer[Long]
 
-    override def registerAccumulatorForCleanup(a: NewAccumulator[_, _]): Unit = {
+    override def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
       accumsRegistered += a.id
       super.registerAccumulatorForCleanup(a)
     }

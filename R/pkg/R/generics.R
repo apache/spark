@@ -1181,6 +1181,10 @@ setGeneric("window", function(x, ...) { standardGeneric("window") })
 #' @export
 setGeneric("year", function(x) { standardGeneric("year") })
 
+#' @rdname spark.glm
+#' @export
+setGeneric("spark.glm", function(data, formula, ...) { standardGeneric("spark.glm") })
+
 #' @rdname glm
 #' @export
 setGeneric("glm")
@@ -1193,22 +1197,22 @@ setGeneric("predict", function(object, ...) { standardGeneric("predict") })
 #' @export
 setGeneric("rbind", signature = "...")
 
-#' @rdname kmeans
+#' @rdname spark.kmeans
 #' @export
-setGeneric("kmeans")
+setGeneric("spark.kmeans", function(data, formula, ...) { standardGeneric("spark.kmeans") })
 
 #' @rdname fitted
 #' @export
 setGeneric("fitted")
 
-#' @rdname naiveBayes
+#' @rdname spark.naiveBayes
 #' @export
-setGeneric("naiveBayes", function(formula, data, ...) { standardGeneric("naiveBayes") })
+setGeneric("spark.naiveBayes", function(data, formula, ...) { standardGeneric("spark.naiveBayes") })
 
-#' @rdname survreg
+#' @rdname spark.survreg
 #' @export
-setGeneric("survreg", function(formula, data, ...) { standardGeneric("survreg") })
+setGeneric("spark.survreg", function(data, formula, ...) { standardGeneric("spark.survreg") })
 
-#' @rdname ml.save
+#' @rdname write.ml
 #' @export
-setGeneric("ml.save", function(object, path, ...) { standardGeneric("ml.save") })
+setGeneric("write.ml", function(object, path, ...) { standardGeneric("write.ml") })
