@@ -1025,8 +1025,7 @@ setMethod("keyBy",
 setMethod("repartition",
           signature(x = "RDD"),
           function(x, numPartitions) {
-            if (!is.null(numPartitions) && (class(numPartitions) == "numeric" ||
-              class(numPartitions) == "integer")) {
+            if (!is.null(numPartitions) && is.numeric(numPartitions)) {
               coalesce(x, numPartitions, TRUE)
             } else {
               coalesce(x, 200L, TRUE)
