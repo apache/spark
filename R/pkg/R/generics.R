@@ -550,9 +550,9 @@ setGeneric("registerTempTable", function(x, tableName) { standardGeneric("regist
 # @rdname repartitionByColumns
 # @seealso repartition
 # @export
-setGeneric("repartitionByColumns",
+setGeneric("repartitionByColumn",
            function(x, col, ...) {
-             standardGeneric("repartitionByColumns")
+             standardGeneric("repartitionByColumn")
           })
 
 #' @rdname sample

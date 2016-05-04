@@ -594,7 +594,7 @@ setMethod("repartition",
             dataFrame(sdf)
           })
 
-#' RepartitionByColumns
+#' RepartitionByColumn
 #'
 #' Return a new SparkDataFrame which has as many partitions as the number of unique
 #' groups identified by column(s) values which are being specified by the input.
@@ -612,9 +612,9 @@ setMethod("repartition",
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
-#' newDF <- repartitionByColumns(df, df$col1, df$col2)
+#' newDF <- repartitionByColumn(df, df$col1, df$col2)
 #'}
-setMethod("repartitionByColumns",
+setMethod("repartitionByColumn",
           signature(x = "SparkDataFrame", col = "Column"),
           function(x, col, ...) {
             cols <- list(col, ...)

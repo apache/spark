@@ -2083,14 +2083,14 @@ test_that("dapply() on a DataFrame", {
   expect_identical(expected, result)
 })
 
-test_that("repartitionByColumns on DataFrame", {
+test_that("repartitionByColumn on DataFrame", {
   df <- createDataFrame (
     sqlContext,
     list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
 
-  # repartition by key
-  actual <- repartitionByColumns(df, df$"a", df$"b")
+  # repartition by columns
+  actual <- repartitionByColumn(df, df$"a", df$"b")
 
   # since we cannot access the number of partitions from dataframe, checking
   # that at least the dimensions are identical
