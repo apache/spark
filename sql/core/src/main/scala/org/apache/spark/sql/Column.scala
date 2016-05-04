@@ -70,10 +70,18 @@ class TypedColumn[-T, U](
   }
 
   /** Creates a TypedColumn based on the given expression. */
-  private def withExpr(newExpr: Expression): TypedColumn[Any, String] =
-    new TypedColumn[Any, String](newExpr, ExpressionEncoder[String])
+  private def withExpr(newExpr: Expression): TypedColumn[T, U] =
+    new TypedColumn[T, U](newExpr, encoder)
 
-  override def as(alias: String): TypedColumn[Any, String] = withExpr {
+  /**
+   * Gives the TypedColumn a name (alias).
+   * If the current TypedColumn has metadata associated with it, this metadata will be propagated
+   * to the new column.
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  override def as(alias: String): TypedColumn[T, U] = withExpr {
     expr match {
       case ne: NamedExpression => Alias (expr, alias)(explicitMetadata = Some(ne.metadata))
       case other => Alias(other, alias)()
