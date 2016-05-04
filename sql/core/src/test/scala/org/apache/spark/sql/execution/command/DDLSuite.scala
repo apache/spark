@@ -76,6 +76,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         inputFormat = None,
         outputFormat = None,
         serde = None,
+        compressed = false,
         serdeProperties = Map())
     catalog.createTable(CatalogTable(
       identifier = name,
@@ -89,7 +90,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       catalog: SessionCatalog,
       spec: TablePartitionSpec,
       tableName: TableIdentifier): Unit = {
-    val part = CatalogTablePartition(spec, CatalogStorageFormat(None, None, None, None, Map()))
+    val part = CatalogTablePartition(
+      spec, CatalogStorageFormat(None, None, None, None, false, Map()))
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
@@ -264,6 +266,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         inputFormat = None,
         outputFormat = None,
         serde = None,
+        compressed = false,
         serdeProperties = Map())
     val expectedTable =
       CatalogTable(
@@ -288,6 +291,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         inputFormat = None,
         outputFormat = None,
         serde = None,
+        compressed = false,
         serdeProperties = Map())
     val expectedTable =
       CatalogTable(

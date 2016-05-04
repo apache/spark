@@ -579,7 +579,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(source2.table == "table2")
   }
 
-  test("load data")  {
+  test("load data") {
     val v1 = "LOAD DATA INPATH 'path' INTO TABLE table1"
     val (table, path, isLocal, isOverwrite, partition) = parser.parsePlan(v1).collect {
       case LoadData(t, path, l, o, partition) => (t, path, l, o, partition)
