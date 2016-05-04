@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark._
 
 class AccumulatorV2Suite extends SparkFunSuite {
 
@@ -85,5 +85,64 @@ class AccumulatorV2Suite extends SparkFunSuite {
     assert(acc.count == 4)
     assert(acc.sum == 5.0)
     assert(acc.avg == 1.25)
+  }
+
+  test("ListAccumulator") {
+    val acc = new ListAccumulator[Double]
+    assert(acc.value.isEmpty)
+    assert(acc.isZero)
+
+    acc.add(0.0)
+    assert(acc.value.contains(0.0))
+    assert(!acc.isZero)
+
+    acc.add(new java.lang.Double(1.0))
+
+    val acc2 = acc.copyAndReset()
+    assert(acc2.value.isEmpty)
+    assert(acc2.isZero)
+
+    assert(acc.value.contains(1.0))
+    assert(!acc.isZero)
+    assert(acc.value.size() === 2)
+
+    acc2.add(2.0)
+    assert(acc2.value.contains(2.0))
+    assert(!acc2.isZero)
+    assert(acc2.value.size() === 1)
+
+    // Test merging
+    acc.merge(acc2)
+    assert(acc.value.contains(2.0))
+    assert(!acc.isZero)
+    assert(acc.value.size() === 3)
+  }
+
+  test("LegacyAccumulatorWrapper") {
+    val acc = new LegacyAccumulatorWrapper("default", AccumulatorParam.StringAccumulatorParam)
+    assert(acc.value === "default")
+    assert(!acc.isZero)
+
+    acc.add("foo")
+    assert(acc.value === "foo")
+    assert(!acc.isZero)
+
+    acc.add(new java.lang.String("bar"))
+
+    val acc2 = acc.copyAndReset()
+    assert(acc2.value === "")
+    assert(acc2.isZero)
+
+    assert(acc.value === "bar")
+    assert(!acc.isZero)
+
+    acc2.add("baz")
+    assert(acc2.value === "baz")
+    assert(!acc2.isZero)
+
+    // Test merging
+    acc.merge(acc2)
+    assert(acc.value === "baz")
+    assert(!acc.isZero)
   }
 }

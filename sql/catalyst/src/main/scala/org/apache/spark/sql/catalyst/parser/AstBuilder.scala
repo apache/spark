@@ -632,8 +632,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val fraction = ctx.percentage.getText.toDouble
         sample(fraction / 100.0d)
 
+      case SqlBaseParser.BYTELENGTH_LITERAL =>
+        throw new ParseException(
+          "TABLESAMPLE(byteLengthLiteral) is not supported", ctx)
+
       case SqlBaseParser.BUCKET if ctx.ON != null =>
-        throw new ParseException("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
+        if (ctx.identifier != null) {
+          throw new ParseException(
+            "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported", ctx)
+        } else {
+          throw new ParseException(
+            "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported", ctx)
+        }
 
       case SqlBaseParser.BUCKET =>
         sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)

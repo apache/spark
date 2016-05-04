@@ -198,8 +198,7 @@ class CrossValidator(Estimator, ValidatorParams):
         """
         Sets the value of :py:attr:`numFolds`.
         """
-        self._set(numFolds=value)
-        return self
+        return self._set(numFolds=value)
 
     @since("1.4.0")
     def getNumFolds(self):
@@ -350,8 +349,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
         """
         Sets the value of :py:attr:`trainRatio`.
         """
-        self._set(trainRatio=value)
-        return self
+        return self._set(trainRatio=value)
 
     @since("2.0.0")
     def getTrainRatio(self):
