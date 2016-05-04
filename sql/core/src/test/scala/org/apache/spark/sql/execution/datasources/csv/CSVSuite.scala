@@ -398,6 +398,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
         Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
         Seq(new Timestamp(dateFormat.parse("28/01/2016 20:00").getTime)))
+
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
