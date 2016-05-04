@@ -19,7 +19,6 @@
 Spark ML is a component that adds a new set of machine learning APIs to let users quickly
 assemble and configure practical machine learning pipelines.
 """
-
 from pyspark.ml.base import Estimator, Model, Transformer
 from pyspark.ml.pipeline import Pipeline, PipelineModel
 
