@@ -1375,6 +1375,7 @@ class VectorTests(MLlibTestCase):
         tmp = SparseVector(4, [0, 2], [3, 0])
         self.assertEqual(tmp.numNonzeros(), 1)
 
+
 class VectorUDTTests(MLlibTestCase):
 
     dv0 = DenseVector([])
