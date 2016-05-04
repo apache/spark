@@ -411,6 +411,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>120s</code></td>
   <td>
     Set the amount of time for which offers are rejected when constraints are unmet. See <code>spark.mesos.constraints</code>.
+    This is used to prevent starvation of other frameworks.
   </td>
 </tr>
 <tr>
@@ -418,6 +419,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>120s</code></td>
   <td>
     Set the amount of time for which offers are rejected when the app already acquired <code>spark.cores.max</code> cores.
+    This is used to prevent starvation of other frameworks.
   </td>
 </tr>
 </table>
