@@ -475,10 +475,13 @@ class HDFSFileCatalog(
         if (!fs.isDirectory(userDefinedBasePath)) {
           throw new IllegalArgumentException("Option 'basePath' must be a directory")
         }
-        Set(userDefinedBasePath.makeQualified(fs.getUri, fs.getWorkingDirectory))
+        Set(fs.makeQualified(userDefinedBasePath))
 
       case None =>
-        paths.map { path => if (leafFiles.contains(path)) path.getParent else path }.toSet
+        paths.map { path =>
+          // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+          val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
+          if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }
   }
 
