@@ -38,9 +38,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
  * @param replace if true, and if the view already exists, updates it; if false, and if the view
  *                already exists, throws analysis exception.
  * @param isTemporary if true, the view is created as a temporary view. Temporary views are dropped
-  *                 at the end of current Spark session. Existing permanent relations with the same
-  *                 name are not visible to the current session while the temporary view exists,
-  *                 unless they are specified with full qualified table name with database prefix.
+ *                 at the end of current Spark session. Existing permanent relations with the same
+ *                 name are not visible to the current session while the temporary view exists,
+ *                 unless they are specified with full qualified table name with database prefix.
  * @param sql the original sql
  */
 case class CreateViewCommand(
@@ -106,9 +106,9 @@ case class CreateViewCommand(
         } else {
           // Handles `CREATE VIEW v0 AS SELECT ...`. Throws exception when the target view already
           // exists.
-          throw new AnalysisException(s"View $tableIdentifier already exists. " +
-            "If you want to update the view definition, please use ALTER VIEW AS or " +
-            "CREATE OR REPLACE VIEW AS")
+          throw new AnalysisException(
+            s"View $tableIdentifier already exists. If you want to update the view definition, " +
+              "please use ALTER VIEW AS or CREATE OR REPLACE VIEW AS")
         }
       } else {
         // Create the view if it doesn't exist.
