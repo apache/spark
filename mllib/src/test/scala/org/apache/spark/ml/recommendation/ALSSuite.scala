@@ -552,6 +552,7 @@ class ALSSuite
     val knownItem = data.select(max("item")).as[Int].first()
     val unknownItem = knownItem + 20
     val test = Seq(
+      (unknownUser, unknownItem),
       (knownUser, unknownItem),
       (unknownUser, knownItem),
       (knownUser, knownItem)
@@ -561,16 +562,15 @@ class ALSSuite
     // default is 'nan'
     val defaultModel = als.fit(data)
     val defaultPredictions = defaultModel.transform(test).select("prediction").as[Float].collect()
-    assert(defaultPredictions.length == 3)
-    assert(defaultPredictions(0).isNaN)
-    assert(defaultPredictions(1).isNaN)
-    assert(!defaultPredictions(2).isNaN)
+    assert(defaultPredictions.length == 4)
+    defaultPredictions.slice(0, 3).foreach(p => assert(p.isNaN))
+    assert(!defaultPredictions.last.isNaN)
 
     // check 'drop' strategy should filter out rows with unknown users/items
     val dropModel = als.setUnknownStrategy("drop").fit(data)
     val dropPredictions = dropModel.transform(test).select("prediction").as[Float].collect()
     assert(dropPredictions.length == 1)
-    assert(!dropPredictions(0).isNaN)
+    assert(!dropPredictions.head.isNaN)
   }
 }
 
