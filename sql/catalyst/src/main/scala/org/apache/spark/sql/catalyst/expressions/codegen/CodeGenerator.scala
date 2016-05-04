@@ -632,16 +632,9 @@ class CodegenContext {
 
       // Generate the code for this expression tree.
       val code = expr.genCode(this)
-      val effectiveCode =
-        s"""
-           |  ${code.code.trim}
-           |  boolean $isNull = ${code.isNull};
-           |  ${javaType(expr.dataType)} $value = ${code.value};
-           """.stripMargin
-
-      val state = SubExprEliminationState(isNull, value)
+      val state = SubExprEliminationState(code.isNull, code.value)
       e.foreach(subExprEliminationExprs.put(_, state))
-      effectiveCode
+      code.code.trim
     }
     SubExprCodes(codes, subExprEliminationExprs.toMap)
   }
