@@ -2473,4 +2473,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
+
+  test("SPARK-14986: Outer lateral view with empty generate expression") {
+    checkAnswer(
+      sql("select nil from (select 1 as x ) x lateral view outer explode(array()) n as nil"),
+      Row(null) :: Nil
+    )
+  }
 }
