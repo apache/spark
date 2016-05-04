@@ -357,7 +357,7 @@ class Params(Identifiable):
             return self._defaultParamMap[param]
 
     @since("1.4.0")
-    def extractParamMap(self, extra=None):
+    def extractParamMap(self, extra=None, default=False):
         """
         Extracts the embedded default param values and user-supplied
         values, and then merges them with extra values from input into
@@ -371,7 +371,8 @@ class Params(Identifiable):
         if extra is None:
             extra = dict()
         paramMap = self._defaultParamMap.copy()
-        paramMap.update(self._paramMap)
+        if not default:
+            paramMap.update(self._paramMap)
         paramMap.update(extra)
         return paramMap
 
@@ -463,7 +464,7 @@ class Params(Identifiable):
             self._defaultParamMap[p] = value
         return self
 
-    def _copyValues(self, to, extra=None):
+    def _copyValues(self, to, extra=None, default=False):
         """
         Copies param values from this instance to another instance for
         params shared by them.
@@ -474,10 +475,11 @@ class Params(Identifiable):
         """
         if extra is None:
             extra = dict()
-        paramMap = self.extractParamMap(extra)
+        paramMap = self.extractParamMap(extra, default)
         for p in self.params:
             if p in paramMap and to.hasParam(p.name):
                 to._set(**{p.name: paramMap[p]})
+        to.set(**{'uid': self.uid})
         return to
 
     def _resetUid(self, newUid):
