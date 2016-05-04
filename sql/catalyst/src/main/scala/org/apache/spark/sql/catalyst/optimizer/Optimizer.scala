@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -163,14 +163,21 @@ object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
-      // A workaround for SPARK-14803. Remove this after it is fixed.
-      if (d.outputObjectType.isInstanceOf[ObjectType] &&
-          d.outputObjectType.asInstanceOf[ObjectType].cls == classOf[org.apache.spark.sql.Row]) {
-        s.child
+      val addProject = if (d.outputObjectType.isInstanceOf[ObjectType]) {
+        ScalaReflection.dataTypeFor(d.outputObjectType.asInstanceOf[ObjectType].cls) match {
+          case o: ObjectType => false
+          case _ => true
+        }
       } else {
+        true
+      }
+
+      if (addProject) {
         // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
         val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
         Project(objAttr :: Nil, s.child)
+      } else {
+        s.child
       }
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>

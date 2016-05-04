@@ -62,6 +62,16 @@ object ScalaReflection extends ScalaReflection {
    */
   def dataTypeFor[T : TypeTag]: DataType = dataTypeFor(localTypeOf[T])
 
+  /**
+   * Returns the Spark SQL DataType for a given runtime class.  Where this is not an exact mapping
+   * to a native type, an ObjectType is returned. Special handling is also used for Arrays including
+   * those that hold primitive types.
+   *
+   * Unlike `schemaFor`, this function doesn't do any massaging of types into the Spark SQL type
+   * system.  As a result, ObjectType will be returned for things like boxed Integers
+   */
+  def dataTypeFor(t: Class[_]): DataType = dataTypeFor(getTypeForClass(t))
+
   private def dataTypeFor(tpe: `Type`): DataType = ScalaReflectionLock.synchronized {
     tpe match {
       case t if t <:< definitions.IntTpe => IntegerType
@@ -657,6 +667,15 @@ object ScalaReflection extends ScalaReflection {
     val classSymbol = m.staticClass(cls.getName)
     val t = classSymbol.selfType
     constructParams(t).map(_.name.toString)
+  }
+
+  /**
+   * Returns the type for given runtime class.
+   */
+  def getTypeForClass(cls: Class[_]): Type = {
+    val m = runtimeMirror(cls.getClassLoader)
+    val classSymbol = m.staticClass(cls.getName)
+    classSymbol.selfType
   }
 
   /*
