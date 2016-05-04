@@ -102,13 +102,14 @@ private[spark] class MesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    var extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").getOrElse("")
+    val extraJavaOpts = sc.conf.getOption("spark.executor.extraJavaOptions").map {
+      Utils.substituteExecIdWildCard(_, execId)
+    }.getOrElse("")
 
     val prefixEnv = sc.conf.getOption("spark.executor.extraLibraryPath").map { p =>
       Utils.libraryPathEnvPrefix(Seq(p))
     }.getOrElse("")
 
-    extraJavaOpts = Utils.substituteExecIdWildCard(extraJavaOpts, execId)
     environment.addVariables(
       Environment.Variable.newBuilder()
         .setName("SPARK_EXECUTOR_OPTS")
