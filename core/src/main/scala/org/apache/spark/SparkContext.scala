@@ -608,6 +608,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * scheduler pool. User-defined properties may also be set here. These properties are propagated
    * through to worker tasks and can be accessed there via
    * [[org.apache.spark.TaskContext#getLocalProperty]].
+   *
+   * These properties are inherited by child threads spawned from this thread. This
+   * may have unexpected consequences when working with thread pools. The standard java
+   * implementation of thread pools have worker threads spawn other worker threads.
+   * As a result, local properties may propagate unpredictably.
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
@@ -1219,6 +1224,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] = {
     val acc = new Accumulator(initialValue, param)
     cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
@@ -1230,6 +1236,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name))
@@ -1243,6 +1250,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
     val acc = new Accumulable(initialValue, param)
@@ -1257,6 +1265,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
     val acc = new Accumulable(initialValue, param, Some(name))
@@ -1270,6 +1279,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Growable and TraversableOnce are the standard APIs that guarantee += and ++=, implemented by
    * standard mutable collections. So you can use this with mutable Map, Set, etc.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R, T]
@@ -1282,7 +1292,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register the given accumulator.  Note that accumulators must be registered before use, or it
    * will throw exception.
    */
-  def register(acc: NewAccumulator[_, _]): Unit = {
+  def register(acc: AccumulatorV2[_, _]): Unit = {
     acc.register(this)
   }
 
@@ -1290,7 +1300,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register the given accumulator with given name.  Note that accumulators must be registered
    * before use, or it will throw exception.
    */
-  def register(acc: NewAccumulator[_, _], name: String): Unit = {
+  def register(acc: AccumulatorV2[_, _], name: String): Unit = {
     acc.register(this, name = Some(name))
   }
 
@@ -1326,28 +1336,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
-    register(acc, name)
-    acc
-  }
-
-  /**
-   * Create and register an average accumulator, which accumulates double inputs by recording the
-   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
-   * returned if no input is added.
-   */
-  def averageAccumulator: AverageAccumulator = {
-    val acc = new AverageAccumulator
-    register(acc)
-    acc
-  }
-
-  /**
-   * Create and register an average accumulator, which accumulates double inputs by recording the
-   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
-   * returned if no input is added.
-   */
-  def averageAccumulator(name: String): AverageAccumulator = {
-    val acc = new AverageAccumulator
     register(acc, name)
     acc
   }
@@ -2216,21 +2204,7 @@ object SparkContext extends Logging {
       sc: SparkContext,
       allowMultipleContexts: Boolean): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      contextBeingConstructed.foreach { otherContext =>
-        if (otherContext ne sc) {  // checks for reference equality
-          // Since otherContext might point to a partially-constructed context, guard against
-          // its creationSite field being null:
-          val otherContextCreationSite =
-            Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
-          val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
-            " constructor).  This may indicate an error, since only one SparkContext may be" +
-            " running in this JVM (see SPARK-2243)." +
-            s" The other SparkContext was created at:\n$otherContextCreationSite"
-          logWarning(warnMsg)
-        }
-
-        if (activeContext.get() != null) {
-          val ctx = activeContext.get()
+      Option(activeContext.get()).filter(_ ne sc).foreach { ctx =>
           val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
@@ -2241,6 +2215,17 @@ object SparkContext extends Logging {
             throw exception
           }
         }
+
+      contextBeingConstructed.filter(_ ne sc).foreach { otherContext =>
+        // Since otherContext might point to a partially-constructed context, guard against
+        // its creationSite field being null:
+        val otherContextCreationSite =
+          Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
+        val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
+          " constructor).  This may indicate an error, since only one SparkContext may be" +
+          " running in this JVM (see SPARK-2243)." +
+          s" The other SparkContext was created at:\n$otherContextCreationSite"
+        logWarning(warnMsg)
       }
     }
   }
