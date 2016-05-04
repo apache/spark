@@ -406,6 +406,20 @@ See the [configuration page](configuration.html) for information on Spark config
     If unset it will point to Spark's internal web UI.
   </td>
 </tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForUnmetConstraints</code></td>
+  <td><code>120s</code></td>
+  <td>
+    Set the amount of time for which offers are rejected when constraints are unmet. See <code>spark.mesos.constraints</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.mesos.rejectOfferDurationForReachedMaxCores</code></td>
+  <td><code>120s</code></td>
+  <td>
+    Set the amount of time for which offers are rejected when the app already acquired <code>spark.cores.max</code> cores.
+  </td>
+</tr>
 </table>
 
 # Troubleshooting and Debugging

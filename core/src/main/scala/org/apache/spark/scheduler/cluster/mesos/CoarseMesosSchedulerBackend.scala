@@ -341,20 +341,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           Collections.singleton(offer.getId),
           offerTasks.asJava)
       } else if (totalCoresAcquired >= maxCores) {
-        // We already acquired the maximum number of cores so we don't need to get new offers
-        // unless an executor goes down. Setting a high "refuse seconds" filter is especially
-        // important when running a lot of frameworks in the same Mesos cluster to avoid resource
-        // starvation. One such case of starvation happens when running many small Spark apps
-        // (e.g. small Spark streaming jobs) then a new big Spark app would get offered only a
-        // fraction of the cores available in the cluster and Mesos would then stop sending it
-        // offers. That's because the small apps have a much smaller "max share" so they get the
-        // offers first. With a low number of apps it's okay because with the default
-        // refuse_seconds value of 5 seconds it's enough time for Mesos to cycle through every
-        // app and send offers to each of them. But as the number of apps increases it becomes
-        // more and more problematic, to the point where Mesos stops sending offers to the apps
-        // ranked the lowest by DRF, i.e. the big apps. We mitigate this problem by declining
-        // the offers for a long period of time when we know that we don't need offers anymore
-        // because the app already acquired all the cores it needs.
+        // Reject an offer for a configurable amount of time to avoid starving other frameworks
         declineOffer(d, offer, Some("reached spark.cores.max"),
           Some(rejectOfferDurationForReachedMaxCores))
       } else {
