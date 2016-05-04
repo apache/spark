@@ -376,8 +376,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     val expected =
       Seq(Seq(1, 2, 3, 4, 5.01D, Timestamp.valueOf("2015-08-20 15:57:00")),
-          Seq(6, 7, 8, 9, 0D, Timestamp.valueOf("2015-08-21 16:58:01")),
-          Seq(1, 2, 3, 4, 5D, Timestamp.valueOf("2015-08-23 18:00:42")))
+          Seq(6, 7, 8, 9, 0, Timestamp.valueOf("2015-08-21 16:58:01")),
+          Seq(1, 2, 3, 4, 5, Timestamp.valueOf("2015-08-23 18:00:42")))
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
