@@ -931,8 +931,8 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast(df: DataFrame): DataFrame = {
-    Dataset.ofRows(df.sparkSession, BroadcastHint(df.logicalPlan))
+  def broadcast[T](df: Dataset[T]): Dataset[T] = {
+    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.unresolvedTEncoder)
   }
 
   /**
