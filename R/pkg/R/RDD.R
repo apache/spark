@@ -1029,7 +1029,7 @@ setMethod("repartition",
               class(numPartitions) == "integer")) {
               coalesce(x, numPartitions, TRUE)
             } else {
-              coalesce(x, 200L)
+              coalesce(x, 200L, TRUE)
             }
           })
 
