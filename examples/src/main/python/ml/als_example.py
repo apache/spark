@@ -34,7 +34,7 @@ if __name__ == "__main__":
     lines = sc.textFile("data/mllib/als/sample_movielens_ratings.txt")
     parts = lines.map(lambda l: l.split("::"))
     ratingsRDD = parts.map(lambda p: Row(userId=int(p[0]), movieId=int(p[1]),
-                                         rating=float(p[2]), timestamp=long(p[3])))
+                                         rating=float(p[2]), timestamp=int(p[3])))
     ratings = sqlContext.createDataFrame(ratingsRDD)
     (training, test) = ratings.randomSplit([0.8, 0.2])
 
