@@ -77,7 +77,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams
    * @group param
    */
   final val minInfoGain: DoubleParam = new DoubleParam(this, "minInfoGain",
-    "Minimum information gain for a split to be considered at a tree node.")
+    "Minimum information gain for a split to be considered at a tree node.",
+    ParamValidators.gtEq(0))
 
   /**
    * Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be
