@@ -75,8 +75,8 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    * @group expertParam
    */
   final val solver: Param[String] = new Param[String](this, "solver",
-    " Allows setting the solver: minibatch gradient descent (gd) or l-bfgs. " +
-      " l-bfgs is the default one.",
+    "Allows setting the solver: minibatch gradient descent (gd) or l-bfgs. " +
+      "(Default l-bfgs)",
     ParamValidators.inArray[String](Array("gd", "l-bfgs")))
 
   /** @group getParam */
@@ -88,7 +88,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    * @group expertParam
    */
   final val weights: Param[Vector] = new Param[Vector](this, "weights",
-    " Sets the weights of the model ")
+    "Sets the weights of the model")
 
   /** @group getParam */
   final def getWeights: Vector = $(weights)
