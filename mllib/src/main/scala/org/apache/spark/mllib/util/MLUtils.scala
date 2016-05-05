@@ -119,7 +119,7 @@ object MLUtils {
       previous = current
       i += 1
     }
-    (label, indices, values)
+    (label, indices.toArray, values.toArray)
   }
 
   /**
