@@ -136,6 +136,12 @@ class BinaryClassificationMetrics @Since("1.3.0") (
   def precisionByThreshold(): RDD[(Double, Double)] = createCurve(Precision)
 
   /**
+   * Returns the (threshold, accuracy) curve.
+   */
+  @Since("2.0.0")
+  def accuracyByThreshold(): RDD[(Double, Double)] = createCurve(Accuracy)
+
+  /**
    * Returns the (threshold, recall) curve.
    */
   @Since("1.0.0")

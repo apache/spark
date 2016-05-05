@@ -24,6 +24,19 @@ private[evaluation] trait BinaryClassificationMetricComputer extends Serializabl
   def apply(c: BinaryConfusionMatrix): Double
 }
 
+/** Accuracy. Defined as 1.0 where there are zero no positive and negative examples. */
+private[evaluation] object Accuracy extends BinaryClassificationMetricComputer {
+  override  def apply(c: BinaryConfusionMatrix): Double = {
+    val totalCounts = c.numNegatives + c.numPositives
+    val totalTrue = c.numTruePositives + c.numTrueNegatives
+    if (totalCounts == 0) {
+      1.0
+    } else {
+      totalTrue.toDouble / totalCounts
+    }
+  }
+}
+
 /** Precision. Defined as 1.0 when there are no positive examples. */
 private[evaluation] object Precision extends BinaryClassificationMetricComputer {
   override def apply(c: BinaryConfusionMatrix): Double = {

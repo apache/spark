@@ -44,7 +44,8 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       expectedFMeasures1: Seq[Double],
       expectedFmeasures2: Seq[Double],
       expectedPrecisions: Seq[Double],
-      expectedRecalls: Seq[Double]) = {
+      expectedRecalls: Seq[Double],
+      expectedAccuracies: Seq[Double]) = {
 
     assertSequencesMatch(metrics.thresholds().collect(), expectedThresholds)
     assertTupleSequencesMatch(metrics.roc().collect(), expectedROCCurve)
@@ -59,6 +60,8 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       expectedThresholds.zip(expectedPrecisions))
     assertTupleSequencesMatch(metrics.recallByThreshold().collect(),
       expectedThresholds.zip(expectedRecalls))
+    assertTupleSequencesMatch(metrics.accuracyByThreshold().collect(),
+      expectedThresholds.zip(expectedAccuracies))
   }
 
   test("binary evaluation metrics") {
@@ -68,6 +71,8 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val thresholds = Seq(0.8, 0.6, 0.4, 0.1)
     val numTruePositives = Seq(1, 3, 3, 4)
     val numFalsePositives = Seq(0, 1, 2, 3)
+    val numAllCounts = 7
+    val numTruePosNeg = Seq(4, 5, 4, 4)
     val numPositives = 4
     val numNegatives = 3
     val precisions = numTruePositives.zip(numFalsePositives).map { case (t, f) =>
@@ -80,8 +85,9 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val prCurve = Seq((0.0, 1.0)) ++ pr
     val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
     val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
+    val accuracies = numTruePosNeg.map (t => t.toDouble / numAllCounts)
 
-    validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls)
+    validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls, accuracies)
   }
 
   test("binary evaluation metrics for RDD where all examples have positive label") {
@@ -92,13 +98,14 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val precisions = Seq(1.0)
     val recalls = Seq(1.0)
     val fpr = Seq(0.0)
+    val accuracies = Seq(1.0)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recalls) ++ Seq((1.0, 1.0))
     val pr = recalls.zip(precisions)
     val prCurve = Seq((0.0, 1.0)) ++ pr
     val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
     val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
 
-    validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls)
+    validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls, accuracies)
   }
 
   test("binary evaluation metrics for RDD where all examples have negative label") {
@@ -109,6 +116,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val precisions = Seq(0.0)
     val recalls = Seq(0.0)
     val fpr = Seq(1.0)
+    val accuracies = Seq(0.0)
     val rocCurve = Seq((0.0, 0.0)) ++ fpr.zip(recalls) ++ Seq((1.0, 1.0))
     val pr = recalls.zip(precisions)
     val prCurve = Seq((0.0, 1.0)) ++ pr
@@ -121,7 +129,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
       case (r, p) => 5.0 * (p * r) / (4.0 * p + r)
     }
 
-    validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls)
+    validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls, accuracies)
   }
 
   test("binary evaluation metrics with downsampling") {
