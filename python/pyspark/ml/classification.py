@@ -96,7 +96,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
-                      " If threshold and thresholds are both set, they must match.",
+                      " If threshold and thresholds are both set, they must match." +
+                      "e.g. threshold must be equal to [1-p, p].",
                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
@@ -154,7 +155,9 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     @since("1.4.0")
     def getThreshold(self):
         """
-        Gets the value of threshold or its default value.
+        Gets the value of threshold or attempt to convert thresholds to threshold if set, or default
+        value if neither are set.
+        This conversion is equivalent to: {{{1 / (1 + thresholds(0) / thresholds(1))}}}.
         """
         self._checkThresholdConsistency()
         if self.isSet(self.thresholds):
@@ -616,6 +619,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              RandomForestParams, TreeClassifierParams, HasCheckpointInterval,
                              JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
@@ -708,6 +713,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
 class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
     Model fitted by RandomForestClassifier.
 
     .. versionadded:: 1.4.0
@@ -862,6 +868,8 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
                  HasRawPredictionCol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Naive Bayes Classifiers.
     It supports both Multinomial and Bernoulli NB. Multinomial NB
     (`http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html`)
@@ -980,6 +988,8 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
 
 class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by NaiveBayes.
 
     .. versionadded:: 1.5.0
@@ -1006,6 +1016,8 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                                      HasMaxIter, HasTol, HasSeed, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
     Number of inputs has to be equal to the size of feature vectors.
@@ -1120,6 +1132,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
 
 class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by MultilayerPerceptronClassifier.
 
     .. versionadded:: 1.6.0
@@ -1169,6 +1183,8 @@ class OneVsRestParams(HasFeaturesCol, HasLabelCol, HasPredictionCol):
 @inherit_doc
 class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     """
+    .. note:: Experimental
+
     Reduction of Multiclass Classification to Binary Classification.
     Performs reduction using one against all strategy.
     For a multiclass classification with k classes, train k models (one per class).
@@ -1323,6 +1339,8 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
 
 class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
     """
+    .. note:: Experimental
+
     Model fitted by OneVsRest.
     This stores the models resulting from training k binary classifiers: one for each class.
     Each example is scored against all k models, and the model with the highest score
