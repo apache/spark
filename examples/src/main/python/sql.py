@@ -63,7 +63,7 @@ if __name__ == "__main__":
     #  |-- age: long (nullable = true)
     #  |-- name: string (nullable = true)
 
-    # Register this DataFrame as a table.
+    # Register this DataFrame as a temporary table.
     people.registerTempTable("people")
 
     # SQL statements can be run by using the sql methods provided by sqlContext
