@@ -41,11 +41,14 @@ object HiveFromSpark {
     // using HiveQL. Users who do not have an existing Hive deployment can still create a
     // HiveContext. When not configured by the hive-site.xml, the context automatically
     // creates metastore_db and warehouse in the current directory.
-    val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
-    val sc = sparkSession.sparkContext
+    val spark = SparkSession.builder
+      .config(sparkConf)
+      .enableHiveSupport()
+      .getOrCreate()
+    val sc = spark.sparkContext
 
-    import sparkSession.implicits._
-    import sparkSession.sql
+    import spark.implicits._
+    import spark.sql
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql(s"LOAD DATA LOCAL INPATH '${kv1File.getAbsolutePath}' INTO TABLE src")
@@ -75,7 +78,7 @@ object HiveFromSpark {
     println("Result of SELECT *:")
     sql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println
