@@ -728,6 +728,12 @@ class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaML
         """
         return self._call_java("featureImportances")
 
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
+
 
 @inherit_doc
 class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
@@ -860,6 +866,12 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
         .. seealso:: :py:attr:`DecisionTreeClassificationModel.featureImportances`
         """
         return self._call_java("featureImportances")
+
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
 
 
 @inherit_doc

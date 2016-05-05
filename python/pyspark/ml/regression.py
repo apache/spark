@@ -738,6 +738,12 @@ class TreeEnsembleModels(JavaModel):
     """
 
     @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeModel(m) for m in list(self._call_java("trees"))]
+
+    @property
     @since("1.5.0")
     def treeWeights(self):
         """Return the weights for each tree"""
@@ -883,6 +889,12 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
 
     @property
     @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
+
+    @property
+    @since("2.0.0")
     def featureImportances(self):
         """
         Estimate of the importance of each feature.
@@ -1019,6 +1031,12 @@ class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
         .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
         """
         return self._call_java("featureImportances")
+
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
 
 @inherit_doc
