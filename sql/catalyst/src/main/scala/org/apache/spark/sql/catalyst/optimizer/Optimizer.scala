@@ -180,9 +180,9 @@ object EliminateSerialization extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case p if p.children.exists(_.isInstanceOf[DeserializeToObject]) =>
-      p.children.map(eliminateSerialization(_, false))
-      p
-    case d: DeserializeToObject => eliminateSerialization(d, true)
+      p.withNewChildren(p.children.map(eliminateSerialization(_, false)))
+    case d: DeserializeToObject =>
+      eliminateSerialization(d, true)
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
