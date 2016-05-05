@@ -18,7 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.recommendation.ALS
