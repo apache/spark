@@ -95,10 +95,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     catalog.createPartitions(tableName, Seq(part), ignoreIfExists = false)
   }
 
-  private def dropTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
-    catalog.dropTable(name, ignoreIfNotExists = false)
-  }
-
   private def appendTrailingSlash(path: String): String = {
     if (!path.endsWith(File.separator)) path + File.separator else path
   }
@@ -303,7 +299,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }.getMessage
     assert(message.contains(s"Database '$dbName' is not empty. One or more tables exist"))
 
-    dropTable(catalog, tableIdent1)
+    catalog.dropTable(tableIdent1, ignoreIfNotExists = false)
+
     assert(catalog.listDatabases().contains(dbName))
     sql(s"DROP DATABASE $dbName RESTRICT")
     assert(!catalog.listDatabases().contains(dbName))
