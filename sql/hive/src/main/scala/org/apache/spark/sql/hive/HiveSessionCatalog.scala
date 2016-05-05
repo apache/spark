@@ -145,7 +145,7 @@ private[sql] class HiveSessionCatalog(
           udaf
         } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
           val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udtf.elementTypes // Force it to check input data types.
+          udtf.elementSchema // Force it to check input data types.
           udtf
         } else {
           throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")

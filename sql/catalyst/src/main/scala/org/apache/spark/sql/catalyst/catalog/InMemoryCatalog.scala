@@ -207,7 +207,7 @@ class InMemoryCatalog extends ExternalCatalog {
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Table or View '$table' does not exist in database '$db'")
+        throw new AnalysisException(s"Table or view '$table' does not exist in database '$db'")
       }
     }
   }
@@ -267,7 +267,7 @@ class InMemoryCatalog extends ExternalCatalog {
       loadPath: String,
       isOverwrite: Boolean,
       holdDDLTime: Boolean): Unit = {
-    throw new AnalysisException("loadTable is not implemented for InMemoryCatalog.")
+    throw new UnsupportedOperationException("loadTable is not implemented")
   }
 
   override def loadPartition(
@@ -279,7 +279,7 @@ class InMemoryCatalog extends ExternalCatalog {
       holdDDLTime: Boolean,
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean): Unit = {
-    throw new AnalysisException("loadPartition is not implemented for InMemoryCatalog.")
+    throw new UnsupportedOperationException("loadPartition is not implemented.")
   }
 
   // --------------------------------------------------------------------------
@@ -307,8 +307,8 @@ class InMemoryCatalog extends ExternalCatalog {
     // TODO: we should follow hive to roll back if one partition path failed to create.
     parts.foreach { p =>
       if (p.storage.locationUri.isEmpty) {
-        val partitionPath = partitionColumnNames.flatMap(p.spec.get).map {
-          case (k, v) => s"$k=$v"
+        val partitionPath = partitionColumnNames.flatMap { col =>
+          p.spec.get(col).map(col + "=" + _)
         }.mkString("/")
         try {
           fs.mkdirs(new Path(tableDir, partitionPath))
@@ -342,8 +342,8 @@ class InMemoryCatalog extends ExternalCatalog {
     // TODO: we should follow hive to roll back if one partition path failed to delete.
     partSpecs.foreach { p =>
       if (existingParts(p).storage.locationUri.isEmpty) {
-        val partitionPath = partitionColumnNames.flatMap(p.get).map {
-          case (k, v) => s"$k=$v"
+        val partitionPath = partitionColumnNames.flatMap { col =>
+          p.get(col).map(col + "=" + _)
         }.mkString("/")
         try {
           fs.delete(new Path(tableDir, partitionPath), true)
@@ -371,11 +371,11 @@ class InMemoryCatalog extends ExternalCatalog {
       val existingParts = catalog(db).tables(table).partitions
 
       if (newPart.storage.locationUri.isEmpty) {
-        val oldPath = partitionColumnNames.flatMap(oldSpec.get).map {
-          case (k, v) => s"$k=$v"
+        val oldPath = partitionColumnNames.flatMap { col =>
+          oldSpec.get(col).map(col + "=" + _)
         }.mkString("/")
-        val newPath = partitionColumnNames.flatMap(newSpec.get).map {
-          case (k, v) => s"$k=$v"
+        val newPath = partitionColumnNames.flatMap { col =>
+          newSpec.get(col).map(col + "=" + _)
         }.mkString("/")
         try {
           fs.rename(new Path(tableDir, oldPath), new Path(tableDir, newPath))
@@ -414,8 +414,8 @@ class InMemoryCatalog extends ExternalCatalog {
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
     if (partialSpec.nonEmpty) {
-      throw new AnalysisException("listPartition does not support partition spec in " +
-        "InMemoryCatalog.")
+      throw new UnsupportedOperationException(
+        "listPartition with partial partition spec is not implemented")
     }
     catalog(db).tables(table).partitions.values.toSeq
   }

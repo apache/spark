@@ -204,24 +204,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
       val converter = RowEncoder(dataSchema)
 
-      val unsafeRowIterator = points.map { pt =>
+      points.map { pt =>
         val features = if (sparse) pt.features.toSparse else pt.features.toDense
         converter.toRow(Row(pt.label, features))
-      }
-
-      def toAttribute(f: StructField): AttributeReference =
-        AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
-
-      // Appends partition values
-      val fullOutput = (dataSchema ++ partitionSchema).map(toAttribute)
-      val requiredOutput = fullOutput.filter { a =>
-        requiredSchema.fieldNames.contains(a.name) || partitionSchema.fieldNames.contains(a.name)
-      }
-      val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
-
-      unsafeRowIterator.map { dataRow =>
-        appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
       }
     }
   }

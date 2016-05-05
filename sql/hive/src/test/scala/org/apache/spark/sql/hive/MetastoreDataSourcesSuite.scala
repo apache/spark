@@ -732,6 +732,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           inputFormat = None,
           outputFormat = None,
           serde = None,
+          compressed = false,
           serdeProperties = Map(
             "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
         ),

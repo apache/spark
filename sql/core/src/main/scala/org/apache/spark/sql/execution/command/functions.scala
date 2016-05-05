@@ -51,9 +51,8 @@ case class CreateFunction(
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
-        throw new AnalysisException(
-          s"It is not allowed to provide database name when defining a temporary function. " +
-            s"However, database name ${databaseName.get} is provided.")
+        throw new AnalysisException(s"Specifying a database in CREATE TEMPORARY FUNCTION " +
+          s"is not allowed: '${databaseName.get}'")
       }
       // We first load resources and then put the builder in the function registry.
       // Please note that it is allowed to overwrite an existing temp function.
@@ -153,9 +152,8 @@ case class DropFunction(
     val catalog = sparkSession.sessionState.catalog
     if (isTemp) {
       if (databaseName.isDefined) {
-        throw new AnalysisException(
-          s"It is not allowed to provide database name when dropping a temporary function. " +
-            s"However, database name ${databaseName.get} is provided.")
+        throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
+          s"is not allowed: '${databaseName.get}'")
       }
       catalog.dropTempFunction(functionName, ifExists)
     } else {

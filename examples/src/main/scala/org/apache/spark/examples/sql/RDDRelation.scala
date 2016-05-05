@@ -18,7 +18,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.{SaveMode, SparkSession}
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
@@ -27,14 +26,12 @@ case class Record(key: Int, value: String)
 
 object RDDRelation {
   def main(args: Array[String]) {
-    val sparkConf = new SparkConf().setAppName("RDDRelation")
-    val sc = new SparkContext(sparkConf)
-    val spark = new SparkSession(sc)
+    val spark = SparkSession.builder.appName("RDDRelation").getOrCreate()
 
     // Importing the SparkSession gives access to all the SQL functions and implicit conversions.
     import spark.implicits._
 
-    val df = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i"))).toDF()
+    val df = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
     // Any RDD containing case classes can be registered as a table.  The schema of the table is
     // automatically inferred using scala reflection.
     df.registerTempTable("records")
@@ -70,7 +67,7 @@ object RDDRelation {
     parquetFile.registerTempTable("parquetFile")
     spark.sql("SELECT * FROM parquetFile").collect().foreach(println)
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println
