@@ -41,7 +41,6 @@ class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(s"Function '$func' not found in database '$db'")
 
 class NoSuchFunctionException(db: String, func: String)
-  extends AnalysisException(s"Undefined function: '$func'. This function is " +
-s"neither a registered temporary function nor " +
-s"a permanent function registered in the database '$db'.")
-
+  extends AnalysisException(
+    s"Undefined function: '$func'. This function is neither a registered temporary function nor " +
+    s"a permanent function registered in the database '$db'.")
