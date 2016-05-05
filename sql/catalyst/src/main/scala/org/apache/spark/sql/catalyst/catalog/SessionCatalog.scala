@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, SimpleFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -100,6 +100,12 @@ class SessionCatalog(
     fs.makeQualified(hadoopPath)
   }
 
+  protected[this] def requireDbExists(db: String): Unit = {
+    if (!databaseExists(db)) {
+      throw new NoSuchDatabaseException(db)
+    }
+  }
+
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -118,10 +124,12 @@ class SessionCatalog(
   }
 
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
+    requireDbExists(dbDefinition.name)
     externalCatalog.alterDatabase(dbDefinition)
   }
 
   def getDatabaseMetadata(db: String): CatalogDatabase = {
+    requireDbExists(db)
     externalCatalog.getDatabase(db)
   }
 
@@ -140,9 +148,7 @@ class SessionCatalog(
   def getCurrentDatabase: String = currentDb
 
   def setCurrentDatabase(db: String): Unit = {
-    if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database '$db' does not exist.")
-    }
+    requireDbExists(db)
     currentDb = db
   }
 
@@ -172,6 +178,7 @@ class SessionCatalog(
     val db = tableDefinition.identifier.database.getOrElse(currentDb)
     val table = formatTableName(tableDefinition.identifier.table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+    requireDbExists(db)
     externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
   }
 
@@ -188,6 +195,7 @@ class SessionCatalog(
     val db = tableDefinition.identifier.database.getOrElse(currentDb)
     val table = formatTableName(tableDefinition.identifier.table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+    requireDbExists(db)
     externalCatalog.alterTable(db, newTableDefinition)
   }
 
@@ -199,6 +207,7 @@ class SessionCatalog(
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
+    requireDbExists(db)
     externalCatalog.getTable(db, table)
   }
 
@@ -210,6 +219,7 @@ class SessionCatalog(
   def getTableMetadataOption(name: TableIdentifier): Option[CatalogTable] = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
+    requireDbExists(db)
     externalCatalog.getTableOption(db, table)
   }
 
@@ -267,7 +277,7 @@ class SessionCatalog(
       overrideIfExists: Boolean): Unit = {
     val table = formatTableName(name)
     if (tempTables.contains(table) && !overrideIfExists) {
-      throw new AnalysisException(s"Temporary table '$name' already exists.")
+      throw new AlreadyExistTempFunctionException(name)
     }
     tempTables.put(table, tableDefinition)
   }
@@ -290,7 +300,11 @@ class SessionCatalog(
     }
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
+
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
+      if (tableExists(newName)) {
+        throw new AlreadyExistTableException(db = db, table = newTableName)
+      }
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
       val table = tempTables(oldTableName)
@@ -312,10 +326,10 @@ class SessionCatalog(
     if (name.database.isDefined || !tempTables.contains(table)) {
       // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
       // Instead, log it as an error message.
-      if (externalCatalog.tableExists(db, table)) {
+      if (tableExists(name)) {
         externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
       } else if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Table or view '${name.quotedString}' does not exist")
+        throw new NoSuchTableException(db = db, table = table)
       }
     } else {
       tempTables.remove(table)
@@ -356,6 +370,7 @@ class SessionCatalog(
   def tableExists(name: TableIdentifier): Boolean = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
+    requireDbExists(db)
     if (name.database.isDefined || !tempTables.contains(table)) {
       externalCatalog.tableExists(db, table)
     } else {
@@ -382,6 +397,7 @@ class SessionCatalog(
    * List all matching tables in the specified database, including temporary tables.
    */
   def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
+    requireDbExists(db)
     val dbTables =
       externalCatalog.listTables(db, pattern).map { t => TableIdentifier(t, Some(db)) }
     val _tempTables = StringUtils.filterPattern(tempTables.keys.toSeq, pattern)
@@ -439,6 +455,7 @@ class SessionCatalog(
       ignoreIfExists: Boolean): Unit = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
   }
 
@@ -452,6 +469,7 @@ class SessionCatalog(
       ignoreIfNotExists: Boolean): Unit = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
     externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
@@ -467,6 +485,7 @@ class SessionCatalog(
       newSpecs: Seq[TablePartitionSpec]): Unit = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -482,6 +501,7 @@ class SessionCatalog(
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
     externalCatalog.alterPartitions(db, table, parts)
   }
 
@@ -492,6 +512,7 @@ class SessionCatalog(
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
     externalCatalog.getPartition(db, table, spec)
   }
 
@@ -507,6 +528,7 @@ class SessionCatalog(
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = {
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
     externalCatalog.listPartitions(db, table, partialSpec)
   }
 
@@ -534,7 +556,7 @@ class SessionCatalog(
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new AnalysisException(s"Function '$identifier' already exists in database '$db'")
+      throw new AlreadyExistFunctionException(db = db, func = identifier.toString)
     }
   }
 
@@ -556,7 +578,7 @@ class SessionCatalog(
       }
       externalCatalog.dropFunction(db, name.funcName)
     } else if (!ignoreIfNotExists) {
-      throw new AnalysisException(s"function '$identifier' does not exist in database '$db'")
+      throw new NoSuchFunctionException(db = db, func = identifier.toString)
     }
   }
 
@@ -568,6 +590,7 @@ class SessionCatalog(
    */
   def getFunctionMetadata(name: FunctionIdentifier): CatalogFunction = {
     val db = name.database.getOrElse(currentDb)
+    requireDbExists(db)
     externalCatalog.getFunction(db, name.funcName)
   }
 
@@ -576,6 +599,7 @@ class SessionCatalog(
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
     val db = name.database.getOrElse(currentDb)
+    requireDbExists(db)
     functionRegistry.functionExists(name.unquotedString) ||
       externalCatalog.functionExists(db, name.funcName)
   }
@@ -616,7 +640,7 @@ class SessionCatalog(
       funcDefinition: FunctionBuilder,
       ignoreIfExists: Boolean): Unit = {
     if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
-      throw new AnalysisException(s"Temporary function '$name' already exists.")
+      throw new AlreadyExistTempFunctionException(name)
     }
     functionRegistry.registerFunction(name, info, funcDefinition)
   }
@@ -626,8 +650,7 @@ class SessionCatalog(
    */
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
     if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
-      throw new AnalysisException(
-        s"Temporary function '$name' cannot be dropped because it does not exist!")
+      throw new NoSuchTempFunctionException(name)
     }
   }
 
@@ -719,6 +742,7 @@ class SessionCatalog(
    * List all matching functions in the specified database, including temporary functions.
    */
   def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
+    requireDbExists(db)
     val dbFunctions =
       externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)

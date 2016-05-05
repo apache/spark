@@ -125,7 +125,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message1 = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("'badtable' not found in database 'default'"))
+    assert(message1.contains("Table or view 'badtable' not found in database 'default'"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
