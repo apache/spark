@@ -115,6 +115,7 @@ class SparkSession private(
   @transient
   private var _wrapped: SQLContext = _
 
+  @transient
   private val _wrappedLock = new Object
 
   protected[sql] def wrapped: SQLContext = _wrappedLock.synchronized {
