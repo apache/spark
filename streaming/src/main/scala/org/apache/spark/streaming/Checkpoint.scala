@@ -103,7 +103,10 @@ object Checkpoint extends Logging {
     new Path(checkpointDir, PREFIX + checkpointTime.milliseconds + ".bk")
   }
 
-  /** Get checkpoint files present in the give directory, ordered by oldest-first */
+  /**
+   * @param checkpointDir checkpoint directory to read checkpoint files from
+   * @return checkpoint files from the `checkpointDir` checkpoint directory, ordered by oldest-first
+   */
   def getCheckpointFiles(checkpointDir: String, fsOption: Option[FileSystem] = None): Seq[Path] = {
 
     def sortFunc(path1: Path, path2: Path): Boolean = {
@@ -125,7 +128,7 @@ object Checkpoint extends Logging {
         Seq.empty
       }
     } else {
-      logInfo("Checkpoint directory " + path + " does not exist")
+      logWarning("Checkpoint directory " + path + " does not exist")
       Seq.empty
     }
   }
@@ -205,7 +208,7 @@ class CheckpointWriter(
       // time of a batch is greater than the batch interval, checkpointing for completing an old
       // batch may run after checkpointing of a new batch. If this happens, checkpoint of an old
       // batch actually has the latest information, so we want to recovery from it. Therefore, we
-      // also use the latest checkpoint time as the file name, so that we can recovery from the
+      // also use the latest checkpoint time as the file name, so that we can recover from the
       // latest checkpoint file.
       //
       // Note: there is only one thread writing the checkpoint files, so we don't need to worry
@@ -216,8 +219,7 @@ class CheckpointWriter(
       while (attempts < MAX_ATTEMPTS && !stopped) {
         attempts += 1
         try {
-          logInfo("Saving checkpoint for time " + checkpointTime + " to file '" + checkpointFile
-            + "'")
+          logInfo(s"Saving checkpoint for time $checkpointTime to file '$checkpointFile'")
 
           // Write checkpoint to temp file
           if (fs.exists(tempFile)) {
@@ -250,7 +252,7 @@ class CheckpointWriter(
           val allCheckpointFiles = Checkpoint.getCheckpointFiles(checkpointDir, Some(fs))
           if (allCheckpointFiles.size > 10) {
             allCheckpointFiles.take(allCheckpointFiles.size - 10).foreach { file =>
-              logInfo("Deleting " + file)
+              logInfo(s"Deleting $file")
               fs.delete(file, true)
             }
           }
@@ -278,7 +280,7 @@ class CheckpointWriter(
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
         checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
-      logInfo("Submitted checkpoint of time " + checkpoint.checkpointTime + " writer queue")
+      logInfo("Submitted checkpoint of time " + checkpoint.checkpointTime + " to writer queue")
     } catch {
       case rej: RejectedExecutionException =>
         logError("Could not submit checkpoint task to the thread pool executor", rej)
@@ -295,7 +297,7 @@ class CheckpointWriter(
       executor.shutdownNow()
     }
     val endTime = System.currentTimeMillis()
-    logInfo("CheckpointWriter executor terminated ? " + terminated +
+    logInfo("CheckpointWriter executor terminated? " + terminated +
       ", waited for " + (endTime - startTime) + " ms.")
     stopped = true
   }
