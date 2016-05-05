@@ -17,8 +17,7 @@
 
 from __future__ import print_function
 
-from optparse import OptionParser
-import sys
+import argparse
 
 from pyspark import SparkContext
 
@@ -37,28 +36,39 @@ Run with:
   bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
 """
 
-parser = OptionParser()
-parser.add_option("--input", type="string", help="input path to labeled examples. This path must be specified")
-parser.add_option("--fracTest", type="float", default=0.2, help="fraction of data to hold out for testing.  If given option testInput, this option is ignored. default: 0.2")
-parser.add_option("--testInput", type="string", default=None, help="iinput path to test dataset. If given, option fracTest is ignored")
-parser.add_option("--maxIter", type="int", default=100, help="maximum number of iterations for Logistic Regression. default: 100")
-parser.add_option("--tol", type="float", default=1e-6, help="the convergence tolerance of iterations for Logistic Regression. default: 1e-6")
-parser.add_option("--fitIntercept", type="string", default="true", help="fit intercept for Logistic Regression. default: true")
-parser.add_option("--regParam", type="float", default=None, help="the regularization parameter for Logistic Regression. default: None")
-parser.add_option("--elasticNetParam", type="float", default=None, help="the ElasticNet mixing parameter for Logistic Regression. default: None")
+def parse():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input",
+                        help="input path to labeled examples. This path must be specified")
+    parser.add_argument("--fracTest", type=float, default=0.2,
+                        help="fraction of data to hold out for testing.  If given option testInput,"
+                             " this option is ignored. default: 0.2")
+    parser.add_argument("--testInput",
+                        help="iinput path to test dataset. If given, option fracTest is ignored")
+    parser.add_argument("--maxIter", type=int, default=100,
+                        help="maximum number of iterations for Logistic Regression. default: 100")
+    parser.add_argument("--tol", type=float, default=1e-6,
+                        help="the convergence tolerance of iterations for Logistic Regression."
+                             " default: 1e-6")
+    parser.add_argument("--fitIntercept", default="true",
+                        help="fit intercept for Logistic Regression. default: true")
+    parser.add_argument("--regParam", type=float,
+                        help="the regularization parameter for Logistic Regression. default: None")
+    parser.add_argument("--elasticNetParam", type=float,
+                        help="the ElasticNet mixing parameter for Logistic Regression. default:"
+                             " None")
+    params = parser.parse_args()
 
-def parse(args):
-    (params, args) = parser.parse_args(args)
-    assert params.input != None, "input is required"
+    assert params.input is not None, "input is required"
     assert 0 <= params.fracTest < 1, "fracTest value incorrect; should be in [0,1)."
     assert params.fitIntercept in ("true", "false")
     params.fitIntercept = params.fitIntercept == "true"
+
     return params
 
 if __name__ == "__main__":
 
-    print(sys.argv)
-    params = parse(sys.argv)
+    params = parse()
 
     sc = SparkContext(appName="PythonOneVsRestExample")
     sqlContext = SQLContext(sc)
