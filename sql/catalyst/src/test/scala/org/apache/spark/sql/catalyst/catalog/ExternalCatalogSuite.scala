@@ -514,7 +514,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val table = CatalogTable(
       identifier = TableIdentifier("myTable", Some("db1")),
       tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat(None, None, None, None, Map.empty),
+      storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
       schema = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string"))
     )
 
@@ -535,7 +535,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val table = CatalogTable(
       identifier = TableIdentifier("myTable", Some("db1")),
       tableType = CatalogTableType.MANAGED,
-      storage = CatalogStorageFormat(None, None, None, None, Map.empty),
+      storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
       schema = Seq(
         CatalogColumn("col1", "int"),
         CatalogColumn("col2", "string"),
