@@ -315,6 +315,16 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
     pool
   }
 
+  // Make sure that that we aren't going to exceed the max RPC message size by making sure
+  // we use broadcast to send large map output statuses.
+  if (minSizeForBroadcast > maxRpcMessageSize) {
+    val msg = s"spark.shuffle.mapOutput.minSizeForBroadcast ($minSizeForBroadcast bytes) must " +
+      s"be <= spark.rpc.message.maxSize ($maxRpcMessageSize bytes) to prevent sending an rpc " +
+      "message that is to large."
+    logError(msg)
+    throw new IllegalArgumentException(msg)
+  }
+
   def post(message: GetMapOutputMessage): Unit = {
     mapOutputRequests.offer(message)
   }
@@ -337,20 +347,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
             logDebug("Handling request to send map output locations for shuffle " + shuffleId +
               " to " + hostPort)
             val mapOutputStatuses = getSerializedMapOutputStatuses(shuffleId)
-            val serializedSize = mapOutputStatuses.length
-            if (serializedSize > maxRpcMessageSize) {
-              val msg = s"Map output statuses were $serializedSize bytes which " +
-                s"exceeds spark.rpc.message.maxSize ($maxRpcMessageSize bytes)."
-
-              // For SPARK-1244 we'll opt for just logging an error and then sending it to
-              // the sender. A bigger refactoring (SPARK-1239) will ultimately remove this
-              // entire code path.
-              val exception = new SparkException(msg)
-              logError(msg, exception)
-              context.sendFailure(exception)
-            } else {
-              context.reply(mapOutputStatuses)
-            }
+            context.reply(mapOutputStatuses)
           } catch {
             case NonFatal(e) => logError(e.getMessage, e)
           }
@@ -621,7 +618,7 @@ private[spark] object MapOutputTracker extends Logging {
       objOut.close()
     }
     val arr = out.toByteArray
-    if (minBroadcastSize >= 0 && arr.length >= minBroadcastSize) {
+    if (arr.length >= minBroadcastSize) {
       // Use broadcast instead.
       // Important arr(0) is the tag == DIRECT, ignore that while deserializing !
       val bcast = broadcastManager.newBroadcast(arr, isLocal)

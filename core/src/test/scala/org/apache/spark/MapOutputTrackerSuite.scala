@@ -30,8 +30,6 @@ import org.apache.spark.storage.{BlockManagerId, ShuffleBlockId}
 
 class MapOutputTrackerSuite extends SparkFunSuite {
   private val conf = new SparkConf
-  // disabled by default.
-  conf.setIfMissing("spark.shuffle.mapOutput.minSizeForBroadcast", "-1")
 
   private def newTrackerMaster(sparkConf: SparkConf = conf) = {
     val broadcastManager = new BroadcastManager(true, sparkConf,
@@ -172,7 +170,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     val newConf = new SparkConf
     newConf.set("spark.rpc.message.maxSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast
-    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "-1")
+    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "1048576")
 
     val masterTracker = newTrackerMaster(newConf)
     val rpcEnv = createRpcEnv("spark")
@@ -196,37 +194,13 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("remote fetch exceeds max RPC message size") {
+  test("min broadcast size exceeds max RPC message size") {
     val newConf = new SparkConf
     newConf.set("spark.rpc.message.maxSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast
-    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", "-1")
+    newConf.set("spark.shuffle.mapOutput.minSizeForBroadcast", Int.MaxValue.toString)
 
-    val masterTracker = newTrackerMaster(newConf)
-    val rpcEnv = createRpcEnv("test")
-    val masterEndpoint = new MapOutputTrackerMasterEndpoint(rpcEnv, masterTracker, newConf)
-    rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME, masterEndpoint)
-
-    // Message size should be ~1.1MB, and MapOutputTrackerMasterEndpoint should throw exception.
-    // Note that the size is hand-selected here because map output statuses are compressed before
-    // being sent.
-    masterTracker.registerShuffle(20, 100)
-    (0 until 100).foreach { i =>
-      masterTracker.registerMapOutput(20, i, new CompressedMapStatus(
-        BlockManagerId("999", "mps", 1000), Array.fill[Long](4000000)(0)))
-    }
-    val senderAddress = RpcAddress("localhost", 12345)
-    val rpcCallContext = mock(classOf[RpcCallContext])
-    when(rpcCallContext.senderAddress).thenReturn(senderAddress)
-    masterEndpoint.receiveAndReply(rpcCallContext)(GetMapOutputStatuses(20))
-
-    // Default size for broadcast in this testsuite is set to -1 so should not cause broadcast
-    // to be used.
-    verify(rpcCallContext, timeout(30000)).sendFailure(isA(classOf[SparkException]))
-    assert(0 == masterTracker.getNumCachedSerializedBroadcast)
-
-    //    masterTracker.stop() // this throws an exception
-    rpcEnv.shutdown()
+    intercept[IllegalArgumentException] { newTrackerMaster(newConf) }
   }
 
   test("getLocationsWithLargestOutputs with multiple outputs in same machine") {
@@ -264,8 +238,7 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     rpcEnv.shutdown()
   }
 
-  test("remote fetch exceeds RPC size") {
-    // Same test as "remote fetch exceeds rpc frame size" - except we force use of broadcast here
+  test("remote fetch using broadcast") {
     val newConf = new SparkConf
     newConf.set("spark.rpc.message.maxSize", "1")
     newConf.set("spark.rpc.askTimeout", "1") // Fail fast

@@ -62,7 +62,6 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   val securityMgr = new SecurityManager(new SparkConf(false))
   val bcastManager = new BroadcastManager(true, new SparkConf(false), securityMgr)
   val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false), bcastManager, true)
-  val shuffleManager = new HashShuffleManager(new SparkConf(false))
   val shuffleManager = new SortShuffleManager(new SparkConf(false))
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
