@@ -28,6 +28,7 @@ import org.apache.spark.ml.classification.{NaiveBayes, NaiveBayesModel}
 import org.apache.spark.ml.feature.{IndexToString, RFormula}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions._
 
 private[r] class NaiveBayesWrapper private (
     val pipeline: PipelineModel,
@@ -60,26 +61,54 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
     val rFormula = new RFormula()
       .setFormula(formula)
       .fit(data)
-    // get labels and feature names from output schema
-    val schema = rFormula.transform(data).schema
-    val labelAttr = Attribute.fromStructField(schema(rFormula.getLabelCol))
-      .asInstanceOf[NominalAttribute]
-    val labels = labelAttr.values.get
+
+    val rFormulaTransformed = rFormula.transform(data)
+    val schema = rFormulaTransformed.schema
+
+    // get feature names from output schema
     val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
+
+    // get labels according to the type of the response variable of formula (string or numeric)
+    val labelAttr = Attribute.fromStructField(schema(rFormula.getLabelCol))
+    val stringResponse = labelAttr match {
+      case _: NominalAttribute => true
+      case other => false
+    }
+    val labels = if (stringResponse) {
+      labelAttr.asInstanceOf[NominalAttribute].values.get
+    } else {
+      // classes are assumed to be numbered from 0, ..., maxLabelIndex
+      val maxLabelIndex = rFormulaTransformed
+        .agg(max(col(rFormula.getLabelCol)))
+        .head()
+        .getDouble(0)
+      (0 to maxLabelIndex.toInt).toArray.map(_.toString)
+    }
+
     // assemble and fit the pipeline
-    val naiveBayes = new NaiveBayes()
-      .setSmoothing(laplace)
-      .setModelType("bernoulli")
-      .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
-    val idxToStr = new IndexToString()
-      .setInputCol(PREDICTED_LABEL_INDEX_COL)
-      .setOutputCol(PREDICTED_LABEL_COL)
-      .setLabels(labels)
-    val pipeline = new Pipeline()
-      .setStages(Array(rFormula, naiveBayes, idxToStr))
-      .fit(data)
+    val pipeline = if (stringResponse) {
+      val naiveBayes = new NaiveBayes()
+        .setSmoothing(laplace)
+        .setModelType("bernoulli")
+        .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
+      val idxToStr = new IndexToString()
+        .setInputCol(PREDICTED_LABEL_INDEX_COL)
+        .setOutputCol(PREDICTED_LABEL_COL)
+        .setLabels(labels)
+      new Pipeline()
+        .setStages(Array(rFormula, naiveBayes, idxToStr))
+        .fit(data)
+    } else {
+      val naiveBayes = new NaiveBayes()
+        .setSmoothing(laplace)
+        .setModelType("bernoulli")
+        .setPredictionCol(PREDICTED_LABEL_COL)
+      new Pipeline()
+        .setStages(Array(rFormula, naiveBayes))
+        .fit(data)
+    }
     new NaiveBayesWrapper(pipeline, labels, features)
   }
 
