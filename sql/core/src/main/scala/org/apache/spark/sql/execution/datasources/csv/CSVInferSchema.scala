@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.text.{NumberFormat, SimpleDateFormat}
+import java.text.NumberFormat
 import java.util.Locale
 
 import scala.util.control.Exception._
@@ -192,63 +192,59 @@ private[csv] object CSVTypeCast {
       nullable: Boolean = true,
       options: CSVOptions = CSVOptions()): Any = {
 
-    castType match {
-      case _: ByteType => if (datum == options.nullValue && nullable) null else datum.toByte
-      case _: ShortType => if (datum == options.nullValue && nullable) null else datum.toShort
-      case _: IntegerType => if (datum == options.nullValue && nullable) null else datum.toInt
-      case _: LongType => if (datum == options.nullValue && nullable) null else datum.toLong
-      case _: FloatType =>
-        if (datum == options.nullValue && nullable) {
-          null
-        } else if (datum == options.nanValue) {
-          Float.NaN
-        } else if (datum == options.negativeInf) {
-          Float.NegativeInfinity
-        } else if (datum == options.positiveInf) {
-          Float.PositiveInfinity
-        } else {
-          Try(datum.toFloat)
-            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
-        }
-      case _: DoubleType =>
-        if (datum == options.nullValue && nullable) {
-          null
-        } else if (datum == options.nanValue) {
-          Double.NaN
-        } else if (datum == options.negativeInf) {
-          Double.NegativeInfinity
-        } else if (datum == options.positiveInf) {
-          Double.PositiveInfinity
-        } else {
-          Try(datum.toDouble)
-            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
-        }
-      case _: BooleanType if datum == options.nullValue && nullable => null
-      case _: BooleanType => datum.toBoolean
-      case dt: DecimalType =>
-        if (datum == options.nullValue && nullable) {
-          null
-        } else {
-          val value = new BigDecimal(datum.replaceAll(",", ""))
-          Decimal(value, dt.precision, dt.scale)
-        }
-      case _: TimestampType if datum == options.nullValue && nullable => null
-      case _: TimestampType if options.dateFormat != null =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        options.dateFormat.parse(datum).getTime * 1000L
-      case _: TimestampType =>
-        // This one will lose microseconds parts.
-        // See https://issues.apache.org/jira/browse/SPARK-10681.
-        DateTimeUtils.stringToTime(datum).getTime  * 1000L
-      case _: DateType if datum == options.nullValue && nullable => null
-      case _: DateType if options.dateFormat != null =>
-        DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime)
-      case _: DateType =>
-        DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-      case _: StringType if datum == options.nullValue && nullable => null
-      case _: StringType => UTF8String.fromString(datum)
-      case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
+    if (datum == null || (datum == options.nullValue && nullable)) {
+      null
+    } else {
+      castType match {
+        case _: ByteType => datum.toByte
+        case _: ShortType => datum.toShort
+        case _: IntegerType => datum.toInt
+        case _: LongType => datum.toLong
+        case _: FloatType =>
+          if (datum == options.nanValue) {
+            Float.NaN
+          } else if (datum == options.negativeInf) {
+            Float.NegativeInfinity
+          } else if (datum == options.positiveInf) {
+            Float.PositiveInfinity
+          } else {
+            Try(datum.toFloat)
+              .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+          }
+        case _: DoubleType =>
+          if (datum == options.nanValue) {
+            Double.NaN
+          } else if (datum == options.negativeInf) {
+            Double.NegativeInfinity
+          } else if (datum == options.positiveInf) {
+            Double.PositiveInfinity
+          } else {
+            Try(datum.toDouble)
+              .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+          }
+        case _: BooleanType => datum.toBoolean
+        case dt: DecimalType =>
+          if (datum == options.nullValue && nullable) {
+            null
+          } else {
+            val value = new BigDecimal(datum.replaceAll(",", ""))
+            Decimal(value, dt.precision, dt.scale)
+          }
+        case _: TimestampType if options.dateFormat != null =>
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          options.dateFormat.parse(datum).getTime * 1000L
+        case _: TimestampType =>
+          // This one will lose microseconds parts.
+          // See https://issues.apache.org/jira/browse/SPARK-10681.
+          DateTimeUtils.stringToTime(datum).getTime  * 1000L
+        case _: DateType if options.dateFormat != null =>
+          DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime)
+        case _: DateType =>
+          DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+        case _: StringType => UTF8String.fromString(datum)
+        case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
+      }
     }
   }
 
