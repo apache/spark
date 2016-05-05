@@ -641,7 +641,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
         // Make value 3 take a large time to process, to ensure that the driver
         // shuts down in the middle of processing the 3rd batch
         CheckpointSuite.batchThreeShouldBlockALongTime = true
-        val mappedStream = fileStream.map(s => {
+        val mappedStream = fileStream.map{ s =>
           val i = s.toInt
           if (i == 3) {
             if (CheckpointSuite.batchThreeShouldBlockALongTime) {
@@ -651,7 +651,7 @@ class CheckpointSuite extends TestSuiteBase with DStreamCheckpointTester
             }
           }
           i
-        })
+        }
 
         // Reducing over a large window to ensure that recovery from driver failure
         // requires reprocessing of all the files seen before the failure
