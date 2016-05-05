@@ -1089,6 +1089,9 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     try {
       event.accumUpdates.foreach { updates =>
+        // We only send back updated accumulators
+        assert(!updates.isZero)
+
         val id = updates.id
         // Find the corresponding accumulator on the driver and update it
         val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
