@@ -300,7 +300,6 @@ class SessionCatalog(
     }
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
-
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       if (tableExists(newName)) {
         throw new AlreadyExistTableException(db = db, table = newTableName)

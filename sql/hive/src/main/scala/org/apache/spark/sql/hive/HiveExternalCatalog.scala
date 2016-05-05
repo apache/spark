@@ -145,6 +145,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       db: String,
       tableDefinition: CatalogTable,
       ignoreIfExists: Boolean): Unit = withClient {
+    requireDbExists(db)
     requireDbMatches(db, tableDefinition)
     client.createTable(tableDefinition, ignoreIfExists)
   }
@@ -153,6 +154,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       db: String,
       table: String,
       ignoreIfNotExists: Boolean): Unit = withClient {
+    requireDbExists(db)
     client.dropTable(db, table, ignoreIfNotExists)
   }
 
@@ -188,10 +190,12 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   }
 
   override def listTables(db: String): Seq[String] = withClient {
+    requireDbExists(db)
     client.listTables(db)
   }
 
   override def listTables(db: String, pattern: String): Seq[String] = withClient {
+    requireDbExists(db)
     client.listTables(db, pattern)
   }
 
