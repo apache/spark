@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.internal.HiveSerDe
@@ -193,6 +193,10 @@ case class CreateDataSourceTableAsSelectCommand(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               existingSchema = Some(l.schema)
+            case s: SimpleCatalogRelation
+                if s.metadata.properties.contains("spark.sql.sources.provider") =>
+              val tbl = CreateDataSourceTableUtils.readDataSourceTable(sparkSession, s.metadata)
+              existingSchema = Some(tbl.schema)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -257,6 +261,68 @@ object CreateDataSourceTableUtils extends Logging {
     val matcher = tpat.matcher(name)
 
     matcher.matches()
+  }
+
+  def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
+    def schemaStringFromParts: Option[String] = {
+      table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val part = table.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+          if (part == null) {
+            throw new AnalysisException(
+              "Could not read schema from the metastore because it is corrupted " +
+                s"(missing part $index of the schema, $numParts parts are expected).")
+          }
+
+          part
+        }
+        // Stick all parts back to a single schema string.
+        parts.mkString
+      }
+    }
+
+    def getColumnNames(colType: String): Seq[String] = {
+      table.properties.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").map {
+        numCols => (0 until numCols.toInt).map { index =>
+          table.properties.getOrElse(s"spark.sql.sources.schema.${colType}Col.$index",
+            throw new AnalysisException(
+              s"Could not read $colType columns from the metastore because it is corrupted " +
+                s"(missing part $index of it, $numCols parts are expected)."))
+        }
+      }.getOrElse(Nil)
+    }
+
+    // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
+    // After SPARK-6024, we removed this flag.
+    // Although we are not using spark.sql.sources.schema any more, we need to still support.
+    val schemaString =
+      table.properties.get("spark.sql.sources.schema").orElse(schemaStringFromParts)
+
+    val userSpecifiedSchema =
+      schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
+
+    // We only need names at here since userSpecifiedSchema we loaded from the metastore
+    // contains partition columns. We can always get datatypes of partitioning columns
+    // from userSpecifiedSchema.
+    val partitionColumns = getColumnNames("part")
+
+    val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
+      BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
+    }
+
+    val options = table.storage.serdeProperties
+    val dataSource =
+      DataSource(
+        sparkSession,
+        userSpecifiedSchema = userSpecifiedSchema,
+        partitionColumns = partitionColumns,
+        bucketSpec = bucketSpec,
+        className = table.properties("spark.sql.sources.provider"),
+        options = options)
+
+    LogicalRelation(
+      dataSource.resolveRelation(),
+      metastoreTableIdentifier = Some(table.identifier))
   }
 
   def createDataSourceTable(
