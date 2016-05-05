@@ -2089,14 +2089,23 @@ test_that("repartition by columns on DataFrame", {
     list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
 
-  # repartition by columns
-  actual <- repartition(df, col = df$"a")
+  # no column and number of partitions specified
+  retError <- tryCatch(repartition(df), error = function(e) e)
+  expect_equal(grepl
+    ("Please, specify the number of partitions and/or a column\\(s\\)", retError), TRUE)
+
+  # repartition by column and number of partitions
+  actual <- repartition(df, 3L, col = df$"a")
 
   # since we cannot access the number of partitions from dataframe, checking
   # that at least the dimensions are identical
   expect_identical(dim(df), dim(actual))
 
-  # a test case with dapply
+  # repartition by number of partitions
+  actual <- repartition(df, 13L)
+  expect_identical(dim(df), dim(actual))
+
+  # a test case with a column and dapply
   schema <-  structType(structField("a", "integer"), structField("avg", "double"))
   df <- repartition(df, col = df$"a")
   df1 <- dapply(
