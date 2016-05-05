@@ -2182,7 +2182,7 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[Dataset]] partitioned by the given partitioning expressions, using
    * `spark.sql.shuffle.partitions` as number of partitions.
-   * The resulting Datasetis hash partitioned.
+   * The resulting Dataset is hash partitioned.
    *
    * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
    *
