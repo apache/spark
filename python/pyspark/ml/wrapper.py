@@ -88,9 +88,8 @@ class JavaParams(JavaWrapper, Params):
         paramMap = self.extractParamMap()
         for param in self.params:
             if param in paramMap:
-                if paramMap[param] is not None:
-                    pair = self._make_java_param_pair(param, paramMap[param])
-                    self._java_obj.set(pair)
+                pair = self._make_java_param_pair(param, paramMap[param])
+                self._java_obj.set(pair)
 
     def _transfer_param_map_to_java(self, pyParamMap):
         """
