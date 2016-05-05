@@ -84,7 +84,7 @@ class Checkpoint(ssc: StreamingContext, val checkpointTime: Time)
     assert(framework != null, "Checkpoint.framework is null")
     assert(graph != null, "Checkpoint.graph is null")
     assert(checkpointTime != null, "Checkpoint.checkpointTime is null")
-    logInfo("Checkpoint for time " + checkpointTime + " validated")
+    logInfo(s"Checkpoint for time $checkpointTime validated")
   }
 }
 
@@ -124,11 +124,11 @@ object Checkpoint extends Logging {
         val filtered = paths.filter(p => REGEX.findFirstIn(p.toString).nonEmpty)
         filtered.sortWith(sortFunc)
       } else {
-        logWarning("Listing " + path + " returned null")
+        logWarning(s"Listing $path returned null")
         Seq.empty
       }
     } else {
-      logWarning("Checkpoint directory " + path + " does not exist")
+      logWarning(s"Checkpoint directory $path does not exist")
       Seq.empty
     }
   }
@@ -239,13 +239,13 @@ class CheckpointWriter(
               fs.delete(backupFile, true) // just in case it exists
             }
             if (!fs.rename(checkpointFile, backupFile)) {
-              logWarning("Could not rename " + checkpointFile + " to " + backupFile)
+              logWarning(s"Could not rename $checkpointFile to $backupFile")
             }
           }
 
           // Rename temp file to the final checkpoint file
           if (!fs.rename(tempFile, checkpointFile)) {
-            logWarning("Could not rename " + tempFile + " to " + checkpointFile)
+            logWarning(s"Could not rename $tempFile to $checkpointFile")
           }
 
           // Delete old checkpoint files
@@ -259,19 +259,18 @@ class CheckpointWriter(
 
           // All done, print success
           val finishTime = System.currentTimeMillis()
-          logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + checkpointFile +
-            "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " ms")
+          logInfo(s"Checkpoint for time $checkpointTime saved to file '$checkpointFile'" +
+            s", took ${bytes.length} bytes and ${finishTime - startTime} ms")
           jobGenerator.onCheckpointCompletion(checkpointTime, clearCheckpointDataLater)
           return
         } catch {
           case ioe: IOException =>
-            logWarning("Error in attempt " + attempts + " of writing checkpoint to "
-              + checkpointFile, ioe)
+            val msg = s"Error in attempt $attempts of writing checkpoint to '$checkpointFile'"
+            logWarning(msg, ioe)
             fs = null
         }
       }
-      logWarning("Could not write checkpoint for time " + checkpointTime + " to file "
-        + checkpointFile + "'")
+      logWarning(s"Could not write checkpoint for time $checkpointTime to file '$checkpointFile'")
     }
   }
 
@@ -280,7 +279,7 @@ class CheckpointWriter(
       val bytes = Checkpoint.serialize(checkpoint, conf)
       executor.execute(new CheckpointWriteHandler(
         checkpoint.checkpointTime, bytes, clearCheckpointDataLater))
-      logInfo("Submitted checkpoint of time " + checkpoint.checkpointTime + " to writer queue")
+      logInfo(s"Submitted checkpoint of time ${checkpoint.checkpointTime} to writer queue")
     } catch {
       case rej: RejectedExecutionException =>
         logError("Could not submit checkpoint task to the thread pool executor", rej)
@@ -297,8 +296,8 @@ class CheckpointWriter(
       executor.shutdownNow()
     }
     val endTime = System.currentTimeMillis()
-    logInfo("CheckpointWriter executor terminated? " + terminated +
-      ", waited for " + (endTime - startTime) + " ms.")
+    logInfo(s"CheckpointWriter executor terminated? $terminated," +
+      s" waited for ${endTime - startTime} ms.")
     stopped = true
   }
 }
@@ -338,20 +337,20 @@ object CheckpointReader extends Logging {
     }
 
     // Try to read the checkpoint files in the order
-    logInfo("Checkpoint files found: " + checkpointFiles.mkString(","))
+    logInfo(s"Checkpoint files found: ${checkpointFiles.mkString(",")}")
     var readError: Exception = null
     checkpointFiles.foreach { file =>
-      logInfo("Attempting to load checkpoint from file " + file)
+      logInfo(s"Attempting to load checkpoint from file $file")
       try {
         val fis = fs.open(file)
         val cp = Checkpoint.deserialize(fis, conf)
-        logInfo("Checkpoint successfully loaded from file " + file)
-        logInfo("Checkpoint was generated at time " + cp.checkpointTime)
+        logInfo(s"Checkpoint successfully loaded from file $file")
+        logInfo(s"Checkpoint was generated at time ${cp.checkpointTime}")
         return Some(cp)
       } catch {
         case e: Exception =>
           readError = e
-          logWarning("Error reading checkpoint from file " + file, e)
+          logWarning(s"Error reading checkpoint from file $file", e)
       }
     }
 

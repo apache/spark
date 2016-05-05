@@ -97,12 +97,13 @@ private[spark] class Pool(
   }
 
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
-    schedulableQueue
-      .asScala
-      .toSeq
-      .sortWith(taskSetSchedulingAlgorithm.comparator)
-      .toBuffer[TaskSetManager]
-      .to[ArrayBuffer[TaskSetManager]]
+    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
+    val sortedSchedulableQueue =
+      schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
+    for (schedulable <- sortedSchedulableQueue) {
+      sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
+    }
+    sortedTaskSetQueue
   }
 
   def increaseRunningTasks(taskNum: Int) {

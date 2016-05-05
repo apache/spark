@@ -155,8 +155,8 @@ private[spark] class Client(
 
       // Get a new application from our RM
       val newApp = yarnClient.createApplication()
-      val newAppResponse = newApp.getNewApplicationResponse
-      appId = newAppResponse.getApplicationId
+      val newAppResponse = newApp.getNewApplicationResponse()
+      appId = newAppResponse.getApplicationId()
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
       launcherBackend.setAppId(appId.toString)
 
