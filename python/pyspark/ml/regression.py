@@ -743,6 +743,18 @@ class TreeEnsembleModels(JavaModel):
         """Return the weights for each tree"""
         return list(self._call_java("javaTreeWeights"))
 
+    @property
+    @since("2.0.0")
+    def totalNumNodes(self):
+        """Total number of nodes, summed over all trees in the ensemble."""
+        return self._call_java("totalNumNodes")
+
+    @property
+    @since("2.0.0")
+    def toDebugString(self):
+        """Full description of model."""
+        return self._call_java("toDebugString")
+
     def __repr__(self):
         return self._call_java("toString")
 
