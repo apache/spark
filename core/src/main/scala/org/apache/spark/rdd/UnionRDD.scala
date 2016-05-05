@@ -79,7 +79,7 @@ class UnionRDD[T: ClassTag](
     } else {
       rdds
     }
-    val array = new Array[Partition](parRDDs.map(_.partitions.length).sum)
+    val array = new Array[Partition](parRDDs.map(_.partitions.length).seq.sum)
     var pos = 0
     for ((rdd, rddIndex) <- rdds.zipWithIndex; split <- rdd.partitions) {
       array(pos) = new UnionPartition(pos, rdd, rddIndex, split.index)
