@@ -399,6 +399,14 @@ class KryoSerializerSuite extends SparkFunSuite with SharedSparkContext {
     assert(!ser2.getAutoReset)
   }
 
+  private def testBothUnsafeAndSafe(f: SparkConf => Unit): Unit = {
+    Seq(true, false).foreach { useUnsafe =>
+      val conf = new SparkConf()
+      conf.set("spark.kryo.useUnsafe", useUnsafe.toString)
+      f(conf)
+    }
+  }
+
   private def testSerializerInstanceReuse(autoReset: Boolean, referenceTracking: Boolean): Unit = {
     val conf = new SparkConf(loadDefaults = false)
       .set("spark.kryo.referenceTracking", referenceTracking.toString)
