@@ -17,8 +17,9 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.File
+import java.net.URI
+
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -494,18 +495,21 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   // File System operations
   // --------------------------------------------------------------------------
 
-  private lazy val fs = FileSystem.get(new Configuration)
-
-  private def exists(path: Path): Boolean = fs.exists(path)
+  private def exists(uri: String, children: String*): Boolean = {
+    val base = new File(new URI(uri))
+    children.foldLeft(base) {
+      case (parent, child) => new File(parent, child)
+    }.exists()
+  }
 
   test("create/drop database should create/delete the directory") {
     val catalog = newBasicCatalog()
     val db = newDb("mydb")
     catalog.createDatabase(db, ignoreIfExists = false)
-    assert(exists(new Path(db.locationUri)))
+    assert(exists(db.locationUri))
 
     catalog.dropDatabase("mydb", ignoreIfNotExists = false, cascade = false)
-    assert(!exists(new Path(db.locationUri)))
+    assert(!exists(db.locationUri))
   }
 
   test("create/drop/rename table should create/delete/rename the directory") {
@@ -519,14 +523,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     )
 
     catalog.createTable("db1", table, ignoreIfExists = false)
-    assert(exists(new Path(db.locationUri, "myTable")))
+    assert(exists(db.locationUri, "myTable"))
 
     catalog.renameTable("db1", "myTable", "yourTable")
-    assert(!exists(new Path(db.locationUri, "myTable")))
-    assert(exists(new Path(db.locationUri, "yourTable")))
+    assert(!exists(db.locationUri, "myTable"))
+    assert(exists(db.locationUri, "yourTable"))
 
     catalog.dropTable("db1", "yourTable", ignoreIfNotExists = false)
-    assert(!exists(new Path(db.locationUri, "yourTable")))
+    assert(!exists(db.locationUri, "yourTable"))
   }
 
   test("create/drop/rename partitions should create/delete/rename the directory") {
@@ -546,16 +550,16 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.createTable("db1", table, ignoreIfExists = false)
 
     catalog.createPartitions("db1", "myTable", Seq(part1, part2), ignoreIfExists = false)
-    assert(exists(new Path(databaseDir, "myTable/a=1/b=2")))
-    assert(exists(new Path(databaseDir, "myTable/a=3/b=4")))
+    assert(exists(databaseDir, "myTable", "a=1", "b=2"))
+    assert(exists(databaseDir, "myTable", "a=3", "b=4"))
 
     catalog.renamePartitions("db1", "myTable", Seq(part1.spec), Seq(part3.spec))
-    assert(!exists(new Path(databaseDir, "myTable/a=1/b=2")))
-    assert(exists(new Path(databaseDir, "myTable/a=5/b=6")))
+    assert(!exists(databaseDir, "myTable", "a=1", "b=2"))
+    assert(exists(databaseDir, "myTable", "a=5", "b=6"))
 
     catalog.dropPartitions("db1", "myTable", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
-    assert(!exists(new Path(databaseDir, "myTable/a=3/b=4")))
-    assert(!exists(new Path(databaseDir, "myTable/a=5/b=6")))
+    assert(!exists(databaseDir, "myTable", "a=3", "b=4"))
+    assert(!exists(databaseDir, "myTable", "a=5", "b=6"))
   }
 }
 
@@ -610,7 +614,7 @@ abstract class CatalogTestUtils {
 
   def newFunc(): CatalogFunction = newFunc("funcName")
 
-  def newUriForDatabase(): String = Utils.createTempDir().getAbsolutePath
+  def newUriForDatabase(): String = Utils.createTempDir().toURI.toString.stripSuffix("/")
 
   def newDb(name: String): CatalogDatabase = {
     CatalogDatabase(name, name + " description", newUriForDatabase(), Map.empty)
