@@ -570,15 +570,13 @@ setMethod("unpersist",
 
 #' Repartition
 #'
-#' The following options for repartitioning are possible:
+#' The following options for repartition are possible:
 #' \itemize{
 #'  \item{"Option 1"} {Return a new SparkDataFrame partitioned by
 #'                      the given columns into `numPartitions`.}
 #'  \item{"Option 2"} {Return a new SparkDataFrame that has exactly `numPartitions`.}
 #'  \item{"Option 3"} {Return a new SparkDataFrame partitioned by the given columns,
 #'                      preserving the existing number of partitions.}
-#'  \item{"Option 4"} {Return a new SparkDataFrame that has exactly the default
-#'                      number of numPartitions: 200.}
 #'}
 #' @param x A SparkDataFrame
 #' @param numPartitions The number of partitions to use.
@@ -618,7 +616,7 @@ setMethod("repartition",
               jcol <- lapply(cols, function(c) { c@jc })
               sdf <- callJMethod(x@sdf, "repartition", jcol)
             } else {
-              sdf <- callJMethod(x@sdf, "repartition", 200L)
+              stop("Please, specify the number of partitions and/or a column(s)")
             }
             dataFrame(sdf)
           })

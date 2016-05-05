@@ -1028,7 +1028,7 @@ setMethod("repartition",
             if (!is.null(numPartitions) && is.numeric(numPartitions)) {
               coalesce(x, numPartitions, TRUE)
             } else {
-              coalesce(x, 200L, TRUE)
+              stop("Please, specify the number of partitions")
             }
           })
 
