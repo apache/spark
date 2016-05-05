@@ -672,7 +672,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val message = intercept[Exception] {
       df.collect()
     }.getMessage
-    assert(message.contains("Runtime null check failed"))
+    assert(message.contains("The 0th field of input row cannot be null"))
   }
 }
 
