@@ -454,7 +454,8 @@ class TreeClassifierParams(object):
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +
                      "Supported options: " +
-                     ", ".join(supportedImpurities) + ". (Default: gni)", typeConverter=TypeConverters.toString)
+                     ", ".join(supportedImpurities) + ". (Default: gni)",
+                     typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(TreeClassifierParams, self).__init__()
