@@ -37,10 +37,11 @@ import org.apache.spark.util.Utils
 class BlockManagerId private (
     private var executorId_ : String,
     private var host_ : String,
-    private var port_ : Int)
+    private var port_ : Int,
+    private var rackInfo_ : Option[String])
   extends Externalizable {
 
-  private def this() = this(null, null, 0)  // For deserialization only
+  private def this() = this(null, null, 0, None)  // For deserialization only
 
   def executorId: String = executorId_
 
@@ -69,12 +70,23 @@ class BlockManagerId private (
     out.writeUTF(executorId_)
     out.writeUTF(host_)
     out.writeInt(port_)
+    out.writeBoolean(rackInfo_.isDefined)
+    // if we don't keep rack information, we just write an empty string.
+    out.writeUTF(rackInfo_.getOrElse(""))
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     executorId_ = in.readUTF()
     host_ = in.readUTF()
     port_ = in.readInt()
+    val isRackInfoAvailable = in.readBoolean()
+    rackInfo_ = if (isRackInfoAvailable) {
+      Some(in.readUTF())
+    } else {
+      // we would read an empty string in this case
+      in.readUTF()
+      None
+    }
   }
 
   @throws(classOf[IOException])
@@ -103,8 +115,8 @@ private[spark] object BlockManagerId {
    * @param port Port of the block manager.
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
-  def apply(execId: String, host: String, port: Int): BlockManagerId =
-    getCachedBlockManagerId(new BlockManagerId(execId, host, port))
+  def apply(execId: String, host: String, port: Int, rack: Option[String] = None): BlockManagerId =
+    getCachedBlockManagerId(new BlockManagerId(execId, host, port, rack))
 
   def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()
