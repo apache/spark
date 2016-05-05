@@ -105,8 +105,7 @@ public class JavaALSExample {
     ALSModel model = als.fit(training);
 
     // Evaluate the model by computing the RMSE on the test data
-    Dataset<Row> rawPredictions = model.transform(test);
-    Dataset<Row> predictions = rawPredictions;
+    Dataset<Row> predictions = model.transform(test);
 
     RegressionEvaluator evaluator = new RegressionEvaluator()
       .setMetricName("rmse")
