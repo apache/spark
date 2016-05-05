@@ -191,7 +191,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           .option("dataSchema", dataSchema.json)
           .options(extraReadOptions)
           .load(),
-        testDF)
+        testDF.collect())
     }
   }
 
