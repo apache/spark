@@ -688,3 +688,53 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
     ev.copy(code = code, isNull = "false", value = childGen.value)
   }
 }
+
+case class GetExternalRowField(
+    targetObject: Expression,
+    index: Int,
+    dataType: DataType,
+    nullable: Boolean) extends Expression with NonSQLExpression {
+
+  override def children: Seq[Expression] = Seq(targetObject)
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+    val javaType = ctx.javaType(dataType)
+    val obj = targetObject.gen(ctx)
+
+    val get = dataType match {
+      case IntegerType => s"""${obj.value}.getInt($index)"""
+      case LongType => s"""${obj.value}.getLong($index)"""
+      case FloatType => s"""${obj.value}.getFloat($index)"""
+      case ShortType => s"""${obj.value}.getShort($index)"""
+      case ByteType => s"""${obj.value}.getByte($index)"""
+      case DoubleType => s"""${obj.value}.getDouble($index)"""
+      case BooleanType => s"""${obj.value}.getBoolean($index)"""
+      case ObjectType(x) if x == classOf[Row] => s"""${obj.value}.getStruct($index)"""
+      case _ => s"""((${javaType}) ${obj.value}.get($index))"""
+    }
+
+    if (nullable) {
+      s"""
+        ${obj.code}
+        final ${javaType} ${ev.value};
+        final boolean ${ev.isNull};
+        if (${obj.value}.isNullAt(${index})) {
+          ${ev.value} = ${ctx.defaultValue(dataType)};
+          ${ev.isNull} = true;
+        } else {
+          ${ev.value} = ${get};
+          ${ev.isNull} = false;
+        }
+      """
+    } else {
+      s"""
+        ${obj.code}
+        final ${javaType} ${ev.value} = ${get};
+        final boolean ${ev.isNull} = false;
+      """
+    }
+  }
+}
