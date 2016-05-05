@@ -36,13 +36,14 @@ object HiveFromSpark {
 
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
-    val sc = new SparkContext(sparkConf)
 
     // A hive context adds support for finding tables in the MetaStore and writing queries
     // using HiveQL. Users who do not have an existing Hive deployment can still create a
     // HiveContext. When not configured by the hive-site.xml, the context automatically
     // creates metastore_db and warehouse in the current directory.
-    val sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
+    val sparkSession = SparkSession.builder.config(sparkConf).enableHiveSupport().getOrCreate()
+    val sc = sparkSession.sparkContext
+
     import sparkSession.implicits._
     import sparkSession.sql
 
