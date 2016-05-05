@@ -87,8 +87,11 @@ public class ExternalShuffleBlockHandler extends RpcHandler {
         blocks.add(blockManager.getBlockData(msg.appId, msg.execId, blockId));
       }
       long streamId = streamManager.registerStream(client.getClientId(), blocks.iterator());
-      logger.trace("Registered streamId {} with {} buffers for client {} from host {}", streamId, 
-        msg.blockIds.length, client.getClientId(), NettyUtils.getRemoteAddress(client.getChannel()));
+      logger.trace("Registered streamId {} with {} buffers for client {} from host {}",
+          streamId,
+          msg.blockIds.length,
+          client.getClientId(),
+          NettyUtils.getRemoteAddress(client.getChannel()));
       callback.onSuccess(new StreamHandle(streamId, msg.blockIds.length).toByteBuffer());
 
     } else if (msgObj instanceof RegisterExecutor) {

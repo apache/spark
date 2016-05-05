@@ -38,8 +38,10 @@ from pyspark.sql import Row, SparkSession
 
 def getSparkSessionInstance(sparkConf):
     if ('sparkSessionSingletonInstance' not in globals()):
-        globals()['sparkSessionSingletonInstance'] =\
-            SparkSession.builder.config(conf=sparkConf).getOrCreate()
+        globals()['sparkSessionSingletonInstance'] = SparkSession\
+            .builder\
+            .config(conf=sparkConf)\
+            .getOrCreate()
     return globals()['sparkSessionSingletonInstance']
 
 

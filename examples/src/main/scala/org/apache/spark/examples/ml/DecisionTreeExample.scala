@@ -167,7 +167,9 @@ object DecisionTreeExample {
       testInput: String,
       algo: String,
       fracTest: Double): (DataFrame, DataFrame) = {
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession
+      .builder
+      .getOrCreate()
 
     // Load training data
     val origExamples: DataFrame = loadData(spark, input, dataFormat)

@@ -26,7 +26,10 @@ import org.apache.spark.sql.SparkSession
 
 object RankingMetricsExample {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("RankingMetricsExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("RankingMetricsExample")
+      .getOrCreate()
     import spark.implicits._
     // $example on$
     // Read in the ratings data
