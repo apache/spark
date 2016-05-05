@@ -23,7 +23,7 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.{Pipeline, PipelineModel}
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.sql.Row
 // $example off$
 import org.apache.spark.sql.SQLContext

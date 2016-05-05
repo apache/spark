@@ -22,7 +22,7 @@ package org.apache.spark.examples.ml
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.clustering.KMeans
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.{DataFrame, SQLContext}
 // $example off$
 

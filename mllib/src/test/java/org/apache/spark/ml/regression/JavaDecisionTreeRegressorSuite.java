@@ -27,9 +27,10 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.tree.impl.TreeTests;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
@@ -56,7 +57,13 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
     double B = -1.5;
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
-      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).map(
+        new Function<org.apache.spark.mllib.regression.LabeledPoint, LabeledPoint>() {
+          public LabeledPoint call(org.apache.spark.mllib.regression.LabeledPoint point) {
+            return point.asML();
+          }
+        }
+    ).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
     Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 

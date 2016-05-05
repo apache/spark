@@ -19,8 +19,10 @@ package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.junit.After;
@@ -29,9 +31,9 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.tree.impl.TreeTests;
 import org.apache.spark.mllib.classification.LogisticRegressionSuite;
-import org.apache.spark.mllib.regression.LabeledPoint;
 
 
 public class JavaDecisionTreeClassifierSuite implements Serializable {
@@ -56,7 +58,12 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     double B = -1.5;
 
     JavaRDD<LabeledPoint> data = sc.parallelize(
-      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42)).map(
+        new Function<org.apache.spark.mllib.regression.LabeledPoint, LabeledPoint>() {
+          public LabeledPoint call(org.apache.spark.mllib.regression.LabeledPoint point) {
+            return point.asML();
+          }
+        }).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
     Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 

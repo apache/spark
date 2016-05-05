@@ -26,9 +26,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.DataFrame
 // $example off$
 import org.apache.spark.sql.SQLContext

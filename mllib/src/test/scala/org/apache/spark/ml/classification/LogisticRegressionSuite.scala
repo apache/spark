@@ -21,14 +21,14 @@ import scala.language.existentials
 import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.{Instance, LabeledPoint}
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.classification.LogisticRegressionSuite._
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.lit
 
@@ -830,6 +830,7 @@ class LogisticRegressionSuite
       val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
       val testData =
         generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
+          .map(_.asML)
 
       // Let's over-sample the positive samples twice.
       val data1 = testData.flatMap { case labeledPoint: LabeledPoint =>
