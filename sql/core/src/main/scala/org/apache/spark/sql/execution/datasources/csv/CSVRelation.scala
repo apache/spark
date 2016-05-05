@@ -120,24 +120,15 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         }
       }
 
-      // Appends partition values
-      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-      val joinedRow = new JoinedRow()
-
       // TODO What if the first partitioned file consists of only comments and empty lines?
       val shouldDropHeader = csvOptions.headerFlag && file.start == 0
-      val rows = UnivocityParser.parseCsv(
+      UnivocityParser.parseCsv(
         lines,
         dataSchema,
         requiredSchema,
         headers,
         shouldDropHeader,
         csvOptions)
-
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
-      rows.map { row =>
-        appendPartitionColumns(joinedRow(row, file.partitionValues))
-      }
     }
   }
 

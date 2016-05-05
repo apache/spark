@@ -18,12 +18,11 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.recommendation.ALS
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 // $example on$
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
@@ -43,13 +42,11 @@ object ALSExample {
   // $example off$
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("ALSExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession.builder.appName("ALSExample").getOrCreate()
+    import spark.implicits._
 
     // $example on$
-    val ratings = sc.textFile("data/mllib/als/sample_movielens_ratings.txt")
+    val ratings = spark.read.text("data/mllib/als/sample_movielens_ratings.txt")
       .map(Rating.parseRating)
       .toDF()
     val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2))
@@ -75,7 +72,8 @@ object ALSExample {
     val rmse = evaluator.evaluate(predictions)
     println(s"Root-mean-square error = $rmse")
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println

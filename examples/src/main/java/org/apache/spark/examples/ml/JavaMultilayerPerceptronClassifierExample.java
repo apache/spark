@@ -18,11 +18,9 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassificationModel;
 import org.apache.spark.ml.classification.MultilayerPerceptronClassifier;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
@@ -34,14 +32,13 @@ import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 public class JavaMultilayerPerceptronClassifierExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaMultilayerPerceptronClassifierExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder().appName("JavaMultilayerPerceptronClassifierExample").getOrCreate();
 
     // $example on$
     // Load training data
     String path = "data/mllib/sample_multiclass_classification_data.txt";
-    Dataset<Row> dataFrame = jsql.read().format("libsvm").load(path);
+    Dataset<Row> dataFrame = spark.read().format("libsvm").load(path);
     // Split the data into train and test
     Dataset<Row>[] splits = dataFrame.randomSplit(new double[]{0.6, 0.4}, 1234L);
     Dataset<Row> train = splits[0];
@@ -66,6 +63,6 @@ public class JavaMultilayerPerceptronClassifierExample {
     System.out.println("Precision = " + evaluator.evaluate(predictionAndLabels));
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }
