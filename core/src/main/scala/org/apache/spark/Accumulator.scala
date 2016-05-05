@@ -24,16 +24,17 @@ package org.apache.spark
  * They can be used to implement counters (as in MapReduce) or sums. Spark natively supports
  * accumulators of numeric value types, and programmers can add support for new types.
  *
- * An accumulator is created from an initial value `v` by calling [[SparkContext#accumulator]].
- * Tasks running on the cluster can then add to it using the [[Accumulable#+=]] operator.
+ * An accumulator is created from an initial value `v` by calling
+ * [[SparkContext#accumulator SparkContext.accumulator]].
+ * Tasks running on the cluster can then add to it using the [[Accumulable#+= +=]] operator.
  * However, they cannot read its value. Only the driver program can read the accumulator's value,
- * using its value method.
+ * using its [[#value]] method.
  *
  * The interpreter session below shows an accumulator being used to add up the elements of an array:
  *
  * {{{
  * scala> val accum = sc.accumulator(0)
- * accum: spark.Accumulator[Int] = 0
+ * accum: org.apache.spark.Accumulator[Int] = 0
  *
  * scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
  * ...
