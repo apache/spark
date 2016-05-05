@@ -28,7 +28,7 @@ from pyspark.sql import Row
 
 
 """
-A simple example demonstrating a bisecting k-means clustering.
+A simple example demonstrating LDA.
 """
 
 

@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 // $example off$
 
 /**
- * An example demonstrating a LDA.
+ * An example demonstrating LDA.
  * Run with
  * {{{
  * bin/run-example ml.LDAExample
