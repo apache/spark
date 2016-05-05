@@ -25,11 +25,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
 import org.apache.spark.util.Utils
 
 case class CreateTableAsSelectLogicalPlan(
@@ -288,45 +288,39 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    sparkSession.sessionState.catalog.lookupRelation(table) match {
-      case catalogRelation: CatalogRelation =>
-        if (isExtended) {
-          describeExtended(catalogRelation, result)
-        } else if (isFormatted) {
-          describeFormatted(catalogRelation, result)
-        } else {
-          describe(catalogRelation, result)
-        }
+    val metadata = sparkSession.sessionState.catalog.getTableMetadata(table)
 
-      case relation =>
-        describeSchema(relation.schema, result)
+    if (isExtended) {
+      describeExtended(metadata, result)
+    } else if (isFormatted) {
+      describeFormatted(metadata, result)
+    } else {
+      describe(metadata, result)
     }
 
     result
   }
 
   // Shows data columns and partitioned columns (if any)
-  private def describe(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
-    describeSchema(relation.catalogTable.schema, buffer)
+  private def describe(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    describeSchema(table.schema, buffer)
 
-    if (relation.catalogTable.partitionColumns.nonEmpty) {
+    if (table.partitionColumns.nonEmpty) {
       append(buffer, "# Partition Information", "", "")
       append(buffer, s"# ${output(0).name}", output(1).name, output(2).name)
-      describeSchema(relation.catalogTable.partitionColumns, buffer)
+      describeSchema(table.partitionColumns, buffer)
     }
   }
 
-  private def describeExtended(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
-    describe(relation, buffer)
+  private def describeExtended(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    describe(table, buffer)
 
     append(buffer, "", "", "")
-    append(buffer, "# Detailed Table Information", relation.catalogTable.toString, "")
+    append(buffer, "# Detailed Table Information", table.toString, "")
   }
 
-  private def describeFormatted(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
-    describe(relation, buffer)
-
-    val table = relation.catalogTable
+  private def describeFormatted(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    describe(table, buffer)
 
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
@@ -355,14 +349,6 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     append(buffer, "Storage Desc Parameters:", "", "")
     table.storage.serdeProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
-    }
-  }
-
-  private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
-    schema.foreach { column =>
-      val comment =
-        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
-      append(buffer, column.name, column.dataType.simpleString, comment)
     }
   }
 
