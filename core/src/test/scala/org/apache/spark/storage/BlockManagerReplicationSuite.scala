@@ -34,7 +34,7 @@ import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage.StorageLevel._
 
 /** Testsuite that tests block replication in BlockManager */
@@ -46,7 +46,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
   private val securityMgr = new SecurityManager(conf)
   private val bcastManager = new BroadcastManager(true, conf, securityMgr)
   private val mapOutputTracker = new MapOutputTrackerMaster(conf, bcastManager, true)
-  private val shuffleManager = new HashShuffleManager(conf)
+  private val shuffleManager = new SortShuffleManager(conf)
 
   // List of block manager created during an unit test, so that all of the them can be stopped
   // after the unit test.
@@ -64,7 +64,7 @@ class BlockManagerReplicationSuite extends SparkFunSuite with Matchers with Befo
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     conf.set("spark.testing.memory", maxMem.toString)
     conf.set("spark.memory.offHeap.size", maxMem.toString)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1)
     val memManager = UnifiedMemoryManager(conf, numCores = 1)
     val serializerManager = new SerializerManager(serializer, conf)
     val store = new BlockManager(name, rpcEnv, master, serializerManager, conf,

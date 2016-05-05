@@ -23,7 +23,7 @@ NULL
 setOldClass("jobj")
 
 #' @title S4 class that represents a GroupedData
-#' @description GroupedDatas can be created using groupBy() on a DataFrame
+#' @description GroupedDatas can be created using groupBy() on a SparkDataFrame
 #' @rdname GroupedData
 #' @seealso groupBy
 #'
@@ -37,7 +37,7 @@ setMethod("initialize", "GroupedData", function(.Object, sgd) {
   .Object
 })
 
-#' @rdname DataFrame
+#' @rdname GroupedData
 groupedData <- function(sgd) {
   new("GroupedData", sgd)
 }
@@ -52,10 +52,10 @@ setMethod("show", "GroupedData",
 #' Count
 #'
 #' Count the number of rows for each group.
-#' The resulting DataFrame will also contain the grouping columns.
+#' The resulting SparkDataFrame will also contain the grouping columns.
 #'
 #' @param x a GroupedData
-#' @return a DataFrame
+#' @return a SparkDataFrame
 #' @rdname agg
 #' @export
 #' @examples
@@ -70,14 +70,14 @@ setMethod("count",
 
 #' summarize
 #'
-#' Aggregates on the entire DataFrame without groups.
-#' The resulting DataFrame will also contain the grouping columns.
+#' Aggregates on the entire SparkDataFrame without groups.
+#' The resulting SparkDataFrame will also contain the grouping columns.
 #'
 #' df2 <- agg(df, <column> = <aggFunction>)
 #' df2 <- agg(df, newColName = aggFunction(column))
 #'
 #' @param x a GroupedData
-#' @return a DataFrame
+#' @return a SparkDataFrame
 #' @rdname summarize
 #' @name agg
 #' @family agg_funcs

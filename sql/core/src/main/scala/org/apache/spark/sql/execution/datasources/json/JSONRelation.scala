@@ -28,25 +28,23 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
-import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SQLContext}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{JoinedRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "json"
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     if (files.isEmpty) {
@@ -55,14 +53,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       val parsedOptions: JSONOptions = new JSONOptions(options)
       val columnNameOfCorruptRecord =
         parsedOptions.columnNameOfCorruptRecord
-          .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
+          .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
       val jsonFiles = files.filterNot { status =>
         val name = status.getPath.getName
         name.startsWith("_") || name.startsWith(".")
       }.toArray
 
       val jsonSchema = InferSchema.infer(
-        createBaseRdd(sqlContext, jsonFiles),
+        createBaseRdd(sparkSession, jsonFiles),
         columnNameOfCorruptRecord,
         parsedOptions)
       checkConstraints(jsonSchema)
@@ -72,7 +70,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -93,71 +91,36 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: Filter files for all formats before calling buildInternalScan.
-    val jsonFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
-
-    val parsedOptions: JSONOptions = new JSONOptions(options)
-    val requiredDataSchema = StructType(requiredColumns.map(dataSchema(_)))
-    val columnNameOfCorruptRecord =
-      parsedOptions.columnNameOfCorruptRecord
-        .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
-    val rows = JacksonParser.parse(
-      createBaseRdd(sqlContext, jsonFiles),
-      requiredDataSchema,
-      columnNameOfCorruptRecord,
-      parsedOptions)
-
-    rows.mapPartitions { iterator =>
-      val unsafeProjection = UnsafeProjection.create(requiredDataSchema)
-      iterator.map(unsafeProjection)
-    }
-  }
-
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
-    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
-    val broadcastedConf =
-      sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     val parsedOptions: JSONOptions = new JSONOptions(options)
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
-      .getOrElse(sqlContext.conf.columnNameOfCorruptRecord)
+      .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-    val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-    val joinedRow = new JoinedRow()
+    (file: PartitionedFile) => {
+      val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
 
-    file => {
-      val lines = new HadoopFileLinesReader(file, broadcastedConf.value.value).map(_.toString)
-
-      val rows = JacksonParser.parseJson(
+      JacksonParser.parseJson(
         lines,
         requiredSchema,
         columnNameOfCorruptRecord,
         parsedOptions)
-
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-      rows.map { row =>
-        appendPartitionColumns(joinedRow(row, file.partitionValues))
-      }
     }
   }
 
-  private def createBaseRdd(sqlContext: SQLContext, inputPaths: Seq[FileStatus]): RDD[String] = {
-    val job = Job.getInstance(sqlContext.sparkContext.hadoopConfiguration)
+  private def createBaseRdd(
+      sparkSession: SparkSession,
+      inputPaths: Seq[FileStatus]): RDD[String] = {
+    val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
     val conf = job.getConfiguration
 
     val paths = inputPaths.map(_.getPath)
@@ -166,7 +129,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       FileInputFormat.setInputPaths(job, paths: _*)
     }
 
-    sqlContext.sparkContext.hadoopRDD(
+    sparkSession.sparkContext.hadoopRDD(
       conf.asInstanceOf[JobConf],
       classOf[TextInputFormat],
       classOf[LongWritable],
@@ -185,6 +148,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def toString: String = "JSON"
+
+  override def hashCode(): Int = getClass.hashCode()
+
   override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
 }
 

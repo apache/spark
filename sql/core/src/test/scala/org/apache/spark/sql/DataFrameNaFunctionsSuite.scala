@@ -57,7 +57,7 @@ class DataFrameNaFunctionsSuite extends QueryTest with SharedSQLContext {
       rows(0))
 
     // dropna on an a dataframe with no column should return an empty data frame.
-    val empty = input.sqlContext.emptyDataFrame.select()
+    val empty = input.sparkSession.emptyDataFrame.select()
     assert(empty.na.drop().count() === 0L)
 
     // Make sure the columns are properly named.

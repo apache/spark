@@ -114,7 +114,7 @@ public class TaskMemoryManager {
   /**
    * The amount of memory that is acquired but not used.
    */
-  private long acquiredButNotUsed = 0L;
+  private volatile long acquiredButNotUsed = 0L;
 
   /**
    * Construct a new TaskMemoryManager.
@@ -379,7 +379,6 @@ public class TaskMemoryManager {
    */
   public long cleanUpAllAllocatedMemory() {
     synchronized (this) {
-      Arrays.fill(pageTable, null);
       for (MemoryConsumer c: consumers) {
         if (c != null && c.getUsed() > 0) {
           // In case of failed task, it's normal to see leaked memory
@@ -387,14 +386,16 @@ public class TaskMemoryManager {
         }
       }
       consumers.clear();
+
+      for (MemoryBlock page : pageTable) {
+        if (page != null) {
+          logger.warn("leak a page: " + page + " in task " + taskAttemptId);
+          memoryManager.tungstenMemoryAllocator().free(page);
+        }
+      }
+      Arrays.fill(pageTable, null);
     }
 
-    for (MemoryBlock page : pageTable) {
-      if (page != null) {
-        memoryManager.tungstenMemoryAllocator().free(page);
-      }
-    }
-    Arrays.fill(pageTable, null);
 
     // release the memory that is not used by any consumer.
     memoryManager.releaseExecutionMemory(acquiredButNotUsed, taskAttemptId, tungstenMemoryMode);
@@ -407,5 +408,12 @@ public class TaskMemoryManager {
    */
   public long getMemoryConsumptionForThisTask() {
     return memoryManager.getExecutionMemoryUsageForTask(taskAttemptId);
+  }
+
+  /**
+   * Returns Tungsten memory mode
+   */
+  public MemoryMode getTungstenMemoryMode(){
+    return tungstenMemoryMode;
   }
 }

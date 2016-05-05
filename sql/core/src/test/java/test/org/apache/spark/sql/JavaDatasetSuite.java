@@ -291,7 +291,7 @@ public class JavaDatasetSuite implements Serializable {
       unioned.collectAsList());
 
     Dataset<String> subtracted = ds.except(ds2);
-    Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
+    Assert.assertEquals(Arrays.asList("abc"), subtracted.collectAsList());
   }
 
   private static <T> Set<T> toSet(List<T> records) {
@@ -452,6 +452,16 @@ public class JavaDatasetSuite implements Serializable {
       new JavaSerializable("hello"), new JavaSerializable("world"));
     Dataset<JavaSerializable> ds = context.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
+  }
+
+  @Test
+  public void testRandomSplit() {
+    List<String> data = Arrays.asList("hello", "world", "from", "spark");
+    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    double[] arraySplit = {1, 2, 3};
+
+    List<Dataset<String>> randomSplit =  ds.randomSplitAsList(arraySplit, 1);
+    Assert.assertEquals("wrong number of splits", randomSplit.size(), 3);
   }
 
   /**

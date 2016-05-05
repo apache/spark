@@ -82,7 +82,7 @@ private[hive] case class HiveSimpleUDF(
 
   // TODO: Finish input output types.
   override def eval(input: InternalRow): Any = {
-    val inputs = wrap(children.map(c => c.eval(input)), arguments, cached, inputDataTypes)
+    val inputs = wrap(children.map(_.eval(input)), arguments, cached, inputDataTypes)
     val ret = FunctionRegistry.invoke(
       method,
       function,
@@ -152,10 +152,8 @@ private[hive] case class HiveGenericUDF(
     var i = 0
     while (i < children.length) {
       val idx = i
-      deferredObjects(i).asInstanceOf[DeferredObjectAdapter].set(
-        () => {
-          children(idx).eval(input)
-        })
+      deferredObjects(i).asInstanceOf[DeferredObjectAdapter]
+        .set(() => children(idx).eval(input))
       i += 1
     }
     unwrap(function.evaluate(deferredObjects), returnInspector)
@@ -204,9 +202,10 @@ private[hive] case class HiveGenericUDTF(
   @transient
   protected lazy val collector = new UDTFCollector
 
-  override lazy val elementTypes = outputInspector.getAllStructFieldRefs.asScala.map {
-    field => (inspectorToDataType(field.getFieldObjectInspector), true, field.getFieldName)
-  }
+  override lazy val elementSchema = StructType(outputInspector.getAllStructFieldRefs.asScala.map {
+    field => StructField(field.getFieldName, inspectorToDataType(field.getFieldObjectInspector),
+      nullable = true)
+  })
 
   @transient
   private lazy val inputDataTypes: Array[DataType] = children.map(_.dataType).toArray

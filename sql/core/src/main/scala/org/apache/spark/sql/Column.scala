@@ -24,7 +24,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.parser.DataTypeParser
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.functions.lit
@@ -59,14 +59,14 @@ class TypedColumn[-T, U](
    * on a decoded object.
    */
   private[sql] def withInputType(
-      inputEncoder: ExpressionEncoder[_],
-      schema: Seq[Attribute]): TypedColumn[T, U] = {
-    val boundEncoder = inputEncoder.bind(schema).asInstanceOf[ExpressionEncoder[Any]]
-    new TypedColumn[T, U](
-      expr transform { case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
-        ta.copy(aEncoder = Some(boundEncoder), children = schema)
-      },
-      encoder)
+      inputDeserializer: Expression,
+      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
+    val unresolvedDeserializer = UnresolvedDeserializer(inputDeserializer, inputAttributes)
+    val newExpr = expr transform {
+      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
+        ta.copy(inputDeserializer = Some(unresolvedDeserializer))
+    }
+    new TypedColumn[T, U](newExpr, encoder)
   }
 }
 
@@ -979,7 +979,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(DataTypeParser.parse(to))
+  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
 
   /**
    * Returns an ordering used in sorting.

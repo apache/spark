@@ -113,7 +113,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
-      val conf = sparkContext.hadoopConfiguration
+      val conf = sqlContext.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf)
       readParquetFile(path.toString)(df => {
         val sparkTypes = df.schema.map(_.dataType)
@@ -250,7 +250,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
-      val conf = sparkContext.hadoopConfiguration
+      val conf = sqlContext.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf)
       val errorMessage = intercept[Throwable] {
         sqlContext.read.parquet(path.toString).printSchema()
@@ -271,7 +271,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
-      val conf = sparkContext.hadoopConfiguration
+      val conf = sqlContext.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf)
       val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
       assert(sparkTypes === expectedSparkTypes)
@@ -279,9 +279,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("compression codec") {
+    val hadoopConf = sqlContext.sessionState.newHadoopConf()
     def compressionCodecFor(path: String, codecName: String): String = {
       val codecs = for {
-        footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConfiguration)
+        footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConf)
         block <- footer.getParquetMetadata.getBlocks.asScala
         column <- block.getColumns.asScala
       } yield column.getCodec.name()
@@ -350,17 +351,18 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("write metadata") {
+    val hadoopConf = sqlContext.sessionState.newHadoopConf()
     withTempPath { file =>
       val path = new Path(file.toURI.toString)
-      val fs = FileSystem.getLocal(hadoopConfiguration)
+      val fs = FileSystem.getLocal(hadoopConf)
       val schema = StructType.fromAttributes(ScalaReflection.attributesFor[(Int, String)])
-      writeMetadata(schema, path, hadoopConfiguration)
+      writeMetadata(schema, path, hadoopConf)
 
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)))
       assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
 
       val expectedSchema = new CatalystSchemaConverter().convert(schema)
-      val actualSchema = readFooter(path, hadoopConfiguration).getFileMetaData.getSchema
+      val actualSchema = readFooter(path, hadoopConf).getFileMetaData.getSchema
 
       actualSchema.checkContains(expectedSchema)
       expectedSchema.checkContains(actualSchema)
@@ -431,7 +433,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withTempPath { location =>
       val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val path = new Path(location.getCanonicalPath)
-      val conf = sparkContext.hadoopConfiguration
+      val conf = sqlContext.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf, extraMetadata)
 
       readParquetFile(path.toString) { df =>
@@ -446,26 +448,16 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-8121: spark.sql.parquet.output.committer.class shouldn't be overridden") {
+    val extraOptions = Map(
+      SQLConf.OUTPUT_COMMITTER_CLASS.key -> classOf[ParquetOutputCommitter].getCanonicalName,
+      "spark.sql.parquet.output.committer.class" ->
+        classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName
+    )
     withTempPath { dir =>
-      val clonedConf = new Configuration(hadoopConfiguration)
-
-      hadoopConfiguration.set(
-        SQLConf.OUTPUT_COMMITTER_CLASS.key, classOf[ParquetOutputCommitter].getCanonicalName)
-
-      hadoopConfiguration.set(
-        "spark.sql.parquet.output.committer.class",
-        classOf[JobCommitFailureParquetOutputCommitter].getCanonicalName)
-
-      try {
-        val message = intercept[SparkException] {
-          sqlContext.range(0, 1).write.parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
-        assert(message === "Intentional exception for testing purposes")
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      val message = intercept[SparkException] {
+        sqlContext.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+      }.getCause.getMessage
+      assert(message === "Intentional exception for testing purposes")
     }
   }
 
@@ -482,36 +474,29 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("SPARK-7837 Do not close output writer twice when commitTask() fails") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-
     // Using a output committer that always fail when committing a task, so that both
     // `commitTask()` and `abortTask()` are invoked.
-    hadoopConfiguration.set(
-      "spark.sql.parquet.output.committer.class",
-      classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName)
+    val extraOptions = Map[String, String](
+      "spark.sql.parquet.output.committer.class" ->
+        classOf[TaskCommitFailureParquetOutputCommitter].getCanonicalName
+    )
 
-    try {
-      // Before fixing SPARK-7837, the following code results in an NPE because both
-      // `commitTask()` and `abortTask()` try to close output writers.
+    // Before fixing SPARK-7837, the following code results in an NPE because both
+    // `commitTask()` and `abortTask()` try to close output writers.
 
-      withTempPath { dir =>
-        val m1 = intercept[SparkException] {
-          sqlContext.range(1).coalesce(1).write.parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
-        assert(m1.contains("Intentional exception for testing purposes"))
-      }
+    withTempPath { dir =>
+      val m1 = intercept[SparkException] {
+        sqlContext.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+      }.getCause.getMessage
+      assert(m1.contains("Intentional exception for testing purposes"))
+    }
 
-      withTempPath { dir =>
-        val m2 = intercept[SparkException] {
-          val df = sqlContext.range(1).select('id as 'a, 'id as 'b).coalesce(1)
-          df.write.partitionBy("a").parquet(dir.getCanonicalPath)
-        }.getCause.getMessage
-        assert(m2.contains("Intentional exception for testing purposes"))
-      }
-    } finally {
-      // Hadoop 1 doesn't have `Configuration.unset`
-      hadoopConfiguration.clear()
-      clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
+    withTempPath { dir =>
+      val m2 = intercept[SparkException] {
+        val df = sqlContext.range(1).select('id as 'a, 'id as 'b).coalesce(1)
+        df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
+      }.getCause.getMessage
+      assert(m2.contains("Intentional exception for testing purposes"))
     }
   }
 
@@ -519,31 +504,27 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     // For dictionary encoding, Parquet changes the encoding types according to its writer
     // version. So, this test checks one of the encoding types in order to ensure that
     // the file is written with writer version2.
+    val extraOptions = Map[String, String](
+      // Write a Parquet file with writer version2.
+      ParquetOutputFormat.WRITER_VERSION -> ParquetProperties.WriterVersion.PARQUET_2_0.toString,
+      // By default, dictionary encoding is enabled from Parquet 1.2.0 but
+      // it is enabled just in case.
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "true"
+    )
+
+    val hadoopConf = sqlContext.sessionState.newHadoopConfWithOptions(extraOptions)
+
     withTempPath { dir =>
-      val clonedConf = new Configuration(hadoopConfiguration)
-      try {
-        // Write a Parquet file with writer version2.
-        hadoopConfiguration.set(ParquetOutputFormat.WRITER_VERSION,
-          ParquetProperties.WriterVersion.PARQUET_2_0.toString)
+      val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
+      sqlContext.range(1 << 16).selectExpr("(id % 4) AS i")
+        .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
 
-        // By default, dictionary encoding is enabled from Parquet 1.2.0 but
-        // it is enabled just in case.
-        hadoopConfiguration.setBoolean(ParquetOutputFormat.ENABLE_DICTIONARY, true)
-        val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
-        sqlContext.range(1 << 16).selectExpr("(id % 4) AS i")
-          .coalesce(1).write.mode("overwrite").parquet(path)
+      val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+      val columnChunkMetadata = blockMetadata.getColumns.asScala.head
 
-        val blockMetadata = readFooter(new Path(path), hadoopConfiguration).getBlocks.asScala.head
-        val columnChunkMetadata = blockMetadata.getColumns.asScala.head
-
-        // If the file is written with version2, this should include
-        // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
-        assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
-      } finally {
-        // Manually clear the hadoop configuration for other tests.
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      // If the file is written with version2, this should include
+      // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
+      assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
     }
   }
 

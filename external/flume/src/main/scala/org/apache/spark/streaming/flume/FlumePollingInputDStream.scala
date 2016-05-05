@@ -79,11 +79,11 @@ private[streaming] class FlumePollingReceiver(
 
   override def onStart(): Unit = {
     // Create the connections to each Flume agent.
-    addresses.foreach(host => {
+    addresses.foreach { host =>
       val transceiver = new NettyTransceiver(host, channelFactory)
       val client = SpecificRequestor.getClient(classOf[SparkFlumeProtocol.Callback], transceiver)
       connections.add(new FlumeConnection(transceiver, client))
-    })
+    }
     for (i <- 0 until parallelism) {
       logInfo("Starting Flume Polling Receiver worker threads..")
       // Threads that pull data from Flume.

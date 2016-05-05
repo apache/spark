@@ -51,18 +51,21 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
   }
 
   test("local-cluster format") {
-    sc = new SparkContext("local-cluster[2,1,1024]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
-    sc = new SparkContext("local-cluster[2 , 1 , 1024]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
-    sc = new SparkContext("local-cluster[2, 1, 1024]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
-    sc = new SparkContext("local-cluster[ 2, 1, 1024 ]", "test")
-    assert(sc.parallelize(1 to 2, 2).count() == 2)
-    resetSparkContext()
+    import SparkMasterRegex._
+
+    val masterStrings = Seq(
+      "local-cluster[2,1,1024]",
+      "local-cluster[2 , 1 , 1024]",
+      "local-cluster[2, 1, 1024]",
+      "local-cluster[ 2, 1, 1024 ]"
+    )
+
+    masterStrings.foreach {
+      case LOCAL_CLUSTER_REGEX(numSlaves, coresPerSlave, memoryPerSlave) =>
+        assert(numSlaves.toInt == 2)
+        assert(coresPerSlave.toInt == 1)
+        assert(memoryPerSlave.toInt == 1024)
+    }
   }
 
   test("simple groupByKey") {
@@ -320,7 +323,7 @@ class DistributedSuite extends SparkFunSuite with Matchers with LocalSparkContex
           Thread.sleep(200)
         }
       } catch {
-        case _: Throwable => { Thread.sleep(10) }
+        case _: Throwable => Thread.sleep(10)
           // Do nothing. We might see exceptions because block manager
           // is racing this thread to remove entries from the driver.
       }

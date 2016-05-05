@@ -115,7 +115,7 @@ class StringIndexerSuite
       .setInputCol("label")
       .setOutputCol("labelIndex")
     val df = sqlContext.range(0L, 10L).toDF()
-    assert(indexerModel.transform(df).eq(df))
+    assert(indexerModel.transform(df).collect().toSet === df.collect().toSet)
   }
 
   test("StringIndexerModel can't overwrite output column") {

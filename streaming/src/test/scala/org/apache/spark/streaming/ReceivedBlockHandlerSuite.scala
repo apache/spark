@@ -36,7 +36,7 @@ import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
-import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
@@ -60,7 +60,7 @@ class ReceivedBlockHandlerSuite
   val securityMgr = new SecurityManager(conf)
   val broadcastManager = new BroadcastManager(true, conf, securityMgr)
   val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
-  val shuffleManager = new HashShuffleManager(conf)
+  val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
   var serializerManager = new SerializerManager(serializer, conf)
   val manualClock = new ManualClock
@@ -268,7 +268,7 @@ class ReceivedBlockHandlerSuite
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
     val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
-    val transfer = new NettyBlockTransferService(conf, securityMgr, numCores = 1)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1)
     val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
       memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
     memManager.setMemoryStore(blockManager.memoryStore)

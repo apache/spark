@@ -626,13 +626,13 @@ convertNamedListToEnv <- function(namedList) {
 
 # Assign a new environment for attach() and with() methods
 assignNewEnv <- function(data) {
-  stopifnot(class(data) == "DataFrame")
+  stopifnot(class(data) == "SparkDataFrame")
   cols <- columns(data)
   stopifnot(length(cols) > 0)
 
   env <- new.env()
   for (i in 1:length(cols)) {
-    assign(x = cols[i], value = data[, cols[i]], envir = env)
+    assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
 }
@@ -649,4 +649,15 @@ convertToJSaveMode <- function(mode) {
  }
  jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
  jmode
+}
+
+varargsToJProperties <- function(...) {
+  pairs <- list(...)
+  props <- newJObject("java.util.Properties")
+  if (length(pairs) > 0) {
+    lapply(ls(pairs), function(k) {
+      callJMethod(props, "setProperty", as.character(k), as.character(pairs[[k]]))
+    })
+  }
+  props
 }

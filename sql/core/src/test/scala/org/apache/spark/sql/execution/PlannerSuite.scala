@@ -25,8 +25,8 @@ import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Repartition}
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
-import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchange, ReuseExchange, ShuffleExchange}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, SortMergeJoin}
+import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReusedExchangeExec, ReuseExchange, ShuffleExchange}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -86,8 +86,8 @@ class PlannerSuite extends SharedSQLContext {
             |FROM testData2 l JOIN (SELECT * FROM testLimit LIMIT 1) r ON (l.a = r.key)
           """.stripMargin).queryExecution.sparkPlan
 
-        val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
+        val broadcastHashJoins = planned.collect { case join: BroadcastHashJoinExec => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoinExec => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
         assert(sortMergeJoins.isEmpty, "Should not use sort merge join")
@@ -139,8 +139,8 @@ class PlannerSuite extends SharedSQLContext {
         val b = sqlContext.table("tiny").as("b")
         val planned = a.join(b, $"a.key" === $"b.key").queryExecution.sparkPlan
 
-        val broadcastHashJoins = planned.collect { case join: BroadcastHashJoin => join }
-        val sortMergeJoins = planned.collect { case join: SortMergeJoin => join }
+        val broadcastHashJoins = planned.collect { case join: BroadcastHashJoinExec => join }
+        val sortMergeJoins = planned.collect { case join: SortMergeJoinExec => join }
 
         assert(broadcastHashJoins.size === 1, "Should use broadcast hash join")
         assert(sortMergeJoins.isEmpty, "Should not use shuffled hash join")
@@ -167,34 +167,34 @@ class PlannerSuite extends SharedSQLContext {
   test("efficient terminal limit -> sort should use TakeOrderedAndProject") {
     val query = testData.select('key, 'value).sort('key).limit(2)
     val planned = query.queryExecution.executedPlan
-    assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
+    assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
     assert(planned.output === testData.select('key, 'value).logicalPlan.output)
   }
 
   test("terminal limit -> project -> sort should use TakeOrderedAndProject") {
     val query = testData.select('key, 'value).sort('key).select('value, 'key).limit(2)
     val planned = query.queryExecution.executedPlan
-    assert(planned.isInstanceOf[execution.TakeOrderedAndProject])
+    assert(planned.isInstanceOf[execution.TakeOrderedAndProjectExec])
     assert(planned.output === testData.select('value, 'key).logicalPlan.output)
   }
 
   test("terminal limits that are not handled by TakeOrderedAndProject should use CollectLimit") {
     val query = testData.select('value).limit(2)
     val planned = query.queryExecution.sparkPlan
-    assert(planned.isInstanceOf[CollectLimit])
+    assert(planned.isInstanceOf[CollectLimitExec])
     assert(planned.output === testData.select('value).logicalPlan.output)
   }
 
   test("TakeOrderedAndProject can appear in the middle of plans") {
     val query = testData.select('key, 'value).sort('key).limit(2).filter('key === 3)
     val planned = query.queryExecution.executedPlan
-    assert(planned.find(_.isInstanceOf[TakeOrderedAndProject]).isDefined)
+    assert(planned.find(_.isInstanceOf[TakeOrderedAndProjectExec]).isDefined)
   }
 
   test("CollectLimit can appear in the middle of a plan when caching is used") {
     val query = testData.select('key, 'value).limit(2).cache()
     val planned = query.queryExecution.optimizedPlan.asInstanceOf[InMemoryRelation]
-    assert(planned.child.isInstanceOf[CollectLimit])
+    assert(planned.child.isInstanceOf[CollectLimitExec])
   }
 
   test("PartitioningCollection") {
@@ -394,7 +394,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: Sort => true }.isEmpty) {
+    if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
       fail(s"Sort should have been added:\n$outputPlan")
     }
   }
@@ -410,7 +410,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: Sort => true }.nonEmpty) {
+    if (outputPlan.collect { case s: SortExec => true }.nonEmpty) {
       fail(s"No sorts should have been added:\n$outputPlan")
     }
   }
@@ -427,7 +427,7 @@ class PlannerSuite extends SharedSQLContext {
     )
     val outputPlan = EnsureRequirements(sqlContext.sessionState.conf).apply(inputPlan)
     assertDistributionRequirementsAreSatisfied(outputPlan)
-    if (outputPlan.collect { case s: Sort => true }.isEmpty) {
+    if (outputPlan.collect { case s: SortExec => true }.isEmpty) {
       fail(s"Sort should have been added:\n$outputPlan")
     }
   }
@@ -485,7 +485,7 @@ class PlannerSuite extends SharedSQLContext {
         requiredChildOrdering = Seq(Seq.empty)),
       None)
 
-    val inputPlan = SortMergeJoin(
+    val inputPlan = SortMergeJoinExec(
         Literal(1) :: Nil,
         Literal(1) :: Nil,
         Inner,
@@ -494,7 +494,7 @@ class PlannerSuite extends SharedSQLContext {
         shuffle)
 
     val outputPlan = ReuseExchange(sqlContext.sessionState.conf).apply(inputPlan)
-    if (outputPlan.collect { case e: ReusedExchange => true }.size != 1) {
+    if (outputPlan.collect { case e: ReusedExchangeExec => true }.size != 1) {
       fail(s"Should re-use the shuffle:\n$outputPlan")
     }
     if (outputPlan.collect { case e: ShuffleExchange => true }.size != 1) {
@@ -502,7 +502,7 @@ class PlannerSuite extends SharedSQLContext {
     }
 
     // nested exchanges
-    val inputPlan2 = SortMergeJoin(
+    val inputPlan2 = SortMergeJoinExec(
       Literal(1) :: Nil,
       Literal(1) :: Nil,
       Inner,
@@ -511,7 +511,7 @@ class PlannerSuite extends SharedSQLContext {
       ShuffleExchange(finalPartitioning, inputPlan))
 
     val outputPlan2 = ReuseExchange(sqlContext.sessionState.conf).apply(inputPlan2)
-    if (outputPlan2.collect { case e: ReusedExchange => true }.size != 2) {
+    if (outputPlan2.collect { case e: ReusedExchangeExec => true }.size != 2) {
       fail(s"Should re-use the two shuffles:\n$outputPlan2")
     }
     if (outputPlan2.collect { case e: ShuffleExchange => true }.size != 2) {

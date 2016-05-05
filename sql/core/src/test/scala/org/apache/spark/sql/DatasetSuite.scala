@@ -456,8 +456,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
 
-    assert(ds.groupByKey(p => p).count().collect().toSeq ==
-      Seq((JavaData(1), 1L), (JavaData(2), 1L)))
+    assert(ds.groupByKey(p => p).count().collect().toSet ==
+      Set((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
   test("Java encoder self join") {
@@ -469,6 +469,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(1), JavaData(2)),
         (JavaData(2), JavaData(1)),
         (JavaData(2), JavaData(2))))
+  }
+
+  test("SPARK-14696: implicit encoders for boxed types") {
+    assert(sqlContext.range(1).map { i => i : java.lang.Long }.head == 0L)
   }
 
   test("SPARK-11894: Incorrect results are returned when using null") {
@@ -620,6 +624,40 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val df = streaming.join(static, Seq("b"))
     assert(df.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
   }
+
+  test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
+    val wideDF = sqlContext.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    // Make sure the generated code for this plan can compile and execute.
+    checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
+  }
+
+  test("SPARK-14838: estimating sizeInBytes in operators with ObjectProducer shouldn't fail") {
+    val dataset = Seq(
+      (0, 3, 54f),
+      (0, 4, 44f),
+      (0, 5, 42f),
+      (1, 3, 39f),
+      (1, 5, 33f),
+      (1, 4, 26f),
+      (2, 3, 51f),
+      (2, 5, 45f),
+      (2, 4, 30f)
+    ).toDF("user", "item", "rating")
+
+    val actual = dataset
+      .select("user", "item")
+      .as[(Int, Int)]
+      .groupByKey(_._1)
+      .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+      .toDF("id", "actual")
+
+    dataset.join(actual, dataset("user") === actual("id")).collect()
+  }
+
+  test("SPARK-15097: implicits on dataset's sqlContext can be imported") {
+    val dataset = Seq(1, 2, 3).toDS()
+    checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
+  }
 }
 
 case class OtherTuple(_1: String, _2: Int)
@@ -679,4 +717,12 @@ class JavaData(val a: Int) extends Serializable {
 
 object JavaData {
   def apply(a: Int): JavaData = new JavaData(a)
+}
+
+/** Used to test importing dataset.sqlContext.implicits._ */
+object DatasetTransform {
+  def addOne(ds: Dataset[Int]): Dataset[Int] = {
+    import ds.sqlContext.implicits._
+    ds.map(_ + 1)
+  }
 }

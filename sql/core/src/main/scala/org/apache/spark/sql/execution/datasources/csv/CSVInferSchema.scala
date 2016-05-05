@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.math.BigDecimal
-import java.text.NumberFormat
+import java.text.{NumberFormat, SimpleDateFormat}
 import java.util.Locale
 
 import scala.util.control.Exception._
@@ -41,11 +41,10 @@ private[csv] object CSVInferSchema {
   def infer(
       tokenRdd: RDD[Array[String]],
       header: Array[String],
-      nullValue: String = ""): StructType = {
-
+      options: CSVOptions): StructType = {
     val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
     val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(nullValue), mergeRowTypes)
+      tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
     val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
       val dType = rootType match {
@@ -58,11 +57,11 @@ private[csv] object CSVInferSchema {
     StructType(structFields)
   }
 
-  private def inferRowType(nullValue: String)
+  private def inferRowType(options: CSVOptions)
       (rowSoFar: Array[DataType], next: Array[String]): Array[DataType] = {
     var i = 0
     while (i < math.min(rowSoFar.length, next.length)) {  // May have columns on right missing.
-      rowSoFar(i) = inferField(rowSoFar(i), next(i), nullValue)
+      rowSoFar(i) = inferField(rowSoFar(i), next(i), options)
       i+=1
     }
     rowSoFar
@@ -78,17 +77,17 @@ private[csv] object CSVInferSchema {
    * Infer type of string field. Given known type Double, and a string "1", there is no
    * point checking if it is an Int, as the final type must be Double or higher.
    */
-  def inferField(typeSoFar: DataType, field: String, nullValue: String = ""): DataType = {
-    if (field == null || field.isEmpty || field == nullValue) {
+  def inferField(typeSoFar: DataType, field: String, options: CSVOptions): DataType = {
+    if (field == null || field.isEmpty || field == options.nullValue) {
       typeSoFar
     } else {
       typeSoFar match {
-        case NullType => tryParseInteger(field)
-        case IntegerType => tryParseInteger(field)
-        case LongType => tryParseLong(field)
-        case DoubleType => tryParseDouble(field)
-        case TimestampType => tryParseTimestamp(field)
-        case BooleanType => tryParseBoolean(field)
+        case NullType => tryParseInteger(field, options)
+        case IntegerType => tryParseInteger(field, options)
+        case LongType => tryParseLong(field, options)
+        case DoubleType => tryParseDouble(field, options)
+        case TimestampType => tryParseTimestamp(field, options)
+        case BooleanType => tryParseBoolean(field, options)
         case StringType => StringType
         case other: DataType =>
           throw new UnsupportedOperationException(s"Unexpected data type $other")
@@ -96,35 +95,49 @@ private[csv] object CSVInferSchema {
     }
   }
 
-  private def tryParseInteger(field: String): DataType = if ((allCatch opt field.toInt).isDefined) {
-    IntegerType
-  } else {
-    tryParseLong(field)
+  private def tryParseInteger(field: String, options: CSVOptions): DataType = {
+    if ((allCatch opt field.toInt).isDefined) {
+      IntegerType
+    } else {
+      tryParseLong(field, options)
+    }
   }
 
-  private def tryParseLong(field: String): DataType = if ((allCatch opt field.toLong).isDefined) {
-    LongType
-  } else {
-    tryParseDouble(field)
+  private def tryParseLong(field: String, options: CSVOptions): DataType = {
+    if ((allCatch opt field.toLong).isDefined) {
+      LongType
+    } else {
+      tryParseDouble(field, options)
+    }
   }
 
-  private def tryParseDouble(field: String): DataType = {
+  private def tryParseDouble(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toDouble).isDefined) {
       DoubleType
     } else {
-      tryParseTimestamp(field)
+      tryParseTimestamp(field, options)
     }
   }
 
-  def tryParseTimestamp(field: String): DataType = {
-    if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
-      TimestampType
+  private def tryParseTimestamp(field: String, options: CSVOptions): DataType = {
+    if (options.dateFormat != null) {
+      // This case infers a custom `dataFormat` is set.
+      if ((allCatch opt options.dateFormat.parse(field)).isDefined) {
+        TimestampType
+      } else {
+        tryParseBoolean(field, options)
+      }
     } else {
-      tryParseBoolean(field)
+      // We keep this for backwords competibility.
+      if ((allCatch opt DateTimeUtils.stringToTime(field)).isDefined) {
+        TimestampType
+      } else {
+        tryParseBoolean(field, options)
+      }
     }
   }
 
-  def tryParseBoolean(field: String): DataType = {
+  private def tryParseBoolean(field: String, options: CSVOptions): DataType = {
     if ((allCatch opt field.toBoolean).isDefined) {
       BooleanType
     } else {
@@ -177,35 +190,61 @@ private[csv] object CSVTypeCast {
       datum: String,
       castType: DataType,
       nullable: Boolean = true,
-      nullValue: String = ""): Any = {
+      options: CSVOptions = CSVOptions()): Any = {
 
-    if (datum == nullValue && nullable && (!castType.isInstanceOf[StringType])) {
-      null
-    } else {
-      castType match {
-        case _: ByteType => datum.toByte
-        case _: ShortType => datum.toShort
-        case _: IntegerType => datum.toInt
-        case _: LongType => datum.toLong
-        case _: FloatType => Try(datum.toFloat)
-          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
-        case _: DoubleType => Try(datum.toDouble)
-          .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
-        case _: BooleanType => datum.toBoolean
-        case dt: DecimalType =>
+    castType match {
+      case _: ByteType => if (datum == options.nullValue && nullable) null else datum.toByte
+      case _: ShortType => if (datum == options.nullValue && nullable) null else datum.toShort
+      case _: IntegerType => if (datum == options.nullValue && nullable) null else datum.toInt
+      case _: LongType => if (datum == options.nullValue && nullable) null else datum.toLong
+      case _: FloatType =>
+        if (datum == options.nullValue && nullable) {
+          null
+        } else if (datum == options.nanValue) {
+          Float.NaN
+        } else if (datum == options.negativeInf) {
+          Float.NegativeInfinity
+        } else if (datum == options.positiveInf) {
+          Float.PositiveInfinity
+        } else {
+          Try(datum.toFloat)
+            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).floatValue())
+        }
+      case _: DoubleType =>
+        if (datum == options.nullValue && nullable) {
+          null
+        } else if (datum == options.nanValue) {
+          Double.NaN
+        } else if (datum == options.negativeInf) {
+          Double.NegativeInfinity
+        } else if (datum == options.positiveInf) {
+          Double.PositiveInfinity
+        } else {
+          Try(datum.toDouble)
+            .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
+        }
+      case _: BooleanType => datum.toBoolean
+      case dt: DecimalType =>
+        if (datum == options.nullValue && nullable) {
+          null
+        } else {
           val value = new BigDecimal(datum.replaceAll(",", ""))
           Decimal(value, dt.precision, dt.scale)
-        // TODO(hossein): would be good to support other common timestamp formats
-        case _: TimestampType =>
-          // This one will lose microseconds parts.
-          // See https://issues.apache.org/jira/browse/SPARK-10681.
-          DateTimeUtils.stringToTime(datum).getTime  * 1000L
-        // TODO(hossein): would be good to support other common date formats
-        case _: DateType =>
-          DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
-        case _: StringType => UTF8String.fromString(datum)
-        case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
-      }
+        }
+      case _: TimestampType if options.dateFormat != null =>
+        // This one will lose microseconds parts.
+        // See https://issues.apache.org/jira/browse/SPARK-10681.
+        options.dateFormat.parse(datum).getTime * 1000L
+      case _: TimestampType =>
+        // This one will lose microseconds parts.
+        // See https://issues.apache.org/jira/browse/SPARK-10681.
+        DateTimeUtils.stringToTime(datum).getTime  * 1000L
+      case _: DateType if options.dateFormat != null =>
+        DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime)
+      case _: DateType =>
+        DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+      case _: StringType => UTF8String.fromString(datum)
+      case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
     }
   }
 
