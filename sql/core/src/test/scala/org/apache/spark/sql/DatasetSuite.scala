@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
-import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -657,6 +657,22 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-15097: implicits on dataset's sqlContext can be imported") {
     val dataset = Seq(1, 2, 3).toDS()
     checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
+  }
+
+  test("runtime null check for RowEncoder") {
+    val schema = new StructType().add("i", IntegerType, nullable = false)
+    val df = sqlContext.range(10).map(l => {
+      if (l % 5 == 0) {
+        Row(null)
+      } else {
+        Row(l)
+      }
+    })(RowEncoder(schema))
+
+    val message = intercept[Exception] {
+      df.collect()
+    }.getMessage
+    assert(message.contains("The 0th field of input row cannot be null"))
   }
 }
 

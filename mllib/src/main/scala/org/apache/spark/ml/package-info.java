@@ -16,7 +16,7 @@
  */
 
 /**
- * Spark ML is a BETA component that adds a new set of machine learning APIs to let users quickly
+ * Spark ML is a component that adds a new set of machine learning APIs to let users quickly
  * assemble and configure practical machine learning pipelines.
  */
 @Experimental
