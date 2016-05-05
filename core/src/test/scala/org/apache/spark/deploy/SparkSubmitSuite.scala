@@ -652,7 +652,7 @@ class SparkSubmitSuite
     val sparkSubmitFile = if (Utils.isWindows) {
       new File("..\\bin\\spark-submit.cmd")
     } else {
-      new File("./bin/spark-submit.cmd")
+      new File("../bin/spark-submit")
     }
     val process = Utils.executeCommand(
       Seq(sparkSubmitFile.getCanonicalPath) ++ args,
