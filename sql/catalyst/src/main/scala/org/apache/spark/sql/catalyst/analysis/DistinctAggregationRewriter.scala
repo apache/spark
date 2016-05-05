@@ -100,13 +100,10 @@ import org.apache.spark.sql.types.IntegerType
  * we could improve this in the current rule by applying more advanced expression cannocalization
  * techniques.
  */
-case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalPlan] {
+object DistinctAggregationRewriter extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-    case p if !p.resolved => p
-    // We need to wait until this Aggregate operator is resolved.
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformUp  {
     case a: Aggregate => rewrite(a)
-    case p => p
   }
 
   def rewrite(a: Aggregate): Aggregate = {
@@ -123,15 +120,7 @@ case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalP
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
-      // When the flag is set to specialize single distinct agg planning,
-      // we will rely on our Aggregation strategy to handle queries with a single
-      // distinct column.
-      distinctAggGroups.size > 1
-    } else {
-      distinctAggGroups.size >= 1
-    }
-    if (shouldRewrite) {
+    if (distinctAggGroups.size > 1) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {

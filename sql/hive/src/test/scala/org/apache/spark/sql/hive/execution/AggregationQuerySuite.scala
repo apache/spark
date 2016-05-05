@@ -930,6 +930,69 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(11) :: Nil)
     }
   }
+
+  test("SPARK-14495: two distinct aggregation with having clause of one distinct aggregation") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |select key, count(distinct value1), count(distinct value2)
+          |from agg2 group by key
+          |having count(distinct value1) > 0
+        """.stripMargin),
+      Seq(
+        Row(null, 3, 3),
+        Row(1, 2, 3),
+        Row(2, 2, 1)
+      )
+    )
+  }
+
+  test("SPARK-14495: one distinct aggregration with having clause of one distinct aggregation") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |select key, count(distinct value1)
+          |from agg2 group by key
+          |having count(distinct value1) > 0
+        """.stripMargin),
+      Seq(
+        Row(null, 3),
+        Row(1, 2),
+        Row(2, 2)
+      )
+    )
+  }
+
+  test("SPARK-14495: two distinct aggregration with having clause of two distinct aggregation") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |select key, count(distinct value1), count(distinct value2)
+          |from agg2 group by key
+          |having count(distinct value1) > 0 and count(distinct value2) = 3
+        """.stripMargin),
+      Seq(
+        Row(null, 3, 3),
+        Row(1, 2, 3)
+      )
+    )
+  }
+
+  test("SPARK-14495: two distinct aggregration with having clause of non-distinct aggregation") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |select key, count(distinct value1), count(distinct value2)
+          |from agg2 group by key
+          |having count(value1) > 0
+        """.stripMargin),
+      Seq(
+        Row(null, 3, 3),
+        Row(1, 2, 3),
+        Row(2, 2, 1)
+      )
+    )
+  }
 }
 
 
