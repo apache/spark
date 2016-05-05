@@ -85,7 +85,7 @@ class BinaryClassificationMetricsSuite extends SparkFunSuite with MLlibTestSpark
     val prCurve = Seq((0.0, 1.0)) ++ pr
     val f1 = pr.map { case (r, p) => 2.0 * (p * r) / (p + r)}
     val f2 = pr.map { case (r, p) => 5.0 * (p * r) / (4.0 * p + r)}
-    val accuracies = numTruePosNeg.map (t => t.toDouble / numAllCounts)
+    val accuracies = numTruePosNeg.map(t => t.toDouble / numAllCounts)
 
     validateMetrics(metrics, thresholds, rocCurve, prCurve, f1, f2, precisions, recalls, accuracies)
   }
