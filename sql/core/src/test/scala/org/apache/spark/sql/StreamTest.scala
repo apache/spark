@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, Ro
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
 /**
  * A framework for implementing tests for streaming queries and sources.
@@ -138,11 +138,17 @@ trait StreamTest extends QueryTest with Timeouts {
     private def operatorName = if (lastOnly) "CheckLastBatch" else "CheckAnswer"
   }
 
-  /** Stops the stream.  It must currently be running. */
+  /** Stops the stream. It must currently be running. */
   case object StopStream extends StreamAction with StreamMustBeRunning
 
-  /** Starts the stream, resuming if data has already been processed.  It must not be running. */
-  case object StartStream extends StreamAction
+  /** Starts the stream, resuming if data has already been processed. It must not be running. */
+  case class StartStream(
+      trigger: Trigger = ProcessingTime(0),
+      triggerClock: Clock = new SystemClock)
+    extends StreamAction
+
+  /** Advance the trigger clock's time manually. */
+  case class AdvanceManualClock(timeToAdd: Long) extends StreamAction
 
   /** Signals that a failure is expected and should not kill the test. */
   case class ExpectFailure[T <: Throwable : ClassTag]() extends StreamAction {
@@ -199,8 +205,8 @@ trait StreamTest extends QueryTest with Timeouts {
 
     // If the test doesn't manually start the stream, we do it automatically at the beginning.
     val startedManually =
-      actions.takeWhile(!_.isInstanceOf[StreamMustBeRunning]).contains(StartStream)
-    val startedTest = if (startedManually) actions else StartStream +: actions
+      actions.takeWhile(!_.isInstanceOf[StreamMustBeRunning]).exists(_.isInstanceOf[StartStream])
+    val startedTest = if (startedManually) actions else StartStream() +: actions
 
     def testActions = actions.zipWithIndex.map {
       case (a, i) =>
@@ -280,7 +286,7 @@ trait StreamTest extends QueryTest with Timeouts {
     try {
       startedTest.foreach { action =>
         action match {
-          case StartStream =>
+          case StartStream(trigger, triggerClock) =>
             verify(currentStream == null, "stream already running")
             lastStream = currentStream
             currentStream =
@@ -291,6 +297,8 @@ trait StreamTest extends QueryTest with Timeouts {
                   metadataRoot,
                   stream,
                   sink,
+                  trigger,
+                  triggerClock,
                   outputMode = outputMode)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
@@ -300,6 +308,13 @@ trait StreamTest extends QueryTest with Timeouts {
                   testThread.interrupt()
                 }
               })
+
+          case AdvanceManualClock(timeToAdd) =>
+            verify(currentStream != null,
+                   "can not advance manual clock when a stream is not running")
+            verify(currentStream.triggerClock.isInstanceOf[ManualClock],
+                   s"can not advance clock of type ${currentStream.triggerClock.getClass}")
+            currentStream.triggerClock.asInstanceOf[ManualClock].advance(timeToAdd)
 
           case StopStream =>
             verify(currentStream != null, "can not stop a stream that is not running")
@@ -470,7 +485,7 @@ trait StreamTest extends QueryTest with Timeouts {
             addRandomData()
 
           case _ => // StartStream
-            actions += StartStream
+            actions += StartStream()
             running = true
         }
       } else {
@@ -488,7 +503,7 @@ trait StreamTest extends QueryTest with Timeouts {
         }
       }
     }
-    if(!running) { actions += StartStream }
+    if(!running) { actions += StartStream() }
     addCheck()
     testStream(ds)(actions: _*)
   }

@@ -291,7 +291,7 @@ public class JavaDatasetSuite implements Serializable {
       unioned.collectAsList());
 
     Dataset<String> subtracted = ds.except(ds2);
-    Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
+    Assert.assertEquals(Arrays.asList("abc"), subtracted.collectAsList());
   }
 
   private static <T> Set<T> toSet(List<T> records) {

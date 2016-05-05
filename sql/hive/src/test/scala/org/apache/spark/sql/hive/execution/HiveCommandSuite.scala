@@ -125,7 +125,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message1 = intercept[AnalysisException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("Table or View badtable not found in database default"))
+    assert(message1.contains("'badtable' not found in database 'default'"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
@@ -266,14 +266,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       intercept[AnalysisException] {
         sql(s"""LOAD DATA LOCAL INPATH "$incorrectUri" INTO TABLE non_part_table""")
       }
-
-      // Unset default URI Scheme and Authority: throw exception
-      val originalFsName = hiveContext.sessionState.hadoopConf.get("fs.default.name")
-      hiveContext.sessionState.hadoopConf.unset("fs.default.name")
-      intercept[AnalysisException] {
-        sql(s"""LOAD DATA INPATH "$testData" INTO TABLE non_part_table""")
-      }
-      hiveContext.sessionState.hadoopConf.set("fs.default.name", originalFsName)
     }
   }
 
@@ -297,7 +289,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message = intercept[NoSuchTableException] {
       sql("SHOW COLUMNS IN badtable FROM default")
     }.getMessage
-    assert(message.contains("badtable not found in database"))
+    assert(message.contains("'badtable' not found in database"))
   }
 
   test("show partitions - show everything") {

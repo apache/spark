@@ -712,8 +712,13 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
-   * Set a local property that affects jobs submitted from this thread, such as the
-   * Spark fair scheduler pool.
+   * Set a local property that affects jobs submitted from this thread, and all child
+   * threads, such as the Spark fair scheduler pool.
+   *
+   * These properties are inherited by child threads spawned from this thread. This
+   * may have unexpected consequences when working with thread pools. The standard java
+   * implementation of thread pools have worker threads spawn other worker threads.
+   * As a result, local properties may propagate unpredictably.
    */
   def setLocalProperty(key: String, value: String): Unit = sc.setLocalProperty(key, value)
 

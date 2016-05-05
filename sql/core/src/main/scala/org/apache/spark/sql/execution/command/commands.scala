@@ -23,7 +23,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
-import org.apache.spark.sql.catalyst.catalog.ExternalCatalog.TablePartitionSpec
+import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
@@ -183,8 +183,8 @@ case class ShowPartitionsCommand(
        * 2. If it is a datasource table.
        * 3. If it is a view or index table.
        */
-      if (tab.tableType == CatalogTableType.VIRTUAL_VIEW ||
-        tab.tableType == CatalogTableType.INDEX_TABLE) {
+      if (tab.tableType == CatalogTableType.VIEW ||
+        tab.tableType == CatalogTableType.INDEX) {
         throw new AnalysisException("SHOW PARTITIONS is not allowed on a view or index table: " +
           s"${tab.qualifiedName}")
       }

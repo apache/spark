@@ -58,7 +58,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
         ioschema = noSerdeIOSchema
-      )(hiveContext.sessionState.hiveconf),
+      ),
       rowsDf.collect())
   }
 
@@ -72,7 +72,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
         output = Seq(AttributeReference("a", StringType)()),
         child = child,
         ioschema = serdeIOSchema
-      )(hiveContext.sessionState.hiveconf),
+      ),
       rowsDf.collect())
   }
 
@@ -87,7 +87,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
           ioschema = noSerdeIOSchema
-        )(hiveContext.sessionState.hiveconf),
+        ),
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
@@ -104,7 +104,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
           output = Seq(AttributeReference("a", StringType)()),
           child = ExceptionInjectingOperator(child),
           ioschema = serdeIOSchema
-        )(hiveContext.sessionState.hiveconf),
+        ),
         rowsDf.collect())
     }
     assert(e.getMessage().contains("intentional exception"))
