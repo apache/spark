@@ -71,9 +71,6 @@ class SparkSession(object):
             .config("spark.some.config.option", "some-value") \
             .getOrCreate()
 
-    :param sparkContext: The :class:`SparkContext` backing this SparkSession.
-    :param jsparkSession: An optional JVM Scala SparkSession. If set, we do not instantiate a new
-        SparkSession in the JVM, instead we make all calls to this object.
     """
 
     class Builder(object):

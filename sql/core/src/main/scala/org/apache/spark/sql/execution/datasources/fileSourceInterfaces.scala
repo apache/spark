@@ -304,232 +304,31 @@ case class Partition(values: InternalRow, files: Seq[FileStatus])
  * as the partitioning characteristics of those files.
  */
 trait FileCatalog {
+
+  /** Returns the list of input paths from which the catalog will get files. */
   def paths: Seq[Path]
 
+  /** Returns the specification of the partitions inferred from the data. */
   def partitionSpec(): PartitionSpec
 
   /**
    * Returns all valid files grouped into partitions when the data is partitioned. If the data is
-   * unpartitioned, this will return a single partition with not partition values.
+   * unpartitioned, this will return a single partition with no partition values.
    *
-   * @param filters the filters used to prune which partitions are returned.  These filters must
+   * @param filters The filters used to prune which partitions are returned.  These filters must
    *                only refer to partition columns and this method will only return files
    *                where these predicates are guaranteed to evaluate to `true`.  Thus, these
    *                filters will not need to be evaluated again on the returned data.
    */
   def listFiles(filters: Seq[Expression]): Seq[Partition]
 
+  /** Returns all the valid files. */
   def allFiles(): Seq[FileStatus]
 
-  def getStatus(path: Path): Array[FileStatus]
-
+  /** Refresh the file listing */
   def refresh(): Unit
 }
 
-/**
- * A file catalog that caches metadata gathered by scanning all the files present in `paths`
- * recursively.
- *
- * @param parameters as set of options to control discovery
- * @param paths a list of paths to scan
- * @param partitionSchema an optional partition schema that will be use to provide types for the
- *                        discovered partitions
- */
-class HDFSFileCatalog(
-    sparkSession: SparkSession,
-    parameters: Map[String, String],
-    override val paths: Seq[Path],
-    partitionSchema: Option[StructType])
-  extends FileCatalog with Logging {
-
-  private val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(parameters)
-
-  var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
-  var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
-  var cachedPartitionSpec: PartitionSpec = _
-
-  def partitionSpec(): PartitionSpec = {
-    if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning(partitionSchema)
-    }
-
-    cachedPartitionSpec
-  }
-
-  refresh()
-
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
-    if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
-    } else {
-      prunePartitions(filters, partitionSpec()).map {
-        case PartitionDirectory(values, path) =>
-          Partition(
-            values,
-            getStatus(path).filterNot(_.getPath.getName startsWith "_"))
-      }
-    }
-  }
-
-  protected def prunePartitions(
-      predicates: Seq[Expression],
-      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
-    val PartitionSpec(partitionColumns, partitions) = partitionSpec
-    val partitionColumnNames = partitionColumns.map(_.name).toSet
-    val partitionPruningPredicates = predicates.filter {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
-
-    if (partitionPruningPredicates.nonEmpty) {
-      val predicate = partitionPruningPredicates.reduce(expressions.And)
-
-      val boundPredicate = InterpretedPredicate.create(predicate.transform {
-        case a: AttributeReference =>
-          val index = partitionColumns.indexWhere(a.name == _.name)
-          BoundReference(index, partitionColumns(index).dataType, nullable = true)
-      })
-
-      val selected = partitions.filter {
-        case PartitionDirectory(values, _) => boundPredicate(values)
-      }
-      logInfo {
-        val total = partitions.length
-        val selectedSize = selected.length
-        val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
-        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
-      }
-
-      selected
-    } else {
-      partitions
-    }
-  }
-
-  def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
-
-  def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
-
-  private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
-    } else {
-      val statuses: Seq[FileStatus] = paths.flatMap { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        logInfo(s"Listing $path on driver")
-        // Dummy jobconf to get to the pathFilter defined in configuration
-        val jobConf = new JobConf(hadoopConf, this.getClass)
-        val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-
-        val statuses = {
-          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
-          if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
-        }
-
-        statuses.map {
-          case f: LocatedFileStatus => f
-
-          // NOTE:
-          //
-          // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-          //   operations, calling `getFileBlockLocations` does no harm here since these file system
-          //   implementations don't actually issue RPC for this method.
-          //
-          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
-          //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
-          //   exceeds threshold.
-          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
-        }
-      }.filterNot { status =>
-        val name = status.getPath.getName
-        HadoopFsRelation.shouldFilterOut(name)
-      }
-
-      val (dirs, files) = statuses.partition(_.isDirectory)
-
-      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-      if (dirs.isEmpty) {
-        mutable.LinkedHashSet(files: _*)
-      } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
-      }
-    }
-  }
-
-  def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
-    // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = leafDirToChildrenFiles.keys.toSeq
-    schema match {
-      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
-        val spec = PartitioningUtils.parsePartitions(
-          leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = false,
-          basePaths = basePaths)
-
-        // Without auto inference, all of value in the `row` should be null or in StringType,
-        // we need to cast into the data type that user specified.
-        def castPartitionValuesToUserSchema(row: InternalRow) = {
-          InternalRow((0 until row.numFields).map { i =>
-            Cast(
-              Literal.create(row.getUTF8String(i), StringType),
-              userProvidedSchema.fields(i).dataType).eval()
-          }: _*)
-        }
-
-        PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
-          part.copy(values = castPartitionValuesToUserSchema(part.values))
-        })
-      case _ =>
-        PartitioningUtils.parsePartitions(
-          leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sparkSession.sessionState.conf.partitionColumnTypeInferenceEnabled(),
-          basePaths = basePaths)
-    }
-  }
-
-  /**
-   * Contains a set of paths that are considered as the base dirs of the input datasets.
-   * The partitioning discovery logic will make sure it will stop when it reaches any
-   * base path. By default, the paths of the dataset provided by users will be base paths.
-   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
-   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
-   * `something`. If users want to override the basePath. They can set `basePath` in the options
-   * to pass the new base path to the data source.
-   * For the above example, if the user-provided base path is `/path/`, the returned
-   * DataFrame will have the column of `something`.
-   */
-  private def basePaths: Set[Path] = {
-    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
-    userDefinedBasePath.getOrElse {
-      // If the user does not provide basePath, we will just use paths.
-      paths.toSet
-    }.map { hdfsPath =>
-      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    }
-  }
-
-  def refresh(): Unit = {
-    val files = listLeafFiles(paths)
-
-    leafFiles.clear()
-    leafDirToChildrenFiles.clear()
-
-    leafFiles ++= files.map(f => f.getPath -> f)
-    leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
-
-    cachedPartitionSpec = null
-  }
-
-  override def equals(other: Any): Boolean = other match {
-    case hdfs: HDFSFileCatalog => paths.toSet == hdfs.paths.toSet
-    case _ => false
-  }
-
-  override def hashCode(): Int = paths.toSet.hashCode()
-}
 
 /**
  * Helper methods for gathering metadata from HDFS.

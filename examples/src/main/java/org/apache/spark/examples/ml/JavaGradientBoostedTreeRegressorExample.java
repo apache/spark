@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
@@ -30,19 +28,17 @@ import org.apache.spark.ml.regression.GBTRegressionModel;
 import org.apache.spark.ml.regression.GBTRegressor;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaGradientBoostedTreeRegressorExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaGradientBoostedTreeRegressorExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder().appName("JavaGradientBoostedTreeRegressorExample").getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    Dataset<Row> data =
-        sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> data = spark.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
 
     // Automatically identify categorical features, and index them.
     // Set maxCategories so features with > 4 distinct values are treated as continuous.
@@ -87,6 +83,6 @@ public class JavaGradientBoostedTreeRegressorExample {
     System.out.println("Learned regression GBT model:\n" + gbtModel.toDebugString());
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }
