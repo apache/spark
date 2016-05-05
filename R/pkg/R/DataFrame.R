@@ -575,8 +575,8 @@ setMethod("unpersist",
 #'  \item{"Option 1"} {Return a new SparkDataFrame partitioned by
 #'                      the given columns into `numPartitions`.}
 #'  \item{"Option 2"} {Return a new SparkDataFrame that has exactly `numPartitions`.}
-#'  \item{"Option 3"} {Return a new SparkDataFrame partitioned by the given columns,
-#'                      preserving the existing number of partitions.}
+#'  \item{"Option 3"} {Return a new SparkDataFrame partitioned by the given column(s),
+#'                      using `spark.sql.shuffle.partitions` as number of partitions.}
 #'}
 #' @param x A SparkDataFrame
 #' @param numPartitions The number of partitions to use.
