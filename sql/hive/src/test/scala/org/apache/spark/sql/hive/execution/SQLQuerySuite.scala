@@ -1350,87 +1350,50 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("writing partitioned DataFrame to Hive compatible format") {
-    val schema = StructType(
-      Array(StructField("a", LongType, false),
-        StructField("b", StringType, false),
-        StructField("c", StringType, false),
-        StructField("d", IntegerType, false)))
+    withTable("testDFTABLE1") {
+      val schema = StructType(
+        Array(StructField("a", LongType, false),
+          StructField("b", StringType, false),
+          StructField("c", StringType, false),
+          StructField("d", IntegerType, false)))
 
-    val rdd = sparkContext.parallelize(Array(
-      Row(1L, "test", "NW", 1),
-      Row(2L, "test2", "SF", 1),
-      Row(3L, "test3", "NW", 1),
-      Row(1L, "test", "CA", 2)))
+      val rdd = sparkContext.parallelize(Array(
+        Row(1L, "test", "NW", 1),
+        Row(2L, "test2", "SF", 1),
+        Row(3L, "test3", "NW", 1),
+        Row(1L, "test", "CA", 2)))
 
-    val df = sqlContext.createDataFrame(rdd, schema)
-    df.write.partitionBy("c", "d").saveAsTable("testDFTABLE1")
+      val df = sqlContext.createDataFrame(rdd, schema)
+      df.write.partitionBy("c", "d").saveAsTable("testDFTABLE1")
 
-    val dfLoad = sqlContext.table("testDFTABLE1")
-    checkAnswer(dfLoad,
-      Row(1L, "test", "NW", 1) ::
-      Row(2L, "test2", "SF", 1) ::
-      Row(3L, "test3", "NW", 1) ::
-      Row(1L, "test", "CA", 2) :: Nil)
+      val dfLoad = sqlContext.table("testDFTABLE1")
+      checkAnswer(dfLoad,
+        Row(1L, "test", "NW", 1) ::
+        Row(2L, "test2", "SF", 1) ::
+        Row(3L, "test3", "NW", 1) ::
+        Row(1L, "test", "CA", 2) :: Nil)
 
-    assertResult(
-      Array(
-        Array("a", "bigint"),
-        Array("b", "string"),
-        Array("c", "string"),
-        Array("d", "int"),
-        Array(""),
-        Array("# Partition Information"),
-        Array("# col_name", "data_type", "comment"),
-        Array(""),
-        Array("c", "string"),
-        Array("d", "int"))
-    ) {
-      sql("DESCRIBE testDFTABLE1 PARTITION (c='NW', d='1')")
-        .select('result)
-        .collect()
-        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
-    }
+      // Appending data to Hive compatible format with new partitions
+      val rdd2 = sparkContext.parallelize(Array(
+        Row(2L, "test2", "NW", 1), // old partition
+        Row(4L, "test3", "SF", 1), // old partition
+        Row(1L, "test", "LA", 2),  // new partition
+        Row(2L, "test", "NY", 1))) // new partition
 
-    // Appending data to Hive compatible format with new partitions
-    val rdd2 = sparkContext.parallelize(Array(
-      Row(2L, "test2", "NW", 1), // old partition
-      Row(4L, "test3", "SF", 1), // old partition
-      Row(1L, "test", "LA", 2),  // new partition
-      Row(2L, "test", "NY", 1))) // new partition
+      val df2 = sqlContext.createDataFrame(rdd2, schema)
+      df2.write.mode(SaveMode.Append).partitionBy("c", "d").saveAsTable("testDFTABLE1")
 
-    val df2 = sqlContext.createDataFrame(rdd2, schema)
-    df2.write.mode(SaveMode.Append).partitionBy("c", "d").saveAsTable("testDFTABLE1")
-
-    val dfLoad2 = sqlContext.table("testDFTABLE1")
-    checkAnswer(dfLoad2,
-      Row(1L, "test", "NW", 1) ::
-      Row(2L, "test2", "SF", 1) ::
-      Row(3L, "test3", "NW", 1) ::
-      Row(1L, "test", "CA", 2) ::
-      Row(2L, "test2", "NW", 1) ::
-      Row(4L, "test3", "SF", 1) ::
-      Row(1L, "test", "LA", 2) ::
-      Row(2L, "test", "NY", 1) :: Nil)
-
-    assertResult(
-      Array(
-        Array("a", "bigint"),
-        Array("b", "string"),
-        Array("c", "string"),
-        Array("d", "int"),
-        Array(""),
-        Array("# Partition Information"),
-        Array("# col_name", "data_type", "comment"),
-        Array(""),
-        Array("c", "string"),
-        Array("d", "int"))
-    ) {
-      sql("DESCRIBE testDFTABLE1 PARTITION (c='LA', d='2')")
-        .select('result)
-        .collect()
-        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
-    }
-    sql("DROP TABLE testDFTABLE1")
+      val dfLoad2 = sqlContext.table("testDFTABLE1")
+      checkAnswer(dfLoad2,
+        Row(1L, "test", "NW", 1) ::
+        Row(2L, "test2", "SF", 1) ::
+        Row(3L, "test3", "NW", 1) ::
+        Row(1L, "test", "CA", 2) ::
+        Row(2L, "test2", "NW", 1) ::
+        Row(4L, "test3", "SF", 1) ::
+        Row(1L, "test", "LA", 2) ::
+        Row(2L, "test", "NY", 1) :: Nil)
+      }
   }
 
   test(
