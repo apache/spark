@@ -60,9 +60,7 @@ class MapWithStateSuite extends SparkFunSuite
       }
     } finally {
       super.afterAll()
-      if (checkpointDir != null) {
-        Utils.deleteRecursively(checkpointDir)
-      }
+      Utils.deleteRecursively(checkpointDir)
     }
   }
 
