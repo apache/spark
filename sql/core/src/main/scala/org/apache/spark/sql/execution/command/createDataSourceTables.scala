@@ -466,41 +466,44 @@ object CreateDataSourceTableUtils extends Logging {
 
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
-    val (hiveTable, hiveParts, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
+
+    val (hiveTable, hiveParts, logMessage) = dataSource.resolveRelation() match {
       case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, None, message)
 
-      case (Some(serde), relation: HadoopFsRelation) if relation.location.paths.length == 1 =>
-        val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
-        val hivePartitions = newHiveMetastorePartitions(relation, serde, options)
-        val message =
-          s"Persisting data source relation $qualifiedTableName with a single input path " +
-            s"into Hive metastore in Hive compatible format. Input path: " +
-            s"${relation.location.paths.head}."
-        (Some(hiveTable), Some(hivePartitions), message)
-
-      case (Some(serde), relation: HadoopFsRelation) =>
-        val message =
-          s"Persisting data source relation $qualifiedTableName with multiple input paths into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-            s"Input paths: " + relation.location.paths.mkString("\n", "\n", "")
-        (None, None, message)
-
-      case (Some(serde), _) =>
-        val message =
-          s"Data source relation $qualifiedTableName is not a " +
-            s"${classOf[HadoopFsRelation].getSimpleName}. Persisting it into Hive metastore " +
-            "in Spark SQL specific format, which is NOT compatible with Hive."
-        (None, None, message)
-
-      case _ =>
+      case _ if maybeSerDe.isEmpty =>
         val message =
           s"Couldn't find corresponding Hive SerDe for data source provider $provider. " +
             s"Persisting data source relation $qualifiedTableName into Hive metastore in " +
             s"Spark SQL specific format, which is NOT compatible with Hive."
+        (None, None, message)
+
+      case relation: HadoopFsRelation =>
+        if (relation.location.paths.length == 1) {
+          val serde = maybeSerDe.get
+          val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
+          val hivePartitions = newHiveMetastorePartitions(relation, serde, options)
+          val message =
+            s"Persisting data source relation $qualifiedTableName with a single input path " +
+              s"into Hive metastore in Hive compatible format. Input path: " +
+              s"${relation.location.paths.head}."
+          (Some(hiveTable), Some(hivePartitions), message)
+        } else {
+          val message =
+            s"Persisting data source relation $qualifiedTableName with multiple input paths into " +
+              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+              s"Input paths: " + relation.location.paths.mkString("\n", "\n", "")
+          (None, None, message)
+        }
+
+      case _ =>
+        val message =
+          s"Data source relation $qualifiedTableName is not a " +
+            s"${classOf[HadoopFsRelation].getSimpleName}. Persisting it into Hive metastore " +
+            "in Spark SQL specific format, which is NOT compatible with Hive."
         (None, None, message)
     }
 
