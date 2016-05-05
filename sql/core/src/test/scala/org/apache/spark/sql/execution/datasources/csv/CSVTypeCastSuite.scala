@@ -180,5 +180,13 @@ class CSVTypeCastSuite extends SparkFunSuite {
       CSVTypeCast.castTo("-", DoubleType, nullable = true, CSVOptions("nullValue", "-")))
     assertNull(
       CSVTypeCast.castTo("-", DecimalType.DoubleDecimal, true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", StringType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", TimestampType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", DateType, nullable = true, CSVOptions("nullValue", "-")))
+    assertNull(
+      CSVTypeCast.castTo("-", BooleanType, nullable = true, CSVOptions("nullValue", "-")))
   }
 }
