@@ -26,7 +26,7 @@ import org.apache.spark.sql.types.{StructField, StructType}
 // $example off$
 
 /**
- * An example demonstrating a LDA of ML pipeline.
+ * An example demonstrating a LDA.
  * Run with
  * {{{
  * bin/run-example ml.LDAExample
@@ -58,19 +58,21 @@ object LDAExample {
       .setMaxIter(10)
       .setFeaturesCol(FEATURES_COL)
     val model = lda.fit(dataset)
-    val transformed = model.transform(dataset)
 
     val ll = model.logLikelihood(dataset)
     val lp = model.logPerplexity(dataset)
+    println(ll)
+    println(lp)
 
     // describeTopics
     val topics = model.describeTopics(3)
 
     // Shows the result
+    val transformed = model.transform(dataset)
     topics.show(false)
     transformed.show(false)
-
     // $example off$
+
     spark.stop()
   }
 }
