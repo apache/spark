@@ -92,9 +92,7 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = $(metricName) match {
-    case _ => true
-  }
+  override def isLargerBetter: Boolean = true
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MulticlassClassificationEvaluator = defaultCopy(extra)
