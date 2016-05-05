@@ -156,7 +156,13 @@ private[spark] abstract class Task[T](
   def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
     if (context != null) {
       context.taskMetrics.accumulators().filter { a =>
-        !a.isZero && (!taskFailed || a.countFailedValues)
+        if (taskFailed) {
+          a.countFailedValues && !a.isZero
+        } else {
+          // RESULT_SIZE accumulator is always zero at executor, we need to send it back as its
+          // value will be updated at driver side if task not fail.
+          !a.isZero || a.name == Some(InternalAccumulator.RESULT_SIZE)
+        }
       }
     } else {
       Seq.empty

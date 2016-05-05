@@ -1089,9 +1089,6 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
     try {
       event.accumUpdates.foreach { updates =>
-        // We only send back updated accumulators
-        assert(!updates.isZero)
-
         val id = updates.id
         // Find the corresponding accumulator on the driver and update it
         val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
@@ -1100,8 +1097,8 @@ class DAGScheduler(
             throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
-        // Only display named accumulators on UI.
-        if (acc.name.isDefined) {
+        // To avoid UI cruft, ignore cases where value wasn't updated
+        if (acc.name.isDefined && !updates.isZero) {
           stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
           event.taskInfo.accumulables += acc.toInfo(Some(updates.value), Some(acc.value))
         }
