@@ -31,7 +31,10 @@ import org.apache.spark.sql.types.*;
 
 public class JavaSQLTransformerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaSQLTransformerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaSQLTransformerExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(
