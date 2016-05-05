@@ -691,6 +691,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
 
 /**
  * Returns the value of field at index `index` from the external row `child`.
+ * This class can be viewed as [[GetStructField]] for [[Row]]s instead of [[InternalRow]]s.
  *
  * Note that the input row and the field we try to get are both guaranteed to be not null, if they
  * are null, a runtime exception will be thrown.
@@ -715,9 +716,15 @@ case class GetExternalRowField(
 
     val code = s"""
       ${row.code}
-      if (${row.isNull} || ${row.value}.isNullAt($index)) {
-        throw new RuntimeException("Runtime null check failed.");
+
+      if (${row.isNull}) {
+        throw new RuntimeException("The input external row cannot be null.");
       }
+
+      if (${row.value}.isNullAt($index)) {
+        throw new RuntimeException("The ${index}th field of input row cannot be null.");
+      }
+
       final ${ctx.javaType(dataType)} ${ev.value} = $getField;
      """
     ev.copy(code = code, isNull = "false")
