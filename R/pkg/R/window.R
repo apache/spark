@@ -26,8 +26,11 @@
 #' @export
 #' @examples
 #' \dontrun{
-#'   window.partitionBy("col1", "col2")
-#'   window.partitionBy(df$col1, df$col2)
+#'   ws <- window.partitionBy("key1", "key2")
+#'   df1 <- select(df, over(lead("value", 1), ws))
+#'
+#'   ws <- window.partitionBy(df$key1, df$key2)
+#'   df1 <- select(df, over(lead("value", 1), ws))
 #' }
 setMethod("window.partitionBy",
           signature(col = "character"),
@@ -63,8 +66,11 @@ setMethod("window.partitionBy",
 #' @export
 #' @examples
 #' \dontrun{
-#'   window.orderBy("col1", "col2")
-#'   window.orderBy(df$col1, df$col2)
+#'   ws <- window.orderBy("key1", "key2")
+#'   df1 <- select(df, over(lead("value", 1), ws))
+#'
+#'   ws <- window.orderBy(df$key1, df$key2)
+#'   df1 <- select(df, over(lead("value", 1), ws))
 #' }
 setMethod("window.orderBy",
           signature(col = "character"),
