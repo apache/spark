@@ -39,6 +39,12 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   val dataSourceName: String
 
+  // This options below will be applied for the tests for reading in `HadoopFsRelationTest`.
+  val extraReadOptions = Map.empty[String, String]
+
+  // This options below will be applied for the tests for writing in `HadoopFsRelationTest`.
+  val extraWriteOptions = Map.empty[String, String]
+
   protected def supportsDataType(dataType: DataType): Boolean = true
 
   val dataSchema =
@@ -168,26 +174,44 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
   test("save()/load() - non-partitioned table - Overwrite") {
     withTempPath { file =>
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
 
       checkAnswer(
         sqlContext.read.format(dataSourceName)
           .option("path", file.getCanonicalPath)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(),
-        testDF.collect())
+        testDF)
     }
   }
 
   test("save()/load() - non-partitioned table - Append") {
     withTempPath { file =>
-      testDF.write.mode(SaveMode.Overwrite).format(dataSourceName).save(file.getCanonicalPath)
-      testDF.write.mode(SaveMode.Append).format(dataSourceName).save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Overwrite)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
+      testDF.write
+        .mode(SaveMode.Append)
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(file.getCanonicalPath)
 
       checkAnswer(
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath).orderBy("a"),
         testDF.union(testDF).orderBy("a").collect())
     }
@@ -215,6 +239,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.ErrorIfExists)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -222,6 +247,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkQueries(
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath))
     }
   }
@@ -230,12 +256,14 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -243,6 +271,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkAnswer(
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
     }
@@ -252,12 +281,14 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Append)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -265,6 +296,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkAnswer(
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath),
         partitionedTestDF.union(partitionedTestDF).collect())
     }
@@ -274,12 +306,14 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF1.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
 
       partitionedTestDF2.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Append)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -287,6 +321,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       checkAnswer(
         sqlContext.read.format(dataSourceName)
           .option("dataSchema", dataSchema.json)
+          .options(extraReadOptions)
           .load(file.getCanonicalPath),
         partitionedTestDF.collect())
     }
@@ -490,6 +525,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     withTempPath { file =>
       partitionedTestDF.write
         .format(dataSourceName)
+        .options(extraWriteOptions)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
         .save(file.getCanonicalPath)
@@ -498,6 +534,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .format(dataSourceName)
         .option("dataSchema", dataSchema.json)
         .option("basePath", file.getCanonicalPath)
+        .options(extraReadOptions)
         .load(s"${file.getCanonicalPath}/p1=*/p2=???")
 
       val expectedPaths = Set(
@@ -612,23 +649,33 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
     val df = sqlContext.range(1, 10).toDF("i")
     withTempPath { dir =>
-      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+      df.write
+        .mode("append")
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(dir.getCanonicalPath)
       // Because there data already exists,
       // this append should succeed because we will use the output committer associated
       // with file format and AlwaysFailOutputCommitter will not be used.
-      df.write.mode("append").format(dataSourceName).save(dir.getCanonicalPath)
+      df.write
+        .mode("append")
+        .format(dataSourceName)
+        .options(extraWriteOptions)
+        .save(dir.getCanonicalPath)
       checkAnswer(
         sqlContext.read
           .format(dataSourceName)
           .option("dataSchema", df.schema.json)
-          .options(extraOptions)
+          .options(extraOptions ++ extraReadOptions)
           .load(dir.getCanonicalPath),
         df.union(df))
 
       // This will fail because AlwaysFailOutputCommitter is used when we do append.
       intercept[Exception] {
         df.write.mode("overwrite")
-          .options(extraOptions).format(dataSourceName).save(dir.getCanonicalPath)
+          .options(extraOptions ++ extraWriteOptions)
+          .format(dataSourceName)
+          .save(dir.getCanonicalPath)
       }
     }
     withTempPath { dir =>
@@ -637,7 +684,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
       // and there is no existing data.
       intercept[Exception] {
         df.write.mode("append")
-          .options(extraOptions)
+          .options(extraOptions ++ extraWriteOptions)
           .format(dataSourceName)
           .save(dir.getCanonicalPath)
       }

@@ -223,6 +223,7 @@ private[csv] object CSVTypeCast {
           Try(datum.toDouble)
             .getOrElse(NumberFormat.getInstance(Locale.getDefault).parse(datum).doubleValue())
         }
+      case _: BooleanType if datum == options.nullValue && nullable => null
       case _: BooleanType => datum.toBoolean
       case dt: DecimalType =>
         if (datum == options.nullValue && nullable) {
@@ -231,6 +232,7 @@ private[csv] object CSVTypeCast {
           val value = new BigDecimal(datum.replaceAll(",", ""))
           Decimal(value, dt.precision, dt.scale)
         }
+      case _: TimestampType if datum == options.nullValue && nullable => null
       case _: TimestampType if options.dateFormat != null =>
         // This one will lose microseconds parts.
         // See https://issues.apache.org/jira/browse/SPARK-10681.
@@ -239,10 +241,12 @@ private[csv] object CSVTypeCast {
         // This one will lose microseconds parts.
         // See https://issues.apache.org/jira/browse/SPARK-10681.
         DateTimeUtils.stringToTime(datum).getTime  * 1000L
+      case _: DateType if datum == options.nullValue && nullable => null
       case _: DateType if options.dateFormat != null =>
         DateTimeUtils.millisToDays(options.dateFormat.parse(datum).getTime)
       case _: DateType =>
         DateTimeUtils.millisToDays(DateTimeUtils.stringToTime(datum).getTime)
+      case _: StringType if datum == options.nullValue && nullable => null
       case _: StringType => UTF8String.fromString(datum)
       case _ => throw new RuntimeException(s"Unsupported type: ${castType.typeName}")
     }

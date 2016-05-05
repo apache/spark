@@ -431,7 +431,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("nullable fields with user defined null value of \"null\"") {
-
     // year,make,model,comment,blank
     val dataSchema = StructType(List(
       StructField("year", IntegerType, nullable = true),
@@ -447,7 +446,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     verifyCars(cars, withHeader = true, checkValues = false)
     val results = cars.collect()
-    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", null, null))
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
