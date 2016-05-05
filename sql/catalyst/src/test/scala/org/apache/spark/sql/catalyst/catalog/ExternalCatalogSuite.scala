@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.io.File
-
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.SparkFunSuite
@@ -494,46 +494,68 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
   // File System operations
   // --------------------------------------------------------------------------
 
+  private lazy val fs = FileSystem.get(new Configuration)
+
+  private def exists(path: Path): Boolean = fs.exists(path)
+
   test("create/drop database should create/delete the directory") {
     val catalog = newBasicCatalog()
     val db = newDb("mydb")
     catalog.createDatabase(db, ignoreIfExists = false)
-    assert(new File(db.locationUri).exists())
+    assert(exists(new Path(db.locationUri)))
 
     catalog.dropDatabase("mydb", ignoreIfNotExists = false, cascade = false)
-    assert(!new File(db.locationUri).exists())
+    assert(!exists(new Path(db.locationUri)))
   }
 
   test("create/drop/rename table should create/delete/rename the directory") {
     val catalog = newBasicCatalog()
     val db = catalog.getDatabase("db1")
-    val table = newTable("myTable", "db1")
+    val table = CatalogTable(
+      identifier = TableIdentifier("myTable", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat(None, None, None, None, Map.empty),
+      schema = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string"))
+    )
+
     catalog.createTable("db1", table, ignoreIfExists = false)
-    assert(new File(db.locationUri, "myTable").exists())
+    assert(exists(new Path(db.locationUri, "myTable")))
 
     catalog.renameTable("db1", "myTable", "yourTable")
-    assert(!new File(db.locationUri, "myTable").exists())
-    assert(new File(db.locationUri, "yourTable").exists())
+    assert(!exists(new Path(db.locationUri, "myTable")))
+    assert(exists(new Path(db.locationUri, "yourTable")))
 
     catalog.dropTable("db1", "yourTable", ignoreIfNotExists = false)
-    assert(!new File(db.locationUri, "yourTable").exists())
+    assert(!exists(new Path(db.locationUri, "yourTable")))
   }
 
   test("create/drop/rename partitions should create/delete/rename the directory") {
     val catalog = newBasicCatalog()
-    val databaseDir = catalog.getDatabase("db2").locationUri
+    val databaseDir = catalog.getDatabase("db1").locationUri
+    val table = CatalogTable(
+      identifier = TableIdentifier("myTable", Some("db1")),
+      tableType = CatalogTableType.MANAGED,
+      storage = CatalogStorageFormat(None, None, None, None, Map.empty),
+      schema = Seq(
+        CatalogColumn("col1", "int"),
+        CatalogColumn("col2", "string"),
+        CatalogColumn("a", "int"),
+        CatalogColumn("b", "string")),
+      partitionColumnNames = Seq("a", "b")
+    )
+    catalog.createTable("db1", table, ignoreIfExists = false)
 
-    catalog.createPartitions("db2", "tbl1", Seq(part1, part2), ignoreIfExists = false)
-    assert(new File(databaseDir, "tbl1/a=1/b=2").exists())
-    assert(new File(databaseDir, "tbl1/a=3/b=4").exists())
+    catalog.createPartitions("db1", "myTable", Seq(part1, part2), ignoreIfExists = false)
+    assert(exists(new Path(databaseDir, "myTable/a=1/b=2")))
+    assert(exists(new Path(databaseDir, "myTable/a=3/b=4")))
 
-    catalog.renamePartitions("db2", "tbl1", Seq(part1.spec), Seq(part3.spec))
-    assert(!new File(databaseDir, "tbl1/a=1/b=2").exists())
-    assert(new File(databaseDir, "tbl1/a=5/b=6").exists())
+    catalog.renamePartitions("db1", "myTable", Seq(part1.spec), Seq(part3.spec))
+    assert(!exists(new Path(databaseDir, "myTable/a=1/b=2")))
+    assert(exists(new Path(databaseDir, "myTable/a=5/b=6")))
 
-    catalog.dropPartitions("db2", "tbl1", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
-    assert(!new File(databaseDir, "tbl1/a=3/b=4").exists())
-    assert(!new File(databaseDir, "tbl1/a=5/b=6").exists())
+    catalog.dropPartitions("db1", "myTable", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
+    assert(!exists(new Path(databaseDir, "myTable/a=3/b=4")))
+    assert(!exists(new Path(databaseDir, "myTable/a=5/b=6")))
   }
 }
 

@@ -194,7 +194,7 @@ class InMemoryCatalog extends ExternalCatalog {
       ignoreIfNotExists: Boolean): Unit = synchronized {
     requireDbExists(db)
     if (tableExists(db, table)) {
-      if (catalog(db).tables(table).table.tableType == CatalogTableType.MANAGED) {
+      if (getTable(db, table).tableType == CatalogTableType.MANAGED) {
         val dir = new Path(catalog(db).db.locationUri, table)
         try {
           fs.delete(dir, true)
@@ -303,10 +303,13 @@ class InMemoryCatalog extends ExternalCatalog {
     }
 
     val tableDir = new Path(catalog(db).db.locationUri, table)
+    val partitionColumnNames = getTable(db, table).partitionColumnNames
     // TODO: we should follow hive to roll back if one partition path failed to create.
     parts.foreach { p =>
       if (p.storage.locationUri.isEmpty) {
-        val partitionPath = p.spec.map { case (k, v) => s"$k=$v" }.mkString("/")
+        val partitionPath = partitionColumnNames.flatMap(p.spec.get).map {
+          case (k, v) => s"$k=$v"
+        }.mkString("/")
         try {
           fs.mkdirs(new Path(tableDir, partitionPath))
         } catch {
@@ -335,10 +338,13 @@ class InMemoryCatalog extends ExternalCatalog {
     }
 
     val tableDir = new Path(catalog(db).db.locationUri, table)
+    val partitionColumnNames = getTable(db, table).partitionColumnNames
     // TODO: we should follow hive to roll back if one partition path failed to delete.
     partSpecs.foreach { p =>
       if (existingParts(p).storage.locationUri.isEmpty) {
-        val partitionPath = p.map { case (k, v) => s"$k=$v" }.mkString("/")
+        val partitionPath = partitionColumnNames.flatMap(p.get).map {
+          case (k, v) => s"$k=$v"
+        }.mkString("/")
         try {
           fs.delete(new Path(tableDir, partitionPath), true)
         } catch {
@@ -358,16 +364,21 @@ class InMemoryCatalog extends ExternalCatalog {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
 
     val tableDir = new Path(catalog(db).db.locationUri, table)
+    val partitionColumnNames = getTable(db, table).partitionColumnNames
     // TODO: we should follow hive to roll back if one partition path failed to rename.
     specs.zip(newSpecs).foreach { case (oldSpec, newSpec) =>
       val newPart = getPartition(db, table, oldSpec).copy(spec = newSpec)
       val existingParts = catalog(db).tables(table).partitions
 
       if (newPart.storage.locationUri.isEmpty) {
-        val oldPath = new Path(tableDir, oldSpec.map { case (k, v) => s"$k=$v" }.mkString("/"))
-        val newPath = new Path(tableDir, newSpec.map { case (k, v) => s"$k=$v" }.mkString("/"))
+        val oldPath = partitionColumnNames.flatMap(oldSpec.get).map {
+          case (k, v) => s"$k=$v"
+        }.mkString("/")
+        val newPath = partitionColumnNames.flatMap(newSpec.get).map {
+          case (k, v) => s"$k=$v"
+        }.mkString("/")
         try {
-          fs.rename(oldPath, newPath)
+          fs.rename(new Path(tableDir, oldPath), new Path(tableDir, newPath))
         } catch {
           case e: IOException =>
             throw new SparkException(s"Unable to rename partition path $oldPath", e)
