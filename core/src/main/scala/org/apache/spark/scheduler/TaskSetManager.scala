@@ -718,9 +718,10 @@ private[spark] class TaskSetManager(
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
     if (successful(index)) {
-      logWarning(
-        s"Task ${info.id} in stage ${taskSet.id} (TID $tid) will not be re-queued " +
-        "as another attempt has already succeeded")
+      logInfo(
+        s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, " +
+        "but another instance of the task has already succeeded, " +
+        "so not re-queuing the task to be re-executed.")
     } else {
       addPendingTask(index)
     }
