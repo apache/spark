@@ -60,7 +60,7 @@ case class CreateDatabase(
       CatalogDatabase(
         databaseName,
         comment.getOrElse(""),
-        catalog.createDatabasePath(databaseName, path),
+        path.getOrElse(catalog.getDefaultDBPath(databaseName)),
         props),
       ifNotExists)
     Seq.empty[Row]

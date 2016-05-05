@@ -46,11 +46,11 @@ class HiveDDLSuite
       tableIdentifier: TableIdentifier,
       dbPath: Option[String] = None): Boolean = {
     val expectedTablePath =
-    if (dbPath.isEmpty) {
-      hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
-    } else {
-      new Path(new Path(dbPath.get), tableIdentifier.table).toString
-    }
+      if (dbPath.isEmpty) {
+        hiveContext.sessionState.catalog.hiveDefaultTableFilePath(tableIdentifier)
+      } else {
+        new Path(new Path(dbPath.get), tableIdentifier.table).toString
+      }
     val filesystemPath = new Path(expectedTablePath)
     val fs = filesystemPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
@@ -386,8 +386,7 @@ class HiveDDLSuite
     val catalog = sqlContext.sessionState.catalog
     val dbName = "db1"
     val tabName = "tab1"
-    val path = "file:" + catalog.createDatabasePath(dbName, Option(tmpDir.toString))
-    val fs = new Path(path).getFileSystem(hiveContext.sessionState.newHadoopConf())
+    val fs = new Path(tmpDir.toString).getFileSystem(hiveContext.sessionState.newHadoopConf())
     withTable(tabName) {
       if (dirExists) {
         assert(tmpDir.listFiles.isEmpty)
@@ -396,10 +395,11 @@ class HiveDDLSuite
       }
       sql(s"CREATE DATABASE $dbName Location '$tmpDir'")
       val db1 = catalog.getDatabaseMetadata(dbName)
+      val dbPath = "file:" + tmpDir
       assert(db1 == CatalogDatabase(
         dbName,
         "",
-        path,
+        if (dbPath.endsWith(File.separator)) dbPath.dropRight(1) else dbPath,
         Map.empty))
       sql("USE db1")
 
@@ -427,61 +427,74 @@ class HiveDDLSuite
     }
   }
 
-  test("create/drop database - RESTRICT") {
-    val catalog = sqlContext.sessionState.catalog
-    val dbName = "db1"
-    val path = "file:" + catalog.createDatabasePath(dbName, None)
-    val dbPath = new Path(path)
-    val fs = dbPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
-    // the database directory does not exist
-    assert(!fs.exists(dbPath))
-
-    sql(s"CREATE DATABASE $dbName")
-    val db1 = catalog.getDatabaseMetadata(dbName)
-    assert(db1 == CatalogDatabase(
-      dbName,
-      "",
-      path,
-      Map.empty))
-    // the database directory was created
-    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
-    sql("USE db1")
-
-    val tabName = "tab1"
-    assert(!tableDirectoryExists(TableIdentifier(tabName), Option(path)))
-    sql(s"CREATE TABLE $tabName as SELECT 1")
-    assert(tableDirectoryExists(TableIdentifier(tabName), Option(path)))
-    sql(s"DROP TABLE $tabName")
-    assert(!tableDirectoryExists(TableIdentifier(tabName), Option(path)))
-
-    sql(s"DROP DATABASE $dbName")
-    // the database directory was removed
-    assert(!fs.exists(dbPath))
+  private def appendTrailingSlash(path: String): String = {
+    if (!path.endsWith(File.separator)) path + File.separator else path
   }
 
-  test("create/drop database - CASCADE") {
-    val catalog = sqlContext.sessionState.catalog
-    val dbName = "db1"
-    val path = catalog.createDatabasePath(dbName, None)
-    val dbPath = new Path(path)
-    val fs = dbPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
-    // the database directory does not exist
-    assert(!fs.exists(dbPath))
+  private def dropDatabase(cascade: Boolean, tableExists: Boolean): Unit = {
+    withTempPath { tmpDir =>
+      val path = tmpDir.toString
+      withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
+        val dbName = "db1"
+        val fs = new Path(path).getFileSystem(hiveContext.sessionState.newHadoopConf())
+        val dbPath = new Path(path)
+        // the database directory does not exist
+        assert(!fs.exists(dbPath))
 
-    sql(s"CREATE DATABASE $dbName")
-    assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
-    sql("USE db1")
+        sql(s"CREATE DATABASE $dbName")
+        val catalog = sqlContext.sessionState.catalog
+        val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
+        val db1 = catalog.getDatabaseMetadata(dbName)
+        assert(db1 == CatalogDatabase(
+          dbName,
+          "",
+          expectedDBLocation,
+          Map.empty))
+        // the database directory was created
+        assert(fs.exists(dbPath) && fs.isDirectory(dbPath))
+        sql(s"USE $dbName")
 
-    val tabName = "tab1"
-    assert(!tableDirectoryExists(TableIdentifier(tabName), Option(path)))
-    sql(s"CREATE TABLE $tabName as SELECT 1")
-    assert(tableDirectoryExists(TableIdentifier(tabName), Option(path)))
-    sql(s"DROP TABLE $tabName")
-    assert(!tableDirectoryExists(TableIdentifier(tabName), Option(path)))
+        val tabName = "tab1"
+        assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+        sql(s"CREATE TABLE $tabName as SELECT 1")
+        assert(tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
 
-    sql(s"DROP DATABASE $dbName CASCADE")
-    // the database directory was removed and the inclusive table directories are also removed
-    assert(!fs.exists(dbPath))
+        if (!tableExists) {
+          sql(s"DROP TABLE $tabName")
+          assert(!tableDirectoryExists(TableIdentifier(tabName), Option(expectedDBLocation)))
+        }
+
+        val sqlDropDatabase = s"DROP DATABASE $dbName ${if (cascade) "CASCADE" else "RESTRICT"}"
+        if (tableExists && !cascade) {
+          val message = intercept[AnalysisException] {
+            sql(sqlDropDatabase)
+          }.getMessage
+          assert(message.contains(s"Database $dbName is not empty. One or more tables exist."))
+          // the database directory was not removed
+          assert(fs.exists(new Path(expectedDBLocation)))
+        } else {
+          sql(sqlDropDatabase)
+          // the database directory was removed and the inclusive table directories are also removed
+          assert(!fs.exists(new Path(expectedDBLocation)))
+        }
+      }
+    }
+  }
+
+  test("drop database containing tables - CASCADE") {
+    dropDatabase(cascade = true, tableExists = true)
+  }
+
+  test("drop an empty database - CASCADE") {
+    dropDatabase(cascade = true, tableExists = false)
+  }
+
+  test("drop database containing tables - RESTRICT") {
+    dropDatabase(cascade = false, tableExists = true)
+  }
+
+  test("drop an empty database - RESTRICT") {
+    dropDatabase(cascade = false, tableExists = false)
   }
 
   test("drop default database") {
