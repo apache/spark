@@ -49,6 +49,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
                          HasElasticNetParam, HasFitIntercept, HasStandardization, HasThresholds,
                          HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Logistic regression.
     Currently, this class only supports binary classification.
 
@@ -211,6 +213,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
 
 class LogisticRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by LogisticRegression.
 
     .. versionadded:: 1.3.0
@@ -492,6 +496,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              TreeClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
                              JavaMLReadable):
     """
+    .. note:: Experimental
+
     `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
@@ -586,6 +592,8 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 @inherit_doc
 class DecisionTreeClassificationModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by DecisionTreeClassifier.
 
     .. versionadded:: 1.4.0
@@ -714,6 +722,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
+
     Model fitted by RandomForestClassifier.
 
     .. versionadded:: 1.4.0
@@ -740,6 +749,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                     GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
                     JavaMLReadable):
     """
+    .. note:: Experimental
+
     `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
     learning algorithm for classification.
     It supports binary labels, as well as both continuous and categorical features.
@@ -843,6 +854,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
 
 class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by GBTClassifier.
 
     .. versionadded:: 1.4.0
