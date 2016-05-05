@@ -18,15 +18,12 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.recommendation.ALS
 // $example off$
 import org.apache.spark.sql.SparkSession
-// $example on$
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
-// $example off$
 
 object ALSExample {
 
