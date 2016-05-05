@@ -2473,4 +2473,29 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
     }
   }
+
+  test("check code injection is prevented") {
+    // `\u002A/` is `*/`
+    // So, if those characters are in the query, we need to escape them.
+    val literal =
+      """|\\\\u002A/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    val expected =
+      """|\\u002A/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+  }
 }

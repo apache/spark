@@ -162,7 +162,8 @@ package object util {
   def toCommentSafeString(str: String): String = {
     val len = math.min(str.length, 128)
     val suffix = if (str.length > len) "..." else ""
-    str.substring(0, len).replace("*/", "\\*\\/").replace("\\u", "\\\\u") + suffix
+    str.substring(0, len).replace("*/", "\\*\\/")
+      .replaceAll("(^|[^\\\\])(\\\\(\\\\\\\\)*u)", "$1\\\\$2") + suffix
   }
 
   /* FIX ME

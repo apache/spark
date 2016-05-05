@@ -194,4 +194,11 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       true,
       InternalRow(UTF8String.fromString("\\u")))
   }
+
+  test("check compilation error doesn't occur caused by specific literal") {
+    // `\u002A/` is `*/`
+    // So, if those characters are in the query, we need to escape them.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002A/Compilation error occurs/*", StringType) :: Nil)
+  }
 }
