@@ -17,19 +17,19 @@
 
 # window.R - Utility functions for defining window in DataFrames
 
-#' Window.partitionBy
+#' window.partitionBy
 #'
 #' Creates a WindowSpec with the partitioning defined.
 #'
-#' @rdname Window.partitionBy
-#' @name Window.partitionBy
+#' @rdname window.partitionBy
+#' @name window.partitionBy
 #' @export
 #' @examples
 #' \dontrun{
-#'   Window.partitionBy("col1", "col2")
-#'   Window.partitionBy(df$col1, df$col2)
+#'   window.partitionBy("col1", "col2")
+#'   window.partitionBy(df$col1, df$col2)
 #' }
-setMethod("Window.partitionBy",
+setMethod("window.partitionBy",
           signature(col = "character"),
           function(col, ...) {
             windowSpec(
@@ -39,10 +39,10 @@ setMethod("Window.partitionBy",
                           list(...)))
           })
 
-#' @rdname Window.partitionBy
-#' @name Window.partitionBy
+#' @rdname window.partitionBy
+#' @name window.partitionBy
 #' @export
-setMethod("Window.partitionBy",
+setMethod("window.partitionBy",
           signature(col = "Column"),
           function(col, ...) {
             jcols <- lapply(list(col, ...), function(c) {
@@ -54,19 +54,19 @@ setMethod("Window.partitionBy",
                           jcols))
           })
 
-#' Window.orderBy
+#' window.orderBy
 #'
 #' Creates a WindowSpec with the ordering defined.
 #'
-#' @rdname Window.orderBy
-#' @name Window.orderBy
+#' @rdname window.orderBy
+#' @name window.orderBy
 #' @export
 #' @examples
 #' \dontrun{
-#'   Window.orderBy("col1", "col2")
-#'   Window.orderBy(df$col1, df$col2)
+#'   window.orderBy("col1", "col2")
+#'   window.orderBy(df$col1, df$col2)
 #' }
-setMethod("Window.orderBy",
+setMethod("window.orderBy",
           signature(col = "character"),
           function(col, ...) {
             windowSpec(
@@ -76,10 +76,10 @@ setMethod("Window.orderBy",
                           list(...)))
           })
 
-#' @rdname Window.orderBy
-#' @name Window.orderBy
+#' @rdname window.orderBy
+#' @name window.orderBy
 #' @export
-setMethod("Window.orderBy",
+setMethod("window.orderBy",
           signature(col = "Column"),
           function(col, ...) {
             jcols <- lapply(list(col, ...), function(c) {

@@ -21,10 +21,10 @@
 NULL
 
 #' @title S4 class that represents a WindowSpec
-#' @description WindowSpec can be created by using Window.partitionBy()
-#'              or Window.orderBy()
+#' @description WindowSpec can be created by using window.partitionBy()
+#'              or window.orderBy()
 #' @rdname WindowSpec
-#' @seealso \link{Window.partitionBy}, \link{Window.orderBy}
+#' @seealso \link{window.partitionBy}, \link{window.orderBy}
 #'
 #' @param sws A Java object reference to the backing Scala WindowSpec
 #' @export

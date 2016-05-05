@@ -747,13 +747,13 @@ setGeneric("rowsBetween", function(x, start, end) { standardGeneric("rowsBetween
 #' @export
 setGeneric("rangeBetween", function(x, start, end) { standardGeneric("rangeBetween") })
 
-#' @rdname Window.partitionBy
+#' @rdname window.partitionBy
 #' @export
-setGeneric("Window.partitionBy", function(col, ...) { standardGeneric("Window.partitionBy") })
+setGeneric("window.partitionBy", function(col, ...) { standardGeneric("window.partitionBy") })
 
-#' @rdname Window.orderBy
+#' @rdname window.orderBy
 #' @export
-setGeneric("Window.orderBy", function(col, ...) { standardGeneric("Window.orderBy") })
+setGeneric("window.orderBy", function(col, ...) { standardGeneric("window.orderBy") })
 
 ###################### Expression Function Methods ##########################
 

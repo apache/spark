@@ -2130,7 +2130,7 @@ test_that("Window functions on a DataFrame", {
   df <- createDataFrame(hiveCtx,
                         list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
                         schema = c("key", "value"))
-  ws <- orderBy(Window.partitionBy("key"), "value")
+  ws <- orderBy(window.partitionBy("key"), "value")
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expected <- data.frame(key = c(1L, NA, 2L, NA),
@@ -2138,7 +2138,17 @@ test_that("Window functions on a DataFrame", {
                        stringsAsFactors = FALSE)
   expect_equal(result, expected)
 
-  ws <- partitionBy(Window.orderBy("value"), "key")
+  ws <- orderBy(window.partitionBy(df$key), df$value)
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy("value"), "key")
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy(df$value), df$key)
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
