@@ -159,7 +159,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Gets the value of threshold or attempt to convert thresholds to threshold if set, or default
         value if neither are set.
-        This conversion is equivalent to: :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
+        This conversion is equivalent to:
+        :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
         """
         self._checkThresholdConsistency()
         if self.isSet(self.thresholds):
