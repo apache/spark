@@ -514,9 +514,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .mode(SaveMode.Overwrite)
         .save(subdir.getCanonicalPath)
 
-      require(subdir.exists)
-      require(subdir.listFiles().exists(!_.isDirectory))
-
       // Inferring schema should throw error as it should not find any file to infer
       val e = intercept[Exception] {
         sqlContext.read.format(dataSourceName).load(dir.getCanonicalPath)
@@ -544,14 +541,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       // Verify that reading by path 'dir/' gives empty results as there are no files in 'file'
       // and it should not pick up files in 'dir/subdir'
+      require(subdir.exists)
+      require(subdir.listFiles().exists(!_.isDirectory))
       testWithPath(dir, Seq.empty)
 
       // Verify that if there is data in dir, then reading by path 'dir/' reads only dataInDir
       dataInDir.write
         .format(dataSourceName)
-        .mode(SaveMode.Ignore)
+        .mode(SaveMode.Append)   // append to prevent subdir from being deleted
         .save(dir.getCanonicalPath)
       require(dir.listFiles().exists(!_.isDirectory))
+      require(subdir.exists())
       require(subdir.listFiles().exists(!_.isDirectory))
       testWithPath(dir, dataInDir.collect())
     }
