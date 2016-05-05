@@ -106,16 +106,20 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
-   * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute after
-   * preparations. Concrete implementations of SparkPlan should override doExecute.
+   * Returns the result of this query as an RDD[InternalRow] by delegating to `doExecute` after
+   * preparations.
+   *
+   * Concrete implementations of SparkPlan should override `doExecute`.
    */
   final def execute(): RDD[InternalRow] = executeQuery {
     doExecute()
   }
 
   /**
-   * Returns the result of this query as a broadcast variable by delegating to doBroadcast after
-   * preparations. Concrete implementations of SparkPlan should override doBroadcast.
+   * Returns the result of this query as a broadcast variable by delegating to `doExecuteBroadcast`
+   * after preparations.
+   *
+   * Concrete implementations of SparkPlan should override `doExecuteBroadcast`.
    */
   final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
     doExecuteBroadcast()
