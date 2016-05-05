@@ -24,6 +24,7 @@ if sys.version > '3':
 from abc import ABCMeta
 import copy
 import numpy as np
+import re
 import warnings
 
 from py4j.java_gateway import JavaObject
@@ -280,7 +281,9 @@ class Params(Identifiable):
         else:
             values.append("undefined")
         valueStr = "(" + ", ".join(values) + ")"
-        return "%s: %s %s" % (param.name, param.doc, valueStr)
+        # Remove the default value from the doc string
+        docStr = re.sub(r'\(Default [\w\-\s]+?\)\Z', '', param.doc)
+        return "%s: %s %s" % (param.name, docStr, valueStr)
 
     @since("1.4.0")
     def explainParams(self):
