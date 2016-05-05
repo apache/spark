@@ -17,7 +17,8 @@
 
 package org.apache.spark.mllib.recommendation
 
-import scala.collection.mutable.{ArrayBuffer, BitSet}
+import scala.collection.immutable.BitSet
+import scala.collection.mutable.{ArrayBuffer, BitSet => MBitSet}
 import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
@@ -337,11 +338,12 @@ class ALS private (
     val userIds = ratings.map(_.user).distinct.sorted
     val numUsers = userIds.length
     val userIdToPos = userIds.zipWithIndex.toMap
-    val shouldSend = Array.fill(numUsers)(new BitSet(numBlocks))
+    val shouldSend = Array.fill(numUsers)(new MBitSet(numBlocks))
     for (r <- ratings) {
       shouldSend(userIdToPos(r.user))(partitioner.getPartition(r.product)) = true
     }
-    OutLinkBlock(userIds, shouldSend)
+    // mutable BitSet is not registered in KryoSerializer(Twitter Chill) by default, convert to immutable
+    OutLinkBlock(userIds, shouldSend.map(_.toImmutable))
   }
 
   /**
