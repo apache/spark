@@ -144,7 +144,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
 
   /**
    * Returns recall
-   * (equals to accuracy for multiclass classifier
+   * (equals to precision for multiclass classifier
    * because sum of all false positives is equal to sum
    * of all false negatives)
    */
