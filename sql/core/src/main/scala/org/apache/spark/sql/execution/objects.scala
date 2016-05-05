@@ -28,6 +28,32 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.{DataType, ObjectType}
 
 /**
+ * Simply takes the object from child and projects it as new attribute.
+ * The output of this operator is a single-field safe row containing the input object.
+ */
+case class ObjectProject(
+    outputObjAttr: Attribute,
+    child: SparkPlan) extends UnaryExecNode with CodegenSupport {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
+
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    consume(ctx, input)
+  }
+
+  override protected def doExecute(): RDD[InternalRow] = child.execute()
+}
+
+/**
  * Takes the input row from child and turns it into object using the given deserializer expression.
  * The output of this operator is a single-field safe row containing the deserialized object.
  */

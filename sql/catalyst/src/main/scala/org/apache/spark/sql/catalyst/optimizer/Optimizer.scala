@@ -163,21 +163,21 @@ object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
-      val addProject = if (d.outputObjectType.isInstanceOf[ObjectType]) {
+      val outputObject = if (d.outputObjectType.isInstanceOf[ObjectType]) {
         ScalaReflection.dataTypeFor(d.outputObjectType.asInstanceOf[ObjectType].cls) match {
-          case o: ObjectType => false
-          case _ => true
+          case o: ObjectType => true
+          case _ => false
         }
       } else {
-        true
+        false
       }
 
-      if (addProject) {
+      if (outputObject) {
+        ObjectProject(d.output.head, s.child)
+      } else {
         // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
         val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
         Project(objAttr :: Nil, s.child)
-      } else {
-        s.child
       }
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>

@@ -302,6 +302,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new IllegalStateException(
           "logical except operator should have been replaced by anti-join in the optimizer")
 
+      case logical.ObjectProject(objAttr, child) =>
+        execution.ObjectProject(objAttr, planLater(child)) :: Nil
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
         execution.DeserializeToObject(deserializer, objAttr, planLater(child)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
