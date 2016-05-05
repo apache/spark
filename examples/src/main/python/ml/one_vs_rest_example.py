@@ -36,6 +36,7 @@ Run with:
   bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
 """
 
+
 def parse():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input",
