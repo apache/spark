@@ -340,7 +340,7 @@ class InMemoryCatalog extends ExternalCatalog {
     catalog(db).functions(funcName)
   }
 
-  override def functionExists(db: String, funcName: String): Boolean = {
+  override def functionExists(db: String, funcName: String): Boolean = synchronized {
     requireDbExists(db)
     catalog(db).functions.contains(funcName)
   }
