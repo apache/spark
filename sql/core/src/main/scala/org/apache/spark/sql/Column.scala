@@ -951,8 +951,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    */
   def name(alias: String): Column = withExpr {
     expr match {
-      case ne: NamedExpression =>
-        Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
       case other => Alias(other, alias)()
     }
   }
@@ -963,7 +962,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @since 2.0.0
    */
   def name(aliases: Seq[String]): Column = withExpr {
-     MultiAlias(expr, aliases)
+    MultiAlias(expr, aliases)
   }
 
   /**
