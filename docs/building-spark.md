@@ -222,6 +222,11 @@ in interactive mode by running `build/sbt`, and then run all build commands at t
 prompt. For more recommendations on reducing build time, refer to the
 [wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
 
+To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
+in interactive mode by running `build/sbt`, and then run all build commands at the command
+prompt. For more recommendations on reducing build time, refer to the
+[wiki page](https://cwiki.apache.org/confluence/display/SPARK/Useful+Developer+Tools#UsefulDeveloperTools-ReducingBuildTimes).
+
 # Testing with SBT
 
 Some of the tests require Spark to be packaged first, so always run `build/sbt package` the first time.  The following is an example of a correct (build, test) sequence:
