@@ -112,11 +112,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
       this.allowsMixedArguments = true;
-      appResource = PYSPARK_SHELL_RESOURCE;
+      appResource = PYSPARK_SHELL;
       submitArgs = args.subList(1, args.size());
     } else if (args.size() > 0 && args.get(0).equals(SPARKR_SHELL)) {
       this.allowsMixedArguments = true;
-      appResource = SPARKR_SHELL_RESOURCE;
+      appResource = SPARKR_SHELL;
       submitArgs = args.subList(1, args.size());
     } else if (args.size() > 0 && args.get(0).equals(RUN_EXAMPLE)) {
       isExample = true;
@@ -134,9 +134,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
-    if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printInfo) {
+    if (PYSPARK_SHELL.equals(appResource) && !printInfo) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printInfo) {
+    } else if (SPARKR_SHELL.equals(appResource) && !printInfo) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -282,6 +282,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // When launching the pyspark shell, the spark-submit arguments should be stored in the
     // PYSPARK_SUBMIT_ARGS env variable.
+    appResource = PYSPARK_SHELL_RESOURCE;
     constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS");
 
     // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
@@ -305,6 +306,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
     // env variable.
+    appResource = SPARKR_SHELL_RESOURCE;
     constructEnvVarArgs(env, "SPARKR_SUBMIT_ARGS");
 
     // Set shell.R as R_PROFILE_USER to load the SparkR package when the shell comes up.
