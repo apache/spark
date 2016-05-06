@@ -212,8 +212,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     // written to disk. This also counts the space needed to store the sorter's pointer array.
     inMemSorter.reset();
     // Reset the in-memory sorter's pointer array only after freeing up the memory pages holding the
-    // records. Otherwise, if the task is over allocated memory, then without freeing the memory pages,
-    // we might not be able to get memory for the pointer array.
+    // records. Otherwise, if the task is over allocated memory, then without freeing the memory
+    // pages, we might not be able to get memory for the pointer array.
 
     taskContext.taskMetrics().incMemoryBytesSpilled(spillSize);
     totalSpillBytes += spillSize;

@@ -35,10 +35,10 @@ trait ContinuousQuery {
   def name: String
 
   /**
-   * Returns the SQLContext associated with `this` query
+   * Returns the [[SparkSession]] associated with `this`.
    * @since 2.0.0
    */
-  def sqlContext: SQLContext
+  def sparkSession: SparkSession
 
   /**
    * Whether the query is currently active or not

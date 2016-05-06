@@ -49,9 +49,9 @@ package object debug {
   }
 
   def codegenString(plan: SparkPlan): String = {
-    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
+    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
     plan transform {
-      case s: WholeStageCodegen =>
+      case s: WholeStageCodegenExec =>
         codegenSubtrees += s
         s
       case s => s
@@ -68,11 +68,11 @@ package object debug {
   }
 
   /**
-   * Augments [[SQLContext]] with debug methods.
+   * Augments [[SparkSession]] with debug methods.
    */
-  implicit class DebugSQLContext(sqlContext: SQLContext) {
+  implicit class DebugSQLContext(sparkSession: SparkSession) {
     def debug(): Unit = {
-      sqlContext.setConf(SQLConf.DATAFRAME_EAGER_ANALYSIS, false)
+      sparkSession.conf.set(SQLConf.DATAFRAME_EAGER_ANALYSIS.key, false)
     }
   }
 
@@ -86,11 +86,11 @@ package object debug {
       val debugPlan = plan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)
-          DebugNode(s)
+          DebugExec(s)
       }
       debugPrint(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
-        case d: DebugNode => d.dumpStats()
+        case d: DebugExec => d.dumpStats()
         case _ =>
       }
     }
@@ -104,7 +104,7 @@ package object debug {
     }
   }
 
-  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
+  private[sql] case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {

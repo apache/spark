@@ -280,6 +280,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def ui: Option[SparkUI] = _ui
 
+  def uiWebUrl: Option[String] = _ui.map(_.webUrl)
+
   /**
    * A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse.
    *
@@ -606,6 +608,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * scheduler pool. User-defined properties may also be set here. These properties are propagated
    * through to worker tasks and can be accessed there via
    * [[org.apache.spark.TaskContext#getLocalProperty]].
+   *
+   * These properties are inherited by child threads spawned from this thread. This
+   * may have unexpected consequences when working with thread pools. The standard java
+   * implementation of thread pools have worker threads spawn other worker threads.
+   * As a result, local properties may propagate unpredictably.
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
@@ -1217,10 +1224,10 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
-  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] =
-  {
+  @deprecated("use AccumulatorV2", "2.0.0")
+  def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]): Accumulator[T] = {
     val acc = new Accumulator(initialValue, param)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1229,10 +1236,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * in the Spark UI. Tasks can "add" values to the accumulator using the `+=` method. Only the
    * driver can access the accumulator's `value`.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String)(implicit param: AccumulatorParam[T])
     : Accumulator[T] = {
     val acc = new Accumulator(initialValue, param, Some(name))
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1242,10 +1250,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
     val acc = new Accumulable(initialValue, param)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1256,10 +1265,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[R, T](initialValue: R, name: String)(implicit param: AccumulableParam[R, T])
     : Accumulable[R, T] = {
     val acc = new Accumulable(initialValue, param, Some(name))
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
     acc
   }
 
@@ -1269,11 +1279,84 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Growable and TraversableOnce are the standard APIs that guarantee += and ++=, implemented by
    * standard mutable collections. So you can use this with mutable Map, Set, etc.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable: ClassTag, T]
       (initialValue: R): Accumulable[R, T] = {
     val param = new GrowableAccumulableParam[R, T]
     val acc = new Accumulable(initialValue, param)
-    cleaner.foreach(_.registerAccumulatorForCleanup(acc))
+    cleaner.foreach(_.registerAccumulatorForCleanup(acc.newAcc))
+    acc
+  }
+
+  /**
+   * Register the given accumulator.  Note that accumulators must be registered before use, or it
+   * will throw exception.
+   */
+  def register(acc: AccumulatorV2[_, _]): Unit = {
+    acc.register(this)
+  }
+
+  /**
+   * Register the given accumulator with given name.  Note that accumulators must be registered
+   * before use, or it will throw exception.
+   */
+  def register(acc: AccumulatorV2[_, _], name: String): Unit = {
+    acc.register(this, name = Some(name))
+  }
+
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
+  def longAccumulator: LongAccumulator = {
+    val acc = new LongAccumulator
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
+  def longAccumulator(name: String): LongAccumulator = {
+    val acc = new LongAccumulator
+    register(acc, name)
+    acc
+  }
+
+  /**
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
+  def doubleAccumulator: DoubleAccumulator = {
+    val acc = new DoubleAccumulator
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   */
+  def doubleAccumulator(name: String): DoubleAccumulator = {
+    val acc = new DoubleAccumulator
+    register(acc, name)
+    acc
+  }
+
+  /**
+   * Create and register a list accumulator, which starts with empty list and accumulates inputs
+   * by adding them into the inner list.
+   */
+  def listAccumulator[T]: ListAccumulator[T] = {
+    val acc = new ListAccumulator[T]
+    register(acc)
+    acc
+  }
+
+  /**
+   * Create and register a list accumulator, which starts with empty list and accumulates inputs
+   * by adding them into the inner list.
+   */
+  def listAccumulator[T](name: String): ListAccumulator[T] = {
+    val acc = new ListAccumulator[T]
+    register(acc, name)
     acc
   }
 
@@ -2121,21 +2204,7 @@ object SparkContext extends Logging {
       sc: SparkContext,
       allowMultipleContexts: Boolean): Unit = {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
-      contextBeingConstructed.foreach { otherContext =>
-        if (otherContext ne sc) {  // checks for reference equality
-          // Since otherContext might point to a partially-constructed context, guard against
-          // its creationSite field being null:
-          val otherContextCreationSite =
-            Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
-          val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
-            " constructor).  This may indicate an error, since only one SparkContext may be" +
-            " running in this JVM (see SPARK-2243)." +
-            s" The other SparkContext was created at:\n$otherContextCreationSite"
-          logWarning(warnMsg)
-        }
-
-        if (activeContext.get() != null) {
-          val ctx = activeContext.get()
+      Option(activeContext.get()).filter(_ ne sc).foreach { ctx =>
           val errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243)." +
             " To ignore this error, set spark.driver.allowMultipleContexts = true. " +
             s"The currently running SparkContext was created at:\n${ctx.creationSite.longForm}"
@@ -2146,6 +2215,17 @@ object SparkContext extends Logging {
             throw exception
           }
         }
+
+      contextBeingConstructed.filter(_ ne sc).foreach { otherContext =>
+        // Since otherContext might point to a partially-constructed context, guard against
+        // its creationSite field being null:
+        val otherContextCreationSite =
+          Option(otherContext.creationSite).map(_.longForm).getOrElse("unknown location")
+        val warnMsg = "Another SparkContext is being constructed (or threw an exception in its" +
+          " constructor).  This may indicate an error, since only one SparkContext may be" +
+          " running in this JVM (see SPARK-2243)." +
+          s" The other SparkContext was created at:\n$otherContextCreationSite"
+        logWarning(warnMsg)
       }
     }
   }
@@ -2389,53 +2469,6 @@ object SparkContext extends Logging {
         }
         (backend, scheduler)
 
-      case "yarn" if deployMode == "cluster" =>
-        val scheduler = try {
-          val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
-          val cons = clazz.getConstructor(classOf[SparkContext])
-          cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
-        } catch {
-          // TODO: Enumerate the exact reasons why it can fail
-          // But irrespective of it, it means we cannot proceed !
-          case e: Exception =>
-            throw new SparkException("YARN mode not available ?", e)
-        }
-        val backend = try {
-          val clazz =
-            Utils.classForName("org.apache.spark.scheduler.cluster.YarnClusterSchedulerBackend")
-          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
-          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
-        } catch {
-          case e: Exception =>
-            throw new SparkException("YARN mode not available ?", e)
-        }
-        scheduler.initialize(backend)
-        (backend, scheduler)
-
-      case "yarn" if deployMode == "client" =>
-        val scheduler = try {
-          val clazz = Utils.classForName("org.apache.spark.scheduler.cluster.YarnScheduler")
-          val cons = clazz.getConstructor(classOf[SparkContext])
-          cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
-
-        } catch {
-          case e: Exception =>
-            throw new SparkException("YARN mode not available ?", e)
-        }
-
-        val backend = try {
-          val clazz =
-            Utils.classForName("org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend")
-          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
-          cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
-        } catch {
-          case e: Exception =>
-            throw new SparkException("YARN mode not available ?", e)
-        }
-
-        scheduler.initialize(backend)
-        (backend, scheduler)
-
       case MESOS_REGEX(mesosUrl) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
@@ -2464,6 +2497,7 @@ object SparkContext extends Logging {
           cm.initialize(scheduler, backend)
           (backend, scheduler)
         } catch {
+          case se: SparkException => throw se
           case NonFatal(e) =>
             throw new SparkException("External scheduler cannot be instantiated", e)
         }

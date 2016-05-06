@@ -86,6 +86,7 @@ object LinearRegressionModel extends Loader[LinearRegressionModel] {
  * See also the documentation for the precise formulation.
  */
 @Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 class LinearRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -119,6 +120,7 @@ class LinearRegressionWithSGD private[mllib] (
  *
  */
 @Since("0.8.0")
+@deprecated("Use ml.regression.LinearRegression or LBFGS", "2.0.0")
 object LinearRegressionWithSGD {
 
   /**

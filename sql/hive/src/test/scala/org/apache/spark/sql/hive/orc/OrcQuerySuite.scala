@@ -20,8 +20,6 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 import java.nio.charset.StandardCharsets
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hadoop.hive.ql.io.orc.CompressionKind
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.sql._
@@ -169,39 +167,45 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  // We only support zlib in Hive 0.12.0 now
-  test("Default compression options for writing to an ORC file") {
-    withOrcFile((1 to 100).map(i => (i, s"val_$i"))) { file =>
-      assertResult(CompressionKind.ZLIB) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
+  // Hive supports zlib, snappy and none for Hive 1.2.1.
+  test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
+    withTempPath { file =>
+      sqlContext.range(0, 10).write
+        .option("orc.compress", "ZLIB")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
+    }
+
+    withTempPath { file =>
+      sqlContext.range(0, 10).write
+        .option("orc.compress", "SNAPPY")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("SNAPPY" === expectedCompressionKind.name())
+    }
+
+    withTempPath { file =>
+      sqlContext.range(0, 10).write
+        .option("orc.compress", "NONE")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("NONE" === expectedCompressionKind.name())
     }
   }
 
-  // Following codec is supported in hive-0.13.1, ignore it now
-  ignore("Other compression options for writing to an ORC file - 0.13.1 and above") {
-    val data = (1 to 100).map(i => (i, s"val_$i"))
-    val conf = sparkContext.hadoopConfiguration
-
-    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "SNAPPY")
-    withOrcFile(data) { file =>
-      assertResult(CompressionKind.SNAPPY) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
-    }
-
-    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "NONE")
-    withOrcFile(data) { file =>
-      assertResult(CompressionKind.NONE) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
-    }
-
-    conf.set(ConfVars.HIVE_ORC_DEFAULT_COMPRESS.varname, "LZO")
-    withOrcFile(data) { file =>
-      assertResult(CompressionKind.LZO) {
-        OrcFileOperator.getFileReader(file).get.getCompression
-      }
+  // Following codec is not supported in Hive 1.2.1, ignore it now
+  ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
+    withTempPath { file =>
+      sqlContext.range(0, 10).write
+        .option("orc.compress", "LZO")
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("LZO" === expectedCompressionKind.name())
     }
   }
 

@@ -21,8 +21,6 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.classification.LogisticRegression;
@@ -30,7 +28,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * A simple example demonstrating ways to specify parameters for Estimators and Transformers.
@@ -42,9 +40,10 @@ import org.apache.spark.sql.SQLContext;
 public class JavaSimpleParamsExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaSimpleParamsExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaSimpleParamsExample")
+      .getOrCreate();
 
     // Prepare training data.
     // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
@@ -55,7 +54,7 @@ public class JavaSimpleParamsExample {
       new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
       new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
     Dataset<Row> training =
-        jsql.createDataFrame(jsc.parallelize(localTraining), LabeledPoint.class);
+      spark.createDataFrame(localTraining, LabeledPoint.class);
 
     // Create a LogisticRegression instance.  This instance is an Estimator.
     LogisticRegression lr = new LogisticRegression();
@@ -96,7 +95,7 @@ public class JavaSimpleParamsExample {
         new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
         new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
+    Dataset<Row> test = spark.createDataFrame(localTest, LabeledPoint.class);
 
     // Make predictions on test documents using the Transformer.transform() method.
     // LogisticRegressionModel.transform will only use the 'features' column.
@@ -109,6 +108,6 @@ public class JavaSimpleParamsExample {
           + ", prediction=" + r.get(3));
     }
 
-    jsc.stop();
+    spark.stop();
   }
 }

@@ -33,7 +33,7 @@ import org.apache.spark.ml.util.MetadataUtils
 import org.apache.spark.mllib.evaluation.{MulticlassMetrics, RegressionMetrics}
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
  * An example runner for decision trees. Run with
@@ -134,18 +134,18 @@ object DecisionTreeExample {
 
   /** Load a dataset from the given path, using the given format */
   private[ml] def loadData(
-      sqlContext: SQLContext,
+      spark: SparkSession,
       path: String,
       format: String,
       expectedNumFeatures: Option[Int] = None): DataFrame = {
-    import sqlContext.implicits._
+    import spark.implicits._
 
     format match {
-      case "dense" => MLUtils.loadLabeledPoints(sqlContext.sparkContext, path).toDF()
+      case "dense" => MLUtils.loadLabeledPoints(spark.sparkContext, path).toDF()
       case "libsvm" => expectedNumFeatures match {
-        case Some(numFeatures) => sqlContext.read.option("numFeatures", numFeatures.toString)
+        case Some(numFeatures) => spark.read.option("numFeatures", numFeatures.toString)
           .format("libsvm").load(path)
-        case None => sqlContext.read.format("libsvm").load(path)
+        case None => spark.read.format("libsvm").load(path)
       }
       case _ => throw new IllegalArgumentException(s"Bad data format: $format")
     }
@@ -167,17 +167,19 @@ object DecisionTreeExample {
       testInput: String,
       algo: String,
       fracTest: Double): (DataFrame, DataFrame) = {
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .getOrCreate()
 
     // Load training data
-    val origExamples: DataFrame = loadData(sqlContext, input, dataFormat)
+    val origExamples: DataFrame = loadData(spark, input, dataFormat)
 
     // Load or create test set
     val dataframes: Array[DataFrame] = if (testInput != "") {
       // Load testInput.
       val numFeatures = origExamples.first().getAs[Vector](1).size
       val origTestExamples: DataFrame =
-        loadData(sqlContext, testInput, dataFormat, Some(numFeatures))
+        loadData(spark, testInput, dataFormat, Some(numFeatures))
       Array(origExamples, origTestExamples)
     } else {
       // Split input into training, test.

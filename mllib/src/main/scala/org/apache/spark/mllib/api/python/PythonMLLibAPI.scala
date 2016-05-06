@@ -357,7 +357,6 @@ private[python] class PythonMLLibAPI extends Serializable {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
-      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)

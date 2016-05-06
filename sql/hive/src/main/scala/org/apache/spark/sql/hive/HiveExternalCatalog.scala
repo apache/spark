@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.client.HiveClient
  * All public methods must be synchronized for thread-safety.
  */
 private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCatalog with Logging {
-  import ExternalCatalog._
+  import CatalogTypes.TablePartitionSpec
 
   // Exceptions thrown by the hive client that we would like to wrap
   private val clientExceptions = Set(
@@ -75,7 +75,7 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
   private def requireDbMatches(db: String, table: CatalogTable): Unit = {
     if (table.identifier.database != Some(db)) {
       throw new AnalysisException(
-        s"Provided database $db does not match the one specified in the " +
+        s"Provided database '$db' does not match the one specified in the " +
         s"table definition (${table.identifier.database.getOrElse("n/a")})")
     }
   }
@@ -283,10 +283,14 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
     client.getPartition(db, table, spec)
   }
 
+  /**
+   * Returns the partition names from hive metastore for a given table in a database.
+   */
   override def listPartitions(
       db: String,
-      table: String): Seq[CatalogTablePartition] = withClient {
-    client.getAllPartitions(db, table)
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = withClient {
+    client.getPartitions(db, table, partialSpec)
   }
 
   // --------------------------------------------------------------------------

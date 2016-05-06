@@ -231,7 +231,7 @@ object SparkPlanTest {
   }
 
   private def executePlan(outputPlan: SparkPlan, sqlContext: SQLContext): Seq[Row] = {
-    val execution = new QueryExecution(sqlContext, null) {
+    val execution = new QueryExecution(sqlContext.sparkSession, null) {
       override lazy val sparkPlan: SparkPlan = outputPlan transform {
         case plan: SparkPlan =>
           val inputMap = plan.children.flatMap(_.output).map(a => (a.name, a)).toMap

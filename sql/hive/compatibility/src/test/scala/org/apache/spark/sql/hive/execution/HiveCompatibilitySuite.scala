@@ -84,7 +84,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
       TestHive.sessionState.functionRegistry.restore()
 
-      // For debugging dump some statistics about how much time was spent in various optimizer rules.
+      // For debugging dump some statistics about how much time was spent in various optimizer rules
       logWarning(RuleExecutor.dumpTimeSpent())
     } finally {
       super.afterAll()
@@ -461,7 +461,64 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "alter_merge_2",
 
     // TOUCH is not supported
-    "touch"
+    "touch",
+
+    // INPUTDRIVER and OUTPUTDRIVER are not supported
+    "inoutdriver",
+
+    // We do not support ALTER TABLE ADD COLUMN, ALTER TABLE REPLACE COLUMN,
+    // ALTER TABLE CHANGE COLUMN, and ALTER TABLE SET FILEFORMAT.
+    // We have converted the useful parts of these tests to tests
+    // in org.apache.spark.sql.hive.execution.SQLQuerySuite.
+    "alter_partition_format_loc",
+    "alter_varchar1",
+    "alter_varchar2",
+    "date_3",
+    "diff_part_input_formats",
+    "disallow_incompatible_type_change_off",
+    "fileformat_mix",
+    "input3",
+    "partition_schema1",
+    "partition_wise_fileformat4",
+    "partition_wise_fileformat5",
+    "partition_wise_fileformat6",
+    "partition_wise_fileformat7",
+    "rename_column",
+
+    // The following fails due to describe extended.
+    "alter3",
+    "alter5",
+    "alter_table_serde",
+    "input_part10",
+    "input_part10_win",
+    "inputddl6",
+    "inputddl7",
+    "part_inherit_tbl_props_empty",
+    "serde_reported_schema",
+    "stats0",
+    "stats_empty_partition",
+    "unicode_notation",
+    "union_remove_11",
+    "union_remove_3",
+
+    // The following fails due to alter table partitions with predicate.
+    "drop_partitions_filter",
+    "drop_partitions_filter2",
+    "drop_partitions_filter3",
+
+    // The following failes due to truncate table
+    "truncate_table",
+
+    // We do not support DFS command.
+    // We have converted the useful parts of these tests to tests
+    // in org.apache.spark.sql.hive.execution.SQLQuerySuite.
+    "drop_database_removes_partition_dirs",
+    "drop_table_removes_partition_dirs",
+
+    // These tests use EXPLAIN FORMATTED, which is not supported
+    "input4",
+    "join0",
+    "plan_json"
   )
 
   /**
@@ -475,14 +532,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "add_partition_with_whitelist",
     "alias_casted_column",
     "alter2",
-    "alter3",
-    "alter5",
-    "alter_partition_format_loc",
     "alter_partition_with_whitelist",
     "alter_rename_partition",
-    "alter_table_serde",
-    "alter_varchar1",
-    "alter_varchar2",
     "ambiguous_col",
     "annotate_stats_join",
     "annotate_stats_limit",
@@ -561,7 +612,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "database_properties",
     "date_1",
     "date_2",
-    "date_3",
     "date_4",
     "date_comparison",
     "date_join1",
@@ -572,26 +622,18 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
-    "diff_part_input_formats",
     "disable_file_format_check",
-    "disallow_incompatible_type_change_off",
     "distinct_stats",
-    "drop_database_removes_partition_dirs",
     "drop_function",
     "drop_multi_partitions",
-    "drop_partitions_filter",
-    "drop_partitions_filter2",
-    "drop_partitions_filter3",
     "drop_table",
     "drop_table2",
-    "drop_table_removes_partition_dirs",
     "drop_view",
     "dynamic_partition_skip_default",
     "escape_clusterby1",
     "escape_distributeby1",
     "escape_orderby1",
     "escape_sortby1",
-    "fileformat_mix",
     "fileformat_sequencefile",
     "fileformat_text",
     "filter_join_breaktask",
@@ -651,7 +693,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "index_serde",
     "infer_bucket_sort_dyn_part",
     "innerjoin",
-    "inoutdriver",
     "input",
     "input0",
     "input1",
@@ -673,8 +714,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "input26",
     "input28",
     "input2_limit",
-    "input3",
-    "input4",
     "input40",
     "input41",
     "input49",
@@ -686,8 +725,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "input_limit",
     "input_part0",
     "input_part1",
-    "input_part10",
-    "input_part10_win",
     "input_part2",
     "input_part3",
     "input_part4",
@@ -700,14 +737,11 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "inputddl1",
     "inputddl2",
     "inputddl3",
-    "inputddl6",
-    "inputddl7",
     "inputddl8",
     "insert1",
     "insert1_overwrite_partitions",
     "insert2_overwrite_partitions",
     "insert_compressed",
-    "join0",
     "join1",
     "join10",
     "join11",
@@ -838,20 +872,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "parallel",
     "parenthesis_star_by",
     "part_inherit_tbl_props",
-    "part_inherit_tbl_props_empty",
     "part_inherit_tbl_props_with_star",
     "partcols1",
     "partition_date",
-    "partition_schema1",
     "partition_serde_format",
     "partition_type_check",
     "partition_varchar1",
-    "partition_wise_fileformat4",
-    "partition_wise_fileformat5",
-    "partition_wise_fileformat6",
-    "partition_wise_fileformat7",
     "partition_wise_fileformat9",
-    "plan_json",
     "ppd1",
     "ppd2",
     "ppd_clusterby",
@@ -891,7 +918,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "reduce_deduplicate_exclude_join",
     "reduce_deduplicate_extended",
     "reducesink_dedup",
-    "rename_column",
     "router_join_ppr",
     "select_as_omitted",
     "select_unquote_and",
@@ -900,7 +926,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "semicolon",
     "semijoin",
     "serde_regex",
-    "serde_reported_schema",
     "set_variable_sub",
     "show_columns",
     "show_describe_func_quotes",
@@ -908,9 +933,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "show_partitions",
     "show_tblproperties",
     "sort",
-    "stats0",
     "stats_aggregator_error_1",
-    "stats_empty_partition",
     "stats_publisher_error_1",
     "subq2",
     "subquery_exists",
@@ -927,7 +950,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "timestamp_null",
     "transform_ppr1",
     "transform_ppr2",
-    "truncate_table",
     "type_cast_1",
     "type_widening",
     "udaf_collect_set",
@@ -1074,7 +1096,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "udf_xpath_long",
     "udf_xpath_short",
     "udf_xpath_string",
-    "unicode_notation",
     "union10",
     "union11",
     "union13",
@@ -1108,8 +1129,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "union_date",
     "union_lateralview",
     "union_ppr",
-    "union_remove_11",
-    "union_remove_3",
     "union_remove_6",
     "union_script",
     "varchar_2",
