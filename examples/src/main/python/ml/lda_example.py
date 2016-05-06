@@ -49,14 +49,15 @@ if __name__ == "__main__":
 
     ll = model.logLikelihood(dataset)
     lp = model.logPerplexity(dataset)
-    print(ll)
-    print(lp)
+    print("The lower bound on the log likelihood of the entire corpus: " + str(ll))
+    print("The upper bound bound on perplexity: " + str(lp))
 
     # describeTopics
     topics = model.describeTopics(3)
 
     # Shows the result
     transformed = model.transform(dataset)
+    print("The topics described by their top-weighted terms")
     topics.show(truncate=False)
     transformed.show(truncate=False)
     # $example off$
