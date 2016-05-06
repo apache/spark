@@ -1049,12 +1049,14 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     True
     >>> model.weights == model2.weights
     True
-    >>> mlp2.setWeights([
+    >>> mlp2 = mlp2.setWeights([
     ...    2, 5, 1, -7, -5, -10, 0, 0.6, -1, 2, -2, 1, 2, -7, -1, -2, 2, 1, -1, 9, -9, 3, -3, -3,
     ...    3.0, 0, -1])
     >>> model3 = mlp2.fit(df)
-    >>> model3.weights[0]
-    2
+    >>> model3.weights != model2.weights
+    True
+    >>> model3.layers == model.layers
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -1071,8 +1073,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     solver = Param(Params._dummy(), "solver", "Allows setting the solver: minibatch gradient " +
                    "descent (gd) or l-bfgs. (Default l-bfgs)",
                    typeConverter=TypeConverters.toString)
-    weights = Param(Params._dummy(), "weights", "Sets the weights of the model",
-                    typeConverter=TypeConverters.toVector)
+    weights = Param(Params._dummy(), "weights", "Weights (either initial if before training or " +
+                    "actual on model)", typeConverter=TypeConverters.toVector)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
