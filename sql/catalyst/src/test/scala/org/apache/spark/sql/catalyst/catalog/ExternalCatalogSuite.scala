@@ -516,28 +516,28 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     val db = catalog.getDatabase("db1")
     val table = CatalogTable(
-      identifier = TableIdentifier("myTable", Some("db1")),
+      identifier = TableIdentifier("my_table", Some("db1")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
       schema = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string"))
     )
 
     catalog.createTable("db1", table, ignoreIfExists = false)
-    assert(exists(db.locationUri, "myTable"))
+    assert(exists(db.locationUri, "my_table"))
 
-    catalog.renameTable("db1", "myTable", "yourTable")
-    assert(!exists(db.locationUri, "myTable"))
-    assert(exists(db.locationUri, "yourTable"))
+    catalog.renameTable("db1", "my_table", "your_table")
+    assert(!exists(db.locationUri, "my_table"))
+    assert(exists(db.locationUri, "your_table"))
 
-    catalog.dropTable("db1", "yourTable", ignoreIfNotExists = false)
-    assert(!exists(db.locationUri, "yourTable"))
+    catalog.dropTable("db1", "your_table", ignoreIfNotExists = false)
+    assert(!exists(db.locationUri, "your_table"))
   }
 
   test("create/drop/rename partitions should create/delete/rename the directory") {
     val catalog = newBasicCatalog()
     val databaseDir = catalog.getDatabase("db1").locationUri
     val table = CatalogTable(
-      identifier = TableIdentifier("myTable", Some("db1")),
+      identifier = TableIdentifier("tbl", Some("db1")),
       tableType = CatalogTableType.MANAGED,
       storage = CatalogStorageFormat(None, None, None, None, false, Map.empty),
       schema = Seq(
@@ -549,17 +549,17 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     )
     catalog.createTable("db1", table, ignoreIfExists = false)
 
-    catalog.createPartitions("db1", "myTable", Seq(part1, part2), ignoreIfExists = false)
-    assert(exists(databaseDir, "myTable", "a=1", "b=2"))
-    assert(exists(databaseDir, "myTable", "a=3", "b=4"))
+    catalog.createPartitions("db1", "tbl", Seq(part1, part2), ignoreIfExists = false)
+    assert(exists(databaseDir, "tbl", "a=1", "b=2"))
+    assert(exists(databaseDir, "tbl", "a=3", "b=4"))
 
-    catalog.renamePartitions("db1", "myTable", Seq(part1.spec), Seq(part3.spec))
-    assert(!exists(databaseDir, "myTable", "a=1", "b=2"))
-    assert(exists(databaseDir, "myTable", "a=5", "b=6"))
+    catalog.renamePartitions("db1", "tbl", Seq(part1.spec), Seq(part3.spec))
+    assert(!exists(databaseDir, "tbl", "a=1", "b=2"))
+    assert(exists(databaseDir, "tbl", "a=5", "b=6"))
 
-    catalog.dropPartitions("db1", "myTable", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
-    assert(!exists(databaseDir, "myTable", "a=3", "b=4"))
-    assert(!exists(databaseDir, "myTable", "a=5", "b=6"))
+    catalog.dropPartitions("db1", "tbl", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
+    assert(!exists(databaseDir, "tbl", "a=3", "b=4"))
+    assert(!exists(databaseDir, "tbl", "a=5", "b=6"))
   }
 }
 
