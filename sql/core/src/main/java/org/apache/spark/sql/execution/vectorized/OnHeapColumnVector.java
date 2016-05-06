@@ -29,9 +29,10 @@ import org.apache.spark.unsafe.Platform;
  * and a java array for the values.
  */
 public final class OnHeapColumnVector extends ColumnVector {
-  
-  private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
-  
+
+  private static final boolean bigEndianPlatform =
+    ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+
   // The data stored in these arrays need to maintain binary compatible. We can
   // directly pass this buffer to external components.
 

@@ -167,7 +167,7 @@ setGeneric("reduce", function(x, func) { standardGeneric("reduce") })
 # @rdname repartition
 # @seealso coalesce
 # @export
-setGeneric("repartition", function(x, numPartitions) { standardGeneric("repartition") })
+setGeneric("repartition", function(x, ...) { standardGeneric("repartition") })
 
 # @rdname sampleRDD
 # @export

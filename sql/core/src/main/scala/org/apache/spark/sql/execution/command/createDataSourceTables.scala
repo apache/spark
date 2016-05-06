@@ -349,6 +349,7 @@ object CreateDataSourceTableUtils extends Logging {
           inputFormat = None,
           outputFormat = None,
           serde = None,
+          compressed = false,
           serdeProperties = options
         ),
         properties = tableProperties.toMap)
@@ -368,6 +369,7 @@ object CreateDataSourceTableUtils extends Logging {
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
           serde = serde.serde,
+          compressed = false,
           serdeProperties = options
         ),
         schema = relation.schema.map { f =>

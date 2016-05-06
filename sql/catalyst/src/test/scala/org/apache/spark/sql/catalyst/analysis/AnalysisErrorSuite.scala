@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
@@ -328,6 +327,25 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation.select(
       TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-5 second").as("window")),
       "The start time" :: "must be greater than or equal to 0." :: Nil
+  )
+
+  errorTest(
+    "generator nested in expressions",
+    listRelation.select(Explode('list) + 1),
+    "Generators are not supported when it's nested in expressions, but got: (explode(list) + 1)"
+      :: Nil
+  )
+
+  errorTest(
+    "generator appears in operator which is not Project",
+    listRelation.sortBy(Explode('list).asc),
+    "Generators are not supported outside the SELECT clause, but got: Sort" :: Nil
+  )
+
+  errorTest(
+    "more than one generators in SELECT",
+    listRelation.select(Explode('list), Explode('list)),
+    "Only one generator allowed per select clause but found 2: explode(list), explode(list)" :: Nil
   )
 
   test("SPARK-6452 regression test") {
