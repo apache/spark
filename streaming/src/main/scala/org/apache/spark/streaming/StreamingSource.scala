@@ -26,7 +26,7 @@ private[streaming] class StreamingSource(ssc: StreamingContext) extends Source {
   val metricRegistry = new MetricRegistry
   val sourceName = "%s.StreamingMetrics".format(ssc.sparkContext.appName)
 
-  val streamingListener = ssc.uiTab.listener
+  val streamingListener = ssc.progressListener
 
   private def registerGauge[T](name: String, f: StreamingJobProgressListener => T,
       defaultValue: T) {
