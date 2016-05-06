@@ -293,8 +293,8 @@ $ sbt package
 
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
-  --class "SimpleApp" \
-  --master local[4] \
+  --class SimpleApp \
+  --master 'local[4]' \
   target/scala-2.10/simple-project_2.10-1.0.jar
 ...
 Lines with a: 46, Lines with b: 23
@@ -381,8 +381,8 @@ $ mvn package
 
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
-  --class "SimpleApp" \
-  --master local[4] \
+  --class SimpleApp \
+  --master 'local[4]' \
   target/simple-project-1.0.jar
 ...
 Lines with a: 46, Lines with b: 23
@@ -426,7 +426,7 @@ We can run this application using the `bin/spark-submit` script:
 {% highlight bash %}
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
-  --master local[4] \
+  --master 'local[4]' \
   SimpleApp.py
 ...
 Lines with a: 46, Lines with b: 23
