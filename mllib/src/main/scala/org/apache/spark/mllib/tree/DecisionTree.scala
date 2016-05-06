@@ -20,6 +20,7 @@ package org.apache.spark.mllib.tree
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 
 import org.apache.spark.annotation.Experimental
@@ -1044,9 +1045,10 @@ object DecisionTree extends Serializable with Logging {
               splits(featureIndex) = new Array[Split](numSplits)
               bins(featureIndex) = new Array[Bin](numBins)
               var splitIndex = 0
+              var randomSubsetsAsIntegers = generateRandomIntegers(featureArity, numSplits)
               while (splitIndex < numSplits) {
                 val categories: List[Double] =
-                  extractMultiClassCategories(splitIndex + 1, featureArity)
+                  extractMultiClassCategories(randomSubsetsAsIntegers(splitIndex), featureArity)
                 splits(featureIndex)(splitIndex) =
                   new Split(featureIndex, Double.MinValue, Categorical, categories)
                 bins(featureIndex)(splitIndex) = {
@@ -1082,6 +1084,37 @@ object DecisionTree extends Serializable with Logging {
       case ApproxHist =>
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
     }
+  }
+
+  /**
+  * Generate a list of random integers between 1..2^n-2 without duplicates. Used to choose
+   * random subsets based on each number's binary representation, excluding the empty set
+   * and the full set.
+   */
+  private[tree] def generateRandomIntegers(
+      maxFeatureValue: Int,
+      splits: Int): List[Int] = {
+    var maxValue = (1 << maxFeatureValue) - 2
+    var integers = List[Int]()
+    if (maxValue == splits) {
+      integers = (1 to maxValue).toList
+    } else {
+      var selectedToUnselected = Map[Int, Int]()
+      var selected = 0
+      var rand = new Random()
+      while (selected < splits) {
+        var randomInt = rand.nextInt(maxValue) + 1
+        if (selectedToUnselected.contains(randomInt)) {
+          integers = selectedToUnselected.get(randomInt).get :: integers
+        } else {
+          integers = randomInt :: integers
+        }
+        selectedToUnselected += (randomInt -> maxValue)
+        maxValue -= 1
+        selected += 1
+      }
+    }
+    integers
   }
 
   /**
