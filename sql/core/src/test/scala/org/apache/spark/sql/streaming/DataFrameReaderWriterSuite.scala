@@ -19,15 +19,18 @@ package org.apache.spark.sql.streaming.test
 
 import java.util.concurrent.TimeUnit
 
+import scala.concurrent.duration._
+
+import org.mockito.Mockito._
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Append, Update}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.util.{SystemClock, ManualClock, Utils}
-import org.mockito.Mockito._
-import org.scalatest.BeforeAndAfter
+import org.apache.spark.util.{ManualClock, SystemClock, Utils}
 
 import scala.concurrent.duration._
 
