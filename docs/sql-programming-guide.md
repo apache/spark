@@ -907,6 +907,10 @@ using this syntax.
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
 {% highlight scala %}
 val df = sqlContext.read.format("json").load("examples/src/main/resources/people.json")
 df.select("name", "age").write.format("parquet").save("namesAndAges.parquet")
@@ -1530,6 +1534,10 @@ Note that the file that is offered as _a json file_ is not a typical JSON file. 
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
 {% highlight java %}
 // sc is an existing JavaSparkContext.
 SQLContext sqlContext = new org.apache.spark.sql.SQLContext(sc);
@@ -1564,6 +1572,10 @@ Spark SQL can automatically infer the schema of a JSON dataset and load it as a 
 This conversion can be done using `SQLContext.read.json` on a JSON file.
 
 Note that the file that is offered as _a json file_ is not a typical JSON file. Each
+line must contain a separate, self-contained valid JSON object. As a consequence,
+a regular multi-line JSON file will most often fail.
+
+Note that the file that is offered as _jsonFile_ is not a typical JSON file. Each
 line must contain a separate, self-contained valid JSON object. As a consequence,
 a regular multi-line JSON file will most often fail.
 
