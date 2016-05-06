@@ -2083,7 +2083,7 @@ test_that("dapply() on a DataFrame", {
 })
 
 test_that("gapply() on a DataFrame", {
-  df <- createDataFrame (sqlContext, iris)
+  df <- suppressWarnings(createDataFrame (sqlContext, iris))
   schema <-  structType(structField("Species", "string"), structField("Avg", "double"))
 
   # Groups by `Species` and computes the average on three R workers

@@ -599,7 +599,7 @@ setMethod("unpersist",
 #'}
 setMethod("repartition",
           signature(x = "SparkDataFrame"),
-          function(x, numPartitions = NULL, col = NULL, ...) {
+          function(x, numPartitions = NULL, col, ...) {
             if (!is.null(numPartitions) && is.numeric(numPartitions)) {
               # number of partitions and columns both are specified
               if (!is.null(col) && class(col) == "Column") {
@@ -1216,7 +1216,7 @@ setMethod("dapply",
 
 #' gapply
 #'
-#' Apply a function to each group of a DataFrame. The group is defined by an input
+#' Apply a function to each group of a DataFrame. The group is defined by input
 #' grouping column(s).
 #'
 #' @param x A SparkDataFrame
@@ -1243,7 +1243,7 @@ setMethod("dapply",
 #'   function(x) {
 #'     data.frame(x$Species[1], mean(x$Sepal_Width), stringsAsFactors = FALSE)
 #'   },
-#'   schema, col=df$"Species")
+#'   schema, col = df$"Species")
 #' collect(df1)
 #'
 #' Species      Avg
@@ -1251,6 +1251,16 @@ setMethod("dapply",
 #' virginica   2.974
 #' versicolor  2.770
 #' setosa      3.428
+#'
+#' We can also have multiple grouping columns
+#' schema <-  structType(structField("Species", "string"), structField("Avg", "double"))
+#' df1 <- gapply(
+#'   df,
+#'   function(x) {
+#'     data.frame(x$Species[1], sum(x$Sepal_Width), stringsAsFactors = FALSE)
+#'   },
+#'   schema, col = df$"Species", col2 = df$"Petal_Length")
+#' collect(df1)
 #'
 #' Fits linear models on iris dataset by grouping on the `Species` column and
 #' using `Sepal_Length` as a target variable, `Sepal_Width`, `Petal_Length`
