@@ -895,7 +895,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Seq[String]): Column = name(aliases)
+  def as(aliases: Seq[String]): Column = withExpr { MultiAlias(expr, aliases) }
 
   /**
    * Assigns the given aliases to the results of a table generating function.
@@ -907,7 +907,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def as(aliases: Array[String]): Column = name(aliases)
+  def as(aliases: Array[String]): Column = withExpr { MultiAlias(expr, aliases) }
 
   /**
    * Gives the column an alias.
@@ -934,7 +934,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String, metadata: Metadata): Column = name(alias, metadata)
+  def as(alias: String, metadata: Metadata): Column = withExpr {
+    Alias(expr, alias)(explicitMetadata = Some(metadata))
+  }
 
   /**
    * Gives the column a name (alias).
@@ -954,24 +956,6 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
       case other => Alias(other, alias)()
     }
-  }
-
-  /**
-   * Gives the column a name (alias).
-   * * @group expr_ops
-   * @since 2.0.0
-   */
-  def name(aliases: Seq[String]): Column = withExpr {
-    MultiAlias(expr, aliases)
-  }
-
-  /**
-   * Gives the column an alias with metadata.
-   * @group expr_ops
-   * @since 2.0.0
-   */
-  def name(alias: String, metadata: Metadata): Column = withExpr {
-    Alias(expr, alias)(explicitMetadata = Some(metadata))
   }
 
   /**
