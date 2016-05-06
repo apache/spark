@@ -366,14 +366,15 @@ class Params(Identifiable):
         user-supplied values < extra.
 
         :param extra: extra param values
+        :param default: if just copy the default param map
         :return: merged param map
         """
-        if extra is None:
+        if extra is None and not default:
             extra = dict()
         paramMap = self._defaultParamMap.copy()
         if not default:
             paramMap.update(self._paramMap)
-        paramMap.update(extra)
+            paramMap.update(extra)
         return paramMap
 
     @since("1.4.0")
@@ -471,6 +472,7 @@ class Params(Identifiable):
 
         :param to: the target instance
         :param extra: extra params to be copied
+        :param default: if just copy the default param map
         :return: the target instance with param values copied
         """
         if extra is None:
@@ -479,7 +481,6 @@ class Params(Identifiable):
         for p in self.params:
             if p in paramMap and to.hasParam(p.name):
                 to._set(**{p.name: paramMap[p]})
-        to.set(**{'uid': self.uid})
         return to
 
     def _resetUid(self, newUid):
