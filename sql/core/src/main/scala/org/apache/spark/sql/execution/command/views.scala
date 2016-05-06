@@ -77,6 +77,19 @@ case class CreateViewCommand(
       s"It is not allowed to add database prefix ${database} for the TEMPORARY view name.")
   }
 
+  // Disallows 'CREATE TEMPORARY VIEW IF NOT EXISTS' to be consistent with 'CREATE TEMPORARY TABLE'
+  if (allowExisting && isTemporary) {
+    throw new AnalysisException(
+      "It is not allowed to define a TEMPORARY view with IF NOT EXISTS.")
+  }
+
+  // Temporary view names should NOT contain database prefix like "database.table"
+  if (isTemporary && tableDesc.identifier.database.isDefined) {
+    val database = tableDesc.identifier.database.get
+    throw new AnalysisException(
+      s"It is not allowed to add database prefix ${database} for the TEMPORARY view name.")
+  }
+
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
     val qe = sparkSession.executePlan(child)
