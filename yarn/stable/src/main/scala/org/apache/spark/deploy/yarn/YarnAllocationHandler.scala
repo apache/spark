@@ -28,7 +28,9 @@ import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
-import org.apache.hadoop.yarn.util.Records
+import org.apache.hadoop.yarn.util.{RackResolver, Records}
+
+import org.apache.log4j.{Level, Logger}
 
 /**
  * Acquires resources for executors from a ResourceManager and launches executors in new containers.
@@ -43,6 +45,10 @@ private[yarn] class YarnAllocationHandler(
     securityMgr: SecurityManager)
   extends YarnAllocator(conf, sparkConf, appAttemptId, args, preferredNodes, securityMgr) {
 
+  if (Logger.getLogger(classOf[RackResolver]).getLevel == null) {
+    Logger.getLogger(classOf[RackResolver]).setLevel(Level.WARN)
+  }
+
   override protected def releaseContainer(container: Container) = {
     amClient.releaseAssignedContainer(container.getId())
   }
@@ -54,7 +60,80 @@ private[yarn] class YarnAllocationHandler(
     // We have already set the container request. Poll the ResourceManager for a response.
     // This doubles as a heartbeat if there are no pending container requests.
     val progressIndicator = 0.1f
-    new StableAllocateResponse(amClient.allocate(progressIndicator))
+    val allocateResponse = amClient.allocate(progressIndicator)
+    val allocatedContainers = allocateResponse.getAllocatedContainers()
+
+    if (allocatedContainers.size > 0) {
+      removeAllocatedContainersRequest(allocatedContainers)
+    }
+    new StableAllocateResponse(allocateResponse)
+  }
+
+  /**
+   * Remove container requests for containers granted by YARN.
+   *
+   * @param allocatedContainers Sequence of containers that were given to us by YARN
+   *
+   * Visible for testing.
+   */
+  def removeAllocatedContainersRequest(allocatedContainers: Seq[Container]): Unit = {
+    val containersToUse = new ArrayBuffer[Container](allocatedContainers.size)
+
+    // Match incoming requests by host
+    val remainingAfterHostMatches = new ArrayBuffer[Container]
+    for (allocatedContainer <- allocatedContainers) {
+      matchContainerToRequest(allocatedContainer, allocatedContainer.getNodeId.getHost,
+        containersToUse, remainingAfterHostMatches)
+    }
+
+    // Match remaining by rack
+    val remainingAfterRackMatches = new ArrayBuffer[Container]
+    for (allocatedContainer <- remainingAfterHostMatches) {
+      val rack = RackResolver.resolve(conf, allocatedContainer.getNodeId.getHost).getNetworkLocation
+      matchContainerToRequest(allocatedContainer, rack, containersToUse,
+        remainingAfterRackMatches)
+    }
+
+    // Assign remaining that are neither node-local nor rack-local
+    val remainingAfterOffRackMatches = new ArrayBuffer[Container]
+    for (allocatedContainer <- remainingAfterRackMatches) {
+      matchContainerToRequest(allocatedContainer, YarnSparkHadoopUtil.ANY_HOST, containersToUse,
+        remainingAfterOffRackMatches)
+    }
+  }
+
+  /**
+   * Looks for requests for the given location that match the given container allocation. If it
+   * finds one, removes the request so that it won't be submitted again. Places the container into
+   * containersToUse or remaining.
+   *
+   * @param allocatedContainer container that was given to us by YARN
+   * @param location resource name, either a node, rack, or *
+   * @param containersToUse list of containers that will be used
+   * @param remaining list of containers that will not be used
+   */
+  private def matchContainerToRequest(
+                                       allocatedContainer: Container,
+                                       location: String,
+                                       containersToUse: ArrayBuffer[Container],
+                                       remaining: ArrayBuffer[Container]): Unit = {
+    // SPARK-6050: certain Yarn configurations return a virtual core count that doesn't match the
+    // request; for example, capacity scheduler + DefaultResourceCalculator. So match on requested
+    // memory, but use the asked vcore count for matching, effectively disabling matching on vcore
+    // count.
+    val matchingResource = Resource.newInstance(allocatedContainer.getResource.getMemory,
+      executorCores)
+    val matchingRequests = amClient.getMatchingRequests(allocatedContainer.getPriority, location,
+      matchingResource)
+
+    // Match the allocation to a request
+    if (!matchingRequests.isEmpty) {
+      val containerRequest = matchingRequests.get(0).iterator.next
+      amClient.removeContainerRequest(containerRequest)
+      containersToUse += allocatedContainer
+    } else {
+      remaining += allocatedContainer
+    }
   }
 
   private def createRackResourceRequests(
