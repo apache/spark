@@ -1239,11 +1239,11 @@ setMethod("dapply",
 #' df <- createDataFrame (sqlContext, iris)
 #' schema <-  structType(structField("Species", "string"), structField("Avg", "double"))
 #' df1 <- gapply(
-#' df,
-#' function(x) {
-#'  data.frame(x$Species[1], mean(x$Sepal_Width), stringsAsFactors = FALSE)
-#' },
-#' schema, col=df$"Species")
+#'   df,
+#'   function(x) {
+#'     data.frame(x$Species[1], mean(x$Sepal_Width), stringsAsFactors = FALSE)
+#'   },
+#'   schema, col=df$"Species")
 #' collect(df1)
 #'
 #' Species      Avg
@@ -1263,9 +1263,9 @@ setMethod("dapply",
 #' df1 <- gapply(
 #'   df,
 #'   function(x) {
-#'     m <- suppressWarnings(lm(Sepal_Length ~
+#'     model <- suppressWarnings(lm(Sepal_Length ~
 #'     Sepal_Width + Petal_Length + Petal_Width, x))
-#'     data.frame(t(coef(m)))
+#'     data.frame(t(coef(model)))
 #'   }, schema, df$"Species")
 #' collect(df1)
 #'
