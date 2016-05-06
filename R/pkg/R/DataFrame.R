@@ -1214,6 +1214,77 @@ setMethod("dapply",
             dataFrame(sdf)
           })
 
+#' gapply
+#'
+#' Apply a function to each group of a DataFrame. The group is defined by an input
+#' grouping column(s).
+#'
+#' @param x A SparkDataFrame
+#' @param func A function to be applied to each group partition specified by grouping
+#'             column(s) of the SparkDataFrame.
+#'             The output of func is a local R data.frame.
+#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
+#'               It must match the output of func.
+#' @family SparkDataFrame functions
+#' @rdname gapply
+#' @name gapply
+#' @export
+#' @examples
+#'
+#' \dontrun{
+#'
+#' Computes the arithmetic mean of `Sepal_Width` by grouping
+#' on `Species`. Output the grouping value and the average.
+#'
+#' df <- createDataFrame (sqlContext, iris)
+#' schema <-  structType(structField("Species", "string"), structField("Avg", "double"))
+#' df1 <- gapply(
+#' df,
+#' function(x) {
+#'  data.frame(x$Species[1], mean(x$Sepal_Width), stringsAsFactors = FALSE)
+#' },
+#' schema, col=df$"Species")
+#' collect(df1)
+#'
+#' Species      Avg
+#' -----------------
+#' virginica   2.974
+#' versicolor  2.770
+#' setosa      3.428
+#'
+#' Fits linear models on iris dataset by grouping on the `Species` column and
+#' using `Sepal_Length` as a target variable, `Sepal_Width`, `Petal_Length`
+#' and `Petal_Width` as training features.
+#'
+#' df <- createDataFrame (sqlContext, iris)
+#' schema <- structType(structField("(Intercept)", "double"),
+#'   structField("Sepal_Width", "double"), structField("Petal_Length", "double"),
+#'   structField("Petal_Width", "double"))
+#' df1 <- gapply(
+#'   df,
+#'   function(x) {
+#'     m <- suppressWarnings(lm(Sepal_Length ~
+#'     Sepal_Width + Petal_Length + Petal_Width, x))
+#'     data.frame(t(coef(m)))
+#'   }, schema, df$"Species")
+#' collect(df1)
+#'
+#'Result
+#'---------
+#' Model  (Intercept)  Sepal_Width  Petal_Length  Petal_Width
+#' 1        0.699883    0.3303370    0.9455356    -0.1697527
+#' 2        1.895540    0.3868576    0.9083370    -0.6792238
+#' 3        2.351890    0.6548350    0.2375602     0.2521257
+#'
+#'}
+setMethod("gapply",
+          signature(x = "SparkDataFrame", func = "function", schema = "structType",
+                    col = "Column"),
+          function(x, func, schema, col, ...) {
+            repartitionedX <- repartition(x, col = col, ...)
+            dapply(repartitionedX, func, schema)
+          })
+
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #
 # but allow for use with DataFrames by first converting to an RRDD before calling #

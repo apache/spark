@@ -2082,6 +2082,27 @@ test_that("dapply() on a DataFrame", {
   expect_identical(expected, result)
 })
 
+test_that("gapply() on a DataFrame", {
+  df <- createDataFrame (sqlContext, iris)
+  schema <-  structType(structField("Species", "string"), structField("Avg", "double"))
+
+  # Groups by `Species` and computes the average on three R workers
+  df1 <- gapply(
+    df,
+   function(x) {
+     data.frame(x$Species[1], mean(x$Sepal_Width), stringsAsFactors = FALSE)
+   },
+   schema, col = df$"Species")
+   actual <- collect(arrange(df1, "Species"))
+
+   # Groups by `Species` and computes the average on one R worker
+   agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Species), FUN = mean))
+   colnames(agg_local_df) <- c("Species", "Avg")
+   expected <-  agg_local_df
+
+   expect_identical(expected, actual)
+})
+
 test_that("repartition by columns on DataFrame", {
   df <- createDataFrame (
     sqlContext,
