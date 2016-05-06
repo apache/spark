@@ -383,7 +383,7 @@ object ScalaReflection extends ScalaReflection {
           newInstance
         }
 
-      case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+      case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         val obj = NewInstance(
           udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
@@ -607,7 +607,7 @@ object ScalaReflection extends ScalaReflection {
         case t if t <:< localTypeOf[java.lang.Boolean] =>
           Invoke(inputObject, "booleanValue", BooleanType)
 
-        case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+        case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
           val udt = getClassFromType(t)
             .getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
           val obj = NewInstance(
@@ -690,7 +690,7 @@ object ScalaReflection extends ScalaReflection {
   /** Returns a catalyst DataType and its nullability for the given Scala Type using reflection. */
   def schemaFor(tpe: `Type`): Schema = ScalaReflectionLock.synchronized {
     tpe match {
-      case t if t.typeSymbol.annotations.exists(_.tpe =:= typeOf[SQLUserDefinedType]) =>
+      case t if t.typeSymbol.annotations.exists(_.tree.tpe =:= typeOf[SQLUserDefinedType]) =>
         val udt = getClassFromType(t).getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance()
         Schema(udt, nullable = true)
       case t if UDTRegistration.exists(getClassNameFromType(t)) =>
@@ -786,7 +786,7 @@ trait ScalaReflection {
   // SPARK-13640: Synchronize this because TypeTag.tpe is not thread-safe in Scala 2.10.
   def localTypeOf[T: TypeTag]: `Type` = ScalaReflectionLock.synchronized {
     val tag = implicitly[TypeTag[T]]
-    tag.in(mirror).tpe.normalize
+    tag.in(mirror).tpe.dealias
   }
 
   /**
@@ -827,9 +827,9 @@ trait ScalaReflection {
   }
 
   protected def constructParams(tpe: Type): Seq[Symbol] = {
-    val constructorSymbol = tpe.member(nme.CONSTRUCTOR)
+    val constructorSymbol = tpe.member(termNames.CONSTRUCTOR)
     val params = if (constructorSymbol.isMethod) {
-      constructorSymbol.asMethod.paramss
+      constructorSymbol.asMethod.paramLists
     } else {
       // Find the primary constructor, and use its parameter ordering.
       val primaryConstructorSymbol: Option[Symbol] = constructorSymbol.asTerm.alternatives.find(
@@ -837,7 +837,7 @@ trait ScalaReflection {
       if (primaryConstructorSymbol.isEmpty) {
         sys.error("Internal SQL error: Product object did not have a primary constructor.")
       } else {
-        primaryConstructorSymbol.get.asMethod.paramss
+        primaryConstructorSymbol.get.asMethod.paramLists
       }
     }
     params.flatten
