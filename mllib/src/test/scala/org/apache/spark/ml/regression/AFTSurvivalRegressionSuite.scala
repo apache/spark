@@ -63,6 +63,19 @@ class AFTSurvivalRegressionSuite
     }.repartition(1).saveAsTextFile("target/tmp/AFTSurvivalRegressionSuite/datasetMultivariate")
   }
 
+  /**
+   * Enable the ignored test to export the dataset into CSV format,
+   * so we can validate the training accuracy compared with R's survival package.
+   */
+  ignore("export test data into CSV format") {
+    datasetUnivariate.rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
+      features.toArray.mkString(",") + "," + censor + "," + label
+    }.repartition(1).saveAsTextFile("target/tmp/AFTSurvivalRegressionSuite/datasetUnivariate")
+    datasetMultivariate.rdd.map { case Row(features: Vector, label: Double, censor: Double) =>
+      features.toArray.mkString(",") + "," + censor + "," + label
+    }.repartition(1).saveAsTextFile("target/tmp/AFTSurvivalRegressionSuite/datasetMultivariate")
+  }
+
   test("params") {
     ParamsSuite.checkParams(new AFTSurvivalRegression)
     val model = new AFTSurvivalRegressionModel("aftSurvReg", Vectors.dense(0.0), 0.0, 0.0)
