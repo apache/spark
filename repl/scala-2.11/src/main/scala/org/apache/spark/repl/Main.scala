@@ -71,35 +71,32 @@ object Main extends Logging {
     }
   }
 
-  def createSparkContext(): SparkContext = {
+  def createSparkSession(): SparkSession = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
     conf.setIfMissing("spark.app.name", "Spark shell")
-      // SparkContext will detect this configuration and register it with the RpcEnv's
-      // file server, setting spark.repl.class.uri to the actual URI for executors to
-      // use. This is sort of ugly but since executors are started as part of SparkContext
-      // initialization in certain cases, there's an initialization order issue that prevents
-      // this from being set after SparkContext is instantiated.
-      .set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
+    // SparkContext will detect this configuration and register it with the RpcEnv's
+    // file server, setting spark.repl.class.uri to the actual URI for executors to
+    // use. This is sort of ugly but since executors are started as part of SparkContext
+    // initialization in certain cases, there's an initialization order issue that prevents
+    // this from being set after SparkContext is instantiated.
+    conf.set("spark.repl.class.outputDir", outputDir.getAbsolutePath())
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
     if (System.getenv("SPARK_HOME") != null) {
       conf.setSparkHome(System.getenv("SPARK_HOME"))
     }
-    sparkContext = new SparkContext(conf)
-    logInfo("Created spark context..")
-    Signaling.cancelOnInterrupt(sparkContext)
-    sparkContext
-  }
 
-  def createSparkSession(): SparkSession = {
+    val builder = SparkSession.builder.config(conf)
     if (SparkSession.hiveClassesArePresent) {
-      sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
+      sparkSession = builder.enableHiveSupport().getOrCreate()
       logInfo("Created Spark session with Hive support")
     } else {
-      sparkSession = SparkSession.builder.getOrCreate()
+      sparkSession = builder.getOrCreate()
       logInfo("Created Spark session")
     }
+    sparkContext = sparkSession.sparkContext
+    Signaling.cancelOnInterrupt(sparkContext)
     sparkSession
   }
 

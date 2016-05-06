@@ -15,59 +15,35 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.execution.benchmark
 
 import java.util.HashMap
 
-import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.SparkConf
 import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
-import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
-import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
+import org.apache.spark.sql.execution.joins.LongToUnsafeRowMap
 import org.apache.spark.sql.execution.vectorized.AggregateHashMap
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.util.Benchmark
 
 /**
- * Benchmark to measure whole stage codegen performance.
+ * Benchmark to measure performance for aggregate primitives.
  * To run this:
- *  build/sbt "sql/test-only *BenchmarkWholeStageCodegen"
+ *  build/sbt "sql/test-only *benchmark.AggregateBenchmark"
  *
  * Benchmarks in this file are skipped in normal builds.
  */
-class BenchmarkWholeStageCodegen extends SparkFunSuite {
-  lazy val conf = new SparkConf().setMaster("local[1]").setAppName("benchmark")
-    .set("spark.sql.shuffle.partitions", "1")
-    .set("spark.sql.autoBroadcastJoinThreshold", "1")
-  lazy val sc = SparkContext.getOrCreate(conf)
-  lazy val sqlContext = SQLContext.getOrCreate(sc)
-
-  /** Runs function `f` with whole stage codegen on and off. */
-  def runBenchmark(name: String, cardinality: Long)(f: => Unit): Unit = {
-    val benchmark = new Benchmark(name, cardinality)
-
-    benchmark.addCase(s"$name wholestage off", numIters = 2) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
-      f
-    }
-
-    benchmark.addCase(s"$name wholestage on", numIters = 5) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      f
-    }
-
-    benchmark.run()
-  }
+class AggregateBenchmark extends BenchmarkBase {
 
   ignore("aggregate without grouping") {
     val N = 500L << 22
     val benchmark = new Benchmark("agg without grouping", N)
     runBenchmark("agg w/o group", N) {
-      sqlContext.range(N).selectExpr("sum(id)").collect()
+      sparkSession.range(N).selectExpr("sum(id)").collect()
     }
     /*
     agg w/o group:                           Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
@@ -77,79 +53,19 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
      */
   }
 
-  ignore("filter & aggregate without group") {
-    val N = 500L << 22
-    runBenchmark("range/filter/sum", N) {
-      sqlContext.range(N).filter("(id & 1) = 1").groupBy().sum().collect()
-    }
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    range/filter/sum:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    range/filter/sum codegen=false              30663 / 31216         68.4          14.6       1.0X
-    range/filter/sum codegen=true                 2399 / 2409        874.1           1.1      12.8X
-    */
-  }
-
-  ignore("range/limit/sum") {
-    val N = 500L << 20
-    runBenchmark("range/limit/sum", N) {
-      sqlContext.range(N).limit(1000000).groupBy().sum().collect()
-    }
-    /*
-    Westmere E56xx/L56xx/X56xx (Nehalem-C)
-    range/limit/sum:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    range/limit/sum codegen=false             609 /  672        861.6           1.2       1.0X
-    range/limit/sum codegen=true              561 /  621        935.3           1.1       1.1X
-    */
-  }
-
-  ignore("sample") {
-    val N = 500 << 18
-    runBenchmark("sample with replacement", N) {
-      sqlContext.range(N).sample(withReplacement = true, 0.01).groupBy().sum().collect()
-    }
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    sample with replacement:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    sample with replacement codegen=false         7073 / 7227         18.5          54.0       1.0X
-    sample with replacement codegen=true          5199 / 5203         25.2          39.7       1.4X
-    */
-
-    runBenchmark("sample without replacement", N) {
-      sqlContext.range(N).sample(withReplacement = false, 0.01).groupBy().sum().collect()
-    }
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-
-    sample without replacement:              Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    ------------------------------------------------------------------------------------------------
-    sample without replacement codegen=false      1508 / 1529         86.9          11.5       1.0X
-    sample without replacement codegen=true        644 /  662        203.5           4.9       2.3X
-    */
-  }
-
   ignore("stat functions") {
     val N = 100L << 20
 
     runBenchmark("stddev", N) {
-      sqlContext.range(N).groupBy().agg("id" -> "stddev").collect()
+      sparkSession.range(N).groupBy().agg("id" -> "stddev").collect()
     }
 
     runBenchmark("kurtosis", N) {
-      sqlContext.range(N).groupBy().agg("id" -> "kurtosis").collect()
+      sparkSession.range(N).groupBy().agg("id" -> "kurtosis").collect()
     }
 
-
-    /**
-      Using ImperativeAggregate (as implemented in Spark 1.6):
+    /*
+    Using ImperativeAggregate (as implemented in Spark 1.6):
 
       Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       stddev:                            Avg Time(ms)    Avg Rate(M/s)  Relative Rate
@@ -172,29 +88,31 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       -------------------------------------------------------------------------------------------
       kurtosis codegen=false                 14847 / 15084          7.0         142.9       1.0X
       kurtosis codegen=true                    1652 / 2124         63.0          15.9       9.0X
-      */
+    */
   }
 
   ignore("aggregate with linear keys") {
     val N = 20 << 22
 
     val benchmark = new Benchmark("Aggregate w keys", N)
-    def f(): Unit = sqlContext.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+    def f(): Unit = {
+      sparkSession.range(N).selectExpr("(id & 65535) as k").groupBy("k").sum().collect()
+    }
 
     benchmark.addCase(s"codegen = F", numIters = 2) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -216,24 +134,24 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     val N = 20 << 22
 
     val benchmark = new Benchmark("Aggregate w keys", N)
-    sqlContext.range(N).selectExpr("id", "floor(rand() * 10000) as k").registerTempTable("test")
+    sparkSession.range(N).selectExpr("id", "floor(rand() * 10000) as k").registerTempTable("test")
 
-    def f(): Unit = sqlContext.sql("select k, k, sum(id) from test group by k, k").collect()
+    def f(): Unit = sparkSession.sql("select k, k, sum(id) from test group by k, k").collect()
 
     benchmark.addCase(s"codegen = F", numIters = 2) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = false)
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 0)
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", value = true)
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", 3)
       f()
     }
 
@@ -255,23 +173,23 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     val N = 20 << 20
 
     val benchmark = new Benchmark("Aggregate w string key", N)
-    def f(): Unit = sqlContext.range(N).selectExpr("id", "cast(id & 1023 as string) as k")
+    def f(): Unit = sparkSession.range(N).selectExpr("id", "cast(id & 1023 as string) as k")
       .groupBy("k").count().collect()
 
     benchmark.addCase(s"codegen = F", numIters = 2) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = F", numIters = 3) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T", numIters = 5) { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -292,23 +210,23 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     val N = 20 << 20
 
     val benchmark = new Benchmark("Aggregate w decimal key", N)
-    def f(): Unit = sqlContext.range(N).selectExpr("id", "cast(id & 65535 as decimal) as k")
+    def f(): Unit = sparkSession.range(N).selectExpr("id", "cast(id & 65535 as decimal) as k")
       .groupBy("k").count().collect()
 
     benchmark.addCase(s"codegen = F") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "3")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "3")
       f()
     }
 
@@ -329,7 +247,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     val N = 20 << 20
 
     val benchmark = new Benchmark("Aggregate w multiple keys", N)
-    def f(): Unit = sqlContext.range(N)
+    def f(): Unit = sparkSession.range(N)
       .selectExpr(
         "id",
         "(id & 1023) as k1",
@@ -343,19 +261,19 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       .collect()
 
     benchmark.addCase(s"codegen = F") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "false")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "false")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = F") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "0")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "0")
       f()
     }
 
     benchmark.addCase(s"codegen = T hashmap = T") { iter =>
-      sqlContext.setConf("spark.sql.codegen.wholeStage", "true")
-      sqlContext.setConf("spark.sql.codegen.aggregate.map.columns.max", "10")
+      sparkSession.conf.set("spark.sql.codegen.wholeStage", "true")
+      sparkSession.conf.set("spark.sql.codegen.aggregate.map.columns.max", "10")
       f()
     }
 
@@ -372,187 +290,22 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     */
   }
 
-  ignore("broadcast hash join") {
-    val N = 20 << 20
-    val M = 1 << 16
-    val dim = broadcast(sqlContext.range(M).selectExpr("id as k", "cast(id as string) as v"))
-
-    runBenchmark("Join w long", N) {
-      sqlContext.range(N).join(dim, (col("id") % M) === col("k")).count()
-    }
-
-    /*
-    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w long:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Join w long codegen=false                3002 / 3262          7.0         143.2       1.0X
-    Join w long codegen=true                  321 /  371         65.3          15.3       9.3X
-    */
-
-    runBenchmark("Join w long duplicated", N) {
-      val dim = broadcast(sqlContext.range(M).selectExpr("cast(id/10 as long) as k"))
-      sqlContext.range(N).join(dim, (col("id") % M) === col("k")).count()
-    }
-
-    /**
-    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w long duplicated:             Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Join w long duplicated codegen=false      3446 / 3478          6.1         164.3       1.0X
-    Join w long duplicated codegen=true       322 /  351         65.2          15.3      10.7X
-    */
-
-    val dim2 = broadcast(sqlContext.range(M)
-      .selectExpr("cast(id as int) as k1", "cast(id as int) as k2", "cast(id as string) as v"))
-
-    runBenchmark("Join w 2 ints", N) {
-      sqlContext.range(N).join(dim2,
-        (col("id") % M).cast(IntegerType) === col("k1")
-          && (col("id") % M).cast(IntegerType) === col("k2")).count()
-    }
-
-    /**
-    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w 2 ints:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Join w 2 ints codegen=false              4426 / 4501          4.7         211.1       1.0X
-    Join w 2 ints codegen=true                791 /  818         26.5          37.7       5.6X
-    */
-
-    val dim3 = broadcast(sqlContext.range(M)
-      .selectExpr("id as k1", "id as k2", "cast(id as string) as v"))
-
-    runBenchmark("Join w 2 longs", N) {
-      sqlContext.range(N).join(dim3,
-        (col("id") % M) === col("k1") && (col("id") % M) === col("k2"))
-        .count()
-    }
-
-    /**
-    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w 2 longs:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Join w 2 longs codegen=false             5905 / 6123          3.6         281.6       1.0X
-    Join w 2 longs codegen=true              2230 / 2529          9.4         106.3       2.6X
-      */
-
-    val dim4 = broadcast(sqlContext.range(M)
-      .selectExpr("cast(id/10 as long) as k1", "cast(id/10 as long) as k2"))
-
-    runBenchmark("Join w 2 longs duplicated", N) {
-      sqlContext.range(N).join(dim4,
-        (col("id") bitwiseAND M) === col("k1") && (col("id") bitwiseAND M) === col("k2"))
-        .count()
-    }
-
-    /**
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    Join w 2 longs duplicated:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    Join w 2 longs duplicated codegen=false      6420 / 6587          3.3         306.1       1.0X
-    Join w 2 longs duplicated codegen=true      2080 / 2139         10.1          99.2       3.1X
-     */
-
-    runBenchmark("outer join w long", N) {
-      sqlContext.range(N).join(dim, (col("id") % M) === col("k"), "left").count()
-    }
-
-    /**
-    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    outer join w long:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    outer join w long codegen=false          3055 / 3189          6.9         145.7       1.0X
-    outer join w long codegen=true            261 /  276         80.5          12.4      11.7X
-      */
-
-    runBenchmark("semi join w long", N) {
-      sqlContext.range(N).join(dim, (col("id") % M) === col("k"), "leftsemi").count()
-    }
-
-    /**
-    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    semi join w long:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    semi join w long codegen=false           1912 / 1990         11.0          91.2       1.0X
-    semi join w long codegen=true             237 /  244         88.3          11.3       8.1X
-     */
-  }
-
-  ignore("sort merge join") {
-    val N = 2 << 20
-    runBenchmark("merge join", N) {
-      val df1 = sqlContext.range(N).selectExpr(s"id * 2 as k1")
-      val df2 = sqlContext.range(N).selectExpr(s"id * 3 as k2")
-      df1.join(df2, col("k1") === col("k2")).count()
-    }
-
-    /**
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    merge join:                         Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    merge join codegen=false                 1588 / 1880          1.3         757.1       1.0X
-    merge join codegen=true                  1477 / 1531          1.4         704.2       1.1X
-      */
-
-    runBenchmark("sort merge join", N) {
-      val df1 = sqlContext.range(N)
-        .selectExpr(s"(id * 15485863) % ${N*10} as k1")
-      val df2 = sqlContext.range(N)
-        .selectExpr(s"(id * 15485867) % ${N*10} as k2")
-      df1.join(df2, col("k1") === col("k2")).count()
-    }
-
-    /**
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    sort merge join:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    sort merge join codegen=false            3626 / 3667          0.6        1728.9       1.0X
-    sort merge join codegen=true             3405 / 3438          0.6        1623.8       1.1X
-      */
-  }
-
-  ignore("shuffle hash join") {
-    val N = 4 << 20
-    sqlContext.setConf("spark.sql.shuffle.partitions", "2")
-    sqlContext.setConf("spark.sql.autoBroadcastJoinThreshold", "10000000")
-    sqlContext.setConf("spark.sql.join.preferSortMergeJoin", "false")
-    runBenchmark("shuffle hash join", N) {
-      val df1 = sqlContext.range(N).selectExpr(s"id as k1")
-      val df2 = sqlContext.range(N / 5).selectExpr(s"id * 3 as k2")
-      df1.join(df2, col("k1") === col("k2")).count()
-    }
-
-    /**
-    Java HotSpot(TM) 64-Bit Server VM 1.7.0_60-b19 on Mac OS X 10.9.5
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    shuffle hash join:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    shuffle hash join codegen=false          1101 / 1391          3.8         262.6       1.0X
-    shuffle hash join codegen=true            528 /  578          7.9         125.8       2.1X
-     */
-  }
 
   ignore("cube") {
     val N = 5 << 20
 
     runBenchmark("cube", N) {
-      sqlContext.range(N).selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
+      sparkSession.range(N).selectExpr("id", "id % 1000 as k1", "id & 256 as k2")
         .cube("k1", "k2").sum("id").collect()
     }
 
     /**
-      Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
+    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
       cube:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
       -------------------------------------------------------------------------------------------
       cube codegen=false                       3188 / 3392          1.6         608.2       1.0X
       cube codegen=true                        1239 / 1394          4.2         236.3       2.6X
-      */
+     */
   }
 
   ignore("hash and BytesToBytesMap") {
@@ -802,7 +555,7 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
       }
     }
 
-    /**
+    /*
     Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
     BytesToBytesMap:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
@@ -822,49 +575,4 @@ class BenchmarkWholeStageCodegen extends SparkFunSuite {
     benchmark.run()
   }
 
-  ignore("collect") {
-    val N = 1 << 20
-
-    val benchmark = new Benchmark("collect", N)
-    benchmark.addCase("collect 1 million") { iter =>
-      sqlContext.range(N).collect()
-    }
-    benchmark.addCase("collect 2 millions") { iter =>
-      sqlContext.range(N * 2).collect()
-    }
-    benchmark.addCase("collect 4 millions") { iter =>
-      sqlContext.range(N * 4).collect()
-    }
-    benchmark.run()
-
-    /**
-    Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
-    collect:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    collect 1 million                         439 /  654          2.4         418.7       1.0X
-    collect 2 millions                        961 / 1907          1.1         916.4       0.5X
-    collect 4 millions                       3193 / 3895          0.3        3044.7       0.1X
-     */
-  }
-
-  ignore("collect limit") {
-    val N = 1 << 20
-
-    val benchmark = new Benchmark("collect limit", N)
-    benchmark.addCase("collect limit 1 million") { iter =>
-      sqlContext.range(N * 4).limit(N).collect()
-    }
-    benchmark.addCase("collect limit 2 millions") { iter =>
-      sqlContext.range(N * 4).limit(N * 2).collect()
-    }
-    benchmark.run()
-
-    /**
-    model name      : Westmere E56xx/L56xx/X56xx (Nehalem-C)
-    collect limit:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    collect limit 1 million                   833 / 1284          1.3         794.4       1.0X
-    collect limit 2 millions                 3348 / 4005          0.3        3193.3       0.2X
-     */
-  }
 }

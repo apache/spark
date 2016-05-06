@@ -35,9 +35,8 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
-  def set(key: String, value: String): RuntimeConfig = {
+  def set(key: String, value: String): Unit = {
     sqlConf.setConfString(key, value)
-    this
   }
 
   /**
@@ -45,7 +44,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
-  def set(key: String, value: Boolean): RuntimeConfig = {
+  def set(key: String, value: Boolean): Unit = {
     set(key, value.toString)
   }
 
@@ -54,7 +53,7 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    *
    * @since 2.0.0
    */
-  def set(key: String, value: Long): RuntimeConfig = {
+  def set(key: String, value: Long): Unit = {
     set(key, value.toString)
   }
 

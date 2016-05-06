@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.vectorized;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 
-import org.apache.commons.lang.NotImplementedException;
-
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
@@ -29,9 +27,10 @@ import org.apache.spark.unsafe.Platform;
  * Column data backed using offheap memory.
  */
 public final class OffHeapColumnVector extends ColumnVector {
-  
-  private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
-  
+
+  private static final boolean bigEndianPlatform =
+    ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
   private long nulls;
@@ -230,7 +229,8 @@ public final class OffHeapColumnVector extends ColumnVector {
       int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
       long offset = data + 4 * rowId;
       for (int i = 0; i < count; ++i, offset += 4, srcOffset += 4) {
-        Platform.putInt(null, offset, java.lang.Integer.reverseBytes(Platform.getInt(src, srcOffset)));
+        Platform.putInt(null, offset,
+            java.lang.Integer.reverseBytes(Platform.getInt(src, srcOffset)));
       }
     }
   }
@@ -276,7 +276,8 @@ public final class OffHeapColumnVector extends ColumnVector {
       int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
       long offset = data + 8 * rowId;
       for (int i = 0; i < count; ++i, offset += 8, srcOffset += 8) {
-        Platform.putLong(null, offset, java.lang.Long.reverseBytes(Platform.getLong(src, srcOffset)));
+        Platform.putLong(null, offset,
+            java.lang.Long.reverseBytes(Platform.getLong(src, srcOffset)));
       }
     }
   }

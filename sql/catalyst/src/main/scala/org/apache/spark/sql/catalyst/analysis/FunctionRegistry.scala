@@ -28,7 +28,11 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.util.StringKeyHashMap
 
 
-/** A catalog for looking up user defined functions, used by an [[Analyzer]]. */
+/**
+ * A catalog for looking up user defined functions, used by an [[Analyzer]].
+ *
+ * Note: The implementation should be thread-safe to allow concurrent access.
+ */
 trait FunctionRegistry {
 
   final def registerFunction(name: String, builder: FunctionBuilder): Unit = {
@@ -62,7 +66,7 @@ trait FunctionRegistry {
 
 class SimpleFunctionRegistry extends FunctionRegistry {
 
-  private[sql] val functionBuilders =
+  protected val functionBuilders =
     StringKeyHashMap[(ExpressionInfo, FunctionBuilder)](caseSensitive = false)
 
   override def registerFunction(
@@ -97,7 +101,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.remove(name).isDefined
   }
 
-  override def clear(): Unit = {
+  override def clear(): Unit = synchronized {
     functionBuilders.clear()
   }
 
