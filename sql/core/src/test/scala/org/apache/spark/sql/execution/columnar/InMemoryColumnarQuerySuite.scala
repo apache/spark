@@ -219,4 +219,14 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     assert(data.count() === 10)
     assert(data.filter($"s" === "3").count() === 1)
   }
+
+  test("SPARK-14138: Generated SpecificColumnarIterator can exceed JVM size limit for cached DF") {
+    val length1 = 3999
+    val columnTypes1 = List.fill(length1)(IntegerType)
+    val columnarIterator1 = GenerateColumnAccessor.generate(columnTypes1)
+
+    val length2 = 10000
+    val columnTypes2 = List.fill(length2)(IntegerType)
+    val columnarIterator2 = GenerateColumnAccessor.generate(columnTypes2)
+  }
 }

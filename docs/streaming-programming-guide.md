@@ -872,10 +872,7 @@ val runningCounts = pairs.updateStateByKey[Int](updateFunction _)
 {% endhighlight %}
 
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
-the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
-Scala code, take a look at the example
-[StatefulNetworkWordCount.scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache
-/spark/examples/streaming/StatefulNetworkWordCount.scala).
+the `(word, 1)` pairs) and the `runningCount` having the previous count.
 
 </div>
 <div data-lang="java" markdown="1">

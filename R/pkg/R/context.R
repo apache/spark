@@ -103,7 +103,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
+  # nolint start
+  # suppress lintr warning: Place a space before left parenthesis, except in a function call.
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
+  # nolint end
     if (is.data.frame(coll)) {
       message(paste("context.R: A data frame is parallelized by columns."))
     } else {

@@ -388,14 +388,20 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
 
     def test_parse_vector(self):
+        a = DenseVector([])
+        self.assertEqual(str(a), '[]')
+        self.assertEqual(Vectors.parse(str(a)), a)
         a = DenseVector([3, 4, 6, 7])
-        self.assertTrue(str(a), '[3.0,4.0,6.0,7.0]')
-        self.assertTrue(Vectors.parse(str(a)), a)
+        self.assertEqual(str(a), '[3.0,4.0,6.0,7.0]')
+        self.assertEqual(Vectors.parse(str(a)), a)
+        a = SparseVector(4, [], [])
+        self.assertEqual(str(a), '(4,[],[])')
+        self.assertEqual(SparseVector.parse(str(a)), a)
         a = SparseVector(4, [0, 2], [3, 4])
-        self.assertTrue(str(a), '(4,[0,2],[3.0,4.0])')
-        self.assertTrue(Vectors.parse(str(a)), a)
+        self.assertEqual(str(a), '(4,[0,2],[3.0,4.0])')
+        self.assertEqual(Vectors.parse(str(a)), a)
         a = SparseVector(10, [0, 1], [4, 5])
-        self.assertTrue(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
+        self.assertEqual(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
 
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])

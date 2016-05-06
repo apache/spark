@@ -54,7 +54,7 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "DataFram
           function(formula, family = c("gaussian", "binomial"), data, lambda = 0, alpha = 0,
             standardize = TRUE, solver = "auto") {
             family <- match.arg(family)
-            formula <- paste(deparse(formula), collapse="")
+            formula <- paste(deparse(formula), collapse = "")
             model <- callJStatic("org.apache.spark.ml.api.r.SparkRWrappers",
                                  "fitRModelFormula", formula, data@sdf, family, lambda,
                                  alpha, standardize, solver)

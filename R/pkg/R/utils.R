@@ -158,7 +158,7 @@ wrapInt <- function(value) {
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
 mult31AndAdd <- function(val, addVal) {
-  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
@@ -202,7 +202,7 @@ serializeToString <- function(rdd) {
 # This function amortizes the allocation cost by doubling
 # the size of the list every time it fills up.
 addItemToAccumulator <- function(acc, item) {
-  if(acc$counter == acc$size) {
+  if (acc$counter == acc$size) {
     acc$size <- acc$size * 2
     length(acc$data) <- acc$size
   }

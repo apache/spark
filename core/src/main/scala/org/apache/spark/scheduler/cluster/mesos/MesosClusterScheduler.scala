@@ -422,6 +422,12 @@ private[spark] class MesosClusterScheduler(
       "--driver-cores", desc.cores.toString,
       "--driver-memory", s"${desc.mem}M")
 
+    val replicatedOptionsBlacklist = Set(
+      "spark.jars", // Avoids duplicate classes in classpath
+      "spark.submit.deployMode", // this would be set to `cluster`, but we need client
+      "spark.master" // this contains the address of the dispatcher, not master
+    )
+
     // Assume empty main class means we're running python
     if (!desc.command.mainClass.equals("")) {
       options ++= Seq("--class", desc.command.mainClass)
@@ -439,7 +445,27 @@ private[spark] class MesosClusterScheduler(
         .mkString(",")
       options ++= Seq("--py-files", formattedFiles)
     }
+    desc.schedulerProperties
+      .filter { case (key, _) => !replicatedOptionsBlacklist.contains(key) }
+      .foreach { case (key, value) => options ++= Seq("--conf", s"$key=${shellEscape(value)}") }
     options
+  }
+
+  /**
+    * Escape args for Unix-like shells, unless already quoted by the user.
+    * Based on: http://www.gnu.org/software/bash/manual/html_node/Double-Quotes.html
+    * and http://www.grymoire.com/Unix/Quote.html
+    * @param value argument
+    * @return escaped argument
+    */
+  private[scheduler] def shellEscape(value: String): String = {
+    val WrappedInQuotes = """^(".+"|'.+')$""".r
+    val ShellSpecialChars = (""".*([ '<>&|\?\*;!#\\(\)"$`]).*""").r
+    value match {
+      case WrappedInQuotes(c) => value // The user quoted his args, don't touch it!
+      case ShellSpecialChars(c) => "\"" + value.replaceAll("""(["`\$\\])""", """\\$1""") + "\""
+      case _: String => value // Don't touch harmless strings
+    }
   }
 
   private class ResourceOffer(val offer: Offer, var cpu: Double, var mem: Double) {

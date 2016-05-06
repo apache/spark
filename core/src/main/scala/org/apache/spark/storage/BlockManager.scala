@@ -1091,7 +1091,6 @@ private[spark] class BlockManager(
 
   /**
    * Remove all blocks belonging to the given RDD.
- *
    * @return The number of blocks removed.
    */
   def removeRdd(rddId: Int): Int = {
@@ -1134,9 +1133,14 @@ private[spark] class BlockManager(
               "the disk, memory, or external block store")
           }
           blockInfo.remove(blockId)
+          val status = getCurrentBlockStatus(blockId, info)
           if (tellMaster && info.tellMaster) {
-            val status = getCurrentBlockStatus(blockId, info)
             reportBlockStatus(blockId, info, status)
+          }
+          Option(TaskContext.get()).foreach { tc =>
+            val metrics = tc.taskMetrics()
+            val lastUpdatedBlocks = metrics.updatedBlocks.getOrElse(Seq[(BlockId, BlockStatus)]())
+            metrics.updatedBlocks = Some(lastUpdatedBlocks ++ Seq((blockId, status)))
           }
         }
       } finally {
@@ -1168,15 +1172,9 @@ private[spark] class BlockManager(
         try {
           info.synchronized {
             val level = info.level
-            if (level.useMemory) {
-              memoryStore.remove(id)
-            }
-            if (level.useDisk) {
-              diskStore.remove(id)
-            }
-            if (level.useOffHeap) {
-              externalBlockStore.remove(id)
-            }
+            if (level.useMemory) { memoryStore.remove(id) }
+            if (level.useDisk) { diskStore.remove(id) }
+            if (level.useOffHeap) { externalBlockStore.remove(id) }
             iterator.remove()
             logInfo(s"Dropped block $id")
           }
