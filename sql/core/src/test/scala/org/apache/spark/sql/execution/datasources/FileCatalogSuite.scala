@@ -48,15 +48,19 @@ class FileCatalogSuite extends SharedSQLContext {
 
       val unqualifiedDirPath = new Path(dir.getCanonicalPath)
       val unqualifiedFilePath = new Path(file.getCanonicalPath)
+      require(!unqualifiedDirPath.toString.contains("file:"))
+      require(!unqualifiedFilePath.toString.contains("file:"))
+
       val fs = unqualifiedDirPath.getFileSystem(sparkContext.hadoopConfiguration)
       val qualifiedFilePath = fs.makeQualified(new Path(file.getCanonicalPath))
+      require(qualifiedFilePath.toString.startsWith("file:"))
 
       val catalog1 = new ListingFileCatalog(
         sqlContext.sparkSession, Seq(unqualifiedDirPath), Map.empty, None)
       assert(catalog1.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
 
       val catalog2 = new ListingFileCatalog(
-        sqlContext.sparkSession, Seq(unqualifiedFilePath), Map.empty, None)
+        sqlContext.sparkSession, Seq(unqualifiedDirPath), Map.empty, None)
       assert(catalog2.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
 
     }

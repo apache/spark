@@ -803,12 +803,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       check(          // red from ../p1=1/p2=foo with base ../p1=1/ should not infer p1
         path = s"$dir/p1=1/p2=foo/*",
         basePath = s"$dir/p1=1/",
-        resultDf.filter("p1 = 1").filter("p2 = foo").drop("p1"))
+        resultDf.filter("p1 = 1").filter("p2 = 'foo'").drop("p1"))
 
       check(          // red from ../p1=1/p2=foo with base ../p1=1/p2=foo, should not infer p1, p2
         path = s"$dir/p1=1/p2=foo/*",
         basePath = s"$dir/p1=1/p2=foo/",
-        resultDf.filter("p1 = 1").filter("p2 = foo").drop("p1", "p2"))
+        resultDf.filter("p1 = 1").filter("p2 = 'foo'").drop("p1", "p2"))
     }
   }
 
