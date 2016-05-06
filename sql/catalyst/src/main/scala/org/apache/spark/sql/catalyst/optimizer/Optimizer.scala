@@ -21,8 +21,9 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -1572,7 +1573,17 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
         val newCondition = condition transform {
           case a: Attribute if a == d.output.head => d.deserializer
         }
-        Filter(newCondition, d.child)
+
+        val newFilter = Filter(newCondition, d.child)
+
+        // SPARK-15112
+        val output = d.child.resolve(StructType.fromAttributes(s.output), caseSensitiveResolution)
+
+        if (output == d.child.output) {
+          newFilter
+        } else {
+          Project(output, newFilter)
+        }
       }
   }
 }

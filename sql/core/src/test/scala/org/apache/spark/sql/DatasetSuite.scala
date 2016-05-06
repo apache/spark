@@ -24,6 +24,7 @@ import scala.language.postfixOps
 
 import org.scalatest.words.MatcherWords.be
 
+import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -701,6 +702,28 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException](dataset.createTempView("tempView"))
     assert(e.message.contains("already exists"))
     dataset.sparkSession.catalog.dropTempView("tempView")
+  }
+
+  test("SPARK-15112: Dataset should accept out of order input columns") {
+    val ds = Seq(1 -> "foo", 2 -> "bar").toDF("b", "a").as[ClassData]
+
+    assertResult(ScalaReflection.schemaFor[ClassData].dataType) {
+      ds.schema
+    }
+
+    assertResult(Seq(ClassData("foo", 1), ClassData("bar", 2))) {
+      ds.collect().toSeq
+    }
+
+    assertResult(
+      new StructType()
+        .add("b", IntegerType, nullable = false)
+        .add("a", StringType, nullable = true)
+    ) {
+      ds.toDF().schema
+    }
+
+    assert(ds.filter(_.b > 1).collect().toSeq == Seq(ClassData("bar", 2)))
   }
 }
 

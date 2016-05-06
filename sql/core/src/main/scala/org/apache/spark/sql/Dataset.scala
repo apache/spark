@@ -343,7 +343,8 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema))
+  def toDF(): DataFrame =
+    new Dataset[Row](sparkSession, queryExecution, RowEncoder(logicalPlan.schema))
 
   /**
    * :: Experimental ::
@@ -397,7 +398,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def schema: StructType = queryExecution.analyzed.schema
+  def schema: StructType = resolvedTEncoder.schema
 
   /**
    * Prints the schema to the console in a nice tree format.
