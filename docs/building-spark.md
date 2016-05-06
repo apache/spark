@@ -237,6 +237,21 @@ To run test suites of a specific sub project as follows:
 
     build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver core/test
 
+# Testing with SBT
+
+Some of the tests require Spark to be packaged first, so always run `sbt/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
+
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive assembly
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive test
+
+To run only a specific test suite as follows:
+
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive "test-only org.apache.spark.repl.ReplSuite"
+
+To run test suites of a specific sub project as follows:
+
+    sbt/sbt -Pyarn -Phadoop-2.3 -Phive core/test
+
 # Speeding up Compilation with Zinc
 
 [Zinc](https://github.com/typesafehub/zinc) is a long-running server version of SBT's incremental
