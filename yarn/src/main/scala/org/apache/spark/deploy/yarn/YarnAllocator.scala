@@ -480,6 +480,10 @@ private[yarn] class YarnAllocator(
       val executorId = executorIdCounter.toString
 
       assert(container.getResource.getMemory >= resource.getMemory)
+      if (container.getResource.getVirtualCores < resource.getVirtualCores) {
+        logWarning(s"Number of vcore ${container.getResource.getVirtualCores} in allocated " +
+          s"container response is less than the requested number ${resource.getVirtualCores}")
+      }
 
       logInfo("Launching container %s for on host %s".format(containerId, executorHostname))
       executorIdToContainer(executorId) = container
@@ -499,7 +503,7 @@ private[yarn] class YarnAllocator(
         executorId,
         executorHostname,
         executorMemory,
-        executorCores,
+        container.getResource.getVirtualCores,
         appAttemptId.getApplicationId.toString,
         securityMgr,
         localResources)
