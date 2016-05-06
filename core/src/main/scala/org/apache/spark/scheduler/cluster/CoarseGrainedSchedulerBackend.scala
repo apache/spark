@@ -533,6 +533,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, val rpcEnv: Rp
     unknownExecutors.foreach { id =>
       logWarning(s"Executor to kill $id does not exist!")
     }
+    executorsPendingToRemove --= knownExecutors
 
     // If an executor is already pending to be removed, do not kill it again (SPARK-9795)
     // If this executor is busy, do not kill it unless we are told to force kill it (SPARK-9552)
