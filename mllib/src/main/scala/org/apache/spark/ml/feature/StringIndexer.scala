@@ -124,6 +124,8 @@ class StringIndexerModel (
 
   def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
 
+  def this(labels: Array[String]) = this(Identifiable.randomUID("strIdx"), labels)
+
   private val labelToIndex: OpenHashMap[String, Double] = {
     val n = labels.length
     val map = new OpenHashMap[String, Double](n)
