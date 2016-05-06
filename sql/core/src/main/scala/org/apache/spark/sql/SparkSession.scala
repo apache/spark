@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.types.{DataType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, LongType, StructField, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
 
@@ -450,7 +450,12 @@ class SparkSession private(
    */
   @Experimental
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
-    new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
+    val encoder = {
+      val schema = StructType(Seq(StructField("id", LongType, nullable = false)))
+      ExpressionEncoder[java.lang.Long]().copy[java.lang.Long](schema = schema)
+    }
+
+    new Dataset(self, Range(start, end, step, numPartitions), encoder)
   }
 
   /**
@@ -489,7 +494,7 @@ class SparkSession private(
 
   /* ------------------------ *
    |  Catalog-related methods |
-   * ----------------- ------ */
+   * ------------------------ */
 
   /**
    * Interface through which the user may create, drop, alter or query underlying
