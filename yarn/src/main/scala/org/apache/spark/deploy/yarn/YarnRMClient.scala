@@ -19,27 +19,26 @@ package org.apache.spark.deploy.yarn
 
 import java.util.{List => JList}
 
-import scala.collection.JavaConversions._
-import scala.collection.{Map, Set}
+import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.ApplicationConstants
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
 import org.apache.hadoop.yarn.conf.YarnConfiguration
-import org.apache.hadoop.yarn.util.ConverterUtils
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
-import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
 
 /**
  * Handles registering and unregistering the application with the YARN ResourceManager.
  */
-private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logging {
+private[spark] class YarnRMClient extends Logging {
 
   private var amClient: AMRMClient[ContainerRequest] = _
   private var uiHistoryAddress: String = _
@@ -50,17 +49,20 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
    *
    * @param conf The Yarn configuration.
    * @param sparkConf The Spark configuration.
-   * @param preferredNodeLocations Map with hints about where to allocate containers.
    * @param uiAddress Address of the SparkUI.
    * @param uiHistoryAddress Address of the application on the History Server.
+   * @param securityMgr The security manager.
+   * @param localResources Map with information about files distributed via YARN's cache.
    */
   def register(
+      driverUrl: String,
+      driverRef: RpcEndpointRef,
       conf: YarnConfiguration,
       sparkConf: SparkConf,
-      preferredNodeLocations: Map[String, Set[SplitInfo]],
       uiAddress: String,
       uiHistoryAddress: String,
-      securityMgr: SecurityManager
+      securityMgr: SecurityManager,
+      localResources: Map[String, LocalResource]
     ): YarnAllocator = {
     amClient = AMRMClient.createAMRMClient()
     amClient.init(conf)
@@ -72,7 +74,8 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
     }
-    new YarnAllocator(conf, sparkConf, amClient, getAttemptId(), args, securityMgr)
+    new YarnAllocator(driverUrl, driverRef, conf, sparkConf, amClient, getAttemptId(), securityMgr,
+      localResources)
   }
 
   /**
@@ -89,9 +92,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
 
   /** Returns the attempt ID. */
   def getAttemptId(): ApplicationAttemptId = {
-    val containerIdString = System.getenv(ApplicationConstants.Environment.CONTAINER_ID.name())
-    val containerId = ConverterUtils.toContainerId(containerIdString)
-    containerId.getApplicationAttemptId()
+    YarnSparkHadoopUtil.get.getContainerId.getApplicationAttemptId()
   }
 
   /** Returns the configuration for the AmIpFilter to add to the Spark UI. */
@@ -106,8 +107,8 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       val method = classOf[WebAppUtils].getMethod("getProxyHostsAndPortsForAmFilter",
         classOf[Configuration])
       val proxies = method.invoke(null, conf).asInstanceOf[JList[String]]
-      val hosts = proxies.map { proxy => proxy.split(":")(0) }
-      val uriBases = proxies.map { proxy => prefix + proxy + proxyBase }
+      val hosts = proxies.asScala.map { proxy => proxy.split(":")(0) }
+      val uriBases = proxies.asScala.map { proxy => prefix + proxy + proxyBase }
       Map("PROXY_HOSTS" -> hosts.mkString(","), "PROXY_URI_BASES" -> uriBases.mkString(","))
     } catch {
       case e: NoSuchMethodException =>
@@ -120,7 +121,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
 
   /** Returns the maximum number of attempts to register the AM. */
   def getMaxRegAttempts(sparkConf: SparkConf, yarnConf: YarnConfiguration): Int = {
-    val sparkMaxAttempts = sparkConf.getOption("spark.yarn.maxAppAttempts").map(_.toInt)
+    val sparkMaxAttempts = sparkConf.get(MAX_APP_ATTEMPTS).map(_.toInt)
     val yarnMaxAttempts = yarnConf.getInt(
       YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS)
     val retval: Int = sparkMaxAttempts match {

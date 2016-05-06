@@ -24,10 +24,14 @@ import org.apache.spark.ui.{SparkUI, SparkUITab}
 private[ui] class JobsTab(parent: SparkUI) extends SparkUITab(parent, "jobs") {
   val sc = parent.sc
   val killEnabled = parent.killEnabled
-  def isFairScheduler: Boolean =
-    jobProgresslistener.schedulingMode.exists(_ == SchedulingMode.FAIR)
   val jobProgresslistener = parent.jobProgressListener
   val executorListener = parent.executorsListener
+  val operationGraphListener = parent.operationGraphListener
+
+  def isFairScheduler: Boolean =
+    jobProgresslistener.schedulingMode == Some(SchedulingMode.FAIR)
+
+  def getSparkUser: String = parent.getSparkUser
 
   attachPage(new AllJobsPage(this))
   attachPage(new JobPage(this))

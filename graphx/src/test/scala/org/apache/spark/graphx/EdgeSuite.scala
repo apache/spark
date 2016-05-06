@@ -17,21 +17,21 @@
 
 package org.apache.spark.graphx
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class EdgeSuite extends FunSuite {
+class EdgeSuite extends SparkFunSuite {
   test ("compare") {
-    // decending order
+    // descending order
     val testEdges: Array[Edge[Int]] = Array(
-      Edge(0x7FEDCBA987654321L, -0x7FEDCBA987654321L, 1), 
-      Edge(0x2345L, 0x1234L, 1), 
-      Edge(0x1234L, 0x5678L, 1), 
-      Edge(0x1234L, 0x2345L, 1), 
+      Edge(0x7FEDCBA987654321L, -0x7FEDCBA987654321L, 1),
+      Edge(0x2345L, 0x1234L, 1),
+      Edge(0x1234L, 0x5678L, 1),
+      Edge(0x1234L, 0x2345L, 1),
       Edge(-0x7FEDCBA987654321L, 0x7FEDCBA987654321L, 1)
     )
     // to ascending order
     val sortedEdges = testEdges.sorted(Edge.lexicographicOrdering[Int])
-    
+
     for (i <- 0 until testEdges.length) {
       assert(sortedEdges(i) == testEdges(testEdges.length - i - 1))
     }

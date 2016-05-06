@@ -27,10 +27,14 @@ import java.util.Map;
  */
 class CommandBuilderUtils {
 
-  static final String DEFAULT_MEM = "512m";
+  static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
   static final String ENV_SPARK_HOME = "SPARK_HOME";
-  static final String ENV_SPARK_ASSEMBLY = "_SPARK_ASSEMBLY";
+
+  /** The set of known JVM vendors. */
+  enum JavaVendor {
+    Oracle, IBM, OpenJDK, Unknown
+  }
 
   /** Returns whether the given string is null or empty. */
   static boolean isEmpty(String s) {
@@ -108,6 +112,21 @@ class CommandBuilderUtils {
     return os.startsWith("Windows");
   }
 
+  /** Returns an enum value indicating whose JVM is being used. */
+  static JavaVendor getJavaVendor() {
+    String vendorString = System.getProperty("java.vendor");
+    if (vendorString.contains("Oracle")) {
+      return JavaVendor.Oracle;
+    }
+    if (vendorString.contains("IBM")) {
+      return JavaVendor.IBM;
+    }
+    if (vendorString.contains("OpenJDK")) {
+      return JavaVendor.OpenJDK;
+    }
+    return JavaVendor.Unknown;
+  }
+
   /**
    * Updates the user environment, appending the given pathList to the existing value of the given
    * environment variable (or setting it if it hasn't yet been set).
@@ -127,7 +146,7 @@ class CommandBuilderUtils {
    * Output: [ "ab cd", "efgh", "i \" j" ]
    */
   static List<String> parseOptionString(String s) {
-    List<String> opts = new ArrayList<String>();
+    List<String> opts = new ArrayList<>();
     StringBuilder opt = new StringBuilder();
     boolean inOpt = false;
     boolean inSingleQuote = false;
@@ -291,6 +310,68 @@ class CommandBuilderUtils {
       quoted.appendCodePoint(cp);
     }
     return quoted.append('"').toString();
+  }
+
+  /**
+   * Adds the default perm gen size option for Spark if the VM requires it and the user hasn't
+   * set it.
+   */
+  static void addPermGenSizeOpt(List<String> cmd) {
+    // Don't set MaxPermSize for IBM Java, or Oracle Java 8 and later.
+    if (getJavaVendor() == JavaVendor.IBM) {
+      return;
+    }
+    if (javaMajorVersion(System.getProperty("java.version")) > 7) {
+      return;
+    }
+    for (String arg : cmd) {
+      if (arg.startsWith("-XX:MaxPermSize=")) {
+        return;
+      }
+    }
+
+    cmd.add("-XX:MaxPermSize=256m");
+  }
+
+  /**
+   * Get the major version of the java version string supplied. This method
+   * accepts any JEP-223-compliant strings (9-ea, 9+100), as well as legacy
+   * version strings such as 1.7.0_79
+   */
+  static int javaMajorVersion(String javaVersion) {
+    String[] version = javaVersion.split("[+.\\-]+");
+    int major = Integer.parseInt(version[0]);
+    // if major > 1, we're using the JEP-223 version string, e.g., 9-ea, 9+120
+    // otherwise the second number is the major version
+    if (major > 1) {
+      return major;
+    } else {
+      return Integer.parseInt(version[1]);
+    }
+  }
+
+  /**
+   * Find the location of the Spark jars dir, depending on whether we're looking at a build
+   * or a distribution directory.
+   */
+  static String findJarsDir(String sparkHome, String scalaVersion, boolean failIfNotFound) {
+    // TODO: change to the correct directory once the assembly build is changed.
+    File libdir;
+    if (new File(sparkHome, "RELEASE").isFile()) {
+      libdir = new File(sparkHome, "jars");
+      checkState(!failIfNotFound || libdir.isDirectory(),
+        "Library directory '%s' does not exist.",
+        libdir.getAbsolutePath());
+    } else {
+      libdir = new File(sparkHome, String.format("assembly/target/scala-%s/jars", scalaVersion));
+      if (!libdir.isDirectory()) {
+        checkState(!failIfNotFound,
+          "Library directory '%s' does not exist; make sure Spark is built.",
+          libdir.getAbsolutePath());
+        libdir = null;
+      }
+    }
+    return libdir != null ? libdir.getAbsolutePath() : null;
   }
 
 }

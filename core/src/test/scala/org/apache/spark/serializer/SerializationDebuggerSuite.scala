@@ -17,16 +17,21 @@
 
 package org.apache.spark.serializer
 
-import java.io.{ObjectOutput, ObjectInput}
+import java.io._
 
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
+import scala.annotation.meta.param
+
+import org.scalatest.BeforeAndAfterEach
+
+import org.apache.spark.SparkFunSuite
 
 
-class SerializationDebuggerSuite extends FunSuite with BeforeAndAfterEach {
+class SerializationDebuggerSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   import SerializationDebugger.find
 
   override def beforeEach(): Unit = {
+    super.beforeEach()
     SerializationDebugger.enableDebugging = true
   }
 
@@ -96,13 +101,100 @@ class SerializationDebuggerSuite extends FunSuite with BeforeAndAfterEach {
   }
 
   test("externalizable class writing out not serializable object") {
-    val s = find(new ExternalizableClass)
+    val s = find(new ExternalizableClass(new SerializableClass2(new NotSerializable)))
     assert(s.size === 5)
     assert(s(0).contains("NotSerializable"))
     assert(s(1).contains("objectField"))
     assert(s(2).contains("SerializableClass2"))
     assert(s(3).contains("writeExternal"))
     assert(s(4).contains("ExternalizableClass"))
+  }
+
+  test("externalizable class writing out serializable objects") {
+    assert(find(new ExternalizableClass(new SerializableClass1)).isEmpty)
+  }
+
+  test("object containing writeReplace() which returns not serializable object") {
+    val s = find(new SerializableClassWithWriteReplace(new NotSerializable))
+    assert(s.size === 3)
+    assert(s(0).contains("NotSerializable"))
+    assert(s(1).contains("writeReplace"))
+    assert(s(2).contains("SerializableClassWithWriteReplace"))
+  }
+
+  test("object containing writeReplace() which returns serializable object") {
+    assert(find(new SerializableClassWithWriteReplace(new SerializableClass1)).isEmpty)
+  }
+
+    test("object containing writeObject() and not serializable field") {
+    val s = find(new SerializableClassWithWriteObject(new NotSerializable))
+    assert(s.size === 3)
+    assert(s(0).contains("NotSerializable"))
+    assert(s(1).contains("writeObject data"))
+    assert(s(2).contains("SerializableClassWithWriteObject"))
+  }
+
+  test("object containing writeObject() and serializable field") {
+    assert(find(new SerializableClassWithWriteObject(new SerializableClass1)).isEmpty)
+  }
+
+  test("object of serializable subclass with more fields than superclass (SPARK-7180)") {
+    // This should not throw ArrayOutOfBoundsException
+    find(new SerializableSubclass(new SerializableClass1))
+  }
+
+  test("crazy nested objects") {
+
+    def findAndAssert(shouldSerialize: Boolean, obj: Any): Unit = {
+      val s = find(obj)
+      if (shouldSerialize) {
+        assert(s.isEmpty)
+      } else {
+        assert(s.nonEmpty)
+        assert(s.head.contains("NotSerializable"))
+      }
+    }
+
+    findAndAssert(false,
+      new SerializableClassWithWriteReplace(new ExternalizableClass(new SerializableSubclass(
+        new SerializableArray(
+          Array(new SerializableClass1, new SerializableClass2(new NotSerializable))
+        )
+      )))
+    )
+
+    findAndAssert(true,
+      new SerializableClassWithWriteReplace(new ExternalizableClass(new SerializableSubclass(
+        new SerializableArray(
+          Array(new SerializableClass1, new SerializableClass2(new SerializableClass1))
+        )
+      )))
+    )
+  }
+
+  test("improveException") {
+    val e = SerializationDebugger.improveException(
+      new SerializableClass2(new NotSerializable), new NotSerializableException("someClass"))
+    assert(e.getMessage.contains("someClass"))  // original exception message should be present
+    assert(e.getMessage.contains("SerializableClass2"))  // found debug trace should be present
+  }
+
+  test("improveException with error in debugger") {
+    // Object that throws exception in the SerializationDebugger
+    val o = new SerializableClass1 {
+      private def writeReplace(): Object = {
+        throw new Exception()
+      }
+    }
+    withClue("requirement: SerializationDebugger should fail trying debug this object") {
+      intercept[Exception] {
+        SerializationDebugger.find(o)
+      }
+    }
+
+    val originalException = new NotSerializableException("someClass")
+    // verify that original exception is returned on failure
+    assert(SerializationDebugger.improveException(o, originalException).eq(originalException))
   }
 }
 
@@ -116,10 +208,34 @@ class SerializableClass2(val objectField: Object) extends Serializable
 class SerializableArray(val arrayField: Array[Object]) extends Serializable
 
 
-class ExternalizableClass extends java.io.Externalizable {
+class SerializableSubclass(val objectField: Object) extends SerializableClass1
+
+
+class SerializableClassWithWriteObject(val objectField: Object) extends Serializable {
+  val serializableObjectField = new SerializableClass1
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream): Unit = {
+    oos.defaultWriteObject()
+  }
+}
+
+
+class SerializableClassWithWriteReplace(@(transient @param) replacementFieldObject: Object)
+  extends Serializable {
+  private def writeReplace(): Object = {
+    replacementFieldObject
+  }
+}
+
+
+class ExternalizableClass(objectField: Object) extends java.io.Externalizable {
+  val serializableObjectField = new SerializableClass1
+
   override def writeExternal(out: ObjectOutput): Unit = {
     out.writeInt(1)
-    out.writeObject(new SerializableClass2(new NotSerializable))
+    out.writeObject(serializableObjectField)
+    out.writeObject(objectField)
   }
 
   override def readExternal(in: ObjectInput): Unit = {}

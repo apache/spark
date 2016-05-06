@@ -17,21 +17,22 @@
 
 package org.apache.spark.deploy.master.ui
 
-import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
+import org.apache.spark.internal.Logging
 import org.apache.spark.ui.{SparkUI, WebUI}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.RpcUtils
 
 /**
  * Web UI server for the standalone master.
  */
 private[master]
-class MasterWebUI(val master: Master, requestedPort: Int)
-  extends WebUI(master.securityMgr, requestedPort, master.conf, name = "MasterUI") with Logging {
+class MasterWebUI(
+    val master: Master,
+    requestedPort: Int)
+  extends WebUI(master.securityMgr, master.securityMgr.getSSLOptions("standalone"),
+    requestedPort, master.conf, name = "MasterUI") with Logging {
 
-  val masterActorRef = master.self
-  val timeout = RpcUtils.askTimeout(master.conf)
+  val masterEndpointRef = master.self
   val killEnabled = master.conf.getBoolean("spark.ui.killEnabled", true)
 
   initialize()
@@ -40,25 +41,12 @@ class MasterWebUI(val master: Master, requestedPort: Int)
   def initialize() {
     val masterPage = new MasterPage(this)
     attachPage(new ApplicationPage(this))
-    attachPage(new HistoryNotFoundPage(this))
     attachPage(masterPage)
     attachHandler(createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static"))
     attachHandler(createRedirectHandler(
       "/app/kill", "/", masterPage.handleAppKillRequest, httpMethods = Set("POST")))
     attachHandler(createRedirectHandler(
       "/driver/kill", "/", masterPage.handleDriverKillRequest, httpMethods = Set("POST")))
-  }
-
-  /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
-  def attachSparkUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be bound to a server before attaching SparkUIs")
-    ui.getHandlers.foreach(attachHandler)
-  }
-
-  /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
-  def detachSparkUI(ui: SparkUI) {
-    assert(serverInfo.isDefined, "Master UI must be bound to a server before detaching SparkUIs")
-    ui.getHandlers.foreach(detachHandler)
   }
 }
 

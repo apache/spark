@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.regression
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 
-class LabeledPointSuite extends FunSuite {
+class LabeledPointSuite extends SparkFunSuite {
 
   test("parse labeled points") {
     val points = Seq(
@@ -30,6 +29,11 @@ class LabeledPointSuite extends FunSuite {
     points.foreach { p =>
       assert(p === LabeledPoint.parse(p.toString))
     }
+  }
+
+  test("parse labeled points with whitespaces") {
+    val point = LabeledPoint.parse("(0.0, [1.0, 2.0])")
+    assert(point === LabeledPoint(0.0, Vectors.dense(1.0, 2.0)))
   }
 
   test("parse labeled points with v0.9 format") {

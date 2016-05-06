@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.SparkConf
+import org.apache.spark.mllib.classification.StreamingLogisticRegressionWithSGD
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.classification.StreamingLogisticRegressionWithSGD
-import org.apache.spark.SparkConf
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 
 /**
@@ -71,3 +72,4 @@ object StreamingLogisticRegression {
   }
 
 }
+// scalastyle:on println

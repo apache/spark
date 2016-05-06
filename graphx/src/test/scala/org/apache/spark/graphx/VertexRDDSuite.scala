@@ -17,13 +17,11 @@
 
 package org.apache.spark.graphx
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.{HashPartitioner, SparkContext}
+import org.apache.spark.{HashPartitioner, SparkContext, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-class VertexRDDSuite extends FunSuite with LocalSparkContext {
+class VertexRDDSuite extends SparkFunSuite with LocalSparkContext {
 
   private def vertices(sc: SparkContext, n: Int) = {
     VertexRDD(sc.parallelize((0 to n).map(x => (x.toLong, x)), 5))
@@ -34,7 +32,7 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
       val n = 100
       val verts = vertices(sc, n)
       val evens = verts.filter(q => ((q._2 % 2) == 0))
-      assert(evens.count === (0 to n).filter(_ % 2 == 0).size)
+      assert(evens.count === (0 to n).count(_ % 2 == 0))
     }
   }
 

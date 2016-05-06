@@ -110,6 +110,11 @@ invokeJava <- function(isStatic, objId, methodName, ...) {
 
   # TODO: check the status code to output error information
   returnStatus <- readInt(conn)
-  stopifnot(returnStatus == 0)
+  if (length(returnStatus) == 0) {
+    stop("No status is returned. Java SparkR backend might have failed.")
+  }
+  if (returnStatus != 0) {
+    stop(readString(conn))
+  }
   readObject(conn)
 }

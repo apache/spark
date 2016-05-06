@@ -17,21 +17,33 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{OutputStream, PrintStream}
-
 import scala.util.Try
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.util.quietly
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 
+class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
+  import hiveContext.implicits._
 
-class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
-
-  before {
+  override protected def beforeEach(): Unit = {
+    super.beforeEach()
+    if (sqlContext.tableNames().contains("src")) {
+      sqlContext.dropTempTable("src")
+    }
+    Seq((1, "")).toDF("key", "value").registerTempTable("src")
     Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
+  }
+
+  override protected def afterEach(): Unit = {
+    try {
+      sqlContext.dropTempTable("src")
+      sqlContext.dropTempTable("dupAttributes")
+    } finally {
+      super.afterEach()
+    }
   }
 
   positionTest("ambiguous attribute reference 1",
@@ -109,25 +121,6 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
       "SELECT 1 + array(1)", "1 + array")
   }
 
-  /** Hive can be very noisy, messing up the output of our tests. */
-  private def quietly[A](f: => A): A = {
-    val origErr = System.err
-    val origOut = System.out
-    try {
-      System.setErr(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-      System.setOut(new PrintStream(new OutputStream {
-        def write(b: Int) = {}
-      }))
-
-      f
-    } finally {
-      System.setErr(origErr)
-      System.setOut(origOut)
-    }
-  }
-
   /**
    * Creates a test that checks to see if the error thrown when analyzing a given query includes
    * the location of the given token in the query string.
@@ -137,12 +130,12 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
    * @param token a unique token in the string that should be indicated by the exception
    */
   def positionTest(name: String, query: String, token: String): Unit = {
-    def parseTree =
-      Try(quietly(HiveQl.dumpTree(HiveQl.getAst(query)))).getOrElse("<failed to parse>")
+    def ast = hiveContext.parseSql(query)
+    def parseTree = Try(quietly(ast.treeString)).getOrElse("<failed to parse>")
 
     test(name) {
       val error = intercept[AnalysisException] {
-        quietly(sql(query))
+        quietly(hiveContext.sql(query))
       }
 
       assert(!error.getMessage.contains("Seq("))
@@ -160,10 +153,7 @@ class ErrorPositionSuite extends QueryTest with BeforeAndAfter {
 
       val expectedStart = line.indexOf(token)
       val actualStart = error.startPosition.getOrElse {
-        fail(
-          s"start not returned for error on token $token\n" +
-            HiveQl.dumpTree(HiveQl.getAst(query))
-        )
+        fail(s"start not returned for error on token $token\n${ast.treeString}")
       }
       assert(expectedStart === actualStart,
        s"""Incorrect start position.

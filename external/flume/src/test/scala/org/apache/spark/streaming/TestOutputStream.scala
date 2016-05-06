@@ -18,13 +18,13 @@
 package org.apache.spark.streaming
 
 import java.io.{IOException, ObjectInputStream}
+import java.util.concurrent.ConcurrentLinkedQueue
+
+import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.dstream.{DStream, ForEachDStream}
 import org.apache.spark.util.Utils
-
-import scala.collection.mutable.ArrayBuffer
-import scala.reflect.ClassTag
 
 /**
  * This is a output stream just for the testsuites. All the output is collected into a
@@ -33,11 +33,11 @@ import scala.reflect.ClassTag
  * The buffer contains a sequence of RDD's, each containing a sequence of items
  */
 class TestOutputStream[T: ClassTag](parent: DStream[T],
-    val output: ArrayBuffer[Seq[T]] = ArrayBuffer[Seq[T]]())
+    val output: ConcurrentLinkedQueue[Seq[T]] = new ConcurrentLinkedQueue[Seq[T]]())
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
-    output += collected
-  }) {
+    output.add(collected)
+  }, false) {
 
   // This is to clear the output buffer every it is read from a checkpoint
   @throws(classOf[IOException])

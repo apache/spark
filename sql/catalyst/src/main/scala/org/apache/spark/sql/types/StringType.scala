@@ -22,12 +22,11 @@ import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * :: DeveloperApi ::
  * The data type representing `String` values. Please use the singleton [[DataTypes.StringType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class StringType private() extends AtomicType {
@@ -39,9 +38,9 @@ class StringType private() extends AtomicType {
   private[sql] val ordering = implicitly[Ordering[InternalType]]
 
   /**
-   * The default size of a value of the StringType is 4096 bytes.
+   * The default size of a value of the StringType is 20 bytes.
    */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = 20
 
   private[spark] override def asNullable: StringType = this
 }

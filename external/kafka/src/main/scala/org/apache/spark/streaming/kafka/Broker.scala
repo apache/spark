@@ -20,11 +20,9 @@ package org.apache.spark.streaming.kafka
 import org.apache.spark.annotation.Experimental
 
 /**
- * :: Experimental ::
- * Represent the host and port info for a Kafka broker.
- * Differs from the Kafka project's internal kafka.cluster.Broker, which contains a server ID
+ * Represents the host and port info for a Kafka broker.
+ * Differs from the Kafka project's internal kafka.cluster.Broker, which contains a server ID.
  */
-@Experimental
 final class Broker private(
     /** Broker's hostname */
     val host: String,

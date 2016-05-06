@@ -17,11 +17,10 @@
 
 package org.apache.spark.graphx.util
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx.LocalSparkContext
 
-class GraphGeneratorsSuite extends FunSuite with LocalSparkContext {
+class GraphGeneratorsSuite extends SparkFunSuite with LocalSparkContext {
 
   test("GraphGenerators.generateRandomEdges") {
     val src = 5

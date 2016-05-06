@@ -19,19 +19,15 @@ package org.apache.spark.ml.util
 
 import scala.collection.immutable.HashMap
 
-import org.apache.spark.annotation.Experimental
-import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, BinaryAttribute, NominalAttribute,
-  NumericAttribute}
+import org.apache.spark.ml.attribute._
+import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.types.StructField
 
 
 /**
- * :: Experimental ::
- *
- * Helper utilities for tree-based algorithms
+ * Helper utilities for algorithms using ML metadata
  */
-@Experimental
-object MetadataUtils {
+private[spark] object MetadataUtils {
 
   /**
    * Examine a schema to identify the number of classes in a label column.
@@ -39,9 +35,9 @@ object MetadataUtils {
    */
   def getNumClasses(labelSchema: StructField): Option[Int] = {
     Attribute.fromStructField(labelSchema) match {
-      case numAttr: NumericAttribute => None
       case binAttr: BinaryAttribute => Some(2)
       case nomAttr: NominalAttribute => nomAttr.getNumValues
+      case _: NumericAttribute | UnresolvedAttribute => None
     }
   }
 
@@ -65,7 +61,7 @@ object MetadataUtils {
           Iterator()
         } else {
           attr match {
-            case numAttr: NumericAttribute => Iterator()
+            case _: NumericAttribute | UnresolvedAttribute => Iterator()
             case binAttr: BinaryAttribute => Iterator(idx -> 2)
             case nomAttr: NominalAttribute =>
               nomAttr.getNumValues match {
@@ -79,4 +75,20 @@ object MetadataUtils {
     }
   }
 
+  /**
+   * Takes a Vector column and a list of feature names, and returns the corresponding list of
+   * feature indices in the column, in order.
+   * @param col  Vector column which must have feature names specified via attributes
+   * @param names  List of feature names
+   */
+  def getFeatureIndicesFromNames(col: StructField, names: Array[String]): Array[Int] = {
+    require(col.dataType.isInstanceOf[VectorUDT], s"getFeatureIndicesFromNames expected column $col"
+      + s" to be Vector type, but it was type ${col.dataType} instead.")
+    val inputAttr = AttributeGroup.fromStructField(col)
+    names.map { name =>
+      require(inputAttr.hasAttr(name),
+        s"getFeatureIndicesFromNames found no feature with name $name in column $col.")
+      inputAttr.getAttr(name).index.get
+    }
+  }
 }

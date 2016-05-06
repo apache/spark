@@ -18,22 +18,22 @@
 package org.apache.spark.mllib.util
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import scala.io.Source
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{squaredDistance => breezeSquaredDistance}
-import com.google.common.base.Charsets
 import com.google.common.io.Files
 
+import org.apache.spark.SparkException
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
-class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
+class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("epsilon computation") {
     assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")
@@ -63,7 +63,7 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
       val fastSquaredDist3 =
         fastSquaredDistance(v2, norm2, v3, norm3, precision)
       assert((fastSquaredDist3 - squaredDist2) <= precision * squaredDist2, s"failed with m = $m")
-      if (m > 10) { 
+      if (m > 10) {
         val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
           indices.map(i => a(i) + 0.5).slice(0, m - 10))
         val norm4 = Vectors.norm(v4, 2.0)
@@ -84,7 +84,7 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, Charsets.US_ASCII)
+    Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
 
     val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
@@ -106,6 +106,40 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
     assert(multiclassPoints(1).label === 0.0)
     assert(multiclassPoints(2).label === 0.0)
 
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("loadLibSVMFile throws IllegalArgumentException when indices is zero-based") {
+    val lines =
+      """
+        |0
+        |0 0:4.0 4:5.0 6:6.0
+      """.stripMargin
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir.getPath, "part-00000")
+    Files.write(lines, file, StandardCharsets.UTF_8)
+    val path = tempDir.toURI.toString
+
+    intercept[SparkException] {
+      loadLibSVMFile(sc, path).collect()
+    }
+    Utils.deleteRecursively(tempDir)
+  }
+
+  test("loadLibSVMFile throws IllegalArgumentException when indices is not in ascending order") {
+    val lines =
+      """
+        |0
+        |0 3:4.0 2:5.0 6:6.0
+      """.stripMargin
+    val tempDir = Utils.createTempDir()
+    val file = new File(tempDir.getPath, "part-00000")
+    Files.write(lines, file, StandardCharsets.UTF_8)
+    val path = tempDir.toURI.toString
+
+    intercept[SparkException] {
+      loadLibSVMFile(sc, path).collect()
+    }
     Utils.deleteRecursively(tempDir)
   }
 
@@ -148,8 +182,8 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
     for (folds <- 2 to 10) {
       for (seed <- 1 to 5) {
         val foldedRdds = kFold(data, folds, seed)
-        assert(foldedRdds.size === folds)
-        foldedRdds.map { case (training, validation) =>
+        assert(foldedRdds.length === folds)
+        foldedRdds.foreach { case (training, validation) =>
           val result = validation.union(training).collect().sorted
           val validationSize = validation.collect().size.toFloat
           assert(validationSize > 0, "empty validation data")
@@ -168,7 +202,7 @@ class MLUtilsSuite extends FunSuite with MLlibTestSparkContext {
             "Each training+validation set combined should contain all of the data.")
         }
         // K fold cross validation should only have each element in the validation set exactly once
-        assert(foldedRdds.map(_._2).reduce((x,y) => x.union(y)).collect().sorted ===
+        assert(foldedRdds.map(_._2).reduce((x, y) => x.union(y)).collect().sorted ===
           data.collect().sorted)
       }
     }

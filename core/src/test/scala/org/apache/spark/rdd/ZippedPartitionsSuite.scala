@@ -17,8 +17,7 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.SharedSparkContext
-import org.scalatest.FunSuite
+import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 
 object ZippedPartitionsSuite {
   def procZippedData(i: Iterator[Int], s: Iterator[String], d: Iterator[Double]) : Iterator[Int] = {
@@ -26,7 +25,7 @@ object ZippedPartitionsSuite {
   }
 }
 
-class ZippedPartitionsSuite extends FunSuite with SharedSparkContext {
+class ZippedPartitionsSuite extends SparkFunSuite with SharedSparkContext {
   test("print sizes") {
     val data1 = sc.makeRDD(Array(1, 2, 3, 4), 2)
     val data2 = sc.makeRDD(Array("1", "2", "3", "4", "5", "6"), 2)

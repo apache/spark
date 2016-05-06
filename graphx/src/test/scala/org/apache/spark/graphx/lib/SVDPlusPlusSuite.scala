@@ -17,12 +17,11 @@
 
 package org.apache.spark.graphx.lib
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx._
 
 
-class SVDPlusPlusSuite extends FunSuite with LocalSparkContext {
+class SVDPlusPlusSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Test SVD++ with mean square error on training set") {
     withSpark { sc =>

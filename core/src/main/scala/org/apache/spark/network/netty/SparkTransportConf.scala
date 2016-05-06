@@ -18,7 +18,7 @@
 package org.apache.spark.network.netty
 
 import org.apache.spark.SparkConf
-import org.apache.spark.network.util.{TransportConf, ConfigProvider}
+import org.apache.spark.network.util.{ConfigProvider, TransportConf}
 
 /**
  * Provides a utility for transforming from a SparkConf inside a Spark JVM (e.g., Executor,
@@ -40,23 +40,23 @@ object SparkTransportConf {
 
   /**
    * Utility for creating a [[TransportConf]] from a [[SparkConf]].
+   * @param _conf the [[SparkConf]]
+   * @param module the module name
    * @param numUsableCores if nonzero, this will restrict the server and client threads to only
    *                       use the given number of cores, rather than all of the machine's cores.
    *                       This restriction will only occur if these properties are not already set.
    */
-  def fromSparkConf(_conf: SparkConf, numUsableCores: Int = 0): TransportConf = {
+  def fromSparkConf(_conf: SparkConf, module: String, numUsableCores: Int = 0): TransportConf = {
     val conf = _conf.clone
 
     // Specify thread configuration based on our JVM's allocation of cores (rather than necessarily
     // assuming we have all the machine's cores).
     // NB: Only set if serverThreads/clientThreads not already set.
     val numThreads = defaultNumThreads(numUsableCores)
-    conf.set("spark.shuffle.io.serverThreads",
-      conf.get("spark.shuffle.io.serverThreads", numThreads.toString))
-    conf.set("spark.shuffle.io.clientThreads",
-      conf.get("spark.shuffle.io.clientThreads", numThreads.toString))
+    conf.setIfMissing(s"spark.$module.io.serverThreads", numThreads.toString)
+    conf.setIfMissing(s"spark.$module.io.clientThreads", numThreads.toString)
 
-    new TransportConf(new ConfigProvider {
+    new TransportConf(module, new ConfigProvider {
       override def get(name: String): String = conf.get(name)
     })
   }

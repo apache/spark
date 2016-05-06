@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
-import breeze.linalg.{Vector, DenseVector, squaredDistance}
+import breeze.linalg.{squaredDistance, DenseVector, Vector}
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 
 /**
  * K-means clustering.
@@ -79,7 +79,7 @@ object SparkKMeans {
     while(tempDist > convergeDist) {
       val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
 
-      val pointStats = closest.reduceByKey{case ((x1, y1), (x2, y2)) => (x1 + x2, y1 + y2)}
+      val pointStats = closest.reduceByKey{case ((p1, c1), (p2, c2)) => (p1 + p2, c1 + c2)}
 
       val newPoints = pointStats.map {pair =>
         (pair._1, pair._2._1 * (1.0 / pair._2._2))}.collectAsMap()
@@ -100,3 +100,4 @@ object SparkKMeans {
     sc.stop()
   }
 }
+// scalastyle:on println

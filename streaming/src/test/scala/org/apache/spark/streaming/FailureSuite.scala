@@ -17,25 +17,36 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.Logging
+import java.io.File
+
+import org.scalatest.BeforeAndAfter
+
+import org.apache.spark._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**
  * This testsuite tests master failures at random times while the stream is running using
  * the real clock.
  */
-class FailureSuite extends TestSuiteBase with Logging {
+class FailureSuite extends SparkFunSuite with BeforeAndAfter with Logging {
 
-  val directory = Utils.createTempDir()
-  val numBatches = 30
+  private val batchDuration: Duration = Milliseconds(1000)
+  private val numBatches = 30
+  private var directory: File = null
 
-  override def batchDuration: Duration = Milliseconds(1000)
+  before {
+    directory = Utils.createTempDir()
+  }
 
-  override def useManualClock: Boolean = false
+  after {
+    if (directory != null) {
+      Utils.deleteRecursively(directory)
+    }
+    StreamingContext.getActive().foreach { _.stop() }
 
-  override def afterFunction() {
-    Utils.deleteRecursively(directory)
-    super.afterFunction()
+    // Stop SparkContext if active
+    SparkContext.getOrCreate(new SparkConf().setMaster("local").setAppName("bla")).stop()
   }
 
   test("multiple failures with map") {

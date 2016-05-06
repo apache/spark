@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.mllib
 
 import org.apache.spark.SparkConf
+// $example on$
 import org.apache.spark.mllib.clustering.StreamingKMeans
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.streaming.{Seconds, StreamingContext}
+// $example off$
 
 /**
  * Estimate clusters on one stream of data and make predictions
@@ -57,7 +60,8 @@ object StreamingKMeansExample {
       System.exit(1)
     }
 
-    val conf = new SparkConf().setMaster("local").setAppName("StreamingKMeansExample")
+    // $example on$
+    val conf = new SparkConf().setAppName("StreamingKMeansExample")
     val ssc = new StreamingContext(conf, Seconds(args(2).toLong))
 
     val trainingData = ssc.textFileStream(args(0)).map(Vectors.parse)
@@ -73,5 +77,7 @@ object StreamingKMeansExample {
 
     ssc.start()
     ssc.awaitTermination()
+    // $example off$
   }
 }
+// scalastyle:on println

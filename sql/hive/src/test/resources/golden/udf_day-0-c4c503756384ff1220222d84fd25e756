@@ -1,1 +1,1 @@
-day(date) - Returns the date of the month of date
+day(param) - Returns the day of the month of date/timestamp, or day component of interval

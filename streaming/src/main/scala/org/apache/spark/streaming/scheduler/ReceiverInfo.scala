@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rpc.RpcEndpointRef
 
 /**
  * :: DeveloperApi ::
@@ -28,10 +27,11 @@ import org.apache.spark.rpc.RpcEndpointRef
 case class ReceiverInfo(
     streamId: Int,
     name: String,
-    private[streaming] val endpoint: RpcEndpointRef,
     active: Boolean,
     location: String,
+    executorId: String,
     lastErrorMessage: String = "",
-    lastError: String = ""
+    lastError: String = "",
+    lastErrorTime: Long = -1L
    ) {
 }

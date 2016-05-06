@@ -19,20 +19,19 @@ package org.apache.spark.rdd
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{LongWritable, Text}
-import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
-import org.scalatest.FunSuite
-
 import scala.collection.Map
 import scala.language.postfixOps
 import scala.sys.process._
 import scala.util.Try
 
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.{LongWritable, Text}
+import org.apache.hadoop.mapred.{FileSplit, JobConf, TextInputFormat}
+
 import org.apache.spark._
 import org.apache.spark.util.Utils
 
-class PipedRDDSuite extends FunSuite with SharedSparkContext {
+class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("basic pipe") {
     if (testCommandAvailable("cat")) {
@@ -48,6 +47,27 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
       assert(c(3) === "4")
     } else {
       assert(true)
+    }
+  }
+
+  test("failure in iterating over pipe input") {
+    if (testCommandAvailable("cat")) {
+      val nums =
+        sc.makeRDD(Array(1, 2, 3, 4), 2)
+          .mapPartitionsWithIndex((index, iterator) => {
+            new Iterator[Int] {
+              def hasNext = true
+              def next() = {
+                throw new SparkException("Exception to simulate bad scenario")
+              }
+            }
+          })
+
+      val piped = nums.pipe(Seq("cat"))
+
+      intercept[SparkException] {
+        piped.collect()
+      }
     }
   }
 
@@ -114,15 +134,27 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
-  test("pipe with non-zero exit status") {
-    if (testCommandAvailable("cat")) {
+  test("pipe with process which cannot be launched due to bad command") {
+    if (!testCommandAvailable("some_nonexistent_command")) {
       val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
-      val piped = nums.pipe(Seq("cat nonexistent_file", "2>", "/dev/null"))
-      intercept[SparkException] {
+      val command = Seq("some_nonexistent_command")
+      val piped = nums.pipe(command)
+      val exception = intercept[SparkException] {
         piped.collect()
       }
-    } else {
-      assert(true)
+      assert(exception.getMessage.contains(command.mkString(" ")))
+    }
+  }
+
+  test("pipe with process which is launched but fails with non-zero exit status") {
+    if (testCommandAvailable("cat")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+      val command = Seq("cat", "nonexistent_file")
+      val piped = nums.pipe(command)
+      val exception = intercept[SparkException] {
+        piped.collect()
+      }
+      assert(exception.getMessage.contains(command.mkString(" ")))
     }
   }
 
@@ -176,7 +208,7 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
       }
       val hadoopPart1 = generateFakeHadoopPartition()
       val pipedRdd = new PipedRDD(nums, "printenv " + varName)
-      val tContext = new TaskContextImpl(0, 0, 0, 0, null)
+      val tContext = TaskContext.empty()
       val rddIter = pipedRdd.compute(hadoopPart1, tContext)
       val arr = rddIter.toArray
       assert(arr(0) == "/some/path")

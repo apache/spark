@@ -16,38 +16,50 @@
 #
 
 import itertools
+import numpy as np
 
-__all__ = ['ParamGridBuilder']
+from pyspark import SparkContext
+from pyspark import since, keyword_only
+from pyspark.ml import Estimator, Model
+from pyspark.ml.param import Params, Param, TypeConverters
+from pyspark.ml.param.shared import HasSeed
+from pyspark.ml.wrapper import JavaParams
+from pyspark.sql.functions import rand
+from pyspark.mllib.common import inherit_doc, _py2java
+
+__all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainValidationSplit',
+           'TrainValidationSplitModel']
 
 
 class ParamGridBuilder(object):
-    """
+    r"""
     Builder for a param grid used in grid search-based model selection.
 
-    >>> from classification import LogisticRegression
+    >>> from pyspark.ml.classification import LogisticRegression
     >>> lr = LogisticRegression()
-    >>> output = ParamGridBuilder().baseOn({lr.labelCol: 'l'}) \
-            .baseOn([lr.predictionCol, 'p']) \
-            .addGrid(lr.regParam, [1.0, 2.0, 3.0]) \
-            .addGrid(lr.maxIter, [1, 5]) \
-            .addGrid(lr.featuresCol, ['f']) \
-            .build()
-    >>> expected = [ \
-{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 1.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 2.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}, \
-{lr.regParam: 3.0, lr.featuresCol: 'f', lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
+    >>> output = ParamGridBuilder() \
+    ...     .baseOn({lr.labelCol: 'l'}) \
+    ...     .baseOn([lr.predictionCol, 'p']) \
+    ...     .addGrid(lr.regParam, [1.0, 2.0]) \
+    ...     .addGrid(lr.maxIter, [1, 5]) \
+    ...     .build()
+    >>> expected = [
+    ...     {lr.regParam: 1.0, lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 2.0, lr.maxIter: 1, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 1.0, lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'},
+    ...     {lr.regParam: 2.0, lr.maxIter: 5, lr.labelCol: 'l', lr.predictionCol: 'p'}]
     >>> len(output) == len(expected)
     True
     >>> all([m in expected for m in output])
     True
+
+    .. versionadded:: 1.4.0
     """
 
     def __init__(self):
         self._param_grid = {}
 
+    @since("1.4.0")
     def addGrid(self, param, values):
         """
         Sets the given parameters in this grid to fixed values.
@@ -56,6 +68,7 @@ class ParamGridBuilder(object):
 
         return self
 
+    @since("1.4.0")
     def baseOn(self, *args):
         """
         Sets the given parameters in this grid to fixed values.
@@ -69,6 +82,7 @@ class ParamGridBuilder(object):
 
         return self
 
+    @since("1.4.0")
     def build(self):
         """
         Builds and returns all combinations of parameters specified
@@ -79,6 +93,361 @@ class ParamGridBuilder(object):
         return [dict(zip(keys, prod)) for prod in itertools.product(*grid_values)]
 
 
+class ValidatorParams(HasSeed):
+    """
+    Common params for TrainValidationSplit and CrossValidator.
+    """
+
+    estimator = Param(Params._dummy(), "estimator", "estimator to be cross-validated")
+    estimatorParamMaps = Param(Params._dummy(), "estimatorParamMaps", "estimator param maps")
+    evaluator = Param(
+        Params._dummy(), "evaluator",
+        "evaluator used to select hyper-parameters that maximize the validator metric")
+
+    def setEstimator(self, value):
+        """
+        Sets the value of :py:attr:`estimator`.
+        """
+        return self._set(estimator=value)
+
+    def getEstimator(self):
+        """
+        Gets the value of estimator or its default value.
+        """
+        return self.getOrDefault(self.estimator)
+
+    def setEstimatorParamMaps(self, value):
+        """
+        Sets the value of :py:attr:`estimatorParamMaps`.
+        """
+        return self._set(estimatorParamMaps=value)
+
+    def getEstimatorParamMaps(self):
+        """
+        Gets the value of estimatorParamMaps or its default value.
+        """
+        return self.getOrDefault(self.estimatorParamMaps)
+
+    def setEvaluator(self, value):
+        """
+        Sets the value of :py:attr:`evaluator`.
+        """
+        return self._set(evaluator=value)
+
+    def getEvaluator(self):
+        """
+        Gets the value of evaluator or its default value.
+        """
+        return self.getOrDefault(self.evaluator)
+
+
+class CrossValidator(Estimator, ValidatorParams):
+    """
+    K-fold cross validation.
+
+    >>> from pyspark.ml.classification import LogisticRegression
+    >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> dataset = sqlContext.createDataFrame(
+    ...     [(Vectors.dense([0.0]), 0.0),
+    ...      (Vectors.dense([0.4]), 1.0),
+    ...      (Vectors.dense([0.5]), 0.0),
+    ...      (Vectors.dense([0.6]), 1.0),
+    ...      (Vectors.dense([1.0]), 1.0)] * 10,
+    ...     ["features", "label"])
+    >>> lr = LogisticRegression()
+    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+    >>> evaluator = BinaryClassificationEvaluator()
+    >>> cv = CrossValidator(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> cvModel = cv.fit(dataset)
+    >>> evaluator.evaluate(cvModel.transform(dataset))
+    0.8333...
+
+    .. versionadded:: 1.4.0
+    """
+
+    numFolds = Param(Params._dummy(), "numFolds", "number of folds for cross validation",
+                     typeConverter=TypeConverters.toInt)
+
+    @keyword_only
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                 seed=None):
+        """
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
+                 seed=None)
+        """
+        super(CrossValidator, self).__init__()
+        self._setDefault(numFolds=3)
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    @keyword_only
+    @since("1.4.0")
+    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,
+                  seed=None):
+        """
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, numFolds=3,\
+                  seed=None):
+        Sets params for cross validator.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("1.4.0")
+    def setNumFolds(self, value):
+        """
+        Sets the value of :py:attr:`numFolds`.
+        """
+        return self._set(numFolds=value)
+
+    @since("1.4.0")
+    def getNumFolds(self):
+        """
+        Gets the value of numFolds or its default value.
+        """
+        return self.getOrDefault(self.numFolds)
+
+    def _fit(self, dataset):
+        est = self.getOrDefault(self.estimator)
+        epm = self.getOrDefault(self.estimatorParamMaps)
+        numModels = len(epm)
+        eva = self.getOrDefault(self.evaluator)
+        nFolds = self.getOrDefault(self.numFolds)
+        seed = self.getOrDefault(self.seed)
+        h = 1.0 / nFolds
+        randCol = self.uid + "_rand"
+        df = dataset.select("*", rand(seed).alias(randCol))
+        metrics = [0.0] * numModels
+        for i in range(nFolds):
+            validateLB = i * h
+            validateUB = (i + 1) * h
+            condition = (df[randCol] >= validateLB) & (df[randCol] < validateUB)
+            validation = df.filter(condition)
+            train = df.filter(~condition)
+            for j in range(numModels):
+                model = est.fit(train, epm[j])
+                # TODO: duplicate evaluator to take extra params from input
+                metric = eva.evaluate(model.transform(validation, epm[j]))
+                metrics[j] += metric
+
+        if eva.isLargerBetter():
+            bestIndex = np.argmax(metrics)
+        else:
+            bestIndex = np.argmin(metrics)
+        bestModel = est.fit(dataset, epm[bestIndex])
+        return self._copyValues(CrossValidatorModel(bestModel, metrics))
+
+    @since("1.4.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies creates a deep copy of
+        the embedded paramMap, and copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        newCV = Params.copy(self, extra)
+        if self.isSet(self.estimator):
+            newCV.setEstimator(self.getEstimator().copy(extra))
+        # estimatorParamMaps remain the same
+        if self.isSet(self.evaluator):
+            newCV.setEvaluator(self.getEvaluator().copy(extra))
+        return newCV
+
+
+class CrossValidatorModel(Model, ValidatorParams):
+    """
+    Model from k-fold cross validation.
+
+    .. versionadded:: 1.4.0
+    """
+
+    def __init__(self, bestModel, avgMetrics=[]):
+        super(CrossValidatorModel, self).__init__()
+        #: best model from cross validation
+        self.bestModel = bestModel
+        self.avgMetrics = avgMetrics
+
+    def _transform(self, dataset):
+        return self.bestModel.transform(dataset)
+
+    @since("1.4.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies the underlying bestModel,
+        creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        bestModel = self.bestModel.copy(extra)
+        avgMetrics = self.avgMetrics
+        return CrossValidatorModel(bestModel, avgMetrics)
+
+
+class TrainValidationSplit(Estimator, ValidatorParams):
+    """
+    Train-Validation-Split.
+
+    >>> from pyspark.ml.classification import LogisticRegression
+    >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
+    >>> from pyspark.mllib.linalg import Vectors
+    >>> dataset = sqlContext.createDataFrame(
+    ...     [(Vectors.dense([0.0]), 0.0),
+    ...      (Vectors.dense([0.4]), 1.0),
+    ...      (Vectors.dense([0.5]), 0.0),
+    ...      (Vectors.dense([0.6]), 1.0),
+    ...      (Vectors.dense([1.0]), 1.0)] * 10,
+    ...     ["features", "label"])
+    >>> lr = LogisticRegression()
+    >>> grid = ParamGridBuilder().addGrid(lr.maxIter, [0, 1]).build()
+    >>> evaluator = BinaryClassificationEvaluator()
+    >>> tvs = TrainValidationSplit(estimator=lr, estimatorParamMaps=grid, evaluator=evaluator)
+    >>> tvsModel = tvs.fit(dataset)
+    >>> evaluator.evaluate(tvsModel.transform(dataset))
+    0.8333...
+
+    .. versionadded:: 2.0.0
+    """
+
+    trainRatio = Param(Params._dummy(), "trainRatio", "Param for ratio between train and\
+     validation data. Must be between 0 and 1.", typeConverter=TypeConverters.toFloat)
+
+    @keyword_only
+    def __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
+                 seed=None):
+        """
+        __init__(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
+                 seed=None)
+        """
+        super(TrainValidationSplit, self).__init__()
+        self._setDefault(trainRatio=0.75)
+        kwargs = self.__init__._input_kwargs
+        self._set(**kwargs)
+
+    @since("2.0.0")
+    @keyword_only
+    def setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,
+                  seed=None):
+        """
+        setParams(self, estimator=None, estimatorParamMaps=None, evaluator=None, trainRatio=0.75,\
+                  seed=None):
+        Sets params for the train validation split.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("2.0.0")
+    def setTrainRatio(self, value):
+        """
+        Sets the value of :py:attr:`trainRatio`.
+        """
+        return self._set(trainRatio=value)
+
+    @since("2.0.0")
+    def getTrainRatio(self):
+        """
+        Gets the value of trainRatio or its default value.
+        """
+        return self.getOrDefault(self.trainRatio)
+
+    def _fit(self, dataset):
+        est = self.getOrDefault(self.estimator)
+        epm = self.getOrDefault(self.estimatorParamMaps)
+        numModels = len(epm)
+        eva = self.getOrDefault(self.evaluator)
+        tRatio = self.getOrDefault(self.trainRatio)
+        seed = self.getOrDefault(self.seed)
+        randCol = self.uid + "_rand"
+        df = dataset.select("*", rand(seed).alias(randCol))
+        metrics = np.zeros(numModels)
+        condition = (df[randCol] >= tRatio)
+        validation = df.filter(condition)
+        train = df.filter(~condition)
+        for j in range(numModels):
+            model = est.fit(train, epm[j])
+            metric = eva.evaluate(model.transform(validation, epm[j]))
+            metrics[j] += metric
+        if eva.isLargerBetter():
+            bestIndex = np.argmax(metrics)
+        else:
+            bestIndex = np.argmin(metrics)
+        bestModel = est.fit(dataset, epm[bestIndex])
+        return self._copyValues(TrainValidationSplitModel(bestModel))
+
+    @since("2.0.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies creates a deep copy of
+        the embedded paramMap, and copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        newTVS = Params.copy(self, extra)
+        if self.isSet(self.estimator):
+            newTVS.setEstimator(self.getEstimator().copy(extra))
+        # estimatorParamMaps remain the same
+        if self.isSet(self.evaluator):
+            newTVS.setEvaluator(self.getEvaluator().copy(extra))
+        return newTVS
+
+
+class TrainValidationSplitModel(Model, ValidatorParams):
+    """
+    Model from train validation split.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self, bestModel):
+        super(TrainValidationSplitModel, self).__init__()
+        #: best model from cross validation
+        self.bestModel = bestModel
+
+    def _transform(self, dataset):
+        return self.bestModel.transform(dataset)
+
+    @since("2.0.0")
+    def copy(self, extra=None):
+        """
+        Creates a copy of this instance with a randomly generated uid
+        and some extra params. This copies the underlying bestModel,
+        creates a deep copy of the embedded paramMap, and
+        copies the embedded and extra parameters over.
+
+        :param extra: Extra parameters to copy to the new instance
+        :return: Copy of this instance
+        """
+        if extra is None:
+            extra = dict()
+        return TrainValidationSplitModel(self.bestModel.copy(extra))
+
+
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+
+    from pyspark.context import SparkContext
+    from pyspark.sql import SQLContext
+    globs = globals().copy()
+
+    # The small batch size here ensures that we see multiple batches,
+    # even in these small test examples:
+    sc = SparkContext("local[2]", "ml.tuning tests")
+    sqlContext = SQLContext(sc)
+    globs['sc'] = sc
+    globs['sqlContext'] = sqlContext
+    (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+    sc.stop()
+    if failure_count:
+        exit(-1)

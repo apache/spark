@@ -19,15 +19,38 @@ package org.apache.spark.ml.util
 
 import java.util.UUID
 
+import org.apache.spark.annotation.DeveloperApi
+
+
 /**
- * Object with a unique id.
+ * :: DeveloperApi ::
+ *
+ * Trait for an object with an immutable unique ID that identifies itself and its derivatives.
+ *
+ * WARNING: There have not yet been final discussions on this API, so it may be broken in future
+ *          releases.
  */
-private[ml] trait Identifiable extends Serializable {
+@DeveloperApi
+trait Identifiable {
 
   /**
-   * A unique id for the object. The default implementation concatenates the class name, "_", and 8
-   * random hex chars.
+   * An immutable unique ID for the object and its derivatives.
    */
-  private[ml] val uid: String =
-    this.getClass.getSimpleName + "_" + UUID.randomUUID().toString.take(8)
+  val uid: String
+
+  override def toString: String = uid
+}
+
+/**
+ * :: DeveloperApi ::
+ */
+@DeveloperApi
+object Identifiable {
+
+  /**
+   * Returns a random UID that concatenates the given prefix, "_", and 12 random hex chars.
+   */
+  def randomUID(prefix: String): String = {
+    prefix + "_" + UUID.randomUUID().toString.takeRight(12)
+  }
 }

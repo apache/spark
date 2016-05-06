@@ -17,11 +17,13 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
 import org.apache.spark.sql._
@@ -35,6 +37,7 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
 
   /**
    * The minimum of documents in which a term should appear.
+   * Default: 0
    * @group param
    */
   final val minDocFreq = new IntParam(
@@ -43,27 +46,26 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
   setDefault(minDocFreq -> 0)
 
   /** @group getParam */
-  def getMinDocFreq: Int = getOrDefault(minDocFreq)
-
-  /** @group setParam */
-  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
+  def getMinDocFreq: Int = $(minDocFreq)
 
   /**
    * Validate and transform the input schema.
    */
-  protected def validateAndTransformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    val map = extractParamMap(paramMap)
-    SchemaUtils.checkColumnType(schema, map(inputCol), new VectorUDT)
-    SchemaUtils.appendColumn(schema, map(outputCol), new VectorUDT)
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
-@AlphaComponent
-final class IDF extends Estimator[IDFModel] with IDFBase {
+@Experimental
+final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase
+  with DefaultParamsWritable {
+
+  def this() = this(Identifiable.randomUID("idf"))
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -71,31 +73,42 @@ final class IDF extends Estimator[IDFModel] with IDFBase {
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def fit(dataset: DataFrame, paramMap: ParamMap): IDFModel = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
-    val input = dataset.select(map(inputCol)).map { case Row(v: Vector) => v }
-    val idf = new feature.IDF(map(minDocFreq)).fit(input)
-    val model = new IDFModel(this, map, idf)
-    Params.inheritValues(map, this, model)
-    model
+  /** @group setParam */
+  def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
+
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): IDFModel = {
+    transformSchema(dataset.schema, logging = true)
+    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
+    val idf = new feature.IDF($(minDocFreq)).fit(input)
+    copyValues(new IDFModel(uid, idf).setParent(this))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): IDF = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object IDF extends DefaultParamsReadable[IDF] {
+
+  @Since("1.6.0")
+  override def load(path: String): IDF = super.load(path)
 }
 
 /**
- * :: AlphaComponent ::
+ * :: Experimental ::
  * Model fitted by [[IDF]].
  */
-@AlphaComponent
+@Experimental
 class IDFModel private[ml] (
-    override val parent: IDF,
-    override val fittingParamMap: ParamMap,
+    override val uid: String,
     idfModel: feature.IDFModel)
-  extends Model[IDFModel] with IDFBase {
+  extends Model[IDFModel] with IDFBase with MLWritable {
+
+  import IDFModel._
 
   /** @group setParam */
   def setInputCol(value: String): this.type = set(inputCol, value)
@@ -103,14 +116,65 @@ class IDFModel private[ml] (
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
-    transformSchema(dataset.schema, paramMap, logging = true)
-    val map = extractParamMap(paramMap)
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
+    transformSchema(dataset.schema, logging = true)
     val idf = udf { vec: Vector => idfModel.transform(vec) }
-    dataset.withColumn(map(outputCol), idf(col(map(inputCol))))
+    dataset.withColumn($(outputCol), idf(col($(inputCol))))
   }
 
-  override def transformSchema(schema: StructType, paramMap: ParamMap): StructType = {
-    validateAndTransformSchema(schema, paramMap)
+  override def transformSchema(schema: StructType): StructType = {
+    validateAndTransformSchema(schema)
   }
+
+  override def copy(extra: ParamMap): IDFModel = {
+    val copied = new IDFModel(uid, idfModel)
+    copyValues(copied, extra).setParent(parent)
+  }
+
+  /** Returns the IDF vector. */
+  @Since("1.6.0")
+  def idf: Vector = idfModel.idf
+
+  @Since("1.6.0")
+  override def write: MLWriter = new IDFModelWriter(this)
+}
+
+@Since("1.6.0")
+object IDFModel extends MLReadable[IDFModel] {
+
+  private[IDFModel] class IDFModelWriter(instance: IDFModel) extends MLWriter {
+
+    private case class Data(idf: Vector)
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.idf)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class IDFModelReader extends MLReader[IDFModel] {
+
+    private val className = classOf[IDFModel].getName
+
+    override def load(path: String): IDFModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath)
+        .select("idf")
+        .head()
+      val idf = data.getAs[Vector](0)
+      val model = new IDFModel(metadata.uid, new feature.IDFModel(idf))
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[IDFModel] = new IDFModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): IDFModel = super.load(path)
 }

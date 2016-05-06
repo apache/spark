@@ -1,4 +1,0 @@
-This folder contains a script, spark-ec2, for launching Spark clusters on
-Amazon EC2. Usage instructions are available online at:
-
-http://spark.apache.org/docs/latest/ec2-scripts.html

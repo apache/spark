@@ -36,7 +36,7 @@ getMinPartitions <- function(sc, minPartitions) {
 #' @param minPartitions Minimum number of partitions to be created. If NULL, the default
 #'  value is chosen based on available parallelism.
 #' @return RDD where each item is of type \code{character}
-#' @export
+#' @noRd
 #' @examples
 #'\dontrun{
 #'  sc <- sparkR.init()
@@ -45,7 +45,7 @@ getMinPartitions <- function(sc, minPartitions) {
 textFile <- function(sc, path, minPartitions = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- suppressWarnings(normalizePath(path))
-  #' Convert a string vector of paths to a string containing comma separated paths
+  # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
 
   jrdd <- callJMethod(sc, "textFile", path, getMinPartitions(sc, minPartitions))
@@ -64,7 +64,7 @@ textFile <- function(sc, path, minPartitions = NULL) {
 #'  value is chosen based on available parallelism.
 #' @return RDD containing serialized R objects.
 #' @seealso saveAsObjectFile
-#' @export
+#' @noRd
 #' @examples
 #'\dontrun{
 #'  sc <- sparkR.init()
@@ -73,7 +73,7 @@ textFile <- function(sc, path, minPartitions = NULL) {
 objectFile <- function(sc, path, minPartitions = NULL) {
   # Allow the user to have a more flexible definiton of the text file path
   path <- suppressWarnings(normalizePath(path))
-  #' Convert a string vector of paths to a string containing comma separated paths
+  # Convert a string vector of paths to a string containing comma separated paths
   path <- paste(path, collapse = ",")
 
   jrdd <- callJMethod(sc, "objectFile", path, getMinPartitions(sc, minPartitions))
@@ -91,7 +91,7 @@ objectFile <- function(sc, path, minPartitions = NULL) {
 #' @param coll collection to parallelize
 #' @param numSlices number of partitions to create in the RDD
 #' @return an RDD created from this collection
-#' @export
+#' @noRd
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -103,7 +103,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
+  # nolint start
+  # suppress lintr warning: Place a space before left parenthesis, except in a function call.
   if ((!is.list(coll) && !is.vector(coll)) || is.data.frame(coll)) {
+  # nolint end
     if (is.data.frame(coll)) {
       message(paste("context.R: A data frame is parallelized by columns."))
     } else {
@@ -121,7 +124,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
     numSlices <- length(coll)
 
   sliceLen <- ceiling(length(coll) / numSlices)
-  slices <- split(coll, rep(1:(numSlices + 1), each = sliceLen)[1:length(coll)])
+  slices <- split(coll, rep(1: (numSlices + 1), each = sliceLen)[1:length(coll)])
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws
@@ -143,8 +146,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
 #'
 #' @param sc SparkContext to use
 #' @param pkg Package name
-#'
-#' @export
+#' @noRd
 #' @examples
 #'\dontrun{
 #'  library(Matrix)
@@ -179,7 +181,7 @@ includePackage <- function(sc, pkg) {
 #'
 #' @param sc Spark Context to use
 #' @param object Object to be broadcast
-#' @export
+#' @noRd
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -212,7 +214,7 @@ broadcast <- function(sc, object) {
 #'
 #' @param sc Spark Context to use
 #' @param dirName Directory path
-#' @export
+#' @noRd
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -222,4 +224,63 @@ broadcast <- function(sc, object) {
 #'}
 setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
+}
+
+#' @title Run a function over a list of elements, distributing the computations with Spark.
+#'
+#' @description
+#' Applies a function in a manner that is similar to doParallel or lapply to elements of a list.
+#' The computations are distributed using Spark. It is conceptually the same as the following code:
+#'   lapply(list, func)
+#'
+#' Known limitations:
+#'  - variable scoping and capture: compared to R's rich support for variable resolutions, the
+# distributed nature of SparkR limits how variables are resolved at runtime. All the variables
+# that are available through lexical scoping are embedded in the closure of the function and
+# available as read-only variables within the function. The environment variables should be
+# stored into temporary variables outside the function, and not directly accessed within the
+# function.
+#'
+#'  - loading external packages: In order to use a package, you need to load it inside the
+#'    closure. For example, if you rely on the MASS module, here is how you would use it:
+#'\dontrun{
+#' train <- function(hyperparam) {
+#'   library(MASS)
+#'   lm.ridge(“y ~ x+z”, data, lambda=hyperparam)
+#'   model
+#' }
+#'}
+#'
+#' @rdname spark.lapply
+#' @param sc Spark Context to use
+#' @param list the list of elements
+#' @param func a function that takes one argument.
+#' @return a list of results (the exact type being determined by the function)
+#' @export
+#' @examples
+#'\dontrun{
+#' doubled <- spark.lapply(1:10, function(x){2 * x})
+#'}
+spark.lapply <- function(sc, list, func) {
+  rdd <- parallelize(sc, list, length(list))
+  results <- map(rdd, func)
+  local <- collect(results)
+  local
+}
+
+#' Set new log level
+#'
+#' Set new log level: "ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN"
+#'
+#' @rdname setLogLevel
+#' @param sc Spark Context to use
+#' @param level New log level
+#' @export
+#' @examples
+#'\dontrun{
+#' setLogLevel(sc, "ERROR")
+#'}
+
+setLogLevel <- function(sc, level) {
+  callJMethod(sc, "setLogLevel", level)
 }

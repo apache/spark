@@ -19,11 +19,10 @@ package org.apache.spark.ml.tuning
 
 import scala.collection.mutable
 
-import org.scalatest.FunSuite
-
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.{ParamMap, TestParams}
 
-class ParamGridBuilderSuite extends FunSuite {
+class ParamGridBuilderSuite extends SparkFunSuite {
 
   val solver = new TestParams()
   import solver.{inputCol, maxIter}

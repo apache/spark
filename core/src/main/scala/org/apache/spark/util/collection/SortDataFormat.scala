@@ -90,9 +90,9 @@ class KVArraySortDataFormat[K, T <: AnyRef : ClassTag] extends SortDataFormat[K,
   override def swap(data: Array[T], pos0: Int, pos1: Int) {
     val tmpKey = data(2 * pos0)
     val tmpVal = data(2 * pos0 + 1)
-    data(2 * pos0)     = data(2 * pos1)
+    data(2 * pos0) = data(2 * pos1)
     data(2 * pos0 + 1) = data(2 * pos1 + 1)
-    data(2 * pos1)     = tmpKey
+    data(2 * pos1) = tmpKey
     data(2 * pos1 + 1) = tmpVal
   }
 

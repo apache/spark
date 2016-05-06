@@ -18,35 +18,43 @@
 package org.apache.spark.sql.hive.thriftserver.server
 
 import java.util.{Map => JMap}
+
 import scala.collection.mutable.Map
 
 import org.apache.hive.service.cli._
 import org.apache.hive.service.cli.operation.{ExecuteStatementOperation, Operation, OperationManager}
 import org.apache.hive.service.cli.session.HiveSession
-import org.apache.spark.Logging
-import org.apache.spark.sql.hive.HiveContext
-import org.apache.spark.sql.hive.thriftserver.{SparkExecuteStatementOperation, ReflectionUtils}
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveSessionState
+import org.apache.spark.sql.hive.thriftserver.{ReflectionUtils, SparkExecuteStatementOperation}
 
 /**
  * Executes queries using Spark SQL, and maintains a list of handles to active queries.
  */
-private[thriftserver] class SparkSQLOperationManager(hiveContext: HiveContext)
+private[thriftserver] class SparkSQLOperationManager()
   extends OperationManager with Logging {
 
   val handleToOperation = ReflectionUtils
     .getSuperField[JMap[OperationHandle, Operation]](this, "handleToOperation")
 
   val sessionToActivePool = Map[SessionHandle, String]()
+  val sessionToContexts = Map[SessionHandle, SQLContext]()
 
   override def newExecuteStatementOperation(
       parentSession: HiveSession,
       statement: String,
       confOverlay: JMap[String, String],
       async: Boolean): ExecuteStatementOperation = synchronized {
-
-    val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay)(
-      hiveContext, sessionToActivePool)
+    val sqlContext = sessionToContexts(parentSession.getSessionHandle)
+    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+    val runInBackground = async && sessionState.hiveThriftServerAsync
+    val operation = new SparkExecuteStatementOperation(parentSession, statement, confOverlay,
+      runInBackground)(sqlContext, sessionToActivePool)
     handleToOperation.put(operation.getHandle, operation)
+    logDebug(s"Created Operation for $statement with session=$parentSession, " +
+      s"runInBackground=$runInBackground")
     operation
   }
 }

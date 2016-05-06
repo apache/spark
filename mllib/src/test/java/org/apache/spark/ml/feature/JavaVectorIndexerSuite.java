@@ -18,19 +18,20 @@
 package org.apache.spark.ml.feature;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.google.common.collect.Lists;
-
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.VectorIndexerSuite.FeatureData;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 
 
@@ -51,20 +52,21 @@ public class JavaVectorIndexerSuite implements Serializable {
   @Test
   public void vectorIndexerAPI() {
     // The tests are to check Java compatibility.
-    List<FeatureData> points = Lists.newArrayList(
+    List<FeatureData> points = Arrays.asList(
       new FeatureData(Vectors.dense(0.0, -2.0)),
       new FeatureData(Vectors.dense(1.0, 3.0)),
       new FeatureData(Vectors.dense(1.0, 4.0))
     );
     SQLContext sqlContext = new SQLContext(sc);
-    DataFrame data = sqlContext.createDataFrame(sc.parallelize(points, 2), FeatureData.class);
+    Dataset<Row> data = sqlContext.createDataFrame(sc.parallelize(points, 2), FeatureData.class);
     VectorIndexer indexer = new VectorIndexer()
       .setInputCol("features")
       .setOutputCol("indexed")
       .setMaxCategories(2);
     VectorIndexerModel model = indexer.fit(data);
     Assert.assertEquals(model.numFeatures(), 2);
-    Assert.assertEquals(model.categoryMaps().size(), 1);
-    DataFrame indexedData = model.transform(data);
+    Map<Integer, Map<Double, Integer>> categoryMaps = model.javaCategoryMaps();
+    Assert.assertEquals(categoryMaps.size(), 1);
+    Dataset<Row> indexedData = model.transform(data);
   }
 }

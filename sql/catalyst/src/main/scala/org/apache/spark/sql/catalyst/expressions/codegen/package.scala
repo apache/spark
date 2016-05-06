@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.rules
 import org.apache.spark.util.Utils
 
@@ -26,12 +25,6 @@ import org.apache.spark.util.Utils
  * of catalyst expression.
  */
 package object codegen {
-
-  /**
-   * A lock to protect invoking the scala compiler at runtime, since it is not thread safe in Scala
-   * 2.10.
-   */
-  protected[codegen] val globalLock = org.apache.spark.sql.catalyst.ScalaReflectionLock
 
   /** Canonicalizes an expression so those that differ only by names can reuse the same code. */
   object ExpressionCanonicalizer extends rules.RuleExecutor[Expression] {
@@ -46,10 +39,8 @@ package object codegen {
   }
 
   /**
-   * :: DeveloperApi ::
    * Dumps the bytecode from a class to the screen using javap.
    */
-  @DeveloperApi
   object DumpByteCode {
     import scala.sys.process._
     val dumpDirectory = Utils.createTempDir()
@@ -73,8 +64,10 @@ package object codegen {
       outfile.write(generatedBytes)
       outfile.close()
 
+      // scalastyle:off println
       println(
         s"javap -p -v -classpath ${dumpDirectory.getCanonicalPath} ${generatedClass.getName}".!!)
+      // scalastyle:on println
     }
   }
 }

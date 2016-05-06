@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.ml
 
 import scala.collection.mutable
@@ -117,7 +118,7 @@ object RandomForestExample {
         .text(s"input path to test dataset.  If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
-      opt[String]("<dataFormat>")
+      opt[String]("dataFormat")
         .text("data format: libsvm (default), dense (deprecated in Spark v1.1)")
         .action((x, c) => c.copy(dataFormat = x))
       arg[String]("<input>")
@@ -158,7 +159,7 @@ object RandomForestExample {
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
     if (algo == "classification") {
       val labelIndexer = new StringIndexer()
-        .setInputCol("labelString")
+        .setInputCol("label")
         .setOutputCol(labelColName)
       stages += labelIndexer
     }
@@ -209,16 +210,14 @@ object RandomForestExample {
     // Get the trained Random Forest from the fitted PipelineModel
     algo match {
       case "classification" =>
-        val rfModel = pipelineModel.getModel[RandomForestClassificationModel](
-          dt.asInstanceOf[RandomForestClassifier])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[RandomForestClassificationModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {
           println(rfModel) // Print model summary.
         }
       case "regression" =>
-        val rfModel = pipelineModel.getModel[RandomForestRegressionModel](
-          dt.asInstanceOf[RandomForestRegressor])
+        val rfModel = pipelineModel.stages.last.asInstanceOf[RandomForestRegressionModel]
         if (rfModel.totalNumNodes < 30) {
           println(rfModel.toDebugString) // Print full model.
         } else {
@@ -246,3 +245,4 @@ object RandomForestExample {
     sc.stop()
   }
 }
+// scalastyle:on println

@@ -20,6 +20,7 @@ package org.apache.spark.metrics.sink
 import java.util.Properties
 
 import com.codahale.metrics.{JmxReporter, MetricRegistry}
+
 import org.apache.spark.SecurityManager
 
 private[spark] class JmxSink(val property: Properties, val registry: MetricRegistry,

@@ -30,7 +30,8 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.mllib.regression.LabeledPoint;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SQLContext;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
@@ -38,7 +39,7 @@ public class JavaCrossValidatorSuite implements Serializable {
 
   private transient JavaSparkContext jsc;
   private transient SQLContext jsql;
-  private transient DataFrame dataset;
+  private transient Dataset<Row> dataset;
 
   @Before
   public void setUp() {
@@ -68,8 +69,8 @@ public class JavaCrossValidatorSuite implements Serializable {
       .setEvaluator(eval)
       .setNumFolds(3);
     CrossValidatorModel cvModel = cv.fit(dataset);
-    ParamMap bestParamMap = cvModel.bestModel().fittingParamMap();
-    Assert.assertEquals(0.001, bestParamMap.apply(lr.regParam()));
-    Assert.assertEquals(10, bestParamMap.apply(lr.maxIter()));
+    LogisticRegression parent = (LogisticRegression) cvModel.bestModel().parent();
+    Assert.assertEquals(0.001, parent.getRegParam(), 0.0);
+    Assert.assertEquals(10, parent.getMaxIter());
   }
 }

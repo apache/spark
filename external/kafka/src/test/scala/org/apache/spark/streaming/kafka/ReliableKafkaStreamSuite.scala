@@ -26,15 +26,15 @@ import scala.util.Random
 
 import kafka.serializer.StringDecoder
 import kafka.utils.{ZKGroupTopicDirs, ZkUtils}
-import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 import org.scalatest.concurrent.Eventually
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext}
 import org.apache.spark.util.Utils
 
-class ReliableKafkaStreamSuite extends FunSuite
+class ReliableKafkaStreamSuite extends SparkFunSuite
     with BeforeAndAfterAll with BeforeAndAfter with Eventually {
 
   private val sparkConf = new SparkConf()
@@ -50,7 +50,7 @@ class ReliableKafkaStreamSuite extends FunSuite
   private var ssc: StreamingContext = _
   private var tempDirectory: File = null
 
-  override def beforeAll() : Unit = {
+  override def beforeAll(): Unit = {
     kafkaTestUtils = new KafkaTestUtils
     kafkaTestUtils.setup()
 

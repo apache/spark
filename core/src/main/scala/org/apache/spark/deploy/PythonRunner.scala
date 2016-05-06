@@ -17,11 +17,14 @@
 
 package org.apache.spark.deploy
 
+import java.io.File
 import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
+import scala.util.Try
 
+import org.apache.spark.SparkUserAppException
 import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.util.{RedirectThread, Utils}
 
@@ -44,9 +47,22 @@ object PythonRunner {
     // Launch a Py4J gateway server for the process to connect to; this will let it see our
     // Java system properties and such
     val gatewayServer = new py4j.GatewayServer(null, 0)
-    gatewayServer.start()
+    val thread = new Thread(new Runnable() {
+      override def run(): Unit = Utils.logUncaughtExceptions {
+        gatewayServer.start()
+      }
+    })
+    thread.setName("py4j-gateway-init")
+    thread.setDaemon(true)
+    thread.start()
 
-    // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
+    // Wait until the gateway server has started, so that we know which port is it bound to.
+    // `gatewayServer.start()` will start a new thread and run the server code there, after
+    // initializing the socket, so the thread started above will end as soon as the server is
+    // ready to serve connections.
+    thread.join()
+
+    // Build up a PYTHONPATH that includes the Spark assembly (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
     val pathElements = new ArrayBuffer[String]
     pathElements ++= formattedPyFiles
@@ -55,18 +71,25 @@ object PythonRunner {
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
 
     // Launch Python process
-    val builder = new ProcessBuilder(Seq(pythonExec, formattedPythonFile) ++ otherArgs)
+    val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:
     env.put("PYTHONUNBUFFERED", "YES") // value is needed to be set to a non-empty string
     env.put("PYSPARK_GATEWAY_PORT", "" + gatewayServer.getListeningPort)
     builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
-    val process = builder.start()
+    try {
+      val process = builder.start()
 
-    new RedirectThread(process.getInputStream, System.out, "redirect output").start()
+      new RedirectThread(process.getInputStream, System.out, "redirect output").start()
 
-    System.exit(process.waitFor())
+      val exitCode = process.waitFor()
+      if (exitCode != 0) {
+        throw new SparkUserAppException(exitCode)
+      }
+    } finally {
+      gatewayServer.shutdown()
+    }
   }
 
   /**
@@ -81,16 +104,13 @@ object PythonRunner {
       throw new IllegalArgumentException("Launching Python applications through " +
         s"spark-submit is currently only supported for local files: $path")
     }
-    val windows = Utils.isWindows || testWindows
-    var formattedPath = if (windows) Utils.formatWindowsPath(path) else path
-
-    // Strip the URI scheme from the path
-    formattedPath =
-      new URI(formattedPath).getScheme match {
-        case null => formattedPath
-        case Utils.windowsDrive(d) if windows => formattedPath
-        case _ => new URI(formattedPath).getPath
-      }
+    // get path when scheme is file.
+    val uri = Try(new URI(path)).getOrElse(new File(path).toURI)
+    var formattedPath = uri.getScheme match {
+      case null => path
+      case "file" | "local" => uri.getPath
+      case _ => null
+    }
 
     // Guard against malformed paths potentially throwing NPE
     if (formattedPath == null) {
@@ -99,7 +119,9 @@ object PythonRunner {
 
     // In Windows, the drive should not be prefixed with "/"
     // For instance, python does not understand "/C:/path/to/sheep.py"
-    formattedPath = if (windows) formattedPath.stripPrefix("/") else formattedPath
+    if (Utils.isWindows && formattedPath.matches("/[a-zA-Z]:/.*")) {
+      formattedPath = formattedPath.stripPrefix("/")
+    }
     formattedPath
   }
 
