@@ -531,6 +531,17 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
 
     catalog.dropTable("db1", "your_table", ignoreIfNotExists = false)
     assert(!exists(db.locationUri, "your_table"))
+
+    val externalTable = CatalogTable(
+      identifier = TableIdentifier("external_table", Some("db1")),
+      tableType = CatalogTableType.EXTERNAL,
+      storage = CatalogStorageFormat(
+        Some(Utils.createTempDir().getAbsolutePath),
+        None, None, None, false, Map.empty),
+      schema = Seq(CatalogColumn("a", "int"), CatalogColumn("b", "string"))
+    )
+    catalog.createTable("db1", externalTable, ignoreIfExists = false)
+    assert(!exists(db.locationUri, "external_table"))
   }
 
   test("create/drop/rename partitions should create/delete/rename the directory") {
@@ -560,6 +571,15 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     catalog.dropPartitions("db1", "tbl", Seq(part2.spec, part3.spec), ignoreIfNotExists = false)
     assert(!exists(databaseDir, "tbl", "a=3", "b=4"))
     assert(!exists(databaseDir, "tbl", "a=5", "b=6"))
+
+    val externalPartition = CatalogTablePartition(
+      Map("a" -> "7", "b" -> "8"),
+      CatalogStorageFormat(
+        Some(Utils.createTempDir().getAbsolutePath),
+        None, None, None, false, Map.empty)
+    )
+    catalog.createPartitions("db1", "tbl", Seq(externalPartition), ignoreIfExists = false)
+    assert(!exists(databaseDir, "tbl", "a=7", "b=8"))
   }
 }
 

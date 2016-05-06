@@ -306,6 +306,8 @@ class InMemoryCatalog extends ExternalCatalog {
     val partitionColumnNames = getTable(db, table).partitionColumnNames
     // TODO: we should follow hive to roll back if one partition path failed to create.
     parts.foreach { p =>
+      // If location is set, the partition is using an external partition location and we don't
+      // need to handle its directory.
       if (p.storage.locationUri.isEmpty) {
         val partitionPath = partitionColumnNames.flatMap { col =>
           p.spec.get(col).map(col + "=" + _)
@@ -341,6 +343,8 @@ class InMemoryCatalog extends ExternalCatalog {
     val partitionColumnNames = getTable(db, table).partitionColumnNames
     // TODO: we should follow hive to roll back if one partition path failed to delete.
     partSpecs.foreach { p =>
+      // If location is set, the partition is using an external partition location and we don't
+      // need to handle its directory.
       if (existingParts(p).storage.locationUri.isEmpty) {
         val partitionPath = partitionColumnNames.flatMap { col =>
           p.get(col).map(col + "=" + _)
@@ -370,6 +374,8 @@ class InMemoryCatalog extends ExternalCatalog {
       val newPart = getPartition(db, table, oldSpec).copy(spec = newSpec)
       val existingParts = catalog(db).tables(table).partitions
 
+      // If location is set, the partition is using an external partition location and we don't
+      // need to handle its directory.
       if (newPart.storage.locationUri.isEmpty) {
         val oldPath = partitionColumnNames.flatMap { col =>
           oldSpec.get(col).map(col + "=" + _)
