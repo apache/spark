@@ -267,8 +267,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf,
   private var cacheEpoch = epoch
 
   // The size at which we use Broadcast to send the map output statuses to the executors
-  private val minSizeForBroadcast = conf.getSizeAsBytes("spark.shuffle.mapOutput.minSizeForBroadcast",
-    "512k").toInt
+  private val minSizeForBroadcast =
+    conf.getSizeAsBytes("spark.shuffle.mapOutput.minSizeForBroadcast", "512k").toInt
 
   /** Whether to compute locality preferences for reduce tasks */
   private val shuffleLocalityEnabled = conf.getBoolean("spark.shuffle.reduceLocality.enabled", true)
