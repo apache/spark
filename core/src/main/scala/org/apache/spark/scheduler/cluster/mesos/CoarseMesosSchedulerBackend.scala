@@ -174,7 +174,9 @@ private[spark] class CoarseMesosSchedulerBackend(
       environment.addVariables(
         Environment.Variable.newBuilder().setName("SPARK_CLASSPATH").setValue(cp).build())
     }
-    val extraJavaOpts = conf.get("spark.executor.extraJavaOptions", "")
+    // Set the ports to be pickedup by the executor
+    val extraJavaOpts = {conf.get("spark.executor.extraJavaOptions", "") +
+      s" -Dspark.mesos.executor.preassigned.ports=${getAssignedPortString(conf, ports)}"}.trim()
 
     // Set the environment variable through a command prefix
     // to append to the existing value of the variable
@@ -194,11 +196,6 @@ private[spark] class CoarseMesosSchedulerBackend(
         .setValue(value)
         .build())
     }
-
-    // Set the ports to be pickedup by the executor
-    environment.addVariables(Environment.Variable.newBuilder()
-      .setName("SPARK_MESOS_PREASSIGNED_PORTS")
-      .setValue(getAssignedPortString(conf, ports)))
 
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
@@ -335,20 +332,24 @@ private[spark] class CoarseMesosSchedulerBackend(
       val offerAttributes = toAttributeMap(offer.getAttributesList)
       val offerMem = getResource(offer.getResourcesList, "mem")
       val offerCpus = getResource(offer.getResourcesList, "cpus")
-      val id = offer.getId.getValue
+      val offerPorts = getRangeResource(offer.getResourcesList, "ports")
+      val id = offer.getId.getValue.mkString(",")
 
       if (tasks.contains(offer.getId)) { // accept
         val offerTasks = tasks(offer.getId)
 
         logDebug(s"Accepting offer: $id with attributes: $offerAttributes " +
-          s"mem: $offerMem cpu: $offerCpus.  Launching ${offerTasks.size} Mesos tasks.")
+          s"mem: $offerMem cpu: $offerCpus ports: $offerPorts." +
+          s"  Launching ${offerTasks.size} Mesos tasks.")
 
         for (task <- offerTasks) {
           val taskId = task.getTaskId
           val mem = getResource(task.getResourcesList, "mem")
           val cpus = getResource(task.getResourcesList, "cpus")
+          val ports = getRangeResource(task.getResourcesList, "ports").mkString(",")
 
-          logDebug(s"Launching Mesos task: ${taskId.getValue} with mem: $mem cpu: $cpus.")
+          logDebug(s"Launching Mesos task: ${taskId.getValue} with mem: $mem cpu: $cpus" +
+            s" ports: $ports")
         }
 
         d.launchTasks(
@@ -403,23 +404,17 @@ private[spark] class CoarseMesosSchedulerBackend(
 
           slaves.getOrElseUpdate(slaveId, new Slave(offer.getHostname)).taskIDs.add(taskId)
 
-          val (afterCPUResources, cpuResourcesToUse) =
-            partitionResources(resources, "cpus", taskCPUs)
-          val (afterMemResources, memResourcesToUse) =
-            partitionResources(afterCPUResources.asJava, "mem", taskMemory)
-          // process port offers
-          val (resourcesLeft, portResources) = getPortResources(afterMemResources)
-          val (portResourcesLeft, portResourcesToUse, portsToUse) =
-            partitionPorts(conf, portResources)
+          val (resourcesLeft, resourcesToUse, portsToUse) =
+            getResources(resources, taskCPUs, taskMemory)
 
           val taskBuilder = MesosTaskInfo.newBuilder()
             .setTaskId(TaskID.newBuilder().setValue(taskId.toString).build())
             .setSlaveId(offer.getSlaveId)
             .setCommand(createCommand(offer, taskCPUs + extraCoresPerExecutor, taskId, portsToUse))
             .setName("Task " + taskId)
-            .addAllResources(cpuResourcesToUse.asJava)
-            .addAllResources(memResourcesToUse.asJava)
-            .addAllResources(portResourcesToUse.asJava)
+
+          resourcesToUse.foreach(resourceList =>
+            taskBuilder.addAllResources(resourceList.asJava))
 
           sc.conf.getOption("spark.mesos.executor.docker.image").foreach { image =>
             MesosSchedulerBackendUtil
@@ -427,13 +422,27 @@ private[spark] class CoarseMesosSchedulerBackend(
           }
 
           tasks(offer.getId) ::= taskBuilder.build()
-          remainingResources(offerId) = (resourcesLeft ++ portResourcesLeft).asJava
+          remainingResources(offerId) = resourcesLeft.asJava
           totalCoresAcquired += taskCPUs
           coresByTaskId(taskId) = taskCPUs
         }
       }
     }
     tasks.toMap
+  }
+
+  private def getResources(resources: JList[Resource], taskCPUs: Int, taskMemory: Int)
+    : (List[Resource], List[List[Resource]], List[Long]) = {
+    val (afterCPUResources, cpuResourcesToUse) =
+      partitionResources(resources, "cpus", taskCPUs)
+    val (afterMemResources, memResourcesToUse) =
+      partitionResources(afterCPUResources.asJava, "mem", taskMemory)
+    // process port offers
+    val (resourcesWithoutPorts, portResources) = filterPortResources(afterMemResources)
+    val (afterPortResources, portResourcesToUse, portsToUse) =
+      partitionPorts(conf, portResources)
+    (resourcesWithoutPorts ++ afterPortResources,
+      List(cpuResourcesToUse, memResourcesToUse, portResourcesToUse), portsToUse)
   }
 
   private def canLaunchTask(slaveId: String, resources: JList[Resource]): Boolean = {

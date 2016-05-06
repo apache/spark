@@ -284,7 +284,7 @@ private[spark] object CoarseGrainedExecutorBackend extends Logging {
   }
 
   private def preassignPortsIfAny(conf: SparkConf): Unit = {
-    sys.env.get("SPARK_MESOS_PREASSIGNED_PORTS").map(_.split(",")).foreach {
+    sys.props.get("spark.mesos.executor.preassigned.ports").map(_.split(",")).foreach {
       portPairArray =>
         portPairArray.foreach{ portPair =>
           val splittedPair = portPair.split(":")
