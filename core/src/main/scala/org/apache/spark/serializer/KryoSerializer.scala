@@ -30,6 +30,7 @@ import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage._
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
+import org.apache.spark.util.Utils
 
 import scala.reflect.ClassTag
 
@@ -54,7 +55,7 @@ class KryoSerializer(conf: SparkConf)
   def newKryo(): Kryo = {
     val instantiator = new EmptyScalaKryoInstantiator
     val kryo = instantiator.newKryo()
-    val classLoader = Thread.currentThread.getContextClassLoader
+    val classLoader = Utils.getContextOrSparkClassLoader
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
     // Do this before we invoke the user registrator so the user registrator can override this.
