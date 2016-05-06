@@ -22,21 +22,19 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConverters._
 
 import org.apache.commons.logging.LogFactory
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
-import org.apache.hive.service.server.{HiveServer2, HiveServerServerOptionsProcessor}
+import org.apache.hive.service.cli.thrift.ThriftHttpCLIService
+import org.apache.hive.service.server.HiveServer2
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
 import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.hive.{HiveSharedState, HiveUtils}
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
 import org.apache.spark.sql.internal.SQLConf
@@ -76,7 +74,7 @@ object HiveThriftServer2 extends Logging {
 
   def main(args: Array[String]) {
     Utils.initDaemon(log)
-    val optionsProcessor = new HiveServerServerOptionsProcessor("HiveThriftServer2")
+    val optionsProcessor = new HiveServer2.ServerOptionsProcessor("HiveThriftServer2")
     optionsProcessor.parse(args)
 
     logInfo("Starting SparkContext")
@@ -273,7 +271,7 @@ object HiveThriftServer2 extends Logging {
 
 private[hive] class HiveThriftServer2(sqlContext: SQLContext)
   extends HiveServer2
-  with ReflectedCompositeService {
+  with ReflectedCompositeService with Logging {
   // state is tracked internally so that the server only attempts to shut down if it successfully
   // started, and then once only.
   private val started = new AtomicBoolean(false)
@@ -283,20 +281,18 @@ private[hive] class HiveThriftServer2(sqlContext: SQLContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
-      new ThriftHttpCLIService(sparkSqlCliService)
-    } else {
-      new ThriftBinaryCLIService(sparkSqlCliService)
+    if (isBinaryTransportMode(hiveConf)) {
+      logWarning("Binary mode is not supported, use HTTP mode instead")
     }
-
+    val thriftCliService = new ThriftHttpCLIService(sparkSqlCliService)
     setSuperField(this, "thriftCLIService", thriftCliService)
     addService(thriftCliService)
     initCompositeService(hiveConf)
   }
 
-  private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
+  private def isBinaryTransportMode(hiveConf: HiveConf): Boolean = {
     val transportMode = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    transportMode.toLowerCase(Locale.ENGLISH).equals("http")
+    transportMode.toLowerCase(Locale.ENGLISH).equals("binary")
   }
 
 

@@ -19,12 +19,12 @@ package org.apache.spark.sql.execution.metric
 
 import java.text.NumberFormat
 
-import org.apache.spark.{NewAccumulator, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
 
-class SQLMetric(val metricType: String, initValue: Long = 0L) extends NewAccumulator[Long, Long] {
+class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
   // This is a workaround for SPARK-11013.
   // We may use -1 as initial value of the accumulator, if the accumulator is valid, we will
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
@@ -33,8 +33,8 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends NewAccumul
 
   override def copyAndReset(): SQLMetric = new SQLMetric(metricType, initValue)
 
-  override def merge(other: NewAccumulator[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.localValue
+  override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
+    case o: SQLMetric => _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
@@ -45,7 +45,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends NewAccumul
 
   def +=(v: Long): Unit = _value += v
 
-  override def localValue: Long = _value
+  override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   private[spark] override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {

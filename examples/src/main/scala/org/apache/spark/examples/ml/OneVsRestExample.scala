@@ -22,7 +22,6 @@ import java.util.concurrent.TimeUnit.{NANOSECONDS => NANO}
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
@@ -31,7 +30,7 @@ import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.DataFrame
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 /**
  * An example runner for Multiclass to Binary Reduction with One Vs Rest.
@@ -110,18 +109,19 @@ object OneVsRestExample {
   }
 
   private def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"OneVsRestExample with $params")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName(s"OneVsRestExample with $params")
+      .getOrCreate()
 
     // $example on$
-    val inputData = sqlContext.read.format("libsvm").load(params.input)
+    val inputData = spark.read.format("libsvm").load(params.input)
     // compute the train/test split: if testInput is not provided use part of input.
     val data = params.testInput match {
       case Some(t) =>
         // compute the number of features in the training set.
         val numFeatures = inputData.first().getAs[Vector](1).size
-        val testData = sqlContext.read.option("numFeatures", numFeatures.toString)
+        val testData = spark.read.option("numFeatures", numFeatures.toString)
           .format("libsvm").load(t)
         Array[DataFrame](inputData, testData)
       case None =>
@@ -175,7 +175,7 @@ object OneVsRestExample {
     println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 
   private def time[R](block: => R): (Long, R) = {

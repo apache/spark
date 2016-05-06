@@ -83,6 +83,7 @@ class Column(
 }
 
 
+// TODO(andrew): should we include the database here?
 class Function(
     val name: String,
     @Nullable val description: String,

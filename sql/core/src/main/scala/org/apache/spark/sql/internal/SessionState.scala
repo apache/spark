@@ -99,7 +99,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     sparkSession.externalCatalog,
     functionResourceLoader,
     functionRegistry,
-    conf)
+    conf,
+    newHadoopConf())
 
   /**
    * Interface exposed to the user for registering user-defined functions.
@@ -152,9 +153,11 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   private val jarClassLoader: NonClosableMutableURLClassLoader =
     sparkSession.sharedState.jarClassLoader
 
-  // Automatically extract `spark.sql.*` entries and put it in our SQLConf
+  // Automatically extract all entries and put it in our SQLConf
   // We need to call it after all of vals have been initialized.
-  setConf(SQLContext.getSQLProperties(sparkSession.sparkContext.getConf))
+  sparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
+    conf.setConfString(k, v)
+  }
 
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
@@ -168,19 +171,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   def invalidateTable(tableName: String): Unit = {
     catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
-  }
-
-  final def setConf(properties: Properties): Unit = {
-    properties.asScala.foreach { case (k, v) => setConf(k, v) }
-  }
-
-  final def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    conf.setConf(entry, value)
-    setConf(entry.key, entry.stringConverter(value))
-  }
-
-  def setConf(key: String, value: String): Unit = {
-    conf.setConfString(key, value)
   }
 
   def addJar(path: String): Unit = {

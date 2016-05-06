@@ -233,9 +233,9 @@ class SessionCatalogSuite extends SparkFunSuite {
     intercept[AnalysisException] {
       catalog.dropTable(TableIdentifier("tbl1", Some("unknown_db")), ignoreIfNotExists = true)
     }
-    // If the table does not exist, we do not issue an exception. Instead, we output an error log
-    // message to console when ignoreIfNotExists is set to false.
-    catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false)
+    intercept[AnalysisException] {
+      catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = false)
+    }
     catalog.dropTable(TableIdentifier("unknown_table", Some("db2")), ignoreIfNotExists = true)
   }
 

@@ -68,7 +68,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
       classOf[AnalyzeTable])
   }
 
-  test("analyze MetastoreRelations") {
+  ignore("analyze MetastoreRelations") {
     def queryTotalSize(tableName: String): BigInt =
       hiveContext.sessionState.catalog.lookupRelation(
         TableIdentifier(tableName)).statistics.sizeInBytes
