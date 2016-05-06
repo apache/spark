@@ -133,23 +133,37 @@ abstract class PartitioningAwareFileCatalog(
   /**
    * Contains a set of paths that are considered as the base dirs of the input datasets.
    * The partitioning discovery logic will make sure it will stop when it reaches any
-   * base path. By default, the paths of the dataset provided by users will be base paths.
-   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
-   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
-   * `something`. If users want to override the basePath. They can set `basePath` in the options
-   * to pass the new base path to the data source.
-   * For the above example, if the user-provided base path is `/path/`, the returned
+   * base path.
+   *
+   * By default, the paths of the dataset provided by users will be base paths.
+   * Below are three typical examples,
+   * Case 1) `sqlContext.read.parquet("/path/something=true/")`: the base path will be
+   * `/path/something=true/`, and the returned DataFrame will not contain a column of `something`.
+   * Case 2) `sqlContext.read.parquet("/path/something=true/a.parquet")`: the base path will be
+   * still `/path/something=true/`, and the returned DataFrame will also not contain a column of
+   * `something`.
+   * Case 3) `sqlContext.read.parquet("/path/")`: the base path will be `/path/`, and the returned
    * DataFrame will have the column of `something`.
+   *
+   * Users also can override the basePath by setting `basePath` in the options to pass the new base
+   * path to the data source.
+   * For example, `sqlContext.read.option("basePath", "/path/").parquet("/path/something=true/")`,
+   * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {
-    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
-    userDefinedBasePath.getOrElse {
-      // If the user does not provide basePath, we will just use paths.
-      paths.toSet
-    }.map { hdfsPath =>
-      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+    parameters.get("basePath").map(new Path(_)) match {
+      case Some(userDefinedBasePath) =>
+        val fs = userDefinedBasePath.getFileSystem(hadoopConf)
+        if (!fs.isDirectory(userDefinedBasePath)) {
+          throw new IllegalArgumentException("Option 'basePath' must be a directory")
+        }
+        Set(fs.makeQualified(userDefinedBasePath))
+
+      case None =>
+        paths.map { path =>
+          // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+          val qualifiedPath = path.getFileSystem(hadoopConf).makeQualified(path)
+          if (leafFiles.contains(qualifiedPath)) qualifiedPath.getParent else qualifiedPath }.toSet
     }
   }
 }

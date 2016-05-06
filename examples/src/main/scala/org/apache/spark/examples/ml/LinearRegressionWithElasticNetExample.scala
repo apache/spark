@@ -26,7 +26,10 @@ import org.apache.spark.sql.SparkSession
 object LinearRegressionWithElasticNetExample {
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("LinearRegressionWithElasticNetExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("LinearRegressionWithElasticNetExample")
+      .getOrCreate()
 
     // $example on$
     // Load training data

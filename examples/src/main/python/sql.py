@@ -25,7 +25,10 @@ from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerT
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("PythonSQL").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PythonSQL")\
+        .getOrCreate()
 
     # A list of Rows. Infer schema from the first row, create a DataFrame and print the schema
     rows = [Row(name="John", age=19), Row(name="Smith", age=23), Row(name="Sarah", age=18)]

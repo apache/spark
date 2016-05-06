@@ -42,7 +42,10 @@ object ALSExample {
   // $example off$
 
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("ALSExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("ALSExample")
+      .getOrCreate()
     import spark.implicits._
 
     // $example on$

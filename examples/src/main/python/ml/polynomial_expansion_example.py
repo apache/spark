@@ -24,7 +24,10 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("PolynomialExpansionExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PolynomialExpansionExample")\
+        .getOrCreate()
 
     # $example on$
     df = spark\

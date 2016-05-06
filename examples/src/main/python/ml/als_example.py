@@ -30,7 +30,10 @@ from pyspark.sql import Row
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("ALSExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("ALSExample")\
+        .getOrCreate()
 
     # $example on$
     lines = spark.read.text("data/mllib/als/sample_movielens_ratings.txt").rdd
