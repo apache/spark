@@ -34,10 +34,23 @@ private[spark] trait Schedulable {
   def schedulingMode: SchedulingMode
   def weight: Int
   def minShare: Int
+  val initMaxRunningTasks: Int
   def runningTasks: Int
   def priority: Int
   def stageId: Int
   def name: String
+
+  /**
+   * How much space for new tasks is there in this Schedulable?
+   */
+  def maxRunningTasks: Int = {
+    val myMaxRunningTasks = math.max(0, initMaxRunningTasks - runningTasks)
+    if (parent == null) {
+      myMaxRunningTasks
+    } else {
+      math.min(myMaxRunningTasks, parent.maxRunningTasks)
+    }
+  }
 
   def addSchedulable(schedulable: Schedulable): Unit
   def removeSchedulable(schedulable: Schedulable): Unit

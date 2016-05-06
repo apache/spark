@@ -17,18 +17,44 @@
   -->
 
 <allocations>
+<pool name="0">
+    <minShare>3</minShare>
+    <maxRunningTasks>1024</maxRunningTasks>
+    <weight>1</weight>
+    <schedulingMode>FAIR</schedulingMode>
+</pool>
 <pool name="1">
+    <minShare>4</minShare>
+    <maxRunningTasks>128</maxRunningTasks>
+    <weight>1</weight>
+    <schedulingMode>FAIR</schedulingMode>
+</pool>
+<pool name="00">
+    <parent>0</parent>
     <minShare>2</minShare>
     <maxRunningTasks>512</maxRunningTasks>
-    <weight>1</weight>
-    <schedulingMode>FIFO</schedulingMode>
+    <weight>2</weight>
+    <schedulingMode>FAIR</schedulingMode>
 </pool>
-<pool name="2">
-    <minShare>3</minShare>
+<pool name="01">
+    <parent>0</parent>
+    <minShare>1</minShare>
+    <maxRunningTasks>128</maxRunningTasks>
+    <weight>1</weight>
+    <schedulingMode>FAIR</schedulingMode>
+</pool>
+<pool name="10">
+    <parent>1</parent>
+    <minShare>2</minShare>
     <maxRunningTasks>256</maxRunningTasks>
-    <weight>1</weight>
-    <schedulingMode>FIFO</schedulingMode>
+    <weight>2</weight>
+    <schedulingMode>FAIR</schedulingMode>
 </pool>
-<pool name="3">
+<pool name="11">
+    <parent>1</parent>
+    <minShare>2</minShare>
+    <maxRunningTasks>64</maxRunningTasks>
+    <weight>1</weight>
+    <schedulingMode>FAIR</schedulingMode>
 </pool>
 </allocations>

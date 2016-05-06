@@ -59,12 +59,15 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
   val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
   val DEFAULT_POOL_NAME = "default"
   val MINIMUM_SHARES_PROPERTY = "minShare"
+  val MAXIMUM_RUNNING_TASKS_PROPERTY = "maxRunningTasks"
   val SCHEDULING_MODE_PROPERTY = "schedulingMode"
+  val PARENT_PROPERTY = "parent"
   val WEIGHT_PROPERTY = "weight"
   val POOL_NAME_PROPERTY = "@name"
   val POOLS_PROPERTY = "pool"
   val DEFAULT_SCHEDULING_MODE = SchedulingMode.FIFO
   val DEFAULT_MINIMUM_SHARE = 0
+  val DEFAULT_MAXIMUM_RUNNING_TASKS = Int.MaxValue
   val DEFAULT_WEIGHT = 1
 
   override def buildPools() {
@@ -87,13 +90,20 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     buildDefaultPool()
   }
 
+  private def logPoolCreated(pool: Pool) =
+      logInfo(s"""Created pool ${pool.name},
+        | parent: ${Option(pool.parent).map(_.name).getOrElse("(none)")},
+        | schedulingMode: ${pool.schedulingMode},
+        | minShare: ${pool.minShare},
+        | maxRunningTasks: ${pool.maxRunningTasks},
+        | weight: ${pool.weight}""".stripMargin)
+
   private def buildDefaultPool() {
     if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
-        DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+        DEFAULT_MINIMUM_SHARE, DEFAULT_MAXIMUM_RUNNING_TASKS, DEFAULT_WEIGHT)
       rootPool.addSchedulable(pool)
-      logInfo("Created default pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-        DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+      logPoolCreated(pool)
     }
   }
 
@@ -104,7 +114,9 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       val poolName = (poolNode \ POOL_NAME_PROPERTY).text
       var schedulingMode = DEFAULT_SCHEDULING_MODE
       var minShare = DEFAULT_MINIMUM_SHARE
+      var maxRunningTasks = DEFAULT_MAXIMUM_RUNNING_TASKS
       var weight = DEFAULT_WEIGHT
+      var parent = DEFAULT_POOL_NAME
 
       val xmlSchedulingMode = (poolNode \ SCHEDULING_MODE_PROPERTY).text
       if (xmlSchedulingMode != "") {
@@ -122,15 +134,30 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         minShare = xmlMinShare.toInt
       }
 
+      val xmlMaxShare = (poolNode \ MAXIMUM_RUNNING_TASKS_PROPERTY).text
+      if (xmlMaxShare != "") {
+        maxRunningTasks = xmlMaxShare.toInt
+      }
+
       val xmlWeight = (poolNode \ WEIGHT_PROPERTY).text
       if (xmlWeight != "") {
         weight = xmlWeight.toInt
       }
 
-      val pool = new Pool(poolName, schedulingMode, minShare, weight)
-      rootPool.addSchedulable(pool)
-      logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-        poolName, schedulingMode, minShare, weight))
+      val xmlParent = (poolNode \ PARENT_PROPERTY).text
+      if (xmlParent != "") {
+        parent = xmlParent
+      }
+
+      val pool = new Pool(poolName, schedulingMode, minShare, maxRunningTasks, weight)
+      val parentPool = rootPool.getSchedulableByName(parent)
+      if (parentPool == null) {
+        logWarning(s"couldn't find parent pool $parent, adding pool to the root")
+        rootPool.addSchedulable(pool)
+      } else {
+        parentPool.addSchedulable(pool)
+      }
+      logPoolCreated(pool)
     }
   }
 
@@ -143,11 +170,11 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       if (parentPool == null) {
         // we will create a new pool that user has configured in app
         // instead of being defined in xml file
-        parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
-          DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
-        rootPool.addSchedulable(parentPool)
-        logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-          poolName, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+        val pool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
+          DEFAULT_MINIMUM_SHARE, DEFAULT_MAXIMUM_RUNNING_TASKS, DEFAULT_WEIGHT)
+        rootPool.addSchedulable(pool)
+        logPoolCreated(pool)
+        parentPool = pool
       }
     }
     parentPool.addSchedulable(manager)

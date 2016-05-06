@@ -32,6 +32,7 @@ private[spark] class Pool(
     val poolName: String,
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
+    val initMaxRunningTasks: Int,
     initWeight: Int)
   extends Schedulable with Logging {
 
