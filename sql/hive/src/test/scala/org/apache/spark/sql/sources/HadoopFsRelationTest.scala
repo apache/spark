@@ -524,7 +524,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
           assert(e.getMessage.contains("infer"))
 
         case _: java.util.NoSuchElementException if e.getMessage.contains("dataSchema") =>
-          // ignore, the source format requires schema to be provided by user
+          // Ignore error, the source format requires schema to be provided by user
+          // This is needed for SimpleTextHadoopFsRelationSuite as SimpleTextSource needs schema
 
         case _ =>
           fail("Unexpected error trying to infer schema from empty dir", e)
@@ -615,8 +616,8 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       val schema = dataInSubdir.schema
 
-      /** Test whether data is read with the given path matches the expected answer */
-      def testWithPath(path: String, expectedDf: DataFrame): Unit = {
+      /** Check whether data is read with the given path matches the expected answer */
+      def check(path: String, expectedDf: DataFrame): Unit = {
         val df = sqlContext.read
           .format(dataSourceName)
           .schema(schema) // avoid schema inference for any format
@@ -624,48 +625,81 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         checkAnswer(df, expectedDf)
       }
 
-      testWithPath(s"$dir/*/", dataInSubdir)
-      testWithPath(s"$dir/sub*/*", dataInSubdir.union(dataInSubsubdir))
-      testWithPath(s"$dir/another*/*", dataInAnotherSubsubdir)
-      testWithPath(s"$dir/*/another*", dataInAnotherSubsubdir)
-      testWithPath(s"$dir/*/*", dataInSubdir.union(dataInSubsubdir).union(dataInAnotherSubsubdir))
+      check(s"$dir/*/", dataInSubdir)
+      check(s"$dir/sub*/*", dataInSubdir.union(dataInSubsubdir))
+      check(s"$dir/another*/*", dataInAnotherSubsubdir)
+      check(s"$dir/*/another*", dataInAnotherSubsubdir)
+      check(s"$dir/*/*", dataInSubdir.union(dataInSubsubdir).union(dataInAnotherSubsubdir))
     }
   }
 
   test("Hadoop style globbing - partitioned data") {
-    withTempPath { file =>
+
+    // Tests the following on partition data
+    // - partitions are not discovered with globbing and without base path set.
+    // - partitions are discovered with globbing and base path set, though more detailed
+    //   tests for this is in ParquetPartitionDiscoverySuite
+
+    withTempPath { path =>
+      val dir = path.getCanonicalPath
       partitionedTestDF.write
         .format(dataSourceName)
         .mode(SaveMode.Overwrite)
         .partitionBy("p1", "p2")
-        .save(file.getCanonicalPath)
+        .save(dir)
 
-      val df = sqlContext.read
-        .format(dataSourceName)
-        .option("dataSchema", dataSchema.json)
-        .option("basePath", file.getCanonicalPath)
-        .load(s"${file.getCanonicalPath}/p1=*/p2=???")
-
-      val expectedPaths = Set(
-        s"${file.getCanonicalFile}/p1=1/p2=foo",
-        s"${file.getCanonicalFile}/p1=2/p2=foo",
-        s"${file.getCanonicalFile}/p1=1/p2=bar",
-        s"${file.getCanonicalFile}/p1=2/p2=bar"
-      ).map { p =>
-        val path = new Path(p)
-        val fs = path.getFileSystem(sqlContext.sessionState.newHadoopConf())
-        path.makeQualified(fs.getUri, fs.getWorkingDirectory).toString
+      def check(
+          path: String,
+          expectedResult: Either[DataFrame, String],
+          basePath: Option[String] = None
+        ): Unit = {
+        try {
+          val reader = sqlContext.read
+          basePath.foreach(reader.option("basePath", _))
+          val testDf = reader
+            .format(dataSourceName)
+            .load(path)
+          assert(expectedResult.isLeft, s"Error was expected with $path but result found")
+          checkAnswer(testDf, expectedResult.left.get)
+        } catch {
+          case e: Throwable =>
+            assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)
+            assert(
+              e.getMessage.contains(expectedResult.right.get),
+              s"Did not find expected error message wiht $path")
+        }
       }
 
-      val actualPaths = df.queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: HadoopFsRelation, _, _) =>
-          relation.location.paths.map(_.toString).toSet
-      }.getOrElse {
-        fail("Expect an FSBasedRelation, but none could be found")
+      object Error {
+        def apply(msg: String): Either[DataFrame, String] = Right(msg)
       }
 
-      assert(actualPaths === expectedPaths)
-      checkAnswer(df, partitionedTestDF.collect())
+      object Result {
+        def apply(df: DataFrame): Either[DataFrame, String] = Left(df)
+      }
+
+      // ---- Without base path set ----
+      // Should find all the data with partitioning columns
+      check(s"$dir", Result(partitionedTestDF))
+
+      // Should fail as globbing finds dirs without files, only subdirs in them.
+      check(s"$dir/*/", Error("please set \"basePath\""))
+      check(s"$dir/p1=*/", Error("please set \"basePath\""))
+
+      // Should not find partition columns as the globs resolve to p2 dirs
+      // with files in them
+      check(s"$dir/*/*", Result(partitionedTestDF.drop("p1", "p2")))
+      check(s"$dir/p1=*/p2=???", Result(partitionedTestDF.drop("p1", "p2")))
+
+      // Should find all data without the partitioning columns as the globs resolve to the files
+      check(s"$dir/*/*/*", Result(partitionedTestDF.drop("p1", "p2")))
+      check(s"$dir/p1=*/p2=*/*.parquet", Result(partitionedTestDF.drop("p1", "p2")))
+
+      // ---- With base path set ----
+      val resultDf = partitionedTestDF.select("a", "b", "p1", "p2")
+      check(path = s"$dir/*", Result(resultDf), basePath = Some(dir))
+      check(path = s"$dir/*/*", Result(resultDf), basePath = Some(dir))
+      check(path = s"$dir/*/*/*", Result(resultDf), basePath = Some(dir))
     }
   }
 
