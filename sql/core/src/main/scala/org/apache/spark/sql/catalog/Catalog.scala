@@ -28,6 +28,14 @@ import org.apache.spark.sql.types.StructType
 abstract class Catalog {
 
   /**
+   * Return an identifier for the underlying catalog implementation, currently must be
+   * either 'hive' or 'in-memory'.
+   *
+   * @since 2.0.0
+   */
+  def implementation: String
+
+  /**
    * Returns the current default database in this session.
    *
    * @since 2.0.0
