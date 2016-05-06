@@ -42,7 +42,10 @@ import org.apache.spark.sql.types.StructType;
 public class JavaBisectingKMeansExample {
 
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaBisectingKMeansExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaBisectingKMeansExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

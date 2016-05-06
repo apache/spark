@@ -29,7 +29,10 @@ from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("gradient_boosted_tree_regressor_example").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("gradient_boosted_tree_regressor_example")\
+        .getOrCreate()
 
     # $example on$
     # Load and parse the data file, converting it to a DataFrame.

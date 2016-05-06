@@ -81,7 +81,10 @@ public class JavaALSExample {
   // $example off$
 
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaALSExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaALSExample")
+      .getOrCreate();
 
     // $example on$
     JavaRDD<Rating> ratingsRDD = spark

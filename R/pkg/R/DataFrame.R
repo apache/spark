@@ -570,10 +570,17 @@ setMethod("unpersist",
 
 #' Repartition
 #'
-#' Return a new SparkDataFrame that has exactly numPartitions partitions.
-#'
+#' The following options for repartition are possible:
+#' \itemize{
+#'  \item{"Option 1"} {Return a new SparkDataFrame partitioned by
+#'                      the given columns into `numPartitions`.}
+#'  \item{"Option 2"} {Return a new SparkDataFrame that has exactly `numPartitions`.}
+#'  \item{"Option 3"} {Return a new SparkDataFrame partitioned by the given column(s),
+#'                      using `spark.sql.shuffle.partitions` as number of partitions.}
+#'}
 #' @param x A SparkDataFrame
 #' @param numPartitions The number of partitions to use.
+#' @param col The column by which the partitioning will be performed.
 #'
 #' @family SparkDataFrame functions
 #' @rdname repartition
@@ -586,11 +593,31 @@ setMethod("unpersist",
 #' path <- "path/to/file.json"
 #' df <- read.json(sqlContext, path)
 #' newDF <- repartition(df, 2L)
+#' newDF <- repartition(df, numPartitions = 2L)
+#' newDF <- repartition(df, col = df$"col1", df$"col2")
+#' newDF <- repartition(df, 3L, col = df$"col1", df$"col2")
 #'}
 setMethod("repartition",
-          signature(x = "SparkDataFrame", numPartitions = "numeric"),
-          function(x, numPartitions) {
-            sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions))
+          signature(x = "SparkDataFrame"),
+          function(x, numPartitions = NULL, col = NULL, ...) {
+            if (!is.null(numPartitions) && is.numeric(numPartitions)) {
+              # number of partitions and columns both are specified
+              if (!is.null(col) && class(col) == "Column") {
+                cols <- list(col, ...)
+                jcol <- lapply(cols, function(c) { c@jc })
+                sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions), jcol)
+              } else {
+                # only number of partitions is specified
+                sdf <- callJMethod(x@sdf, "repartition", numToInt(numPartitions))
+              }
+            } else if (!is.null(col) && class(col) == "Column") {
+              # only columns are specified
+              cols <- list(col, ...)
+              jcol <- lapply(cols, function(c) { c@jc })
+              sdf <- callJMethod(x@sdf, "repartition", jcol)
+            } else {
+              stop("Please, specify the number of partitions and/or a column(s)")
+            }
             dataFrame(sdf)
           })
 

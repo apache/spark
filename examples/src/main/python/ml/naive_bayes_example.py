@@ -24,7 +24,10 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("naive_bayes_example").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("naive_bayes_example")\
+        .getOrCreate()
 
     # $example on$
     # Load training data

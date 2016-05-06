@@ -65,7 +65,10 @@ public class JavaLDAExample {
     String inputFile = "data/mllib/sample_lda_data.txt";
 
     // Parses the arguments
-    SparkSession spark = SparkSession.builder().appName("JavaLDAExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaLDAExample")
+      .getOrCreate();
 
     // Loads data
     JavaRDD<Row> points = spark.read().text(inputFile).javaRDD().map(new ParseVector());
