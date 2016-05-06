@@ -431,6 +431,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
    */
   def countApprox(timeout: Long, confidence: Double): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout, confidence)
@@ -438,6 +441,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
    */
   def countApprox(timeout: Long): PartialResult[BoundedDouble] =
     rdd.countApprox(timeout)
@@ -450,7 +455,10 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     mapAsSerializableJavaMap(rdd.countByValue()).asInstanceOf[java.util.Map[T, jl.Long]]
 
   /**
-   * (Experimental) Approximate version of countByValue().
+   * Approximate version of countByValue().
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
    */
   def countByValueApprox(
     timeout: Long,
@@ -459,7 +467,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     rdd.countByValueApprox(timeout, confidence).map(mapAsSerializableJavaMap)
 
   /**
-   * (Experimental) Approximate version of countByValue().
+   * Approximate version of countByValue().
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
    */
   def countByValueApprox(timeout: Long): PartialResult[java.util.Map[T, BoundedDouble]] =
     rdd.countByValueApprox(timeout).map(mapAsSerializableJavaMap)
