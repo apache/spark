@@ -304,10 +304,10 @@ class HasCheckpointInterval(Params):
 
 class HasSeed(Params):
     """
-    Mixin for param seed: random seed.(Default hash of type name)
+    Mixin for param seed: random seed.(Default hash(type(self).__name__))
     """
 
-    seed = Param(Params._dummy(), "seed", "random seed.(Default hash of type name)", typeConverter=TypeConverters.toInt)
+    seed = Param(Params._dummy(), "seed", "random seed.(Default hash(type(self).__name__))", typeConverter=TypeConverters.toInt)
 
     def __init__(self):
         super(HasSeed, self).__init__()
