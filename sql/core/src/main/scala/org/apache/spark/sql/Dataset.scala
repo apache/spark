@@ -343,8 +343,18 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame =
-    new Dataset[Row](sparkSession, queryExecution, RowEncoder(logicalPlan.schema))
+  def toDF(): DataFrame = {
+    val rowEncoder = RowEncoder(schema)
+
+    if (schema == logicalPlan.schema) {
+      new Dataset[Row](sparkSession, queryExecution, rowEncoder)
+    } else {
+      // SPARK-15112: Adjust output column order so that query plan schema and encoder schema are
+      // consistent in the result DataFrame
+      val output = schema.map(f => UnresolvedAttribute(f.name))
+      new Dataset[Row](sparkSession, Project(output, logicalPlan), rowEncoder)
+    }
+  }
 
   /**
    * :: Experimental ::

@@ -1579,11 +1579,10 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
         // SPARK-15112: Column order of input query plan may differ from output column order of the
         // top-most `SerializeFromObject` operator. Here we add a projection to adjust column order
         // when necessary.
-        val output = d.child.resolve(StructType.fromAttributes(s.output), caseSensitiveResolution)
-
-        if (output == d.child.output) {
+        if (s.schema == d.child.schema) {
           newFilter
         } else {
+          val output = d.child.resolve(StructType.fromAttributes(s.output), caseSensitiveResolution)
           Project(output, newFilter)
         }
       }
