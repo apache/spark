@@ -198,6 +198,13 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
+  test("rename table when destination table already exists") {
+    val catalog = newBasicCatalog()
+    intercept[AnalysisException] {
+      catalog.renameTable("db2", "tbl1", "tbl2")
+    }
+  }
+
   test("alter table") {
     val catalog = newBasicCatalog()
     val tbl1 = catalog.getTable("db2", "tbl1")
@@ -356,6 +363,13 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     }
   }
 
+  test("rename partitions when the new partition already exists") {
+    val catalog = newBasicCatalog()
+    intercept[AnalysisException] {
+      catalog.renamePartitions("db2", "tbl2", Seq(part1.spec), Seq(part2.spec))
+    }
+  }
+
   test("alter partitions") {
     val catalog = newBasicCatalog()
     try {
@@ -477,6 +491,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     intercept[AnalysisException] {
       catalog.renameFunction("does_not_exist", "func1", "func5")
+    }
+  }
+
+  test("rename function when new function already exists") {
+    val catalog = newBasicCatalog()
+    catalog.createFunction("db2", newFunc("func2", Some("db2")))
+    intercept[AnalysisException] {
+      catalog.renameFunction("db2", "func1", "func2")
     }
   }
 
