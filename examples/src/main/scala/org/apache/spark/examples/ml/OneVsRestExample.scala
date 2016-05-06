@@ -30,7 +30,7 @@ import org.apache.spark.sql.SparkSession
  * The example uses Logistic Regression as the base classifier.
  * Run with
  * {{{
- * ./bin/run-example ml.OneVsRestExample [options]
+ * ./bin/run-example ml.OneVsRestExample
  * }}}
  */
 
