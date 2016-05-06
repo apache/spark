@@ -354,9 +354,8 @@ class DAGScheduler(
     val numTasks = rdd.partitions.length
     val stage = newShuffleMapStage(rdd, numTasks, shuffleDep, firstJobId, rdd.creationSite)
     if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
-      val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
-      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      (0 until locs.length).foreach { i =>
+      val locs = mapOutputTracker.getMapOutputStatuses(shuffleDep.shuffleId)
+      locs.indices.foreach { i =>
         if (locs(i) ne null) {
           // locs(i) will be null if missing
           stage.addOutputLoc(i, locs(i))
