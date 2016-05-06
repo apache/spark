@@ -23,7 +23,8 @@ beginning with 4040 (4041, 4042, etc).
 Note that this information is only available for the duration of the application by default.
 To view the web UI after the fact, set `spark.eventLog.enabled` to true before starting the
 application. This configures Spark to log Spark events that encode the information displayed
-in the UI to persisted storage.
+in the UI to persisted storage. You can also set `spark.eventLog.backup.enabled` to true to
+copy Spark events to another backup location in real time.
 
 ## Viewing After the Fact
 
