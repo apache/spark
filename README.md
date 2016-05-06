@@ -95,3 +95,7 @@ building for particular Hive and Hive Thriftserver distributions.
 
 Please refer to the [Configuration Guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
+
+## Books
+
+[Spark GraphX in Action](https://manning.com/books/spark-graphx-in-action) by Michael S. Malak and Robin East (Manning Publications). [Chapter 1](https://manning-content.s3.amazonaws.com/download/4/442be53-a723-4be9-8139-6d4adf5a5f59/SparkGraphXinA_MEAP_ch1.pdf)
