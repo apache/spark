@@ -91,7 +91,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
         expectedMetrics.contains(node.id)
       }.map { node =>
         val nodeMetrics = node.metrics.map { metric =>
-          val metricValue = metricValues(metric.accumulatorId)
+          val metricValue = metricValues.getOrElse(metric.accumulatorId, "0")
           (metric.name, metricValue)
         }.toMap
         (node.id, node.name -> nodeMetrics)
