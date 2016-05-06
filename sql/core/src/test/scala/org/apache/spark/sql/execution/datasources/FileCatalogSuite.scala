@@ -60,7 +60,7 @@ class FileCatalogSuite extends SharedSQLContext {
       assert(catalog1.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
 
       val catalog2 = new ListingFileCatalog(
-        sqlContext.sparkSession, Seq(unqualifiedDirPath), Map.empty, None)
+        sqlContext.sparkSession, Seq(unqualifiedFilePath), Map.empty, None)
       assert(catalog2.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
 
     }
