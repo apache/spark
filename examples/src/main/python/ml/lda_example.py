@@ -59,6 +59,6 @@ if __name__ == "__main__":
     transformed = model.transform(dataset)
     topics.show(truncate=False)
     transformed.show(truncate=False)
-
     # $example off$
+
     spark.stop()

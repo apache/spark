@@ -111,7 +111,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/LDA.html) f
 
 <div data-lang="python" markdown="1">
 
-Refer to the [Java API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.LDA) for more details.
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.LDA) for more details.
 
 {% include_example python/ml/lda_example.py %}
 </div>
