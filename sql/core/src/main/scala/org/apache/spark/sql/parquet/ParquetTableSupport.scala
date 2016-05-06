@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.parquet
 
+import java.util
 import java.util.{HashMap => JHashMap}
 
 import org.apache.hadoop.conf.Configuration
@@ -39,8 +40,8 @@ import org.apache.spark.sql.types._
 private[parquet] class RowRecordMaterializer(root: CatalystConverter)
   extends RecordMaterializer[Row] {
 
-  def this(parquetSchema: MessageType, attributes: Seq[Attribute]) =
-    this(CatalystConverter.createRootConverter(parquetSchema, attributes))
+  def this(parquetSchema: MessageType, attributes: Seq[Attribute], fromProtobuf: Boolean = false) =
+    this(CatalystConverter.createRootConverter(parquetSchema, attributes, fromProtobuf))
 
   override def getCurrentRecord: Row = root.getCurrentRecord
 
@@ -87,7 +88,8 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
         parquetSchema, false, true)
     }
     log.debug(s"list of attributes that will be read: $schema")
-    new RowRecordMaterializer(parquetSchema, schema)
+    val isProtobuf = "true".equals(readContext.getReadSupportMetadata.get(RowReadSupport.FROM_PROTOBUF))
+    new RowRecordMaterializer(parquetSchema, schema, fromProtobuf = isProtobuf)
   }
 
   override def init(
@@ -99,14 +101,18 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
     val requestedAttributes = RowReadSupport.getRequestedSchema(configuration)
 
     if (requestedAttributes != null) {
+      val keySet: util.Set[String] = keyValueMetaData.keySet()
       // If the parquet file is thrift derived, there is a good chance that
       // it will have the thrift class in metadata.
-      val isThriftDerived = keyValueMetaData.keySet().contains("thrift.class")
+      val isThriftDerived = keySet.contains("thrift.class")
+      val isProto = keySet.contains("parquet.proto.class")
+      metadata.put(RowReadSupport.FROM_PROTOBUF, isProto.toString)
       parquetSchema = ParquetTypesConverter
-        .convertFromAttributes(requestedAttributes, isThriftDerived)
+        .convertFromAttributes(requestedAttributes, isThriftDerived,isProto)
+      val converter: String = ParquetTypesConverter.convertToString(requestedAttributes)
       metadata.put(
         RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA,
-        ParquetTypesConverter.convertToString(requestedAttributes))
+        converter)
     }
 
     val origAttributesStr: String = configuration.get(RowWriteSupport.SPARK_ROW_SCHEMA)
@@ -121,6 +127,7 @@ private[parquet] class RowReadSupport extends ReadSupport[Row] with Logging {
 private[parquet] object RowReadSupport {
   val SPARK_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
   val SPARK_METADATA_KEY = "org.apache.spark.sql.parquet.row.metadata"
+  val FROM_PROTOBUF = "org.apache.spark.sql.parquet.row.protobuf"
 
   private def getRequestedSchema(configuration: Configuration): Seq[Attribute] = {
     val schemaString = configuration.get(RowReadSupport.SPARK_ROW_REQUESTED_SCHEMA)
