@@ -21,9 +21,10 @@ package org.apache.spark.examples.ml
 
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.ml.clustering.{GaussianMixture, GaussianMixtureSummary}
+import org.apache.spark.ml.clustering.{GaussianMixture, GaussianMixtureModel}
 import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.{StructField, StructType}
 // $example off$
 
 /**
@@ -35,21 +36,16 @@ import org.apache.spark.sql.{DataFrame, SQLContext}
  */
 object GaussianMixtureExample {
   def main(args: Array[String]): Unit = {
-    // Creates a Spark context and a SQL context
-    val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    // Creates a SparkSession
+    val spark = SparkSession.builder.appName(s"${this.getClass.getSimpleName}").getOrCreate()
+    val input = "data/mllib/gmm_data.txt"
 
     // $example on$
     // Crates a DataFrame
-    val dataset: DataFrame = sqlContext.createDataFrame(Seq(
-      (1, Vectors.dense(0.0, 0.0, 0.0)),
-      (2, Vectors.dense(0.1, 0.1, 0.1)),
-      (3, Vectors.dense(0.2, 0.2, 0.2)),
-      (4, Vectors.dense(9.0, 9.0, 9.0)),
-      (5, Vectors.dense(9.1, 9.1, 9.1)),
-      (6, Vectors.dense(9.2, 9.2, 9.2))
-    )).toDF("id", "features")
+    val rowRDD = spark.read.text(input).rdd.filter(_.nonEmpty)
+      .map(_.trim.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
+    val schema = StructType(Array(StructField("features", new VectorUDT, false)))
+    val dataset: DataFrame = spark.createDataFrame(rowRDD, schema)
 
     // Trains Gaussian Mixture Model
     val gmm = new GaussianMixture()
@@ -61,19 +57,15 @@ object GaussianMixtureExample {
       .setSeed(10)
     val model = gmm.fit(dataset)
 
-    // Shows the result
-    val summary: GaussianMixtureSummary = model.summary
-    println("Size of (number of data points in) each cluster: ")
-    println(summary.clusterSizes.foreach(println))
 
-    println("Cluster centers of the transformed data:")
-    summary.cluster.show()
-
-    println("Probability of each cluster:")
-    summary.probability.show()
+    // output parameters of max-likelihood model
+    for (i <- 0 until model.getK) {
+      println("weight=%f\nmu=%s\nsigma=\n%s\n" format
+        (model.weights(i), model.gaussians(i).mean, model.gaussians(i).cov))
+    }
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println
