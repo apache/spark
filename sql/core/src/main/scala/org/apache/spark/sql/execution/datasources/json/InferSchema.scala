@@ -25,7 +25,6 @@ import org.apache.spark.sql.execution.datasources.json.JacksonUtils.nextUntil
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-
 private[sql] object InferSchema {
 
   /**
@@ -135,14 +134,20 @@ private[sql] object InferSchema {
           // when we see a Java BigInteger, we use DecimalType.
           case BIG_INTEGER | BIG_DECIMAL =>
             val v = parser.getDecimalValue
-            DecimalType(v.precision(), v.scale())
-          case FLOAT | DOUBLE =>
-            if (configOptions.floatAsBigDecimal) {
-              val v = parser.getDecimalValue
-              DecimalType(v.precision(), v.scale())
+            if (Math.max(v.precision(), v.scale()) <= DecimalType.MAX_PRECISION) {
+              DecimalType(Math.max(v.precision(), v.scale()), v.scale())
             } else {
               DoubleType
             }
+          case FLOAT | DOUBLE if configOptions.prefersDecimal =>
+            val v = parser.getDecimalValue
+            if (Math.max(v.precision(), v.scale()) <= DecimalType.MAX_PRECISION) {
+              DecimalType(Math.max(v.precision(), v.scale()), v.scale())
+            } else {
+              DoubleType
+            }
+          case FLOAT | DOUBLE =>
+            DoubleType
         }
 
       case VALUE_TRUE | VALUE_FALSE => BooleanType
@@ -250,6 +255,14 @@ private[sql] object InferSchema {
 
         case (ArrayType(elementType1, containsNull1), ArrayType(elementType2, containsNull2)) =>
           ArrayType(compatibleType(elementType1, elementType2), containsNull1 || containsNull2)
+
+        // The case that given `DecimalType` is capable of given `IntegralType` is handled in
+        // `findTightestCommonTypeOfTwo`. Both cases below will be executed only when
+        // the given `DecimalType` is not capable of the given `IntegralType`.
+        case (t1: IntegralType, t2: DecimalType) =>
+          compatibleType(DecimalType.forType(t1), t2)
+        case (t1: DecimalType, t2: IntegralType) =>
+          compatibleType(t1, DecimalType.forType(t2))
 
         // strings and every string is a Json object.
         case (_, _) => StringType

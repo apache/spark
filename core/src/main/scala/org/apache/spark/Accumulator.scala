@@ -56,7 +56,6 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * @param initialValue initial value of accumulator
  * @param param helper object defining how to add elements of type `T`
  * @param name human-readable name associated with this accumulator
- * @param internal whether this accumulator is used internally within Spark only
  * @param countFailedValues whether to accumulate values from failed tasks
  * @tparam T result type
  */
@@ -64,86 +63,9 @@ class Accumulator[T] private[spark] (
     // SI-8813: This must explicitly be a private val, or else scala 2.11 doesn't compile
     @transient private val initialValue: T,
     param: AccumulatorParam[T],
-    name: Option[String],
-    internal: Boolean,
-    private[spark] override val countFailedValues: Boolean = false)
-  extends Accumulable[T, T](initialValue, param, name, internal, countFailedValues) {
-
-  def this(initialValue: T, param: AccumulatorParam[T], name: Option[String]) = {
-    this(initialValue, param, name, false /* internal */)
-  }
-
-  def this(initialValue: T, param: AccumulatorParam[T]) = {
-    this(initialValue, param, None, false /* internal */)
-  }
-}
-
-
-// TODO: The multi-thread support in accumulators is kind of lame; check
-// if there's a more intuitive way of doing it right
-private[spark] object Accumulators extends Logging {
-  /**
-   * This global map holds the original accumulator objects that are created on the driver.
-   * It keeps weak references to these objects so that accumulators can be garbage-collected
-   * once the RDDs and user-code that reference them are cleaned up.
-   * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
-   */
-  @GuardedBy("Accumulators")
-  val originals = mutable.Map[Long, WeakReference[Accumulable[_, _]]]()
-
-  private val nextId = new AtomicLong(0L)
-
-  /**
-   * Return a globally unique ID for a new [[Accumulable]].
-   * Note: Once you copy the [[Accumulable]] the ID is no longer unique.
-   */
-  def newId(): Long = nextId.getAndIncrement
-
-  /**
-   * Register an [[Accumulable]] created on the driver such that it can be used on the executors.
-   *
-   * All accumulators registered here can later be used as a container for accumulating partial
-   * values across multiple tasks. This is what [[org.apache.spark.scheduler.DAGScheduler]] does.
-   * Note: if an accumulator is registered here, it should also be registered with the active
-   * context cleaner for cleanup so as to avoid memory leaks.
-   *
-   * If an [[Accumulable]] with the same ID was already registered, this does nothing instead
-   * of overwriting it. This happens when we copy accumulators, e.g. when we reconstruct
-   * [[org.apache.spark.executor.TaskMetrics]] from accumulator updates.
-   */
-  def register(a: Accumulable[_, _]): Unit = synchronized {
-    if (!originals.contains(a.id)) {
-      originals(a.id) = new WeakReference[Accumulable[_, _]](a)
-    }
-  }
-
-  /**
-   * Unregister the [[Accumulable]] with the given ID, if any.
-   */
-  def remove(accId: Long): Unit = synchronized {
-    originals.remove(accId)
-  }
-
-  /**
-   * Return the [[Accumulable]] registered with the given ID, if any.
-   */
-  def get(id: Long): Option[Accumulable[_, _]] = synchronized {
-    originals.get(id).map { weakRef =>
-      // Since we are storing weak references, we must check whether the underlying data is valid.
-      weakRef.get.getOrElse {
-        throw new IllegalAccessError(s"Attempted to access garbage collected accumulator $id")
-      }
-    }
-  }
-
-  /**
-   * Clear all registered [[Accumulable]]s. For testing only.
-   */
-  def clear(): Unit = synchronized {
-    originals.clear()
-  }
-
-}
+    name: Option[String] = None,
+    countFailedValues: Boolean = false)
+  extends Accumulable[T, T](initialValue, param, name, countFailedValues)
 
 
 /**

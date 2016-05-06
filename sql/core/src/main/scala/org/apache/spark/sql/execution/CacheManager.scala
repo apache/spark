@@ -87,15 +87,15 @@ private[sql] class CacheManager extends Logging {
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
-      val sqlContext = query.sqlContext
+      val sparkSession = query.sparkSession
       cachedData +=
         CachedData(
           planToCache,
           InMemoryRelation(
-            sqlContext.conf.useCompression,
-            sqlContext.conf.columnBatchSize,
+            sparkSession.sessionState.conf.useCompression,
+            sparkSession.sessionState.conf.columnBatchSize,
             storageLevel,
-            sqlContext.executePlan(planToCache).executedPlan,
+            sparkSession.executePlan(planToCache).executedPlan,
             tableName))
     }
   }
@@ -109,9 +109,10 @@ private[sql] class CacheManager extends Logging {
     cachedData.remove(dataIndex)
   }
 
-  /** Tries to remove the data for the given [[Dataset]] from the cache
-    * if it's cached
-    */
+  /**
+   * Tries to remove the data for the given [[Dataset]] from the cache
+   * if it's cached
+   */
   private[sql] def tryUncacheQuery(
       query: Dataset[_],
       blocking: Boolean = true): Boolean = writeLock {

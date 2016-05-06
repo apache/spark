@@ -27,6 +27,8 @@ import org.apache.spark.unsafe.types.UTF8String
 /**
  * Returns an Array containing the evaluation of all children expressions.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(n0, ...) - Returns an array with the given elements.")
 case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -46,24 +48,30 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
     new GenericArrayData(children.map(_.eval(input)).toArray)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val values = ctx.freshName("values")
-    s"""
+    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+
+    ev.copy(code = s"""
       final boolean ${ev.isNull} = false;
-      final Object[] $values = new Object[${children.size}];
-    """ +
-      children.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
-        eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }
-         """
-      }.mkString("\n") +
-      s"final ArrayData ${ev.value} = new $arrayClass($values);"
+      this.$values = new Object[${children.size}];""" +
+      ctx.splitExpressions(
+        ctx.INPUT_ROW,
+        children.zipWithIndex.map { case (e, i) =>
+          val eval = e.genCode(ctx)
+          eval.code + s"""
+            if (${eval.isNull}) {
+              $values[$i] = null;
+            } else {
+              $values[$i] = ${eval.value};
+            }
+           """
+        }) +
+      s"""
+        final ArrayData ${ev.value} = new $arrayClass($values);
+        this.$values = null;
+      """)
   }
 
   override def prettyName: String = "array"
@@ -73,6 +81,8 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
  * Returns a catalyst Map containing the evaluation of all children expressions as keys and values.
  * The children are a flatted sequence of kv pairs, e.g. (key1, value1, key2, value2, ...)
  */
+@ExpressionDescription(
+  usage = "_FUNC_(key0, value0, key1, value1...) - Creates a map with the given key/value pairs.")
 case class CreateMap(children: Seq[Expression]) extends Expression {
   private[sql] lazy val keys = children.indices.filter(_ % 2 == 0).map(children)
   private[sql] lazy val values = children.indices.filter(_ % 2 != 0).map(children)
@@ -111,40 +121,51 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
     new ArrayBasedMapData(new GenericArrayData(keyArray), new GenericArrayData(valueArray))
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val mapClass = classOf[ArrayBasedMapData].getName
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
+    ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
+    ctx.addMutableState("Object[]", valueArray, s"this.$valueArray = null;")
+
     val keyData = s"new $arrayClass($keyArray)"
     val valueData = s"new $arrayClass($valueArray)"
-    s"""
+    ev.copy(code = s"""
       final boolean ${ev.isNull} = false;
-      final Object[] $keyArray = new Object[${keys.size}];
-      final Object[] $valueArray = new Object[${values.size}];
-    """ + keys.zipWithIndex.map {
-      case (key, i) =>
-        val eval = key.gen(ctx)
-        s"""
-          ${eval.code}
-          if (${eval.isNull}) {
-            throw new RuntimeException("Cannot use null as map key!");
-          } else {
-            $keyArray[$i] = ${eval.value};
-          }
-        """
-    }.mkString("\n") + values.zipWithIndex.map {
-      case (value, i) =>
-        val eval = value.gen(ctx)
-        s"""
-          ${eval.code}
-          if (${eval.isNull}) {
-            $valueArray[$i] = null;
-          } else {
-            $valueArray[$i] = ${eval.value};
-          }
-        """
-    }.mkString("\n") + s"final MapData ${ev.value} = new $mapClass($keyData, $valueData);"
+      $keyArray = new Object[${keys.size}];
+      $valueArray = new Object[${values.size}];""" +
+      ctx.splitExpressions(
+        ctx.INPUT_ROW,
+        keys.zipWithIndex.map { case (key, i) =>
+          val eval = key.genCode(ctx)
+          s"""
+            ${eval.code}
+            if (${eval.isNull}) {
+              throw new RuntimeException("Cannot use null as map key!");
+            } else {
+              $keyArray[$i] = ${eval.value};
+            }
+          """
+        }) +
+      ctx.splitExpressions(
+        ctx.INPUT_ROW,
+        values.zipWithIndex.map { case (value, i) =>
+          val eval = value.genCode(ctx)
+          s"""
+            ${eval.code}
+            if (${eval.isNull}) {
+              $valueArray[$i] = null;
+            } else {
+              $valueArray[$i] = ${eval.value};
+            }
+          """
+        }) +
+      s"""
+        final MapData ${ev.value} = new $mapClass($keyData, $valueData);
+        this.$keyArray = null;
+        this.$valueArray = null;
+      """)
   }
 
   override def prettyName: String = "map"
@@ -153,6 +174,8 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 /**
  * Returns a Row containing the evaluation of all children expressions.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(col1, col2, col3, ...) - Creates a struct with the given field values.")
 case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def foldable: Boolean = children.forall(_.foldable)
@@ -175,24 +198,29 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
     InternalRow(children.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    s"""
+    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+
+    ev.copy(code = s"""
       boolean ${ev.isNull} = false;
-      final Object[] $values = new Object[${children.size}];
-    """ +
-      children.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
-        eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }
-         """
-      }.mkString("\n") +
-      s"final InternalRow ${ev.value} = new $rowClass($values);"
+      this.$values = new Object[${children.size}];""" +
+      ctx.splitExpressions(
+        ctx.INPUT_ROW,
+        children.zipWithIndex.map { case (e, i) =>
+          val eval = e.genCode(ctx)
+          eval.code + s"""
+            if (${eval.isNull}) {
+              $values[$i] = null;
+            } else {
+              $values[$i] = ${eval.value};
+            }"""
+        }) +
+      s"""
+        final InternalRow ${ev.value} = new $rowClass($values);
+        this.$values = null;
+      """)
   }
 
   override def prettyName: String = "struct"
@@ -204,6 +232,10 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
  *
  * @param children Seq(name1, val1, name2, val2, ...)
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(name1, val1, name2, val2, ...) - Creates a struct with the given field names and values.")
+// scalastyle:on line.size.limit
 case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   /**
@@ -252,24 +284,29 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
     InternalRow(valExprs.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
     val values = ctx.freshName("values")
-    s"""
+    ctx.addMutableState("Object[]", values, s"this.$values = null;")
+
+    ev.copy(code = s"""
       boolean ${ev.isNull} = false;
-      final Object[] $values = new Object[${valExprs.size}];
-    """ +
-      valExprs.zipWithIndex.map { case (e, i) =>
-        val eval = e.gen(ctx)
-        eval.code + s"""
+      $values = new Object[${valExprs.size}];""" +
+      ctx.splitExpressions(
+        ctx.INPUT_ROW,
+        valExprs.zipWithIndex.map { case (e, i) =>
+          val eval = e.genCode(ctx)
+          eval.code + s"""
           if (${eval.isNull}) {
             $values[$i] = null;
           } else {
             $values[$i] = ${eval.value};
-          }
-         """
-      }.mkString("\n") +
-      s"final InternalRow ${ev.value} = new $rowClass($values);"
+          }"""
+        }) +
+      s"""
+        final InternalRow ${ev.value} = new $rowClass($values);
+        this.$values = null;
+      """)
   }
 
   override def prettyName: String = "named_struct"
@@ -304,11 +341,9 @@ case class CreateStructUnsafe(children: Seq[Expression]) extends Expression {
     InternalRow(children.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, children)
-    ev.isNull = eval.isNull
-    ev.value = eval.value
-    eval.code
+    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
   }
 
   override def prettyName: String = "struct_unsafe"
@@ -344,11 +379,9 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
     InternalRow(valExprs.map(_.eval(input)): _*)
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val eval = GenerateUnsafeProjection.createCode(ctx, valExprs)
-    ev.isNull = eval.isNull
-    ev.value = eval.value
-    eval.code
+    ExprCode(code = eval.code, isNull = eval.isNull, value = eval.value)
   }
 
   override def prettyName: String = "named_struct_unsafe"

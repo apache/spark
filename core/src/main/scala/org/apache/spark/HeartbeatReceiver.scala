@@ -35,7 +35,7 @@ import org.apache.spark.util.{Clock, SystemClock, ThreadUtils, Utils}
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    accumUpdates: Array[(Long, Seq[AccumulableInfo])], // taskId -> accum updates
+    accumUpdates: Array[(Long, Seq[NewAccumulator[_, _]])], // taskId -> accumulator updates
     blockManagerId: BlockManagerId)
 
 /**
@@ -56,7 +56,7 @@ private[spark] case class HeartbeatResponse(reregisterBlockManager: Boolean)
  * Lives in the driver to receive heartbeats from executors..
  */
 private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
-  extends ThreadSafeRpcEndpoint with SparkListener with Logging {
+  extends SparkListener with ThreadSafeRpcEndpoint with Logging {
 
   def this(sc: SparkContext) {
     this(sc, new SystemClock)
@@ -220,6 +220,7 @@ private[spark] class HeartbeatReceiver(sc: SparkContext, clock: Clock)
   }
 }
 
-object HeartbeatReceiver {
+
+private[spark] object HeartbeatReceiver {
   val ENDPOINT_NAME = "HeartbeatReceiver"
 }

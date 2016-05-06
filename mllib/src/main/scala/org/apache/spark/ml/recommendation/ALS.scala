@@ -40,7 +40,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.CholeskyDecomposition
 import org.apache.spark.mllib.optimization.NNLS
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, FloatType, IntegerType, StructType}
 import org.apache.spark.storage.StorageLevel
@@ -200,8 +200,8 @@ class ALSModel private[ml] (
   @Since("1.3.0")
   def setPredictionCol(value: String): this.type = set(predictionCol, value)
 
-  @Since("1.3.0")
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     // Register a UDF for DataFrame, and then
     // create a new column named map(predictionCol) by running the predict UDF.
     val predict = udf { (userFeatures: Seq[Float], itemFeatures: Seq[Float]) =>
@@ -385,9 +385,9 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     this
   }
 
-  @Since("1.3.0")
-  override def fit(dataset: DataFrame): ALSModel = {
-    import dataset.sqlContext.implicits._
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): ALSModel = {
+    import dataset.sparkSession.implicits._
     val r = if ($(ratingCol) != "") col($(ratingCol)).cast(FloatType) else lit(1.0f)
     val ratings = dataset
       .select(col($(userCol)).cast(IntegerType), col($(itemCol)).cast(IntegerType), r)
@@ -395,6 +395,10 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
       .map { row =>
         Rating(row.getInt(0), row.getInt(1), row.getFloat(2))
       }
+    val instrLog = Instrumentation.create(this, ratings)
+    instrLog.logParams(rank, numUserBlocks, numItemBlocks, implicitPrefs, alpha,
+                       userCol, itemCol, ratingCol, predictionCol, maxIter,
+                       regParam, nonnegative, checkpointInterval, seed)
     val (userFactors, itemFactors) = ALS.train(ratings, rank = $(rank),
       numUserBlocks = $(numUserBlocks), numItemBlocks = $(numItemBlocks),
       maxIter = $(maxIter), regParam = $(regParam), implicitPrefs = $(implicitPrefs),
@@ -403,6 +407,7 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
     val userDF = userFactors.toDF("id", "features")
     val itemDF = itemFactors.toDF("id", "features")
     val model = new ALSModel(uid, $(rank), userDF, itemDF).setParent(this)
+    instrLog.logSuccess(model)
     copyValues(model)
   }
 
@@ -640,7 +645,8 @@ object ALS extends DefaultParamsReadable[ALS] with Logging {
     val deletePreviousCheckpointFile: () => Unit = () =>
       previousCheckpointFile.foreach { file =>
         try {
-          FileSystem.get(sc.hadoopConfiguration).delete(new Path(file), true)
+          val checkpointFile = new Path(file)
+          checkpointFile.getFileSystem(sc.hadoopConfiguration).delete(checkpointFile, true)
         } catch {
           case e: IOException =>
             logWarning(s"Cannot delete checkpoint file $file:", e)

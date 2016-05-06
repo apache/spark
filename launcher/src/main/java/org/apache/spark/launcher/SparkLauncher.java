@@ -477,6 +477,6 @@ public class SparkLauncher {
       // No op.
     }
 
-  };
+  }
 
 }

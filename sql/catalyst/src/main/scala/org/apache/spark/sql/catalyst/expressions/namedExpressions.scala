@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
-import java.util.UUID
+import java.util.{Objects, UUID}
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -97,7 +97,7 @@ trait NamedExpression extends Expression {
     }
 }
 
-abstract class Attribute extends LeafExpression with NamedExpression {
+abstract class Attribute extends LeafExpression with NamedExpression with NullIntolerant {
 
   override def references: AttributeSet = AttributeSet(this)
 
@@ -142,8 +142,8 @@ case class Alias(child: Expression, name: String)(
   override def eval(input: InternalRow): Any = child.eval(input)
 
   /** Just a simple passthrough for code generation. */
-  override def gen(ctx: CodegenContext): ExprCode = child.gen(ctx)
-  override protected def genCode(ctx: CodegenContext, ev: ExprCode): String = ""
+  override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")
 
   override def dataType: DataType = child.dataType
   override def nullable: Boolean = child.nullable
@@ -173,6 +173,11 @@ case class Alias(child: Expression, name: String)(
 
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: explicitMetadata :: isGenerated :: Nil
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(name, exprId, child, qualifier, explicitMetadata)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   override def equals(other: Any): Boolean = other match {
@@ -329,10 +334,12 @@ case class PrettyAttribute(
   override def withName(newName: String): Attribute = throw new UnsupportedOperationException
   override def qualifier: Option[String] = throw new UnsupportedOperationException
   override def exprId: ExprId = throw new UnsupportedOperationException
-  override def nullable: Boolean = throw new UnsupportedOperationException
+  override def nullable: Boolean = true
 }
 
 object VirtualColumn {
-  val groupingIdName: String = "grouping__id"
+  // The attribute name used by Hive, which has different result than Spark, deprecated.
+  val hiveGroupingIdName: String = "grouping__id"
+  val groupingIdName: String = "spark_grouping_id"
   val groupingIdAttribute: UnresolvedAttribute = UnresolvedAttribute(groupingIdName)
 }

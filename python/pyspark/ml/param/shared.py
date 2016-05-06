@@ -392,7 +392,7 @@ class HasHandleInvalid(Params):
     Mixin for param handleInvalid: how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.
     """
 
-    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", typeConverter=TypeConverters.toBoolean)
+    handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", typeConverter=TypeConverters.toString)
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
@@ -557,6 +557,30 @@ class HasSolver(Params):
         Gets the value of solver or its default value.
         """
         return self.getOrDefault(self.solver)
+
+
+class HasVarianceCol(Params):
+    """
+    Mixin for param varianceCol: column name for the biased sample variance of prediction.
+    """
+
+    varianceCol = Param(Params._dummy(), "varianceCol", "column name for the biased sample variance of prediction.", typeConverter=TypeConverters.toString)
+
+    def __init__(self):
+        super(HasVarianceCol, self).__init__()
+
+    def setVarianceCol(self, value):
+        """
+        Sets the value of :py:attr:`varianceCol`.
+        """
+        self._set(varianceCol=value)
+        return self
+
+    def getVarianceCol(self):
+        """
+        Gets the value of varianceCol or its default value.
+        """
+        return self.getOrDefault(self.varianceCol)
 
 
 class DecisionTreeParams(Params):

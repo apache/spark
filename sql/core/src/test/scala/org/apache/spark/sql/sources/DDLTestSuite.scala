@@ -28,12 +28,20 @@ class DDLScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleDDLScan(parameters("from").toInt, parameters("TO").toInt, parameters("Table"))(sqlContext)
+    SimpleDDLScan(
+      parameters("from").toInt,
+      parameters("TO").toInt,
+      parameters("Table"))(sqlContext.sparkSession)
   }
 }
 
-case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlContext: SQLContext)
+case class SimpleDDLScan(
+    from: Int,
+    to: Int,
+    table: String)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   override def schema: StructType =
     StructType(Seq(
@@ -63,7 +71,7 @@ case class SimpleDDLScan(from: Int, to: Int, table: String)(@transient val sqlCo
 
   override def buildScan(): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
-    sqlContext.sparkContext.parallelize(from to to).map { e =>
+    sparkSession.sparkContext.parallelize(from to to).map { e =>
       InternalRow(UTF8String.fromString(s"people$e"), e * 2)
     }.asInstanceOf[RDD[Row]]
   }

@@ -1111,9 +1111,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-      } {
-        writer.close(hadoopContext)
-      }
+      }(finallyBlock = writer.close(hadoopContext))
       committer.commitTask(hadoopContext)
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())
@@ -1200,9 +1198,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
           maybeUpdateOutputMetrics(outputMetricsAndBytesWrittenCallback, recordsWritten)
           recordsWritten += 1
         }
-      } {
-        writer.close()
-      }
+      }(finallyBlock = writer.close())
       writer.commit()
       outputMetricsAndBytesWrittenCallback.foreach { case (om, callback) =>
         om.setBytesWritten(callback())
@@ -1222,7 +1218,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       context: TaskContext): Option[(OutputMetrics, () => Long)] = {
     val bytesWrittenCallback = SparkHadoopUtil.get.getFSBytesWrittenOnThreadCallback()
     bytesWrittenCallback.map { b =>
-      (context.taskMetrics().registerOutputMetrics(DataWriteMethod.Hadoop), b)
+      (context.taskMetrics().outputMetrics, b)
     }
   }
 

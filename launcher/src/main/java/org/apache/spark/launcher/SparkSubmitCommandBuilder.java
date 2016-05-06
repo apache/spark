@@ -132,7 +132,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   @Override
-  public List<String> buildCommand(Map<String, String> env) throws IOException {
+  public List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException {
     if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printInfo) {
       return buildPySparkShellCommand(env);
     } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printInfo) {
@@ -211,7 +212,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     return args;
   }
 
-  private List<String> buildSparkSubmitCommand(Map<String, String> env) throws IOException {
+  private List<String> buildSparkSubmitCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException {
     // Load the properties file and check whether spark-submit will be running the app's driver
     // or just launching a cluster app. When running the driver, the JVM's argument will be
     // modified to cover the driver's configuration.
@@ -227,6 +229,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     addOptionString(cmd, System.getenv("SPARK_SUBMIT_OPTS"));
     addOptionString(cmd, System.getenv("SPARK_JAVA_OPTS"));
 
+    // We don't want the client to specify Xmx. These have to be set by their corresponding
+    // memory flag --driver-memory or configuration entry spark.driver.memory
+    String driverExtraJavaOptions = config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS);
+    if (!isEmpty(driverExtraJavaOptions) && driverExtraJavaOptions.contains("Xmx")) {
+      String msg = String.format("Not allowed to specify max heap(Xmx) memory settings through " +
+                   "java options (was %s). Use the corresponding --driver-memory or " +
+                   "spark.driver.memory configuration instead.", driverExtraJavaOptions);
+      throw new IllegalArgumentException(msg);
+    }
+
     if (isClientMode) {
       // Figuring out where the memory value come from is a little tricky due to precedence.
       // Precedence is observed in the following order:
@@ -240,9 +252,8 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         isThriftServer(mainClass) ? System.getenv("SPARK_DAEMON_MEMORY") : null;
       String memory = firstNonEmpty(tsMemory, config.get(SparkLauncher.DRIVER_MEMORY),
         System.getenv("SPARK_DRIVER_MEMORY"), System.getenv("SPARK_MEM"), DEFAULT_MEM);
-      cmd.add("-Xms" + memory);
       cmd.add("-Xmx" + memory);
-      addOptionString(cmd, config.get(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS));
+      addOptionString(cmd, driverExtraJavaOptions);
       mergeEnvPathList(env, getLibPathEnvName(),
         config.get(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH));
     }
@@ -336,6 +347,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   private List<String> findExamplesJars() {
+    boolean isTesting = "1".equals(getenv("SPARK_TESTING"));
     List<String> examplesJars = new ArrayList<>();
     String sparkHome = getSparkHome();
 
@@ -346,11 +358,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       jarsDir = new File(sparkHome,
         String.format("examples/target/scala-%s/jars", getScalaVersion()));
     }
-    checkState(jarsDir.isDirectory(), "Examples jars directory '%s' does not exist.",
+
+    boolean foundDir = jarsDir.isDirectory();
+    checkState(isTesting || foundDir, "Examples jars directory '%s' does not exist.",
         jarsDir.getAbsolutePath());
 
-    for (File f: jarsDir.listFiles()) {
-      examplesJars.add(f.getAbsolutePath());
+    if (foundDir) {
+      for (File f: jarsDir.listFiles()) {
+        examplesJars.add(f.getAbsolutePath());
+      }
     }
     return examplesJars;
   }

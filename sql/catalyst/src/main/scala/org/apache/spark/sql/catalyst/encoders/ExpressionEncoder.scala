@@ -24,7 +24,7 @@ import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
 import org.apache.spark.sql.{AnalysisException, Encoder}
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedAttribute, UnresolvedDeserializer, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
@@ -47,8 +47,9 @@ object ExpressionEncoder {
   def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
-    val cls = mirror.runtimeClass(typeTag[T].tpe)
-    val flat = !classOf[Product].isAssignableFrom(cls)
+    val tpe = typeTag[T].tpe
+    val cls = mirror.runtimeClass(tpe)
+    val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
     val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = false)
     val serializer = ScalaReflection.serializerFor[T](inputObject)
@@ -317,11 +318,11 @@ case class ExpressionEncoder[T](
   def resolve(
       schema: Seq[Attribute],
       outerScopes: ConcurrentMap[String, AnyRef]): ExpressionEncoder[T] = {
-    val resolved = SimpleAnalyzer.ResolveReferences.resolveDeserializer(deserializer, schema)
-
     // Make a fake plan to wrap the deserializer, so that we can go though the whole analyzer, check
     // analysis, go through optimizer, etc.
-    val plan = Project(Alias(resolved, "")() :: Nil, LocalRelation(schema))
+    val plan = Project(
+      Alias(UnresolvedDeserializer(deserializer, schema), "")() :: Nil,
+      LocalRelation(schema))
     val analyzedPlan = SimpleAnalyzer.execute(plan)
     SimpleAnalyzer.checkAnalysis(analyzedPlan)
     copy(deserializer = SimplifyCasts(analyzedPlan).expressions.head.children.head)

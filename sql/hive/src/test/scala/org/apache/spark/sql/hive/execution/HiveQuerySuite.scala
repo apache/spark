@@ -28,10 +28,10 @@ import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkException, SparkFiles}
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
-import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.hive.test.TestHive._
@@ -50,7 +50,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   override def beforeAll() {
     super.beforeAll()
-    TestHive.cacheTables = true
+    TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -59,25 +59,18 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   override def afterAll() {
     try {
-      TestHive.cacheTables = false
+      TestHive.setCacheTables(false)
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
-      sql("DROP TEMPORARY FUNCTION udtf_count2")
+      sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
     } finally {
       super.afterAll()
     }
   }
 
   private def assertUnsupportedFeature(body: => Unit): Unit = {
-    val e = intercept[AnalysisException] { body }
-    assert(e.getMessage.toLowerCase.contains("unsupported operation"))
-  }
-
-  test("SPARK-4908: concurrent hive native commands") {
-    (1 to 100).par.map { _ =>
-      sql("USE default")
-      sql("SHOW DATABASES")
-    }
+    val e = intercept[ParseException] { body }
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
@@ -122,7 +115,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN") {
     def assertBroadcastNestedLoopJoin(sqlText: String): Unit = {
       assert(sql(sqlText).queryExecution.sparkPlan.collect {
-        case _: BroadcastNestedLoopJoin => 1
+        case _: BroadcastNestedLoopJoinExec => 1
       }.nonEmpty)
     }
 
@@ -707,7 +700,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   def isExplanation(result: DataFrame): Boolean = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.contains("== Physical Plan ==")
+    explanation.head.startsWith("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a DataFrame") {
@@ -777,29 +770,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select array(key, *) from src limit 5").collect().size == 5)
   }
 
-  test("Query Hive native command execution result") {
-    val databaseName = "test_native_commands"
-
-    assertResult(0) {
-      sql(s"DROP DATABASE IF EXISTS $databaseName").count()
-    }
-
-    assertResult(0) {
-      sql(s"CREATE DATABASE $databaseName").count()
-    }
-
-    assert(
-      sql("SHOW DATABASES")
-        .select('result)
-        .collect()
-        .map(_.getString(0))
-        .contains(databaseName))
-
-    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
-
-    TestHive.reset()
-  }
-
   test("Exactly once semantics for DDL and command statements") {
     val tableName = "test_exactly_once"
     val q0 = sql(s"CREATE TABLE $tableName(key INT, value STRING)")
@@ -847,40 +817,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
-    }
-
-    // Describe a column is a native command
-    assertResult(Array(Array("value", "string", "from deserializer"))) {
-      sql("DESCRIBE test_describe_commands1 value")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
-    // Describe a column is a native command
-    assertResult(Array(Array("value", "string", "from deserializer"))) {
-      sql("DESCRIBE default.test_describe_commands1 value")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
-    // Describe a partition is a native command
-    assertResult(
-      Array(
-        Array("key", "int"),
-        Array("value", "string"),
-        Array("dt", "string"),
-        Array(""),
-        Array("# Partition Information"),
-        Array("# col_name", "data_type", "comment"),
-        Array(""),
-        Array("dt", "string"))
-    ) {
-      sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
-        .select('result)
-        .collect()
-        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
     }
 
     // Describe a registered temporary table.
@@ -1010,7 +946,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         .mkString("/")
 
       // Loads partition data to a temporary table to verify contents
-      val path = s"$warehousePath/dynamic_part_table/$partFolder/part-00000"
+      val path = s"${sparkSession.warehousePath}/dynamic_part_table/$partFolder/part-00000"
 
       sql("DROP TABLE IF EXISTS dp_verify")
       sql("CREATE TABLE dp_verify(intcol INT)")
@@ -1134,51 +1070,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(getConf(testKey, "0") == "")
   }
 
-  test("SET commands semantics for a HiveContext") {
-    // Adapted from its SQL counterpart.
-    val testKey = "spark.sql.key.usedfortestonly"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
-    def collectResults(df: DataFrame): Set[Any] =
-      df.collect().map {
-        case Row(key: String, value: String) => key -> value
-        case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
-      }.toSet
-    conf.clear()
-
-    val expectedConfs = conf.getAllDefinedConfs.toSet
-    assertResult(expectedConfs)(collectResults(sql("SET -v")))
-
-    // "SET" itself returns all config variables currently specified in SQLConf.
-    // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
-
-    val defaults = collectResults(sql("SET"))
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey=$testVal"))
-    }
-
-    assert(hiveconf.get(testKey, "") === testVal)
-    assertResult(defaults ++ Set(testKey -> testVal))(collectResults(sql("SET")))
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(defaults ++ Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET"))
-    }
-
-    // "SET key"
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey"))
-    }
-
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(sql(s"SET $nonexistentKey"))
-    }
-
-    conf.clear()
-  }
-
   test("current_database with multiple sessions") {
     sql("create database a")
     sql("use a")
@@ -1230,14 +1121,16 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     val e = intercept[AnalysisException] {
       range(1).selectExpr("not_a_udf()")
     }
-    assert(e.getMessage.contains("undefined function not_a_udf"))
+    assert(e.getMessage.contains("Undefined function"))
+    assert(e.getMessage.contains("not_a_udf"))
     var success = false
     val t = new Thread("test") {
       override def run(): Unit = {
         val e = intercept[AnalysisException] {
           range(1).selectExpr("not_a_udf()")
         }
-        assert(e.getMessage.contains("undefined function not_a_udf"))
+        assert(e.getMessage.contains("Undefined function"))
+        assert(e.getMessage.contains("not_a_udf"))
         success = true
       }
     }
@@ -1280,6 +1173,28 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertUnsupportedFeature { sql("SHOW LOCKS my_table") }
   }
 
+  test("lock/unlock table and database commands are not supported") {
+    assertUnsupportedFeature { sql("LOCK TABLE my_table SHARED") }
+    assertUnsupportedFeature { sql("UNLOCK TABLE my_table") }
+    assertUnsupportedFeature { sql("LOCK DATABASE my_db SHARED") }
+    assertUnsupportedFeature { sql("UNLOCK DATABASE my_db") }
+  }
+
+  test("create/drop/alter index commands are not supported") {
+    assertUnsupportedFeature {
+      sql("CREATE INDEX my_index ON TABLE my_table(a) as 'COMPACT' WITH DEFERRED REBUILD")}
+    assertUnsupportedFeature { sql("DROP INDEX my_index ON my_table") }
+    assertUnsupportedFeature { sql("ALTER INDEX my_index ON my_table REBUILD")}
+    assertUnsupportedFeature {
+      sql("ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")")}
+  }
+
+  test("create/drop macro commands are not supported") {
+    assertUnsupportedFeature {
+      sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
+    }
+    assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
+  }
 }
 
 // for SPARK-2180 test

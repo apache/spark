@@ -23,6 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -71,6 +72,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.first() == item)
     assert(ds.take(1).head == item)
     assert(ds.takeAsList(1).get(0) == item)
+    assert(ds.toLocalIterator().next() === item)
   }
 
   test("coalesce, repartition") {
@@ -454,8 +456,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
 
-    assert(ds.groupByKey(p => p).count().collect().toSeq ==
-      Seq((JavaData(1), 1L), (JavaData(2), 1L)))
+    assert(ds.groupByKey(p => p).count().collect().toSet ==
+      Set((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
   test("Java encoder self join") {
@@ -467,6 +469,10 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         (JavaData(1), JavaData(2)),
         (JavaData(2), JavaData(1)),
         (JavaData(2), JavaData(2))))
+  }
+
+  test("SPARK-14696: implicit encoders for boxed types") {
+    assert(sqlContext.range(1).map { i => i : java.lang.Long }.head == 0L)
   }
 
   test("SPARK-11894: Incorrect results are returned when using null") {
@@ -600,6 +606,52 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(TupleClass((1, "a"))).toDS(),
       TupleClass(1, "a")
     )
+  }
+
+  test("isStreaming returns false for static Dataset") {
+    val data = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    assert(!data.isStreaming, "static Dataset returned true for 'isStreaming'.")
+  }
+
+  test("isStreaming returns true for streaming Dataset") {
+    val data = MemoryStream[Int].toDS()
+    assert(data.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
+  }
+
+  test("isStreaming returns true after static and streaming Dataset join") {
+    val static = Seq(("a", 1), ("b", 2), ("c", 3)).toDF("a", "b")
+    val streaming = MemoryStream[Int].toDS().toDF("b")
+    val df = streaming.join(static, Seq("b"))
+    assert(df.isStreaming, "streaming Dataset returned false for 'isStreaming'.")
+  }
+
+  test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
+    val wideDF = sqlContext.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    // Make sure the generated code for this plan can compile and execute.
+    checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
+  }
+
+  test("SPARK-14838: estimating sizeInBytes in operators with ObjectProducer shouldn't fail") {
+    val dataset = Seq(
+      (0, 3, 54f),
+      (0, 4, 44f),
+      (0, 5, 42f),
+      (1, 3, 39f),
+      (1, 5, 33f),
+      (1, 4, 26f),
+      (2, 3, 51f),
+      (2, 5, 45f),
+      (2, 4, 30f)
+    ).toDF("user", "item", "rating")
+
+    val actual = dataset
+      .select("user", "item")
+      .as[(Int, Int)]
+      .groupByKey(_._1)
+      .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+      .toDF("id", "actual")
+
+    dataset.join(actual, dataset("user") === actual("id")).collect()
   }
 }
 

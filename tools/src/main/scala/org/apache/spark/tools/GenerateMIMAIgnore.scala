@@ -91,10 +91,11 @@ object GenerateMIMAIgnore {
     (ignoredClasses.flatMap(c => Seq(c, c.replace("$", "#"))).toSet, ignoredMembers.toSet)
   }
 
-  /** Scala reflection does not let us see inner function even if they are upgraded
-    * to public for some reason. So had to resort to java reflection to get all inner
-    * functions with $$ in there name.
-    */
+  /**
+   * Scala reflection does not let us see inner function even if they are upgraded
+   * to public for some reason. So had to resort to java reflection to get all inner
+   * functions with $$ in there name.
+   */
   def getInnerFunctions(classSymbol: unv.ClassSymbol): Seq[String] = {
     try {
       Class.forName(classSymbol.fullName, false, classLoader).getMethods.map(_.getName)

@@ -61,9 +61,9 @@ class LinearRegressionSuite
     val featureSize = 4100
     datasetWithSparseFeature = sqlContext.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
-        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble).toArray,
-        xMean = Seq.fill(featureSize)(r.nextDouble).toArray,
-        xVariance = Seq.fill(featureSize)(r.nextDouble).toArray, nPoints = 200,
+        intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble()).toArray,
+        xMean = Seq.fill(featureSize)(r.nextDouble()).toArray,
+        xVariance = Seq.fill(featureSize)(r.nextDouble()).toArray, nPoints = 200,
         seed, eps = 0.1, sparsity = 0.7), 2))
 
     /*
@@ -687,7 +687,7 @@ class LinearRegressionSuite
       // Validate that we re-insert a prediction column for evaluation
       val modelNoPredictionColFieldNames
       = modelNoPredictionCol.summary.predictions.schema.fieldNames
-      assert((datasetWithDenseFeature.schema.fieldNames.toSet).subsetOf(
+      assert(datasetWithDenseFeature.schema.fieldNames.toSet.subsetOf(
         modelNoPredictionColFieldNames.toSet))
       assert(modelNoPredictionColFieldNames.exists(s => s.startsWith("prediction_")))
 
@@ -759,7 +759,7 @@ class LinearRegressionSuite
             .sliding(2)
             .forall(x => x(0) >= x(1)))
       } else {
-        // To clalify that the normal solver is used here.
+        // To clarify that the normal solver is used here.
         assert(model.summary.objectiveHistory.length == 1)
         assert(model.summary.objectiveHistory(0) == 0.0)
         val devianceResidualsR = Array(-0.47082, 0.34635)
@@ -1005,6 +1005,15 @@ class LinearRegressionSuite
     val lr = new LinearRegression()
     testEstimatorAndModelReadWrite(lr, datasetWithWeight, LinearRegressionSuite.allParamSettings,
       checkModelData)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val lr = new LinearRegression().setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
+      lr, isClassification = false, sqlContext) { (expected, actual) =>
+        assert(expected.intercept === actual.intercept)
+        assert(expected.coefficients === actual.coefficients)
+      }
   }
 }
 

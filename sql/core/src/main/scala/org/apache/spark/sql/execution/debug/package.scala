@@ -35,8 +35,8 @@ import org.apache.spark.sql.internal.SQLConf
  * Usage:
  * {{{
  *   import org.apache.spark.sql.execution.debug._
- *   sql("SELECT key FROM src").debug()
- *   dataFrame.typeCheck()
+ *   sql("SELECT 1").debug()
+ *   sql("SELECT 1").debugCodegen()
  * }}}
  */
 package object debug {
@@ -46,6 +46,25 @@ package object debug {
     // scalastyle:off println
     println(msg)
     // scalastyle:on println
+  }
+
+  def codegenString(plan: SparkPlan): String = {
+    val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegenExec]()
+    plan transform {
+      case s: WholeStageCodegenExec =>
+        codegenSubtrees += s
+        s
+      case s => s
+    }
+    var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
+    for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
+      output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
+      output += s
+      output += "\nGenerated code:\n"
+      val (_, source) = s.doCodeGen()
+      output += s"${CodeFormatter.format(source)}\n"
+    }
+    output
   }
 
   /**
@@ -58,20 +77,20 @@ package object debug {
   }
 
   /**
-   * Augments [[DataFrame]]s with debug methods.
+   * Augments [[Dataset]]s with debug methods.
    */
-  implicit class DebugQuery(query: DataFrame) extends Logging {
+  implicit class DebugQuery(query: Dataset[_]) extends Logging {
     def debug(): Unit = {
       val plan = query.queryExecution.executedPlan
       val visited = new collection.mutable.HashSet[TreeNodeRef]()
       val debugPlan = plan transform {
         case s: SparkPlan if !visited.contains(new TreeNodeRef(s)) =>
           visited += new TreeNodeRef(s)
-          DebugNode(s)
+          DebugExec(s)
       }
       debugPrint(s"Results returned: ${debugPlan.execute().count()}")
       debugPlan.foreach {
-        case d: DebugNode => d.dumpStats()
+        case d: DebugExec => d.dumpStats()
         case _ =>
       }
     }
@@ -81,32 +100,11 @@ package object debug {
      * WholeStageCodegen subtree).
      */
     def debugCodegen(): Unit = {
-      debugPrint(debugCodegenString())
-    }
-
-    /** Visible for testing. */
-    def debugCodegenString(): String = {
-      val plan = query.queryExecution.executedPlan
-      val codegenSubtrees = new collection.mutable.HashSet[WholeStageCodegen]()
-      plan transform {
-        case s: WholeStageCodegen =>
-          codegenSubtrees += s
-          s
-        case s => s
-      }
-      var output = s"Found ${codegenSubtrees.size} WholeStageCodegen subtrees.\n"
-      for ((s, i) <- codegenSubtrees.toSeq.zipWithIndex) {
-        output += s"== Subtree ${i + 1} / ${codegenSubtrees.size} ==\n"
-        output += s
-        output += "\nGenerated code:\n"
-        val (_, source) = s.doCodeGen()
-        output += s"${CodeFormatter.format(source)}\n"
-      }
-      output
+      debugPrint(codegenString(query.queryExecution.executedPlan))
     }
   }
 
-  private[sql] case class DebugNode(child: SparkPlan) extends UnaryNode with CodegenSupport {
+  private[sql] case class DebugExec(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
     def output: Seq[Attribute] = child.output
 
     implicit object SetAccumulatorParam extends AccumulatorParam[HashSet[String]] {
@@ -123,6 +121,7 @@ package object debug {
 
     /**
      * A collection of metrics for each column of output.
+     *
      * @param elementTypes the actual runtime types for the output.  Useful when there are bugs
      *                     causing the wrong data to be projected.
      */
@@ -165,8 +164,8 @@ package object debug {
       }
     }
 
-    override def upstreams(): Seq[RDD[InternalRow]] = {
-      child.asInstanceOf[CodegenSupport].upstreams()
+    override def inputRDDs(): Seq[RDD[InternalRow]] = {
+      child.asInstanceOf[CodegenSupport].inputRDDs()
     }
 
     override def doProduce(ctx: CodegenContext): String = {

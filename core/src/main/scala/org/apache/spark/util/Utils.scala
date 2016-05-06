@@ -256,10 +256,11 @@ private[spark] object Utils extends Logging {
     dir
   }
 
-  /** Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
-    * copying is disabled by default unless explicitly set transferToEnabled as true,
-    * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
-    */
+  /**
+   * Copy all data from an InputStream to an OutputStream. NIO way of file stream to file stream
+   * copying is disabled by default unless explicitly set transferToEnabled as true,
+   * the parameter transferToEnabled should be configured by spark.file.transferTo = [true|false].
+   */
   def copyStream(in: InputStream,
                  out: OutputStream,
                  closeStreams: Boolean = false,
@@ -1120,9 +1121,9 @@ private[spark] object Utils extends Logging {
       extraEnvironment: Map[String, String] = Map.empty,
       redirectStderr: Boolean = true): String = {
     val process = executeCommand(command, workingDir, extraEnvironment, redirectStderr)
-    val output = new StringBuffer
+    val output = new StringBuilder
     val threadName = "read stdout for " + command(0)
-    def appendToOutput(s: String): Unit = output.append(s)
+    def appendToOutput(s: String): Unit = output.append(s).append("\n")
     val stdoutThread = processStreamByLine(threadName, process.getInputStream, appendToOutput)
     val exitCode = process.waitFor()
     stdoutThread.join()   // Wait for it to finish reading output
@@ -1259,26 +1260,35 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code, call the failure callbacks before finally block if there is any
-   * exceptions happen. But if exceptions happen in the finally block, do not suppress the original
-   * exception.
+   * Execute a block of code and call the failure callbacks in the catch block. If exceptions occur
+   * in either the catch or the finally block, they are appended to the list of suppressed
+   * exceptions in original exception which is then rethrown.
    *
-   * This is primarily an issue with `finally { out.close() }` blocks, where
-   * close needs to be called to clean up `out`, but if an exception happened
-   * in `out.write`, it's likely `out` may be corrupted and `out.close` will
+   * This is primarily an issue with `catch { abort() }` or `finally { out.close() }` blocks,
+   * where the abort/close needs to be called to clean up `out`, but if an exception happened
+   * in `out.write`, it's likely `out` may be corrupted and `abort` or `out.close` will
    * fail as well. This would then suppress the original/likely more meaningful
    * exception from the original `out.write` call.
    */
-  def tryWithSafeFinallyAndFailureCallbacks[T](block: => T)(finallyBlock: => Unit): T = {
+  def tryWithSafeFinallyAndFailureCallbacks[T](block: => T)
+      (catchBlock: => Unit = (), finallyBlock: => Unit = ()): T = {
     var originalThrowable: Throwable = null
     try {
       block
     } catch {
-      case t: Throwable =>
+      case cause: Throwable =>
         // Purposefully not using NonFatal, because even fatal exceptions
         // we don't want to have our finallyBlock suppress
-        originalThrowable = t
-        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(t)
+        originalThrowable = cause
+        try {
+          logError("Aborting task", originalThrowable)
+          TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(originalThrowable)
+          catchBlock
+        } catch {
+          case t: Throwable =>
+            originalThrowable.addSuppressed(t)
+            logWarning(s"Suppressing exception in catch: " + t.getMessage, t)
+        }
         throw originalThrowable
     } finally {
       try {
@@ -1564,9 +1574,11 @@ private[spark] object Utils extends Logging {
     else -1
   }
 
-  /** Returns the system properties map that is thread-safe to iterator over. It gets the
-    * properties which have been set explicitly, as well as those for which only a default value
-    * has been defined. */
+  /**
+   * Returns the system properties map that is thread-safe to iterator over. It gets the
+   * properties which have been set explicitly, as well as those for which only a default value
+   * has been defined.
+   */
   def getSystemProperties: Map[String, String] = {
     System.getProperties.stringPropertyNames().asScala
       .map(key => (key, System.getProperty(key))).toMap
@@ -1586,6 +1598,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
+   *
    * @param numIters number of iterations
    * @param f function to be executed. If prepare is not None, the running time of each call to f
    *          must be an order of magnitude longer than one millisecond for accurate timing.
@@ -1627,6 +1640,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Creates a symlink.
+   *
    * @param src absolute path to the source
    * @param dst relative path for the destination
    */
@@ -2270,7 +2284,7 @@ private[spark] object Utils extends Logging {
    */
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
-    SignalLogger.register(log)
+    SignalUtils.registerLogger(log)
   }
 }
 

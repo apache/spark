@@ -212,7 +212,7 @@ public final class OnHeapColumnVector extends ColumnVector {
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
     for (int i = 0; i < count; ++i) {
-      intData[i + rowId] = Platform.getInt(src, srcOffset);;
+      intData[i + rowId] = Platform.getInt(src, srcOffset);
       srcIndex += 4;
       srcOffset += 4;
     }
@@ -387,35 +387,49 @@ public final class OnHeapColumnVector extends ColumnVector {
       arrayLengths = newLengths;
       arrayOffsets = newOffsets;
     } else if (type instanceof BooleanType) {
-      byte[] newData = new byte[newCapacity];
-      if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
-      byteData = newData;
+      if (byteData == null || byteData.length < newCapacity) {
+        byte[] newData = new byte[newCapacity];
+        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
+        byteData = newData;
+      }
     } else if (type instanceof ByteType) {
-      byte[] newData = new byte[newCapacity];
-      if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
-      byteData = newData;
+      if (byteData == null || byteData.length < newCapacity) {
+        byte[] newData = new byte[newCapacity];
+        if (byteData != null) System.arraycopy(byteData, 0, newData, 0, elementsAppended);
+        byteData = newData;
+      }
     } else if (type instanceof ShortType) {
-      short[] newData = new short[newCapacity];
-      if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
-      shortData = newData;
+      if (shortData == null || shortData.length < newCapacity) {
+        short[] newData = new short[newCapacity];
+        if (shortData != null) System.arraycopy(shortData, 0, newData, 0, elementsAppended);
+        shortData = newData;
+      }
     } else if (type instanceof IntegerType || type instanceof DateType ||
       DecimalType.is32BitDecimalType(type)) {
-      int[] newData = new int[newCapacity];
-      if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
-      intData = newData;
+      if (intData == null || intData.length < newCapacity) {
+        int[] newData = new int[newCapacity];
+        if (intData != null) System.arraycopy(intData, 0, newData, 0, elementsAppended);
+        intData = newData;
+      }
     } else if (type instanceof LongType || type instanceof TimestampType ||
         DecimalType.is64BitDecimalType(type)) {
-      long[] newData = new long[newCapacity];
-      if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
-      longData = newData;
+      if (longData == null || longData.length < newCapacity) {
+        long[] newData = new long[newCapacity];
+        if (longData != null) System.arraycopy(longData, 0, newData, 0, elementsAppended);
+        longData = newData;
+      }
     } else if (type instanceof FloatType) {
-      float[] newData = new float[newCapacity];
-      if (floatData != null) System.arraycopy(floatData, 0, newData, 0, elementsAppended);
-      floatData = newData;
+      if (floatData == null || floatData.length < newCapacity) {
+        float[] newData = new float[newCapacity];
+        if (floatData != null) System.arraycopy(floatData, 0, newData, 0, elementsAppended);
+        floatData = newData;
+      }
     } else if (type instanceof DoubleType) {
-      double[] newData = new double[newCapacity];
-      if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, elementsAppended);
-      doubleData = newData;
+      if (doubleData == null || doubleData.length < newCapacity) {
+        double[] newData = new double[newCapacity];
+        if (doubleData != null) System.arraycopy(doubleData, 0, newData, 0, elementsAppended);
+        doubleData = newData;
+      }
     } else if (resultStruct != null) {
       // Nothing to store.
     } else {

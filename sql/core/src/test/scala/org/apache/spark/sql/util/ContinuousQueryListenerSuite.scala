@@ -146,7 +146,6 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
 
   private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
-    @volatile var query: StreamExecution = null
     try {
       failAfter(1 minute) {
         sqlContext.streams.addListener(listener)
@@ -212,7 +211,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
   case class QueryStatus(
     active: Boolean,
-    expection: Option[Exception],
+    exception: Option[Exception],
     sourceStatuses: Array[SourceStatus],
     sinkStatus: SinkStatus)
 

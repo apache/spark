@@ -23,8 +23,8 @@ import java.util.Random
 import org.apache.spark.{SparkConf, SparkContext}
 
 /**
-  * Usage: SimpleSkewedGroupByTest [numMappers] [numKVPairs] [valSize] [numReducers] [ratio]
-  */
+ * Usage: SimpleSkewedGroupByTest [numMappers] [numKVPairs] [valSize] [numReducers] [ratio]
+ */
 object SimpleSkewedGroupByTest {
   def main(args: Array[String]) {
 

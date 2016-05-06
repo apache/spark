@@ -24,8 +24,9 @@ import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.execution.aggregate
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoin, CartesianProduct, SortMergeJoin}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, CartesianProductExec, SortMergeJoinExec}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
@@ -56,18 +57,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
-      val regex = java.util.regex.Pattern.compile(pattern)
-      sqlContext.sessionState.functionRegistry.listFunction()
-        .filter(regex.matcher(_).matches()).map(Row(_))
+      StringUtils.filterPattern(sqlContext.sessionState.functionRegistry.listFunction(), pattern)
+        .map(Row(_))
     }
-    checkAnswer(sql("SHOW functions"), getFunctions(".*"))
-    Seq("^c.*", ".*e$", "log.*", ".*date.*").foreach { pattern =>
+    checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
+      // For the pattern part, only '*' and '|' are allowed as wildcards.
+      // For '*', we need to replace it to '.*'.
       checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
     }
   }
 
   test("describe functions") {
-    checkExistence(sql("describe function extended upper"), true,
+    checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase",
@@ -75,16 +77,22 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "> SELECT upper('SparkSql');",
       "'SPARKSQL'")
 
-    checkExistence(sql("describe functioN Upper"), true,
+    checkKeywordsExist(sql("describe functioN Upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
       "Usage: upper(str) - Returns str with all characters changed to uppercase")
 
-    checkExistence(sql("describe functioN Upper"), false,
-      "Extended Usage")
+    checkKeywordsNotExist(sql("describe functioN Upper"), "Extended Usage")
 
-    checkExistence(sql("describe functioN abcadf"), true,
-      "Function: abcadf not found.")
+    checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
+  }
+
+  test("SPARK-14415: All functions should have own descriptions") {
+    for (f <- sqlContext.sessionState.functionRegistry.listFunction()) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f)) {
+        checkKeywordsNotExist(sql(s"describe function `$f`"), "To be added.")
+      }
+    }
   }
 
   test("SPARK-6743: no columns from cache") {
@@ -746,36 +754,43 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("inner join where, one match per row") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData WHERE n = N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata WHERE n = N"),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")))
+    }
   }
 
   test("inner join ON, one match per row") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData JOIN lowerCaseData ON n = N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata JOIN lowercasedata ON n = N"),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")))
+    }
   }
 
   test("inner join, where, multiple matches") {
-    checkAnswer(
-      sql("""
-        |SELECT * FROM
-        |  (SELECT * FROM testData2 WHERE a = 1) x JOIN
-        |  (SELECT * FROM testData2 WHERE a = 1) y
-        |WHERE x.a = y.a""".stripMargin),
-      Row(1, 1, 1, 1) ::
-      Row(1, 1, 1, 2) ::
-      Row(1, 2, 1, 1) ::
-      Row(1, 2, 1, 2) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql(
+          """
+          |SELECT * FROM
+          |  (SELECT * FROM testdata2 WHERE a = 1) x JOIN
+          |  (SELECT * FROM testdata2 WHERE a = 1) y
+          |WHERE x.a = y.a""".stripMargin),
+        Row(1, 1, 1, 1) ::
+        Row(1, 1, 1, 2) ::
+        Row(1, 2, 1, 1) ::
+        Row(1, 2, 1, 2) :: Nil)
+    }
   }
 
   test("inner join, no matches") {
@@ -817,25 +832,29 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("left outer join") {
-    checkAnswer(
-      sql("SELECT * FROM upperCaseData LEFT OUTER JOIN lowerCaseData ON n = N"),
-      Row(1, "A", 1, "a") ::
-      Row(2, "B", 2, "b") ::
-      Row(3, "C", 3, "c") ::
-      Row(4, "D", 4, "d") ::
-      Row(5, "E", null, null) ::
-      Row(6, "F", null, null) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM uppercasedata LEFT OUTER JOIN lowercasedata ON n = N"),
+        Row(1, "A", 1, "a") ::
+          Row(2, "B", 2, "b") ::
+          Row(3, "C", 3, "c") ::
+          Row(4, "D", 4, "d") ::
+          Row(5, "E", null, null) ::
+          Row(6, "F", null, null) :: Nil)
+    }
   }
 
   test("right outer join") {
-    checkAnswer(
-      sql("SELECT * FROM lowerCaseData RIGHT OUTER JOIN upperCaseData ON n = N"),
-      Row(1, "a", 1, "A") ::
-      Row(2, "b", 2, "B") ::
-      Row(3, "c", 3, "C") ::
-      Row(4, "d", 4, "D") ::
-      Row(null, null, 5, "E") ::
-      Row(null, null, 6, "F") :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM lowercasedata RIGHT OUTER JOIN uppercasedata ON n = N"),
+        Row(1, "a", 1, "A") ::
+          Row(2, "b", 2, "B") ::
+          Row(3, "c", 3, "C") ::
+          Row(4, "d", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
+    }
   }
 
   test("full outer join") {
@@ -858,12 +877,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-11111 null-safe join should not use cartesian product") {
     val df = sql("select count(*) from testData a join testData b on (a.key <=> b.key)")
     val cp = df.queryExecution.sparkPlan.collect {
-      case cp: CartesianProduct => cp
+      case cp: CartesianProductExec => cp
     }
     assert(cp.isEmpty, "should not use CartesianProduct for null-safe join")
     val smj = df.queryExecution.sparkPlan.collect {
-      case smj: SortMergeJoin => smj
-      case j: BroadcastHashJoin => j
+      case smj: SortMergeJoinExec => smj
+      case j: BroadcastHashJoinExec => j
     }
     assert(smj.size > 0, "should use SortMergeJoin or BroadcastHashJoin")
     checkAnswer(df, Row(100) :: Nil)
@@ -1817,12 +1836,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val e1 = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e1.message.contains("Table not found"))
+    assert(e1.message.contains("Table or view not found"))
 
     val e2 = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e2.message.contains("Table not found"))
+    assert(e2.message.contains("Table or view not found"))
 
     val e3 = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
@@ -2226,6 +2245,88 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql("select course, year, grouping__id from courseSales group by cube(course, year)")
     }
     assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("grouping and grouping_id in having") {
+    checkAnswer(
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping(year) = 1 and grouping_id(course, year) > 0"),
+        Row("Java", null) ::
+        Row("dotNET", null) ::
+        Row(null, null) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping(course) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " having grouping_id(course, year) > 0")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " having grouping__id > 0")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("grouping and grouping_id in sort") {
+    checkAnswer(
+      sql("select course, year, grouping(course), grouping(year) from courseSales" +
+        " group by cube(course, year) order by grouping_id(course, year), course, year"),
+      Row("Java", 2012, 0, 0) ::
+        Row("Java", 2013, 0, 0) ::
+        Row("dotNET", 2012, 0, 0) ::
+        Row("dotNET", 2013, 0, 0) ::
+        Row("Java", null, 0, 1) ::
+        Row("dotNET", null, 0, 1) ::
+        Row(null, 2012, 1, 0) ::
+        Row(null, 2013, 1, 0) ::
+        Row(null, null, 1, 1) :: Nil
+    )
+
+    checkAnswer(
+      sql("select course, year, grouping_id(course, year) from courseSales" +
+        " group by cube(course, year) order by grouping(course), grouping(year), course, year"),
+      Row("Java", 2012, 0) ::
+        Row("Java", 2013, 0) ::
+        Row("dotNET", 2012, 0) ::
+        Row("dotNET", 2013, 0) ::
+        Row("Java", null, 1) ::
+        Row("dotNET", null, 1) ::
+        Row(null, 2012, 2) ::
+        Row(null, 2013, 2) ::
+        Row(null, null, 3) :: Nil
+    )
+
+    var error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " order by grouping(course)")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by course, year" +
+        " order by grouping_id(course, year)")
+    }
+    assert(error.getMessage contains
+      "grouping()/grouping_id() can only be used with GroupingSets/Cube/Rollup")
+    error = intercept[AnalysisException] {
+      sql("select course, year from courseSales group by cube(course, year)" +
+        " order by grouping__id")
+    }
+    assert(error.getMessage contains "grouping__id is deprecated; use grouping_id() instead")
+  }
+
+  test("filter on a grouping column that is not presented in SELECT") {
+    checkAnswer(
+      sql("select count(1) from (select 1 as a) t group by a having a > 0"),
+      Row(1) :: Nil)
   }
 
   test("SPARK-13056: Null in map value causes NPE") {

@@ -59,7 +59,8 @@ public final class UnsafeExternalRowSorter {
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
-      long pageSizeBytes) throws IOException {
+      long pageSizeBytes,
+      boolean canUseRadixSort) throws IOException {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
@@ -72,7 +73,8 @@ public final class UnsafeExternalRowSorter {
       new RowComparator(ordering, schema.length()),
       prefixComparator,
       /* initialSize */ 4096,
-      pageSizeBytes
+      pageSizeBytes,
+      canUseRadixSort
     );
   }
 
@@ -151,7 +153,7 @@ public final class UnsafeExternalRowSorter {
             Platform.throwException(e);
           }
           throw new RuntimeException("Exception should have been re-thrown in next()");
-        };
+        }
       };
     } catch (IOException e) {
       cleanupResources();

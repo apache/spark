@@ -255,8 +255,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-    * Returns the number of partitions of this RDD.
-    */
+   * Returns the number of partitions of this RDD.
+   */
   @Since("1.6.0")
   final def getNumPartitions: Int = partitions.length
 
@@ -332,11 +332,11 @@ abstract class RDD[T: ClassTag](
     }) match {
       case Left(blockResult) =>
         if (readCachedBlock) {
-          val existingMetrics = context.taskMetrics().registerInputMetrics(blockResult.readMethod)
-          existingMetrics.incBytesReadInternal(blockResult.bytes)
+          val existingMetrics = context.taskMetrics().inputMetrics
+          existingMetrics.incBytesRead(blockResult.bytes)
           new InterruptibleIterator[T](context, blockResult.data.asInstanceOf[Iterator[T]]) {
             override def next(): T = {
-              existingMetrics.incRecordsReadInternal(1)
+              existingMetrics.incRecordsRead(1)
               delegate.next()
             }
           }
@@ -433,7 +433,9 @@ abstract class RDD[T: ClassTag](
    * coalesce(1000, shuffle = true) will result in 1000 partitions with the
    * data distributed using a hash partitioner.
    */
-  def coalesce(numPartitions: Int, shuffle: Boolean = false)(implicit ord: Ordering[T] = null)
+  def coalesce(numPartitions: Int, shuffle: Boolean = false,
+               partitionCoalescer: Option[PartitionCoalescer] = Option.empty)
+              (implicit ord: Ordering[T] = null)
       : RDD[T] = withScope {
     if (shuffle) {
       /** Distributes elements evenly across output partitions, starting from a random partition. */
@@ -451,9 +453,10 @@ abstract class RDD[T: ClassTag](
       new CoalescedRDD(
         new ShuffledRDD[Int, T, T](mapPartitionsWithIndex(distributePartition),
         new HashPartitioner(numPartitions)),
-        numPartitions).values
+        numPartitions,
+        partitionCoalescer).values
     } else {
-      new CoalescedRDD(this, numPartitions)
+      new CoalescedRDD(this, numPartitions, partitionCoalescer)
     }
   }
 
@@ -568,11 +571,7 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def union(other: RDD[T]): RDD[T] = withScope {
-    if (partitioner.isDefined && other.partitioner == partitioner) {
-      new PartitionerAwareUnionRDD(sc, Array(this, other))
-    } else {
-      new UnionRDD(sc, Array(this, other))
-    }
+    sc.union(this, other)
   }
 
   /**

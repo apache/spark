@@ -32,8 +32,8 @@ trait LeaderElectionAgent {
 
 @DeveloperApi
 trait LeaderElectable {
-  def electedLeader()
-  def revokedLeadership()
+  def electedLeader(): Unit
+  def revokedLeadership(): Unit
 }
 
 /** Single-node implementation of LeaderElectionAgent -- we're initially and always the leader. */

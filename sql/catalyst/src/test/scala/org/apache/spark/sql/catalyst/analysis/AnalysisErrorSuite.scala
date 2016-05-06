@@ -24,8 +24,8 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, Complete, Count}
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftOuter, RightOuter}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -272,6 +272,62 @@ class AnalysisErrorSuite extends AnalysisTest {
     testRelation2.where('bad_column > 1).groupBy('a)(UnresolvedAlias(max('b))),
     "cannot resolve '`bad_column`'" :: Nil)
 
+  errorTest(
+    "slide duration greater than window in time window",
+    testRelation2.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "2 second", "0 second").as("window")),
+      s"The slide duration " :: " must be less than or equal to the windowDuration " :: Nil
+  )
+
+  errorTest(
+    "start time greater than slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 minute").as("window")),
+      "The start time " :: " must be less than the slideDuration " :: Nil
+  )
+
+  errorTest(
+    "start time equal to slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "1 second").as("window")),
+      "The start time " :: " must be less than the slideDuration " :: Nil
+  )
+
+  errorTest(
+    "negative window duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "-1 second", "1 second", "0 second").as("window")),
+      "The window duration " :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "zero window duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "0 second", "1 second", "0 second").as("window")),
+      "The window duration " :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "negative slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "-1 second", "0 second").as("window")),
+      "The slide duration " :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "zero slide duration in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "0 second", "0 second").as("window")),
+      "The slide duration" :: " must be greater than 0." :: Nil
+  )
+
+  errorTest(
+    "negative start time in time window",
+    testRelation.select(
+      TimeWindow(Literal("2016-01-01 01:01:01"), "1 second", "1 second", "-5 second").as("window")),
+      "The start time" :: "must be greater than or equal to 0." :: Nil
+  )
+
   test("SPARK-6452 regression test") {
     // CheckAnalysis should throw AnalysisException when Aggregate contains missing attribute(s)
     // Since we manually construct the logical plan at here and Sum only accept
@@ -387,5 +443,61 @@ class AnalysisErrorSuite extends AnalysisTest {
           AttributeReference("c", MapType(IntegerType, StringType))(exprId = ExprId(4)))))
 
     assertAnalysisError(plan2, "map type expression `a` cannot be used in join conditions" :: Nil)
+  }
+
+  test("PredicateSubQuery is used outside of a filter") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val plan = Project(
+      Seq(a, Alias(InSubQuery(a, LocalRelation(b)), "c")()),
+      LocalRelation(a))
+    assertAnalysisError(plan, "Predicate sub-queries can only be used in a Filter" :: Nil)
+  }
+
+  test("PredicateSubQuery is used is a nested condition") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", BooleanType)()
+    val plan1 = Filter(Cast(InSubQuery(a, LocalRelation(b)), BooleanType), LocalRelation(a))
+    assertAnalysisError(plan1, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+
+    val plan2 = Filter(Or(InSubQuery(a, LocalRelation(b)), c), LocalRelation(a, c))
+    assertAnalysisError(plan2, "Predicate sub-queries cannot be used in nested conditions" :: Nil)
+  }
+
+  test("PredicateSubQuery correlated predicate is nested in an illegal plan") {
+    val a = AttributeReference("a", IntegerType)()
+    val b = AttributeReference("b", IntegerType)()
+    val c = AttributeReference("c", IntegerType)()
+
+    val plan1 = Filter(
+      Exists(
+        Join(
+          LocalRelation(b),
+          Filter(EqualTo(a, c), LocalRelation(c)),
+          LeftOuter,
+          Option(EqualTo(b, c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan1, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan2 = Filter(
+      Exists(
+        Join(
+          Filter(EqualTo(a, c), LocalRelation(c)),
+          LocalRelation(b),
+          RightOuter,
+          Option(EqualTo(b, c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan2, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan3 = Filter(
+      Exists(Aggregate(Seq.empty, Seq.empty, Filter(EqualTo(a, c), LocalRelation(c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan3, "Accessing outer query column is not allowed in" :: Nil)
+
+    val plan4 = Filter(
+      Exists(Union(LocalRelation(b), Filter(EqualTo(a, c), LocalRelation(c)))),
+      LocalRelation(a))
+    assertAnalysisError(plan4, "Accessing outer query column is not allowed in" :: Nil)
   }
 }

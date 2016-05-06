@@ -144,7 +144,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
     registerForCleanup(rdd, CleanRDD(rdd.id))
   }
 
-  def registerAccumulatorForCleanup(a: Accumulable[_, _]): Unit = {
+  def registerAccumulatorForCleanup(a: NewAccumulator[_, _]): Unit = {
     registerForCleanup(a, CleanAccum(a.id))
   }
 
@@ -241,7 +241,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   def doCleanupAccum(accId: Long, blocking: Boolean): Unit = {
     try {
       logDebug("Cleaning accumulator " + accId)
-      Accumulators.remove(accId)
+      AccumulatorContext.remove(accId)
       listeners.asScala.foreach(_.accumCleaned(accId))
       logInfo("Cleaned accumulator " + accId)
     } catch {
@@ -278,9 +278,9 @@ private object ContextCleaner {
  * Listener class used for testing when any item has been cleaned by the Cleaner class.
  */
 private[spark] trait CleanerListener {
-  def rddCleaned(rddId: Int)
-  def shuffleCleaned(shuffleId: Int)
-  def broadcastCleaned(broadcastId: Long)
-  def accumCleaned(accId: Long)
-  def checkpointCleaned(rddId: Long)
+  def rddCleaned(rddId: Int): Unit
+  def shuffleCleaned(shuffleId: Int): Unit
+  def broadcastCleaned(broadcastId: Long): Unit
+  def accumCleaned(accId: Long): Unit
+  def checkpointCleaned(rddId: Long): Unit
 }
