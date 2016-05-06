@@ -1361,7 +1361,7 @@ class DAGScheduler(
   private[scheduler] def handleExecutorAdded(execId: String, host: String) {
     // remove from failedEpoch(execId) ?
     if (failedEpoch.contains(execId)) {
-      logInfo("Host added was in lost list earlier: " + host)
+      logInfo(s"Executor $execId added was in lost list earlier.")
       failedEpoch -= execId
     }
     submitWaitingStages()
