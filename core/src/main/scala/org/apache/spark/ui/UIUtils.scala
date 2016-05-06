@@ -502,4 +502,19 @@ private[spark] object UIUtils extends Logging {
     }
     param
   }
+
+  /**
+   * Decode URLParameter if URL is encoded by YARN-WebAppProxyServlet.
+   * Due to YARN-2844: WebAppProxyServlet cannot handle urls which contain encoded characters
+   * Therefore we need to decode it until we get the real URLParameter.
+   */
+  def decodeURLParameter(urlParam: String): String = {
+    var param = urlParam
+    var decodedParam = URLDecoder.decode(param, "UTF-8")
+    while (param != decodedParam) {
+      param = decodedParam
+      decodedParam = URLDecoder.decode(param, "UTF-8")
+    }
+    param
+  }
 }
