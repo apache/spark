@@ -21,7 +21,7 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.DataFrame
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -40,6 +40,8 @@ object OneVsRestExample {
       .builder
       .appName(s"OneVsRestExample")
       .getOrCreate()
+
+    import spark.implicits._
 
     // $example on$
     // load data file.
