@@ -131,6 +131,11 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
     set("spark.home", home)
   }
 
+  /** Set the metrics configuration property */
+  def setMetricsProperty(name: String, value: String): SparkConf = {
+    set(s"spark.metrics.conf.$name", value)
+  }
+
   /** Set multiple parameters together */
   def setAll(settings: Traversable[(String, String)]) = {
     this.settings.putAll(settings.toMap.asJava)
@@ -220,6 +225,14 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
      *   E.g. spark.akka.option.x.y.x = "value"
      */
     getAll.filter { case (k, _) => isAkkaConf(k) }
+
+  /** Get all metrics system properties. */
+  def getMetricsConf: Seq[(String, String)] = {
+    val pattern = """^spark\.metrics\.conf\.(.*)$""".r
+    for ((pattern(key), value) <- getAll) yield {
+      (key, value)
+    }
+  }
 
   /**
    * Returns the Spark application id, valid in the Driver after TaskScheduler registration and
