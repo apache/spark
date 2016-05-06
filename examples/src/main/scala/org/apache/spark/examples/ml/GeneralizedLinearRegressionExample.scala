@@ -18,22 +18,22 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.regression.GeneralizedLinearRegression
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object GeneralizedLinearRegressionExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("GeneralizedLinearRegressionExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("GeneralizedLinearRegressionExample")
+      .getOrCreate()
 
     // $example on$
     // Load training data
-    val training = sqlContext.read.format("libsvm")
+    val training = spark.read.format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt")
 
     val glr = new GeneralizedLinearRegression()
@@ -63,7 +63,7 @@ object GeneralizedLinearRegressionExample {
     summary.residuals().show()
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

@@ -17,19 +17,20 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.regression import GeneralizedLinearRegression
 # $example off$
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="GeneralizedLinearRegressionExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("GeneralizedLinearRegressionExample")\
+        .getOrCreate()
 
     # $example on$
     # Load training data
-    training = sqlContext.read.format("libsvm")\
+    training = spark.read.format("libsvm")\
         .load("data/mllib/sample_linear_regression_data.txt")
 
     glr = GeneralizedLinearRegression(family="gaussian", link="identity", maxIter=10, regParam=0.3)
@@ -42,4 +43,4 @@ if __name__ == "__main__":
     print("Intercept: " + str(model.intercept))
     # $example off$
 
-    sc.stop()
+    spark.stop()

@@ -17,30 +17,26 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-
 // $example on$
 import java.util.Arrays;
 
 import org.apache.spark.ml.regression.GeneralizedLinearRegression;
 import org.apache.spark.ml.regression.GeneralizedLinearRegressionModel;
-import org.apache.spark.ml.regression.GeneralizedLinearRegressionSummary;
+import org.apache.spark.ml.regression.GeneralizedLinearRegressionTrainingSummary;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaGeneralizedLinearRegressionExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaGeneralizedLinearRegressionExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder().appName("JavaGeneralizedLinearRegressionExample").getOrCreate();
 
     // $example on$
     // Load training data
-    Dataset<Row> training = sqlContext.read().format("libsvm")
+    Dataset<Row> training = spark.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
     GeneralizedLinearRegression glr = new GeneralizedLinearRegression()
@@ -57,7 +53,7 @@ public class JavaGeneralizedLinearRegressionExample {
       + model.coefficients() + " Intercept: " + model.intercept());
 
     // Summarize the model over the training set and print out some metrics
-    GeneralizedLinearRegressionSummary summary = model.summary();
+    GeneralizedLinearRegressionTrainingSummary summary = model.summary();
     System.out.println("Coefficient Standard Errors: "
       + Arrays.toString(summary.coefficientStandardErrors()));
     System.out.println("T Values: " + Arrays.toString(summary.tValues()));
@@ -72,6 +68,6 @@ public class JavaGeneralizedLinearRegressionExample {
     summary.residuals().show();
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }
