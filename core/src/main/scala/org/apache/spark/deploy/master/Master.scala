@@ -670,12 +670,12 @@ private[spark] class Master(
   def rebuildSparkUI(app: ApplicationInfo): Boolean = {
     val appName = app.desc.name
     val eventLogDir = app.desc.eventLogDir.getOrElse { return false }
-    val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
-    val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
-    val eventLogPaths = eventLogInfo.logPaths
-    val compressionCodec = eventLogInfo.compressionCodec
-    if (!eventLogPaths.isEmpty) {
-      try {
+    try {
+      val fileSystem = Utils.getHadoopFileSystem(eventLogDir)
+      val eventLogInfo = EventLoggingListener.parseLoggingInfo(eventLogDir, fileSystem)
+      val eventLogPaths = eventLogInfo.logPaths
+      val compressionCodec = eventLogInfo.compressionCodec
+      if (!eventLogPaths.isEmpty) {
         val replayBus = new ReplayListenerBus(eventLogPaths, fileSystem, compressionCodec)
         val ui = new SparkUI(
           new SparkConf, replayBus, appName + " (completed)", "/history/" + app.id)
@@ -683,15 +683,16 @@ private[spark] class Master(
         app.desc.appUiUrl = ui.basePath
         appIdToUI(app.id) = ui
         webUi.attachSparkUI(ui)
-        return true
-      } catch {
-        case e: Exception =>
-          logError("Exception in replaying log for application %s (%s)".format(appName, app.id), e)
+        true
+      } else {
+        logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))
+        false
       }
-    } else {
-      logWarning("Application %s (%s) has no valid logs: %s".format(appName, app.id, eventLogDir))
+    } catch {
+      case e: Exception =>
+        logError("Exception in replaying log for application %s (%s)".format(appName, app.id), e)
+        false
     }
-    false
   }
 
   /** Generate a new app ID given a app's submission date */
