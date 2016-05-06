@@ -57,10 +57,14 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("describe function") {
-    assertEqual("describe function bar", DescribeFunction("bar", isExtended = false))
-    assertEqual("describe function extended bar", DescribeFunction("bar", isExtended = true))
-    assertEqual("describe function foo.bar", DescribeFunction("foo.bar", isExtended = false))
-    assertEqual("describe function extended f.bar", DescribeFunction("f.bar", isExtended = true))
+    assertEqual("describe function bar",
+      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = false))
+    assertEqual("describe function extended bar",
+      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = true))
+    assertEqual("describe function foo.bar",
+      DescribeFunction(FunctionIdentifier("bar", database = Option("foo")), isExtended = false))
+    assertEqual("describe function extended f.bar",
+      DescribeFunction(FunctionIdentifier("bar", database = Option("f")), isExtended = true))
   }
 
   test("set operations") {

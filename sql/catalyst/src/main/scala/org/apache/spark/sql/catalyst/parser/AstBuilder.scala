@@ -103,11 +103,11 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     import ctx._
     val functionName =
       if (describeFuncName.STRING() != null) {
-        string(describeFuncName.STRING())
+        FunctionIdentifier(string(describeFuncName.STRING()), database = None)
       } else if (describeFuncName.qualifiedName() != null) {
-        visitFunctionName(describeFuncName.qualifiedName).unquotedString
+        visitFunctionName(describeFuncName.qualifiedName)
       } else {
-        describeFuncName.getText
+        FunctionIdentifier(describeFuncName.getText, database = None)
       }
     DescribeFunction(functionName, EXTENDED != null)
   }
