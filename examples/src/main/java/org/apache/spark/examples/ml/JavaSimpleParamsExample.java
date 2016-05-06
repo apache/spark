@@ -33,9 +33,9 @@ import org.apache.spark.sql.SparkSession;
 /**
  * A simple example demonstrating ways to specify parameters for Estimators and Transformers.
  * Run with
- * {{{
+ * <pre>
  * bin/run-example ml.JavaSimpleParamsExample
- * }}}
+ * </pre>
  */
 public class JavaSimpleParamsExample {
 
