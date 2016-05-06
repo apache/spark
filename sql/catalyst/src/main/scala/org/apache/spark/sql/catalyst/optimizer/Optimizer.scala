@@ -101,6 +101,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       EliminateSorts,
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
+      RewriteScalarSubqueriesInFilter,
       RewriteCorrelatedScalarSubquery,
       EliminateSerialization) ::
     Batch("Decimal Optimizations", fixedPoint,
@@ -1643,5 +1644,32 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       } else {
         f
       }
+  }
+}
+
+/**
+ * Rewrite [[Filter]] plans that contain correlated [[ScalarSubquery]] expressions. When these
+ * correlated [[ScalarSubquery]] expressions are wrapped in a some Predicate expression, we rewrite
+ * them into [[PredicateSubquery]] expressions.
+ */
+object RewriteScalarSubqueriesInFilter extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case f @ Filter(condition, child) =>
+      val newCond = f.condition.transformUp {
+        case e if e.dataType == BooleanType =>
+          val scalars = ArrayBuffer.empty[ScalarSubquery]
+          val newExpr = e.transform {
+            case s: ScalarSubquery if s.children.nonEmpty =>
+              scalars += s
+              s.query.output.head
+          }
+          scalars match {
+            case Seq(ScalarSubquery(query, conditions, exprId)) =>
+              PredicateSubquery(query, conditions :+ newExpr, nullAware = false, exprId)
+            case _ =>
+              e
+          }
+      }
+      Filter(newCond, f.child)
   }
 }
