@@ -937,7 +937,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         self.assertEqual(s.residualDegreeOfFreedom, 1)
         self.assertEqual(s.residualDegreeOfFreedomNull, 2)
         self.assertEqual(s.rank, 1)
-        self.assertEqual(isinstance(s.solver, basestring))
+        self.assertTrue(isinstance(s.solver, basestring))
         self.assertTrue(isinstance(s.aic, float))
         self.assertTrue(isinstance(s.deviance, float))
         self.assertTrue(isinstance(s.nullDeviance, float))
