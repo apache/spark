@@ -587,6 +587,9 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager).size === 5)
 
     // Starting a task cancel the remove timer for that executor
+    setExecutorBusy(manager, createTaskInfo(0, 0, "executor-1"))
+    setExecutorBusy(manager, createTaskInfo(1, 1, "executor-1"))
+    setExecutorBusy(manager, createTaskInfo(2, 2, "executor-2"))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(1, 1, "executor-1")))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(2, 2, "executor-2")))
@@ -662,6 +665,7 @@ class ExecutorAllocationManagerSuite
     assert(removeTimes(manager).isEmpty)
     sc.listenerBus.postToAll(SparkListenerExecutorAdded(
       0L, "executor-1", new ExecutorInfo("host1", 1, Map.empty)))
+    setExecutorBusy(manager, createTaskInfo(0, 0, "executor-1"))
     sc.listenerBus.postToAll(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "executor-1")))
 
     assert(executorIds(manager).size === 1)
@@ -961,6 +965,7 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
   private val _onExecutorBusy = PrivateMethod[Unit]('onExecutorBusy)
   private val _localityAwareTasks = PrivateMethod[Int]('localityAwareTasks)
   private val _hostToLocalTaskCount = PrivateMethod[Map[String, Int]]('hostToLocalTaskCount)
+  private val _setExecutorBusy = PrivateMethod[Map[String, Int]]('setExecutorBusy)
 
   private def numExecutorsToAdd(manager: ExecutorAllocationManager): Int = {
     manager invokePrivate _numExecutorsToAdd()
@@ -1038,5 +1043,10 @@ private object ExecutorAllocationManagerSuite extends PrivateMethodTester {
 
   private def hostToLocalTaskCount(manager: ExecutorAllocationManager): Map[String, Int] = {
     manager invokePrivate _hostToLocalTaskCount()
+  }
+
+  private def setExecutorBusy(manager: ExecutorAllocationManager,
+                             info: TaskInfo): Map[String, Int] = {
+    manager invokePrivate _setExecutorBusy(info)
   }
 }
