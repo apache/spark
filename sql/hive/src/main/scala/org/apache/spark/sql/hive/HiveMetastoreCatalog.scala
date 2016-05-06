@@ -521,6 +521,13 @@ private[hive] case class MetastoreRelation
           .getOrElse(sqlContext.defaultSizeInBytes)))
     }
   )
+  override def sameResult(plan: LogicalPlan): Boolean = {
+      plan match {
+           case mr: MetastoreRelation =>
+                    mr.databaseName == databaseName && mr.tableName == tableName
+           case _ => false
+      }
+  }
 
   /** Only compare database and tablename, not alias. */
   override def sameResult(plan: LogicalPlan): Boolean = {
