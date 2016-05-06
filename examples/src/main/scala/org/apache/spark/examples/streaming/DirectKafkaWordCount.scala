@@ -65,6 +65,18 @@ object DirectKafkaWordCount {
     val wordCounts = words.map(x => (x, 1L)).reduceByKey(_ + _)
     wordCounts.print()
 
+    //Access the offset ranges using HasOffsetRanges
+    // Hold a reference to the current offset ranges, so it can be used downstream
+    var offsetRanges = Array[OffsetRange]()
+    messages.transform { rdd =>
+      offsetRanges = rdd.asInstanceOf[HasOffsetRanges].offsetRanges
+      rdd
+    }.foreachRDD { rdd =>
+      for (o <- offsetRanges) {
+        println(s"Processed ranges: topic:${o.topic} partition:${o.partition} fromOffset:${o.fromOffset} untilOffset:${o.untilOffset}")
+      }
+    }
+
     // Start the computation
     ssc.start()
     ssc.awaitTermination()

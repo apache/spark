@@ -17,11 +17,16 @@
 
 package org.apache.spark.examples.streaming;
 
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.streaming.kafka.HasOffsetRanges;
+import org.apache.spark.streaming.kafka.OffsetRange;
 import scala.Tuple2;
 
 import com.google.common.collect.Lists;
@@ -105,6 +110,32 @@ public final class JavaDirectKafkaWordCount {
         }
       });
     wordCounts.print();
+
+    //Access the offset ranges using HasOffsetRanges
+    // Hold a reference to the current offset ranges, so it can be used downstream
+    final AtomicReference<OffsetRange[]> offsetRanges = new AtomicReference();
+    messages.transformToPair(
+        new Function<JavaPairRDD<String, String>, JavaPairRDD<String, String>>() {
+            @Override
+            public JavaPairRDD<String, String> call(JavaPairRDD<String, String> rdd) throws Exception {
+            OffsetRange[] offsets = ((HasOffsetRanges) rdd.rdd()).offsetRanges();
+            offsetRanges.set(offsets);
+            return rdd;
+            }
+        }
+    ).foreachRDD(
+        new Function<JavaPairRDD<String, String>, Void>() {
+            @Override
+            public Void call(JavaPairRDD<String, String> rdd) throws IOException {
+                for (OffsetRange o : offsetRanges.get()) {
+                    System.out.println(
+                        "Processed ranges: " + "topic:"+ o.topic() + " " + "partition:"+ o.partition() + " " + "fromOffset:" + o.fromOffset() + " " + "untilOffset:" + o.untilOffset()
+                    );
+                }
+                return null;
+            }
+        }
+    );
 
     // Start the computation
     jssc.start();
