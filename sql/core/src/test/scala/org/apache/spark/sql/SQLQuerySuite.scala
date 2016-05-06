@@ -1765,37 +1765,25 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("specifying database name for a temporary table is not allowed") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-      val df =
-        sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
-      df
-        .write
-        .format("parquet")
-        .save(path)
+    val tableNames = Seq("db.t", "`db.t`")
+    tableNames.foreach { tableName =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        val df = sparkContext.parallelize(1 to 10).map(i => (i, i.toString)).toDF("num", "str")
+        df.write.format("parquet").save(path)
 
-      // We don't support creating a temporary table while specifying a database
-      intercept[AnalysisException] {
-        sqlContext.sql(
-          s"""
-          |CREATE TEMPORARY TABLE db.t
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-        """.stripMargin)
-      }.getMessage
-
-      // If you use backticks to quote the name then it's OK.
-      sqlContext.sql(
-        s"""
-          |CREATE TEMPORARY TABLE `db.t`
-          |USING parquet
-          |OPTIONS (
-          |  path '$path'
-          |)
-        """.stripMargin)
-      checkAnswer(sqlContext.table("`db.t`"), df)
+        // We don't support creating a temporary table while specifying a database
+        intercept[AnalysisException] {
+          sqlContext.sql(
+            s"""
+              |CREATE TEMPORARY TABLE $tableName
+              |USING parquet
+              |OPTIONS (
+              |  path '$path'
+              |)
+             """.stripMargin)
+        }
+      }
     }
   }
 
