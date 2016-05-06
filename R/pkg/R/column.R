@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-setOldClass("DataFrame")
-setClassUnion("DataFrameOrNULL", c("DataFrame", "NULL"))
+setOldClass("SparkDataFrame")
+setClassUnion("SparkDataFrameOrNull", c("SparkDataFrame", "NULL"))
 
 # Column Class
 
@@ -31,7 +31,7 @@ setOldClass("jobj")
 #' @slot jc reference to JVM SparkDataFrame column
 #' @export
 setClass("Column",
-         slots = list(jc = "jobj", df = "DataFrameOrNULL"))
+         slots = list(jc = "jobj", df = "SparkDataFrameOrNull"))
 
 setMethod("initialize", "Column", function(.Object, jc, df) {
   .Object@jc <- jc
