@@ -66,7 +66,10 @@ private[spark] class CoarseGrainedExecutorBackend(
       case Success(msg) => Utils.tryLogNonFatalError {
         Option(self).foreach(_.send(msg)) // msg must be RegisteredExecutor
       }
-      case Failure(e) => logError(s"Cannot register with driver: $driverUrl", e)
+      case Failure(e) => {
+        logError(s"Cannot register with driver: $driverUrl", e)
+        System.exit(1)
+      }
     }(ThreadUtils.sameThread)
   }
 
