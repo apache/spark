@@ -353,7 +353,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Returns the receiver operating characteristic (ROC) curve,
         which is an Dataframe having two fields (FPR, TPR) with
         (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
-        `Wikipedia reference <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
+
+        .. seealso:: `Wikipedia reference \
+        <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LogisticRegression.weightCol`. This will change in later Spark
