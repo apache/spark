@@ -95,7 +95,7 @@ class FileStreamSource(
     val endId = end.asInstanceOf[LongOffset].offset
 
     assert(startId <= endId)
-    val files = metadataLog.get(Some(startId + 1), Some(endId)).map(_._2).flatten
+    val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logDebug(s"Streaming ${files.mkString(", ")}")
     dataFrameBuilder(files)

@@ -142,8 +142,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  // TODO: re-enable this after rebuilding the jar (HiveContext was removed)
-  ignore("SPARK-8489: MissingRequirementError during reflection") {
+  test("SPARK-8489: MissingRequirementError during reflection") {
     // This test uses a pre-built jar to test SPARK-8489. In a nutshell, this test creates
     // a HiveContext and uses it to create a data frame from an RDD using reflection.
     // Before the fix in SPARK-8470, this results in a MissingRequirementError because
@@ -290,8 +289,11 @@ object SetWarehouseLocationTest extends Logging {
     conf.set("spark.sql.warehouse.dir", warehouseLocation.toString)
     conf.set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
 
-    val sc = new SparkContext(conf)
-    val sparkSession = SparkSession.withHiveSupport(sc)
+    val sparkSession = SparkSession.builder
+      .config(conf)
+      .enableHiveSupport()
+      .getOrCreate()
+
     val catalog = sparkSession.sessionState.catalog
 
     sparkSession.sql("drop table if exists testLocation")

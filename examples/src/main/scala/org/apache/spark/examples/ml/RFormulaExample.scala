@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object RFormulaExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("RFormulaExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("RFormulaExample")
+      .getOrCreate()
 
     // $example on$
     val dataset = spark.createDataFrame(Seq(

@@ -36,7 +36,10 @@ object KMeansExample {
 
   def main(args: Array[String]): Unit = {
     // Creates a Spark context and a SQL context
-    val spark = SparkSession.builder.appName(s"${this.getClass.getSimpleName}").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName(s"${this.getClass.getSimpleName}")
+      .getOrCreate()
 
     // $example on$
     // Crates a DataFrame

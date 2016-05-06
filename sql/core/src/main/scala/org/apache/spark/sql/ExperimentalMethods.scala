@@ -42,9 +42,9 @@ class ExperimentalMethods private[sql]() {
    * @since 1.3.0
    */
   @Experimental
-  var extraStrategies: Seq[Strategy] = Nil
+  @volatile var extraStrategies: Seq[Strategy] = Nil
 
   @Experimental
-  var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
+  @volatile var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
 
 }

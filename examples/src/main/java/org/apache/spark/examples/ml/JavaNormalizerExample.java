@@ -27,7 +27,10 @@ import org.apache.spark.sql.Row;
 
 public class JavaNormalizerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaNormalizerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaNormalizerExample")
+      .getOrCreate();
 
     // $example on$
     Dataset<Row> dataFrame =

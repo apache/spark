@@ -26,7 +26,10 @@ case class Record(key: Int, value: String)
 
 object RDDRelation {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("RDDRelation").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("RDDRelation")
+      .getOrCreate()
 
     // Importing the SparkSession gives access to all the SQL functions and implicit conversions.
     import spark.implicits._
