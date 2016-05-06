@@ -389,10 +389,6 @@ private[spark] class TaskSchedulerImpl(
     // (taskId, stageId, stageAttemptId, accumUpdates)
     val accumUpdatesWithTaskIds: Array[(Long, Int, Int, Seq[AccumulableInfo])] = synchronized {
       accumUpdates.flatMap { case (id, updates) =>
-        // We call `acc.value` here as we are at driver side now.  However, the RPC framework
-        // optimizes local message delivery so that messages do not need to de serialized and
-        // deserialized.  This brings trouble to the accumulator framework, which depends on
-        // serialization to set the `atDriverSide` flag.
         val accInfos = updates.map(acc => acc.toInfo(Some(acc.value), None))
         taskIdToTaskSetManager.get(id).map { taskSetMgr =>
           (id, taskSetMgr.stageId, taskSetMgr.taskSet.stageAttemptId, accInfos)
