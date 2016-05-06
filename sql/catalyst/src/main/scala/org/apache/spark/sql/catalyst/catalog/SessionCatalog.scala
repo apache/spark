@@ -118,6 +118,9 @@ class SessionCatalog(
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
+    if (db == "default") {
+      throw new AnalysisException(s"Can not drop default database")
+    }
     externalCatalog.dropDatabase(db, ignoreIfNotExists, cascade)
   }
 

@@ -939,4 +939,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
     )
   }
+
+  test("drop default database") {
+    val message = intercept[AnalysisException] {
+      sql("DROP DATABASE default")
+    }.getMessage
+    assert(message.contains("Can not drop default database"))
+  }
 }
