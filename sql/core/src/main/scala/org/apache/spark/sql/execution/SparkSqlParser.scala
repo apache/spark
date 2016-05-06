@@ -935,7 +935,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * For example:
    * {{{
-   *   CREATE VIEW [IF NOT EXISTS] [db_name.]view_name
+   *   CREATE [TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
    *   [(column_name [COMMENT column_comment], ...) ]
    *   [COMMENT view_comment]
    *   [TBLPROPERTIES (property_name = property_value, ...)]
@@ -958,7 +958,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         ctx.query,
         Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
         ctx.EXISTS != null,
-        ctx.REPLACE != null
+        ctx.REPLACE != null,
+        ctx.TEMPORARY != null
       )
     }
   }
@@ -975,7 +976,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx.query,
       Map.empty,
       allowExist = false,
-      replace = true)
+      replace = true,
+      isTemporary = false)
   }
 
   /**
@@ -989,7 +991,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       query: QueryContext,
       properties: Map[String, String],
       allowExist: Boolean,
-      replace: Boolean): LogicalPlan = {
+      replace: Boolean,
+      isTemporary: Boolean): LogicalPlan = {
     val sql = Option(source(query))
     val tableDesc = CatalogTable(
       identifier = visitTableIdentifier(name),
@@ -1000,7 +1003,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       viewOriginalText = sql,
       viewText = sql,
       comment = comment)
-    CreateViewCommand(tableDesc, plan(query), allowExist, replace, command(ctx))
+    CreateViewCommand(tableDesc, plan(query), allowExist, replace, isTemporary, command(ctx))
   }
 
   /**

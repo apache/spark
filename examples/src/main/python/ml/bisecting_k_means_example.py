@@ -17,28 +17,29 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
 # $example on$
 from pyspark.ml.clustering import BisectingKMeans, BisectingKMeansModel
 from pyspark.mllib.linalg import VectorUDT, _convert_to_vector, Vectors
 from pyspark.mllib.linalg import Vectors
 from pyspark.sql.types import Row
 # $example off$
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 
 """
 A simple example demonstrating a bisecting k-means clustering.
 """
 
 if __name__ == "__main__":
-
-    sc = SparkContext(appName="PythonBisectingKMeansExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("PythonBisectingKMeansExample")\
+        .getOrCreate()
 
     # $example on$
-    data = sc.textFile("data/mllib/kmeans_data.txt")
-    parsed = data.map(lambda l: Row(features=Vectors.dense([float(x) for x in l.split(' ')])))
-    training = sqlContext.createDataFrame(parsed)
+    data = spark.read.text("data/mllib/kmeans_data.txt").rdd
+    parsed = data\
+        .map(lambda row: Row(features=Vectors.dense([float(x) for x in row.value.split(' ')])))
+    training = spark.createDataFrame(parsed)
 
     kmeans = BisectingKMeans().setK(2).setSeed(1).setFeaturesCol("features")
 
@@ -54,4 +55,4 @@ if __name__ == "__main__":
         print(center)
     # $example off$
 
-    sc.stop()
+    spark.stop()

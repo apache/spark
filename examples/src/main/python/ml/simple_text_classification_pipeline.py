@@ -17,11 +17,10 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import HashingTF, Tokenizer
-from pyspark.sql import Row, SQLContext
+from pyspark.sql import Row, SparkSession
 
 
 """
@@ -34,16 +33,18 @@ pipeline in Python. Run with:
 
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="SimpleTextClassificationPipeline")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("SimpleTextClassificationPipeline")\
+        .getOrCreate()
 
     # Prepare training documents, which are labeled.
-    LabeledDocument = Row("id", "text", "label")
-    training = sc.parallelize([(0, "a b c d e spark", 1.0),
-                               (1, "b d", 0.0),
-                               (2, "spark f g h", 1.0),
-                               (3, "hadoop mapreduce", 0.0)]) \
-        .map(lambda x: LabeledDocument(*x)).toDF()
+    training = spark.createDataFrame([
+        (0, "a b c d e spark", 1.0),
+        (1, "b d", 0.0),
+        (2, "spark f g h", 1.0),
+        (3, "hadoop mapreduce", 0.0)
+    ], ["id", "text", "label"])
 
     # Configure an ML pipeline, which consists of tree stages: tokenizer, hashingTF, and lr.
     tokenizer = Tokenizer(inputCol="text", outputCol="words")
@@ -55,12 +56,12 @@ if __name__ == "__main__":
     model = pipeline.fit(training)
 
     # Prepare test documents, which are unlabeled.
-    Document = Row("id", "text")
-    test = sc.parallelize([(4, "spark i j k"),
-                           (5, "l m n"),
-                           (6, "spark hadoop spark"),
-                           (7, "apache hadoop")]) \
-        .map(lambda x: Document(*x)).toDF()
+    test = spark.createDataFrame([
+        (4, "spark i j k"),
+        (5, "l m n"),
+        (6, "spark hadoop spark"),
+        (7, "apache hadoop")
+    ], ["id", "text"])
 
     # Make predictions on test documents and print columns of interest.
     prediction = model.transform(test)
@@ -68,4 +69,4 @@ if __name__ == "__main__":
     for row in selected.collect():
         print(row)
 
-    sc.stop()
+    spark.stop()
