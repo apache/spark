@@ -165,7 +165,7 @@ class DirectKafkaStreamSuite
     val kc = new KafkaConsumer(kafkaParams)
     kc.assign(Arrays.asList(topicPartition))
     def getLatestOffset(): Long = {
-      kc.seekToEnd(topicPartition)
+      kc.seekToEnd(Arrays.asList(topicPartition))
       kc.position(topicPartition)
     }
 
@@ -216,7 +216,7 @@ class DirectKafkaStreamSuite
     val kc = new KafkaConsumer(kafkaParams)
     kc.assign(Arrays.asList(topicPartition))
     def getLatestOffset(): Long = {
-      kc.seekToEnd(topicPartition)
+      kc.seekToEnd(Arrays.asList(topicPartition))
       kc.position(topicPartition)
     }
 
