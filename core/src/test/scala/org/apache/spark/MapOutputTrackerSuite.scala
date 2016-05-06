@@ -242,4 +242,33 @@ class MapOutputTrackerSuite extends SparkFunSuite {
     tracker.stop()
     rpcEnv.shutdown()
   }
+
+
+  test("getLocationsWithOverAllSituation with multiple outputs") {
+    val rpcEnv = createRpcEnv("test")
+    val tracker = new MapOutputTrackerMaster(conf)
+    tracker.trackerEndpoint = rpcEnv.setupEndpoint(MapOutputTracker.ENDPOINT_NAME,
+      new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf))
+    // Setup 4 map tasks
+    tracker.registerShuffle(10, 4)
+    tracker.registerMapOutput(10, 0, MapStatus(BlockManagerId("a", "hostA", 1000),
+      Array(1L,2L,3L,4L,5L,6L,7L)))
+    tracker.registerMapOutput(10, 1, MapStatus(BlockManagerId("b", "hostB", 1000),
+      Array(2L,8L,2L,5L,2L,2L,9L)))
+    tracker.registerMapOutput(10, 2, MapStatus(BlockManagerId("c", "hostC", 1000),
+      Array(3L,2L,7L,4L,2L,6L,1L)))
+    tracker.registerMapOutput(10, 3, MapStatus(BlockManagerId("c", "hostC", 1000),
+      Array(8L,5L,3L,4L,7L,2L,5L)))
+
+    val topLocs = tracker.getLocationsWithGlobalMode(10, 7)
+    assert(topLocs.nonEmpty)
+    assert(topLocs.get.size === 7)
+    assert(topLocs.get ===
+      Array(BlockManagerId("c", "hostC", 1000), BlockManagerId("c", "hostC", 1000), BlockManagerId("b", "hostB", 1000),
+        BlockManagerId("a", "hostA", 1000), BlockManagerId("a", "hostA", 1000), BlockManagerId("c", "hostC", 1000),
+        BlockManagerId("b", "hostB", 1000)))
+
+    tracker.stop()
+    rpcEnv.shutdown()
+  }
 }
