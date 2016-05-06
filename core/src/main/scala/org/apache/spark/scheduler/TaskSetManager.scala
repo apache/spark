@@ -730,15 +730,6 @@ private[spark] class TaskSetManager(
       addPendingTask(index)
     }
 
-    if (successful(index)) {
-      logInfo(
-        s"Task ${info.id} in stage ${taskSet.id} (TID $tid) failed, " +
-        "but another instance of the task has already succeeded, " +
-        "so not re-queuing the task to be re-executed.")
-    } else {
-      addPendingTask(index)
-    }
-
     if (!isZombie && state != TaskState.KILLED
         && reason.isInstanceOf[TaskFailedReason]
         && reason.asInstanceOf[TaskFailedReason].countTowardsTaskFailures) {
