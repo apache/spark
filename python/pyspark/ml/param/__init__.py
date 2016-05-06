@@ -282,7 +282,7 @@ class Params(Identifiable):
             values.append("undefined")
         valueStr = "(" + ", ".join(values) + ")"
         # Remove the default value from the doc string
-        docStr = re.sub(r'\(Default [\w\-\s]+?\)\Z', '', param.doc)
+        docStr = re.sub(r'\(Default .+?\)\Z', '', param.doc)
         return "%s: %s %s" % (param.name, docStr, valueStr)
 
     @since("1.4.0")
