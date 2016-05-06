@@ -73,5 +73,11 @@ private[spark] trait TaskScheduler {
    * @return An application ID
    */
   def applicationId(): String = appId
+  /**
+   * Get an application's attempt Id  associated with the job.
+   *
+   * @return An application's Attempt ID
+   */
+  def applicationAttemptId(): String = ""
 
 }
