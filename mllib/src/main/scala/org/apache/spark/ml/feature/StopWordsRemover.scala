@@ -17,9 +17,11 @@
 
 package org.apache.spark.ml.feature
 
+import java.util.Locale
+
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
-import org.apache.spark.ml.param.{BooleanParam, ParamMap, StringArrayParam}
+import org.apache.spark.ml.param.{BooleanParam, Param, ParamMap, StringArrayParam}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -73,7 +75,22 @@ class StopWordsRemover(override val uid: String)
   /** @group getParam */
   def getCaseSensitive: Boolean = $(caseSensitive)
 
-  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"), caseSensitive -> false)
+  /**
+   * Locale for doing a case sensitive comparison
+   * Default: English locale ("en")
+   * @group param
+   */
+  val locale: Param[String] = new Param[String](this, "locale",
+    "locale for doing a case sensitive comparison")
+
+  /** @group setParam */
+  def setLocale(value: String): this.type = set(locale, value)
+
+  /** @group getParam */
+  def getLocale: String = $(locale)
+
+  setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"),
+    caseSensitive -> false, locale -> "en")
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
@@ -81,14 +98,14 @@ class StopWordsRemover(override val uid: String)
     val t = if ($(caseSensitive)) {
       val stopWordsSet = $(stopWords).toSet
       udf { terms: Seq[String] =>
-        terms.filter(s => !stopWordsSet.contains(s))
+        terms.filterNot(stopWordsSet.contains)
       }
     } else {
-      // TODO: support user locale (SPARK-15064)
-      val toLower = (s: String) => if (s != null) s.toLowerCase else s
+      val loadedLocale = StopWordsRemover.loadLocale($(locale))
+      val toLower = (s: String) => if (s != null) s.toLowerCase(loadedLocale) else s
       val lowerStopWords = $(stopWords).map(toLower(_)).toSet
       udf { terms: Seq[String] =>
-        terms.filter(s => !lowerStopWords.contains(toLower(s)))
+        terms.filterNot(term => lowerStopWords.contains(toLower(term)))
       }
     }
     val metadata = outputSchema($(outputCol)).metadata
@@ -109,6 +126,7 @@ class StopWordsRemover(override val uid: String)
 object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
 
   private[feature]
+  def loadLocale(value : String) = new Locale(value)
   val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
     "hungarian", "italian", "norwegian", "portuguese", "russian", "spanish", "swedish", "turkish")
 

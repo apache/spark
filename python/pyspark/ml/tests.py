@@ -424,6 +424,13 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
+        # with locale
+        stopwords = ["BİRİ"]
+        dataset = sqlContext.createDataFrame([Row(input=["biri"])])
+        stopWordRemover.setStopWords(stopwords).setLocale("tr")
+        self.assertEqual(stopWordRemover.getStopWords(), stopwords)
+        transformedDF = stopWordRemover.transform(dataset)
+        self.assertEqual(transformedDF.head().output, [])
 
     def test_count_vectorizer_with_binary(self):
         sqlContext = SQLContext(self.sc)

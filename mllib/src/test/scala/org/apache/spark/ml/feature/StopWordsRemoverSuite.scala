@@ -98,6 +98,7 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
+      .setLocale("tr")
     val dataSet = sqlContext.createDataFrame(Seq(
       (Seq("acaba", "ama", "biri"), Seq()),
       (Seq("hep", "her", "scala"), Seq("scala"))
