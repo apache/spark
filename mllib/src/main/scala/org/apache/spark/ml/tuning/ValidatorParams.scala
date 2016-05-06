@@ -25,15 +25,15 @@ import org.apache.spark.SparkContext
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.{Param, ParamMap, ParamPair, Params}
-import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, MetaAlgorithmReadWrite,
-  MLWritable}
+import org.apache.spark.ml.param.shared.HasSeed
+import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter, MetaAlgorithmReadWrite, MLWritable}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
 import org.apache.spark.sql.types.StructType
 
 /**
  * Common params for [[TrainValidationSplitParams]] and [[CrossValidatorParams]].
  */
-private[ml] trait ValidatorParams extends Params {
+private[ml] trait ValidatorParams extends HasSeed with Params {
 
   /**
    * param for the estimator to be validated
@@ -137,7 +137,8 @@ private[ml] object ValidatorParams {
     }
 
     val jsonParams = validatorSpecificParams ++ List(
-      "estimatorParamMaps" -> parse(estimatorParamMapsJson))
+      "estimatorParamMaps" -> parse(estimatorParamMapsJson),
+      "seed" -> parse(instance.seed.jsonEncode(instance.getSeed)))
 
     DefaultParamsWriter.saveMetadata(instance, path, sc, extraMetadata, Some(jsonParams))
 

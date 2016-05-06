@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.shuffle.FetchFailedException
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2}
 
 
 class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
@@ -183,18 +184,19 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
       private val myCleaner = new SaveAccumContextCleaner(this)
       override def cleaner: Option[ContextCleaner] = Some(myCleaner)
     }
-    assert(AccumulatorContext.originals.isEmpty)
+    assert(AccumulatorContext.numAccums == 0)
     sc.parallelize(1 to 100).map { i => (i, i) }.reduceByKey { _ + _ }.count()
     val numInternalAccums = TaskMetrics.empty.internalAccums.length
     // We ran 2 stages, so we should have 2 sets of internal accumulators, 1 for each stage
-    assert(AccumulatorContext.originals.size === numInternalAccums * 2)
+    assert(AccumulatorContext.numAccums === numInternalAccums * 2)
     val accumsRegistered = sc.cleaner match {
       case Some(cleaner: SaveAccumContextCleaner) => cleaner.accumsRegisteredForCleanup
       case _ => Seq.empty[Long]
     }
     // Make sure the same set of accumulators is registered for cleanup
     assert(accumsRegistered.size === numInternalAccums * 2)
-    assert(accumsRegistered.toSet === AccumulatorContext.originals.keySet().asScala)
+    assert(accumsRegistered.toSet.size === AccumulatorContext.numAccums)
+    accumsRegistered.foreach(id => assert(AccumulatorContext.get(id) != None))
   }
 
   /**
@@ -212,7 +214,7 @@ class InternalAccumulatorSuite extends SparkFunSuite with LocalSparkContext {
   private class SaveAccumContextCleaner(sc: SparkContext) extends ContextCleaner(sc) {
     private val accumsRegistered = new ArrayBuffer[Long]
 
-    override def registerAccumulatorForCleanup(a: NewAccumulator[_, _]): Unit = {
+    override def registerAccumulatorForCleanup(a: AccumulatorV2[_, _]): Unit = {
       accumsRegistered += a.id
       super.registerAccumulatorForCleanup(a)
     }

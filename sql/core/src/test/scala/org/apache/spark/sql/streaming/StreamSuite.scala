@@ -19,10 +19,10 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.util.ManualClock
 
 class StreamSuite extends StreamTest with SharedSQLContext {
 
@@ -34,11 +34,11 @@ class StreamSuite extends StreamTest with SharedSQLContext {
 
     testStream(mapped)(
       AddData(inputData, 1, 2, 3),
-      StartStream,
+      StartStream(),
       CheckAnswer(2, 3, 4),
       StopStream,
       AddData(inputData, 4, 5, 6),
-      StartStream,
+      StartStream(),
       CheckAnswer(2, 3, 4, 5, 6, 7))
   }
 
@@ -70,7 +70,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       CheckAnswer(1, 2, 3, 4, 5, 6),
       StopStream,
       AddData(inputData1, 7),
-      StartStream,
+      StartStream(),
       AddData(inputData2, 8),
       CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8))
   }
@@ -135,6 +135,22 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       val ds = streamInput.toDS.map { i => i }.sort()
       testStream(ds)()
     }
+  }
+
+  // This would fail for now -- error is "Timed out waiting for stream"
+  // Root cause is that data generated in batch 0 may not get processed in batch 1
+  // Let's enable this after SPARK-14942: Reduce delay between batch construction and execution
+  ignore("minimize delay between batch construction and execution") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDS())(
+      StartStream(ProcessingTime("10 seconds"), new ManualClock),
+      /* -- batch 0 ----------------------- */
+      AddData(inputData, 1),
+      AddData(inputData, 2),
+      AddData(inputData, 3),
+      AdvanceManualClock(10 * 1000), // 10 seconds
+      /* -- batch 1 ----------------------- */
+      CheckAnswer(1, 2, 3))
   }
 }
 

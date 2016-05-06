@@ -18,8 +18,7 @@
 package org.apache.spark.ml.linalg
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.catalyst.util.GenericArrayData
+import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, UnsafeArrayData}
 import org.apache.spark.sql.types._
 
 /**
@@ -53,9 +52,9 @@ private[ml] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setByte(0, 0)
         row.setInt(1, sm.numRows)
         row.setInt(2, sm.numCols)
-        row.update(3, new GenericArrayData(sm.colPtrs.map(_.asInstanceOf[Any])))
-        row.update(4, new GenericArrayData(sm.rowIndices.map(_.asInstanceOf[Any])))
-        row.update(5, new GenericArrayData(sm.values.map(_.asInstanceOf[Any])))
+        row.update(3, UnsafeArrayData.fromPrimitiveArray(sm.colPtrs))
+        row.update(4, UnsafeArrayData.fromPrimitiveArray(sm.rowIndices))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(sm.values))
         row.setBoolean(6, sm.isTransposed)
 
       case dm: DenseMatrix =>
@@ -64,7 +63,7 @@ private[ml] class MatrixUDT extends UserDefinedType[Matrix] {
         row.setInt(2, dm.numCols)
         row.setNullAt(3)
         row.setNullAt(4)
-        row.update(5, new GenericArrayData(dm.values.map(_.asInstanceOf[Any])))
+        row.update(5, UnsafeArrayData.fromPrimitiveArray(dm.values))
         row.setBoolean(6, dm.isTransposed)
     }
     row

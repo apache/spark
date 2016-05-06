@@ -138,6 +138,12 @@ test_that("sparkJars sparkPackages as comma-separated strings", {
 
   # check normalizePath
   f <- dir()[[1]]
-  expect_that(processSparkJars(f), not(gives_warning()))
+  expect_warning(processSparkJars(f), NA)
   expect_match(processSparkJars(f), f)
+})
+
+test_that("spark.lapply should perform simple transforms", {
+  sc <- sparkR.init()
+  doubled <- spark.lapply(sc, 1:10, function(x) { 2 * x })
+  expect_equal(doubled, as.list(2 * 1:10))
 })

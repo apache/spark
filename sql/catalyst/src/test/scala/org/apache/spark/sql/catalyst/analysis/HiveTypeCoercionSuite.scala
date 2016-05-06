@@ -488,14 +488,6 @@ class HiveTypeCoercionSuite extends PlanTest {
     assert(r1.right.isInstanceOf[Project])
     assert(r2.left.isInstanceOf[Project])
     assert(r2.right.isInstanceOf[Project])
-
-    val r3 = wt(Except(firstTable, firstTable)).asInstanceOf[Except]
-    checkOutput(r3.left, Seq(IntegerType, DecimalType.SYSTEM_DEFAULT, ByteType, DoubleType))
-    checkOutput(r3.right, Seq(IntegerType, DecimalType.SYSTEM_DEFAULT, ByteType, DoubleType))
-
-    // Check if no Project is added
-    assert(r3.left.isInstanceOf[LocalRelation])
-    assert(r3.right.isInstanceOf[LocalRelation])
   }
 
   test("WidenSetOperationTypes for union") {
