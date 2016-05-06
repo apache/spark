@@ -382,6 +382,39 @@ class BlockMatrix @Since("1.3.0") (
     }
   }
 
+  /** Block (i,j) --> Set of destination partitions */
+  private type BlockDestinations = Map[(Int, Int), Set[Int]]
+
+  /**
+   * Simulate the multiplication with just block indices in order to cut costs on communication,
+   * when we are actually shuffling the matrices.
+   * The `colsPerBlock` of this matrix must equal the `rowsPerBlock` of `other`.
+   * Exposed for tests.
+   *
+   * @param other The BlockMatrix to multiply
+   * @param partitioner The partitioner that will be used for the resulting matrix `C = A * B`
+   * @return A tuple of [[BlockDestinations]]. The first element is the Map of the set of partitions
+   *         that we need to shuffle each blocks of `this`, and the second element is the Map for
+   *         `other`.
+   */
+  private[distributed] def simulateMultiply(
+      other: BlockMatrix,
+      partitioner: GridPartitioner): (BlockDestinations, BlockDestinations) = {
+    val leftMatrix = blockInfo.keys.collect() // blockInfo should already be cached
+    val rightMatrix = other.blocks.keys.collect()
+    val leftDestinations = leftMatrix.map { case (rowIndex, colIndex) =>
+      val rightCounterparts = rightMatrix.filter(_._1 == colIndex)
+      val partitions = rightCounterparts.map(b => partitioner.getPartition((rowIndex, b._2)))
+      ((rowIndex, colIndex), partitions.toSet)
+    }.toMap
+    val rightDestinations = rightMatrix.map { case (rowIndex, colIndex) =>
+      val leftCounterparts = leftMatrix.filter(_._2 == rowIndex)
+      val partitions = leftCounterparts.map(b => partitioner.getPartition((b._1, colIndex)))
+      ((rowIndex, colIndex), partitions.toSet)
+    }.toMap
+    (leftDestinations, rightDestinations)
+  }
+
   /**
    * Adds the given block matrix `other` to `this` block matrix: `this + other`.
    * The matrices must have the same size and matching `rowsPerBlock` and `colsPerBlock`
