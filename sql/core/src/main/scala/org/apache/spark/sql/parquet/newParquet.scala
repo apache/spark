@@ -122,7 +122,7 @@ private[sql] class ParquetRelation2(
     .map(DataType.fromJson(_).asInstanceOf[StructType])
 
   private lazy val metadataCache: MetadataCache = {
-    val meta = new MetadataCache
+    val meta = new MetadataCache()
     meta.refresh()
     meta
   }
@@ -249,8 +249,6 @@ private[sql] class ParquetRelation2(
     // Create the function to set input paths at the driver side.
     val setInputPaths = ParquetRelation2.initializeDriverSideJobFunc(inputFiles) _
 
-    val footers = inputFiles.map(f => metadataCache.footers(f.getPath))
-
     Utils.withDummyCallSite(sqlContext.sparkContext) {
       // TODO Stop using `FilteringParquetRowInputFormat` and overriding `getPartition`.
       // After upgrading to Parquet 1.6.0, we should be able to stop caching `FileStatus` objects
@@ -277,12 +275,6 @@ private[sql] class ParquetRelation2(
             f.getAccessTime, f.getPermission, f.getOwner, f.getGroup, pathWithEscapedAuthority)
         }.toSeq
 
-        @transient val cachedFooters = footers.map { f =>
-          // In order to encode the authority of a Path containing special characters such as /,
-          // we need to use the string returned by the URI of the path to create a new Path.
-          new Footer(escapePathUserInfo(f.getFile), f.getParquetMetadata)
-        }.toSeq
-
         private def escapePathUserInfo(path: Path): Path = {
           val uri = path.toUri
           new Path(new URI(
@@ -295,7 +287,6 @@ private[sql] class ParquetRelation2(
           val inputFormat = if (cacheMetadata) {
             new FilteringParquetRowInputFormat {
               override def listStatus(jobContext: JobContext): JList[FileStatus] = cachedStatuses
-              override def getFooters(jobContext: JobContext): JList[Footer] = cachedFooters
             }
           } else {
             new FilteringParquetRowInputFormat
@@ -313,6 +304,8 @@ private[sql] class ParquetRelation2(
   }
 
   private class MetadataCache {
+    import ParquetRelation2.RelationMemo
+
     // `FileStatus` objects of all "_metadata" files.
     private var metadataStatuses: Array[FileStatus] = _
 
@@ -320,7 +313,7 @@ private[sql] class ParquetRelation2(
     private var commonMetadataStatuses: Array[FileStatus] = _
 
     // Parquet footer cache.
-    var footers: Map[Path, Footer] = _
+    var footers: RelationMemo[Map[Path, Footer]] = _
 
     // `FileStatus` objects of all data files (Parquet part-files).
     var dataStatuses: Array[FileStatus] = _
@@ -347,8 +340,9 @@ private[sql] class ParquetRelation2(
       commonMetadataStatuses =
         leaves.filter(_.getPath.getName == ParquetFileWriter.PARQUET_COMMON_METADATA_FILE)
 
-      footers = {
-        val conf = SparkHadoopUtil.get.conf
+      val conf = SparkHadoopUtil.get.conf
+
+      def getFooters() = {
         val taskSideMetaData = conf.getBoolean(ParquetInputFormat.TASK_SIDE_METADATA, true)
         val rawFooters = if (shouldMergeSchemas) {
           ParquetFileReader.readAllFootersInParallel(
@@ -361,13 +355,15 @@ private[sql] class ParquetRelation2(
         rawFooters.map(footer => footer.getFile -> footer).toMap
       }
 
+      footers = new RelationMemo(getFooters())
+
       // If we already get the schema, don't need to re-compute it since the schema merging is
       // time-consuming.
       if (dataSchema == null) {
         dataSchema = {
           val dataSchema0 = maybeDataSchema
-            .orElse(readSchema())
             .orElse(maybeMetastoreSchema)
+            .orElse(readSchema())
             .getOrElse(throw new AnalysisException(
               s"Failed to discover schema of Parquet file(s) in the following location(s):\n" +
                 paths.mkString("\n\t")))
@@ -431,12 +427,20 @@ private[sql] class ParquetRelation2(
         "No schema defined, " +
           s"and no Parquet data file or summary file found under ${paths.mkString(", ")}.")
 
-      ParquetRelation2.readSchema(filesToTouch.map(f => footers.apply(f.getPath)), sqlContext)
+      ParquetRelation2.readSchema(filesToTouch.map(f => footers.value.apply(f.getPath)), sqlContext)
     }
   }
 }
 
 private[sql] object ParquetRelation2 extends Logging {
+
+  // TODO: Move to utils
+  private[sql] class RelationMemo[T](memo: => T) {
+    lazy val value = {
+      memo
+    }
+  }
+
   // Whether we should merge schemas collected from all Parquet part-files.
   private[sql] val MERGE_SCHEMA = "mergeSchema"
 

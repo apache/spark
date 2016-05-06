@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.sources
 
-import scala.collection.mutable
+import scala.collection.{AbstractIterator, mutable}
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
@@ -379,31 +379,25 @@ abstract class HadoopFsRelation private[sql](maybePartitionSpec: Option[Partitio
     var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
 
     def refresh(): Unit = {
-      // We don't filter files/directories whose name start with "_" except "_temporary" here, as
-      // specific data sources may take advantages over them (e.g. Parquet _metadata and
-      // _common_metadata files). "_temporary" directories are explicitly ignored since failed
-      // tasks/jobs may leave partial/corrupted data files there.
-      def listLeafFilesAndDirs(fs: FileSystem, status: FileStatus): Set[FileStatus] = {
-        if (status.getPath.getName.toLowerCase == "_temporary") {
-          Set.empty
-        } else {
-          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDir)
-          val leafDirs = if (dirs.isEmpty) Set(status) else Set.empty[FileStatus]
-          files.toSet ++ leafDirs ++ dirs.flatMap(dir => listLeafFilesAndDirs(fs, dir))
-        }
-      }
 
       leafFiles.clear()
 
-      val statuses = paths.flatMap { path =>
+      val statuses = paths.par.flatMap { path =>
         val hdfsPath = new Path(path)
         val fs = hdfsPath.getFileSystem(hadoopConf)
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-        Try(fs.getFileStatus(qualified)).toOption.toArray.flatMap(listLeafFilesAndDirs(fs, _))
+        val it = fs.listFiles(qualified, true)
+        val its = new AbstractIterator[FileStatus] {
+          def hasNext: Boolean = it.hasNext
+          def next(): FileStatus = {
+              it.next()
+          }
+        }
+        its
       }.filterNot { status =>
         // SPARK-8037: Ignores files like ".DS_Store" and other hidden files/directories
         status.getPath.getName.startsWith(".")
-      }
+      }.toArray
 
       val files = statuses.filterNot(_.isDir)
       leafFiles ++= files.map(f => f.getPath -> f).toMap
