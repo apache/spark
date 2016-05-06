@@ -106,6 +106,13 @@ class SessionCatalog(
     }
   }
 
+  protected[this] def requireTableExists(name: TableIdentifier): Unit = {
+    if (!tableExists(name)) {
+      val db = name.database.getOrElse(currentDb)
+      throw new NoSuchTableException(db = db, table = name.table)
+    }
+  }
+
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -194,20 +201,23 @@ class SessionCatalog(
   def alterTable(tableDefinition: CatalogTable): Unit = {
     val db = tableDefinition.identifier.database.getOrElse(currentDb)
     val table = formatTableName(tableDefinition.identifier.table)
-    val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
     requireDbExists(db)
+    requireTableExists(tableIdentifier)
     externalCatalog.alterTable(db, newTableDefinition)
   }
 
   /**
    * Retrieve the metadata of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
+   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
     requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.getTable(db, table)
   }
 
@@ -226,7 +236,7 @@ class SessionCatalog(
   /**
    * Load files stored in given path into an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
+   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
    */
   def loadTable(
       name: TableIdentifier,
@@ -235,13 +245,14 @@ class SessionCatalog(
       holdDDLTime: Boolean): Unit = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
+    requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime)
   }
 
   /**
    * Load files stored in given path into the partition of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[AnalysisException]] is thrown.
+   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
    */
   def loadPartition(
       name: TableIdentifier,
@@ -253,6 +264,7 @@ class SessionCatalog(
       isSkewedStoreAsSubdir: Boolean): Unit = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
+    requireTableExists(name)
     externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
       inheritTableSpecs, isSkewedStoreAsSubdir)
   }
@@ -277,7 +289,7 @@ class SessionCatalog(
       overrideIfExists: Boolean): Unit = {
     val table = formatTableName(name)
     if (tempTables.contains(table) && !overrideIfExists) {
-      throw new AlreadyExistTempFunctionException(name)
+      throw new AlreadyExistTempTableException(name)
     }
     tempTables.put(table, tableDefinition)
   }
@@ -304,6 +316,7 @@ class SessionCatalog(
       if (tableExists(newName)) {
         throw new AlreadyExistTableException(db = db, table = newTableName)
       }
+      requireTableExists(oldName)
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
       val table = tempTables(oldTableName)
@@ -369,7 +382,6 @@ class SessionCatalog(
   def tableExists(name: TableIdentifier): Boolean = {
     val db = name.database.getOrElse(currentDb)
     val table = formatTableName(name.table)
-    requireDbExists(db)
     if (name.database.isDefined || !tempTables.contains(table)) {
       externalCatalog.tableExists(db, table)
     } else {
@@ -455,6 +467,7 @@ class SessionCatalog(
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     requireDbExists(db)
+    requireTableExists(tableName)
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
   }
 
@@ -469,6 +482,7 @@ class SessionCatalog(
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     requireDbExists(db)
+    requireTableExists(tableName)
     externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
@@ -485,6 +499,7 @@ class SessionCatalog(
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     requireDbExists(db)
+    requireTableExists(tableName)
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -501,6 +516,7 @@ class SessionCatalog(
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     requireDbExists(db)
+    requireTableExists(tableName)
     externalCatalog.alterPartitions(db, table, parts)
   }
 
@@ -512,6 +528,7 @@ class SessionCatalog(
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     requireDbExists(db)
+    requireTableExists(tableName)
     externalCatalog.getPartition(db, table, spec)
   }
 
@@ -528,6 +545,7 @@ class SessionCatalog(
     val db = tableName.database.getOrElse(currentDb)
     val table = formatTableName(tableName.table)
     requireDbExists(db)
+    requireTableExists(tableName)
     externalCatalog.listPartitions(db, table, partialSpec)
   }
 
@@ -550,6 +568,7 @@ class SessionCatalog(
    */
   def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
     val db = funcDefinition.identifier.database.getOrElse(currentDb)
+    requireDbExists(db)
     val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (!functionExists(identifier)) {
@@ -565,6 +584,7 @@ class SessionCatalog(
    */
   def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
     val db = name.database.getOrElse(currentDb)
+    requireDbExists(db)
     val identifier = name.copy(database = Some(db))
     if (functionExists(identifier)) {
       // TODO: registry should just take in FunctionIdentifier for type safety
@@ -669,6 +689,7 @@ class SessionCatalog(
       .orElse(functionRegistry.lookupFunction(qualifiedName.unquotedString))
       .getOrElse {
         val db = qualifiedName.database.get
+        requireDbExists(db)
         if (externalCatalog.functionExists(db, name.funcName)) {
           val metadata = externalCatalog.getFunction(db, name.funcName)
           new ExpressionInfo(metadata.className, qualifiedName.unquotedString)
