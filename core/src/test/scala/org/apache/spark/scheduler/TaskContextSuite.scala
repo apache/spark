@@ -193,10 +193,8 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     TaskMetricsSuite.assertUpdatesEquals(accumUpdates2.takeRight(1), Seq(acc2))
   }
 
-  test("only updated accumulators will be sent back to driver") {
+  test("only updated internal accumulators will be sent back to driver") {
     sc = new SparkContext("local", "test")
-    val acc1 = AccumulatorSuite.createLongAccum("x")
-    val acc2 = AccumulatorSuite.createLongAccum("y")
     // Create a dummy task. We won't end up running this; we just want to collect
     // accumulator updates from it.
     val taskMetrics = TaskMetrics.empty
@@ -206,14 +204,16 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
         new Properties,
         SparkEnv.get.metricsSystem,
         taskMetrics)
-      taskMetrics.registerAccumulator(acc1)
-      taskMetrics.registerAccumulator(acc2)
+      taskMetrics.incMemoryBytesSpilled(10)
       override def runTask(tc: TaskContext): Int = 0
     }
-    acc1.add(1)
     val updatedAccums = task.collectAccumulatorUpdates()
-    assert(updatedAccums.map(_.id).contains(acc1.id))
-    assert(!updatedAccums.map(_.id).contains(acc2.id))
+    assert(updatedAccums.length == 2)
+    // the RESULT_SIZE accumulator will be sent back anyway.
+    assert(updatedAccums(0).name == Some(InternalAccumulator.RESULT_SIZE))
+    assert(updatedAccums(0).value == 0)
+    assert(updatedAccums(1).name == Some(InternalAccumulator.MEMORY_BYTES_SPILLED))
+    assert(updatedAccums(1).value == 10)
   }
 
   test("localProperties are propagated to executors correctly") {
