@@ -1,0 +1,18 @@
+{
+    "contents" : "#\n# Author:   Daniel Emaasit (@emaasit)\n# Purpose: This script shows how to install SparkR onto your workstation/PC\n#          and initialize a spark context and a SparkSQL context\n# Date:    06/04/2015\n#\n\n\n# Install SparkR from CRAN\ninstall.packages(\"SparkR\")\n\n## OR Install the dev version from Github\ninstall.packages(devtools)\ndevtools::install_github(\"amplab-extras/SparkR-pkg\", subdir=\"pkg\")\n\n# Load SparkR onto your PC\nlibrary(SparkR)\n\n## Initialize SparkContext on your local PC\nsc <- sparkR.init(master = \"local\", appName = \"MyApp\")\n\n## Initialize SQLContext\nsqlCtx <- SparkRSQL.init(sc)",
+    "created" : 1433379543782.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "4169040924",
+    "id" : "B3476473",
+    "lastKnownWriteTime" : 1433413654,
+    "path" : "C:/Users/Emaasit/Dropbox/BigData/ApacheSpark/spark/examples/src/main/r/0-getting-started.R",
+    "project_path" : "examples/src/main/r/0-getting-started.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "type" : "r_source"
+}
