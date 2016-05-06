@@ -67,10 +67,10 @@ class LassoSuite extends FunSuite with LocalSparkContext {
     val validationRDD  = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictScore(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictScore(row.features)), validationData)
   }
 
   test("Lasso local random SGD with initial weights") {
@@ -110,10 +110,10 @@ class LassoSuite extends FunSuite with LocalSparkContext {
     val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictScore(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictScore(row.features)), validationData)
   }
 }
 
@@ -129,6 +129,6 @@ class LassoClusterSuite extends FunSuite with LocalClusterSparkContext {
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
     val model = LassoWithSGD.train(points, 2)
-    val predictions = model.predict(points.map(_.features))
+    val predictions = model.predictScore(points.map(_.features))
   }
 }

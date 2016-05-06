@@ -131,7 +131,7 @@ object BinaryClassification {
           .setNumIterations(params.numIterations)
           .setUpdater(updater)
           .setRegParam(params.regParam)
-        algorithm.run(training).clearThreshold()
+        algorithm.run(training)
       case SVM =>
         val algorithm = new SVMWithSGD()
         algorithm.optimizer
@@ -139,10 +139,10 @@ object BinaryClassification {
           .setStepSize(params.stepSize)
           .setUpdater(updater)
           .setRegParam(params.regParam)
-        algorithm.run(training).clearThreshold()
+        algorithm.run(training)
     }
 
-    val prediction = model.predict(test.map(_.features))
+    val prediction = model.predictClass(test.map(_.features))
     val predictionAndLabel = prediction.zip(test.map(_.label))
 
     val metrics = new BinaryClassificationMetrics(predictionAndLabel)

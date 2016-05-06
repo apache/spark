@@ -91,10 +91,10 @@ class NaiveBayesSuite extends FunSuite with LocalSparkContext {
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictClass(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictClass(row.features)), validationData)
   }
 
   test("detect negative values") {
@@ -139,6 +139,6 @@ class NaiveBayesClusterSuite extends FunSuite with LocalClusterSparkContext {
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
     val model = NaiveBayes.train(examples)
-    val predictions = model.predict(examples.map(_.features))
+    val predictions = model.predictClass(examples.map(_.features))
   }
 }

@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils._
+import org.apache.spark.api.java.JavaRDD
 
 /**
  * :: DeveloperApi ::
@@ -45,7 +46,10 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param weightMatrix Column vector containing the weights of the model
    * @param intercept Intercept of the model.
    */
-  protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
+  protected def computeScore(
+      dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double = {
+    weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
+  }
 
   /**
    * Predict values for the given data set using the model trained.
@@ -53,6 +57,47 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
    * @param testData RDD representing data points to be predicted
    * @return RDD[Double] where each entry contains the corresponding prediction
    */
+  def predictScore(testData: RDD[Vector]): RDD[Double] = {
+    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
+    // and intercept is needed.
+    val localWeights = weights
+    val bcWeights = testData.context.broadcast(localWeights)
+    val localIntercept = intercept
+    testData.mapPartitions { iter =>
+      val w = bcWeights.value
+      iter.map(v => computeScore(v, w, localIntercept))
+    }
+  }
+
+  /**
+   * Predict values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double prediction from the trained model
+   */
+  def predictScore(testData: Vector): Double = {
+    computeScore(testData, weights, intercept)
+  }
+
+  /**
+   * : Deprecated :
+   * Predict the result given a data point and the weights learned.
+   *
+   * @param dataMatrix Row vector containing the features for this data point
+   * @param weightMatrix Column vector containing the weights of the model
+   * @param intercept Intercept of the model.
+   */
+  @Deprecated
+  protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector, intercept: Double): Double
+
+  /**
+   * : Deprecated :
+   * Predict values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding prediction
+   */
+  @Deprecated
   def predict(testData: RDD[Vector]): RDD[Double] = {
     // A small optimization to avoid serializing the entire model. Only the weightsMatrix
     // and intercept is needed.
@@ -66,14 +111,23 @@ abstract class GeneralizedLinearModel(val weights: Vector, val intercept: Double
   }
 
   /**
+   * : Deprecated :
    * Predict values for a single data point using the model trained.
    *
    * @param testData array representing a single data point
    * @return Double prediction from the trained model
    */
+  @Deprecated
   def predict(testData: Vector): Double = {
     predictPoint(testData, weights, intercept)
   }
+
+  /**
+   * DEPRECATED: Use predictScore(...) instead
+   */
+  @Deprecated
+  def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
+    predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }
 
 /**

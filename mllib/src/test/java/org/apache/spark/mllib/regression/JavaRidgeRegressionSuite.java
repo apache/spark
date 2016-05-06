@@ -48,7 +48,7 @@ public class JavaRidgeRegressionSuite implements Serializable {
   double predictionError(List<LabeledPoint> validationData, RidgeRegressionModel model) {
     double errorSum = 0;
     for (LabeledPoint point: validationData) {
-      Double prediction = model.predict(point.features());
+      Double prediction = model.predictScore(point.features());
       errorSum += (prediction - point.label()) * (prediction - point.label());
     }
     return errorSum / validationData.size();

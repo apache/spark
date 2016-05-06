@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
@@ -33,45 +32,34 @@ import org.apache.spark.rdd.RDD
 class LogisticRegressionModel (
     override val weights: Vector,
     override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
+  extends BinaryClassificationModel(weights, intercept) with ProbabilisticClassificationModel {
 
-  private var threshold: Option[Double] = Some(0.5)
+  protected def computeProbability(value: Double) = {
+    1.0 / (1.0 + math.exp(-value))
+  }
 
-  /**
-   * :: Experimental ::
-   * Sets the threshold that separates positive predictions from negative predictions. An example
-   * with prediction score greater than or equal to this threshold is identified as an positive,
-   * and negative otherwise. The default value is 0.5.
-   */
-  @Experimental
-  def setThreshold(threshold: Double): this.type = {
-    this.threshold = Some(threshold)
-    this
+  def predictProbability(testData: RDD[Vector]): RDD[Double] = {
+    predictScore(testData).map(computeProbability)
+  }
+
+  def predictProbability(testData: Vector): Double = {
+    computeProbability(predictScore(testData))
   }
 
   /**
-   * :: Experimental ::
-   * Clears the threshold so that `predict` will output raw prediction scores.
+   * DEPRECATED: Use predictProbability(...) or predictClass(...) instead
    */
-  @Experimental
-  def clearThreshold(): this.type = {
-    threshold = None
-    this
-  }
-
+  @Deprecated
   override protected def predictPoint(dataMatrix: Vector, weightMatrix: Vector,
-      intercept: Double) = {
-    val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-    val score = 1.0 / (1.0 + math.exp(-margin))
-    threshold match {
-      case Some(t) => if (score < t) 0.0 else 1.0
-      case None => score
-    }
+                                      intercept: Double) = {
+    if (useThreshold) predictClass(dataMatrix)
+    else predictProbability(dataMatrix)
   }
 }
 
 /**
- * Train a classification model for Logistic Regression using Stochastic Gradient Descent.
+ * Train a classification model for Logistic Regression using limited-memory
+ * Broyden–Fletcher–Goldfarb–Shanno algorithm.
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  *
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.

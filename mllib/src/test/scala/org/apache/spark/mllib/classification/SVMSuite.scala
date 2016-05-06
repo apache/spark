@@ -91,17 +91,17 @@ class SVMSuite extends FunSuite with LocalSparkContext {
 
     // Test prediction on RDD.
 
-    var predictions = model.predict(validationRDD.map(_.features)).collect()
+    var predictions = model.predictClass(validationRDD.map(_.features)).collect()
     assert(predictions.count(_ == 0.0) != predictions.length)
 
     // High threshold makes all the predictions 0.0
     model.setThreshold(10000.0)
-    predictions = model.predict(validationRDD.map(_.features)).collect()
+    predictions = model.predictClass(validationRDD.map(_.features)).collect()
     assert(predictions.count(_ == 0.0) == predictions.length)
 
     // Low threshold makes all the predictions 1.0
     model.setThreshold(-10000.0)
-    predictions = model.predict(validationRDD.map(_.features)).collect()
+    predictions = model.predictClass(validationRDD.map(_.features)).collect()
     assert(predictions.count(_ == 1.0) == predictions.length)
   }
 
@@ -127,10 +127,10 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     val validationRDD  = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictClass(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictClass(row.features)), validationData)
   }
 
   test("SVM local random SGD with initial weights") {
@@ -159,10 +159,10 @@ class SVMSuite extends FunSuite with LocalSparkContext {
     val validationRDD  = sc.parallelize(validationData,2)
 
     // Test prediction on RDD.
-    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+    validatePrediction(model.predictClass(validationRDD.map(_.features)).collect(), validationData)
 
     // Test prediction on Array.
-    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+    validatePrediction(validationData.map(row => model.predictClass(row.features)), validationData)
   }
 
   test("SVM with invalid labels") {
@@ -205,6 +205,6 @@ class SVMClusterSuite extends FunSuite with LocalClusterSparkContext {
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
     val model = SVMWithSGD.train(points, 2)
-    val predictions = model.predict(points.map(_.features))
+    val predictions = model.predictClass(points.map(_.features))
   }
 }

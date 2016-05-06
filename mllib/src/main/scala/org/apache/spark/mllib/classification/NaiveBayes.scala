@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java.JavaRDD
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -54,17 +55,36 @@ class NaiveBayesModel private[mllib] (
     }
   }
 
-  override def predict(testData: RDD[Vector]): RDD[Double] = {
+  override def predictClass(testData: RDD[Vector]): RDD[Double] = {
     val bcModel = testData.context.broadcast(this)
     testData.mapPartitions { iter =>
       val model = bcModel.value
-      iter.map(model.predict)
+      iter.map(model.predictClass)
     }
   }
 
-  override def predict(testData: Vector): Double = {
+  override def predictClass(testData: Vector): Double = {
     labels(brzArgmax(brzPi + brzTheta * testData.toBreeze))
   }
+
+  /**
+   * DEPRECATED: Use predictClass(...) instead
+   */
+  @Deprecated
+  def predict(testData: RDD[Vector]): RDD[Double] = predictClass(testData)
+
+  /**
+   * DEPRECATED: Use predictClass(...) instead
+   */
+  @deprecated
+  def predict(testData: Vector): Double = predictClass(testData)
+
+  /**
+   * DEPRECATED: Use predictClass(...) instead
+   */
+  @Deprecated
+  def predict(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
+    predict(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
 }
 
 /**

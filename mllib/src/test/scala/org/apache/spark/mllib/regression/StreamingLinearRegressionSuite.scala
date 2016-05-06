@@ -75,7 +75,7 @@ class StreamingLinearRegressionSuite extends FunSuite with TestSuiteBase {
 
     // check accuracy of predictions
     val validationData = LinearDataGenerator.generateLinearInput(0.0, Array(10.0, 10.0), 100, 17)
-    validatePrediction(validationData.map(row => model.latestModel().predict(row.features)),
+    validatePrediction(validationData.map(row => model.latestModel().predictScore(row.features)),
       validationData)
   }
 

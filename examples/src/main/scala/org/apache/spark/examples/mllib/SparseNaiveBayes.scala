@@ -91,7 +91,7 @@ object SparseNaiveBayes {
 
     val model = new NaiveBayes().setLambda(params.lambda).run(training)
 
-    val prediction = model.predict(test.map(_.features))
+    val prediction = model.predictClass(test.map(_.features))
     val predictionAndLabel = prediction.zip(test.map(_.label))
     val accuracy = predictionAndLabel.filter(x => x._1 == x._2).count().toDouble / numTest
 

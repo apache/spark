@@ -61,7 +61,7 @@ class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
 
     val linearModel = linearReg.run(testRDD)
     val linearErr = predictionError(
-        linearModel.predict(validationRDD.map(_.features)).collect(), validationData)
+        linearModel.predictScore(validationRDD.map(_.features)).collect(), validationData)
 
     val ridgeReg = new RidgeRegressionWithSGD()
     ridgeReg.optimizer.setNumIterations(200)
@@ -69,7 +69,7 @@ class RidgeRegressionSuite extends FunSuite with LocalSparkContext {
                       .setStepSize(1.0)
     val ridgeModel = ridgeReg.run(testRDD)
     val ridgeErr = predictionError(
-        ridgeModel.predict(validationRDD.map(_.features)).collect(), validationData)
+        ridgeModel.predictScore(validationRDD.map(_.features)).collect(), validationData)
 
     // Ridge validation error should be lower than linear regression.
     assert(ridgeErr < linearErr,
@@ -89,6 +89,6 @@ class RidgeRegressionClusterSuite extends FunSuite with LocalClusterSparkContext
     // If we serialize data directly in the task closure, the size of the serialized task would be
     // greater than 1MB and hence Spark would throw an error.
     val model = RidgeRegressionWithSGD.train(points, 2)
-    val predictions = model.predict(points.map(_.features))
+    val predictions = model.predictScore(points.map(_.features))
   }
 }

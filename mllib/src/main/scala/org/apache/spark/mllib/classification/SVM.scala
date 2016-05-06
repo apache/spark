@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.regression._
@@ -31,44 +30,9 @@ import org.apache.spark.rdd.RDD
  * @param intercept Intercept computed for this model.
  */
 class SVMModel (
-    override val weights: Vector,
-    override val intercept: Double)
-  extends GeneralizedLinearModel(weights, intercept) with ClassificationModel with Serializable {
-
-  private var threshold: Option[Double] = Some(0.0)
-
-  /**
-   * :: Experimental ::
-   * Sets the threshold that separates positive predictions from negative predictions. An example
-   * with prediction score greater than or equal to this threshold is identified as an positive,
-   * and negative otherwise. The default value is 0.0.
-   */
-  @Experimental
-  def setThreshold(threshold: Double): this.type = {
-    this.threshold = Some(threshold)
-    this
-  }
-
-  /**
-   * :: Experimental ::
-   * Clears the threshold so that `predict` will output raw prediction scores.
-   */
-  @Experimental
-  def clearThreshold(): this.type = {
-    threshold = None
-    this
-  }
-
-  override protected def predictPoint(
-      dataMatrix: Vector,
-      weightMatrix: Vector,
-      intercept: Double) = {
-    val margin = weightMatrix.toBreeze.dot(dataMatrix.toBreeze) + intercept
-    threshold match {
-      case Some(t) => if (margin < t) 0.0 else 1.0
-      case None => margin
-    }
-  }
+                 override val weights: Vector,
+                 override val intercept: Double)
+  extends BinaryClassificationModel(weights, intercept) {
 }
 
 /**

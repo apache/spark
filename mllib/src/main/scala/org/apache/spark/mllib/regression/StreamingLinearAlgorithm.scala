@@ -105,7 +105,7 @@ abstract class StreamingLinearAlgorithm[
       logError(msg)
       throw new IllegalArgumentException(msg)
     }
-    data.map(model.predict)
+    data.map(model.predictScore)
   }
 
   /**
@@ -120,6 +120,6 @@ abstract class StreamingLinearAlgorithm[
       logError(msg)
       throw new IllegalArgumentException(msg)
     }
-    data.mapValues(model.predict)
+    data.mapValues(model.predictScore)
   }
 }

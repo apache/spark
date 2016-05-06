@@ -15,36 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.regression
+package org.apache.spark.mllib.classification
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.rdd.RDD
 
+/**
+ * :: Experimental ::
+ * Represents a probabilistic classification model that provides a probability
+ * distribution over a set of classes, rather than only predicting a class.
+ */
 @Experimental
-trait RegressionModel extends Serializable {
+trait ProbabilisticClassificationModel extends ClassificationModel {
   /**
-   * Predict values for the given data set using the model trained.
+   * Return probability for the prediction of the given data set using the model trained.
    *
-   * @param testData RDD representing data points to be predicted
-   * @return RDD[Double] where each entry contains the corresponding prediction
+   * @param testData RDD representing data points to be classified
+   * @return an RDD[Double] where each entry contains the corresponding prediction
    */
-  def predictScore(testData: RDD[Vector]): RDD[Double]
+  def predictProbability(testData: RDD[Vector]): RDD[Double]
 
   /**
-   * Predict values for a single data point using the model trained.
+   * Return probability for a single data point prediction using the model trained.
    *
    * @param testData array representing a single data point
-   * @return Double prediction from the trained model
+   * @return predicted category from the trained model
    */
-  def predictScore(testData: Vector): Double
-
-  /**
-   * Predict values for examples stored in a JavaRDD.
-   * @param testData JavaRDD representing data points to be predicted
-   * @return a JavaRDD[java.lang.Double] where each entry contains the corresponding prediction
-   */
-  def predictScore(testData: JavaRDD[Vector]): JavaRDD[java.lang.Double] =
-    predictScore(testData.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
+  def predictProbability(testData: Vector): Double
 }

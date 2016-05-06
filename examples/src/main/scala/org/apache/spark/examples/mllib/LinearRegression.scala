@@ -118,7 +118,7 @@ object LinearRegression extends App {
 
     val model = algorithm.run(training)
 
-    val prediction = model.predict(test.map(_.features))
+    val prediction = model.predictScore(test.map(_.features))
     val predictionAndLabel = prediction.zip(test.map(_.label))
 
     val loss = predictionAndLabel.map { case (p, l) =>

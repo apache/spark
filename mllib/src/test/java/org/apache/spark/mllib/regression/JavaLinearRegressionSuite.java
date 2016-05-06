@@ -48,7 +48,7 @@ public class JavaLinearRegressionSuite implements Serializable {
   int validatePrediction(List<LabeledPoint> validationData, LinearRegressionModel model) {
     int numAccurate = 0;
     for (LabeledPoint point: validationData) {
-        Double prediction = model.predict(point.features());
+        Double prediction = model.predictScore(point.features());
         // A prediction is off if the prediction is more than 0.5 away from expected value.
         if (Math.abs(prediction - point.label()) <= 0.5) {
             numAccurate++;
@@ -108,7 +108,7 @@ public class JavaLinearRegressionSuite implements Serializable {
         return v.features();
       }
     });
-    JavaRDD<Double> predictions = model.predict(vectors);
+    JavaRDD<Double> predictions = model.predictScore(vectors);
     // Should be able to get the first prediction.
     predictions.first();
   }
