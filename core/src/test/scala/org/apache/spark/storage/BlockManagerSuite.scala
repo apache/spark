@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -428,26 +429,37 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     store = makeBlockManager(2000)
     val a1 = new Array[Byte](400)
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-    val t1 = new Thread {
+    val lock1 = new CountDownLatch(1)
+    val lock2 = new CountDownLatch(1)
+
+    val t2 = new Thread {
       override def run() = {
-        store.memoryManager.synchronized {
-          Thread.sleep(1000)
-          val status = store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
-          assert(status == None, "this thread can not get block a1")
+        val info = store.getBlockInfo("a1")
+        info.synchronized {
+          store.pendingToRemove.put("a1", 1L)
+          lock1.countDown()
+          lock2.await()
+          store.pendingToRemove.remove("a1")
         }
       }
     }
 
-    val t2 = new Thread {
+    val t1 = new Thread {
       override def run() = {
-        store.removeBlock("a1", tellMaster = false)
+        store.memoryManager.synchronized {
+          t2.start()
+          lock1.await()
+          val status = store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
+          assert(status == None, "this thread can not get block a1")
+          lock2.countDown()
+        }
       }
     }
 
     t1.start()
-    t2.start()
     t1.join()
     t2.join()
+    store.removeBlock("a1", tellMaster = false)
   }
 
   test("correct BlockResult returned from get() calls") {

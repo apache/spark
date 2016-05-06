@@ -167,7 +167,7 @@ private[spark] class BlockManager(
   private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec(conf)
 
   // Blocks are removing by another thread
-  private val pendingToRemove = new ConcurrentHashMap[BlockId, Long]()
+  val pendingToRemove = new ConcurrentHashMap[BlockId, Long]()
 
   private val NON_TASK_WRITER = -1024L
 
@@ -1163,26 +1163,25 @@ private[spark] class BlockManager(
     while (iterator.hasNext) {
       val entry = iterator.next()
       val (id, info, time) = (entry.getKey, entry.getValue.value, entry.getValue.timestamp)
-      if (time < cleanupTime && shouldDrop(id)) {
-        if (pendingToRemove.putIfAbsent(id, currentTaskAttemptId) == 0L) {
-          try {
-            info.synchronized {
-              val level = info.level
-              if (level.useMemory) {
-                memoryStore.remove(id)
-              }
-              if (level.useDisk) {
-                diskStore.remove(id)
-              }
-              if (level.useOffHeap) {
-                externalBlockStore.remove(id)
-              }
-              iterator.remove()
-              logInfo(s"Dropped block $id")
+      if (time < cleanupTime && shouldDrop(id) &&
+        pendingToRemove.putIfAbsent(id, currentTaskAttemptId) == 0L) {
+        try {
+          info.synchronized {
+            val level = info.level
+            if (level.useMemory) {
+              memoryStore.remove(id)
             }
-          } finally {
-            pendingToRemove.remove(id)
+            if (level.useDisk) {
+              diskStore.remove(id)
+            }
+            if (level.useOffHeap) {
+              externalBlockStore.remove(id)
+            }
+            iterator.remove()
+            logInfo(s"Dropped block $id")
           }
+        } finally {
+          pendingToRemove.remove(id)
         }
         val status = getCurrentBlockStatus(id, info)
         reportBlockStatus(id, info, status)
@@ -1192,6 +1191,10 @@ private[spark] class BlockManager(
 
   private def currentTaskAttemptId: Long = {
     Option(TaskContext.get()).map(_.taskAttemptId()).getOrElse(NON_TASK_WRITER)
+  }
+
+  def getBlockInfo(blockId: BlockId): BlockInfo = {
+    blockInfo.get(blockId).orNull
   }
 
   /**
