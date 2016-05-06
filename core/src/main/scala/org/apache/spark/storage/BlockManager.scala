@@ -1200,7 +1200,7 @@ private[spark] class BlockManager(
             // we have a failed replication, so we get the list of peers again
             // we don't want peers we have already replicated to and the ones that
             // have failed previously
-            val updatedPeers = rackAwarePrioritizer.prioritize(getPeers(true)).filter{p =>
+            val updatedPeers = rackAwarePrioritizer.prioritize(getPeers(true), blockId).filter{p =>
               !(updatedFailedPeers.contains(p) || peersReplicatedTo.contains(p))
             }
             (numFailures + 1, updatedPeers, peersReplicatedTo, updatedFailedPeers)
@@ -1212,7 +1212,7 @@ private[spark] class BlockManager(
 
     val startTime = System.currentTimeMillis
     val peersReplicatedTo = replicateBlock(0,
-      rackAwarePrioritizer.prioritize(getPeers(false)),
+      rackAwarePrioritizer.prioritize(getPeers(false), blockId),
       Set.empty,
       Set.empty)
     logDebug(s"Replicating $blockId of ${data.size} bytes to " +

@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import scala.util.Random
+
 import org.apache.spark.internal.Logging
 
 /* Trait that should be implemented by any class implementing rack aware prioritization */
@@ -24,11 +26,12 @@ trait RackAwarePriotization {
 
   /**
    * Method to prioritize a bunch of candidate peers of a block
-   *
    * @param peers A list of peers of a BlockManager
+   * @param blockId BlockId of the block being replicated. This can be used as a source of
+   *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  def prioritize(peers: Seq[BlockManagerId]): Seq[BlockManagerId]
+  def prioritize(peers: Seq[BlockManagerId], blockId: BlockId): Seq[BlockManagerId]
 }
 
 class DefaultRackAwarePrioritization(host: String) extends RackAwarePriotization with Logging {
@@ -38,12 +41,16 @@ class DefaultRackAwarePrioritization(host: String) extends RackAwarePriotization
    * that just makes sure we put blocks on different hosts, if possible
    *
    * @param peers A list of peers of a BlockManager
+   * @param blockId BlockId of the block being replicated. This can be used as a source of
+   *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  override def prioritize(peers: Seq[BlockManagerId]): Seq[BlockManagerId] = {
+  override def prioritize(peers: Seq[BlockManagerId], blockId: BlockId): Seq[BlockManagerId] = {
+    val random = new Random(blockId.hashCode)
+
     logInfo(s"Input peers : ${peers.mkString(", ")}")
-    val peersOnOtherHosts = peers.filter(p => !p.host.equals(host))
-    val peersOnHost = peers.filter(p => p.host.equals(host))
+    val peersOnOtherHosts = peers.filter(p => !p.host.equals(host)).sortBy(_ => random.nextInt)
+    val peersOnHost = peers.filter(p => p.host.equals(host)).sortBy(_ => random.nextInt)
     val ret = peersOnOtherHosts ++ peersOnHost
     logInfo(s"Prioritized peers : ${ret.mkString(", ")}")
     ret
