@@ -1382,7 +1382,7 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable
     @since("2.0.0")
     def summary(self):
         """
-        Gets summary (e.g. residuals, mse, r-squared ) of model on
+        Gets summary (e.g. residuals, deviance, pValues) of model on
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
@@ -1434,8 +1434,8 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
     @since("2.0.0")
     def predictionCol(self):
         """
-        Field in "predictions" which gives the predicted value of
-        the label at each instance.
+        Field in :py:attr:`predictions`
+        which gives the predicted value of the label at each instance.
         """
         return self._call_java("predictionCol")
 
