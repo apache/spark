@@ -44,6 +44,8 @@ abstract class RDG(seed: Long) extends LeafExpression with Serializable {
 
   override type EvaluatedType = Double
 
+  override type EvaluatedType = Double
+
   override def deterministic: Boolean = false
 
   override def nullable: Boolean = false
