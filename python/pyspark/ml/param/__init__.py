@@ -378,7 +378,7 @@ class Params(Identifiable):
         return paramMap
 
     @since("1.4.0")
-    def copy(self, extra=None):
+    def copy(self, extra=None, default=False):
         """
         Creates a copy of this instance with the same uid and some
         extra params. The default implementation creates a
@@ -388,13 +388,14 @@ class Params(Identifiable):
         is not sufficient.
 
         :param extra: Extra parameters to copy to the new instance
+        :param default: if just copy the default param map
         :return: Copy of this instance
         """
         if extra is None:
             extra = dict()
         that = copy.copy(self)
         that._paramMap = {}
-        return self._copyValues(that, extra)
+        return self._copyValues(that, extra, default)
 
     def _shouldOwn(self, param):
         """
