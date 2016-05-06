@@ -25,13 +25,13 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.analysis.{Update, OutputMode, Append, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * :: Experimental ::
@@ -111,6 +111,55 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   def trigger(trigger: Trigger): DataFrameWriter = {
     assertStreaming("trigger() can only be called on continuous queries")
     this.trigger = trigger
+    this
+  }
+
+  /**
+   * Specifies the behavior when writing dataFrame or DataSet to sink. Options include:
+   *   - `Append`: append the data.
+   *   - `Update`: Inplace append the data
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: OutputMode): DataFrameWriter = {
+    // mode() is used for non-continuous queries
+    // outputMode() is used for continuous queries
+    assertStreaming("outputMode() can only be called on a continuous queries")
+    this.outputMode = outputMode
+    this
+  }
+
+  /**
+   * Specifies the behavior when writing dataFrame or DataSet to sink. Options include:
+   *   - `Append`: append the data.
+   *   - `Update`: Inplace append the data
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: String): DataFrameWriter = {
+    // mode() is used for non-continuous queries
+    // outputMode() is used for continuous queries
+    assertStreaming("outputMode() can only be called on a continuous queries")
+    this.outputMode = outputMode.toLowerCase match {
+      case "append" => Append
+      case "update" => Update
+      case _ => throw new IllegalArgumentException(s"Unknown outputMode : $outputMode. " +
+        "Accepted modes are 'append', 'update'.")
+    }
+    this
+  }
+
+  /**
+   * Specifies the user Defined Clock as trigger Clock. Default option is SystemClock
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def triggerClock(triggerClock: Clock): DataFrameWriter = {
+    assertStreaming("triggerClock() can only be called on continuous queries")
+    this.triggerClock = triggerClock
     this
   }
 
@@ -314,7 +363,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       } else {
         checkpointPath.toUri.toString
       }
-
+      val outputMode = this.outputMode
+      val triggerClock: Clock = this.triggerClock
       val sink = new MemorySink(df.schema)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       resultDf.registerTempTable(queryName)
@@ -323,7 +373,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointLocation,
         df,
         sink,
-        trigger)
+        trigger,
+        triggerClock,
+        outputMode
+      )
       continuousQuery
     } else {
       val dataSource =
@@ -333,6 +386,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           options = extraOptions.toMap,
           partitionColumns = normalizedParCols.getOrElse(Nil))
 
+      val outputMode = this.outputMode
+      val triggerClock: Clock = this.triggerClock
       val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
       val checkpointLocation = extraOptions.getOrElse("checkpointLocation",
         new Path(df.sparkSession.sessionState.conf.checkpointLocation.get, queryName).toUri.toString
@@ -343,7 +398,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointLocation,
         df,
         dataSource.createSink(),
-        trigger)
+        trigger,
+        triggerClock,
+        outputMode)
     }
   }
 
@@ -662,6 +719,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var outputMode: OutputMode = Append
+
+  private var triggerClock: Clock = new SystemClock()
 
   private var trigger: Trigger = ProcessingTime(0L)
 

@@ -19,17 +19,17 @@ package org.apache.spark.sql.streaming.test
 
 import java.util.concurrent.TimeUnit
 
-import scala.concurrent.duration._
-
-import org.mockito.Mockito._
-import org.scalatest.BeforeAndAfter
-
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.analysis.{Append, Update}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{SystemClock, ManualClock, Utils}
+import org.mockito.Mockito._
+import org.scalatest.BeforeAndAfter
+
+import scala.concurrent.duration._
 
 object LastOptions {
 
@@ -101,7 +101,6 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 }
 
 class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
-  import testImplicits._
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -334,6 +333,57 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(100000))
   }
 
+  test("outputMode") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream("/test")
+
+    var q = df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .outputMode("update")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(ProcessingTime(10.seconds))
+      .startStream()
+    q.stop()
+
+    assert(q.asInstanceOf[StreamExecution].outputMode == Update)
+
+    q = df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .outputMode("append")
+      .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
+      .startStream()
+    q.stop()
+
+    assert(q.asInstanceOf[StreamExecution].outputMode == Append)
+  }
+
+  test("triggerClock") {
+    val df = sqlContext.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream("/test")
+    var q = df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .triggerClock(new ManualClock(System.currentTimeMillis()))
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(ProcessingTime(10.seconds))
+      .startStream()
+    q.stop()
+
+    assert(q.asInstanceOf[StreamExecution].triggerClock.isInstanceOf[ManualClock])
+
+    q = df.write
+      .format("org.apache.spark.sql.streaming.test")
+      .option("checkpointLocation", newMetadataDir)
+      .outputMode("append")
+      .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
+      .startStream()
+    q.stop()
+
+    assert(q.asInstanceOf[StreamExecution].triggerClock.isInstanceOf[SystemClock])
+  }
+
   test("source metadataPath") {
     LastOptions.clear()
 
@@ -371,6 +421,18 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
   private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
 
+  test("check outputMode() can only be called on continuous queries") {
+    val df = sqlContext.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.outputMode(Append))
+    assert(e.getMessage == "outputMode() can only be called on a continuous queries;")
+  }
+  test("check triggerClock() can only be called on continuous queries") {
+    val df = sqlContext.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.triggerClock(new SystemClock))
+    assert(e.getMessage == "triggerClock() can only be called on continuous queries;")
+  }
   test("check trigger() can only be called on continuous queries") {
     val df = sqlContext.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
