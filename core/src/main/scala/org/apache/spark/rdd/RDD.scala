@@ -1104,6 +1104,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
    */
   def countApprox(
       timeout: Long,
@@ -1134,6 +1137,9 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Approximate version of countByValue().
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
    */
   def countByValueApprox(timeout: Long, confidence: Double = 0.95)
       (implicit ord: Ordering[T] = null)
