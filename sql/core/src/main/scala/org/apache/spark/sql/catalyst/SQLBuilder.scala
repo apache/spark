@@ -69,12 +69,14 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
 
     try {
       val replaced = finalPlan.transformAllExpressions {
-        case e: Exists =>
-          val query = new SQLBuilder(e.query).toSQL
-          SubqueryHolder(s"EXISTS($query)")
         case s: SubqueryExpression =>
           val query = new SQLBuilder(s.query).toSQL
-          SubqueryHolder(s"($query)")
+          val sql = s match {
+            case _: ListQuery => query
+            case _: Exists => s"EXISTS($query)"
+            case _ => s"($query)"
+          }
+          SubqueryHolder(sql)
         case e: NonSQLExpression =>
           throw new UnsupportedOperationException(
             s"Expression $e doesn't have a SQL representation"
@@ -83,7 +85,6 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
       }
 
       val generatedSQL = toSQL(replaced)
-      println(generatedSQL)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
            |
@@ -506,15 +507,15 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
             case (EqualTo(r, l), i) =>
               (l, Alias(r, s"_c$i")())
           }.unzip
+          val wrapped = addSubqueryIfNeeded(query)
           val filtered = if (correlated.nonEmpty) {
-            Filter(conditions.reduce(And), addSubqueryIfNeeded(query))
+            Filter(conditions.reduce(And), wrapped)
           } else {
-            addSubqueryIfNeeded(query)
+            wrapped
           }
-          val value = if (outer.size > 1) {
-            CreateStruct(outer)
-          } else {
-            outer.head
+          val value = outer match {
+            case Seq(expr) => expr
+            case exprs => CreateStruct(exprs)
           }
           In(value, Seq(ListQuery(Project(inner, filtered), exprId)))
       }
