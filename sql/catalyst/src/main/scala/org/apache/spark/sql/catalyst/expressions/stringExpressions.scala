@@ -784,6 +784,8 @@ case class Substring(str: Expression, pos: Expression, len: Expression)
 
   override def dataType: DataType = str.dataType
 
+  override def prettyDataType: DataType = str.prettyDataType
+
   override def inputTypes: Seq[AbstractDataType] =
     Seq(TypeCollection(StringType, BinaryType), IntegerType, IntegerType)
 

@@ -32,6 +32,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression
 
   override def dataType: DataType = child.dataType
 
+  override def prettyDataType: DataType = child.prettyDataType
+
   override def toString: String = s"-$child"
 
   private lazy val numeric = TypeUtils.getNumeric(dataType)
@@ -69,6 +71,7 @@ case class UnaryPositive(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection.NumericAndInterval)
 
   override def dataType: DataType = child.dataType
+  override def prettyDataType: DataType = child.prettyDataType
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     defineCodeGen(ctx, ev, c => c)
@@ -91,6 +94,8 @@ case class Abs(child: Expression)
 
   override def dataType: DataType = child.dataType
 
+  override def prettyDataType: DataType = child.prettyDataType
+
   private lazy val numeric = TypeUtils.getNumeric(dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = dataType match {
@@ -106,6 +111,8 @@ case class Abs(child: Expression)
 abstract class BinaryArithmetic extends BinaryOperator {
 
   override def dataType: DataType = left.dataType
+
+  override def prettyDataType: DataType = left.prettyDataType
 
   override lazy val resolved = childrenResolved && checkInputDataTypes().isSuccess
 

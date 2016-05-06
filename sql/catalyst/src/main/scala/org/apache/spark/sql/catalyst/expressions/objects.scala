@@ -423,6 +423,8 @@ case class MapObjects private(
 
   override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
+  override def prettyDataType: DataType = ArrayType(lambdaFunction.prettyDataType)
+
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
@@ -625,6 +627,8 @@ case class InitializeJavaBean(beanInstance: Expression, setters: Map[String, Exp
   override def children: Seq[Expression] = beanInstance +: setters.values.toSeq
   override def dataType: DataType = beanInstance.dataType
 
+  override def prettyDataType: DataType = beanInstance.prettyDataType
+
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
@@ -662,6 +666,8 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
+
+  override def prettyDataType: DataType = child.prettyDataType
 
   override def nullable: Boolean = false
 

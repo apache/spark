@@ -69,6 +69,7 @@ case class MakeDecimal(child: Expression, precision: Int, scale: Int) extends Un
  */
 case class PromotePrecision(child: Expression) extends UnaryExpression {
   override def dataType: DataType = child.dataType
+  override def prettyDataType: DataType = child.prettyDataType
   override def eval(input: InternalRow): Any = child.eval(input)
   override def genCode(ctx: CodegenContext): ExprCode = child.genCode(ctx)
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = ev.copy("")

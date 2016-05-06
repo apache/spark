@@ -60,6 +60,7 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
   override def left: Expression = base
   override def right: Expression = ascendingOrder
   override def dataType: DataType = base.dataType
+  override def prettyDataType: DataType = base.prettyDataType
   override def inputTypes: Seq[AbstractDataType] = Seq(ArrayType, BooleanType)
 
   override def checkInputDataTypes(): TypeCheckResult = base.dataType match {
