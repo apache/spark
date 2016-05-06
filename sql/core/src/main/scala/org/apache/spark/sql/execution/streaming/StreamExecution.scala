@@ -36,7 +36,7 @@ import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
-import org.apache.spark.util.{UninterruptibleThread, Utils}
+import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /**
  * Manages the execution of a streaming Spark SQL query that is occurring in a separate thread.
@@ -50,8 +50,9 @@ class StreamExecution(
     checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
     val sink: Sink,
-    val outputMode: OutputMode,
-    val trigger: Trigger)
+    val trigger: Trigger,
+    private[sql] val triggerClock: Clock,
+    val outputMode: OutputMode)
   extends ContinuousQuery with Logging {
 
   /**
@@ -88,7 +89,7 @@ class StreamExecution(
   private val uniqueSources = sources.distinct
 
   private val triggerExecutor = trigger match {
-    case t: ProcessingTime => ProcessingTimeExecutor(t)
+    case t: ProcessingTime => ProcessingTimeExecutor(t, triggerClock)
   }
 
   /** Defines the internal state of execution */

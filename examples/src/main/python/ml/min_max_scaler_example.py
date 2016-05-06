@@ -17,18 +17,19 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import MinMaxScaler
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="MinMaxScalerExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("MinMaxScalerExample")\
+        .getOrCreate()
 
     # $example on$
-    dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     scaler = MinMaxScaler(inputCol="features", outputCol="scaledFeatures")
 
@@ -40,4 +41,4 @@ if __name__ == "__main__":
     scaledData.show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

@@ -18,11 +18,10 @@
 package org.apache.spark.examples.ml
 
 // scalastyle:off println
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.clustering.LDA
 import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.types.{StructField, StructType}
 // $example off$
 
@@ -41,16 +40,17 @@ object LDAExample {
 
     val input = "data/mllib/sample_lda_data.txt"
     // Creates a Spark context and a SQL context
-    val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName(s"${this.getClass.getSimpleName}")
+      .getOrCreate()
 
     // $example on$
     // Loads data
-    val rowRDD = sc.textFile(input).filter(_.nonEmpty)
+    val rowRDD = spark.read.text(input).rdd.filter(_.nonEmpty)
       .map(_.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
     val schema = StructType(Array(StructField(FEATURES_COL, new VectorUDT, false)))
-    val dataset = sqlContext.createDataFrame(rowRDD, schema)
+    val dataset = spark.createDataFrame(rowRDD, schema)
 
     // Trains a LDA model
     val lda = new LDA()
@@ -71,7 +71,7 @@ object LDAExample {
     transformed.show(false)
 
     // $example off$
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println
