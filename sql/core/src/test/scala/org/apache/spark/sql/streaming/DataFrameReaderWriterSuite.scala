@@ -32,8 +32,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.{ManualClock, SystemClock, Utils}
 
-import scala.concurrent.duration._
-
 object LastOptions {
 
   var mockStreamSourceProvider = mock(classOf[StreamSourceProvider])
@@ -104,7 +102,8 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 }
 
 class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
-
+  import testImplicits._
+ 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
