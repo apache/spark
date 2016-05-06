@@ -730,7 +730,8 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
         return RandomForestClassificationModel(java_model)
 
 
-class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class RandomForestClassificationModel(TreeEnsembleModels, JavaClassificationModel, JavaMLWritable,
+                                      JavaMLReadable):
     """
     Model fitted by RandomForestClassifier.
 
@@ -859,7 +860,8 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
         return self.getOrDefault(self.lossType)
 
 
-class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTClassificationModel(TreeEnsembleModels, JavaPredictionModel, JavaMLWritable,
+                             JavaMLReadable):
     """
     Model fitted by GBTClassifier.
 
@@ -1142,7 +1144,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         return self.getOrDefault(self.blockSize)
 
 
-class MultilayerPerceptronClassificationModel(JavaModel, JavaClassificationModel, JavaMLWritable,
+class MultilayerPerceptronClassificationModel(JavaModel, JavaPredictionModel, JavaMLWritable,
                                               JavaMLReadable):
     """
     Model fitted by MultilayerPerceptronClassifier.
