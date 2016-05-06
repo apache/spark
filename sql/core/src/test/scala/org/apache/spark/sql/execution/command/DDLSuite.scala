@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.AlreadyExistDatabaseException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -168,10 +169,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
             expectedLocation,
             Map.empty))
 
-          val message = intercept[AnalysisException] {
+          intercept[AlreadyExistDatabaseException] {
             sql(s"CREATE DATABASE $dbName")
-          }.getMessage
-          assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+          }
         } finally {
           catalog.reset()
         }
