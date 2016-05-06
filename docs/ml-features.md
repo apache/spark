@@ -1118,6 +1118,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [QuantileDiscretizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example python/ml/quantile_discretizer_example.py %}
+</div>
+
 </div>
 
 # Feature Selectors
