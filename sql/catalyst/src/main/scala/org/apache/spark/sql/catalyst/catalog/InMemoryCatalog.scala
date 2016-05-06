@@ -345,7 +345,7 @@ class InMemoryCatalog extends ExternalCatalog {
     partSpecs.foreach { p =>
       // If location is set, the partition is using an external partition location and we don't
       // need to handle its directory.
-      if (existingParts(p).storage.locationUri.isEmpty) {
+      if (existingParts.contains(p) && existingParts(p).storage.locationUri.isEmpty) {
         val partitionPath = partitionColumnNames.flatMap { col =>
           p.get(col).map(col + "=" + _)
         }.mkString("/")
