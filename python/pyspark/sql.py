@@ -574,6 +574,9 @@ def _parse_datatype_json_value(json_value):
 
 
 # Mapping Python types to Spark SQL DataType
+# int -> LongType below so we can do not have to deal with
+# the differences between Java int and Python ints when
+# inferring data types. SPARK-5722
 _type_mappings = {
     type(None): NullType,
     bool: BooleanType,
@@ -681,6 +684,8 @@ def _need_python_to_sql_conversion(dataType):
             _need_python_to_sql_conversion(dataType.valueType)
     elif isinstance(dataType, UserDefinedType):
         return True
+    elif isinstance(dataType, LongType):
+        return True
     else:
         return False
 
@@ -734,6 +739,8 @@ def _python_to_sql_converter(dataType):
         return lambda m: dict([(key_converter(k), value_converter(v)) for k, v in m.items()])
     elif isinstance(dataType, UserDefinedType):
         return lambda obj: dataType.serialize(obj)
+    elif isinstance(dataType, LongType):
+        return lambda x: long(x)
     else:
         raise ValueError("Unexpected type %r" % dataType)
 
