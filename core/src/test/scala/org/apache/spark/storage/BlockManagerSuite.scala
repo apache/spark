@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import java.nio.{ByteBuffer, MappedByteBuffer}
 import java.util.Arrays
+import java.util.concurrent.CountDownLatch
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -422,6 +423,43 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
       store.dropFromMemory("a2", null: Either[Array[Any], ByteBuffer])
       store.waitForAsyncReregister()
     }
+  }
+
+  test("deadlock between dropFromMemory and removeBlock") {
+    store = makeBlockManager(2000)
+    val a1 = new Array[Byte](400)
+    store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
+    val lock1 = new CountDownLatch(1)
+    val lock2 = new CountDownLatch(1)
+
+    val t2 = new Thread {
+      override def run() = {
+        val info = store.getBlockInfo("a1")
+        info.synchronized {
+          store.pendingToRemove.put("a1", 1L)
+          lock1.countDown()
+          lock2.await()
+          store.pendingToRemove.remove("a1")
+        }
+      }
+    }
+
+    val t1 = new Thread {
+      override def run() = {
+        store.memoryManager.synchronized {
+          t2.start()
+          lock1.await()
+          val status = store.dropFromMemory("a1", null: Either[Array[Any], ByteBuffer])
+          assert(status == None, "this thread can not get block a1")
+          lock2.countDown()
+        }
+      }
+    }
+
+    t1.start()
+    t1.join()
+    t2.join()
+    store.removeBlock("a1", tellMaster = false)
   }
 
   test("correct BlockResult returned from get() calls") {

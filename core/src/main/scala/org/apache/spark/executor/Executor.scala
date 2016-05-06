@@ -218,10 +218,22 @@ private[spark] class Executor(
           threwException = false
           res
         } finally {
+          val releasedLocks = env.blockManager.releaseAllLocksForTask(taskId)
           val freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory()
           if (freedMemory > 0) {
             val errMsg = s"Managed memory leak detected; size = $freedMemory bytes, TID = $taskId"
             if (conf.getBoolean("spark.unsafe.exceptionOnMemoryLeak", false) && !threwException) {
+              throw new SparkException(errMsg)
+            } else {
+              logError(errMsg)
+            }
+          }
+
+          if (releasedLocks.nonEmpty) {
+            val errMsg =
+              s"${releasedLocks.size} block locks were not released by TID = $taskId:\n" +
+              releasedLocks.mkString("[", ", ", "]")
+            if (conf.getBoolean("spark.storage.exceptionOnPinLeak", false) && !threwException) {
               throw new SparkException(errMsg)
             } else {
               logError(errMsg)
