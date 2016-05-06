@@ -69,14 +69,12 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
 
     try {
       val replaced = finalPlan.transformAllExpressions {
-        case e: SubqueryExpression =>
+        case e: Exists =>
           val query = new SQLBuilder(e.query).toSQL
-          val sql = e match {
-            case in: InSubQuery => s"${in.value.sql} IN ($query)"
-            case exist: Exists => s"EXISTS($query)"
-            case _ => s"($query)"
-          }
-          SubqueryHolder(sql)
+          SubqueryHolder(s"EXISTS($query)")
+        case s: SubqueryExpression =>
+          val query = new SQLBuilder(s.query).toSQL
+          SubqueryHolder(s"($query)")
         case e: NonSQLExpression =>
           throw new UnsupportedOperationException(
             s"Expression $e doesn't have a SQL representation"
@@ -85,6 +83,7 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
       }
 
       val generatedSQL = toSQL(replaced)
+      println(generatedSQL)
       logDebug(
         s"""Built SQL query string successfully from given logical plan:
            |
@@ -410,7 +409,9 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
         // that table relation, as we can only convert table sample to standard SQL string.
         ResolveSQLTable,
         // Insert sub queries on top of operators that need to appear after FROM clause.
-        AddSubquery
+        AddSubquery,
+        // Reconstruct subquery expressions.
+        ConstructSubqueryExpressions
       )
     )
 
@@ -487,6 +488,35 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
           // misses the SELECT part.
           val proj = Project(f.output, f)
           g.copy(child = addSubquery(proj))
+      }
+    }
+
+    object ConstructSubqueryExpressions extends Rule[LogicalPlan] {
+      def apply(tree: LogicalPlan): LogicalPlan = tree transformAllExpressions {
+        case PredicateSubquery(query, conditions, false, exprId) =>
+          val plan = Project(Seq(Alias(Literal(1), "1")()),
+            Filter(conditions.reduce(And), addSubqueryIfNeeded(query)))
+          Exists(plan, exprId)
+
+        case PredicateSubquery(query, conditions, true, exprId) =>
+          val (in, correlated) = conditions.partition(_.isInstanceOf[EqualTo])
+          val (outer, inner) = in.zipWithIndex.map {
+            case (EqualTo(l, r), i) if query.outputSet.intersect(r.references).nonEmpty =>
+              (l, Alias(r, s"_c$i")())
+            case (EqualTo(r, l), i) =>
+              (l, Alias(r, s"_c$i")())
+          }.unzip
+          val filtered = if (correlated.nonEmpty) {
+            Filter(conditions.reduce(And), addSubqueryIfNeeded(query))
+          } else {
+            addSubqueryIfNeeded(query)
+          }
+          val value = if (outer.size > 1) {
+            CreateStruct(outer)
+          } else {
+            outer.head
+          }
+          In(value, Seq(ListQuery(Project(inner, filtered), exprId)))
       }
     }
 
