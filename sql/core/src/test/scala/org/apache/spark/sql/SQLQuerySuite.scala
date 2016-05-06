@@ -999,4 +999,25 @@ class SQLQuerySuite extends QueryTest with BeforeAndAfterAll {
     rdd.registerTempTable("distinctData")
     checkAnswer(sql("SELECT COUNT(DISTINCT key,value) FROM distinctData"), 2)
   }
+
+  test("SPARK-10169: grouping expressions used as arguments of aggregate functions.") {
+    sparkContext
+      .parallelize((1 to 1000), 50)
+      .map(i => TestData(i, s"$i"))
+      .registerTempTable("t")
+
+    val query = sql(
+      """
+        |select key % 10, sum(if(key % 10 = 5, 1, 0)), count(key)
+        |from t
+        |where key % 10 = 5
+        |group by key % 10
+      """.stripMargin)
+
+    checkAnswer(
+      query,
+      Seq(Seq(5, 100, 100)))
+
+    dropTempTable("t")
+  }
 }
