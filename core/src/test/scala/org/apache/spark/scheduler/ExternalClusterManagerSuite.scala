@@ -17,9 +17,10 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{AccumulatorV2, LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{LocalSparkContext, SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.AccumulatorV2
 
 class ExternalClusterManagerSuite extends SparkFunSuite with LocalSparkContext {
   test("launch of backend and scheduler") {

@@ -54,6 +54,7 @@ import org.apache.spark.util.Utils
  * {{{
  *   SparkSession.builder()
  *     .master("local")
+ *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value").
  *     .getOrCreate()
  * }}}
@@ -63,7 +64,7 @@ class SparkSession private(
     @transient private val existingSharedState: Option[SharedState])
   extends Serializable with Logging { self =>
 
-  def this(sc: SparkContext) {
+  private[sql] def this(sc: SparkContext) {
     this(sc, None)
   }
 
@@ -114,14 +115,17 @@ class SparkSession private(
   @transient
   private var _wrapped: SQLContext = _
 
-  protected[sql] def wrapped: SQLContext = {
+  @transient
+  private val _wrappedLock = new Object
+
+  protected[sql] def wrapped: SQLContext = _wrappedLock.synchronized {
     if (_wrapped == null) {
       _wrapped = new SQLContext(self, isRootContext = false)
     }
     _wrapped
   }
 
-  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = {
+  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = _wrappedLock.synchronized {
     _wrapped = sqlContext
   }
 
@@ -573,7 +577,7 @@ class SparkSession private(
    * common Scala objects into [[DataFrame]]s.
    *
    * {{{
-   *   val sparkSession = new SparkSession(sc)
+   *   val sparkSession = SparkSession.builder.getOrCreate()
    *   import sparkSession.implicits._
    * }}}
    *
@@ -585,6 +589,15 @@ class SparkSession private(
     protected override def _sqlContext: SQLContext = wrapped
   }
   // scalastyle:on
+
+  /**
+   * Stop the underlying [[SparkContext]].
+   *
+   * @since 2.0.0
+   */
+  def stop(): Unit = {
+    sparkContext.stop()
+  }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
     sessionState.sqlParser.parsePlan(sql)
@@ -803,19 +816,6 @@ object SparkSession {
       true
     } catch {
       case _: ClassNotFoundException | _: NoClassDefFoundError => false
-    }
-  }
-
-  /**
-   * Create a new [[SparkSession]] with a catalog backed by Hive.
-   */
-  def withHiveSupport(sc: SparkContext): SparkSession = {
-    if (hiveClassesArePresent) {
-      sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-      new SparkSession(sc)
-    } else {
-      throw new IllegalArgumentException(
-        "Unable to instantiate SparkSession with Hive support because Hive classes are not found.")
     }
   }
 

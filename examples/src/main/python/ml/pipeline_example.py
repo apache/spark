@@ -18,21 +18,23 @@
 """
 Pipeline Example.
 """
-from pyspark import SparkContext, SQLContext
+
 # $example on$
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import HashingTF, Tokenizer
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-
-    sc = SparkContext(appName="PipelineExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("PipelineExample")\
+        .getOrCreate()
 
     # $example on$
     # Prepare training documents from a list of (id, text, label) tuples.
-    training = sqlContext.createDataFrame([
+    training = spark.createDataFrame([
         (0L, "a b c d e spark", 1.0),
         (1L, "b d", 0.0),
         (2L, "spark f g h", 1.0),
@@ -48,7 +50,7 @@ if __name__ == "__main__":
     model = pipeline.fit(training)
 
     # Prepare test documents, which are unlabeled (id, text) tuples.
-    test = sqlContext.createDataFrame([
+    test = spark.createDataFrame([
         (4L, "spark i j k"),
         (5L, "l m n"),
         (6L, "mapreduce spark"),
@@ -61,4 +63,4 @@ if __name__ == "__main__":
         print(row)
     # $example off$
 
-    sc.stop()
+    spark.stop()

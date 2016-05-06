@@ -136,6 +136,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
@@ -186,6 +187,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     assert(cv.getEvaluator.uid === cv2.getEvaluator.uid)
@@ -259,6 +261,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]

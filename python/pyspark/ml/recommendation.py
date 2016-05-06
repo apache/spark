@@ -177,8 +177,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`rank`.
         """
-        self._set(rank=value)
-        return self
+        return self._set(rank=value)
 
     @since("1.4.0")
     def getRank(self):
@@ -192,8 +191,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numUserBlocks`.
         """
-        self._set(numUserBlocks=value)
-        return self
+        return self._set(numUserBlocks=value)
 
     @since("1.4.0")
     def getNumUserBlocks(self):
@@ -207,8 +205,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`numItemBlocks`.
         """
-        self._set(numItemBlocks=value)
-        return self
+        return self._set(numItemBlocks=value)
 
     @since("1.4.0")
     def getNumItemBlocks(self):
@@ -223,15 +220,14 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         Sets both :py:attr:`numUserBlocks` and :py:attr:`numItemBlocks` to the specific value.
         """
         self._set(numUserBlocks=value)
-        self._set(numItemBlocks=value)
+        return self._set(numItemBlocks=value)
 
     @since("1.4.0")
     def setImplicitPrefs(self, value):
         """
         Sets the value of :py:attr:`implicitPrefs`.
         """
-        self._set(implicitPrefs=value)
-        return self
+        return self._set(implicitPrefs=value)
 
     @since("1.4.0")
     def getImplicitPrefs(self):
@@ -245,8 +241,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`alpha`.
         """
-        self._set(alpha=value)
-        return self
+        return self._set(alpha=value)
 
     @since("1.4.0")
     def getAlpha(self):
@@ -260,8 +255,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`userCol`.
         """
-        self._set(userCol=value)
-        return self
+        return self._set(userCol=value)
 
     @since("1.4.0")
     def getUserCol(self):
@@ -275,8 +269,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`itemCol`.
         """
-        self._set(itemCol=value)
-        return self
+        return self._set(itemCol=value)
 
     @since("1.4.0")
     def getItemCol(self):
@@ -290,8 +283,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`ratingCol`.
         """
-        self._set(ratingCol=value)
-        return self
+        return self._set(ratingCol=value)
 
     @since("1.4.0")
     def getRatingCol(self):
@@ -305,8 +297,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`nonnegative`.
         """
-        self._set(nonnegative=value)
-        return self
+        return self._set(nonnegative=value)
 
     @since("1.4.0")
     def getNonnegative(self):
@@ -320,8 +311,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`intermediateStorageLevel`.
         """
-        self._set(intermediateStorageLevel=value)
-        return self
+        return self._set(intermediateStorageLevel=value)
 
     @since("2.0.0")
     def getIntermediateStorageLevel(self):
@@ -335,8 +325,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
         """
         Sets the value of :py:attr:`finalStorageLevel`.
         """
-        self._set(finalStorageLevel=value)
-        return self
+        return self._set(finalStorageLevel=value)
 
     @since("2.0.0")
     def getFinalStorageLevel(self):

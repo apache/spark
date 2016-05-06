@@ -104,7 +104,7 @@ object MLUtils {
     val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
       val indexAndValue = item.split(':')
       val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
-    val value = indexAndValue(1).toDouble
+      val value = indexAndValue(1).toDouble
       (index, value)
     }.unzip
 
@@ -119,7 +119,6 @@ object MLUtils {
       previous = current
       i += 1
     }
-
     (label, indices.toArray, values.toArray)
   }
 

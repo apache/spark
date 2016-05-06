@@ -157,20 +157,11 @@ private[sql] class DefaultSource
         }
 
         // Unwraps `OrcStruct`s to `UnsafeRow`s
-        val unsafeRowIterator = OrcRelation.unwrapOrcStructs(
+        OrcRelation.unwrapOrcStructs(
           conf,
           requiredSchema,
           Some(orcRecordReader.getObjectInspector.asInstanceOf[StructObjectInspector]),
           new RecordReaderIterator[OrcStruct](orcRecordReader))
-
-        // Appends partition values
-        val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-        val joinedRow = new JoinedRow()
-        val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
-
-        unsafeRowIterator.map { dataRow =>
-          appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
-        }
       }
     }
   }

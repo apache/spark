@@ -17,18 +17,19 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import NGram
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="NGramExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("NGramExample")\
+        .getOrCreate()
 
     # $example on$
-    wordDataFrame = sqlContext.createDataFrame([
+    wordDataFrame = spark.createDataFrame([
         (0, ["Hi", "I", "heard", "about", "Spark"]),
         (1, ["I", "wish", "Java", "could", "use", "case", "classes"]),
         (2, ["Logistic", "regression", "models", "are", "neat"])
@@ -39,4 +40,4 @@ if __name__ == "__main__":
         print(ngrams_label)
     # $example off$
 
-    sc.stop()
+    spark.stop()

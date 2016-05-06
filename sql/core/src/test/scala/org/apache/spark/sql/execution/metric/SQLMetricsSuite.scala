@@ -302,7 +302,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   test("metrics can be loaded by history server") {
     val metric = SQLMetrics.createMetric(sparkContext, "zanzibar")
     metric += 10L
-    val metricInfo = metric.toInfo(Some(metric.localValue), None)
+    val metricInfo = metric.toInfo(Some(metric.value), None)
     metricInfo.update match {
       case Some(v: Long) => assert(v === 10L)
       case Some(v) => fail(s"metric value was not a Long: ${v.getClass.getName}")
