@@ -315,7 +315,11 @@ object DirectKafkaInputDStream extends Logging {
       executorKafkaParams: ju.Map[String, Object],
       driverConsumer: () => Consumer[K, V]
     ): DirectKafkaInputDStream[K, V] = {
-    val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
+    val ph = if (preferredHosts == preferBrokers) {
+      preferredHosts
+    } else {
+      new ju.HashMap[TopicPartition, String](preferredHosts)
+    }
     val ekp = new ju.HashMap[String, Object](executorKafkaParams)
     KafkaRDD.fixKafkaParams(ekp)
     val cleaned = ssc.sparkContext.clean(driverConsumer)
