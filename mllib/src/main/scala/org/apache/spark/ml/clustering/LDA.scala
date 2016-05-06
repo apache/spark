@@ -33,6 +33,7 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Vector => OldVector,
   Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
@@ -427,7 +428,7 @@ sealed abstract class LDAModel private[ml] (
    * then this returns the fixed (given) value for the [[docConcentration]] parameter.
    */
   @Since("1.6.0")
-  def estimatedDocConcentration: Vector = getModel.docConcentration.asML
+  def estimatedDocConcentration: Vector = getModel.docConcentration
 
   /**
    * Inferred topics, where each topic is represented by a distribution over terms.
@@ -577,7 +578,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val topicConcentration = data.getAs[Double](3)
       val gammaShape = data.getAs[Double](4)
       val oldModel = new OldLocalLDAModel(OldMatrices.fromML(topicsMatrix),
-        OldVectors.fromML(docConcentration), topicConcentration, gammaShape)
+        docConcentration, topicConcentration, gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
@@ -846,7 +847,7 @@ class LDA @Since("1.6.0") (
     transformSchema(dataset.schema, logging = true)
     val oldLDA = new OldLDA()
       .setK($(k))
-      .setDocConcentration(OldVectors.fromML(getOldDocConcentration))
+      .setDocConcentration(getOldDocConcentration)
       .setTopicConcentration(getOldTopicConcentration)
       .setMaxIterations($(maxIter))
       .setSeed($(seed))

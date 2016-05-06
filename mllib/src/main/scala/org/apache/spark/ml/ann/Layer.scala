@@ -23,6 +23,7 @@ import breeze.linalg.{*, axpy => Baxpy, DenseMatrix => BDM, DenseVector => BDV, 
 
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
@@ -583,9 +584,9 @@ private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) ext
     label: Double,
     weights: OldVector,
     cumGradient: OldVector): Double = {
-    val (input, target, realBatchSize) = dataStacker.unstack(data.asML)
-    val model = topology.model(weights.asML)
-    model.computeGradient(input, target, cumGradient.asML, realBatchSize)
+    val (input, target, realBatchSize) = dataStacker.unstack(data)
+    val model = topology.model(weights)
+    model.computeGradient(input, target, cumGradient, realBatchSize)
   }
 }
 
@@ -809,7 +810,7 @@ private[ml] class FeedForwardTrainer(
     // TODO: deprecate standard optimizer because it needs Vector
     val newWeights = optimizer.optimize(dataStacker.stack(data).map { v =>
       (v._1, OldVectors.fromML(v._2))
-    }, OldVectors.fromML(w)).asML
+    }, w)
     topology.model(newWeights)
   }
 

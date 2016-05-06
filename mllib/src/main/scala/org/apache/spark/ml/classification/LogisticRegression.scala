@@ -33,7 +33,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -280,8 +280,7 @@ class LogisticRegression @Since("1.2.0") (
     val (summarizer, labelSummarizer) = {
       val seqOp = (c: (MultivariateOnlineSummarizer, MultiClassSummarizer),
         instance: Instance) =>
-          (c._1.add(OldVectors.fromML(instance.features), instance.weight),
-           c._2.add(instance.label, instance.weight))
+          (c._1.add(instance.features, instance.weight), c._2.add(instance.label, instance.weight))
 
       val combOp = (c1: (MultivariateOnlineSummarizer, MultiClassSummarizer),
         c2: (MultivariateOnlineSummarizer, MultiClassSummarizer)) =>
