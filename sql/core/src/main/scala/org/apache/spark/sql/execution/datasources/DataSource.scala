@@ -136,7 +136,7 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
+      val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
@@ -258,7 +258,7 @@ case class DataSource(
       case (format: FileFormat, _)
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new StreamFileCatalog(sparkSession, basePath)
+        val fileCatalog = new MetadataLogFileCatalog(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -310,8 +310,8 @@ case class DataSource(
             })
         }
 
-        val fileCatalog: FileCatalog =
-          new HDFSFileCatalog(sparkSession, options, globbedPaths, partitionSchema)
+        val fileCatalog =
+          new ListingFileCatalog(sparkSession, globbedPaths, options, partitionSchema)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality =

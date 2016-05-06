@@ -305,8 +305,9 @@ object SparkSubmit {
     }
 
     // Require all python files to be local, so we can add them to the PYTHONPATH
-    // In YARN cluster mode, python files are distributed as regular files, which can be non-local
-    if (args.isPython && !isYarnCluster) {
+    // In YARN cluster mode, python files are distributed as regular files, which can be non-local.
+    // In Mesos cluster mode, non-local python files are automatically downloaded by Mesos.
+    if (args.isPython && !isYarnCluster && !isMesosCluster) {
       if (Utils.nonLocalPaths(args.primaryResource).nonEmpty) {
         printErrorAndExit(s"Only local python files are supported: $args.primaryResource")
       }

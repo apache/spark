@@ -157,6 +157,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
             outputFormat = Some(
               classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
             serde = Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()),
+            compressed = false,
             serdeProperties = Map.empty
           ))
 

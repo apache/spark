@@ -39,7 +39,7 @@ object ParserUtils {
     stream.getText(Interval.of(0, stream.size()))
   }
 
-  def parseException(message: String, ctx: ParserRuleContext): ParseException = {
+  def operationNotAllowed(message: String, ctx: ParserRuleContext): ParseException = {
     new ParseException(s"Operation not allowed: $message", ctx)
   }
 
