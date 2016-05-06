@@ -97,7 +97,26 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      val code = s"/* ${toCommentSafeString(this.toString)} */"
+
+      // Check if this subExprState contains [[ExprCode]], if so, meaning we need to evaluate it
+      // first.
+      val commonCode =
+        if (subExprState.exprCode.isDefined && subExprState.exprCode.get.code != "") {
+          val subCode = subExprState.exprCode.get.code.trim
+          // Prevent re-evaluate it later
+          subExprState.exprCode.get.code = ""
+          s"""
+             |// Common expression
+             | ${subCode}
+           """.stripMargin
+        } else {
+          ""
+        }
+      val code =
+        s"""
+           |$commonCode
+           |/* ${toCommentSafeString(this.toString)} */
+         """.stripMargin
       ExprCode(code, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
