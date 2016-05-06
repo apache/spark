@@ -351,11 +351,11 @@ class LogisticRegression @Since("1.2.0") (
                 regParamL1
               } else {
                 // If `standardization` is false, we still standardize the data
-                // to improve the rate of convergence; as a result, we have to
-                // perform this reverse standardization by penalizing each component
-                // differently to get effectively the same objective function when
+                // to improve the rate of convergence unless the standard deviation is zero;
+                // as a result, we have to perform this reverse standardization by penalizing
+                // each component differently to get effectively the same objective function when
                 // the training dataset is not standardized.
-                if (featuresStd(index) != 0.0) regParamL1 / featuresStd(index) else 0.0
+                if (featuresStd(index) != 0.0) regParamL1 / featuresStd(index) else regParamL1
               }
             }
           }
@@ -427,7 +427,7 @@ class LogisticRegression @Since("1.2.0") (
         val rawCoefficients = state.x.toArray.clone()
         var i = 0
         while (i < numFeatures) {
-          rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 0.0 }
+          rawCoefficients(i) *= { if (featuresStd(i) != 0.0) 1.0 / featuresStd(i) else 1.0 }
           i += 1
         }
 
@@ -980,8 +980,12 @@ private class LogisticAggregator(
           val margin = - {
             var sum = 0.0
             features.foreachActive { (index, value) =>
-              if (featuresStd(index) != 0.0 && value != 0.0) {
-                sum += localCoefficientsArray(index) * (value / featuresStd(index))
+              if (value != 0.0) {
+                if (featuresStd(index) != 0.0) {
+                  sum += localCoefficientsArray(index) * (value / featuresStd(index))
+                } else {
+                  sum += localCoefficientsArray(index) * value
+                }
               }
             }
             sum + {
@@ -992,8 +996,12 @@ private class LogisticAggregator(
           val multiplier = weight * (1.0 / (1.0 + math.exp(margin)) - label)
 
           features.foreachActive { (index, value) =>
-            if (featuresStd(index) != 0.0 && value != 0.0) {
-              localGradientSumArray(index) += multiplier * (value / featuresStd(index))
+            if (value != 0.0) {
+              if (featuresStd(index) != 0.0) {
+                localGradientSumArray(index) += multiplier * (value / featuresStd(index))
+              } else {
+                localGradientSumArray(index) += multiplier * value
+              }
             }
           }
 
@@ -1115,7 +1123,8 @@ private class LogisticCostFun(
                 totalGradientArray(index) += regParamL2 * temp
                 value * temp
               } else {
-                0.0
+                totalGradientArray(index) += regParamL2 * value
+                value * value
               }
             }
           }
