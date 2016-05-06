@@ -37,7 +37,10 @@ import org.apache.spark.sql.{Dataset, Row, SparkSession}
 object DeveloperApiExample {
 
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("DeveloperApiExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("DeveloperApiExample")
+      .getOrCreate()
     import spark.implicits._
 
     // Prepare training data.

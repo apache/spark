@@ -33,7 +33,10 @@ pipeline in Python. Run with:
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("SimpleTextClassificationPipeline").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("SimpleTextClassificationPipeline")\
+        .getOrCreate()
 
     # Prepare training documents, which are labeled.
     training = spark.createDataFrame([

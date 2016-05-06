@@ -61,7 +61,10 @@ object DataFrameExample {
   }
 
   def run(params: Params) {
-    val spark = SparkSession.builder.appName(s"DataFrameExample with $params").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName(s"DataFrameExample with $params")
+      .getOrCreate()
 
     // Load input data
     println(s"Loading LIBSVM file with UDT from ${params.input}.")

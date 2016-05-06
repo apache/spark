@@ -49,7 +49,10 @@ import org.apache.spark.sql.SparkSession;
 public class JavaDeveloperApiExample {
 
   public static void main(String[] args) throws Exception {
-    SparkSession spark = SparkSession.builder().appName("JavaDeveloperApiExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaDeveloperApiExample")
+      .getOrCreate();
 
     // Prepare training data.
     List<LabeledPoint> localTraining = Lists.newArrayList(

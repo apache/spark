@@ -34,8 +34,9 @@ public class VectorizedPlainValuesReader extends ValuesReader implements Vectori
   private int offset;
   private int bitOffset; // Only used for booleans.
   private ByteBuffer byteBuffer; // used to wrap the byte array buffer
-  
-  private final static boolean bigEndianPlatform = ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+
+  private static final boolean bigEndianPlatform =
+    ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
 
   public VectorizedPlainValuesReader() {
   }

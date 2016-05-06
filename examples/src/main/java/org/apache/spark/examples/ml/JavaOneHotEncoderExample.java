@@ -37,7 +37,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaOneHotEncoderExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaOneHotEncoderExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaOneHotEncoderExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

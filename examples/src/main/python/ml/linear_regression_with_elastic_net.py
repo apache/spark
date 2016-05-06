@@ -23,7 +23,10 @@ from pyspark.ml.regression import LinearRegression
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("LinearRegressionWithElasticNet").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("LinearRegressionWithElasticNet")\
+        .getOrCreate()
 
     # $example on$
     # Load training data

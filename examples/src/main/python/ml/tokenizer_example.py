@@ -23,7 +23,10 @@ from pyspark.ml.feature import Tokenizer, RegexTokenizer
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("TokenizerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("TokenizerExample")\
+        .getOrCreate()
 
     # $example on$
     sentenceDataFrame = spark.createDataFrame([
