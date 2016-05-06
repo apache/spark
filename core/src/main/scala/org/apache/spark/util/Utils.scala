@@ -2305,6 +2305,20 @@ private[spark] object Utils extends Logging {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
   }
+
+  /**
+   * Returns the gc time limit option.
+   */
+  def getGCTimeLimitOption(): String = {
+    "-XX:GCTimeLimit=90"
+  }
+
+  /**
+   * Returns the gc heap free limit option.
+   */
+  def getGCHeapFreeLimitOption(): String = {
+    "-XX:GCHeapFreeLimit=5"
+  }
 }
 
 /**

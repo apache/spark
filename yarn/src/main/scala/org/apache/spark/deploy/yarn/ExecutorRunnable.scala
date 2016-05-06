@@ -157,6 +157,15 @@ private[yarn] class ExecutorRunnable(
       prefixEnv = Some(Client.getClusterPath(sparkConf, Utils.libraryPathEnvPrefix(Seq(p))))
     }
 
+    // Add GC Limit options if they are not present
+    val javaOptsAsStr = javaOpts.mkString(" ")
+    if (!javaOptsAsStr.contains("-XX:GCTimeLimit")) {
+      javaOpts += Utils.getGCTimeLimitOption
+    }
+    if (!javaOptsAsStr.contains("-XX:GCHeapFreeLimit")) {
+      javaOpts += Utils.getGCHeapFreeLimitOption
+    }
+
     javaOpts += "-Djava.io.tmpdir=" +
       new Path(
         YarnSparkHadoopUtil.expandEnvironment(Environment.PWD),
