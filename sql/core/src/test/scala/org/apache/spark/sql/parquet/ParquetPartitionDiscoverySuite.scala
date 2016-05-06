@@ -25,12 +25,12 @@ import scala.collection.mutable.ArrayBuffer
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.sources.PartitioningUtils._
 import org.apache.spark.sql.sources.{LogicalRelation, Partition, PartitionSpec}
 import org.apache.spark.sql.test.TestSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{Column, QueryTest, Row, SQLContext}
 
 // The data where the partitioning key exists only in the directory structure.
 case class ParquetData(intField: Int, stringField: String)
@@ -358,7 +358,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
         makePartitionDir(base, defaultPartitionName, "pi" -> 2))
 
-      read.format("org.apache.spark.sql.parquet").load(base.getCanonicalPath).registerTempTable("t")
+      sqlContext
+        .read
+        .option("mergeSchema", "true")
+        .format("parquet")
+        .load(base.getCanonicalPath)
+        .registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -447,6 +452,17 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest {
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
       checkAnswer(read.format("parquet").load(dir.getCanonicalPath), df)
+    }
+  }
+
+  test("Parallel partition discovery") {
+    withTempPath { dir =>
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD -> "1") {
+        val path = dir.getCanonicalPath
+        val df = sqlContext.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
+        df.write.partitionBy("b", "c").parquet(path)
+        checkAnswer(sqlContext.read.parquet(path), df)
+      }
     }
   }
 }
