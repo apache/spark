@@ -17,80 +17,36 @@
 
 from __future__ import print_function
 
-import argparse
-
-from pyspark import SparkContext
-
 # $example on$
 from pyspark.ml.classification import LogisticRegression, OneVsRest
 from pyspark.mllib.evaluation import MulticlassMetrics
-from pyspark.sql import SQLContext
 # $example off$
+from pyspark.sql import SparkSession
 
 """
 An example runner for Multiclass to Binary Reduction with One Vs Rest.
-The example uses Logistic Regression as the base classifier. All parameters that
-can be specified on the base classifier can be passed in to the runner options.
+The example uses Logistic Regression as the base classifier.
 Run with:
-
   bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
 """
 
 
-def parse():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--input",
-                        help="input path to labeled examples. This path must be specified")
-    parser.add_argument("--fracTest", type=float, default=0.2,
-                        help="fraction of data to hold out for testing.  If given option testInput,"
-                             " this option is ignored. default: 0.2")
-    parser.add_argument("--testInput",
-                        help="iinput path to test dataset. If given, option fracTest is ignored")
-    parser.add_argument("--maxIter", type=int, default=100,
-                        help="maximum number of iterations for Logistic Regression. default: 100")
-    parser.add_argument("--tol", type=float, default=1e-6,
-                        help="the convergence tolerance of iterations for Logistic Regression."
-                             " default: 1e-6")
-    parser.add_argument("--fitIntercept", default="true",
-                        help="fit intercept for Logistic Regression. default: true")
-    parser.add_argument("--regParam", type=float,
-                        help="the regularization parameter for Logistic Regression. default: None")
-    parser.add_argument("--elasticNetParam", type=float,
-                        help="the ElasticNet mixing parameter for Logistic Regression. default:"
-                             " None")
-    params = parser.parse_args()
-
-    assert params.input is not None, "input is required"
-    assert 0 <= params.fracTest < 1, "fracTest value incorrect; should be in [0,1)."
-    assert params.fitIntercept in ("true", "false")
-    params.fitIntercept = params.fitIntercept == "true"
-
-    return params
-
 if __name__ == "__main__":
-
-    params = parse()
-
-    sc = SparkContext(appName="PythonOneVsRestExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession \
+        .builder \
+        .appName("OneHotEncoderExample") \
+        .getOrCreate()
 
     # $example on$
-    inputData = sqlContext.read.format("libsvm").load(params.input)
-    # compute the train/test split: if testInput is not provided use part of input.
-    if params.testInput is not None:
-        train = inputData
-        test = sqlContext.read.format("libsvm").load(params.testInput)
-    else:
-        f = params.fracTest
-        (train, test) = inputData.randomSplit([1 - f, f])
+    # load data file.
+    inputData = spark.read.format("libsvm") \
+        .load("data/mllib/sample_multiclass_classification_data.txt")
 
-    lrParams = {'maxIter': params.maxIter, 'tol': params.tol, 'fitIntercept': params.fitIntercept}
-    if params.regParam is not None:
-        lrParams['regParam'] = params.regParam
-    if params.elasticNetParam is not None:
-        lrParams['elasticNetParam'] = params.elasticNetParam
+    # generate the train/test split.
+    (train, test) = inputData.randomSplit([0.8, 0.2])
 
-    # instantiate the base classifier
+    # instantiate the base classifier.
+    lrParams = {'maxIter': 10, 'tol': 1E-6, 'fitIntercept': True}
     lr = LogisticRegression(**lrParams)
 
     # instantiate the One Vs Rest Classifier.
@@ -102,24 +58,21 @@ if __name__ == "__main__":
     # score the model on test data.
     predictions = ovrModel.transform(test)
 
-    # evaluate the model
+    # obtain metrics.
     predictionAndLabels = predictions.rdd.map(lambda r: (r.prediction, r.label))
-
     metrics = MulticlassMetrics(predictionAndLabels)
 
     confusionMatrix = metrics.confusionMatrix()
 
-    # compute the false positive rate per label
-    numClasses = train.select('label').distinct().count()
-
+    # compute the false positive rate per label.
+    numClasses = confusionMatrix.numRows
     fprs = [(p, metrics.falsePositiveRate(float(p))) for p in range(numClasses)]
 
     print("Confusion Matrix")
     print(confusionMatrix)
-
     print("label\tfpr")
     for label, fpr in fprs:
         print(str(label) + "\t" + str(fpr))
     # $example off$
 
-    sc.stop()
+    spark.stop()
