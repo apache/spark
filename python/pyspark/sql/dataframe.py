@@ -197,6 +197,18 @@ class DataFrame(object):
         """
         return self._jdf.isLocal()
 
+    @property
+    @since(2.0)
+    def isStreaming(self):
+        """Returns true if this :class:`Dataset` contains one or more sources that continuously
+        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
+        must be executed as a :class:`ContinuousQuery` using the :func:`startStream` method in
+        :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
+        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
+        source present.
+        """
+        return self._jdf.isStreaming()
+
     @since(1.3)
     def show(self, n=20, truncate=True):
         """Prints the first ``n`` rows to the console.
@@ -350,15 +362,6 @@ class DataFrame(object):
         1
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sql_ctx)
-
-    @since(1.3)
-    def repartition(self, numPartitions):
-        """Returns a new :class:`DataFrame` that has exactly ``numPartitions`` partitions.
-
-        >>> df.repartition(10).rdd.getNumPartitions()
-        10
-        """
-        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     @since(1.3)
     def repartition(self, numPartitions, *cols):

@@ -185,15 +185,6 @@ class PortableDataStream(
     }
   }
 
-  /**
-   * Closing the PortableDataStream is not needed anymore. The user either can use the
-   * PortableDataStream to get a DataInputStream (which the user needs to close after usage),
-   * or a byte array.
-   */
-  @deprecated("Closing the PortableDataStream is not needed anymore.", "1.6.0")
-  def close(): Unit = {
-  }
-
   def getPath(): String = path
 }
 

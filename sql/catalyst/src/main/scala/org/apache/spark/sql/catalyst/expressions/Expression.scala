@@ -45,6 +45,7 @@ import org.apache.spark.sql.types._
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
  * - [[BinaryExpression]]: an expression that has two children.
+ * - [[TernaryExpression]]: an expression that has three children.
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
  *                       the same output data type.
  *
@@ -531,7 +532,7 @@ abstract class TernaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
-    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+    sys.error(s"TernaryExpressions must override either eval or nullSafeEval")
 
   /**
    * Short hand for generating ternary evaluation code.

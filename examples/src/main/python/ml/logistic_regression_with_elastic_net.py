@@ -17,19 +17,20 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.classification import LogisticRegression
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="LogisticRegressionWithElasticNet")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("LogisticRegressionWithElasticNet")\
+        .getOrCreate()
 
     # $example on$
     # Load training data
-    training = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    training = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     lr = LogisticRegression(maxIter=10, regParam=0.3, elasticNetParam=0.8)
 
@@ -41,4 +42,4 @@ if __name__ == "__main__":
     print("Intercept: " + str(lrModel.intercept))
     # $example off$
 
-    sc.stop()
+    spark.stop()

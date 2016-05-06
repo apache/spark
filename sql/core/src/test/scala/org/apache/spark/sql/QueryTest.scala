@@ -36,7 +36,6 @@ import org.apache.spark.sql.execution.streaming.MemoryPlan
 import org.apache.spark.sql.types.ObjectType
 
 
-
 abstract class QueryTest extends PlanTest {
 
   protected def sqlContext: SQLContext
@@ -47,22 +46,22 @@ abstract class QueryTest extends PlanTest {
   Locale.setDefault(Locale.US)
 
   /**
-   * Runs the plan and makes sure the answer contains all of the keywords, or the
-   * none of keywords are listed in the answer
-   *
-   * @param df the [[DataFrame]] to be executed
-   * @param exists true for make sure the keywords are listed in the output, otherwise
-   *               to make sure none of the keyword are not listed in the output
-   * @param keywords keyword in string array
+   * Runs the plan and makes sure the answer contains all of the keywords.
    */
-  def checkExistence(df: DataFrame, exists: Boolean, keywords: String*) {
+  def checkKeywordsExist(df: DataFrame, keywords: String*): Unit = {
     val outputs = df.collect().map(_.mkString).mkString
     for (key <- keywords) {
-      if (exists) {
-        assert(outputs.contains(key), s"Failed for $df ($key doesn't exist in result)")
-      } else {
-        assert(!outputs.contains(key), s"Failed for $df ($key existed in the result)")
-      }
+      assert(outputs.contains(key), s"Failed for $df ($key doesn't exist in result)")
+    }
+  }
+
+  /**
+   * Runs the plan and makes sure the answer does NOT contain any of the keywords.
+   */
+  def checkKeywordsNotExist(df: DataFrame, keywords: String*): Unit = {
+    val outputs = df.collect().map(_.mkString).mkString
+    for (key <- keywords) {
+      assert(!outputs.contains(key), s"Failed for $df ($key existed in the result)")
     }
   }
 
@@ -213,6 +212,7 @@ abstract class QueryTest extends PlanTest {
       case _: ObjectProducer => return
       case _: AppendColumns => return
       case _: LogicalRelation => return
+      case p if p.getClass.getSimpleName == "MetastoreRelation" => return
       case _: MemoryPlan => return
     }.transformAllExpressions {
       case a: ImperativeAggregate => return
@@ -282,7 +282,7 @@ abstract class QueryTest extends PlanTest {
     def renormalize: PartialFunction[LogicalPlan, LogicalPlan] = {
       case l: LogicalRDD =>
         val origin = logicalRDDs.pop()
-        LogicalRDD(l.output, origin.rdd)(sqlContext)
+        LogicalRDD(l.output, origin.rdd)(sqlContext.sparkSession)
       case l: LocalRelation =>
         val origin = localRelations.pop()
         l.copy(data = origin.data)

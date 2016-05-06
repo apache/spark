@@ -237,7 +237,7 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix in a [[DenseVector]](column major)
    */
@@ -246,7 +246,7 @@ private[spark] object BLAS extends Serializable with Logging {
   }
 
   /**
-   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's ?SPR.
+   * Adds alpha * v * v.t to a matrix in-place. This is the same as BLAS's ?SPR.
    *
    * @param U the upper triangular part of the matrix packed in an array (column major)
    */
@@ -267,7 +267,6 @@ private[spark] object BLAS extends Serializable with Logging {
           col = indices(j)
           // Skip empty columns.
           colStartIdx += (col - prevCol) * (col + prevCol + 1) / 2
-          col = indices(j)
           av = alpha * values(j)
           i = 0
           while (i <= j) {

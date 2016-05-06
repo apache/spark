@@ -32,17 +32,17 @@ import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.ExpressionInfo
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.CacheManager
+import org.apache.spark.sql.execution.QueryExecution
 import org.apache.spark.sql.execution.command.CacheTableCommand
-import org.apache.spark.sql.execution.ui.SQLListener
 import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.hive.execution.HiveNativeCommand
+import org.apache.spark.sql.hive.client.HiveClient
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.{ShutdownHookManager, Utils}
 
@@ -71,101 +71,103 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * test cases that rely on TestHive must be serialized.
  */
-class TestHiveContext private[hive](
-    testHiveSharedState: TestHiveSharedState,
-    val warehousePath: File,
-    val scratchDirPath: File,
-    metastoreTemporaryConf: Map[String, String],
+class TestHiveContext(
+    @transient override val sparkSession: TestHiveSparkSession,
     isRootContext: Boolean)
-  extends HiveContext(testHiveSharedState, isRootContext) { self =>
+  extends SQLContext(sparkSession, isRootContext) {
 
-  private def this(
-      sc: SparkContext,
-      warehousePath: File,
-      scratchDirPath: File,
-      metastoreTemporaryConf: Map[String, String]) {
-    this(
-      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf),
-      warehousePath,
-      scratchDirPath,
-      metastoreTemporaryConf,
-      true)
+  def this(sc: SparkContext) {
+    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
   }
 
+  override def newSession(): TestHiveContext = {
+    new TestHiveContext(sparkSession.newSession(), false)
+  }
+
+  override def sharedState: TestHiveSharedState = sparkSession.sharedState
+
+  override def sessionState: TestHiveSessionState = sparkSession.sessionState
+
+  def setCacheTables(c: Boolean): Unit = {
+    sparkSession.setCacheTables(c)
+  }
+
+  def getHiveFile(path: String): File = {
+    sparkSession.getHiveFile(path)
+  }
+
+  def loadTestTable(name: String): Unit = {
+    sparkSession.loadTestTable(name)
+  }
+
+  def reset(): Unit = {
+    sparkSession.reset()
+  }
+
+}
+
+
+private[hive] class TestHiveSparkSession(
+    @transient private val sc: SparkContext,
+    val warehousePath: File,
+    scratchDirPath: File,
+    metastoreTemporaryConf: Map[String, String],
+    @transient private val existingSharedState: Option[TestHiveSharedState])
+  extends SparkSession(sc) with Logging { self =>
+
+  // TODO: We need to set the temp warehouse path to sc's conf.
+  // Right now, In SparkSession, we will set the warehouse path to the default one
+  // instead of the temp one. Then, we override the setting in TestHiveSharedState
+  // when we creating metadataHive. This flow is not easy to follow and can introduce
+  // confusion when a developer is debugging an issue. We need to refactor this part
+  // to just set the temp warehouse path in sc's conf.
   def this(sc: SparkContext) {
     this(
       sc,
       Utils.createTempDir(namePrefix = "warehouse"),
       TestHiveContext.makeScratchDir(),
-      HiveContext.newTemporaryConfiguration(useInMemoryDerby = false))
+      HiveUtils.newTemporaryConfiguration(useInMemoryDerby = false),
+      None)
   }
 
-  override def newSession(): HiveContext = {
-    new TestHiveContext(
-      testHiveSharedState,
-      warehousePath,
-      scratchDirPath,
-      metastoreTemporaryConf,
-      isRootContext = false)
+  assume(sc.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+
+  // TODO: Let's remove TestHiveSharedState and TestHiveSessionState. Otherwise,
+  // we are not really testing the reflection logic based on the setting of
+  // CATALOG_IMPLEMENTATION.
+  @transient
+  override lazy val sharedState: TestHiveSharedState = {
+    existingSharedState.getOrElse(
+      new TestHiveSharedState(sc, warehousePath, scratchDirPath, metastoreTemporaryConf))
+  }
+
+  @transient
+  override lazy val sessionState: TestHiveSessionState =
+    new TestHiveSessionState(self, warehousePath)
+
+  override def newSession(): TestHiveSparkSession = {
+    new TestHiveSparkSession(
+      sc, warehousePath, scratchDirPath, metastoreTemporaryConf, Some(sharedState))
+  }
+
+  private var cacheTables: Boolean = false
+
+  def setCacheTables(c: Boolean): Unit = {
+    cacheTables = c
   }
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
   // without restarting the JVM.
   System.clearProperty("spark.hostPort")
-  CommandProcessorFactory.clean(sessionState.hiveconf)
-
-  sessionState.hiveconf.set("hive.plan.serialization.format", "javaXML")
-
-  // A snapshot of the entries in the starting SQLConf
-  // We save this because tests can mutate this singleton object if they want
-  val initialSQLConf: SQLConf = {
-    val snapshot = new SQLConf
-    conf.getAllConfs.foreach { case (k, v) => snapshot.setConfString(k, v) }
-    snapshot
-  }
-
-  val testTempDir = Utils.createTempDir()
 
   // For some hive test case which contain ${system:test.tmp.dir}
-  System.setProperty("test.tmp.dir", testTempDir.getCanonicalPath)
+  System.setProperty("test.tmp.dir", Utils.createTempDir().getCanonicalPath)
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
+
   /** The location of the hive source code. */
   lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
-
-  // Override so we can intercept relative paths and rewrite them to point at hive.
-  override def runSqlHive(sql: String): Seq[String] =
-    super.runSqlHive(rewritePaths(substitutor.substitute(sessionState.hiveconf, sql)))
-
-  override def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution(plan)
-
-  @transient
-  protected[sql] override lazy val sessionState = new HiveSessionState(this) {
-    override lazy val conf: SQLConf = {
-      new SQLConf {
-        clear()
-        override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
-        override def clear(): Unit = {
-          super.clear()
-          TestHiveContext.overrideConfs.map {
-            case (key, value) => setConfString(key, value)
-          }
-        }
-      }
-    }
-
-    override lazy val functionRegistry = {
-      // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
-      // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
-      val fr = new TestHiveFunctionRegistry
-      org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
-        case (name, (info, builder)) => fr.registerFunction(name, info, builder)
-      }
-      fr
-    }
-  }
 
   /**
    * Returns the value of specified environmental variable as a [[java.io.File]] after checking
@@ -174,19 +176,6 @@ class TestHiveContext private[hive](
   private def envVarToFile(envVar: String): Option[File] = {
     Option(System.getenv(envVar)).map(new File(_))
   }
-
-  /**
-   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
-   * hive test cases assume the system is set up.
-   */
-  private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA") {
-      val testDataLocation =
-        hiveDevHome.map(_.getCanonicalPath).getOrElse(inRepoTests.getCanonicalPath)
-      cmd.replaceAll("\\.\\./\\.\\./", testDataLocation + "/")
-    } else {
-      cmd
-    }
 
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
@@ -210,36 +199,11 @@ class TestHiveContext private[hive](
 
   val describedTable = "DESCRIBE (\\w+)".r
 
-  /**
-   * Override QueryExecution with special debug workflow.
-   */
-  class QueryExecution(logicalPlan: LogicalPlan)
-    extends super.QueryExecution(logicalPlan) {
-    def this(sql: String) = this(parseSql(sql))
-    override lazy val analyzed = {
-      val describedTables = logical match {
-        case HiveNativeCommand(describedTable(tbl)) => tbl :: Nil
-        case CacheTableCommand(tbl, _, _) => tbl :: Nil
-        case _ => Nil
-      }
-
-      // Make sure any test tables referenced are loaded.
-      val referencedTables =
-        describedTables ++
-        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
-      val referencedTestTables = referencedTables.filter(testTables.contains)
-      logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
-      referencedTestTables.foreach(loadTestTable)
-      // Proceed with analysis.
-      sessionState.analyzer.execute(logical)
-    }
-  }
-
   case class TestTable(name: String, commands: (() => Unit)*)
 
   protected[hive] implicit class SqlCmd(sql: String) {
     def cmd: () => Unit = {
-      () => new QueryExecution(sql).stringResult(): Unit
+      () => new TestHiveQueryExecution(sql).hiveResultString(): Unit
     }
   }
 
@@ -266,19 +230,20 @@ class TestHiveContext private[hive](
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv3.txt")}' INTO TABLE src1".cmd),
     TestTable("srcpart", () => {
-      runSqlHive(
+      sql(
         "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
-        runSqlHive(
+        sql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
       }
     }),
     TestTable("srcpart1", () => {
-      runSqlHive("CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+      sql(
+        "CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
-        runSqlHive(
+        sql(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
              |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
@@ -289,7 +254,7 @@ class TestHiveContext private[hive](
       import org.apache.hadoop.mapred.{SequenceFileInputFormat, SequenceFileOutputFormat}
       import org.apache.thrift.protocol.TBinaryProtocol
 
-      runSqlHive(
+      sql(
         s"""
          |CREATE TABLE src_thrift(fake INT)
          |ROW FORMAT SERDE '${classOf[ThriftDeserializer].getName}'
@@ -302,7 +267,7 @@ class TestHiveContext private[hive](
          |OUTPUTFORMAT '${classOf[SequenceFileOutputFormat[_, _]].getName}'
         """.stripMargin)
 
-      runSqlHive(
+      sql(
         s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
     }),
     TestTable("serdeins",
@@ -415,7 +380,6 @@ class TestHiveContext private[hive](
 
   private val loadedTables = new collection.mutable.HashSet[String]
 
-  var cacheTables: Boolean = false
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
       // Marks the table as loaded first to prevent infinite mutually recursive table loading.
@@ -426,7 +390,7 @@ class TestHiveContext private[hive](
       createCmds.foreach(_())
 
       if (cacheTables) {
-        cacheTable(name)
+        new SQLContext(self).cacheTable(name)
       }
     }
   }
@@ -451,34 +415,28 @@ class TestHiveContext private[hive](
         }
       }
 
-      cacheManager.clearCache()
+      sharedState.cacheManager.clearCache()
       loadedTables.clear()
       sessionState.catalog.clearTempTables()
       sessionState.catalog.invalidateCache()
-      metadataHive.reset()
+
+      sessionState.metadataHive.reset()
 
       FunctionRegistry.getFunctionNames.asScala.filterNot(originalUDFs.contains(_)).
         foreach { udfName => FunctionRegistry.unregisterTemporaryUDF(udfName) }
 
       // Some tests corrupt this value on purpose, which breaks the RESET call below.
-      sessionState.hiveconf.set("fs.default.name", new File(".").toURI.toString)
+      sessionState.conf.setConfString("fs.default.name", new File(".").toURI.toString)
       // It is important that we RESET first as broken hooks that might have been set could break
       // other sql exec here.
-      executionHive.runSqlHive("RESET")
-      metadataHive.runSqlHive("RESET")
+      sessionState.metadataHive.runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       // https://issues.apache.org/jira/browse/HIVE-9004
-      runSqlHive("set hive.table.parameters.default=")
-      runSqlHive("set datanucleus.cache.collections=true")
-      runSqlHive("set datanucleus.cache.collections.lazy=true")
+      sessionState.metadataHive.runSqlHive("set hive.table.parameters.default=")
+      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections=true")
+      sessionState.metadataHive.runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
-      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
-
-      // In case a test changed any of these values, restore all the original ones here.
-      TestHiveContext.hiveClientConfigurations(
-        sessionState.hiveconf, warehousePath, scratchDirPath, metastoreTemporaryConf)
-          .foreach { case (k, v) => metadataHive.runSqlHive(s"SET $k=$v") }
-      defaultOverrides()
+      sessionState.metadataHive.runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       sessionState.catalog.setCurrentDatabase("default")
     } catch {
@@ -489,16 +447,49 @@ class TestHiveContext private[hive](
 
 }
 
+
+private[hive] class TestHiveQueryExecution(
+    sparkSession: TestHiveSparkSession,
+    logicalPlan: LogicalPlan)
+  extends QueryExecution(sparkSession, logicalPlan) with Logging {
+
+  def this(sparkSession: TestHiveSparkSession, sql: String) {
+    this(sparkSession, sparkSession.sessionState.sqlParser.parsePlan(sql))
+  }
+
+  def this(sql: String) {
+    this(TestHive.sparkSession, sql)
+  }
+
+  override lazy val analyzed: LogicalPlan = {
+    val describedTables = logical match {
+      case CacheTableCommand(tbl, _, _) => tbl :: Nil
+      case _ => Nil
+    }
+
+    // Make sure any test tables referenced are loaded.
+    val referencedTables =
+      describedTables ++
+        logical.collect { case UnresolvedRelation(tableIdent, _) => tableIdent.table }
+    val referencedTestTables = referencedTables.filter(sparkSession.testTables.contains)
+    logDebug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
+    referencedTestTables.foreach(sparkSession.loadTestTable)
+    // Proceed with analysis.
+    sparkSession.sessionState.analyzer.execute(logical)
+  }
+}
+
+
 private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
 
   private val removedFunctions =
     collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
 
-  def unregisterFunction(name: String): Unit = {
+  def unregisterFunction(name: String): Unit = synchronized {
     functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
   }
 
-  def restore(): Unit = {
+  def restore(): Unit = synchronized {
     removedFunctions.foreach {
       case (name, (info, builder)) => registerFunction(name, info, builder)
     }
@@ -517,7 +508,39 @@ private[hive] class TestHiveSharedState(
     TestHiveContext.newClientForMetadata(
       sc.conf, sc.hadoopConfiguration, warehousePath, scratchDirPath, metastoreTemporaryConf)
   }
+}
 
+
+private[hive] class TestHiveSessionState(
+    sparkSession: TestHiveSparkSession,
+    warehousePath: File)
+  extends HiveSessionState(sparkSession) { self =>
+
+  override lazy val conf: SQLConf = {
+    new SQLConf {
+      clear()
+      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+      override def clear(): Unit = {
+        super.clear()
+        TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
+        setConfString("hive.metastore.warehouse.dir", self.warehousePath.toURI.toString)
+      }
+    }
+  }
+
+  override lazy val functionRegistry: TestHiveFunctionRegistry = {
+    // We use TestHiveFunctionRegistry at here to track functions that have been explicitly
+    // unregistered (through TestHiveFunctionRegistry.unregisterFunction method).
+    val fr = new TestHiveFunctionRegistry
+    org.apache.spark.sql.catalyst.analysis.FunctionRegistry.expressions.foreach {
+      case (name, (info, builder)) => fr.registerFunction(name, info, builder)
+    }
+    fr
+  }
+
+  override def executePlan(plan: LogicalPlan): TestHiveQueryExecution = {
+    new TestHiveQueryExecution(sparkSession, plan)
+  }
 }
 
 
@@ -541,30 +564,30 @@ private[hive] object TestHiveContext {
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): HiveClient = {
-    val hiveConf = new HiveConf(hadoopConf, classOf[HiveConf])
-    HiveContext.newClientForMetadata(
+    HiveUtils.newClientForMetadata(
       conf,
-      hiveConf,
       hadoopConf,
-      hiveClientConfigurations(hiveConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
+      hiveClientConfigurations(hadoopConf, warehousePath, scratchDirPath, metastoreTemporaryConf))
   }
 
   /**
    * Configurations needed to create a [[HiveClient]].
    */
-  private def hiveClientConfigurations(
-      hiveconf: HiveConf,
+  def hiveClientConfigurations(
+      hadoopConf: Configuration,
       warehousePath: File,
       scratchDirPath: File,
       metastoreTemporaryConf: Map[String, String]): Map[String, String] = {
-    HiveContext.hiveClientConfigurations(hiveconf) ++ metastoreTemporaryConf ++ Map(
+    HiveUtils.hiveClientConfigurations(hadoopConf) ++ metastoreTemporaryConf ++ Map(
+      // Override WAREHOUSE_PATH and METASTOREWAREHOUSE to use the given path.
+      SQLConf.WAREHOUSE_PATH.key -> warehousePath.toURI.toString,
       ConfVars.METASTOREWAREHOUSE.varname -> warehousePath.toURI.toString,
       ConfVars.METASTORE_INTEGER_JDO_PUSHDOWN.varname -> "true",
       ConfVars.SCRATCHDIR.varname -> scratchDirPath.toURI.toString,
       ConfVars.METASTORE_CLIENT_CONNECT_RETRY_DELAY.varname -> "1")
   }
 
-  private def makeScratchDir(): File = {
+  def makeScratchDir(): File = {
     val scratchDir = Utils.createTempDir(namePrefix = "scratch")
     scratchDir.delete()
     scratchDir

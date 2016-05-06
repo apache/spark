@@ -19,9 +19,7 @@ package org.apache.spark.examples.ml;
 // $example on$
 import java.util.regex.Pattern;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.clustering.LDA;
 import org.apache.spark.ml.clustering.LDAModel;
@@ -30,7 +28,7 @@ import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
@@ -67,15 +65,16 @@ public class JavaLDAExample {
     String inputFile = "data/mllib/sample_lda_data.txt";
 
     // Parses the arguments
-    SparkConf conf = new SparkConf().setAppName("JavaLDAExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaLDAExample")
+      .getOrCreate();
 
     // Loads data
-    JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParseVector());
+    JavaRDD<Row> points = spark.read().text(inputFile).javaRDD().map(new ParseVector());
     StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
     StructType schema = new StructType(fields);
-    Dataset<Row> dataset = sqlContext.createDataFrame(points, schema);
+    Dataset<Row> dataset = spark.createDataFrame(points, schema);
 
     // Trains a LDA model
     LDA lda = new LDA()
@@ -91,7 +90,7 @@ public class JavaLDAExample {
     topics.show(false);
     model.transform(dataset).show(false);
 
-    jsc.stop();
+    spark.stop();
   }
   // $example off$
 }

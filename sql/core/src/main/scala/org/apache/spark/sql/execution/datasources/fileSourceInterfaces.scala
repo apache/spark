@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs._
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, Filter}
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -59,11 +60,25 @@ abstract class OutputWriterFactory extends Serializable {
    * @param context The Hadoop MapReduce task context.
    * @since 1.4.0
    */
-  private[sql] def newInstance(
+  def newInstance(
       path: String,
       bucketId: Option[Int], // TODO: This doesn't belong here...
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter
+
+  /**
+   * Returns a new instance of [[OutputWriter]] that will write data to the given path.
+   * This method gets called by each task on executor to write [[InternalRow]]s to
+   * format-specific files. Compared to the other `newInstance()`, this is a newer API that
+   * passes only the path that the writer must write to. The writer must write to the exact path
+   * and not modify it (do not add subdirectories, extensions, etc.). All other
+   * file-format-specific information needed to create the writer must be passed
+   * through the [[OutputWriterFactory]] implementation.
+   * @since 2.0.0
+   */
+  private[sql] def newWriter(path: String): OutputWriter = {
+    throw new UnsupportedOperationException("newInstance with just path not supported")
+  }
 }
 
 /**
@@ -119,13 +134,15 @@ abstract class OutputWriter {
  * @param options Configuration used when reading / writing data.
  */
 case class HadoopFsRelation(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     location: FileCatalog,
     partitionSchema: StructType,
     dataSchema: StructType,
     bucketSpec: Option[BucketSpec],
     fileFormat: FileFormat,
     options: Map[String, String]) extends BaseRelation with FileRelation {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
@@ -160,7 +177,7 @@ trait FileFormat {
    * Spark will require that user specify the schema manually.
    */
   def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType]
 
@@ -169,7 +186,7 @@ trait FileFormat {
    * can be useful for collecting necessary global information for scanning input data.
    */
   def prepareRead(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Map[String, String] = options
 
@@ -179,7 +196,7 @@ trait FileFormat {
    * by setting the output committer class in the conf of spark.sql.sources.outputCommitterClass.
    */
   def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory
@@ -189,7 +206,7 @@ trait FileFormat {
    *
    * TODO: we should just have different traits for the different formats.
    */
-  def supportBatch(sqlContext: SQLContext, dataSchema: StructType): Boolean = {
+  def supportBatch(sparkSession: SparkSession, dataSchema: StructType): Boolean = {
     false
   }
 
@@ -210,15 +227,69 @@ trait FileFormat {
    * @return
    */
   def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): PartitionedFile => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
     // TODO: Remove this default implementation when the other formats have been ported
     // Until then we guard in [[FileSourceStrategy]] to only call this method on supported formats.
     throw new UnsupportedOperationException(s"buildReader is not supported for $this")
+  }
+
+  /**
+   * Exactly the same as [[buildReader]] except that the reader function returned by this method
+   * appends partition values to [[InternalRow]]s produced by the reader function [[buildReader]]
+   * returns.
+   */
+  private[sql] def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    val dataReader = buildReader(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+
+    new (PartitionedFile => Iterator[InternalRow]) with Serializable {
+      private val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
+
+      private val joinedRow = new JoinedRow()
+
+      // Using lazy val to avoid serialization
+      private lazy val appendPartitionColumns =
+        GenerateUnsafeProjection.generate(fullSchema, fullSchema)
+
+      override def apply(file: PartitionedFile): Iterator[InternalRow] = {
+        // Using local val to avoid per-row lazy val check (pre-mature optimization?...)
+        val converter = appendPartitionColumns
+
+        // Note that we have to apply the converter even though `file.partitionValues` is empty.
+        // This is because the converter is also responsible for converting safe `InternalRow`s into
+        // `UnsafeRow`s.
+        dataReader(file).map { dataRow =>
+          converter(joinedRow(dataRow, file.partitionValues))
+        }
+      }
+    }
+  }
+
+  /**
+   * Returns a [[OutputWriterFactory]] for generating output writers that can write data.
+   * This method is current used only by FileStreamSinkWriter to generate output writers that
+   * does not use output committers to write data. The OutputWriter generated by the returned
+   * [[OutputWriterFactory]] must implement the method `newWriter(path)`..
+   */
+  def buildWriter(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      options: Map[String, String]): OutputWriterFactory = {
+    // TODO: Remove this default implementation when the other formats have been ported
+    throw new UnsupportedOperationException(s"buildWriter is not supported for $this")
   }
 }
 
@@ -233,217 +304,31 @@ case class Partition(values: InternalRow, files: Seq[FileStatus])
  * as the partitioning characteristics of those files.
  */
 trait FileCatalog {
+
+  /** Returns the list of input paths from which the catalog will get files. */
   def paths: Seq[Path]
 
+  /** Returns the specification of the partitions inferred from the data. */
   def partitionSpec(): PartitionSpec
 
   /**
    * Returns all valid files grouped into partitions when the data is partitioned. If the data is
-   * unpartitioned, this will return a single partition with not partition values.
+   * unpartitioned, this will return a single partition with no partition values.
    *
-   * @param filters the filters used to prune which partitions are returned.  These filters must
+   * @param filters The filters used to prune which partitions are returned.  These filters must
    *                only refer to partition columns and this method will only return files
    *                where these predicates are guaranteed to evaluate to `true`.  Thus, these
    *                filters will not need to be evaluated again on the returned data.
    */
   def listFiles(filters: Seq[Expression]): Seq[Partition]
 
+  /** Returns all the valid files. */
   def allFiles(): Seq[FileStatus]
 
-  def getStatus(path: Path): Array[FileStatus]
-
+  /** Refresh the file listing */
   def refresh(): Unit
 }
 
-/**
- * A file catalog that caches metadata gathered by scanning all the files present in `paths`
- * recursively.
- *
- * @param parameters as set of options to control discovery
- * @param paths a list of paths to scan
- * @param partitionSchema an optional partition schema that will be use to provide types for the
- *                        discovered partitions
- */
-class HDFSFileCatalog(
-    val sqlContext: SQLContext,
-    val parameters: Map[String, String],
-    val paths: Seq[Path],
-    val partitionSchema: Option[StructType])
-  extends FileCatalog with Logging {
-
-  private val hadoopConf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
-
-  var leafFiles = mutable.LinkedHashMap.empty[Path, FileStatus]
-  var leafDirToChildrenFiles = mutable.Map.empty[Path, Array[FileStatus]]
-  var cachedPartitionSpec: PartitionSpec = _
-
-  def partitionSpec(): PartitionSpec = {
-    if (cachedPartitionSpec == null) {
-      cachedPartitionSpec = inferPartitioning(partitionSchema)
-    }
-
-    cachedPartitionSpec
-  }
-
-  refresh()
-
-  override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
-    if (partitionSpec().partitionColumns.isEmpty) {
-      Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
-    } else {
-      prunePartitions(filters, partitionSpec()).map {
-        case PartitionDirectory(values, path) =>
-          Partition(
-            values,
-            getStatus(path).filterNot(_.getPath.getName startsWith "_"))
-      }
-    }
-  }
-
-  protected def prunePartitions(
-      predicates: Seq[Expression],
-      partitionSpec: PartitionSpec): Seq[PartitionDirectory] = {
-    val PartitionSpec(partitionColumns, partitions) = partitionSpec
-    val partitionColumnNames = partitionColumns.map(_.name).toSet
-    val partitionPruningPredicates = predicates.filter {
-      _.references.map(_.name).toSet.subsetOf(partitionColumnNames)
-    }
-
-    if (partitionPruningPredicates.nonEmpty) {
-      val predicate = partitionPruningPredicates.reduce(expressions.And)
-
-      val boundPredicate = InterpretedPredicate.create(predicate.transform {
-        case a: AttributeReference =>
-          val index = partitionColumns.indexWhere(a.name == _.name)
-          BoundReference(index, partitionColumns(index).dataType, nullable = true)
-      })
-
-      val selected = partitions.filter {
-        case PartitionDirectory(values, _) => boundPredicate(values)
-      }
-      logInfo {
-        val total = partitions.length
-        val selectedSize = selected.length
-        val percentPruned = (1 - selectedSize.toDouble / total.toDouble) * 100
-        s"Selected $selectedSize partitions out of $total, pruned $percentPruned% partitions."
-      }
-
-      selected
-    } else {
-      partitions
-    }
-  }
-
-  def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
-
-  def getStatus(path: Path): Array[FileStatus] = leafDirToChildrenFiles(path)
-
-  private def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
-    if (paths.length >= sqlContext.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sqlContext.sparkContext)
-    } else {
-      val statuses = paths.flatMap { path =>
-        val fs = path.getFileSystem(hadoopConf)
-        logInfo(s"Listing $path on driver")
-        // Dummy jobconf to get to the pathFilter defined in configuration
-        val jobConf = new JobConf(hadoopConf, this.getClass())
-        val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-        if (pathFilter != null) {
-          Try(fs.listStatus(path, pathFilter)).getOrElse(Array.empty)
-        } else {
-          Try(fs.listStatus(path)).getOrElse(Array.empty)
-        }
-      }.filterNot { status =>
-        val name = status.getPath.getName
-        HadoopFsRelation.shouldFilterOut(name)
-      }
-
-      val (dirs, files) = statuses.partition(_.isDirectory)
-
-      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-      if (dirs.isEmpty) {
-        mutable.LinkedHashSet(files: _*)
-      } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
-      }
-    }
-  }
-
-   def inferPartitioning(schema: Option[StructType]): PartitionSpec = {
-    // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = leafDirToChildrenFiles.keys.toSeq
-    schema match {
-      case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
-        val spec = PartitioningUtils.parsePartitions(
-          leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = false,
-          basePaths = basePaths)
-
-        // Without auto inference, all of value in the `row` should be null or in StringType,
-        // we need to cast into the data type that user specified.
-        def castPartitionValuesToUserSchema(row: InternalRow) = {
-          InternalRow((0 until row.numFields).map { i =>
-            Cast(
-              Literal.create(row.getUTF8String(i), StringType),
-              userProvidedSchema.fields(i).dataType).eval()
-          }: _*)
-        }
-
-        PartitionSpec(userProvidedSchema, spec.partitions.map { part =>
-          part.copy(values = castPartitionValuesToUserSchema(part.values))
-        })
-      case _ =>
-        PartitioningUtils.parsePartitions(
-          leafDirs,
-          PartitioningUtils.DEFAULT_PARTITION_NAME,
-          typeInference = sqlContext.conf.partitionColumnTypeInferenceEnabled(),
-          basePaths = basePaths)
-    }
-  }
-
-  /**
-   * Contains a set of paths that are considered as the base dirs of the input datasets.
-   * The partitioning discovery logic will make sure it will stop when it reaches any
-   * base path. By default, the paths of the dataset provided by users will be base paths.
-   * For example, if a user uses `sqlContext.read.parquet("/path/something=true/")`, the base path
-   * will be `/path/something=true/`, and the returned DataFrame will not contain a column of
-   * `something`. If users want to override the basePath. They can set `basePath` in the options
-   * to pass the new base path to the data source.
-   * For the above example, if the user-provided base path is `/path/`, the returned
-   * DataFrame will have the column of `something`.
-   */
-  private def basePaths: Set[Path] = {
-    val userDefinedBasePath = parameters.get("basePath").map(basePath => Set(new Path(basePath)))
-    userDefinedBasePath.getOrElse {
-      // If the user does not provide basePath, we will just use paths.
-      paths.toSet
-    }.map { hdfsPath =>
-      // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
-      val fs = hdfsPath.getFileSystem(hadoopConf)
-      hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
-    }
-  }
-
-  def refresh(): Unit = {
-    val files = listLeafFiles(paths)
-
-    leafFiles.clear()
-    leafDirToChildrenFiles.clear()
-
-    leafFiles ++= files.map(f => f.getPath -> f)
-    leafDirToChildrenFiles ++= files.toArray.groupBy(_.getPath.getParent)
-
-    cachedPartitionSpec = null
-  }
-
-  override def equals(other: Any): Boolean = other match {
-    case hdfs: HDFSFileCatalog => paths.toSet == hdfs.paths.toSet
-    case _ => false
-  }
-
-  override def hashCode(): Int = paths.toSet.hashCode()
-}
 
 /**
  * Helper methods for gathering metadata from HDFS.
@@ -473,15 +358,15 @@ private[sql] object HadoopFsRelation extends Logging {
       // Dummy jobconf to get to the pathFilter defined in configuration
       val jobConf = new JobConf(fs.getConf, this.getClass())
       val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
-      val statuses =
-        if (pathFilter != null) {
-          val (dirs, files) = fs.listStatus(status.getPath, pathFilter).partition(_.isDirectory)
-          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-        } else {
-          val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
-          files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
-        }
-      statuses.filterNot(status => shouldFilterOut(status.getPath.getName))
+      val statuses = {
+        val (dirs, files) = fs.listStatus(status.getPath).partition(_.isDirectory)
+        val stats = files ++ dirs.flatMap(dir => listLeafFiles(fs, dir))
+        if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
+      }
+      statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
+        case f: LocatedFileStatus => f
+        case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+      }
     }
   }
 
@@ -489,6 +374,12 @@ private[sql] object HadoopFsRelation extends Logging {
   // well with `SerializableWritable`.  So there seems to be no way to serialize a `FileStatus`.
   // Here we use `FakeFileStatus` to extract key components of a `FileStatus` to serialize it from
   // executor side and reconstruct it on driver side.
+  case class FakeBlockLocation(
+      names: Array[String],
+      hosts: Array[String],
+      offset: Long,
+      length: Long)
+
   case class FakeFileStatus(
       path: String,
       length: Long,
@@ -496,7 +387,8 @@ private[sql] object HadoopFsRelation extends Logging {
       blockReplication: Short,
       blockSize: Long,
       modificationTime: Long,
-      accessTime: Long)
+      accessTime: Long,
+      blockLocations: Array[FakeBlockLocation])
 
   def listLeafFilesInParallel(
       paths: Seq[Path],
@@ -511,6 +403,20 @@ private[sql] object HadoopFsRelation extends Logging {
       val fs = path.getFileSystem(serializableConfiguration.value)
       Try(listLeafFiles(fs, fs.getFileStatus(path))).getOrElse(Array.empty)
     }.map { status =>
+      val blockLocations = status match {
+        case f: LocatedFileStatus =>
+          f.getBlockLocations.map { loc =>
+            FakeBlockLocation(
+              loc.getNames,
+              loc.getHosts,
+              loc.getOffset,
+              loc.getLength)
+          }
+
+        case _ =>
+          Array.empty[FakeBlockLocation]
+      }
+
       FakeFileStatus(
         status.getPath.toString,
         status.getLen,
@@ -518,12 +424,18 @@ private[sql] object HadoopFsRelation extends Logging {
         status.getReplication,
         status.getBlockSize,
         status.getModificationTime,
-        status.getAccessTime)
+        status.getAccessTime,
+        blockLocations)
     }.collect()
 
     val hadoopFakeStatuses = fakeStatuses.map { f =>
-      new FileStatus(
-        f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path))
+      val blockLocations = f.blockLocations.map { loc =>
+        new BlockLocation(loc.names, loc.hosts, loc.offset, loc.length)
+      }
+      new LocatedFileStatus(
+        new FileStatus(
+          f.length, f.isDir, f.blockReplication, f.blockSize, f.modificationTime, new Path(f.path)),
+        blockLocations)
     }
     mutable.LinkedHashSet(hadoopFakeStatuses: _*)
   }

@@ -22,94 +22,97 @@ import com.google.common.primitives.UnsignedLongs;
 import org.apache.spark.annotation.Private;
 import org.apache.spark.unsafe.types.ByteArray;
 import org.apache.spark.unsafe.types.UTF8String;
-import org.apache.spark.util.Utils;
 
 @Private
 public class PrefixComparators {
   private PrefixComparators() {}
 
-  public static final StringPrefixComparator STRING = new StringPrefixComparator();
-  public static final StringPrefixComparatorDesc STRING_DESC = new StringPrefixComparatorDesc();
-  public static final BinaryPrefixComparator BINARY = new BinaryPrefixComparator();
-  public static final BinaryPrefixComparatorDesc BINARY_DESC = new BinaryPrefixComparatorDesc();
-  public static final LongPrefixComparator LONG = new LongPrefixComparator();
-  public static final LongPrefixComparatorDesc LONG_DESC = new LongPrefixComparatorDesc();
-  public static final DoublePrefixComparator DOUBLE = new DoublePrefixComparator();
-  public static final DoublePrefixComparatorDesc DOUBLE_DESC = new DoublePrefixComparatorDesc();
+  public static final PrefixComparator STRING = new UnsignedPrefixComparator();
+  public static final PrefixComparator STRING_DESC = new UnsignedPrefixComparatorDesc();
+  public static final PrefixComparator BINARY = new UnsignedPrefixComparator();
+  public static final PrefixComparator BINARY_DESC = new UnsignedPrefixComparatorDesc();
+  public static final PrefixComparator LONG = new SignedPrefixComparator();
+  public static final PrefixComparator LONG_DESC = new SignedPrefixComparatorDesc();
+  public static final PrefixComparator DOUBLE = new UnsignedPrefixComparator();
+  public static final PrefixComparator DOUBLE_DESC = new UnsignedPrefixComparatorDesc();
 
-  public static final class StringPrefixComparator extends PrefixComparator {
-    @Override
-    public int compare(long aPrefix, long bPrefix) {
-      return UnsignedLongs.compare(aPrefix, bPrefix);
-    }
-
+  public static final class StringPrefixComparator {
     public static long computePrefix(UTF8String value) {
       return value == null ? 0L : value.getPrefix();
     }
   }
 
-  public static final class StringPrefixComparatorDesc extends PrefixComparator {
-    @Override
-    public int compare(long bPrefix, long aPrefix) {
-      return UnsignedLongs.compare(aPrefix, bPrefix);
-    }
-  }
-
-  public static final class BinaryPrefixComparator extends PrefixComparator {
-    @Override
-    public int compare(long aPrefix, long bPrefix) {
-      return UnsignedLongs.compare(aPrefix, bPrefix);
-    }
-
+  public static final class BinaryPrefixComparator {
     public static long computePrefix(byte[] bytes) {
       return ByteArray.getPrefix(bytes);
     }
   }
 
-  public static final class BinaryPrefixComparatorDesc extends PrefixComparator {
+  public static final class DoublePrefixComparator {
+    /**
+     * Converts the double into a value that compares correctly as an unsigned long. For more
+     * details see http://stereopsis.com/radix.html.
+     */
+    public static long computePrefix(double value) {
+      // Java's doubleToLongBits already canonicalizes all NaN values to the smallest possible
+      // positive NaN, so there's nothing special we need to do for NaNs.
+      long bits = Double.doubleToLongBits(value);
+      // Negative floats compare backwards due to their sign-magnitude representation, so flip
+      // all the bits in this case.
+      long mask = -(bits >>> 63) | 0x8000000000000000L;
+      return bits ^ mask;
+    }
+  }
+
+  /**
+   * Provides radix sort parameters. Comparators implementing this also are indicating that the
+   * ordering they define is compatible with radix sort.
+   */
+  public abstract static class RadixSortSupport extends PrefixComparator {
+    /** @return Whether the sort should be descending in binary sort order. */
+    public abstract boolean sortDescending();
+
+    /** @return Whether the sort should take into account the sign bit. */
+    public abstract boolean sortSigned();
+  }
+
+  //
+  // Standard prefix comparator implementations
+  //
+
+  public static final class UnsignedPrefixComparator extends RadixSortSupport {
+    @Override public boolean sortDescending() { return false; }
+    @Override public boolean sortSigned() { return false; }
+    @Override
+    public int compare(long aPrefix, long bPrefix) {
+      return UnsignedLongs.compare(aPrefix, bPrefix);
+    }
+  }
+
+  public static final class UnsignedPrefixComparatorDesc extends RadixSortSupport {
+    @Override public boolean sortDescending() { return true; }
+    @Override public boolean sortSigned() { return false; }
     @Override
     public int compare(long bPrefix, long aPrefix) {
       return UnsignedLongs.compare(aPrefix, bPrefix);
     }
   }
 
-  public static final class LongPrefixComparator extends PrefixComparator {
+  public static final class SignedPrefixComparator extends RadixSortSupport {
+    @Override public boolean sortDescending() { return false; }
+    @Override public boolean sortSigned() { return true; }
     @Override
     public int compare(long a, long b) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
     }
   }
 
-  public static final class LongPrefixComparatorDesc extends PrefixComparator {
+  public static final class SignedPrefixComparatorDesc extends RadixSortSupport {
+    @Override public boolean sortDescending() { return true; }
+    @Override public boolean sortSigned() { return true; }
     @Override
     public int compare(long b, long a) {
       return (a < b) ? -1 : (a > b) ? 1 : 0;
-    }
-  }
-
-  public static final class DoublePrefixComparator extends PrefixComparator {
-    @Override
-    public int compare(long aPrefix, long bPrefix) {
-      double a = Double.longBitsToDouble(aPrefix);
-      double b = Double.longBitsToDouble(bPrefix);
-      return Utils.nanSafeCompareDoubles(a, b);
-    }
-
-    public static long computePrefix(double value) {
-      return Double.doubleToLongBits(value);
-    }
-  }
-
-  public static final class DoublePrefixComparatorDesc extends PrefixComparator {
-    @Override
-    public int compare(long bPrefix, long aPrefix) {
-      double a = Double.longBitsToDouble(aPrefix);
-      double b = Double.longBitsToDouble(bPrefix);
-      return Utils.nanSafeCompareDoubles(a, b);
-    }
-
-    public static long computePrefix(double value) {
-      return Double.doubleToLongBits(value);
     }
   }
 }

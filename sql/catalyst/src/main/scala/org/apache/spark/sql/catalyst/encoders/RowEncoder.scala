@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.collection.Map
 import scala.reflect.ClassTag
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -34,9 +35,8 @@ import org.apache.spark.unsafe.types.UTF8String
 object RowEncoder {
   def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    // We use an If expression to wrap extractorsFor result of StructType
-    val serializer = serializerFor(inputObject, schema).asInstanceOf[If].falseValue
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = false)
+    val serializer = serializerFor(inputObject, schema)
     val deserializer = deserializerFor(schema)
     new ExpressionEncoder[Row](
       schema,
@@ -55,10 +55,19 @@ object RowEncoder {
     case p: PythonUserDefinedType => serializerFor(inputObject, p.sqlType)
 
     case udt: UserDefinedType[_] =>
+      val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
+      val udtClass: Class[_] = if (annotation != null) {
+        annotation.udt()
+      } else {
+        UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
+          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
+            "SQLUserDefinedType nor registered with UDTRegistration.}")
+        }
+      }
       val obj = NewInstance(
-        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        udtClass,
         Nil,
-        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+        dataType = ObjectType(udtClass), false)
       Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
 
     case TimestampType =>
@@ -120,21 +129,28 @@ object RowEncoder {
 
     case StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
-        val method = if (f.dataType.isInstanceOf[StructType]) {
-          "getStruct"
+        val fieldValue = serializerFor(
+          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType)),
+          f.dataType
+        )
+        if (f.nullable) {
+          If(
+            Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
+            Literal.create(null, f.dataType),
+            fieldValue
+          )
         } else {
-          "get"
+          fieldValue
         }
-        If(
-          Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
-          Literal.create(null, f.dataType),
-          serializerFor(
-            Invoke(inputObject, method, externalDataTypeForInput(f.dataType), Literal(i) :: Nil),
-            f.dataType))
       }
-      If(IsNull(inputObject),
-        Literal.create(null, inputType),
-        CreateStruct(convertedFields))
+
+      if (inputObject.nullable) {
+        If(IsNull(inputObject),
+          Literal.create(null, inputType),
+          CreateStruct(convertedFields))
+      } else {
+        CreateStruct(convertedFields)
+      }
   }
 
   /**
@@ -187,10 +203,19 @@ object RowEncoder {
          FloatType | DoubleType | BinaryType | CalendarIntervalType => input
 
     case udt: UserDefinedType[_] =>
+      val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])
+      val udtClass: Class[_] = if (annotation != null) {
+        annotation.udt()
+      } else {
+        UDTRegistration.getUDTFor(udt.userClass.getName).getOrElse {
+          throw new SparkException(s"${udt.userClass.getName} is not annotated with " +
+            "SQLUserDefinedType nor registered with UDTRegistration.}")
+        }
+      }
       val obj = NewInstance(
-        udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
+        udtClass,
         Nil,
-        dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
+        dataType = ObjectType(udtClass))
       Invoke(obj, "deserialize", ObjectType(udt.userClass), input :: Nil)
 
     case TimestampType =>

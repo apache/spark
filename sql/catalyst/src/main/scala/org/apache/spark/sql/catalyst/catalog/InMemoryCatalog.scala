@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  * All public methods should be synchronized for thread-safety.
  */
 class InMemoryCatalog extends ExternalCatalog {
-  import ExternalCatalog._
+  import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
     val partitions = new mutable.HashMap[TablePartitionSpec, CatalogTablePartition]
@@ -62,7 +62,7 @@ class InMemoryCatalog extends ExternalCatalog {
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
       throw new AnalysisException(
-        s"Table or View not found: '$table' does not exist in database '$db'")
+        s"Table or view not found: '$table' does not exist in database '$db'")
     }
   }
 
@@ -164,7 +164,7 @@ class InMemoryCatalog extends ExternalCatalog {
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Table or View '$table' does not exist in database '$db'")
+        throw new AnalysisException(s"Table or view '$table' does not exist in database '$db'")
       }
     }
   }
@@ -203,6 +203,27 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def listTables(db: String, pattern: String): Seq[String] = synchronized {
     StringUtils.filterPattern(listTables(db), pattern)
+  }
+
+  override def loadTable(
+      db: String,
+      table: String,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit = {
+    throw new UnsupportedOperationException("loadTable is not implemented")
+  }
+
+  override def loadPartition(
+      db: String,
+      table: String,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit = {
+    throw new UnsupportedOperationException("loadPartition is not implemented.")
   }
 
   // --------------------------------------------------------------------------
@@ -279,8 +300,13 @@ class InMemoryCatalog extends ExternalCatalog {
 
   override def listPartitions(
       db: String,
-      table: String): Seq[CatalogTablePartition] = synchronized {
+      table: String,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = synchronized {
     requireTableExists(db, table)
+    if (partialSpec.nonEmpty) {
+      throw new UnsupportedOperationException(
+        "listPartition with partial partition spec is not implemented")
+    }
     catalog(db).tables(table).partitions.values.toSeq
   }
 
@@ -314,7 +340,7 @@ class InMemoryCatalog extends ExternalCatalog {
     catalog(db).functions(funcName)
   }
 
-  override def functionExists(db: String, funcName: String): Boolean = {
+  override def functionExists(db: String, funcName: String): Boolean = synchronized {
     requireDbExists(db)
     catalog(db).functions.contains(funcName)
   }

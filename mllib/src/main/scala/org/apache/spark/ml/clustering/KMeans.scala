@@ -105,6 +105,14 @@ class KMeansModel private[ml] (
     copyValues(copied, extra)
   }
 
+  /** @group setParam */
+  @Since("2.0.0")
+  def setFeaturesCol(value: String): this.type = set(featuresCol, value)
+
+  /** @group setParam */
+  @Since("2.0.0")
+  def setPredictionCol(value: String): this.type = set(predictionCol, value)
+
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf((vector: Vector) => predict(vector))
@@ -169,18 +177,21 @@ object KMeansModel extends MLReadable[KMeansModel] {
   @Since("1.6.0")
   override def load(path: String): KMeansModel = super.load(path)
 
+  /** Helper class for storing model data */
+  private case class Data(clusterIdx: Int, clusterCenter: Vector)
+
   /** [[MLWriter]] instance for [[KMeansModel]] */
   private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
-
-    private case class Data(clusterCenters: Array[Vector])
 
     override protected def saveImpl(path: String): Unit = {
       // Save metadata and Params
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       // Save model data: cluster centers
-      val data = Data(instance.clusterCenters)
+      val data: Array[Data] = instance.clusterCenters.zipWithIndex.map { case (center, idx) =>
+        Data(idx, center)
+      }
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sqlContext.createDataFrame(data).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -190,11 +201,15 @@ object KMeansModel extends MLReadable[KMeansModel] {
     private val className = classOf[KMeansModel].getName
 
     override def load(path: String): KMeansModel = {
+      // Import implicits for Dataset Encoder
+      val sqlContext = super.sqlContext
+      import sqlContext.implicits._
+
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
 
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath).select("clusterCenters").head()
-      val clusterCenters = data.getAs[Seq[Vector]](0).toArray
+      val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
+      val clusterCenters = data.collect().sortBy(_.clusterIdx).map(_.clusterCenter)
       val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
 
       DefaultParamsReader.getAndSetParams(model, metadata)
@@ -264,6 +279,9 @@ class KMeans @Since("1.5.0") (
   override def fit(dataset: Dataset[_]): KMeansModel = {
     val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
 
+    val instr = Instrumentation.create(this, rdd)
+    instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
+
     val algo = new MLlibKMeans()
       .setK($(k))
       .setInitializationMode($(initMode))
@@ -271,11 +289,13 @@ class KMeans @Since("1.5.0") (
       .setMaxIterations($(maxIter))
       .setSeed($(seed))
       .setEpsilon($(tol))
-    val parentModel = algo.run(rdd)
+    val parentModel = algo.run(rdd, Option(instr))
     val model = copyValues(new KMeansModel(uid, parentModel).setParent(this))
     val summary = new KMeansSummary(
       model.transform(dataset), $(predictionCol), $(featuresCol), $(k))
-    model.setSummary(summary)
+    val m = model.setSummary(summary)
+    instr.logSuccess(m)
+    m
   }
 
   @Since("1.5.0")

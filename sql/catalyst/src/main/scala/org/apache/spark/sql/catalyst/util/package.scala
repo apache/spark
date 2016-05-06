@@ -153,6 +153,8 @@ package object util {
     "`" + name.replace("`", "``") + "`"
   }
 
+  def toPrettySQL(e: Expression): String = usePrettyExpression(e).sql
+
   /**
    * Returns the string representation of this expression that is safe to be put in
    * code comments of generated code. The length is capped at 128 characters.
