@@ -180,6 +180,11 @@ class SessionCatalog(
     val db = tableDefinition.identifier.database.getOrElse(getCurrentDatabase)
     val table = formatTableName(tableDefinition.identifier.table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+    if (tableDefinition.storage.locationUri.isDefined &&
+        tableDefinition.tableType != CatalogTableType.EXTERNAL_TABLE) {
+      logWarning(s"Location: ${tableDefinition.storage.locationUri.get} specified for " +
+        s"non-external table:${tableDefinition.identifier}")
+    }
     externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
   }
 

@@ -106,7 +106,7 @@ case class CreateDataSourceTableCommand(
       partitionColumns = Array.empty[String],
       bucketSpec = None,
       provider = provider,
-      options = optionsWithPath,
+      options = if (isExternal) optionsWithPath else options,
       isExternal = isExternal)
 
     Seq.empty[Row]
@@ -234,7 +234,7 @@ case class CreateDataSourceTableAsSelectCommand(
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
         provider = provider,
-        options = optionsWithPath,
+        options = if (isExternal) optionsWithPath else options,
         isExternal = isExternal)
     }
 
