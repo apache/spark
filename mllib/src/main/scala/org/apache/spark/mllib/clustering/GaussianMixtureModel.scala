@@ -66,6 +66,12 @@ class GaussianMixtureModel(
     responsibilityMatrix.map(r => r.indexOf(r.max))
   }
 
+  /** Maps given point to its cluster index. */
+  def predict(point: Vector): Int = {
+    val r = computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
+    r.indexOf(r.max)
+  }
+
   /** Java-friendly version of [[predict()]] */
   def predict(points: JavaRDD[Vector]): JavaRDD[java.lang.Integer] =
     predict(points.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Integer]]
@@ -81,6 +87,13 @@ class GaussianMixtureModel(
     points.map { x =>
       computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
     }
+  }
+
+  /**
+   * Given the input vector, return the membership values to all mixture components.
+   */
+  def predictSoft(point: Vector): Array[Double] = {
+    computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
   }
 
   /**
