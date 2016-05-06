@@ -540,6 +540,13 @@ class Analyzer(
         } else {
           a.copy(aggregateExpressions = buildExpandedProjectList(a.aggregateExpressions, a.child))
         }
+
+      // When resolve grouping expressions in Aggregate, we need to consider aliases in
+      // aggregationExprs; e.g. SELECT 1 a GROUP BY a
+      case a @ Aggregate(ge, ae, child) if child.resolved && ae.forall(_.resolved) && !a.resolved =>
+         val newGroupingExprs = ge.map(expandGroupingExpr(_, ae))
+         a.copy(groupingExpressions = newGroupingExprs)
+
       // If the script transformation input contains Stars, expand it.
       case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
@@ -659,6 +666,17 @@ class Analyzer(
           failAnalysis(s"Invalid usage of '*' in expression '${o.prettyName}'")
       }
     }
+
+    /**
+     * Expands the matching attribute in aggregation expression aliases.
+     */
+    private def expandGroupingExpr(expr: Expression, aggregationExprs: Seq[NamedExpression]) =
+      if (!expr.resolved && expr.isInstanceOf[UnresolvedAttribute]) {
+        val name = expr.asInstanceOf[UnresolvedAttribute].name
+        aggregationExprs.filter(x => x.resolved && x.name == name).headOption.getOrElse(expr)
+      } else {
+        expr
+      }
   }
 
   private def containsDeserializer(exprs: Seq[Expression]): Boolean = {

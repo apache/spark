@@ -346,4 +346,10 @@ class AnalysisSuite extends AnalysisTest {
 
     assertAnalysisSuccess(query)
   }
+
+  test("SPARK-15020: GROUP-BY should support Aliases") {
+    val input = LocalRelation('a.int)
+    val query = input.groupBy('x)('a.as('x))
+    assertAnalysisSuccess(query)
+  }
 }
