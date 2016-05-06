@@ -67,7 +67,7 @@ abstract class PartitioningAwareFileCatalog(
       paths.flatMap { path =>
         // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
         val fs = path.getFileSystem(hadoopConf)
-        val qualifiedPath = path.makeQualified(fs.getUri, fs.getWorkingDirectory)
+        val qualifiedPath = fs.makeQualified(path)
 
         // There are three cases possible with each path
         // 1. The path is a directory and has children files in it. Then it must be present in
@@ -77,9 +77,7 @@ abstract class PartitioningAwareFileCatalog(
         // 3. The path is a directory, but has no children files. Do not include this path.
 
         leafDirToChildrenFiles.get(qualifiedPath)
-          .orElse {
-            leafFiles.get(path).map(Array(_))
-          }
+          .orElse { leafFiles.get(qualifiedPath).map(Array(_)) }
           .getOrElse(Array.empty)
       }
     } else {

@@ -27,7 +27,6 @@ import org.apache.spark.sql.test.SharedSQLContext
 class FileCatalogSuite extends SharedSQLContext {
 
   test("ListingFileCatalog: leaf files are qualified paths") {
-
     withTempDir { dir =>
       val file = new File(dir, "text.txt")
       stringToFile(file, "text")
@@ -39,6 +38,27 @@ class FileCatalogSuite extends SharedSQLContext {
       }
       assert(catalog.leafFilePaths.forall(p => p.toString.startsWith("file:/")))
       assert(catalog.leafDirPaths.forall(p => p.toString.startsWith("file:/")))
+    }
+  }
+
+  test("ListingFileCatalog: input paths are converted to qualified paths") {
+    withTempDir { dir =>
+      val file = new File(dir, "text.txt")
+      stringToFile(file, "text")
+
+      val unqualifiedDirPath = new Path(dir.getCanonicalPath)
+      val unqualifiedFilePath = new Path(file.getCanonicalPath)
+      val fs = unqualifiedDirPath.getFileSystem(sparkContext.hadoopConfiguration)
+      val qualifiedFilePath = fs.makeQualified(new Path(file.getCanonicalPath))
+
+      val catalog1 = new ListingFileCatalog(
+        sqlContext.sparkSession, Seq(unqualifiedDirPath), Map.empty, None)
+      assert(catalog1.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
+
+      val catalog2 = new ListingFileCatalog(
+        sqlContext.sparkSession, Seq(unqualifiedFilePath), Map.empty, None)
+      assert(catalog2.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
+
     }
   }
 }
