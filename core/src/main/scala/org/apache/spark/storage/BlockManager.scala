@@ -20,12 +20,14 @@ package org.apache.spark.storage
 import java.io._
 import java.nio.ByteBuffer
 
+import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 import scala.util.Random
 import scala.util.control.NonFatal
+
 import org.apache.spark._
 import org.apache.spark.executor.{DataReadMethod, ShuffleWriteMetrics}
 import org.apache.spark.internal.Logging
@@ -42,8 +44,6 @@ import org.apache.spark.storage.memory._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.util._
 import org.apache.spark.util.io.ChunkedByteBuffer
-
-import scala.annotation.tailrec
 
 /* Class for returning a fetched block and associated metrics. */
 private[spark] class BlockResult(
@@ -1134,10 +1134,15 @@ private[spark] class BlockManager(
   }
 
   /**
-    * Replicate block to another node. Not that this is a blocking call that returns after
-    * the block has been replicated.
-    */
-  private def replicateNew(
+   * Replicate block to another node. Note that this is a blocking call that returns after
+   * the block has been replicated.
+   *
+   * @param blockId
+   * @param data
+   * @param level
+   * @param classTag
+   */
+  private def replicate(
     blockId: BlockId,
     data: ChunkedByteBuffer,
     level: StorageLevel,

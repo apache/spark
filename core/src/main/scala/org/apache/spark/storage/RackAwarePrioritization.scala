@@ -21,23 +21,25 @@ import org.apache.spark.internal.Logging
 
 /* Trait that should be implemented by any class implementing rack aware prioritization */
 trait RackAwarePriotization {
+
   /**
-    * Method to prioritize a bunch of candidate peers of a block
- *
-    * @param peers A list of peers of a BlockManager
-    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
-    */
+   * Method to prioritize a bunch of candidate peers of a block
+   *
+   * @param peers A list of peers of a BlockManager
+   * @return A prioritized list of peers. Lower the index of a peer, higher its priority
+   */
   def prioritize(peers: Seq[BlockManagerId]): Seq[BlockManagerId]
 }
 
 class DefaultRackAwarePrioritization(host: String) extends RackAwarePriotization with Logging {
+
   /**
-    * Method to prioritize a bunch of candidate peers of a block. This is a basic implementation,
-    * that just makes sure we put blocks on different hosts, if possible
-    *
-    * @param peers A list of peers of a BlockManager
-    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
-    */
+   * Method to prioritize a bunch of candidate peers of a block. This is a basic implementation,
+   * that just makes sure we put blocks on different hosts, if possible
+   *
+   * @param peers A list of peers of a BlockManager
+   * @return A prioritized list of peers. Lower the index of a peer, higher its priority
+   */
   override def prioritize(peers: Seq[BlockManagerId]): Seq[BlockManagerId] = {
     logInfo(s"Input peers : ${peers.mkString(", ")}")
     val peersOnOtherHosts = peers.filter(p => !p.host.equals(host))
