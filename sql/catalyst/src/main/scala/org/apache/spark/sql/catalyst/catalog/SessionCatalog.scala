@@ -313,10 +313,10 @@ class SessionCatalog(
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
+      requireTableExists(oldName)
       if (tableExists(newName)) {
         throw new AlreadyExistTableException(db = db, table = newTableName)
       }
-      requireTableExists(oldName)
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
       val table = tempTables(oldTableName)
@@ -387,6 +387,14 @@ class SessionCatalog(
     } else {
       true // it's a temporary table
     }
+  }
+
+ /**
+  * Return whether a temp table with the specified name exists.
+  */
+  def tempTableExists(name: TableIdentifier): Boolean = {
+    assert(name.database.isEmpty)
+    tempTables.contains(formatTableName(name.table))
   }
 
   /**
