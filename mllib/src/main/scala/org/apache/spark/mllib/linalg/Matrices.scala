@@ -601,7 +601,22 @@ class SparseMatrix @Since("1.3.0") (
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => toBreeze == m.toBreeze
+    case m : Matrix =>
+      if (this.numRows != m.numRows || this.numCols != m.numCols) return false
+      if (this.numNonzeros != m.numNonzeros) return false
+      val activeIterator = toBreeze.activeIterator
+      m match {
+        case s: SparseMatrix =>
+          val filterIter = s.toBreeze.activeIterator.withFilter(_._2 != 0.0)
+          val currFilterIter = activeIterator.withFilter(_._2 != 0.0)
+          filterIter.sameElements(currFilterIter)
+        case d: DenseMatrix =>
+          while(activeIterator.hasNext){
+            val next = activeIterator.next()
+            if(d.apply(next._1._1, next._1._2) != next._2) return false
+          }
+          true
+      }
     case _ => false
   }
 
