@@ -40,6 +40,11 @@ public class TransportConf {
     return conf.getInt("spark.shuffle.io.connectionTimeout", 120) * 1000;
   }
 
+  /** Read timeout in milliseconds. Default 120 secs. */
+  public int readTimeoutSeconds() {
+    return conf.getInt("spark.shuffle.io.readTimeout", 120);
+  }
+
   /** Number of concurrent connections between two nodes for fetching data. */
   public int numConnectionsPerPeer() {
     return conf.getInt("spark.shuffle.io.numConnectionsPerPeer", 1);
