@@ -40,7 +40,10 @@ object LDAExample {
 
     val input = "data/mllib/sample_lda_data.txt"
     // Creates a Spark context and a SQL context
-    val spark = SparkSession.builder.appName(s"${this.getClass.getSimpleName}").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName(s"${this.getClass.getSimpleName}")
+      .getOrCreate()
 
     // $example on$
     // Loads data

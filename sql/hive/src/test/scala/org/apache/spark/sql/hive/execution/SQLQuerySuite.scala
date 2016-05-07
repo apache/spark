@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -208,8 +207,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
   }
 
-  test("describe functions") {
-    // The Spark SQL built-in functions
+  test("describe functions - built-in functions") {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
@@ -251,6 +249,56 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       "Function: case",
       "Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
         "When a = b, returns c; when a = d, return e; else return f")
+  }
+
+  test("describe functions - user defined functions") {
+    withUserDefinedFunction("udtf_count" -> false) {
+      sql(
+        s"""
+           |CREATE FUNCTION udtf_count
+           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+        """.stripMargin)
+
+      checkKeywordsExist(sql("describe function udtf_count"),
+        "Function: default.udtf_count",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+
+      checkAnswer(
+        sql("SELECT udtf_count(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Nil)
+
+      checkKeywordsExist(sql("describe function udtf_count"),
+        "Function: default.udtf_count",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+    }
+  }
+
+  test("describe functions - temporary user defined functions") {
+    withUserDefinedFunction("udtf_count_temp" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_count_temp
+           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+        """.stripMargin)
+
+      checkKeywordsExist(sql("describe function udtf_count_temp"),
+        "Function: udtf_count_temp",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+
+      checkAnswer(
+        sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Nil)
+
+      checkKeywordsExist(sql("describe function udtf_count_temp"),
+        "Function: udtf_count_temp",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+    }
   }
 
   test("SPARK-5371: union with null and sum") {

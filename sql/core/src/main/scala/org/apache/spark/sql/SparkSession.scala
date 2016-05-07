@@ -115,14 +115,17 @@ class SparkSession private(
   @transient
   private var _wrapped: SQLContext = _
 
-  protected[sql] def wrapped: SQLContext = {
+  @transient
+  private val _wrappedLock = new Object
+
+  protected[sql] def wrapped: SQLContext = _wrappedLock.synchronized {
     if (_wrapped == null) {
       _wrapped = new SQLContext(self, isRootContext = false)
     }
     _wrapped
   }
 
-  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = {
+  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = _wrappedLock.synchronized {
     _wrapped = sqlContext
   }
 
@@ -813,19 +816,6 @@ object SparkSession {
       true
     } catch {
       case _: ClassNotFoundException | _: NoClassDefFoundError => false
-    }
-  }
-
-  /**
-   * Create a new [[SparkSession]] with a catalog backed by Hive.
-   */
-  def withHiveSupport(sc: SparkContext): SparkSession = {
-    if (hiveClassesArePresent) {
-      sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-      new SparkSession(sc)
-    } else {
-      throw new IllegalArgumentException(
-        "Unable to instantiate SparkSession with Hive support because Hive classes are not found.")
     }
   }
 

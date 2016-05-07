@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
 import org.apache.spark.sql.catalyst.catalog.CatalogFunction
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
@@ -82,7 +83,7 @@ case class CreateFunction(
  * }}}
  */
 case class DescribeFunction(
-    functionName: String,
+    functionName: FunctionIdentifier,
     isExtended: Boolean) extends RunnableCommand {
 
   override val output: Seq[Attribute] = {
@@ -92,7 +93,7 @@ case class DescribeFunction(
 
   private def replaceFunctionName(usage: String, functionName: String): String = {
     if (usage == null) {
-      "To be added."
+      "N/A."
     } else {
       usage.replaceAll("_FUNC_", functionName)
     }
@@ -100,7 +101,7 @@ case class DescribeFunction(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Hard code "<>", "!=", "between", and "case" for now as there is no corresponding functions.
-    functionName.toLowerCase match {
+    functionName.funcName.toLowerCase match {
       case "<>" =>
         Row(s"Function: $functionName") ::
           Row(s"Usage: a <> b - Returns TRUE if a is not equal to b") :: Nil
@@ -115,12 +116,13 @@ case class DescribeFunction(
         Row(s"Function: case") ::
           Row(s"Usage: CASE a WHEN b THEN c [WHEN d THEN e]* [ELSE f] END - " +
             s"When a = b, returns c; when a = d, return e; else return f") :: Nil
-      case _ => sparkSession.sessionState.functionRegistry.lookupFunction(functionName) match {
-        case Some(info) =>
+      case _ =>
+        try {
+          val info = sparkSession.sessionState.catalog.lookupFunctionInfo(functionName)
           val result =
             Row(s"Function: ${info.getName}") ::
               Row(s"Class: ${info.getClassName}") ::
-              Row(s"Usage: ${replaceFunctionName(info.getUsage(), info.getName)}") :: Nil
+              Row(s"Usage: ${replaceFunctionName(info.getUsage, info.getName)}") :: Nil
 
           if (isExtended) {
             result :+
@@ -128,9 +130,9 @@ case class DescribeFunction(
           } else {
             result
           }
-
-        case None => Seq(Row(s"Function: $functionName not found."))
-      }
+        } catch {
+          case _: NoSuchFunctionException => Seq(Row(s"Function: $functionName not found."))
+        }
     }
   }
 }

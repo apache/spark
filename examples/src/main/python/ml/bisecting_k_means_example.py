@@ -30,7 +30,10 @@ A simple example demonstrating a bisecting k-means clustering.
 """
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("PythonBisectingKMeansExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PythonBisectingKMeansExample")\
+        .getOrCreate()
 
     # $example on$
     data = spark.read.text("data/mllib/kmeans_data.txt").rdd

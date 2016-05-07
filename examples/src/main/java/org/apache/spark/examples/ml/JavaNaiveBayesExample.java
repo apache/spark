@@ -32,7 +32,10 @@ import org.apache.spark.sql.SparkSession;
 public class JavaNaiveBayesExample {
 
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaNaiveBayesExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaNaiveBayesExample")
+      .getOrCreate();
 
     // $example on$
     // Load training data

@@ -26,7 +26,10 @@ import org.apache.spark.sql.SparkSession
 
 object ElementwiseProductExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("ElementwiseProductExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("ElementwiseProductExample")
+      .getOrCreate()
 
     // $example on$
     // Create some vector data; also works for sparse vectors
