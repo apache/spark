@@ -608,6 +608,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
         self.assertEqual(len(grid), len(validationMetrics),
                          "validationMetrics has the same size of grid parameter")
+        self.assertIn(bestModelMetric, validationMetrics)
 
     def test_fit_maximize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -659,7 +660,6 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         self.assertEqual(loadedLrModel.uid, lrModel.uid)
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
-
     def test_copy(self):
         sqlContext = SQLContext(self.sc)
         dataset = sqlContext.createDataFrame([
@@ -683,6 +683,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         self.assertEqual(tvs.getEstimator().uid, tvsCopied.getEstimator().uid,
                          "Copied TrainValidationSplit has the same uid of Estimator")
 
+        self.assertEqual(tvsModel.bestModel.uid, tvsModelCopied.bestModel.uid)
         self.assertEqual(len(tvsModel.validationMetrics),
                          len(tvsModelCopied.validationMetrics),
                          "Copied validationMetrics has the same size of the original")
