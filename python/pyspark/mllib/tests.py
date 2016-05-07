@@ -66,7 +66,7 @@ from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
 from pyspark.streaming import StreamingContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 from pyspark.streaming import StreamingContext
 
 _have_scipy = False
@@ -83,9 +83,10 @@ ser = PickleSerializer()
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
         self.sc = SparkContext('local[4]', "MLlib tests")
+        self.spark = SparkSession(self.sc)
 
     def tearDown(self):
-        self.sc.stop()
+        self.spark.stop()
 
 
 class MLLibStreamingTestCase(unittest.TestCase):
@@ -698,7 +699,6 @@ class VectorUDTTests(MLlibTestCase):
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
         df = rdd.toDF()
         schema = df.schema
@@ -731,7 +731,6 @@ class MatrixUDTTests(MLlibTestCase):
             self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
         df = rdd.toDF()
         schema = df.schema
