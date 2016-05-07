@@ -563,12 +563,14 @@ class ALSSuite
     val defaultModel = als.fit(data)
     val defaultPredictions = defaultModel.transform(test).select("prediction").as[Float].collect()
     assert(defaultPredictions.length == 4)
-    defaultPredictions.slice(0, 3).foreach(p => assert(p.isNaN))
+    assert(defaultPredictions.slice(0, 3).forall(_.isNaN))
     assert(!defaultPredictions.last.isNaN)
 
     // check 'drop' strategy should filter out rows with unknown users/items
-    val dropModel = als.setUnknownStrategy("drop").fit(data)
-    val dropPredictions = dropModel.transform(test).select("prediction").as[Float].collect()
+    val dropPredictions = defaultModel
+      .setColdStartStrategy("drop")
+      .transform(test)
+      .select("prediction").as[Float].collect()
     assert(dropPredictions.length == 1)
     assert(!dropPredictions.head.isNaN)
   }
