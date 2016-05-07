@@ -366,6 +366,7 @@ class InMemoryCatalog extends ExternalCatalog {
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = synchronized {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
+    requireTableExists(db, table)
 
     val tableDir = new Path(catalog(db).db.locationUri, table)
     val partitionColumnNames = getTable(db, table).partitionColumnNames
