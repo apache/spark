@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.linalg.Vector;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -94,6 +96,14 @@ public class JavaDecisionTreeSuite implements Serializable {
         maxBins, categoricalFeaturesInfo);
 
     DecisionTreeModel model = DecisionTree$.MODULE$.train(rdd.rdd(), strategy);
+
+    // java compatibility test
+    JavaRDD<Double> predictions = model.predict(rdd.map(new Function<LabeledPoint, Vector>() {
+      @Override
+      public Vector call(LabeledPoint v1) throws Exception {
+        return v1.features();
+      }
+    }));
 
     int numCorrect = validatePrediction(arr, model);
     Assert.assertTrue(numCorrect == rdd.count());
