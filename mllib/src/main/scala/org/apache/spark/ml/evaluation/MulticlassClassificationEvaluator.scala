@@ -18,11 +18,12 @@
 package org.apache.spark.ml.evaluation
 
 import org.apache.spark.annotation.{Experimental, Since}
-import org.apache.spark.ml.param.{ParamMap, ParamValidators, Param}
+import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
-import org.apache.spark.ml.util.{SchemaUtils, Identifiable}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.sql.{Row, DataFrame}
+import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.DoubleType
 
 /**
@@ -32,7 +33,7 @@ import org.apache.spark.sql.types.DoubleType
 @Since("1.5.0")
 @Experimental
 class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") override val uid: String)
-  extends Evaluator with HasPredictionCol with HasLabelCol {
+  extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable {
 
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("mcEval"))
@@ -68,16 +69,16 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   setDefault(metricName -> "f1")
 
-  @Since("1.5.0")
-  override def evaluate(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
     SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
-    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
 
-    val predictionAndLabels = dataset.select($(predictionCol), $(labelCol))
-      .map { case Row(prediction: Double, label: Double) =>
-      (prediction, label)
-    }
+    val predictionAndLabels =
+      dataset.select(col($(predictionCol)), col($(labelCol)).cast(DoubleType)).rdd.map {
+        case Row(prediction: Double, label: Double) => (prediction, label)
+      }
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
@@ -100,4 +101,12 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MulticlassClassificationEvaluator = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object MulticlassClassificationEvaluator
+  extends DefaultParamsReadable[MulticlassClassificationEvaluator] {
+
+  @Since("1.6.0")
+  override def load(path: String): MulticlassClassificationEvaluator = super.load(path)
 }

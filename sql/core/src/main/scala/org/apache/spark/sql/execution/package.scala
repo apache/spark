@@ -19,5 +19,7 @@ package org.apache.spark.sql
 
 /**
  * The physical execution component of Spark SQL. Note that this is a private package.
+ * All classes in catalyst are considered an internal API to Spark SQL and are subject
+ * to change between minor releases.
  */
 package object execution

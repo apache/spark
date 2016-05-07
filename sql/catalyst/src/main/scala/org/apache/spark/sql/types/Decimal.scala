@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{RoundingMode, MathContext}
+import java.math.{MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -201,6 +201,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     changePrecision(precision, scale, ROUND_HALF_UP)
   }
 
+  def changePrecision(precision: Int, scale: Int, mode: Int): Boolean = mode match {
+    case java.math.BigDecimal.ROUND_HALF_UP => changePrecision(precision, scale, ROUND_HALF_UP)
+    case java.math.BigDecimal.ROUND_HALF_EVEN => changePrecision(precision, scale, ROUND_HALF_EVEN)
+  }
+
   /**
    * Update precision and scale while keeping our value the same, and return true if successful.
    *
@@ -337,8 +342,12 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
 object Decimal {
   val ROUND_HALF_UP = BigDecimal.RoundingMode.HALF_UP
+  val ROUND_HALF_EVEN = BigDecimal.RoundingMode.HALF_EVEN
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
+
+  /** Maximum number of decimal digits a Int can represent */
+  val MAX_INT_DIGITS = 9
 
   /** Maximum number of decimal digits a Long can represent */
   val MAX_LONG_DIGITS = 18
@@ -372,6 +381,25 @@ object Decimal {
     new Decimal().set(unscaled, precision, scale)
 
   def apply(value: String): Decimal = new Decimal().set(BigDecimal(value))
+
+  // This is used for RowEncoder to handle Decimal inside external row.
+  def fromDecimal(value: Any): Decimal = {
+    value match {
+      case j: java.math.BigDecimal => apply(j)
+      case d: Decimal => d
+    }
+  }
+
+  /**
+   * Creates a decimal from unscaled, precision and scale without checking the bounds.
+   */
+  def createUnsafe(unscaled: Long, precision: Int, scale: Int): Decimal = {
+    val dec = new Decimal()
+    dec.longVal = unscaled
+    dec._precision = precision
+    dec._scale = scale
+    dec
+  }
 
   // Evidence parameters for Decimal considered either as Fractional or Integral. We provide two
   // parameters inheriting from a common trait since both traits define mkNumericOps.

@@ -19,25 +19,32 @@ package org.apache.spark
 
 import org.scalatest.PrivateMethodTester
 
-import org.apache.spark.util.Utils
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, TaskSchedulerImpl}
-import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
+import org.apache.spark.scheduler.cluster.SparkDeploySchedulerBackend
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
+import org.apache.spark.util.Utils
 
 class SparkContextSchedulerCreationSuite
   extends SparkFunSuite with LocalSparkContext with PrivateMethodTester with Logging {
 
   def createTaskScheduler(master: String): TaskSchedulerImpl =
-    createTaskScheduler(master, new SparkConf())
+    createTaskScheduler(master, "client")
 
-  def createTaskScheduler(master: String, conf: SparkConf): TaskSchedulerImpl = {
+  def createTaskScheduler(master: String, deployMode: String): TaskSchedulerImpl =
+    createTaskScheduler(master, deployMode, new SparkConf())
+
+  def createTaskScheduler(
+      master: String,
+      deployMode: String,
+      conf: SparkConf): TaskSchedulerImpl = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
     sc = new SparkContext("local", "test", conf)
     val createTaskSchedulerMethod =
       PrivateMethod[Tuple2[SchedulerBackend, TaskScheduler]]('createTaskScheduler)
-    val (_, sched) = SparkContext invokePrivate createTaskSchedulerMethod(sc, master)
+    val (_, sched) = SparkContext invokePrivate createTaskSchedulerMethod(sc, master, deployMode)
     sched.asInstanceOf[TaskSchedulerImpl]
   }
 
@@ -107,17 +114,10 @@ class SparkContextSchedulerCreationSuite
 
   test("local-default-parallelism") {
     val conf = new SparkConf().set("spark.default.parallelism", "16")
-    val sched = createTaskScheduler("local", conf)
+    val sched = createTaskScheduler("local", "client", conf)
 
     sched.backend match {
       case s: LocalBackend => assert(s.defaultParallelism() === 16)
-      case _ => fail()
-    }
-  }
-
-  test("simr") {
-    createTaskScheduler("simr://uri").backend match {
-      case s: SimrSchedulerBackend => // OK
       case _ => fail()
     }
   }
@@ -129,34 +129,10 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
-  def testYarn(master: String, expectedClassName: String) {
-    try {
-      val sched = createTaskScheduler(master)
-      assert(sched.getClass === Utils.classForName(expectedClassName))
-    } catch {
-      case e: SparkException =>
-        assert(e.getMessage.contains("YARN mode not available"))
-        logWarning("YARN not available, could not test actual YARN scheduler creation")
-      case e: Throwable => fail(e)
-    }
-  }
-
-  test("yarn-cluster") {
-    testYarn("yarn-cluster", "org.apache.spark.scheduler.cluster.YarnClusterScheduler")
-  }
-
-  test("yarn-standalone") {
-    testYarn("yarn-standalone", "org.apache.spark.scheduler.cluster.YarnClusterScheduler")
-  }
-
-  test("yarn-client") {
-    testYarn("yarn-client", "org.apache.spark.scheduler.cluster.YarnScheduler")
-  }
-
   def testMesos(master: String, expectedClass: Class[_], coarse: Boolean) {
     val conf = new SparkConf().set("spark.mesos.coarse", coarse.toString)
     try {
-      val sched = createTaskScheduler(master, conf)
+      val sched = createTaskScheduler(master, "client", conf)
       assert(sched.backend.getClass === expectedClass)
     } catch {
       case e: UnsatisfiedLinkError =>
@@ -175,6 +151,11 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("mesos with zookeeper") {
+    testMesos("mesos://zk://localhost:1234,localhost:2345",
+      classOf[MesosSchedulerBackend], coarse = false)
+  }
+
+  test("mesos with zookeeper and Master URL starting with zk://") {
     testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend], coarse = false)
   }
 }

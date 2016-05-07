@@ -22,11 +22,11 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, Da
 import scala.collection.mutable.HashMap
 import scala.language.existentials
 
-import io.netty.channel.ChannelHandler.Sharable
 import io.netty.channel.{ChannelHandlerContext, SimpleChannelInboundHandler}
+import io.netty.channel.ChannelHandler.Sharable
 
-import org.apache.spark.Logging
 import org.apache.spark.api.r.SerDe._
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Utils
 
 /**

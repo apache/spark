@@ -17,10 +17,9 @@
 
 package org.apache.spark.metrics
 
-import org.apache.spark.SparkConf
-
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkFunSuite
 
 class MetricsConfigSuite extends SparkFunSuite with BeforeAndAfter {

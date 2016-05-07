@@ -18,7 +18,7 @@
 package org.apache.spark.sql.types
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{TypeTag, runtimeMirror}
+import scala.reflect.runtime.universe.{runtimeMirror, TypeTag}
 
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
@@ -84,6 +84,7 @@ private[sql] object TypeCollection {
    * Types that can be ordered/compared. In the long run we should probably make this a trait
    * that can be mixed into each data type, and perhaps create an [[AbstractDataType]].
    */
+  // TODO: Should we consolidate this with RowOrdering.isOrderable?
   val Ordered = TypeCollection(
     BooleanType,
     ByteType, ShortType, IntegerType, LongType,

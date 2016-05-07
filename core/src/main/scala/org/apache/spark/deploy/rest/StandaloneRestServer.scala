@@ -20,11 +20,11 @@ package org.apache.spark.deploy.rest
 import java.io.File
 import javax.servlet.http.HttpServletResponse
 
-import org.apache.spark.deploy.ClientArguments._
+import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 import org.apache.spark.deploy.{Command, DeployMessages, DriverDescription}
+import org.apache.spark.deploy.ClientArguments._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.util.Utils
-import org.apache.spark.{SPARK_VERSION => sparkVersion, SparkConf}
 
 /**
  * A server that responds to requests submitted by the [[RestSubmissionClient]].

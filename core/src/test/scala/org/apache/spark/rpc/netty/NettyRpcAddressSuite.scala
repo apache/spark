@@ -18,12 +18,18 @@
 package org.apache.spark.rpc.netty
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.rpc.RpcEndpointAddress
 
 class NettyRpcAddressSuite extends SparkFunSuite {
 
   test("toString") {
-    val addr = RpcEndpointAddress("localhost", 12345, "test")
+    val addr = new RpcEndpointAddress("localhost", 12345, "test")
     assert(addr.toString === "spark://test@localhost:12345")
+  }
+
+  test("toString for client mode") {
+    val addr = RpcEndpointAddress(null, "test")
+    assert(addr.toString === "spark-client://test")
   }
 
 }

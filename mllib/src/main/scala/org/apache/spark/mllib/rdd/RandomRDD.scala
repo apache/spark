@@ -17,14 +17,14 @@
 
 package org.apache.spark.mllib.rdd
 
+import scala.reflect.ClassTag
+import scala.util.Random
+
 import org.apache.spark.{Partition, SparkContext, TaskContext}
 import org.apache.spark.mllib.linalg.{DenseVector, Vector}
 import org.apache.spark.mllib.random.RandomDataGenerator
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
-
-import scala.reflect.ClassTag
-import scala.util.Random
 
 private[mllib] class RandomRDDPartition[T](override val index: Int,
     val size: Int,

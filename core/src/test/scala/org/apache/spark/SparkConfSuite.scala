@@ -17,17 +17,18 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{TimeUnit, Executors}
+import java.util.concurrent.{Executors, TimeUnit}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Try, Random}
+import scala.util.{Random, Try}
+
+import com.esotericsoftware.kryo.Kryo
 
 import org.apache.spark.network.util.ByteUnit
 import org.apache.spark.serializer.{KryoRegistrator, KryoSerializer}
-import org.apache.spark.util.{RpcUtils, ResetSystemProperties}
-import com.esotericsoftware.kryo.Kryo
+import org.apache.spark.util.{ResetSystemProperties, RpcUtils}
 
 class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSystemProperties {
   test("Test byteString conversion") {
@@ -236,7 +237,7 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     conf.set(newName, "4")
     assert(conf.get(newName) === "4")
 
-    val count = conf.getAll.filter { case (k, v) => k.startsWith("spark.history.") }.size
+    val count = conf.getAll.count { case (k, v) => k.startsWith("spark.history.") }
     assert(count === 4)
 
     conf.set("spark.yarn.applicationMaster.waitTries", "42")
@@ -265,6 +266,20 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
 
     conf.set("spark.akka.lookupTimeout", "4")
     assert(RpcUtils.lookupRpcTimeout(conf).duration === (4 seconds))
+  }
+
+  test("SPARK-13727") {
+    val conf = new SparkConf()
+    // set the conf in the deprecated way
+    conf.set("spark.io.compression.lz4.block.size", "12345")
+    // get the conf in the recommended way
+    assert(conf.get("spark.io.compression.lz4.blockSize") === "12345")
+    // we can still get the conf in the deprecated way
+    assert(conf.get("spark.io.compression.lz4.block.size") === "12345")
+    // the contains() also works as expected
+    assert(conf.contains("spark.io.compression.lz4.block.size"))
+    assert(conf.contains("spark.io.compression.lz4.blockSize"))
+    assert(conf.contains("spark.io.unknown") === false)
   }
 }
 

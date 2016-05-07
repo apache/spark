@@ -17,16 +17,19 @@
 
 package org.apache.spark.shuffle.sort;
 
+import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.SortDataFormat;
 
-final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, long[]> {
+final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, LongArray> {
 
   public static final ShuffleSortDataFormat INSTANCE = new ShuffleSortDataFormat();
 
   private ShuffleSortDataFormat() { }
 
   @Override
-  public PackedRecordPointer getKey(long[] data, int pos) {
+  public PackedRecordPointer getKey(LongArray data, int pos) {
     // Since we re-use keys, this method shouldn't be called.
     throw new UnsupportedOperationException();
   }
@@ -37,31 +40,38 @@ final class ShuffleSortDataFormat extends SortDataFormat<PackedRecordPointer, lo
   }
 
   @Override
-  public PackedRecordPointer getKey(long[] data, int pos, PackedRecordPointer reuse) {
-    reuse.set(data[pos]);
+  public PackedRecordPointer getKey(LongArray data, int pos, PackedRecordPointer reuse) {
+    reuse.set(data.get(pos));
     return reuse;
   }
 
   @Override
-  public void swap(long[] data, int pos0, int pos1) {
-    final long temp = data[pos0];
-    data[pos0] = data[pos1];
-    data[pos1] = temp;
+  public void swap(LongArray data, int pos0, int pos1) {
+    final long temp = data.get(pos0);
+    data.set(pos0, data.get(pos1));
+    data.set(pos1, temp);
   }
 
   @Override
-  public void copyElement(long[] src, int srcPos, long[] dst, int dstPos) {
-    dst[dstPos] = src[srcPos];
+  public void copyElement(LongArray src, int srcPos, LongArray dst, int dstPos) {
+    dst.set(dstPos, src.get(srcPos));
   }
 
   @Override
-  public void copyRange(long[] src, int srcPos, long[] dst, int dstPos, int length) {
-    System.arraycopy(src, srcPos, dst, dstPos, length);
+  public void copyRange(LongArray src, int srcPos, LongArray dst, int dstPos, int length) {
+    Platform.copyMemory(
+      src.getBaseObject(),
+      src.getBaseOffset() + srcPos * 8,
+      dst.getBaseObject(),
+      dst.getBaseOffset() + dstPos * 8,
+      length * 8
+    );
   }
 
   @Override
-  public long[] allocate(int length) {
-    return new long[length];
+  public LongArray allocate(int length) {
+    // This buffer is used temporary (usually small), so it's fine to allocated from JVM heap.
+    return new LongArray(MemoryBlock.fromLongArray(new long[length]));
   }
 
 }

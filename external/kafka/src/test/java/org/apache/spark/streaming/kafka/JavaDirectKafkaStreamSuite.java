@@ -35,6 +35,7 @@ import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.function.Function;
+import org.apache.spark.api.java.function.VoidFunction;
 import org.apache.spark.streaming.Durations;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
@@ -130,17 +131,15 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
     JavaDStream<String> unifiedStream = stream1.union(stream2);
 
     final Set<String> result = Collections.synchronizedSet(new HashSet<String>());
-    unifiedStream.foreachRDD(
-        new Function<JavaRDD<String>, Void>() {
+    unifiedStream.foreachRDD(new VoidFunction<JavaRDD<String>>() {
           @Override
-          public Void call(JavaRDD<String> rdd) {
+          public void call(JavaRDD<String> rdd) {
             result.addAll(rdd.collect());
             for (OffsetRange o : offsetRanges.get()) {
               System.out.println(
                 o.topic() + " " + o.partition() + " " + o.fromOffset() + " " + o.untilOffset()
               );
             }
-            return null;
           }
         }
     );
@@ -169,7 +168,7 @@ public class JavaDirectKafkaStreamSuite implements Serializable {
 
   private  String[] createTopicAndSendData(String topic) {
     String[] data = { topic + "-1", topic + "-2", topic + "-3"};
-    kafkaTestUtils.createTopic(topic);
+    kafkaTestUtils.createTopic(topic, 1);
     kafkaTestUtils.sendMessages(topic, data);
     return data;
   }

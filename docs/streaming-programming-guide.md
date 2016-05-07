@@ -11,7 +11,7 @@ description: Spark Streaming programming guide and tutorial for Spark SPARK_VERS
 # Overview
 Spark Streaming is an extension of the core Spark API that enables scalable, high-throughput,
 fault-tolerant stream processing of live data streams. Data can be ingested from many sources
-like Kafka, Flume, Twitter, ZeroMQ, Kinesis, or TCP sockets, and can be processed using complex
+like Kafka, Flume, Kinesis, or TCP sockets, and can be processed using complex
 algorithms expressed with high-level functions like `map`, `reduce`, `join` and `window`.
 Finally, processed data can be pushed out to filesystems, databases,
 and live dashboards. In fact, you can apply Spark's
@@ -158,15 +158,15 @@ JavaReceiverInputDStream<String> lines = jssc.socketTextStream("localhost", 9999
 {% endhighlight %}
 
 This `lines` DStream represents the stream of data that will be received from the data
-server. Each record in this stream is a line of text. Then, we want to split the the lines by
+server. Each record in this stream is a line of text. Then, we want to split the lines by
 space into words.
 
 {% highlight java %}
 // Split each line into words
 JavaDStream<String> words = lines.flatMap(
   new FlatMapFunction<String, String>() {
-    @Override public Iterable<String> call(String x) {
-      return Arrays.asList(x.split(" "));
+    @Override public Iterator<String> call(String x) {
+      return Arrays.asList(x.split(" ")).iterator();
     }
   });
 {% endhighlight %}
@@ -186,7 +186,7 @@ Next, we want to count these words.
 JavaPairDStream<String, Integer> pairs = words.mapToPair(
   new PairFunction<String, String, Integer>() {
     @Override public Tuple2<String, Integer> call(String s) {
-      return new Tuple2<String, Integer>(s, 1);
+      return new Tuple2<>(s, 1);
     }
   });
 JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
@@ -419,9 +419,6 @@ some of the common ones are as follows.
 <tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
-<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
-<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
-<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td></td><td></td></tr>
 </table>
 
@@ -594,8 +591,8 @@ data from a source and stores it in Spark's memory for processing.
 Spark Streaming provides two categories of built-in streaming sources.
 
 - *Basic sources*: Sources directly available in the StreamingContext API.
-  Examples: file systems, socket connections, and Akka actors.
-- *Advanced sources*: Sources like Kafka, Flume, Kinesis, Twitter, etc. are available through
+  Examples: file systems, and socket connections.
+- *Advanced sources*: Sources like Kafka, Flume, Kinesis, etc. are available through
   extra utility classes. These require linking against extra dependencies as discussed in the
   [linking](#linking) section.
 
@@ -631,7 +628,7 @@ as well as to run the receiver(s).
 We have already taken a look at the `ssc.socketTextStream(...)` in the [quick example](#a-quick-example)
 which creates a DStream from text
 data received over a TCP socket connection. Besides sockets, the StreamingContext API provides
-methods for creating DStreams from files and Akka actors as input sources.
+methods for creating DStreams from files as input sources.
 
 - **File Streams:** For reading data from files on any file system compatible with the HDFS API (that is, HDFS, S3, NFS, etc.), a DStream can be created as:
 
@@ -658,17 +655,12 @@ methods for creating DStreams from files and Akka actors as input sources.
 
 	<span class="badge" style="background-color: grey">Python API</span> `fileStream` is not available in the Python API, only	`textFileStream` is	available.
 
-- **Streams based on Custom Actors:** DStreams can be created with data streams received through Akka
-  actors by using `streamingContext.actorStream(actorProps, actor-name)`. See the [Custom Receiver
-  Guide](streaming-custom-receivers.html) for more details.
-
-  <span class="badge" style="background-color: grey">Python API</span> Since actors are available only in the Java and Scala
-  libraries, `actorStream` is not available in the Python API.
+- **Streams based on Custom Receivers:** DStreams can be created with data streams received through custom receivers. See the [Custom Receiver
+  Guide](streaming-custom-receivers.html) and [DStream Akka](https://github.com/spark-packages/dstream-akka) for more details.
 
 - **Queue of RDDs as a Stream:** For testing a Spark Streaming application with test data, one can also create a DStream based on a queue of RDDs, using `streamingContext.queueStream(queueOfRDDs)`. Each RDD pushed into the queue will be treated as a batch of data in the DStream, and processed like a stream.
 
-For more details on streams from sockets, files, and actors,
-see the API documentations of the relevant functions in
+For more details on streams from sockets and files, see the API documentations of the relevant functions in
 [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) for
 Scala, [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html)
 for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) for Python.
@@ -677,38 +669,12 @@ for Java, and [StreamingContext](api/python/pyspark.streaming.html#pyspark.strea
 {:.no_toc}
 
 <span class="badge" style="background-color: grey">Python API</span> As of Spark {{site.SPARK_VERSION_SHORT}},
-out of these sources, Kafka, Kinesis, Flume and MQTT are available in the Python API.
+out of these sources, Kafka, Kinesis and Flume are available in the Python API.
 
 This category of sources require interfacing with external non-Spark libraries, some of them with
 complex dependencies (e.g., Kafka and Flume). Hence, to minimize issues related to version conflicts
 of dependencies, the functionality to create DStreams from these sources has been moved to separate
-libraries that can be [linked](#linking) to explicitly when necessary. For example, if you want to
-create a DStream using data from Twitter's stream of tweets, you have to do the following:
-
-1. *Linking*: Add the artifact `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` to the
-  SBT/Maven project dependencies.
-1. *Programming*: Import the `TwitterUtils` class and create a DStream with
-  `TwitterUtils.createStream` as shown below.
-1. *Deploying*: Generate an uber JAR with all the dependencies (including the dependency
-  `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and its transitive dependencies) and
-  then deploy the application. This is further explained in the [Deploying section](#deploying-applications).
-
-<div class="codetabs">
-<div data-lang="scala">
-{% highlight scala %}
-import org.apache.spark.streaming.twitter._
-
-TwitterUtils.createStream(ssc, None)
-{% endhighlight %}
-</div>
-<div data-lang="java">
-{% highlight java %}
-import org.apache.spark.streaming.twitter.*;
-
-TwitterUtils.createStream(jssc);
-{% endhighlight %}
-</div>
-</div>
+libraries that can be [linked](#linking) to explicitly when necessary.
 
 Note that these advanced sources are not available in the Spark shell, hence applications based on
 these advanced sources cannot be tested in the shell. If you really want to use them in the Spark
@@ -722,15 +688,6 @@ Some of these advanced sources are as follows.
 - **Flume:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Flume 1.6.0. See the [Flume Integration Guide](streaming-flume-integration.html) for more details.
 
 - **Kinesis:** Spark Streaming {{site.SPARK_VERSION_SHORT}} is compatible with Kinesis Client Library 1.2.1. See the [Kinesis Integration Guide](streaming-kinesis-integration.html) for more details.
-
-- **Twitter:** Spark Streaming's TwitterUtils uses Twitter4j 3.0.3 to get the public stream of tweets using
-  [Twitter's Streaming API](https://dev.twitter.com/docs/streaming-apis). Authentication information
-  can be provided by any of the [methods](http://twitter4j.org/en/configuration.html) supported by
-  Twitter4J library. You can either get the public stream, or get the filtered stream based on a
-  keywords. See the API documentation ([Scala](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$),
-  [Java](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html)) and examples
-  ([TwitterPopularTags]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterPopularTags.scala)
-  and [TwitterAlgebirdCMS]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/TwitterAlgebirdCMS.scala)).
 
 ### Custom Sources
 {:.no_toc}
@@ -798,7 +755,7 @@ Some of the common ones are as follows.
   <td> <b>reduce</b>(<i>func</i>) </td>
   <td> Return a new DStream of single-element RDDs by aggregating the elements in each RDD of the
   source DStream using a function <i>func</i> (which takes two arguments and returns one).
-  The function should be associative so that it can be computed in parallel. </td>
+  The function should be associative and commutative so that it can be computed in parallel. </td>
 </tr>
 <tr>
   <td> <b>countByValue</b>() </td>
@@ -872,16 +829,12 @@ val runningCounts = pairs.updateStateByKey[Int](updateFunction _)
 {% endhighlight %}
 
 The update function will be called for each word, with `newValues` having a sequence of 1's (from
-the `(word, 1)` pairs) and the `runningCount` having the previous count. For the complete
-Scala code, take a look at the example
-[StatefulNetworkWordCount.scala]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache
-/spark/examples/streaming/StatefulNetworkWordCount.scala).
+the `(word, 1)` pairs) and the `runningCount` having the previous count.
 
 </div>
 <div data-lang="java" markdown="1">
 
 {% highlight java %}
-import com.google.common.base.Optional;
 Function2<List<Integer>, Optional<Integer>, Optional<Integer>> updateFunction =
   new Function2<List<Integer>, Optional<Integer>, Optional<Integer>>() {
     @Override public Optional<Integer> call(List<Integer> values, Optional<Integer> state) {
@@ -1073,7 +1026,7 @@ said two parameters - <i>windowLength</i> and <i>slideInterval</i>.
 <tr>
   <td> <b>reduceByWindow</b>(<i>func</i>, <i>windowLength</i>, <i>slideInterval</i>) </td>
   <td> Return a new single-element stream, created by aggregating elements in the stream over a
-  sliding interval using <i>func</i>. The function should be associative so that it can be computed
+  sliding interval using <i>func</i>. The function should be associative and commutative so that it can be computed
   correctly in parallel.
   </td>
 </tr>
@@ -1412,6 +1365,171 @@ Note that the connections in the pool should be lazily created on demand and tim
 - DStreams are executed lazily by the output operations, just like RDDs are lazily executed by RDD actions. Specifically, RDD actions inside the DStream output operations force the processing of the received data. Hence, if your application does not have any output operation, or has output operations like `dstream.foreachRDD()` without any RDD action inside them, then nothing will get executed. The system will simply receive the data and discard it.
 
 - By default, output operations are executed one-at-a-time. And they are executed in the order they are defined in the application.
+
+***
+
+## Accumulators and Broadcast Variables
+
+[Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) cannot be recovered from checkpoint in Spark Streaming. If you enable checkpointing and use [Accumulators](programming-guide.html#accumulators) or [Broadcast variables](programming-guide.html#broadcast-variables) as well, you'll have to create lazily instantiated singleton instances for [Accumulators](programming-guide.html#accumulators) and [Broadcast variables](programming-guide.html#broadcast-variables) so that they can be re-instantiated after the driver restarts on failure. This is shown in the following example.
+
+<div class="codetabs">
+<div data-lang="scala" markdown="1">
+{% highlight scala %}
+
+object WordBlacklist {
+
+  @volatile private var instance: Broadcast[Seq[String]] = null
+
+  def getInstance(sc: SparkContext): Broadcast[Seq[String]] = {
+    if (instance == null) {
+      synchronized {
+        if (instance == null) {
+          val wordBlacklist = Seq("a", "b", "c")
+          instance = sc.broadcast(wordBlacklist)
+        }
+      }
+    }
+    instance
+  }
+}
+
+object DroppedWordsCounter {
+
+  @volatile private var instance: Accumulator[Long] = null
+
+  def getInstance(sc: SparkContext): Accumulator[Long] = {
+    if (instance == null) {
+      synchronized {
+        if (instance == null) {
+          instance = sc.accumulator(0L, "WordsInBlacklistCounter")
+        }
+      }
+    }
+    instance
+  }
+}
+
+wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
+  // Get or register the blacklist Broadcast
+  val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
+  // Get or register the droppedWordsCounter Accumulator
+  val droppedWordsCounter = DroppedWordsCounter.getInstance(rdd.sparkContext)
+  // Use blacklist to drop words and use droppedWordsCounter to count them
+  val counts = rdd.filter { case (word, count) =>
+    if (blacklist.value.contains(word)) {
+      droppedWordsCounter += count
+      false
+    } else {
+      true
+    }
+  }.collect()
+  val output = "Counts at time " + time + " " + counts
+})
+
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/scala/org/apache/spark/examples/streaming/RecoverableNetworkWordCount.scala).
+</div>
+<div data-lang="java" markdown="1">
+{% highlight java %}
+
+class JavaWordBlacklist {
+
+  private static volatile Broadcast<List<String>> instance = null;
+
+  public static Broadcast<List<String>> getInstance(JavaSparkContext jsc) {
+    if (instance == null) {
+      synchronized (JavaWordBlacklist.class) {
+        if (instance == null) {
+          List<String> wordBlacklist = Arrays.asList("a", "b", "c");
+          instance = jsc.broadcast(wordBlacklist);
+        }
+      }
+    }
+    return instance;
+  }
+}
+
+class JavaDroppedWordsCounter {
+
+  private static volatile Accumulator<Integer> instance = null;
+
+  public static Accumulator<Integer> getInstance(JavaSparkContext jsc) {
+    if (instance == null) {
+      synchronized (JavaDroppedWordsCounter.class) {
+        if (instance == null) {
+          instance = jsc.accumulator(0, "WordsInBlacklistCounter");
+        }
+      }
+    }
+    return instance;
+  }
+}
+
+wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() {
+  @Override
+  public Void call(JavaPairRDD<String, Integer> rdd, Time time) throws IOException {
+    // Get or register the blacklist Broadcast
+    final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
+    // Get or register the droppedWordsCounter Accumulator
+    final Accumulator<Integer> droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
+    // Use blacklist to drop words and use droppedWordsCounter to count them
+    String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
+      @Override
+      public Boolean call(Tuple2<String, Integer> wordCount) throws Exception {
+        if (blacklist.value().contains(wordCount._1())) {
+          droppedWordsCounter.add(wordCount._2());
+          return false;
+        } else {
+          return true;
+        }
+      }
+    }).collect().toString();
+    String output = "Counts at time " + time + " " + counts;
+  }
+}
+
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/java/org/apache/spark/examples/streaming/JavaRecoverableNetworkWordCount.java).
+</div>
+<div data-lang="python" markdown="1">
+{% highlight python %}
+
+def getWordBlacklist(sparkContext):
+    if ('wordBlacklist' not in globals()):
+        globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()['wordBlacklist']
+
+def getDroppedWordsCounter(sparkContext):
+    if ('droppedWordsCounter' not in globals()):
+        globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
+    return globals()['droppedWordsCounter']
+
+def echo(time, rdd):
+    # Get or register the blacklist Broadcast
+    blacklist = getWordBlacklist(rdd.context)
+    # Get or register the droppedWordsCounter Accumulator
+    droppedWordsCounter = getDroppedWordsCounter(rdd.context)
+
+    # Use blacklist to drop words and use droppedWordsCounter to count them
+    def filterFunc(wordCount):
+        if wordCount[0] in blacklist.value:
+            droppedWordsCounter.add(wordCount[1])
+            False
+        else:
+            True
+
+    counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
+
+wordCounts.foreachRDD(echo)
+
+{% endhighlight %}
+
+See the full [source code]({{site.SPARK_GITHUB_URL}}/blob/master/examples/src/main/python/streaming/recoverable_network_wordcount.py).
+
+</div>
+</div>
 
 ***
 
@@ -1771,10 +1889,10 @@ To run a Spark Streaming applications, you need to have the following.
 - *Package the application JAR* - You have to compile your streaming application into a JAR.
   If you are using [`spark-submit`](submitting-applications.html) to start the
   application, then you will not need to provide Spark and Spark Streaming in the JAR. However,
-  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume, Twitter),
+  if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume),
   then you will have to package the extra artifact they link to, along with their dependencies,
-  in the JAR that is used to deploy the application. For example, an application using `TwitterUtils`
-  will have to include `spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}}` and all its
+  in the JAR that is used to deploy the application. For example, an application using `KafkaUtils`
+  will have to include `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` and all its
   transitive dependencies in the application JAR.
 
 - *Configuring sufficient memory for the executors* - Since the received data must be stored in
@@ -1820,7 +1938,11 @@ To run a Spark Streaming applications, you need to have the following.
   to increase aggregate throughput. Additionally, it is recommended that the replication of the
   received data within Spark be disabled when the write ahead log is enabled as the log is already
   stored in a replicated storage system. This can be done by setting the storage level for the
-  input stream to `StorageLevel.MEMORY_AND_DISK_SER`.
+  input stream to `StorageLevel.MEMORY_AND_DISK_SER`. While using S3 (or any file system that
+  does not support flushing) for _write ahead logs_, please remember to enable
+  `spark.streaming.driver.writeAheadLog.closeFileAfterWrite` and
+  `spark.streaming.receiver.writeAheadLog.closeFileAfterWrite`. See
+  [Spark Streaming Configuration](configuration.html#spark-streaming) for more details.
 
 - *Setting the max receiving rate* - If the cluster resources is not large enough for the streaming
   application to process data as fast as it is being received, the receivers can be rate limited
@@ -1857,12 +1979,6 @@ information of pre-upgrade code cannot be done. The checkpoint information essen
 contains serialized Scala/Java/Python objects and trying to deserialize objects with new,
 modified classes may lead to errors. In this case, either start the upgraded app with a different
 checkpoint directory, or delete the previous checkpoint directory.
-
-### Other Considerations
-{:.no_toc}
-If the data is being received by the receivers faster than what can be processed,
-you can limit the rate by setting the [configuration parameter](configuration.html#spark-streaming)
-`spark.streaming.receiver.maxRate`.
 
 ***
 
@@ -1936,7 +2052,7 @@ unifiedStream.print()
 <div data-lang="java" markdown="1">
 {% highlight java %}
 int numStreams = 5;
-List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<JavaPairDStream<String, String>>(numStreams);
+List<JavaPairDStream<String, String>> kafkaStreams = new ArrayList<>(numStreams);
 for (int i = 0; i < numStreams; i++) {
   kafkaStreams.add(KafkaUtils.createStream(...));
 }
@@ -1948,8 +2064,8 @@ unifiedStream.print();
 {% highlight python %}
 numStreams = 5
 kafkaStreams = [KafkaUtils.createStream(...) for _ in range (numStreams)]
-unifiedStream = streamingContext.union(kafkaStreams)
-unifiedStream.print()
+unifiedStream = streamingContext.union(*kafkaStreams)
+unifiedStream.pprint()
 {% endhighlight %}
 </div>
 </div>
@@ -2000,9 +2116,6 @@ In specific cases where the amount of data that needs to be retained for the str
 If the number of tasks launched per second is high (say, 50 or more per second), then the overhead
 of sending out tasks to the slaves may be significant and will make it hard to achieve sub-second
 latencies. The overhead can be reduced by the following changes:
-
-* **Task Serialization**: Using Kryo serialization for serializing tasks can reduce the task
-  sizes, and therefore reduce the time taken to send them to the slaves.
 
 * **Execution mode**: Running Spark in Standalone mode or coarse-grained Mesos mode leads to
   better task launch times than the fine-grained Mesos mode. Please refer to the
@@ -2065,7 +2178,7 @@ overall processing throughput of the system, its use is still recommended to ach
 consistent batch processing times. Make sure you set the CMS GC on both the driver (using `--driver-java-options` in `spark-submit`) and the executors (using [Spark configuration](configuration.html#runtime-environment) `spark.executor.extraJavaOptions`).
 
 * **Other tips**: To further reduce GC overheads, here are some more tips to try.
-    - Use Tachyon for off-heap storage of persisted RDDs. See more detail in the [Spark Programming Guide](programming-guide.html#rdd-persistence).
+    - Persist RDDs using the `OFF_HEAP` storage level. See more detail in the [Spark Programming Guide](programming-guide.html#rdd-persistence).
     - Use more executors with smaller heap sizes. This will reduce the GC pressure within each JVM heap.
 
 
@@ -2247,8 +2360,7 @@ additional effort may be necessary to achieve exactly-once semantics. There are 
 Between Spark 0.9.1 and Spark 1.0, there were a few API changes made to ensure future API stability.
 This section elaborates the steps required to migrate your existing code to 1.0.
 
-**Input DStreams**: All operations that create an input stream (e.g., `StreamingContext.socketStream`,
-`FlumeUtils.createStream`, etc.) now returns
+**Input DStreams**: All operations that create an input stream (e.g., `StreamingContext.socketStream`, `FlumeUtils.createStream`, etc.) now returns
 [InputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.InputDStream) /
 [ReceiverInputDStream](api/scala/index.html#org.apache.spark.streaming.dstream.ReceiverInputDStream)
 (instead of DStream) for Scala, and [JavaInputDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaInputDStream.html) /
@@ -2283,13 +2395,8 @@ that can be called to store the data in Spark. So, to migrate your custom networ
 BlockGenerator object (does not exist any more in Spark 1.0 anyway), and use `store(...)` methods on
 received data.
 
-**Actor-based Receivers**: Data could have been received using any Akka Actors by extending the actor class with
-`org.apache.spark.streaming.receivers.Receiver` trait. This has been renamed to
-[`org.apache.spark.streaming.receiver.ActorHelper`](api/scala/index.html#org.apache.spark.streaming.receiver.ActorHelper)
-and the `pushBlock(...)` methods to store received data has been renamed to `store(...)`. Other helper classes in
-the `org.apache.spark.streaming.receivers` package were also moved
-to [`org.apache.spark.streaming.receiver`](api/scala/index.html#org.apache.spark.streaming.receiver.package)
-package and renamed for better clarity.
+**Actor-based Receivers**: The Actor-based Receiver APIs have been moved to [DStream Akka](https://github.com/spark-packages/dstream-akka).
+Please refer to the project for more details.
 
 ***************************************************************************************************
 ***************************************************************************************************
@@ -2297,9 +2404,13 @@ package and renamed for better clarity.
 # Where to Go from Here
 * Additional guides
     - [Kafka Integration Guide](streaming-kafka-integration.html)
-    - [Flume Integration Guide](streaming-flume-integration.html)
     - [Kinesis Integration Guide](streaming-kinesis-integration.html)
     - [Custom Receiver Guide](streaming-custom-receivers.html)
+* External DStream data sources:
+    - [DStream MQTT](https://github.com/spark-packages/dstream-mqtt)
+    - [DStream Twitter](https://github.com/spark-packages/dstream-twitter)
+    - [DStream Akka](https://github.com/spark-packages/dstream-akka)
+    - [DStream ZeroMQ](https://github.com/spark-packages/dstream-zeromq)
 * API documentation
   - Scala docs
     * [StreamingContext](api/scala/index.html#org.apache.spark.streaming.StreamingContext) and
@@ -2307,9 +2418,6 @@ package and renamed for better clarity.
     * [KafkaUtils](api/scala/index.html#org.apache.spark.streaming.kafka.KafkaUtils$),
     [FlumeUtils](api/scala/index.html#org.apache.spark.streaming.flume.FlumeUtils$),
     [KinesisUtils](api/scala/index.html#org.apache.spark.streaming.kinesis.KinesisUtils$),
-    [TwitterUtils](api/scala/index.html#org.apache.spark.streaming.twitter.TwitterUtils$),
-    [ZeroMQUtils](api/scala/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$), and
-    [MQTTUtils](api/scala/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$)
   - Java docs
     * [JavaStreamingContext](api/java/index.html?org/apache/spark/streaming/api/java/JavaStreamingContext.html),
     [JavaDStream](api/java/index.html?org/apache/spark/streaming/api/java/JavaDStream.html) and
@@ -2317,9 +2425,6 @@ package and renamed for better clarity.
     * [KafkaUtils](api/java/index.html?org/apache/spark/streaming/kafka/KafkaUtils.html),
     [FlumeUtils](api/java/index.html?org/apache/spark/streaming/flume/FlumeUtils.html),
     [KinesisUtils](api/java/index.html?org/apache/spark/streaming/kinesis/KinesisUtils.html)
-    [TwitterUtils](api/java/index.html?org/apache/spark/streaming/twitter/TwitterUtils.html),
-    [ZeroMQUtils](api/java/index.html?org/apache/spark/streaming/zeromq/ZeroMQUtils.html), and
-    [MQTTUtils](api/java/index.html?org/apache/spark/streaming/mqtt/MQTTUtils.html)
   - Python docs
     * [StreamingContext](api/python/pyspark.streaming.html#pyspark.streaming.StreamingContext) and [DStream](api/python/pyspark.streaming.html#pyspark.streaming.DStream)
     * [KafkaUtils](api/python/pyspark.streaming.html#pyspark.streaming.kafka.KafkaUtils)

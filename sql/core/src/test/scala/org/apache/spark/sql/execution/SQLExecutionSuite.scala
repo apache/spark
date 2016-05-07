@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution
 
 import java.util.Properties
 
-import scala.collection.parallel.CompositeThrowable
-
 import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.sql.SQLContext
 
@@ -48,6 +46,20 @@ class SQLExecutionSuite extends SparkFunSuite {
       testConcurrentQueryExecution(goodSparkContext)
     } finally {
       goodSparkContext.stop()
+    }
+  }
+
+  test("concurrent query execution with fork-join pool (SPARK-13747)") {
+    val sc = new SparkContext("local[*]", "test")
+    val sqlContext = new SQLContext(sc)
+    import sqlContext.implicits._
+    try {
+      // Should not throw IllegalArgumentException
+      (1 to 100).par.foreach { _ =>
+        sc.parallelize(1 to 5).map { i => (i, i) }.toDF("a", "b").count()
+      }
+    } finally {
+      sc.stop()
     }
   }
 

@@ -18,8 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateUnsafeProjection, GenerateOrdering}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder, Ascending, Expression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, Expression, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateOrdering, GenerateUnsafeProjection}
 
 object GroupedIterator {
   def apply(
@@ -115,7 +115,8 @@ class GroupedIterator private(
       false
     } else {
       // Skip to next group.
-      while (input.hasNext && keyOrdering.compare(currentGroup, currentRow) == 0) {
+      // currentRow may be overwritten by `hasNext`, so we should compare them first.
+      while (keyOrdering.compare(currentGroup, currentRow) == 0 && input.hasNext) {
         currentRow = input.next()
       }
 

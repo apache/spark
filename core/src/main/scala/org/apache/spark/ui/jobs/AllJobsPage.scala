@@ -24,8 +24,8 @@ import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml._
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
+import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -71,7 +71,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val jobId = jobUIData.jobId
       val status = jobUIData.status
       val (jobName, jobDescription) = getLastStageNameAndDescription(jobUIData)
-      val displayJobDescription = if (jobDescription.isEmpty) jobName else jobDescription
+      val displayJobDescription =
+        if (jobDescription.isEmpty) {
+          jobName
+        } else {
+          UIUtils.makeDescription(jobDescription, "", plainText = true).text
+        }
       val submissionTime = jobUIData.submissionTime.get
       val completionTimeOpt = jobUIData.completionTime
       val completionTime = completionTimeOpt.getOrElse(System.currentTimeMillis())
@@ -143,7 +148,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
                |    '${
                         if (event.finishReason.isDefined) {
-                          s"""<br>Reason: ${event.finishReason.get}"""
+                          s"""<br>Reason: ${event.finishReason.get.replace("\n", " ")}"""
                         } else {
                           ""
                         }
@@ -224,10 +229,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-      val jobDescription = UIUtils.makeDescription(lastStageDescription, parent.basePath)
+      val basePathUri = UIUtils.prependBaseUri(parent.basePath)
+      val jobDescription =
+        UIUtils.makeDescription(lastStageDescription, basePathUri, plainText = false)
 
-      val detailUrl =
-        "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
+      val detailUrl = "%s/jobs/job?id=%s".format(basePathUri, job.jobId)
       <tr id={"job-" + job.jobId}>
         <td sorttable_customkey={job.jobId.toString}>
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
@@ -290,6 +296,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
+            <li>
+              <strong>User:</strong>
+              {parent.getSparkUser}
+            </li>
             <li>
               <strong>Total Uptime:</strong>
               {

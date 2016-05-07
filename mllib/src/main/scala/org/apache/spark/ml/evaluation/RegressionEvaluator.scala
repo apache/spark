@@ -20,10 +20,11 @@ package org.apache.spark.ml.evaluation
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasLabelCol, HasPredictionCol}
-import org.apache.spark.ml.util.{Identifiable, SchemaUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable, SchemaUtils}
 import org.apache.spark.mllib.evaluation.RegressionMetrics
-import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.types.DoubleType
+import org.apache.spark.sql.{Dataset, Row}
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.{DoubleType, FloatType}
 
 /**
  * :: Experimental ::
@@ -32,17 +33,18 @@ import org.apache.spark.sql.types.DoubleType
 @Since("1.4.0")
 @Experimental
 final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val uid: String)
-  extends Evaluator with HasPredictionCol with HasLabelCol {
+  extends Evaluator with HasPredictionCol with HasLabelCol with DefaultParamsWritable {
 
   @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regEval"))
 
   /**
-   * param for metric name in evaluation (supports `"rmse"` (default), `"mse"`, `"r2"`, and `"mae"`)
+   * Param for metric name in evaluation. Supports:
+   *  - `"rmse"` (default): root mean squared error
+   *  - `"mse"`: mean squared error
+   *  - `"r2"`: R^2^ metric
+   *  - `"mae"`: mean absolute error
    *
-   * Because we will maximize evaluation value (ref: `CrossValidator`),
-   * when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
-   * we take and output the negative of this metric.
    * @group param
    */
   @Since("1.4.0")
@@ -69,16 +71,16 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   setDefault(metricName -> "rmse")
 
-  @Since("1.4.0")
-  override def evaluate(dataset: DataFrame): Double = {
+  @Since("2.0.0")
+  override def evaluate(dataset: Dataset[_]): Double = {
     val schema = dataset.schema
-    SchemaUtils.checkColumnType(schema, $(predictionCol), DoubleType)
-    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    SchemaUtils.checkColumnTypes(schema, $(predictionCol), Seq(DoubleType, FloatType))
+    SchemaUtils.checkNumericType(schema, $(labelCol))
 
-    val predictionAndLabels = dataset.select($(predictionCol), $(labelCol))
-      .map { case Row(prediction: Double, label: Double) =>
-        (prediction, label)
-      }
+    val predictionAndLabels = dataset
+      .select(col($(predictionCol)).cast(DoubleType), col($(labelCol)).cast(DoubleType))
+      .rdd
+      .map { case Row(prediction: Double, label: Double) => (prediction, label) }
     val metrics = new RegressionMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "rmse" => metrics.rootMeanSquaredError
@@ -99,4 +101,11 @@ final class RegressionEvaluator @Since("1.4.0") (@Since("1.4.0") override val ui
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): RegressionEvaluator = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object RegressionEvaluator extends DefaultParamsReadable[RegressionEvaluator] {
+
+  @Since("1.6.0")
+  override def load(path: String): RegressionEvaluator = super.load(path)
 }

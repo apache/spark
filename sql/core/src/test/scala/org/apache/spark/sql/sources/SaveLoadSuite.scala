@@ -21,7 +21,8 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, SaveMode, SQLConf, DataFrame}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SaveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -121,7 +122,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
 
     // verify the append mode
     df.write.mode(SaveMode.Append).json(path.toString)
-    val df2 = df.unionAll(df)
+    val df2 = df.union(df)
     df2.registerTempTable("jsonTable2")
 
     checkLoad(df2, "jsonTable2")

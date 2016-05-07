@@ -22,7 +22,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-
 import org.apache.spark.util.Utils
 
 class HiveTableScanSuite extends HiveComparisonTest {

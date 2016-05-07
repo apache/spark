@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.test
 
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.SQLContext
 
 
@@ -24,6 +25,8 @@ import org.apache.spark.sql.SQLContext
  * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
  */
 trait SharedSQLContext extends SQLTestUtils {
+
+  protected val sparkConf = new SparkConf()
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
@@ -36,14 +39,15 @@ trait SharedSQLContext extends SQLTestUtils {
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected def sqlContext: SQLContext = _ctx
+  protected implicit def sqlContext: SQLContext = _ctx
 
   /**
    * Initialize the [[TestSQLContext]].
    */
   protected override def beforeAll(): Unit = {
+    SQLContext.clearSqlListener()
     if (_ctx == null) {
-      _ctx = new TestSQLContext
+      _ctx = new TestSQLContext(sparkConf)
     }
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()

@@ -17,13 +17,13 @@
 
 package org.apache.spark.ui.jobs
 
+import scala.collection.mutable
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.util.collection.OpenHashSet
-
-import scala.collection.mutable
-import scala.collection.mutable.HashMap
 
 private[spark] object UIData {
 
@@ -105,12 +105,12 @@ private[spark] object UIData {
   /**
    * These are kept mutable and reused throughout a task's lifetime to avoid excessive reallocation.
    */
-  case class TaskUIData(
+  class TaskUIData(
       var taskInfo: TaskInfo,
-      var taskMetrics: Option[TaskMetrics] = None,
+      var metrics: Option[TaskMetrics] = None,
       var errorMessage: Option[String] = None)
 
-  case class ExecutorUIData(
+  class ExecutorUIData(
       val startTime: Long,
       var finishTime: Option[Long] = None,
       var finishReason: Option[String] = None)

@@ -17,10 +17,11 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.SparkFunSuite
+import scala.language.postfixOps
+
 import org.scalatest.PrivateMethodTester
 
-import scala.language.postfixOps
+import org.apache.spark.SparkFunSuite
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester {
   /** Check that a Decimal has the given string representation, precision and scale */

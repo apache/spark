@@ -22,8 +22,8 @@ import java.io.File
 import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -81,7 +81,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
   test("Double create fails when allowExisting = false") {
     sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
 
-    intercept[QueryExecutionException] {
+    intercept[AnalysisException] {
       sql("CREATE TABLE doubleCreateAndInsertTest (key int, value string)")
     }
   }
@@ -111,7 +111,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
   test("SPARK-4203:random partition directory order") {
     sql("CREATE TABLE tmp_table (key int, value string)")
     val tmpDir = Utils.createTempDir()
-    val stagingDir = new HiveConf().getVar(HiveConf.ConfVars.STAGINGDIR)
+    // The default value of hive.exec.stagingdir.
+    val stagingDir = ".hive-staging"
 
     sql(
       s"""
@@ -154,8 +155,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     }
     val expected = List(
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=2"::Nil,
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=3"::Nil ,
-      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil ,
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=3"::Nil,
+      "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=1"::Nil,
       "p1=a"::"p2=b"::"p3=c"::"p4=c"::"p5=4"::Nil
     )
     assert(listFolders(tmpDir, List()).sortBy(_.toString()) === expected.sortBy(_.toString))
@@ -211,52 +212,5 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       rowRDD.collect().toSeq)
 
     sql("DROP TABLE hiveTableWithStructValue")
-  }
-
-  test("SPARK-5498:partition schema does not match table schema") {
-    val testData = hiveContext.sparkContext.parallelize(
-      (1 to 10).map(i => TestData(i, i.toString))).toDF()
-    testData.registerTempTable("testData")
-
-    val testDatawithNull = hiveContext.sparkContext.parallelize(
-      (1 to 10).map(i => ThreeCloumntable(i, i.toString, null))).toDF()
-
-    val tmpDir = Utils.createTempDir()
-    sql(
-      s"""
-         |CREATE TABLE table_with_partition(key int,value string)
-         |PARTITIONED by (ds string) location '${tmpDir.toURI.toString}'
-       """.stripMargin)
-    sql(
-      """
-        |INSERT OVERWRITE TABLE table_with_partition
-        |partition (ds='1') SELECT key,value FROM testData
-      """.stripMargin)
-
-    // test schema the same between partition and table
-    sql("ALTER TABLE table_with_partition CHANGE COLUMN key key BIGINT")
-    checkAnswer(sql("select key,value from table_with_partition where ds='1' "),
-      testData.collect().toSeq
-    )
-
-    // test difference type of field
-    sql("ALTER TABLE table_with_partition CHANGE COLUMN key key BIGINT")
-    checkAnswer(sql("select key,value from table_with_partition where ds='1' "),
-      testData.collect().toSeq
-    )
-
-    // add column to table
-    sql("ALTER TABLE table_with_partition ADD COLUMNS(key1 string)")
-    checkAnswer(sql("select key,value,key1 from table_with_partition where ds='1' "),
-      testDatawithNull.collect().toSeq
-    )
-
-    // change column name to table
-    sql("ALTER TABLE table_with_partition CHANGE COLUMN key keynew BIGINT")
-    checkAnswer(sql("select keynew,value from table_with_partition where ds='1' "),
-      testData.collect().toSeq
-    )
-
-    sql("DROP TABLE table_with_partition")
   }
 }

@@ -17,14 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup}
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.param.{IntArrayParam, ParamMap, StringArrayParam}
-import org.apache.spark.ml.util.{Identifiable, MetadataUtils, SchemaUtils}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
 
@@ -42,7 +42,7 @@ import org.apache.spark.sql.types.StructType
  */
 @Experimental
 final class VectorSlicer(override val uid: String)
-  extends Transformer with HasInputCol with HasOutputCol {
+  extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("vectorSlicer"))
 
@@ -89,12 +89,8 @@ final class VectorSlicer(override val uid: String)
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def validateParams(): Unit = {
-    require($(indices).length > 0 || $(names).length > 0,
-      s"VectorSlicer requires that at least one feature be selected.")
-  }
-
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     // Validity checks
     transformSchema(dataset.schema)
     val inputAttr = AttributeGroup.fromStructField(dataset.schema($(inputCol)))
@@ -139,6 +135,8 @@ final class VectorSlicer(override val uid: String)
   }
 
   override def transformSchema(schema: StructType): StructType = {
+    require($(indices).length > 0 || $(names).length > 0,
+      s"VectorSlicer requires that at least one feature be selected.")
     SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
 
     if (schema.fieldNames.contains($(outputCol))) {
@@ -153,10 +151,11 @@ final class VectorSlicer(override val uid: String)
   override def copy(extra: ParamMap): VectorSlicer = defaultCopy(extra)
 }
 
-private[feature] object VectorSlicer {
+@Since("1.6.0")
+object VectorSlicer extends DefaultParamsReadable[VectorSlicer] {
 
   /** Return true if given feature indices are valid */
-  def validIndices(indices: Array[Int]): Boolean = {
+  private[feature] def validIndices(indices: Array[Int]): Boolean = {
     if (indices.isEmpty) {
       true
     } else {
@@ -165,7 +164,10 @@ private[feature] object VectorSlicer {
   }
 
   /** Return true if given feature names are valid */
-  def validNames(names: Array[String]): Boolean = {
+  private[feature] def validNames(names: Array[String]): Boolean = {
     names.forall(_.nonEmpty) && names.length == names.distinct.length
   }
+
+  @Since("1.6.0")
+  override def load(path: String): VectorSlicer = super.load(path)
 }

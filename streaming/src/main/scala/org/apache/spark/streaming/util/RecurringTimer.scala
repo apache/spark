@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.util
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.{Clock, SystemClock}
 
 private[streaming]
@@ -72,10 +72,10 @@ class RecurringTimer(clock: Clock, period: Long, callback: (Long) => Unit, name:
 
   /**
    * Stop the timer, and return the last time the callback was made.
-   * - interruptTimer = true will interrupt the callback
-   * if it is in progress (not guaranteed to give correct time in this case).
-   * - interruptTimer = false guarantees that there will be at least one callback after `stop` has
-   * been called.
+   *
+   * @param interruptTimer True will interrupt the callback if it is in progress (not guaranteed to
+   *                       give correct time in this case). False guarantees that there will be at
+   *                       least one callback after `stop` has been called.
    */
   def stop(interruptTimer: Boolean): Long = synchronized {
     if (!stopped) {
