@@ -141,24 +141,21 @@ class StreamSuite extends StreamTest with SharedSQLContext {
 
     // For each batch, we would retrieve new data's offsets and log them before we run the execution
     // This checks whether the key of the offset log is the expected batch id
-    def CheckOffsetLogLatestBatchId(expectedId: Int) = {
+    def CheckOffsetLogLatestBatchId(expectedId: Int): AssertOnQuery =
       AssertOnQuery(_.offsetLog.getLatest().get._1 == expectedId,
         s"offsetLog's latest should be $expectedId")
-    }
 
     // For each batch, we would log the state change during the execution
     // This checks whether the key of the state change log is the expected batch id
-    def CheckIncrementalExecutionCurrentBatchId(expectedId: Int) = {
+    def CheckIncrementalExecutionCurrentBatchId(expectedId: Int): AssertOnQuery =
       AssertOnQuery(_.lastExecution.asInstanceOf[IncrementalExecution].currentBatchId == expectedId,
         s"lastExecution's currentBatchId should be $expectedId")
-    }
 
     // For each batch, we would log the sink change after the execution
     // This checks whether the key of the sink change log is the expected batch id
-    def CheckSinkLatestBatchId(expectedId: Int) = {
+    def CheckSinkLatestBatchId(expectedId: Int): AssertOnQuery =
       AssertOnQuery(_.sink.asInstanceOf[MemorySink].latestBatchId.get == expectedId,
         s"sink's lastBatchId should be $expectedId")
-    }
 
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
