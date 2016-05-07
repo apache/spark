@@ -888,6 +888,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("drop build-in function") {
+    // partition to add already exists
+    val e = intercept[AnalysisException] {
+      sql("DROP TEMPORARY FUNCTION year")
+    }
+    assert(e.getMessage.contains("Cannot drop native function 'year'"))
+  }
+
   test("describe function") {
     checkAnswer(
       sql("DESCRIBE FUNCTION log"),
