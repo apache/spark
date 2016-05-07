@@ -1817,6 +1817,8 @@ private[spark] object Utils extends Logging {
   /** Returns true if the given exception was fatal. See docs for scala.util.control.NonFatal. */
   def isFatalError(e: Throwable): Boolean = {
     e match {
+      case _: IOException =>
+        true
       case NonFatal(_) | _: InterruptedException | _: NotImplementedError | _: ControlThrowable =>
         false
       case _ =>
