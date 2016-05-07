@@ -485,11 +485,11 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
   private val removedFunctions =
     collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
 
-  def unregisterFunction(name: String): Unit = {
+  def unregisterFunction(name: String): Unit = synchronized {
     functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
   }
 
-  def restore(): Unit = {
+  def restore(): Unit = synchronized {
     removedFunctions.foreach {
       case (name, (info, builder)) => registerFunction(name, info, builder)
     }

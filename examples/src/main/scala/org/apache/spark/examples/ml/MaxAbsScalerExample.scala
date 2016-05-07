@@ -24,7 +24,10 @@ import org.apache.spark.sql.SparkSession
 
 object MaxAbsScalerExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("MaxAbsScalerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("MaxAbsScalerExample")
+      .getOrCreate()
 
     // $example on$
     val dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

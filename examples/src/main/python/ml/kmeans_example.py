@@ -49,7 +49,10 @@ if __name__ == "__main__":
     path = sys.argv[1]
     k = sys.argv[2]
 
-    spark = SparkSession.builder.appName("PythonKMeansExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PythonKMeansExample")\
+        .getOrCreate()
 
     lines = spark.read.text(path).rdd
     data = lines.map(parseVector)

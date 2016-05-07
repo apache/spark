@@ -47,7 +47,7 @@ class IncrementalExecution(
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`
-   * preperation walks the query plan.
+   * preparation walks the query plan.
    */
   private var operatorId = 0
 

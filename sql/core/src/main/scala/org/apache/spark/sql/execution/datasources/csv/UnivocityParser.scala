@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import scala.util.control.NonFatal
 
-import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
+import com.univocity.parsers.csv.{CsvParser, CsvParserSettings, UnescapedQuoteHandling}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -183,7 +183,7 @@ private[csv] object UnivocityParser extends Logging {
     settings.setMaxColumns(options.maxColumns)
     settings.setNullValue(options.nullValue)
     settings.setMaxCharsPerColumn(options.maxCharsPerColumn)
-    settings.setParseUnescapedQuotesUntilDelimiter(true)
+    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     settings
   }
 }

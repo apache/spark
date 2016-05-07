@@ -35,7 +35,10 @@ import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaVectorAssemblerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaVectorAssemblerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaVectorAssemblerExample")
+      .getOrCreate();
 
     // $example on$
     StructType schema = createStructType(new StructField[]{

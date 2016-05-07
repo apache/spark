@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object NGramExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("NGramExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("NGramExample")
+      .getOrCreate()
 
     // $example on$
     val wordDataFrame = spark.createDataFrame(Seq(

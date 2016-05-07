@@ -28,7 +28,10 @@ import org.apache.spark.sql.SparkSession
 
 object RandomForestRegressorExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("RandomForestRegressorExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("RandomForestRegressorExample")
+      .getOrCreate()
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
