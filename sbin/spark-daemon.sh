@@ -164,7 +164,7 @@ run_command() {
   echo "$newpid" > "$pid"
   sleep 2
   # Check if the process has died; in that case we'll tail the log so the user can see
-  if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
+  if [[ -z $(ps --no-headers -p "$newpid") ]]; then
     echo "failed to launch $command:"
     tail -2 "$log" | sed 's/^/  /'
     echo "full log in $log"
