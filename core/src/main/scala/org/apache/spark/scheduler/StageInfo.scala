@@ -32,12 +32,23 @@ class StageInfo(
     val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 ) {
   val stageId = stage.id
+  val jobId = stage.jobId
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   var completionTime: Option[Long] = None
   val rddName = stage.rdd.name
   val name = stage.name
-  val numPartitions = stage.numPartitions
-  val numTasks = stage.numTasks
   var emittedTaskSizeWarning = false
+  var description: Option[String] = None
+  var numPartitions = stage.numPartitions
+  var numTasks = stage.numTasks
+  var startedTasks: Int = 0
+  var completedTasks: Int = 0
+  var failedTasks: String = ""
+  var poolName: Option[String] = None
+  var shuffleRead = ""
+  var shuffleWrite = ""
+  val shuffleDep = stage.shuffleDep
+  val parents = stage.parents
+  var numStages: Int = 0
 }

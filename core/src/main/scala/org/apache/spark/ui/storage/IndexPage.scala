@@ -18,9 +18,11 @@
 package org.apache.spark.ui.storage
 
 import javax.servlet.http.HttpServletRequest
+import net.liftweb.json.JsonAST.JValue
 
 import scala.xml.Node
 
+import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.storage.{RDDInfo, StorageUtils}
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
@@ -29,6 +31,22 @@ import org.apache.spark.util.Utils
 /** Page showing list of RDD's currently stored in the cluster */
 private[spark] class IndexPage(parent: BlockManagerUI) {
   val sc = parent.sc
+
+  def renderJson(request: HttpServletRequest): JValue = {
+    val storageStatusList = sc.getExecutorStorageStatus
+    // Calculate macro-level statistics
+
+    val rddHeaders = Seq(
+      "RDD Name",
+      "Storage Level",
+      "Cached Partitions",
+      "Fraction Cached",
+      "Size in Memory",
+      "Size on Disk")
+    val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
+
+    JsonProtocol.writeStorageInfo(rdds.toSeq)
+  }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = sc.getExecutorStorageStatus

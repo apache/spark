@@ -55,6 +55,7 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
   def getHandlers = Seq[(String, Handler)](
     ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
     ("/stages/pool", (request: HttpServletRequest) => poolPage.render(request)),
+    ("/stages/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
     ("/stages", (request: HttpServletRequest) => indexPage.render(request))
   )
 }
