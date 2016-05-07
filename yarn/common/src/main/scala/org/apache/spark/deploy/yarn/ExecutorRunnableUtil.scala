@@ -57,7 +57,7 @@ trait ExecutorRunnableUtil extends Logging {
     }
 
     JAVA_OPTS += "-Djava.io.tmpdir=" +
-      new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+      new Path(Environment.PWD.$$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
     JAVA_OPTS += ClientBase.getLog4jConfiguration(localResources)
 
     // Certain configs need to be passed here because they are needed before the Executor
@@ -96,7 +96,7 @@ trait ExecutorRunnableUtil extends Logging {
         }
     */
 
-    val commands = Seq(Environment.JAVA_HOME.$() + "/bin/java",
+    val commands = Seq(Environment.JAVA_HOME.$$() + "/bin/java",
       "-server",
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
       // Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
