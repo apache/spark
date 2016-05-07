@@ -2101,7 +2101,7 @@ test_that("gapply() on a DataFrame", {
    colnames(agg_local_df) <- c("Species", "Avg")
    expected <-  agg_local_df[order(agg_local_df$Species), ]
 
-   expect_identical(expected, actual)
+   expect_identical(expected$Avg, actual$Avg)
 })
 
 test_that("repartition by columns on DataFrame", {
