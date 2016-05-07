@@ -2096,9 +2096,10 @@ test_that("gapply() on a DataFrame", {
    actual <- collect(arrange(df1, "Species"))
 
    # Groups by `Species` and computes the average on one R worker
-   agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Species), FUN = mean))
+   agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Species), FUN = mean),
+                     stringsAsFactors = FALSE)
    colnames(agg_local_df) <- c("Species", "Avg")
-   expected <-  agg_local_df
+   expected <-  agg_local_df[order(agg_local_df$Species), ]
 
    expect_identical(expected, actual)
 })
