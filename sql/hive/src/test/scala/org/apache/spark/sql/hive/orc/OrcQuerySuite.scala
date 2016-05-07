@@ -458,7 +458,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
     }
   }
 
-  test("SPARK-15198 Support filter push down for booleans") {
+  test("SPARK-15198 Support for pushing down filters for boolean types") {
     withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
       val data = (0 until 10).map(_ => (true, false))
       withOrcFile(data) { file =>
