@@ -1368,7 +1368,7 @@ class Row(tuple):
     >>> row
     Row(age=11, name='Alice')
     >>> row = Row(name="Alice", age=11)
-    >>> row("Hyukjin", 22))
+    >>> row("Hyukjin", 22)
     Row(age=22, name='Hyukjin')
     >>> row['name'], row['age']
     ('Alice', 11)
