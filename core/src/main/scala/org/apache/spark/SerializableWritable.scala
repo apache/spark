@@ -19,11 +19,12 @@ package org.apache.spark
 
 import java.io._
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.ObjectWritable
 import org.apache.hadoop.io.Writable
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.deploy.SparkHadoopUtil
+
 
 @DeveloperApi
 class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
@@ -38,7 +39,7 @@ class SerializableWritable[T <: Writable](@transient var t: T) extends Serializa
   private def readObject(in: ObjectInputStream) {
     in.defaultReadObject()
     val ow = new ObjectWritable()
-    ow.setConf(new Configuration())
+    ow.setConf(SparkHadoopUtil.get.conf)
     ow.readFields(in)
     t = ow.get().asInstanceOf[T]
   }

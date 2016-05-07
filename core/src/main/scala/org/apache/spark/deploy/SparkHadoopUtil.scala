@@ -18,6 +18,7 @@
 package org.apache.spark.deploy
 
 import java.security.PrivilegedExceptionAction
+import java.io.FileInputStream
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.JobConf
@@ -68,7 +69,22 @@ class SparkHadoopUtil extends Logging {
    * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
    * subsystems.
    */
-  def newConfiguration(): Configuration = new Configuration()
+  def newConfiguration(): Configuration = {
+      Option(System.getenv("SPARK_LOCAL_HADOOPCONF")) match {
+          case Some(confPath) => {
+              logInfo("Loading local Hadoop configuration: " + confPath)
+              val conf = new Configuration()
+              // use FileInputStram instead of path to fail loudly if file
+              // is missing
+              conf.addResource(new FileInputStream(confPath), "job.xml")
+              conf
+          }
+          case _ => {
+              logInfo("Loading default system-wide hadoop conf")
+              new Configuration()
+          }
+      }
+  }
 
   /**
    * Add any user credentials to the job conf which are necessary for running on a secure Hadoop

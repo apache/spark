@@ -304,6 +304,11 @@ class SparkContext(config: SparkConf) extends Logging {
   }
   executorEnvs("SPARK_USER") = sparkUser
 
+  Option(System.getenv("SPARK_LOCAL_HADOOPCONF")) match {
+    case Some(confFile) => executorEnvs("SPARK_LOCAL_HADOOPCONF") = confFile
+    case _ =>
+  }
+
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   @volatile private[spark] var dagScheduler: DAGScheduler = _

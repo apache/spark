@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
+import java.io.FileOutputStream
 import java.net.{InetAddress, UnknownHostException, URI, URISyntaxException}
 import java.nio.ByteBuffer
 
@@ -224,6 +225,17 @@ trait ClientBase extends Logging {
       }
     }
 
+    val hadoopConfXml = File.createTempFile("spark",null)
+    yarnConf.writeXml(new FileOutputStream(hadoopConfXml))
+    distCacheMgr.addResource(fs, conf,
+      copyRemoteFile(dst,
+        new Path(hadoopConfXml.toURI()), replication),
+      localResources,
+      LocalResourceType.FILE, "job.xml",
+      statCache);
+
+    hadoopConfXml.delete()
+
     var cachedSecondaryJarLinks = ListBuffer.empty[String]
     val fileLists = List( (args.addJars, LocalResourceType.FILE, true),
       (args.files, LocalResourceType.FILE, false),
@@ -264,6 +276,7 @@ trait ClientBase extends Logging {
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
+    env("SPARK_LOCAL_HADOOPCONF") = "job.xml"
     if (log4jConf != null) {
       env(ClientBase.LOG4J_CONF_ENV_KEY) = log4jConf
     }

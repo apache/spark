@@ -53,6 +53,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
 
   def this(args: ApplicationMasterArguments) = this(args, new SparkConf())
 
+  def this(args: ApplicationMasterArguments, conf: Configuration) =
+    this(args, conf, new SparkConf())
+
   private val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
   private var appAttemptId: ApplicationAttemptId = _
   private var userThread: Thread = _
@@ -466,7 +469,7 @@ object ApplicationMaster {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      new ApplicationMaster(args).run()
+      new ApplicationMaster(args, SparkHadoopUtil.get.conf).run()
     }
   }
 }
