@@ -1137,21 +1137,6 @@ class ALSTest(SparkSessionTestCase):
         self.assertEqual(als.getFinalStorageLevel(), "DISK_ONLY")
         self.assertEqual(als._java_obj.getFinalStorageLevel(), "DISK_ONLY")
 
-    def test_unknown_strategy(self):
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame(
-            [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
-            ["user", "item", "rating"])
-        als = ALS().setMaxIter(1).setRank(1)
-        # test default params
-        als.fit(df)
-        self.assertEqual(als.getUnknownStrategy(), "nan")
-        self.assertEqual(als._java_obj.getUnknownStrategy(), "nan")
-        # test non-default params
-        als.setUnknownStrategy("drop").fit(df)
-        self.assertEqual(als.getUnknownStrategy(), "drop")
-        self.assertEqual(als._java_obj.getUnknownStrategy(), "drop")
-
 
 class DefaultValuesTests(PySparkTestCase):
     """
