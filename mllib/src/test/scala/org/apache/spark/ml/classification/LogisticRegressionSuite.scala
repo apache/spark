@@ -256,6 +256,13 @@ class LogisticRegressionSuite
     assert(summarizer4.countInvalid === 2)
     assert(summarizer4.numClasses === 4)
 
+    val summarizer5 = new MultiClassSummarizer
+    withClue("There are no valid labels in the input dataset.") {
+      intercept[org.apache.spark.SparkException] {
+        summarizer5.histogram
+      }
+    }
+
     // small map merges large one
     val summarizerA = summarizer1.merge(summarizer2)
     assert(summarizerA.hashCode() === summarizer2.hashCode())
