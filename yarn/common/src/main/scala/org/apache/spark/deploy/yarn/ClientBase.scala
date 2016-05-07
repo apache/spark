@@ -288,7 +288,7 @@ trait ClientBase extends Logging {
     val args = clientArgs.userArgs
     val retval = new StringBuilder()
     for (arg <- args) {
-      retval.append(prefix).append(" '").append(arg).append("' ")
+      retval.append(prefix).append(" \"").append(arg).append("\" ")
     }
     retval.toString
   }
