@@ -457,4 +457,20 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       }
     }
   }
+
+  test("SPARK-15198 Support filter push down for booleans") {
+    withSQLConf(SQLConf.ORC_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+      val data = (0 until 10).map(_ => (true, false))
+      withOrcFile(data) { file =>
+        val actualTwo = sqlContext
+          .read
+          .orc(file)
+          .where("_2 == true")
+
+        // ORC filter should be applied and the total count should be less than
+        // the original data.
+        assert(stripSparkFilter(actualTwo).count() < data.length)
+      }
+    }
+  }
 }
