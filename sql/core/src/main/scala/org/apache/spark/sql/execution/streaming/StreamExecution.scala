@@ -122,7 +122,7 @@ class StreamExecution(
    * processing is done.  Thus, the Nth record in this log indicated data that is currently being
    * processed and the N-1th entry indicates which offsets have been durably committed to the sink.
    */
-  private val offsetLog =
+  private[sql] val offsetLog =
     new HDFSMetadataLog[CompositeOffset](sparkSession, checkpointFile("offsets"))
 
   /** Whether the query is currently active or not */

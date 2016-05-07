@@ -27,12 +27,12 @@ import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, 
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
  */
-class IncrementalExecution(
+class IncrementalExecution private[sql](
     sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
     outputMode: OutputMode,
     checkpointLocation: String,
-    currentBatchId: Long)
+    val currentBatchId: Long)
   extends QueryExecution(sparkSession, logicalPlan) {
 
   // TODO: make this always part of planning.
