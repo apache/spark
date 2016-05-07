@@ -303,8 +303,8 @@ class SessionCatalog(
     } else {
       if (newName.database.isDefined) {
         throw new AnalysisException(
-          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination database '$newDb' " +
-            s"is not empty")
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
+            s"name '${newName.database.get}' in the destination table")
       }
       if (tempTables.contains(newTableName)) {
         throw new AnalysisException(

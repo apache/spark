@@ -396,7 +396,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("rename temporary table - negative case 1") {
+  test("rename temporary table - destination table with database name") {
     withTempTable("tab1") {
       sql(
         """
@@ -414,14 +414,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       }
       assert(e.getMessage.contains(
         "RENAME TEMPORARY TABLE from '`tab1`' to '`default`.`tab2`': " +
-          "destination database 'default' is not empty"))
+          "cannot specify database name 'default' in the destination table"))
 
       val catalog = sqlContext.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     }
   }
 
-  test("rename temporary table - negative case 2") {
+  test("rename temporary table - destination table already exists") {
     withTempTable("tab1", "tab2") {
       sql(
         """
