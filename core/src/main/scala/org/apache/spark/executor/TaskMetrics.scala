@@ -81,6 +81,39 @@ class TaskMetrics extends Serializable {
    * Storage statuses of any blocks that have been updated as a result of this task.
    */
   var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
+
+  /**
+   * Custom task-specific metrics. Any piece of Spark machinery that cares to track custom task-related metrics can
+   * now use the setCustomMetric(name,value) method on TaskMetrics to do that.
+   * e.g. Any RDD that wants to track a custom metric of its interest (related to execution of a task) can
+   * call setCustomMetric(name,value) inside its compute() method.
+   * Map Key -> name of custom metric
+   * Map Value -> list of numeric values for custom metric
+   */
+  private val _customMetrics: scala.collection.mutable.HashMap[String, List[Long]] = scala.collection.mutable.HashMap()
+
+  /**
+   * Custom task-specific metrics. Any piece of Spark machinery that cares to track custom task-related metrics can
+   * now use the setCustomMetric(name,value) method on TaskMetrics to do that.
+   * e.g. Any RDD that wants to track a custom metric of its interest (related to execution of a task) can
+   * call setCustomMetric(name,value) inside its compute() method.
+   * Map Key -> name of custom metric
+   * Map Value -> list of numeric values for custom metric
+   */
+  def customMetrics = _customMetrics
+
+  /**
+   * Convenience method for setting a custom metric
+   * @param metricName  name of custom metric
+   * @param metricValue value for custom metric
+   */
+  def setCustomMetric(metricName: String, metricValue: Long) {
+    if (_customMetrics.contains(metricName)) {
+      _customMetrics(metricName) = _customMetrics(metricName) ++ List(metricValue)
+    } else {
+      _customMetrics(metricName) = List(metricValue)
+    }
+  }
 }
 
 private[spark] object TaskMetrics {

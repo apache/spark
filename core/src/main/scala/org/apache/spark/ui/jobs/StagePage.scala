@@ -96,7 +96,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         // scalastyle:on
       val taskHeaders: Seq[String] =
         Seq("Task Index", "Task ID", "Status", "Locality Level", "Executor", "Launch Time") ++
-        Seq("Duration", "GC Time", "Result Ser Time") ++
+        Seq("Duration", "GC Time", "Result Ser Time", "Custom Metrics") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
@@ -217,6 +217,7 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         else metrics.map(m => UIUtils.formatDuration(m.executorRunTime)).getOrElse("")
       val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
       val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
+      val customMetrics = metrics.map(_.customMetrics).getOrElse(scala.collection.mutable.HashMap())
 
       val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
       val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
@@ -257,6 +258,11 @@ private[ui] class StagePage(parent: JobProgressTab) extends WebUIPage("stage") {
         </td>
         <td sorttable_customkey={serializationTime.toString}>
           {if (serializationTime > 0) UIUtils.formatDuration(serializationTime) else ""}
+        </td>
+        <td>
+          {customMetrics.foldLeft("")( (previous, pair) => {
+            (if (previous.isEmpty) "" else previous + "\n") + pair._1 + " = " + pair._2.mkString(",")
+          })}
         </td>
         {if (shuffleRead) {
            <td sorttable_customkey={shuffleReadSortable}>
