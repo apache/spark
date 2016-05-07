@@ -941,9 +941,22 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("drop default database") {
-    val message = intercept[AnalysisException] {
-      sql("DROP DATABASE default")
-    }.getMessage
-    assert(message.contains("Can not drop default database"))
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        var message = intercept[AnalysisException] {
+          sql("DROP DATABASE default")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+
+        message = intercept[AnalysisException] {
+          sql("DROP DATABASE DeFault")
+        }.getMessage
+        if (caseSensitive == "true") {
+          assert(message.contains("Database 'DeFault' does not exist"))
+        } else {
+          assert(message.contains("Can not drop default database"))
+        }
+      }
+    }
   }
 }

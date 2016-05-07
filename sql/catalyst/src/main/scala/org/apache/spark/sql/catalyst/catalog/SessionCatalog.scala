@@ -93,6 +93,13 @@ class SessionCatalog(
   }
 
   /**
+   * Format database name, taking into account case sensitivity.
+   */
+  protected[this] def formatDatabaseName(name: String): String = {
+    if (conf.caseSensitiveAnalysis) name else name.toLowerCase
+  }
+
+  /**
    * This method is used to make the given path qualified before we
    * store this path in the underlying external catalog. So, when a path
    * does not contain a scheme, this path will not be changed after the default
@@ -118,10 +125,11 @@ class SessionCatalog(
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
-    if (db == "default") {
+    val dbName = formatDatabaseName(db)
+    if (dbName == "default") {
       throw new AnalysisException(s"Can not drop default database")
     }
-    externalCatalog.dropDatabase(db, ignoreIfNotExists, cascade)
+    externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
 
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
