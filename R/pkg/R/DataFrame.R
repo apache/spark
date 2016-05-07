@@ -599,7 +599,7 @@ setMethod("unpersist",
 #'}
 setMethod("repartition",
           signature(x = "SparkDataFrame"),
-          function(x, numPartitions = NULL, col, ...) {
+          function(x, numPartitions = NULL, col = NULL, ...) {
             if (!is.null(numPartitions) && is.numeric(numPartitions)) {
               # number of partitions and columns both are specified
               if (!is.null(col) && class(col) == "Column") {
