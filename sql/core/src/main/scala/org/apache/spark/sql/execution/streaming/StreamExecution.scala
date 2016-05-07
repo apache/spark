@@ -181,8 +181,7 @@ class StreamExecution(
             // We'll do this initialization only once
             populateStartOffsets()
             logDebug(s"Stream running from $committedOffsets to $availableOffsets")
-          }
-          else {
+          } else {
             constructNextBatch()
           }
           if (dataAvailable) {
