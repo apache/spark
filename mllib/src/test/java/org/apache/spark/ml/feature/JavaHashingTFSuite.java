@@ -17,40 +17,39 @@
 
 package org.apache.spark.ml.feature;
 
-import java.util.Arrays;
-import java.util.List;
-
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.sql.types.DataTypes;
+import org.apache.spark.sql.types.Metadata;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
-import org.apache.spark.sql.types.DataTypes;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
+import java.util.Arrays;
+import java.util.List;
 
 
 public class JavaHashingTFSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
+  private transient SparkSession spark;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaHashingTFSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaHashingTFSuite")
+      .getOrCreate();
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -65,7 +64,7 @@ public class JavaHashingTFSuite {
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
 
-    Dataset<Row> sentenceData = jsql.createDataFrame(data, schema);
+    Dataset<Row> sentenceData = spark.createDataFrame(data, schema);
     Tokenizer tokenizer = new Tokenizer()
       .setInputCol("sentence")
       .setOutputCol("words");

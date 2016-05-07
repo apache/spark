@@ -17,37 +17,42 @@
 
 package org.apache.spark.mllib.fpm;
 
-import java.io.File;
-import java.util.Arrays;
-import java.util.List;
-
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.fpm.PrefixSpan.FreqSequence;
+import org.apache.spark.sql.SparkSession;
+import org.apache.spark.util.Utils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.fpm.PrefixSpan.FreqSequence;
-import org.apache.spark.util.Utils;
+import java.io.File;
+import java.util.Arrays;
+import java.util.List;
 
 public class JavaPrefixSpanSuite {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaPrefixSpan");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaPrefixSpan")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
   public void runPrefixSpan() {
-    JavaRDD<List<List<Integer>>> sequences = sc.parallelize(Arrays.asList(
+    JavaRDD<List<List<Integer>>> sequences = jsc.parallelize(Arrays.asList(
       Arrays.asList(Arrays.asList(1, 2), Arrays.asList(3)),
       Arrays.asList(Arrays.asList(1), Arrays.asList(3, 2), Arrays.asList(1, 2)),
       Arrays.asList(Arrays.asList(1, 2), Arrays.asList(5)),
@@ -61,7 +66,7 @@ public class JavaPrefixSpanSuite {
     List<FreqSequence<Integer>> localFreqSeqs = freqSeqs.collect();
     Assert.assertEquals(5, localFreqSeqs.size());
     // Check that each frequent sequence could be materialized.
-    for (PrefixSpan.FreqSequence<Integer> freqSeq: localFreqSeqs) {
+    for (PrefixSpan.FreqSequence<Integer> freqSeq : localFreqSeqs) {
       List<List<Integer>> seq = freqSeq.javaSequence();
       long freq = freqSeq.freq();
     }
@@ -69,7 +74,7 @@ public class JavaPrefixSpanSuite {
 
   @Test
   public void runPrefixSpanSaveLoad() {
-    JavaRDD<List<List<Integer>>> sequences = sc.parallelize(Arrays.asList(
+    JavaRDD<List<List<Integer>>> sequences = jsc.parallelize(Arrays.asList(
       Arrays.asList(Arrays.asList(1, 2), Arrays.asList(3)),
       Arrays.asList(Arrays.asList(1), Arrays.asList(3, 2), Arrays.asList(1, 2)),
       Arrays.asList(Arrays.asList(1, 2), Arrays.asList(5)),
@@ -85,13 +90,13 @@ public class JavaPrefixSpanSuite {
     String outputPath = tempDir.getPath();
 
     try {
-      model.save(sc.sc(), outputPath);
-      PrefixSpanModel newModel = PrefixSpanModel.load(sc.sc(), outputPath);
+      model.save(spark.sparkContext(), outputPath);
+      PrefixSpanModel newModel = PrefixSpanModel.load(spark.sparkContext(), outputPath);
       JavaRDD<FreqSequence<Integer>> freqSeqs = newModel.freqSequences().toJavaRDD();
       List<FreqSequence<Integer>> localFreqSeqs = freqSeqs.collect();
       Assert.assertEquals(5, localFreqSeqs.size());
       // Check that each frequent sequence could be materialized.
-      for (PrefixSpan.FreqSequence<Integer> freqSeq: localFreqSeqs) {
+      for (PrefixSpan.FreqSequence<Integer> freqSeq : localFreqSeqs) {
         List<List<Integer>> seq = freqSeq.javaSequence();
         long freq = freqSeq.freq();
       }

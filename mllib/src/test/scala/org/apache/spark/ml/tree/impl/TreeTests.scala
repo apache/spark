@@ -42,8 +42,8 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
-    val sqlContext = SQLContext.getOrCreate(data.sparkContext)
-    import sqlContext.implicits._
+    val spark = SQLContext.getOrCreate(data.sparkContext)
+    import spark.implicits._
     val df = data.toDF()
     val numFeatures = data.first().features.size
     val featuresAttributes = Range(0, numFeatures).map { feature =>

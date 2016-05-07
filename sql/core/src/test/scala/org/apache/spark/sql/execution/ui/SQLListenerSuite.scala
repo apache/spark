@@ -98,7 +98,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
       }
     }
 
-    val listener = new SQLListener(sqlContext.sparkContext.conf)
+    val listener = new SQLListener(spark.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
     val accumulatorIds =
@@ -239,7 +239,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobSucceeded)") {
-    val listener = new SQLListener(sqlContext.sparkContext.conf)
+    val listener = new SQLListener(spark.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
@@ -269,7 +269,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("onExecutionEnd happens before multiple onJobEnd(JobSucceeded)s") {
-    val listener = new SQLListener(sqlContext.sparkContext.conf)
+    val listener = new SQLListener(spark.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
@@ -310,7 +310,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("onExecutionEnd happens before onJobEnd(JobFailed)") {
-    val listener = new SQLListener(sqlContext.sparkContext.conf)
+    val listener = new SQLListener(spark.sparkContext.conf)
     val executionId = 0
     val df = createTestDataFrame
     listener.onOtherEvent(SparkListenerSQLExecutionStart(
@@ -340,16 +340,16 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("SPARK-11126: no memory leak when running non SQL jobs") {
-    val previousStageNumber = sqlContext.listener.stageIdToStageMetrics.size
-    sqlContext.sparkContext.parallelize(1 to 10).foreach(i => ())
-    sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
+    val previousStageNumber = spark.listener.stageIdToStageMetrics.size
+    spark.sparkContext.parallelize(1 to 10).foreach(i => ())
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     // listener should ignore the non SQL stage
-    assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber)
+    assert(spark.listener.stageIdToStageMetrics.size == previousStageNumber)
 
-    sqlContext.sparkContext.parallelize(1 to 10).toDF().foreach(i => ())
-    sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.parallelize(1 to 10).toDF().foreach(i => ())
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
     // listener should save the SQL stage
-    assert(sqlContext.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
+    assert(spark.listener.stageIdToStageMetrics.size == previousStageNumber + 1)
   }
 
   test("SPARK-13055: history listener only tracks SQL metrics") {
@@ -401,8 +401,8 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
       val sc = new SparkContext(conf)
       try {
         SQLContext.clearSqlListener()
-        val sqlContext = new SQLContext(sc)
-        import sqlContext.implicits._
+        val spark = new SQLContext(sc)
+        import spark.implicits._
         // Run 100 successful executions and 100 failed executions.
         // Each execution only has one job and one stage.
         for (i <- 0 until 100) {
@@ -418,12 +418,12 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
           }
         }
         sc.listenerBus.waitUntilEmpty(10000)
-        assert(sqlContext.listener.getCompletedExecutions.size <= 50)
-        assert(sqlContext.listener.getFailedExecutions.size <= 50)
+        assert(spark.listener.getCompletedExecutions.size <= 50)
+        assert(spark.listener.getFailedExecutions.size <= 50)
         // 50 for successful executions and 50 for failed executions
-        assert(sqlContext.listener.executionIdToData.size <= 100)
-        assert(sqlContext.listener.jobIdToExecutionId.size <= 100)
-        assert(sqlContext.listener.stageIdToStageMetrics.size <= 100)
+        assert(spark.listener.executionIdToData.size <= 100)
+        assert(spark.listener.jobIdToExecutionId.size <= 100)
+        assert(spark.listener.stageIdToStageMetrics.size <= 100)
       } finally {
         sc.stop()
       }

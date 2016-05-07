@@ -30,8 +30,8 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
   with DefaultReadWriteTest {
 
   test("Test Chi-Square selector") {
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
+    val spark = SQLContext.getOrCreate(sc)
+    import spark.implicits._
 
     val data = Seq(
       LabeledPoint(0.0, Vectors.sparse(3, Array((0, 8.0), (1, 7.0)))),

@@ -17,31 +17,36 @@
 
 package org.apache.spark.mllib.feature;
 
-import java.io.Serializable;
-import java.util.Arrays;
-import java.util.List;
-
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.linalg.Vector;
+import org.apache.spark.sql.SparkSession;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.Vector;
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.List;
 
 public class JavaTfIdfSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaTfIdfSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaPCASuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -49,7 +54,7 @@ public class JavaTfIdfSuite implements Serializable {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
     @SuppressWarnings("unchecked")
-    JavaRDD<List<String>> documents = sc.parallelize(Arrays.asList(
+    JavaRDD<List<String>> documents = jsc.parallelize(Arrays.asList(
       Arrays.asList("this is a sentence".split(" ")),
       Arrays.asList("this is another sentence".split(" ")),
       Arrays.asList("this is still a sentence".split(" "))), 2);
@@ -59,7 +64,7 @@ public class JavaTfIdfSuite implements Serializable {
     JavaRDD<Vector> tfIdfs = idf.fit(termFreqs).transform(termFreqs);
     List<Vector> localTfIdfs = tfIdfs.collect();
     int indexOfThis = tf.indexOf("this");
-    for (Vector v: localTfIdfs) {
+    for (Vector v : localTfIdfs) {
       Assert.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
     }
   }
@@ -69,7 +74,7 @@ public class JavaTfIdfSuite implements Serializable {
     // The tests are to check Java compatibility.
     HashingTF tf = new HashingTF();
     @SuppressWarnings("unchecked")
-    JavaRDD<List<String>> documents = sc.parallelize(Arrays.asList(
+    JavaRDD<List<String>> documents = jsc.parallelize(Arrays.asList(
       Arrays.asList("this is a sentence".split(" ")),
       Arrays.asList("this is another sentence".split(" ")),
       Arrays.asList("this is still a sentence".split(" "))), 2);
@@ -79,7 +84,7 @@ public class JavaTfIdfSuite implements Serializable {
     JavaRDD<Vector> tfIdfs = idf.fit(termFreqs).transform(termFreqs);
     List<Vector> localTfIdfs = tfIdfs.collect();
     int indexOfThis = tf.indexOf("this");
-    for (Vector v: localTfIdfs) {
+    for (Vector v : localTfIdfs) {
       Assert.assertEquals(0.0, v.apply(indexOfThis), 1e-15);
     }
   }

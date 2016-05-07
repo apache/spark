@@ -17,34 +17,36 @@
 
 package org.apache.spark.ml.feature;
 
-import java.util.Arrays;
-import java.util.List;
-
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import java.util.Arrays;
+import java.util.List;
 
 public class JavaTokenizerSuite {
+  private transient SparkSession spark;
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaTokenizerSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaTokenizerSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -59,10 +61,10 @@ public class JavaTokenizerSuite {
 
 
     JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Arrays.asList(
-      new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
-      new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
+      new TokenizerTestData("Test of tok.", new String[]{"Test", "tok."}),
+      new TokenizerTestData("Te,st.  punct", new String[]{"Te,st.", "punct"})
     ));
-    Dataset<Row> dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
+    Dataset<Row> dataset = spark.createDataFrame(rdd, TokenizerTestData.class);
 
     List<Row> pairs = myRegExTokenizer.transform(dataset)
       .select("tokens", "wantedTokens")

@@ -305,8 +305,8 @@ class ALSSuite
       numUserBlocks: Int = 2,
       numItemBlocks: Int = 3,
       targetRMSE: Double = 0.05): Unit = {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val als = new ALS()
       .setRank(rank)
       .setRegParam(regParam)
@@ -460,8 +460,8 @@ class ALSSuite
     allEstimatorParamSettings.foreach { case (p, v) =>
       als.set(als.getParam(p), v)
     }
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val model = als.fit(ratings.toDF())
 
     // Test Estimator save/load
@@ -535,8 +535,8 @@ class ALSCleanerSuite extends SparkFunSuite {
         // Generate test data
         val (training, _) = ALSSuite.genImplicitTestData(sc, 20, 5, 1, 0.2, 0)
         // Implicitly test the cleaning of parents during ALS training
-        val sqlContext = new SQLContext(sc)
-        import sqlContext.implicits._
+        val spark = new SQLContext(sc)
+        import spark.implicits._
         val als = new ALS()
           .setRank(1)
           .setRegParam(1e-5)
@@ -577,8 +577,8 @@ class ALSStorageSuite
   }
 
   test("default and non-default storage params set correct RDD StorageLevels") {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
     val data = Seq(
       (0, 0, 1.0),
       (0, 1, 2.0),

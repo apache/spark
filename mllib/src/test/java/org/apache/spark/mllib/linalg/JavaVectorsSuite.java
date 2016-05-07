@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.linalg;
 
+import org.junit.Test;
+import scala.Tuple2;
+
 import java.io.Serializable;
 import java.util.Arrays;
 
-import scala.Tuple2;
-
-import org.junit.Test;
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertArrayEquals;
 
 public class JavaVectorsSuite implements Serializable {
 
@@ -37,8 +37,8 @@ public class JavaVectorsSuite implements Serializable {
   public void sparseArrayConstruction() {
     @SuppressWarnings("unchecked")
     Vector v = Vectors.sparse(3, Arrays.asList(
-        new Tuple2<>(0, 2.0),
-        new Tuple2<>(2, 3.0)));
+      new Tuple2<>(0, 2.0),
+      new Tuple2<>(2, 3.0)));
     assertArrayEquals(new double[]{2.0, 0.0, 3.0}, v.toArray(), 0.0);
   }
 }

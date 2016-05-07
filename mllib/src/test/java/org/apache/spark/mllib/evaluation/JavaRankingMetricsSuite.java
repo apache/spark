@@ -17,41 +17,46 @@
 
 package org.apache.spark.mllib.evaluation;
 
-import java.io.Serializable;
-import java.util.Arrays;
-import java.util.List;
-
-import scala.Tuple2;
-import scala.Tuple2$;
-
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SparkSession;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import scala.Tuple2;
+import scala.Tuple2$;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.List;
 
 public class JavaRankingMetricsSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
   private transient JavaRDD<Tuple2<List<Integer>, List<Integer>>> predictionAndLabels;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaRankingMetricsSuite");
-    predictionAndLabels = sc.parallelize(Arrays.asList(
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaPCASuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
+
+    predictionAndLabels = jsc.parallelize(Arrays.asList(
       Tuple2$.MODULE$.apply(
         Arrays.asList(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Arrays.asList(1, 2, 3, 4, 5)),
       Tuple2$.MODULE$.apply(
-          Arrays.asList(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Arrays.asList(1, 2, 3)),
+        Arrays.asList(4, 1, 5, 6, 2, 7, 3, 8, 9, 10), Arrays.asList(1, 2, 3)),
       Tuple2$.MODULE$.apply(
-          Arrays.asList(1, 2, 3, 4, 5), Arrays.<Integer>asList())), 2);
+        Arrays.asList(1, 2, 3, 4, 5), Arrays.<Integer>asList())), 2);
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test

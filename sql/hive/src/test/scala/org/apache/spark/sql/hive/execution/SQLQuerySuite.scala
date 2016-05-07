@@ -860,7 +860,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("Sorting columns are not in Generate") {
     withTempTable("data") {
-      sqlContext.range(1, 5)
+      spark.range(1, 5)
         .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
         .registerTempTable("data")
 
@@ -1081,7 +1081,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       // We don't support creating a temporary table while specifying a database
       val message = intercept[AnalysisException] {
-        sqlContext.sql(
+        spark.sql(
           s"""
           |CREATE TEMPORARY TABLE db.t
           |USING parquet
@@ -1092,7 +1092,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }.getMessage
 
       // If you use backticks to quote the name then it's OK.
-      sqlContext.sql(
+      spark.sql(
         s"""
           |CREATE TEMPORARY TABLE `db.t`
           |USING parquet
@@ -1100,12 +1100,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |  path '$path'
           |)
         """.stripMargin)
-      checkAnswer(sqlContext.table("`db.t`"), df)
+      checkAnswer(spark.table("`db.t`"), df)
     }
   }
 
   test("SPARK-10593 same column names in lateral view") {
-    val df = sqlContext.sql(
+    val df = spark.sql(
     """
       |select
       |insideLayer2.json as a2
@@ -1120,7 +1120,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   ignore("SPARK-10310: " +
     "script transformation using default input/output SerDe and record reader/writer") {
-    sqlContext
+    spark
       .range(5)
       .selectExpr("id AS a", "id AS b")
       .registerTempTable("test")
@@ -1138,7 +1138,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   ignore("SPARK-10310: script transformation using LazySimpleSerDe") {
-    sqlContext
+    spark
       .range(5)
       .selectExpr("id AS a", "id AS b")
       .registerTempTable("test")
@@ -1183,7 +1183,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("run sql directly on files") {
-    val df = sqlContext.range(100).toDF()
+    val df = spark.range(100).toDF()
     withTempPath(f => {
       df.write.parquet(f.getCanonicalPath)
       checkAnswer(sql(s"select id from parquet.`${f.getCanonicalPath}`"),
@@ -1325,14 +1325,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Seq("3" -> "30").toDF("i", "j")
         .write.mode(SaveMode.Append).partitionBy("i").saveAsTable("tbl11453")
       checkAnswer(
-        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        spark.read.table("tbl11453").select("i", "j").orderBy("i"),
         Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Nil)
 
       // make sure case sensitivity is correct.
       Seq("4" -> "40").toDF("i", "j")
         .write.mode(SaveMode.Append).partitionBy("I").saveAsTable("tbl11453")
       checkAnswer(
-        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        spark.read.table("tbl11453").select("i", "j").orderBy("i"),
         Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Row("4", "40") :: Nil)
     }
   }
@@ -1370,7 +1370,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("multi-insert with lateral view") {
     withTempTable("t1") {
-      sqlContext.range(10)
+      spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
         .registerTempTable("source")
       withTable("dest1", "dest2") {
@@ -1388,10 +1388,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           """.stripMargin)
 
         checkAnswer(
-          sqlContext.table("dest1"),
+          spark.table("dest1"),
           sql("SELECT id FROM source WHERE id > 3"))
         checkAnswer(
-          sqlContext.table("dest2"),
+          spark.table("dest2"),
           sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
       }
     }
@@ -1404,7 +1404,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTempPath { dir =>
       withTempTable("t1", "t2") {
         val path = dir.getCanonicalPath
-        val ds = sqlContext.range(10)
+        val ds = spark.range(10)
         ds.registerTempTable("t1")
 
         sql(
@@ -1415,7 +1415,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
            """.stripMargin)
 
         checkAnswer(
-          sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
+          spark.wrapped.tables().select('isTemporary).filter('tableName === "t2"),
           Row(true)
         )
 
@@ -1429,7 +1429,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     "shouldn always be used together with PATH data source option"
   ) {
     withTempTable("t") {
-      sqlContext.range(10).registerTempTable("t")
+      spark.range(10).registerTempTable("t")
 
       val message = intercept[IllegalArgumentException] {
         sql(
