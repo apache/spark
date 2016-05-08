@@ -168,13 +168,18 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     ctx.currentVars = input
 
-    // We need to gencode for notNullPreds in advance of subexpression elimination, otherwise
-    // the bound attributes used in notNullPreds will be cleared when doing subexpression
-    // elimination.
-    notNullPreds.foreach { p =>
-      // Use the child's output. The nullability is what the child produced.
-      val generated = genNotNullPreds(p, input, child.output)
-      expressionGenCodeMap += ((p, generated))
+    // We need to gencode for notNullPreds that cover attributes used in otherPreds in advance of
+    // subexpression elimination, otherwise the bound attributes used in notNullPreds will be
+    // cleared when doing subexpression elimination.
+    otherPreds.foreach { c =>
+      c.references.foreach { r =>
+        val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
+        if (idx != -1 && !expressionGenCodeMap.contains(notNullPreds(idx))) {
+          // Use the child's output. The nullability is what the child produced.
+          val generated = genNotNullPreds(notNullPreds(idx), input, child.output)
+          expressionGenCodeMap += ((notNullPreds(idx), generated))
+        }
+      }
     }
 
     otherPreds.foreach { p =>
@@ -216,7 +221,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     val nullChecks = notNullPreds.zipWithIndex.map { case (c, idx) =>
       if (!generatedIsNotNullChecks(idx)) {
-        expressionGenCodeMap(notNullPreds(idx))
+        genNotNullPreds(c, input, child.output)
       } else {
         ""
       }
