@@ -118,13 +118,26 @@ case class FilterExec(condition: Expression, child: SparkPlan)
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     val numOutput = metricTerm(ctx, "numOutputRows")
     val expressionBoundMap = mutable.HashMap.empty[Expression, Expression]
+    val expressionGenCodeMap = mutable.HashMap.empty[Expression, String]
 
     /**
-     * Generates bound expression for `c`, using `attrs` for nullability.
+     * Generates code for IsNotNull expr `c`, using `in` for input attributes
+     * and `attrs` for nullability. Because IsNotNull is not nullable, we don't need to
+     * add null check.
      */
-    def genBound(c: Expression, attrs: Seq[Attribute]): Expression = {
-      val bound = BindReferences.bindReference(c, attrs)
-      ExpressionCanonicalizer.execute(bound)
+    def genNotNullPreds(
+        c: Expression,
+        in: Seq[ExprCode],
+        attrs: Seq[Attribute]): String = {
+      val bound = ExpressionCanonicalizer.execute((BindReferences.bindReference(c, attrs)))
+      val evaluated = evaluateRequiredVariables(child.output, in, c.references)
+      // Generate the code for the predicate.
+      val ev = bound.genCode(ctx)
+      s"""
+         |$evaluated
+         |${ev.code}
+         |if (!${ev.value}) continue;
+       """.stripMargin
     }
 
     /**
@@ -155,13 +168,18 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     ctx.currentVars = input
 
-    // Bound expressions and build the map
+    // We need to gencode for notNullPreds in advance of subexpression elimination, otherwise
+    // the bound attributes used in notNullPreds will be cleared when doing subexpression
+    // elimination.
     notNullPreds.foreach { p =>
-      expressionBoundMap += ((p, genBound(p, child.output)))
+      // Use the child's output. The nullability is what the child produced.
+      val generated = genNotNullPreds(p, input, child.output)
+      expressionGenCodeMap += ((p, generated))
     }
 
     otherPreds.foreach { p =>
-      expressionBoundMap += ((p, genBound(p, output)))
+      val bound = ExpressionCanonicalizer.execute(BindReferences.bindReference(p, output))
+      expressionBoundMap += ((p, bound))
     }
 
     val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(expressionBoundMap.values.toSeq,
@@ -182,8 +200,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
         val idx = notNullPreds.indexWhere { n => n.asInstanceOf[IsNotNull].child.semanticEquals(r)}
         if (idx != -1 && !generatedIsNotNullChecks(idx)) {
           generatedIsNotNullChecks(idx) = true
-          // Use the child's output. The nullability is what the child produced.
-          genPredicate(notNullPreds(idx), input, child.output, subExprs)
+          expressionGenCodeMap(notNullPreds(idx))
         } else {
           ""
         }
@@ -199,7 +216,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     val nullChecks = notNullPreds.zipWithIndex.map { case (c, idx) =>
       if (!generatedIsNotNullChecks(idx)) {
-        genPredicate(c, input, child.output, subExprs)
+        expressionGenCodeMap(notNullPreds(idx))
       } else {
         ""
       }
