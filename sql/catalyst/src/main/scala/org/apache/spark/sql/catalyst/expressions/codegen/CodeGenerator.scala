@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import scala.collection.immutable
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.language.existentials
@@ -198,6 +199,11 @@ class CodegenContext {
    * A prefix used to generate fresh name.
    */
   var freshNamePrefix = ""
+
+  /**
+   * The map from a place holder to a corresponding comment
+   */
+  private val placeHolderToCommentMap = new mutable.HashMap[String, String]
 
   /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
@@ -706,6 +712,20 @@ class CodegenContext {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.genCode(this))
   }
+
+  /**
+   * Add a pair of a place holder and a corresponding comment
+   */
+  def addCommentEntry(placeHolder: String, comment: String): Unit = {
+    placeHolderToCommentMap += (placeHolder -> comment)
+  }
+
+  /**
+   * Get a immutable map of the pair of a place holder and a corresponding comment
+   */
+  def getPlaceHolderAndCommentMap(): immutable.Map[String, String] = {
+    immutable.Map() ++ placeHolderToCommentMap
+  }
 }
 
 /**
@@ -714,6 +734,23 @@ class CodegenContext {
  */
 abstract class GeneratedClass {
   def generate(references: Array[Any]): Any
+}
+
+/**
+ * A wrapper for the source code to be compiled by [[CodeGenerator]].
+ */
+class SourceCode(val body: String, val comment: Map[String, String]) extends Serializable {
+  override def equals(that: Any): Boolean = {
+    if (!that.isInstanceOf[SourceCode]) {
+      return false
+    }
+    val thatSourceCode = that.asInstanceOf[SourceCode]
+    if (thatSourceCode eq null) return false
+
+    return body == thatSourceCode.body
+  }
+
+  override def hashCode(): Int = body.hashCode
 }
 
 /**
@@ -760,14 +797,14 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  def compile(code: String): GeneratedClass = {
+  def compile(code: SourceCode): GeneratedClass = {
     cache.get(code)
   }
 
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: String): GeneratedClass = {
+  private[this] def doCompile(code: SourceCode): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
@@ -788,7 +825,7 @@ object CodeGenerator extends Logging {
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    def formatted = CodeFormatter.format(code)
+    lazy val formatted = CodeFormatter.format(code)
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
@@ -797,7 +834,7 @@ object CodeGenerator extends Logging {
     })
 
     try {
-      evaluator.cook("generated.java", code)
+      evaluator.cook("generated.java", code.body)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -819,8 +856,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[String, GeneratedClass]() {
-        override def load(code: String): GeneratedClass = {
+      new CacheLoader[SourceCode, GeneratedClass]() {
+        override def load(code: SourceCode): GeneratedClass = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()

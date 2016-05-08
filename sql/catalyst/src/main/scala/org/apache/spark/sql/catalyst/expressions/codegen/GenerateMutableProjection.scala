@@ -94,7 +94,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
     val allProjections = ctx.splitExpressions(ctx.INPUT_ROW, projectionCodes)
     val allUpdates = ctx.splitExpressions(ctx.INPUT_ROW, updates)
 
-    val code = s"""
+    val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificMutableProjection(references);
       }
@@ -133,7 +133,9 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       }
     """
 
-    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
+    val code = new SourceCode(codeBody, ctx.getPlaceHolderAndCommentMap())
+    lazy val formatted = CodeFormatter.format(code)
+    logDebug(s"code for ${expressions.mkString(",")}:\n$formatted")
 
     val c = CodeGenerator.compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[MutableProjection]

@@ -155,7 +155,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
           """
     }
     val allExpressions = ctx.splitExpressions(ctx.INPUT_ROW, expressionCodes)
-    val code = s"""
+    val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificSafeProjection(references);
       }
@@ -181,7 +181,9 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       }
     """
 
-    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
+    val code = new SourceCode(codeBody, ctx.getPlaceHolderAndCommentMap())
+    lazy val formatted = CodeFormatter.format(code)
+    logDebug(s"code for ${expressions.mkString(",")}:\n$formatted")
 
     val c = CodeGenerator.compile(code)
     val resultRow = new SpecificMutableRow(expressions.map(_.dataType))

@@ -362,7 +362,7 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val ctx = newCodeGenContext()
     val eval = createCode(ctx, expressions, subexpressionEliminationEnabled)
 
-    val code = s"""
+    val codeBody = s"""
       public java.lang.Object generate(Object[] references) {
         return new SpecificUnsafeProjection(references);
       }
@@ -390,7 +390,9 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       }
       """
 
-    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
+    val code = new SourceCode(codeBody, ctx.getPlaceHolderAndCommentMap())
+    lazy val formatted = CodeFormatter.format(code)
+    logDebug(s"code for ${expressions.mkString(",")}:\n$formatted")
 
     val c = CodeGenerator.compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]

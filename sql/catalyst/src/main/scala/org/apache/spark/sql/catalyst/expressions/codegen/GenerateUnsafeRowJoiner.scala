@@ -157,7 +157,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
     }.mkString("\n")
 
     // ------------------------ Finally, put everything together  --------------------------- //
-    val code = s"""
+    val codeBody = s"""
        |public java.lang.Object generate(Object[] references) {
        |  return new SpecificUnsafeRowJoiner();
        |}
@@ -193,8 +193,9 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |  }
        |}
      """.stripMargin
-
-    logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n${CodeFormatter.format(code)}")
+    val code = new SourceCode(codeBody, Map.empty)
+    lazy val formatted = CodeFormatter.format(code)
+    logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n$formatted")
 
     val c = CodeGenerator.compile(code)
     c.generate(Array.empty).asInstanceOf[UnsafeRowJoiner]
