@@ -45,4 +45,4 @@ script:
     dev/lint-python &&
     dev/lint-scala &&
     dev/lint-java &&
-    (build/mvn -DskipTests -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver compile | grep -v 'org/maven2/')
+    (build/mvn -DskipTests -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver compile test-compile | grep -v 'org/maven2/')
