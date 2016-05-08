@@ -39,7 +39,7 @@ object LDAExample {
   def main(args: Array[String]): Unit = {
 
     val input = "data/mllib/sample_lda_data.txt"
-    // Creates a Spark context and a SQL context
+    // Creates a SparkSession
     val spark = SparkSession
       .builder
       .appName(s"${this.getClass.getSimpleName}")
