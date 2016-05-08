@@ -20,7 +20,7 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
-import org.apache.spark.mllib.evaluation.MulticlassMetrics
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
 import org.apache.spark.sql.DataFrame
 // $example off$
 import org.apache.spark.sql.SparkSession
@@ -41,8 +41,6 @@ object OneVsRestExample {
       .appName(s"OneVsRestExample")
       .getOrCreate()
 
-    import spark.implicits._
-
     // $example on$
     // load data file.
     val inputData: DataFrame = spark.read.format("libsvm")
@@ -58,8 +56,7 @@ object OneVsRestExample {
       .setFitIntercept(true)
 
     // instantiate the One Vs Rest Classifier.
-    val ovr = new OneVsRest()
-    ovr.setClassifier(classifier)
+    val ovr = new OneVsRest().setClassifier(classifier)
 
     // train the multiclass model.
     val ovrModel = ovr.fit(train)
@@ -67,18 +64,13 @@ object OneVsRestExample {
     // score the model on test data.
     val predictions = ovrModel.transform(test)
 
-    // obtain metrics.
-    val metrics = new MulticlassMetrics(predictions.as[(Double, Double)].rdd)
+    // obtain evaluator.
+    val evaluator = new MulticlassClassificationEvaluator()
+      .setMetricName("precision")
 
-    val confusionMatrix = metrics.confusionMatrix
-
-    // compute the false positive rate per label.
-    val numClasses = confusionMatrix.numRows
-    val fprs = Range(0, numClasses).map(p => (p, metrics.falsePositiveRate(p.toDouble)))
-
-    println(s" Confusion Matrix\n ${confusionMatrix.toString}\n")
-    println("label\tfpr")
-    println(fprs.map {case (label, fpr) => label + "\t" + fpr}.mkString("\n"))
+    // compute the classification error on test data.
+    val precision = evaluator.evaluate(predictions)
+    println(s"Test Error : ${1 - precision}")
     // $example off$
 
     spark.stop()

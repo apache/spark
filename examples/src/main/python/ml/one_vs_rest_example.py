@@ -19,7 +19,7 @@ from __future__ import print_function
 
 # $example on$
 from pyspark.ml.classification import LogisticRegression, OneVsRest
-from pyspark.mllib.evaluation import MulticlassMetrics
+from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -34,7 +34,7 @@ Run with:
 if __name__ == "__main__":
     spark = SparkSession \
         .builder \
-        .appName("OneHotEncoderExample") \
+        .appName("PythonOneVsRestExample") \
         .getOrCreate()
 
     # $example on$
@@ -46,8 +46,7 @@ if __name__ == "__main__":
     (train, test) = inputData.randomSplit([0.8, 0.2])
 
     # instantiate the base classifier.
-    lrParams = {'maxIter': 10, 'tol': 1E-6, 'fitIntercept': True}
-    lr = LogisticRegression(**lrParams)
+    lr = LogisticRegression(maxIter=10, tol=1E-6, fitIntercept=True)
 
     # instantiate the One Vs Rest Classifier.
     ovr = OneVsRest(classifier=lr)
@@ -58,21 +57,12 @@ if __name__ == "__main__":
     # score the model on test data.
     predictions = ovrModel.transform(test)
 
-    # obtain metrics.
-    predictionAndLabels = predictions.rdd.map(lambda r: (r.prediction, r.label))
-    metrics = MulticlassMetrics(predictionAndLabels)
+    # obtain evaluator.
+    evaluator = MulticlassClassificationEvaluator(metricName="precision")
 
-    confusionMatrix = metrics.confusionMatrix()
-
-    # compute the false positive rate per label.
-    numClasses = confusionMatrix.numRows
-    fprs = [(p, metrics.falsePositiveRate(float(p))) for p in range(numClasses)]
-
-    print("Confusion Matrix")
-    print(confusionMatrix)
-    print("label\tfpr")
-    for label, fpr in fprs:
-        print(str(label) + "\t" + str(fpr))
+    # compute the classification error on test data.
+    precision = evaluator.evaluate(predictions)
+    print("Test Error : " + str(1 - precision))
     # $example off$
 
     spark.stop()

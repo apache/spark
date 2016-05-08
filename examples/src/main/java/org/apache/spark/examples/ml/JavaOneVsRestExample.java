@@ -21,7 +21,7 @@ package org.apache.spark.examples.ml;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.OneVsRest;
 import org.apache.spark.ml.classification.OneVsRestModel;
-import org.apache.spark.mllib.evaluation.MulticlassMetrics;
+import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -70,26 +70,13 @@ public class JavaOneVsRestExample {
     Dataset<Row> predictions = ovrModel.transform(test)
       .select("prediction", "label");
 
-    // obtain metrics.
-    MulticlassMetrics metrics = new MulticlassMetrics(predictions);
+    // obtain evaluator.
+    MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
+            .setMetricName("precision");
 
-    Matrix confusionMatrix = metrics.confusionMatrix();
-
-    // compute the false positive rate per label.
-    int numClasses = confusionMatrix.numRows();
-    StringBuilder results = new StringBuilder();
-    results.append("label\tfpr\n");
-    for (int label = 0; label < numClasses; label++) {
-      results.append(label);
-      results.append("\t");
-      results.append(metrics.falsePositiveRate((double) label));
-      results.append("\n");
-    }
-
-    System.out.println("Confusion Matrix");
-    System.out.println(confusionMatrix);
-    System.out.println();
-    System.out.println(results);
+    // compute the classification error on test data.
+    double precision = evaluator.evaluate(predictions);
+    System.out.print("Test Error : " + (1 - precision));
     // $example off$
 
     spark.stop();
