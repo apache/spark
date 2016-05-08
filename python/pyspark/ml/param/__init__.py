@@ -16,9 +16,10 @@
 #
 import array
 import sys
+if sys.version < '3':
+    range = xrange
 if sys.version > '3':
     basestring = str
-    xrange = range
     unicode = str
 
 from abc import ABCMeta
@@ -97,7 +98,7 @@ class TypeConverters(object):
     @staticmethod
     def _can_convert_to_list(value):
         vtype = type(value)
-        return vtype in [list, np.ndarray, tuple, xrange, array.array] or isinstance(value, Vector)
+        return vtype in [list, np.ndarray, tuple, range, array.array] or isinstance(value, Vector)
 
     @staticmethod
     def _can_convert_to_string(value):
@@ -118,7 +119,7 @@ class TypeConverters(object):
         """
         if type(value) == list:
             return value
-        elif type(value) in [np.ndarray, tuple, xrange, array.array]:
+        elif type(value) in [np.ndarray, tuple, range, array.array]:
             return list(value)
         elif isinstance(value, Vector):
             return list(value.toArray())

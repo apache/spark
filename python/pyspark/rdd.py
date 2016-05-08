@@ -38,6 +38,7 @@ if sys.version > '3':
     basestring = unicode = str
 else:
     from itertools import imap as map, ifilter as filter
+    range = xrange
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, \

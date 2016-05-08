@@ -16,11 +16,13 @@
 #
 
 import sys
+if sys.version < '3':
+    range = xrange
+
 import numpy as np
 import warnings
 
 if sys.version > '3':
-    xrange = range
     basestring = str
 
 from pyspark import SparkContext, since
@@ -49,7 +51,7 @@ class MLUtils(object):
         nnz = len(items) - 1
         indices = np.zeros(nnz, dtype=np.int32)
         values = np.zeros(nnz)
-        for i in xrange(nnz):
+        for i in range(nnz):
             index, value = items[1 + i].split(":")
             indices[i] = int(index) - 1
             values[i] = float(value)
@@ -64,10 +66,10 @@ class MLUtils(object):
         v = _convert_to_vector(p.features)
         if isinstance(v, SparseVector):
             nnz = len(v.indices)
-            for i in xrange(nnz):
+            for i in range(nnz):
                 items.append(str(v.indices[i] + 1) + ":" + str(v.values[i]))
         else:
-            for i in xrange(len(v)):
+            for i in range(len(v)):
                 items.append(str(i + 1) + ":" + str(v[i]))
         return " ".join(items)
 

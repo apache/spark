@@ -15,6 +15,10 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version < '3':
+    range = xrange
+
 import os
 import platform
 import shutil

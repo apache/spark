@@ -20,6 +20,7 @@ if sys.version >= "3":
     from io import BytesIO
 else:
     from StringIO import StringIO
+    range = xrange
 from py4j.protocol import Py4JJavaError
 
 from pyspark.storagelevel import StorageLevel

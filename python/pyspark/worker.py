@@ -21,6 +21,9 @@ Worker that receives input from Piped RDD.
 from __future__ import print_function
 import os
 import sys
+if sys.version < '3':
+    range = xrange
+
 import time
 import socket
 import traceback

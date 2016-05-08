@@ -25,6 +25,8 @@ import re
 import base64
 from array import array
 
+if sys.version < '3':
+    range = xrange
 if sys.version >= "3":
     long = int
     basestring = unicode = str

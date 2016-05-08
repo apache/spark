@@ -39,8 +39,8 @@ from pyspark.traceback_utils import CallSite, first_spark_call
 from pyspark.status import StatusTracker
 from pyspark.profiler import ProfilerCollector, BasicProfiler
 
-if sys.version > '3':
-    xrange = range
+if sys.version < '3':
+    range = xrange
 
 
 __all__ = ['SparkContext']
@@ -395,7 +395,7 @@ class SparkContext(object):
             end = start
             start = 0
 
-        return self.parallelize(xrange(start, end, step), numSlices)
+        return self.parallelize(range(start, end, step), numSlices)
 
     def parallelize(self, c, numSlices=None):
         """
@@ -404,11 +404,11 @@ class SparkContext(object):
 
         >>> sc.parallelize([0, 2, 3, 4, 6], 5).glom().collect()
         [[0], [2], [3], [4], [6]]
-        >>> sc.parallelize(xrange(0, 6, 2), 5).glom().collect()
+        >>> sc.parallelize(range(0, 6, 2), 5).glom().collect()
         [[], [0], [], [2], [4]]
         """
         numSlices = int(numSlices) if numSlices is not None else self.defaultParallelism
-        if isinstance(c, xrange):
+        if isinstance(c, range):
             size = len(c)
             if size == 0:
                 return self.parallelize([], numSlices)
@@ -419,7 +419,7 @@ class SparkContext(object):
                 return start0 + int((split * size / numSlices)) * step
 
             def f(split, iterator):
-                return xrange(getStart(split), getStart(split + 1), step)
+                return range(getStart(split), getStart(split + 1), step)
 
             return self.parallelize([], numSlices).mapPartitionsWithIndex(f)
         # Calling the Java parallelize() method with an ArrayList is too slow,

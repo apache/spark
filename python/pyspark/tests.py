@@ -49,13 +49,13 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
     if sys.version_info[0] >= 3:
-        xrange = range
         basestring = str
 
 if sys.version >= "3":
     from io import StringIO
 else:
     from StringIO import StringIO
+    range = xrange
 
 
 from pyspark.conf import SparkConf
@@ -93,7 +93,7 @@ class MergerTests(unittest.TestCase):
 
     def setUp(self):
         self.N = 1 << 12
-        self.l = [i for i in xrange(self.N)]
+        self.l = [i for i in range(self.N)]
         self.data = list(zip(self.l, self.l))
         self.agg = Aggregator(lambda x: [x],
                               lambda x, y: x.append(y) or x,
@@ -104,26 +104,26 @@ class MergerTests(unittest.TestCase):
         m.mergeValues(self.data)
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
+                         sum(range(self.N)))
 
         m = ExternalMerger(self.agg, 1000)
         m.mergeCombiners(map(lambda x_y1: (x_y1[0], [x_y1[1]]), self.data))
         self.assertEqual(m.spills, 0)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
+                         sum(range(self.N)))
 
     def test_medium_dataset(self):
         m = ExternalMerger(self.agg, 20)
         m.mergeValues(self.data)
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)))
+                         sum(range(self.N)))
 
         m = ExternalMerger(self.agg, 10)
         m.mergeCombiners(map(lambda x_y2: (x_y2[0], [x_y2[1]]), self.data * 3))
         self.assertTrue(m.spills >= 1)
         self.assertEqual(sum(sum(v) for k, v in m.items()),
-                         sum(xrange(self.N)) * 3)
+                         sum(range(self.N)) * 3)
 
     def test_huge_dataset(self):
         m = ExternalMerger(self.agg, 5, partitions=3)
@@ -535,7 +535,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_sampling_default_seed(self):
         # Test for SPARK-3995 (default seed setting)
-        data = self.sc.parallelize(xrange(1000), 1)
+        data = self.sc.parallelize(range(1000), 1)
         subset = data.takeSample(False, 10)
         self.assertEqual(len(subset), 10)
 
@@ -737,7 +737,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_large_closure(self):
         N = 200000
-        data = [float(i) for i in xrange(N)]
+        data = [float(i) for i in range(N)]
         rdd = self.sc.parallelize(range(1), 1).map(lambda x: len(data))
         self.assertEqual(N, rdd.first())
         # regression test for SPARK-6886
@@ -762,8 +762,8 @@ class RDDTests(ReusedPySparkTestCase):
 
     def test_zip_with_different_object_sizes(self):
         # regress test for SPARK-5973
-        a = self.sc.parallelize(xrange(10000)).map(lambda i: '*' * i)
-        b = self.sc.parallelize(xrange(10000, 20000)).map(lambda i: '*' * i)
+        a = self.sc.parallelize(range(10000)).map(lambda i: '*' * i)
+        b = self.sc.parallelize(range(10000, 20000)).map(lambda i: '*' * i)
         self.assertEqual(10000, a.zip(b).count())
 
     def test_zip_with_different_number_of_items(self):
@@ -785,7 +785,7 @@ class RDDTests(ReusedPySparkTestCase):
             self.assertRaises(Exception, lambda: a.zip(b).count())
 
     def test_count_approx_distinct(self):
-        rdd = self.sc.parallelize(xrange(1000))
+        rdd = self.sc.parallelize(range(1000))
         self.assertTrue(950 < rdd.countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.03) < 1050)
         self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.03) < 1050)
@@ -915,7 +915,7 @@ class RDDTests(ReusedPySparkTestCase):
     def test_external_group_by_key(self):
         self.sc._conf.set("spark.python.worker.memory", "1m")
         N = 200001
-        kv = self.sc.parallelize(xrange(N)).map(lambda x: (x % 3, x))
+        kv = self.sc.parallelize(range(N)).map(lambda x: (x % 3, x))
         gkv = kv.groupByKey().cache()
         self.assertEqual(3, gkv.count())
         filtered = gkv.filter(lambda kv: kv[0] == 1)
@@ -1009,7 +1009,7 @@ class RDDTests(ReusedPySparkTestCase):
 
     # Regression test for SPARK-6294
     def test_take_on_jrdd(self):
-        rdd = self.sc.parallelize(xrange(1 << 20)).map(lambda x: str(x))
+        rdd = self.sc.parallelize(range(1 << 20)).map(lambda x: str(x))
         rdd._jrdd.first()
 
     def test_sortByKey_uses_all_partitions_not_only_first_and_last(self):
@@ -1655,13 +1655,13 @@ class WorkerTests(ReusedPySparkTestCase):
             self.fail("daemon had been killed")
 
         # run a normal job
-        rdd = self.sc.parallelize(xrange(100), 1)
+        rdd = self.sc.parallelize(range(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_after_exception(self):
         def raise_exception(_):
             raise Exception()
-        rdd = self.sc.parallelize(xrange(100), 1)
+        rdd = self.sc.parallelize(range(100), 1)
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: rdd.foreach(raise_exception))
         self.assertEqual(100, rdd.map(str).count())
@@ -1677,22 +1677,22 @@ class WorkerTests(ReusedPySparkTestCase):
         with QuietTest(self.sc):
             self.assertRaises(Exception, lambda: filtered_data.count())
 
-        rdd = self.sc.parallelize(xrange(100), 1)
+        rdd = self.sc.parallelize(range(100), 1)
         self.assertEqual(100, rdd.map(str).count())
 
     def test_accumulator_when_reuse_worker(self):
         from pyspark.accumulators import INT_ACCUMULATOR_PARAM
         acc1 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc1.add(x))
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc1.add(x))
         self.assertEqual(sum(range(100)), acc1.value)
 
         acc2 = self.sc.accumulator(0, INT_ACCUMULATOR_PARAM)
-        self.sc.parallelize(xrange(100), 20).foreach(lambda x: acc2.add(x))
+        self.sc.parallelize(range(100), 20).foreach(lambda x: acc2.add(x))
         self.assertEqual(sum(range(100)), acc2.value)
         self.assertEqual(sum(range(100)), acc1.value)
 
     def test_reuse_worker_after_take(self):
-        rdd = self.sc.parallelize(xrange(100000), 1)
+        rdd = self.sc.parallelize(range(100000), 1)
         self.assertEqual(0, rdd.first())
 
         def count():

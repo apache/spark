@@ -31,6 +31,10 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
+import sys
+if sys.version < '3':
+    range = xrange
+
 from pyspark.resultiterable import ResultIterable
 from functools import reduce
 

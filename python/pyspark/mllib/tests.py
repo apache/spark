@@ -19,8 +19,11 @@
 Fuller unit tests for Python MLlib.
 """
 
-import os
 import sys
+if sys.version < '3':
+    range = xrange
+
+import os
 import tempfile
 import array as pyarray
 from time import time, sleep
