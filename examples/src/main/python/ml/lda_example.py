@@ -22,8 +22,6 @@ from pyspark.sql import SparkSession
 
 # $example on$
 from pyspark.ml.clustering import LDA
-from pyspark.mllib.linalg import Vectors
-from pyspark.sql import Row
 # $example off$
 
 
@@ -33,18 +31,18 @@ A simple example demonstrating LDA.
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("PythonLDAExample").getOrCreate()
+    # Creates a SparkSession
+    spark = SparkSession \
+        .builder \
+        .appName("PythonKMeansExample") \
+        .getOrCreate()
 
     # $example on$
-    # Loads data
-    data = spark.read.text("data/mllib/sample_lda_data.txt").rdd
-    parsed = data \
-        .map(lambda row: Row(features=Vectors.dense([float(x) for x in row.value.split(' ')])))
-    dataset = spark.createDataFrame(parsed)
+    # Loads data.
+    dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    # Trains a LDA model
+    # Trains a LDA model.
     lda = LDA(k=10, maxIter=10)
-
     model = lda.fit(dataset)
 
     ll = model.logLikelihood(dataset)
@@ -54,11 +52,11 @@ if __name__ == "__main__":
 
     # describeTopics
     topics = model.describeTopics(3)
+    print("The topics described by their top-weighted terms:")
+    topics.show(truncate=False)
 
     # Shows the result
     transformed = model.transform(dataset)
-    print("The topics described by their top-weighted terms")
-    topics.show(truncate=False)
     transformed.show(truncate=False)
     # $example off$
 
