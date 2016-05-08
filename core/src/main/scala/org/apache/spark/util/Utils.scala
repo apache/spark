@@ -1307,8 +1307,7 @@ private[spark] object Utils extends Logging {
   }
 
   /** Default filtering function for finding call sites using `getCallSite`. */
-  private def sparkInternalExclusionFunction(className: String):
-    Boolean = {
+  private def sparkInternalExclusionFunction(className: String): Boolean = {
     // A regular expression to match classes of the internal Spark API's
     // that we want to skip when finding the call site of a method.
     val SPARK_CORE_CLASS_REGEX =

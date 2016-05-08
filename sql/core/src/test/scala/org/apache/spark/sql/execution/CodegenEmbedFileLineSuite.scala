@@ -24,8 +24,6 @@ import org.apache.spark.sql.execution.debug.codegenString
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.ResetSystemProperties
 
-
-
 class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
   with ResetSystemProperties {
   import testImplicits._
