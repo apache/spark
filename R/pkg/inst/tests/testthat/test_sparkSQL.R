@@ -2118,6 +2118,42 @@ test_that("repartition by columns on DataFrame", {
   expect_equal(nrow(df1), 2)
 })
 
+test_that("Window functions on a DataFrame", {
+  ssc <- callJMethod(sc, "sc")
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+  },
+  error = function(err) {
+    skip("Hive is not build with SparkSQL, skipped")
+  })
+
+  df <- createDataFrame(hiveCtx,
+                        list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
+                        schema = c("key", "value"))
+  ws <- orderBy(window.partitionBy("key"), "value")
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expected <- data.frame(key = c(1L, NA, 2L, NA),
+                       value = c("1", NA, "2", NA),
+                       stringsAsFactors = FALSE)
+  expect_equal(result, expected)
+
+  ws <- orderBy(window.partitionBy(df$key), df$value)
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy("value"), "key")
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy(df$value), df$key)
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+})
+
 unlink(parquetPath)
 unlink(jsonPath)
 unlink(jsonPathNa)
