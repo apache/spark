@@ -76,7 +76,7 @@ public class JavaOneVsRestExample {
 
     // compute the classification error on test data.
     double precision = evaluator.evaluate(predictions);
-    System.out.print("Test Error : " + (1 - precision));
+    System.out.println("Test Error : " + (1 - precision));
     // $example off$
 
     spark.stop();
