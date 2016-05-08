@@ -39,7 +39,7 @@ if __name__ == "__main__":
 
     # $example on$
     # Loads data.
-    dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
+    dataset = spark.read.format("libsvm").load("data/mllib/sample_lda_libsvm_data.txt")
 
     # Trains a LDA model.
     lda = LDA(k=10, maxIter=10)
