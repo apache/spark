@@ -494,6 +494,23 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
 
     object ConstructSubqueryExpressions extends Rule[LogicalPlan] {
       def apply(tree: LogicalPlan): LogicalPlan = tree transformAllExpressions {
+        case ScalarSubquery(query, conditions, exprId) if conditions.nonEmpty =>
+          def rewriteAggregate(a: Aggregate): Aggregate = {
+            val filter = Filter(conditions.reduce(And), addSubqueryIfNeeded(a.child))
+            Aggregate(Nil, a.aggregateExpressions.take(1), filter)
+          }
+          val cleaned = query match {
+            case Project(_, child) => child
+            case child => child
+          }
+          val rewrite = cleaned match {
+            case a: Aggregate =>
+              rewriteAggregate(a)
+            case Filter(c, a: Aggregate) =>
+              Filter(c, rewriteAggregate(a))
+          }
+          ScalarSubquery(rewrite, Seq.empty, exprId)
+
         case PredicateSubquery(query, conditions, false, exprId) =>
           val plan = Project(Seq(Alias(Literal(1), "1")()),
             Filter(conditions.reduce(And), addSubqueryIfNeeded(query)))
