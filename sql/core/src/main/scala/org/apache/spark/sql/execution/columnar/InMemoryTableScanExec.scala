@@ -18,14 +18,18 @@
 package org.apache.spark.sql.execution.columnar
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.vectorized.ColumnVector
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -38,7 +42,7 @@ private[sql] case class InMemoryTableScanExec(
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
 
@@ -185,5 +189,90 @@ private[sql] case class InMemoryTableScanExec(
       }
       columnarIterator
     }
+  }
+}
+
+private[sql] object InMemoryTableScanExec {
+  private val columnarItrName = "columnar_itr"
+  private val columnarBatchIdxName = "columnar_batchIdx"
+
+  def enableColumnCodeGen(
+     sqlContext: SQLContext, ctx: CodegenContext, child: SparkPlan): Boolean = {
+    ctx.enableColumnCodeGen &&
+      sqlContext.getConf(SQLConf.COLUMN_VECTOR_CODEGEN.key).toBoolean &&
+      child.find(c => c.isInstanceOf[InMemoryTableScanExec]).isDefined &&
+      child.find(c => c.isInstanceOf[CodegenSupport] &&
+        c.asInstanceOf[CodegenSupport].useUnsafeRow).isEmpty
+  }
+
+  def produceColumnLoop(
+      ctx: CodegenContext, codegen: CodegenSupport, output: Seq[Attribute]): String = {
+    val idx = columnarBatchIdxName
+    val numRows = "columnar_numRows"
+    ctx.addMutableState("int", idx, s"$idx = 0;")
+    ctx.addMutableState("int", numRows, s"$numRows = 0;")
+    val rowidx = ctx.freshName("rowIdx")
+
+    val colVars = output.indices.map(i => ctx.freshName("col" + i))
+    val columnAssigns = colVars.zipWithIndex.map { case (name, i) =>
+      ctx.addMutableState("org.apache.spark.sql.execution.vectorized.ColumnVector",
+        name, s"$name = null;", s"$name = null;")
+      s"$name = ${columnarItrName}.getColumn($i);"
+    }
+    val columns = (output zip colVars).map { case (attr, colVar) =>
+      new ColumnVectorReference(colVar, rowidx, attr.dataType, attr.nullable).genCode(ctx) }
+
+    s"""
+       | while (true) {
+       |   if ($idx == 0) {
+       |     $numRows = ${columnarItrName}.initForColumnar();
+       |     if ($numRows < 0) {
+       |       cleanup();
+       |       break;
+       |     }
+       |     ${columnAssigns.mkString("", "\n", "")}
+       |   }
+       |
+       |   while ($idx < $numRows) {
+       |     int $rowidx = $idx++;
+       |     ${codegen.consume(ctx, columns, null).trim}
+       |     if (shouldStop()) return;
+       |   }
+       |   $idx = 0;
+       | }
+      """.stripMargin
+  }
+
+  def produceProcessNext(
+      ctx: CodegenContext, codegen: CodegenSupport, child: SparkPlan, codeRow: String): String = {
+    ctx.isRow = false
+    val codeCol = child.asInstanceOf[CodegenSupport].produce(ctx, codegen)
+    val columnarItrClz = "org.apache.spark.sql.execution.columnar.ColumnarIterator"
+    val colItr = columnarItrName
+    ctx.addMutableState(s"$columnarItrClz", colItr, s"$colItr = null;", s"$colItr = null;")
+
+    s"""
+      private void processBatch() throws java.io.IOException {
+        ${codeCol.trim}
+      }
+
+      private void processRow() throws java.io.IOException {
+        ${codeRow.trim}
+      }
+
+      private void cleanup() {
+        ${ctx.cleanupMutableStates()}
+      }
+
+      protected void processNext() throws java.io.IOException {
+        if ((${columnarBatchIdxName} != 0) ||
+            (${ctx.iteratorInput} instanceof $columnarItrClz &&
+             ($colItr = ($columnarItrClz)${ctx.iteratorInput}).isSupportColumnarCodeGen())) {
+          processBatch();
+        } else {
+          processRow();
+        }
+      }
+     """.trim
   }
 }
