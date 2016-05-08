@@ -33,6 +33,7 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.Timeouts._
 
 import org.apache.spark._
+import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.executor.DataReadMethod
 import org.apache.spark.memory.UnifiedMemoryManager
 import org.apache.spark.network.{BlockDataManager, BlockTransferService}
@@ -59,7 +60,8 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
   var rpcEnv: RpcEnv = null
   var master: BlockManagerMaster = null
   val securityMgr = new SecurityManager(new SparkConf(false))
-  val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false))
+  val bcastManager = new BroadcastManager(true, new SparkConf(false), securityMgr)
+  val mapOutputTracker = new MapOutputTrackerMaster(new SparkConf(false), bcastManager, true)
   val shuffleManager = new SortShuffleManager(new SparkConf(false))
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test

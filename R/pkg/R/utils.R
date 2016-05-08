@@ -157,8 +157,11 @@ wrapInt <- function(value) {
 
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
+#
+# TODO: this function does not handle integer overflow well
 mult31AndAdd <- function(val, addVal) {
   vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
+  vec[is.na(vec)] <- 0
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
