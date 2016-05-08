@@ -31,19 +31,19 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
   test("filter String") {
     val df = sparkContext.parallelize(1 to 1, 1).map(i => (i, -i)).toDF("k", "v")
       .filter("k > 0")
-    validate(df, Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:35"))
+    validate(df, Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:33"))
   }
 
   test("select Column") {
     val df = sparkContext.parallelize(1 to 1, 1).toDF
       .select($"value" + 1)
-    validate(df, Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:41"))
+    validate(df, Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:39"))
   }
 
   test("selectExpr String") {
     val df = sparkContext.parallelize(1 to 1, 1).toDF
       .selectExpr("value + 2")
-    validate(df, Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:47"))
+    validate(df, Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:45"))
   }
 
   test("filter Strings (two filters are combined into one plan") {
@@ -51,18 +51,18 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
       .filter("k > 0")
       .filter("v > 1")
     validate(df,
-      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:53",
-            " > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:54"),
-      Array(" > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:53",
-            " > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:54"))
+      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:51",
+            " > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:52"),
+      Array(" > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:51",
+            " > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:52"))
   }
 
   test("selectExpr Strings") {
     val df = sparkContext.parallelize(1 to 1, 1).map(i => (i, -i)).toDF("k", "v")
       .selectExpr("k + 2", "v - 2")
     validate(df,
-      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:64",
-            " - 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:64"))
+      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:62",
+            " - 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:62"))
   }
 
   test("select and selectExpr") {
@@ -70,11 +70,11 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
     val df1 = df.select($"value" + 1)
     val df2 = df.selectExpr("value + 2")
     validate(df1,
-      Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:72"),
-      Array(" \\+ 2\\) @ select at CodegenEmbedFileLineSuite.scala:73"))
+      Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:70"),
+      Array(" \\+ 2\\) @ select at CodegenEmbedFileLineSuite.scala:71"))
     validate(df2,
-      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:73"),
-      Array(" \\+ 1\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:72"))
+      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:71"),
+      Array(" \\+ 1\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:70"))
   }
 
   test("filter and select") {
@@ -82,8 +82,8 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
     val df1 = df.filter("value > 0")
     val df2 = df1.select($"value" * 2)
     validate(df2,
-      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:84",
-            " \\* 2\\) @ select at CodegenEmbedFileLineSuite.scala:85"))
+      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:82",
+            " \\* 2\\) @ select at CodegenEmbedFileLineSuite.scala:83"))
   }
 
   test("no transformation") {
