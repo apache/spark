@@ -93,6 +93,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
 
   val retainedStages = conf.getInt("spark.ui.retainedStages", SparkUI.DEFAULT_RETAINED_STAGES)
   val retainedJobs = conf.getInt("spark.ui.retainedJobs", SparkUI.DEFAULT_RETAINED_JOBS)
+  val retainedTasks = conf.getInt("spark.ui.retainedTasks", SparkUI.DEFAULT_RETAINED_TASKS)
 
   // We can test for memory leaks by ensuring that collections that track non-active jobs and
   // stages do not grow without bound and that collections for active jobs/stages eventually become
@@ -135,6 +136,17 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       // Since jobGroupToJobIds is map of sets, check that we don't leak keys with empty values:
       "jobGroupToJobIds keySet" -> jobGroupToJobIds.keys.size
     )
+  }
+
+  /** If Tasks is too large, remove and garbage collect old tasks */
+  private def trimTasksIfNecessary(taskData: HashMap[Long, TaskUIData]) = synchronized {
+    if (taskData.size > retainedTasks) {
+      val toRemove = math.max(retainedTasks / 10, 1)
+      val oldIds = taskData.map(_._2.taskInfo.taskId).toList.sorted.take(toRemove)
+      for (id <- oldIds) {
+        taskData.remove(id)
+      }
+    }
   }
 
   /** If stages is too large, remove and garbage collect old stages */
@@ -399,6 +411,7 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
       taskData.taskInfo = info
       taskData.metrics = taskMetrics
       taskData.errorMessage = errorMessage
+      trimTasksIfNecessary(stageData.taskData)
 
       for (
         activeJobsDependentOnStage <- stageIdToActiveJobIds.get(taskEnd.stageId);
