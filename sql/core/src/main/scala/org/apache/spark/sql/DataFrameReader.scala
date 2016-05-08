@@ -407,7 +407,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
    * from values being read should be skipped.</li>
-   * <li>`ignoreTrailingWhiteSpace` (default `fDataFraalse`): defines whether or not trailing
+   * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
    * whitespaces from values being read should be skipped.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
    * <li>`nanValue` (default `NaN`): sets the string representation of a non-number" value.</li>
