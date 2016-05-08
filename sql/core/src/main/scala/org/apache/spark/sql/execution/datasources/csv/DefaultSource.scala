@@ -61,7 +61,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
 
     val header = if (csvOptions.headerFlag) {
-      firstRow
+      firstRow.map{_.trim}
     } else {
       firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
     }
