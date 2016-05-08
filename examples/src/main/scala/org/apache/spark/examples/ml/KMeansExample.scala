@@ -35,32 +35,26 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
 object KMeansExample {
 
   def main(args: Array[String]): Unit = {
-    // Creates a Spark context and a SQL context
+    // Creates a SparkSession.
     val spark = SparkSession
       .builder
       .appName(s"${this.getClass.getSimpleName}")
       .getOrCreate()
 
     // $example on$
-    // Crates a DataFrame
-    val dataset: DataFrame = spark.createDataFrame(Seq(
-      (1, Vectors.dense(0.0, 0.0, 0.0)),
-      (2, Vectors.dense(0.1, 0.1, 0.1)),
-      (3, Vectors.dense(0.2, 0.2, 0.2)),
-      (4, Vectors.dense(9.0, 9.0, 9.0)),
-      (5, Vectors.dense(9.1, 9.1, 9.1)),
-      (6, Vectors.dense(9.2, 9.2, 9.2))
-    )).toDF("id", "features")
+    // Loads data.
+    val dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    // Trains a k-means model
-    val kmeans = new KMeans()
-      .setK(2)
-      .setFeaturesCol("features")
-      .setPredictionCol("prediction")
+    // Trains a k-means model.
+    val kmeans = new KMeans().setK(2).setSeed(1L)
     val model = kmeans.fit(dataset)
 
-    // Shows the result
-    println("Final Centers: ")
+    // Evaluate clustering by computing Within Set Sum of Squared Errors.
+    val WSSSE = model.computeCost(dataset)
+    println(s"Within Set Sum of Squared Errors = ${WSSSE}")
+
+    // Shows the result.
+    println("Cluster Centers: ")
     model.clusterCenters.foreach(println)
     // $example off$
 
