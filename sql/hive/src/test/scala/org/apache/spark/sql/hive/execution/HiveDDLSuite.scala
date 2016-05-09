@@ -507,7 +507,7 @@ class HiveDDLSuite
   test("desc table for data source table") {
     withTable("tab1") {
       val tabName = "tab1"
-      sqlContext.range(1).write.format("json").saveAsTable(tabName)
+      spark.range(1).write.format("json").saveAsTable(tabName)
 
       assert(sql(s"DESC $tabName").collect().length == 1)
 
