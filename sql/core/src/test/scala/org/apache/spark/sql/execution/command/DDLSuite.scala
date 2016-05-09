@@ -605,16 +605,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A'"),
-      Row("showdb1A") :: Nil)
+      Row("showdb1a") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE 'showdb1A'"),
-      Row("showdb1A") :: Nil)
+      Row("showdb1a") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A|*db2B'"),
-      Row("showdb1A") ::
-        Row("showdb2B") :: Nil)
+      Row("showdb1a") ::
+        Row("showdb2b") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE 'non-existentdb'"),

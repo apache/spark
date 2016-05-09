@@ -82,7 +82,7 @@ class SessionCatalog(
       CatalogDatabase(defaultName, "default database", conf.warehousePath, Map())
     // Initialize default database if it doesn't already exist
     createDatabase(defaultDbDefinition, ignoreIfExists = true)
-    defaultName
+    formatDatabaseName(defaultName)
   }
 
   /**
@@ -134,7 +134,8 @@ class SessionCatalog(
   }
 
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
-    externalCatalog.alterDatabase(dbDefinition)
+    val dbName = formatDatabaseName(dbDefinition.name)
+    externalCatalog.alterDatabase(dbDefinition.copy(name = dbName))
   }
 
   def getDatabaseMetadata(db: String): CatalogDatabase = {
@@ -508,7 +509,7 @@ class SessionCatalog(
    * this becomes a no-op.
    */
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
-    val db = tableName.database.getOrElse(getCurrentDatabase)
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     externalCatalog.alterPartitions(db, table, parts)
   }
@@ -518,7 +519,7 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
-    val db = tableName.database.getOrElse(getCurrentDatabase)
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     externalCatalog.getPartition(db, table, spec)
   }
@@ -533,7 +534,7 @@ class SessionCatalog(
   def listPartitions(
       tableName: TableIdentifier,
       partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = {
-    val db = tableName.database.getOrElse(getCurrentDatabase)
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     externalCatalog.listPartitions(db, table, partialSpec)
   }
@@ -556,7 +557,7 @@ class SessionCatalog(
    * If no such database is specified, create it in the current database.
    */
   def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
-    val db = funcDefinition.identifier.database.getOrElse(getCurrentDatabase)
+    val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
     val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
     val newFuncDefinition = funcDefinition.copy(identifier = identifier)
     if (!functionExists(identifier)) {
@@ -571,7 +572,7 @@ class SessionCatalog(
    * If no database is specified, assume the function is in the current database.
    */
   def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
-    val db = name.database.getOrElse(getCurrentDatabase)
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val identifier = name.copy(database = Some(db))
     if (functionExists(identifier)) {
       // TODO: registry should just take in FunctionIdentifier for type safety
@@ -595,7 +596,7 @@ class SessionCatalog(
    * If no database is specified, this will return the function in the current database.
    */
   def getFunctionMetadata(name: FunctionIdentifier): CatalogFunction = {
-    val db = name.database.getOrElse(getCurrentDatabase)
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     externalCatalog.getFunction(db, name.funcName)
   }
 
@@ -603,7 +604,7 @@ class SessionCatalog(
    * Check if the specified function exists.
    */
   def functionExists(name: FunctionIdentifier): Boolean = {
-    val db = name.database.getOrElse(getCurrentDatabase)
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     functionRegistry.functionExists(name.unquotedString) ||
       externalCatalog.functionExists(db, name.funcName)
   }
@@ -670,7 +671,8 @@ class SessionCatalog(
    */
   private[spark] def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = synchronized {
     // TODO: just make function registry take in FunctionIdentifier instead of duplicating this
-    val qualifiedName = name.copy(database = name.database.orElse(Some(currentDb)))
+    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
+    val qualifiedName = name.copy(database = database)
     functionRegistry.lookupFunction(name.funcName)
       .orElse(functionRegistry.lookupFunction(qualifiedName.unquotedString))
       .getOrElse {
@@ -709,7 +711,8 @@ class SessionCatalog(
     }
 
     // If the name itself is not qualified, add the current database to it.
-    val qualifiedName = if (name.database.isEmpty) name.copy(database = Some(currentDb)) else name
+    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
+    val qualifiedName = name.copy(database = database)
 
     if (functionRegistry.functionExists(qualifiedName.unquotedString)) {
       // This function has been already loaded into the function registry.
@@ -749,8 +752,9 @@ class SessionCatalog(
    * List all matching functions in the specified database, including temporary functions.
    */
   def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
-    val dbFunctions =
-      externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
+    val dbName = formatDatabaseName(db)
+    val dbFunctions = externalCatalog.listFunctions(dbName, pattern)
+      .map { f => FunctionIdentifier(f, Some(dbName)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
     dbFunctions ++ loadedFunctions
