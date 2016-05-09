@@ -26,7 +26,6 @@ import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.Utils
 
 /**
  * Runs the test cases that are included in the hive distribution.
