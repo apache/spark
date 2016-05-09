@@ -351,6 +351,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
    *
+   * Note: Unlike `saveAsTable`, `insertInto` ignores the column names. If the column order or names
+   * doesn't match the table's, you may get unexpected results.
+   *
    * Because it inserts data to an existing table, format or options will be ignored.
    *
    * @since 1.4.0
@@ -444,8 +447,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * save mode, specified by the `mode` function (default to throwing an exception).
    * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
    * the same as that of the existing table.
-   * When `mode` is `Append`, the schema of the [[DataFrame]] need to be
-   * the same as that of the existing table, and format or options will be ignored.
+   *
+   * When `mode` is `Append`, the format or options will be ignored. The column order in the schema
+   * of the [[DataFrame]] doesn't need to be same as that of the existing table. Unlike
+   * `insertInto`, `saveAsTable` will use the column names to find the correct column positions.
    *
    * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
