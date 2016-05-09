@@ -314,7 +314,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
       val logical = InsertIntoTable(spark.table("partitioned").logicalPlan,
         Map("part" -> None), data.logicalPlan, overwrite = false, ifNotExists = false,
-        isMatchByName = false)
+        Map("matchByName" -> "true"))
       assert(!logical.resolved, "Should not resolve: missing partition data")
     }
   }

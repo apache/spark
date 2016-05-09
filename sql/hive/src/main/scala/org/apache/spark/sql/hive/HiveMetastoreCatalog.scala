@@ -27,7 +27,6 @@ import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.command.CreateTableAsSelectLogicalPlan
@@ -370,19 +369,20 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
       plan transformUp {
         // Write path
-        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists, byName)
+        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists,
+            options)
           // Inserting into partitioned table is not supported in Parquet data source (yet).
           if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
           InsertIntoTable(convertToParquetRelation(r), partition, child, overwrite, ifNotExists,
-            byName)
+            options)
 
         // Write path
         case InsertIntoHiveTable(r: MetastoreRelation,
-            partition, child, overwrite, ifNotExists, byName)
+            partition, child, overwrite, ifNotExists, options)
           // Inserting into partitioned table is not supported in Parquet data source (yet).
           if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
           InsertIntoTable(convertToParquetRelation(r), partition, child, overwrite, ifNotExists,
-            byName)
+            options)
 
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
@@ -417,17 +417,20 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
       plan transformUp {
         // Write path
-        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists, byName)
+        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists,
+            options)
           // Inserting into partitioned table is not supported in Orc data source (yet).
           if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreOrc(r) =>
-          InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists, byName)
+          InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists,
+            options)
 
         // Write path
         case InsertIntoHiveTable(r: MetastoreRelation,
-            partition, child, overwrite, ifNotExists, byName)
+            partition, child, overwrite, ifNotExists, options)
           // Inserting into partitioned table is not supported in Orc data source (yet).
           if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreOrc(r) =>
-          InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists, byName)
+          InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists,
+            options)
 
         // Read path
         case relation: MetastoreRelation if shouldConvertMetastoreOrc(relation) =>
@@ -539,7 +542,7 @@ private[hive] case class InsertIntoHiveTable(
     child: LogicalPlan,
     overwrite: Boolean,
     ifNotExists: Boolean,
-    matchByName: Boolean)
+    options: Map[String, String])
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil

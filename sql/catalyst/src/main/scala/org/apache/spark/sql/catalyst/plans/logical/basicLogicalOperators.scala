@@ -349,11 +349,15 @@ case class InsertIntoTable(
     child: LogicalPlan,
     overwrite: Boolean,
     ifNotExists: Boolean,
-    isMatchByName: Boolean)
+    options: Map[String, String])
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
+
+  private[spark] def isMatchByName: Boolean = {
+    options.get("matchByName").map(_.toBoolean).getOrElse(false)
+  }
 
   private[spark] lazy val expectedColumns = {
     if (table.output.isEmpty) {
