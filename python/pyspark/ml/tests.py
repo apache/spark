@@ -261,9 +261,9 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         # Copying an instantiated param should fail
         with self.assertRaises(ValueError):
-            testParams.maxIter._copy_new_parent(testParams)
+            testParams._maxIter._copy_new_parent(testParams)
         # Copying a dummy param should succeed
-        TestParams.maxIter._copy_new_parent(testParams)
+        TestParams._maxIter._copy_new_parent(testParams)
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
@@ -382,7 +382,7 @@ class FeatureTests(PySparkTestCase):
             (DenseVector([0.0, 1.0]),),
             (DenseVector([3.0, 0.2]),)], ["tf"])
         idf0 = IDF(inputCol="tf")
-        self.assertListEqual(idf0.params, [idf0.inputCol, idf0.minDocFreq, idf0.outputCol])
+        self.assertListEqual(idf0.params, [idf0.inputCol, idf0.outputCol, idf0.minDocFreq])
         idf0m = idf0.fit(dataset, {idf0.outputCol: "idf"})
         self.assertEqual(idf0m.uid, idf0.uid,
                          "Model should inherit the UID from its parent estimator.")

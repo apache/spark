@@ -94,6 +94,8 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     .. versionadded:: 1.3.0
     """
 
+    #: threshold - Threshold in binary classification prediction, in range [0, 1].
+    # If threshold and thresholds are both set, they must match.
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
                       " If threshold and thresholds are both set, they must match.",
