@@ -202,6 +202,7 @@ query
 insertInto
     : INSERT OVERWRITE TABLE tableIdentifier partitionSpec? (IF NOT EXISTS)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
+    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING (rowFormat)? (STORED AS format=IDENTIFIER)?
     ;
 
 partitionSpecLocation
@@ -717,6 +718,7 @@ WITH: 'WITH';
 VALUES: 'VALUES';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
+DIRECTORY: 'DIRECTORY';
 VIEW: 'VIEW';
 REPLACE: 'REPLACE';
 INSERT: 'INSERT';

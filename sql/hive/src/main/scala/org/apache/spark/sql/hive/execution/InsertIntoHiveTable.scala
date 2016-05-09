@@ -35,7 +35,7 @@ import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
 import org.apache.spark.SparkException
@@ -47,7 +47,7 @@ case class InsertIntoHiveTable(
     partition: Map[String, Option[String]],
     child: SparkPlan,
     overwrite: Boolean,
-    ifNotExists: Boolean) extends UnaryExecNode {
+    ifNotExists: Boolean) extends SaveAsHiveFile {
 
   @transient private val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
   @transient private val client = sessionState.metadataHive
@@ -109,28 +109,6 @@ case class InsertIntoHiveTable(
     new Path(getStagingDir(path, hadoopConf), "-ext-10000") // Hive uses 10000
   }
 
-  private def saveAsHiveFile(
-      rdd: RDD[InternalRow],
-      valueClass: Class[_],
-      fileSinkConf: FileSinkDesc,
-      conf: SerializableJobConf,
-      writerContainer: SparkHiveWriterContainer): Unit = {
-    assert(valueClass != null, "Output value class not set")
-    conf.value.setOutputValueClass(valueClass)
-
-    val outputFileFormatClassName = fileSinkConf.getTableInfo.getOutputFileFormatClassName
-    assert(outputFileFormatClassName != null, "Output format class not set")
-    conf.value.set("mapred.output.format.class", outputFileFormatClassName)
-
-    FileOutputFormat.setOutputPath(
-      conf.value,
-      SparkHiveWriterContainer.createPathFromString(fileSinkConf.getDirName, conf.value))
-    log.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
-    writerContainer.driverSideSetup()
-    sqlContext.sparkContext.runJob(rdd, writerContainer.writeToFile _)
-    writerContainer.commitJob()
-  }
-
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
@@ -146,18 +124,6 @@ case class InsertIntoHiveTable(
     val hadoopConf = sessionState.newHadoopConf()
     val tmpLocation = getExternalTmpPath(tableLocation, hadoopConf)
     val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
-    val isCompressed =
-      sessionState.conf.getConfString("hive.exec.compress.output", "false").toBoolean
-
-    if (isCompressed) {
-      // Please note that isCompressed, "mapred.output.compress", "mapred.output.compression.codec",
-      // and "mapred.output.compression.type" have no impact on ORC because it uses table properties
-      // to store compression information.
-      hadoopConf.set("mapred.output.compress", "true")
-      fileSinkConf.setCompressed(true)
-      fileSinkConf.setCompressCodec(hadoopConf.get("mapred.output.compression.codec"))
-      fileSinkConf.setCompressType(hadoopConf.get("mapred.output.compression.type"))
-    }
 
     val numDynamicPartitions = partition.values.count(_.isEmpty)
     val numStaticPartitions = partition.values.count(_.nonEmpty)
@@ -203,18 +169,6 @@ case class InsertIntoHiveTable(
     val jobConf = new JobConf(hadoopConf)
     val jobConfSer = new SerializableJobConf(jobConf)
 
-    // When speculation is on and output committer class name contains "Direct", we should warn
-    // users that they may loss data if they are using a direct output committer.
-    val speculationEnabled = sqlContext.sparkContext.conf.getBoolean("spark.speculation", false)
-    val outputCommitterClass = jobConf.get("mapred.output.committer.class", "")
-    if (speculationEnabled && outputCommitterClass.contains("Direct")) {
-      val warningMessage =
-        s"$outputCommitterClass may be an output committer that writes data directly to " +
-          "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
-          "committer that does not have this behavior (e.g. FileOutputCommitter)."
-      logWarning(warningMessage)
-    }
 
     val writerContainer = if (numDynamicPartitions > 0) {
       val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
@@ -228,12 +182,12 @@ case class InsertIntoHiveTable(
       new SparkHiveWriterContainer(
         jobConf,
         fileSinkConf,
-        child.output,
-        table)
+        child.output)
     }
 
     @transient val outputClass = writerContainer.newSerializer(table.tableDesc).getSerializedClass
-    saveAsHiveFile(child.execute(), outputClass, fileSinkConf, jobConfSer, writerContainer)
+    saveAsHiveFile(child.execute(), outputClass, fileSinkConf, jobConfSer, writerContainer,
+      sessionState.conf.getConfString("hive.exec.compress.output", "false").toBoolean)
 
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
     // Have to construct the format of dbname.tablename.

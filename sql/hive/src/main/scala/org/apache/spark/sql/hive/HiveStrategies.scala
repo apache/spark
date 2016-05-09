@@ -50,6 +50,10 @@ private[hive] trait HiveStrategies {
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
         execution.InsertIntoHiveTable(
           table, partition, planLater(child), overwrite, ifNotExists) :: Nil
+        case logical.InsertIntoDir(
+          path, isLocal, fileFormat, rowFormat, child) =>
+          execution.InsertIntoDir(
+            path, isLocal, fileFormat, rowFormat, planLater(child)) :: Nil
       case _ => Nil
     }
   }
