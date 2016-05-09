@@ -331,10 +331,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
    *             \                /
    *               <-------------
    *
-   * Here, RDD B has a shuffle dependency on RDD A, and RDD C has shuffle dependency on both B and A.
-   * The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example easier to
-   * understand, let's call the shuffled data from A shuffle dependency ID s_A and the shuffled data
-   * from B shuffle dependency ID s_B.
+   * Here, RDD B has a shuffle dependency on RDD A, and RDD C has shuffle dependency on both
+   * B and A. The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example
+   * easier to understand, let's call the shuffled data from A shuffle dependency ID s_A and the
+   * shuffled data from B shuffle dependency ID s_B.
    *
    * Note: [] means an RDD, () means a shuffle dependency.
    */
