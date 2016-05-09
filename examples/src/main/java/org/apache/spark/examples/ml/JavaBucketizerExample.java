@@ -35,7 +35,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaBucketizerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaBucketizerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaBucketizerExample")
+      .getOrCreate();
 
     // $example on$
     double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};

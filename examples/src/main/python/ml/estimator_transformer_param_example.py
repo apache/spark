@@ -26,7 +26,10 @@ from pyspark.ml.classification import LogisticRegression
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("EstimatorTransformerParamExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("EstimatorTransformerParamExample")\
+        .getOrCreate()
 
     # $example on$
     # Prepare training data from a list of (label, features) tuples.

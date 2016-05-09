@@ -26,7 +26,10 @@ import org.apache.spark.sql.SparkSession
 
 object NaiveBayesExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("NaiveBayesExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("NaiveBayesExample")
+      .getOrCreate()
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
     val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

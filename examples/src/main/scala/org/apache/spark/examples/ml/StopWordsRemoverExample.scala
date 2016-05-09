@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object StopWordsRemoverExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("StopWordsRemoverExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("StopWordsRemoverExample")
+      .getOrCreate()
 
     // $example on$
     val remover = new StopWordsRemover()
