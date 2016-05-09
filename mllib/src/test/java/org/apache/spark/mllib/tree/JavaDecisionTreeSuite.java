@@ -17,6 +17,15 @@
 
 package org.apache.spark.mllib.tree;
 
+import java.io.Serializable;
+import java.util.HashMap;
+import java.util.List;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -27,14 +36,6 @@ import org.apache.spark.mllib.tree.configuration.Strategy;
 import org.apache.spark.mllib.tree.impurity.Gini;
 import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 import org.apache.spark.sql.SparkSession;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-
-import java.io.Serializable;
-import java.util.HashMap;
-import java.util.List;
 
 
 public class JavaDecisionTreeSuite implements Serializable {

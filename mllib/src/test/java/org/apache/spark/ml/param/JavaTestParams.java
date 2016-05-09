@@ -17,10 +17,10 @@
 
 package org.apache.spark.ml.param;
 
-import org.apache.spark.ml.util.Identifiable$;
-
 import java.util.Arrays;
 import java.util.List;
+
+import org.apache.spark.ml.util.Identifiable$;
 
 /**
  * A subclass of Params for testing.

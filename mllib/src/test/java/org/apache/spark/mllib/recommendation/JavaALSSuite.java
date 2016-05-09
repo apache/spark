@@ -17,20 +17,22 @@
 
 package org.apache.spark.mllib.recommendation;
 
-import org.apache.spark.api.java.JavaPairRDD;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SparkSession;
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.List;
+
+import scala.Tuple2;
+import scala.Tuple3;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import scala.Tuple2;
-import scala.Tuple3;
 
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.List;
+import org.apache.spark.api.java.JavaPairRDD;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaALSSuite implements Serializable {
   private transient SparkSession spark;

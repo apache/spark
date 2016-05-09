@@ -17,6 +17,18 @@
 
 package org.apache.spark.mllib.clustering;
 
+import java.io.Serializable;
+import java.util.ArrayList;
+import java.util.Arrays;
+
+import scala.Tuple2;
+import scala.Tuple3;
+
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -25,17 +37,6 @@ import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.SparkSession;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import scala.Tuple2;
-import scala.Tuple3;
-
-import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Arrays;
-
-import static org.junit.Assert.*;
 
 public class JavaLDASuite implements Serializable {
   private transient SparkSession spark;

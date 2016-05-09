@@ -17,13 +17,13 @@
 
 package org.apache.spark.mllib.linalg;
 
-import org.junit.Test;
-
 import java.io.Serializable;
 import java.util.Random;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+
+import org.junit.Test;
 
 public class JavaMatricesSuite implements Serializable {
 

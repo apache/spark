@@ -17,18 +17,19 @@
 
 package org.apache.spark.mllib.regression;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.util.LinearDataGenerator;
-import org.apache.spark.sql.SparkSession;
+import java.io.Serializable;
+import java.util.List;
+import java.util.Random;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.Serializable;
-import java.util.List;
-import java.util.Random;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.util.LinearDataGenerator;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaRidgeRegressionSuite implements Serializable {
   private transient SparkSession spark;

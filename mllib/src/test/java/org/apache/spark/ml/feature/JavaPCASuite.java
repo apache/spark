@@ -17,6 +17,17 @@
 
 package org.apache.spark.ml.feature;
 
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.List;
+
+import scala.Tuple2;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -27,15 +38,6 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import scala.Tuple2;
-
-import java.io.Serializable;
-import java.util.Arrays;
-import java.util.List;
 
 public class JavaPCASuite implements Serializable {
   private transient SparkSession spark;

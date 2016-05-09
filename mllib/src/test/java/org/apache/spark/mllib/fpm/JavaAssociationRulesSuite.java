@@ -16,16 +16,17 @@
  */
 package org.apache.spark.mllib.fpm;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
-import org.apache.spark.sql.SparkSession;
+import java.io.Serializable;
+import java.util.Arrays;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.Serializable;
-import java.util.Arrays;
+import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaAssociationRulesSuite implements Serializable {
   private transient SparkSession spark;
