@@ -927,6 +927,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("drop build-in function") {
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        // partition to add already exists
+        var e = intercept[AnalysisException] {
+          sql("DROP TEMPORARY FUNCTION year")
+        }
+        assert(e.getMessage.contains("Cannot drop native function 'year'"))
+
+        e = intercept[AnalysisException] {
+          sql("DROP TEMPORARY FUNCTION YeAr")
+        }
+        assert(e.getMessage.contains("Cannot drop native function 'YeAr'"))
+
+        e = intercept[AnalysisException] {
+          sql("DROP TEMPORARY FUNCTION `YeAr`")
+        }
+        assert(e.getMessage.contains("Cannot drop native function 'YeAr'"))
+      }
+    }
+  }
+
   test("describe function") {
     checkAnswer(
       sql("DESCRIBE FUNCTION log"),
