@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, Catal
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.Utils
 
 case class CreateTableAsSelectLogicalPlan(
@@ -288,14 +288,20 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    val metadata = sparkSession.sessionState.catalog.getTableMetadata(table)
+    val catalog = sparkSession.sessionState.catalog
 
-    if (isExtended) {
-      describeExtended(metadata, result)
-    } else if (isFormatted) {
-      describeFormatted(metadata, result)
+    if (catalog.isTemporaryTable(table)) {
+      describeSchema(catalog.lookupRelation(table).schema, result)
     } else {
-      describe(metadata, result)
+      val metadata = catalog.getTableMetadata(table)
+
+      if (isExtended) {
+        describeExtended(metadata, result)
+      } else if (isFormatted) {
+        describeFormatted(metadata, result)
+      } else {
+        describe(metadata, result)
+      }
     }
 
     result
@@ -355,6 +361,14 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
     schema.foreach { column =>
       append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
+    }
+  }
+
+  private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
+    schema.foreach { column =>
+      val comment =
+        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
+      append(buffer, column.name, column.dataType.simpleString, comment)
     }
   }
 
