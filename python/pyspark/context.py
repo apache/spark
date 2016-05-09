@@ -822,7 +822,16 @@ class SparkContext(object):
         Add a package to the spark context, the package must have already been
         imported by the driver via __import__ semantics. Supports namespace
         packages by simulating the loading __path__ as a set of modules from
-        the __path__ list in a single package.
+        the __path__ list in a single package. Example follows:
+
+        import pyspark
+        import foolib
+        
+        sc = pyspark.SparkContext()
+        sc.addPyPackage(foolib)
+        # foolib now in workers PYTHONPATH
+        rdd = sc.parallelize([1, 2, 3])
+        doubles = rdd.map(lambda x: foolib.double(x))
         """
         tmp_dir = tempfile.mkdtemp()
         try:

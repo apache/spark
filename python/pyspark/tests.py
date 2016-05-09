@@ -1961,7 +1961,6 @@ class ContextTests(unittest.TestCase):
                 self.assertSequenceEqual([0, 3, 6, 9], trips.collect())
         finally:
             shutil.rmtree(name)
-        
 
     def test_requirements_file(self):
         import pip
