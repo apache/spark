@@ -96,11 +96,12 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * The user defined type in Python.
  *
  * Note: This can only be accessed via Python UDF, or accessed as serialized object.
  */
+@DeveloperApi
 private[sql] class PythonUserDefinedType(
     val sqlType: DataType,
     override val pyUDT: String,
