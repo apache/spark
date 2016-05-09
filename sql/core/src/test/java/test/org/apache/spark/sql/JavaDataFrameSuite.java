@@ -20,14 +20,8 @@ package test.org.apache.spark.sql;
 import java.io.Serializable;
 import java.net.URISyntaxException;
 import java.net.URL;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
-import java.util.ArrayList;
+import java.util.*;
 
-import org.apache.spark.sql.test.TestSparkSession;
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
 
@@ -37,12 +31,15 @@ import org.junit.*;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.*;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.RowFactory;
+import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.*;
+import org.apache.spark.util.sketch.BloomFilter;
 import org.apache.spark.util.sketch.CountMinSketch;
 import static org.apache.spark.sql.functions.*;
 import static org.apache.spark.sql.types.DataTypes.*;
-import org.apache.spark.util.sketch.BloomFilter;
 
 public class JavaDataFrameSuite {
   private transient TestSparkSession spark;

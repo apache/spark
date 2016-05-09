@@ -21,14 +21,17 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.sql.*;
-import org.apache.spark.sql.test.TestSparkSession;
 import scala.Tuple2;
 
 import org.junit.After;
 import org.junit.Before;
 
 import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoder;
+import org.apache.spark.sql.Encoders;
+import org.apache.spark.sql.KeyValueGroupedDataset;
+import org.apache.spark.sql.test.TestSparkSession;
 
 /**
  * Common test base shared across this and Java8DatasetAggregatorSuite.

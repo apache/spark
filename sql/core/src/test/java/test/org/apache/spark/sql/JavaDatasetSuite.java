@@ -23,25 +23,25 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
-import com.google.common.base.Objects;
-import org.junit.rules.ExpectedException;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
+import com.google.common.base.Objects;
 import org.junit.*;
+import org.junit.rules.ExpectedException;
 
 import org.apache.spark.Accumulator;
-import org.apache.spark.api.java.function.*;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-
-import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
