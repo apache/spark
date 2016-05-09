@@ -150,7 +150,6 @@ private[sql] object Dataset {
  * @groupname func Functional Transformations
  * @groupname rdd RDD Operations
  * @groupname output Output Operations
- *
  * @since 1.6.0
  */
 class Dataset[T] private[sql](
@@ -343,18 +342,8 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = {
-    val rowEncoder = RowEncoder(schema)
-
-    if (schema == logicalPlan.schema) {
-      new Dataset[Row](sparkSession, queryExecution, rowEncoder)
-    } else {
-      // SPARK-15112: Adjust output column order so that query plan schema and encoder schema are
-      // consistent in the result DataFrame
-      val output = schema.map(f => UnresolvedAttribute(f.name))
-      new Dataset[Row](sparkSession, Project(output, logicalPlan), rowEncoder)
-    }
-  }
+  def toDF(): DataFrame =
+    new Dataset[Row](sparkSession, queryExecution, RowEncoder(logicalPlan.schema))
 
   /**
    * :: Experimental ::
@@ -497,7 +486,6 @@ class Dataset[T] private[sql](
    * }}}
    *
    * @param numRows Number of rows to show
-   *
    * @group action
    * @since 1.6.0
    */
@@ -517,7 +505,6 @@ class Dataset[T] private[sql](
    *
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *                 be truncated and all cells will be aligned right
-   *
    * @group action
    * @since 1.6.0
    */
@@ -533,10 +520,10 @@ class Dataset[T] private[sql](
    *   1983  03    0.410516        0.442194
    *   1984  04    0.450090        0.483521
    * }}}
+ *
    * @param numRows Number of rows to show
    * @param truncate Whether truncate long strings. If true, strings more than 20 characters will
    *              be truncated and all cells will be aligned right
-   *
    * @group action
    * @since 1.6.0
    */
@@ -574,7 +561,6 @@ class Dataset[T] private[sql](
    * Note that cartesian joins are very expensive without an extra filter that can be pushed down.
    *
    * @param right Right side of the join operation.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -599,7 +585,6 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumn Name of the column to join on. This column must exist on both sides.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -624,7 +609,6 @@ class Dataset[T] private[sql](
    *
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -645,7 +629,6 @@ class Dataset[T] private[sql](
    * @param right Right side of the join operation.
    * @param usingColumns Names of the columns to join on. This columns must exist on both sides.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -696,7 +679,6 @@ class Dataset[T] private[sql](
    * @param right Right side of the join.
    * @param joinExprs Join expression.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
-   *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -759,7 +741,6 @@ class Dataset[T] private[sql](
    * @param other Right side of the join.
    * @param condition Join expression.
    * @param joinType One of: `inner`, `outer`, `left_outer`, `right_outer`, `leftsemi`.
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -799,7 +780,6 @@ class Dataset[T] private[sql](
    *
    * @param other Right side of the join.
    * @param condition Join expression.
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1228,6 +1208,7 @@ class Dataset[T] private[sql](
    *     "age" -> "max"
    *   ))
    * }}}
+ *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -1343,6 +1324,7 @@ class Dataset[T] private[sql](
    *     "age" -> "max"
    *   ))
    * }}}
+ *
    * @group untypedrel
    * @since 2.0.0
    */
@@ -1483,7 +1465,6 @@ class Dataset[T] private[sql](
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
    * @param seed Seed for sampling.
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1496,7 +1477,6 @@ class Dataset[T] private[sql](
    *
    * @param withReplacement Sample with replacement or not.
    * @param fraction Fraction of rows to generate.
-   *
    * @group typedrel
    * @since 1.6.0
    */
@@ -1511,7 +1491,6 @@ class Dataset[T] private[sql](
    * @param seed Seed for sampling.
    *
    * For Java API, use [[randomSplitAsList]].
-   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1536,7 +1515,6 @@ class Dataset[T] private[sql](
    *
    * @param weights weights for splits, will be normalized if they don't sum to 1.
    * @param seed Seed for sampling.
-   *
    * @group typedrel
    * @since 2.0.0
    */
@@ -1865,7 +1843,6 @@ class Dataset[T] private[sql](
    *
    * @note this method should only be used if the resulting array is expected to be small, as
    * all the data is loaded into the driver's memory.
-   *
    * @group action
    * @since 1.6.0
    */
@@ -1875,6 +1852,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the first row.
+ *
    * @group action
    * @since 1.6.0
    */
@@ -1882,6 +1860,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the first row. Alias for head().
+ *
    * @group action
    * @since 1.6.0
    */
@@ -2160,6 +2139,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the number of rows in the [[Dataset]].
+ *
    * @group action
    * @since 1.6.0
    */
@@ -2252,10 +2232,10 @@ class Dataset[T] private[sql](
 
   /**
    * Persist this [[Dataset]] with the given storage level.
+ *
    * @param newLevel One of: `MEMORY_ONLY`, `MEMORY_AND_DISK`, `MEMORY_ONLY_SER`,
    *                 `MEMORY_AND_DISK_SER`, `DISK_ONLY`, `MEMORY_ONLY_2`,
    *                 `MEMORY_AND_DISK_2`, etc.
-   *
    * @group basic
    * @since 1.6.0
    */
@@ -2268,7 +2248,6 @@ class Dataset[T] private[sql](
    * Mark the [[Dataset]] as non-persistent, and remove all blocks for it from memory and disk.
    *
    * @param blocking Whether to block until all blocks are deleted.
-   *
    * @group basic
    * @since 1.6.0
    */
@@ -2301,6 +2280,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
+ *
    * @group rdd
    * @since 1.6.0
    */
@@ -2308,6 +2288,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
+ *
    * @group rdd
    * @since 1.6.0
    */
@@ -2362,6 +2343,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the [[Dataset]] as a Dataset of JSON strings.
+ *
    * @since 2.0.0
    */
   def toJSON: Dataset[String] = {

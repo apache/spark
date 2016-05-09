@@ -706,13 +706,26 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15112: Dataset should accept out of order input columns") {
     val ds = Seq(1 -> "foo", 2 -> "bar").toDF("b", "a").as[ClassData]
-    val expectedSchema = ScalaReflection.schemaFor[ClassData].dataType
 
-    assert(ds.schema == expectedSchema)
-    assert(ds.toDF().schema == expectedSchema)
+    assertResult(ScalaReflection.schemaFor[ClassData].dataType) {
+      ds.schema
+    }
 
-    checkDataset(ds, ClassData("foo", 1), ClassData("bar", 2))
-    checkDataset(ds.filter(_.b > 1), ClassData("bar", 2))
+    assertResult(
+      new StructType()
+        .add("b", IntegerType, nullable = false)
+        .add("a", StringType, nullable = true)
+    ) {
+      ds.toDF().schema
+    }
+
+    assertResult(Seq(ClassData("foo", 1), ClassData("bar", 2))) {
+      ds.collect().toSeq
+    }
+
+    assertResult(Seq(ClassData("bar", 2))) {
+      ds.filter(_.b > 1).collect().toSeq
+    }
   }
 }
 
