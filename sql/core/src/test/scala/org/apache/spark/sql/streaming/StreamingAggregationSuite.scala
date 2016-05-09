@@ -17,10 +17,13 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.catalyst.analysis.Update
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scala.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -29,7 +32,12 @@ object FailureSinglton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
+class StreamingAggregationSuite extends StreamTest with SharedSQLContext with BeforeAndAfterAll {
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    StateStore.stop()
+  }
 
   import testImplicits._
 

@@ -30,7 +30,10 @@ import org.apache.spark.sql.SparkSession
 object AFTSurvivalRegressionExample {
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("AFTSurvivalRegressionExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("AFTSurvivalRegressionExample")
+      .getOrCreate()
 
     // $example on$
     val training = spark.createDataFrame(Seq(

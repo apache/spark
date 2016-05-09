@@ -109,7 +109,10 @@ object OneVsRestExample {
   }
 
   private def run(params: Params) {
-    val spark = SparkSession.builder.appName(s"OneVsRestExample with $params").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName(s"OneVsRestExample with $params")
+      .getOrCreate()
 
     // $example on$
     val inputData = spark.read.format("libsvm").load(params.input)

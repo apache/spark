@@ -29,7 +29,10 @@ import org.apache.spark.sql.SparkSession
 object EstimatorTransformerParamExample {
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("EstimatorTransformerParamExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("EstimatorTransformerParamExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training data from a list of (label, features) tuples.

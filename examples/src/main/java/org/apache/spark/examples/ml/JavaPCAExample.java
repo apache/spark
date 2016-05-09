@@ -37,7 +37,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaPCAExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaPCAExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaPCAExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

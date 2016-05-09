@@ -34,7 +34,10 @@ import org.apache.spark.sql.{Row, SparkSession}
 object SimpleParamsExample {
 
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("SimpleParamsExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("SimpleParamsExample")
+      .getOrCreate()
     import spark.implicits._
 
     // Prepare training data.
