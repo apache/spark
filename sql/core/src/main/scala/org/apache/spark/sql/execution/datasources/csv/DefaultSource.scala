@@ -63,7 +63,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val header = if (csvOptions.headerFlag) {
       firstRow
     } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
+      // firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
+      new BulkCsvReader(rdd.toLocalIterator, csvOptions, null).next()
+        .zipWithIndex.map { case (value, index) => s"C$index" }
     }
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
