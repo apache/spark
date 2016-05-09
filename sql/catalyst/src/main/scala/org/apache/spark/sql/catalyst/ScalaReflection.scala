@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -30,7 +29,18 @@ import org.apache.spark.unsafe.types.UTF8String
  * for classes whose fields are entirely defined by constructor params but should not be
  * case classes.
  */
-private[sql] trait DefinedByConstructorParams
+private[sql] trait DefinedByConstructorParams {
+
+  /**
+   * Return the values of this instance's constructor parameters.
+   */
+  private[sql] def constructorParams: Seq[AnyRef] = {
+    ScalaReflection.getConstructorParameters(getClass).map { case (name, _) =>
+      getClass.getMethod(name).invoke(this)
+    }
+  }
+
+}
 
 
 /**
