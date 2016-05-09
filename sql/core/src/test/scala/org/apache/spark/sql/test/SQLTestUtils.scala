@@ -217,11 +217,7 @@ private[sql] trait SQLTestUtils
       case FilterExec(_, child) => child
     }
 
-    val childRDD = withoutFilters
-      .execute()
-      .map(row => Row.fromSeq(row.copy().toSeq(schema)))
-
-    sqlContext.createDataFrame(childRDD, schema)
+    sqlContext.internalCreateDataFrame(withoutFilters.execute(), schema)
   }
 
   /**

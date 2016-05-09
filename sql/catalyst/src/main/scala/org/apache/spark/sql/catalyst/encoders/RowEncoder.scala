@@ -49,8 +49,7 @@ object RowEncoder {
   private def serializerFor(
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | CalendarIntervalType => inputObject
+    case dt if ScalaReflection.isNativeType(dt) => inputObject
 
     case p: PythonUserDefinedType => serializerFor(inputObject, p.sqlType)
 
@@ -84,10 +83,10 @@ object RowEncoder {
         "fromJavaDate",
         inputObject :: Nil)
 
-    case _: DecimalType =>
+    case d: DecimalType =>
       StaticInvoke(
         Decimal.getClass,
-        DecimalType.SYSTEM_DEFAULT,
+        d,
         "fromDecimal",
         inputObject :: Nil)
 
@@ -130,7 +129,7 @@ object RowEncoder {
     case StructType(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         val fieldValue = serializerFor(
-          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType)),
+          GetExternalRowField(inputObject, i, f.name, externalDataTypeForInput(f.dataType)),
           f.dataType
         )
         if (f.nullable) {
@@ -199,8 +198,7 @@ object RowEncoder {
   }
 
   private def deserializerFor(input: Expression): Expression = input.dataType match {
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | CalendarIntervalType => input
+    case dt if ScalaReflection.isNativeType(dt) => input
 
     case udt: UserDefinedType[_] =>
       val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])

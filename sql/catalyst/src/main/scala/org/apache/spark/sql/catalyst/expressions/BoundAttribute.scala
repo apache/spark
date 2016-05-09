@@ -31,7 +31,7 @@ import org.apache.spark.sql.types._
 case class BoundReference(ordinal: Int, dataType: DataType, nullable: Boolean)
   extends LeafExpression {
 
-  override def toString: String = s"input[$ordinal, ${dataType.simpleString}]"
+  override def toString: String = s"input[$ordinal, ${dataType.simpleString}, $nullable]"
 
   // Use special getter for primitive types (for UnsafeRow)
   override def eval(input: InternalRow): Any = {

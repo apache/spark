@@ -113,8 +113,8 @@ object ScalaReflection extends ScalaReflection {
    * Returns true if the value of this data type is same between internal and external.
    */
   def isNativeType(dt: DataType): Boolean = dt match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType => true
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
+         FloatType | DoubleType | BinaryType | CalendarIntervalType => true
     case _ => false
   }
 
