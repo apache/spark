@@ -324,55 +324,49 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   /**
    * This test ensures that DAGScheduler build stage graph correctly.
-   * Here, we submit an RDD[F] having a linage of RDDs as follows:
    *
-   *                               <--------------------
-   *                             /                       \
-   * [A] <--(1)-- [B] <--(2)-- [C] <--(3)-- [D] <--(4)-- [E] <--(5)-- [F]
-   *                \                       /
-   *                  <--------------------
+   * Suppose you have the following DAG:
    *
-   * then check if all stages have correct parent stages.
+   * [A] <--(s_A)-- [B] <--(s_B)-- [C] <--(s_C)-- [D]
+   *             \                /
+   *               <-------------
+   *
+   * Here, RDD B has a shuffle dependency on RDD A, and RDD C has shuffle dependency on both B and A.
+   * The shuffle dependency IDs are numbers in the DAGScheduler, but to make the example easier to
+   * understand, let's call the shuffled data from A shuffle dependency ID s_A and the shuffled data
+   * from B shuffle dependency ID s_B.
+   *
    * Note: [] means an RDD, () means a shuffle dependency.
    */
-  test("[SPARK-13902] parent stages") {
+  test("[SPARK-13902] not to create duplicate stage.") {
     val rddA = new MyRDD(sc, 1, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val s_A = shuffleDepA.shuffleId
 
-    val shuffleDef1 = new ShuffleDependency(rddA, new HashPartitioner(1))
-    val rddB = new MyRDD(sc, 1, List(shuffleDef1), tracker = mapOutputTracker)
+    val rddB = new MyRDD(sc, 1, List(shuffleDepA), tracker = mapOutputTracker)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val s_B = shuffleDepB.shuffleId
 
-    val shuffleDef2 = new ShuffleDependency(rddB, new HashPartitioner(1))
-    val rddC = new MyRDD(sc, 1, List(shuffleDef2), tracker = mapOutputTracker)
+    val rddC = new MyRDD(sc, 1, List(shuffleDepA, shuffleDepB), tracker = mapOutputTracker)
+    val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val s_C = shuffleDepC.shuffleId
 
-    val shuffleDef3 = new ShuffleDependency(rddC, new HashPartitioner(1))
-    val rddD = new MyRDD(sc, 1, List(shuffleDef3, new OneToOneDependency(rddB)),
-      tracker = mapOutputTracker)
+    val rddD = new MyRDD(sc, 1, List(shuffleDepC), tracker = mapOutputTracker)
 
-    val shuffleDef4 = new ShuffleDependency(rddD, new HashPartitioner(1))
-    val rddE = new MyRDD(sc, 1, List(new OneToOneDependency(rddC), shuffleDef4),
-      tracker = mapOutputTracker)
+    submit(rddD, Array(0))
 
-    val shuffleDef5 = new ShuffleDependency(rddE, new HashPartitioner(1))
-    val rddF = new MyRDD(sc, 1, List(shuffleDef5),
-      tracker = mapOutputTracker)
-    submit(rddF, Array(0))
-
-    assert(scheduler.shuffleToMapStage.size === 5)
+    assert(scheduler.shuffleToMapStage.size === 3)
     assert(scheduler.activeJobs.size === 1)
 
-    val mapStage1 = scheduler.shuffleToMapStage(shuffleDef1.shuffleId)
-    val mapStage2 = scheduler.shuffleToMapStage(shuffleDef2.shuffleId)
-    val mapStage3 = scheduler.shuffleToMapStage(shuffleDef3.shuffleId)
-    val mapStage4 = scheduler.shuffleToMapStage(shuffleDef4.shuffleId)
-    val mapStage5 = scheduler.shuffleToMapStage(shuffleDef5.shuffleId)
+    val mapStageA = scheduler.shuffleToMapStage(s_A)
+    val mapStageB = scheduler.shuffleToMapStage(s_B)
+    val mapStageC = scheduler.shuffleToMapStage(s_C)
     val finalStage = scheduler.activeJobs.head.finalStage
 
-    assert(mapStage1.parents.isEmpty)
-    assert(mapStage2.parents === List(mapStage1))
-    assert(mapStage3.parents === List(mapStage2))
-    assert(mapStage4.parents === List(mapStage1, mapStage3))
-    assert(mapStage5.parents === List(mapStage2, mapStage4))
-    assert(finalStage.parents === List(mapStage5))
+    assert(mapStageA.parents.isEmpty)
+    assert(mapStageB.parents === List(mapStageA))
+    assert(mapStageC.parents === List(mapStageA, mapStageB))
+    assert(finalStage.parents === List(mapStageC))
   }
 
   test("zero split job") {
