@@ -208,11 +208,13 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   override def toString: String = {
     def output =
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
+    val analyzedPlan =
+      Seq(stringOrError(output), stringOrError(analyzed)).filter(_.nonEmpty).mkString("\n")
 
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical)}
        |== Analyzed Logical Plan ==
-       |${Seq(stringOrError(output), stringOrError(analyzed)).filter(_.nonEmpty).mkString("\n")}
+       |$analyzedPlan
        |== Optimized Logical Plan ==
        |${stringOrError(optimizedPlan)}
        |== Physical Plan ==
