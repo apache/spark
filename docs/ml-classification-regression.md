@@ -374,6 +374,78 @@ regression model and extracting model summary statistics.
 
 </div>
 
+## Generalized linear regression
+
+When working with data that has a relatively small number of features (< 4096), Spark's GeneralizedLinearRegression interface
+allows for flexible specification of [generalized linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) (GLMs) which can be used for various types of
+problems including linear regression, Poisson regression, logistic regression, and others.
+
+Contrasted with linear regression where the output is assumed to have a Gaussian
+distribution, GLMs are specifications of linear models where the output may take on _any_
+distribution from the [exponential family of distributions](https://en.wikipedia.org/wiki/Exponential_family). An exponential family distribution is any
+probability distribution of the form
+
+$$
+f\left(y|\theta, \phi, w\right) = e^{\frac{y\theta - b(\theta)}{\phi/w} - c(y, \phi)}\\
+Y_i \sim f\left(\cdot|\theta_i, \phi, w_i\right)
+$$
+
+where the parameter of interest $\theta_i$ is related to the expected value of the response variable
+$\mu_i$ by
+
+$$
+\theta_i = h(\mu_i)
+$$
+
+A GLM finds the regression coefficients $\vec{\beta}$ which maximize the joint probability density
+of the data, also known as the likelihood.
+
+$$
+\min_{\vec{\beta}} \mathcal{L}(\vec{\theta}|\vec{y},X) =
+\prod_{i=1}^{N} e^{\frac{y_i\theta_i - b(\theta_i)}{\phi/w_i} - c(y_i, \phi)}
+$$
+
+where the parameter of interest $\theta_i$ is related to the regression coefficients $\vec{\beta}$
+by
+
+$$
+\theta_i = h(g^{-1}(\vec{x_i} \cdot \vec{\beta}))
+$$
+
+Spark's generalized linear regression interface also provides summary statistics for diagnosing the
+fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
+others.
+
+
+**Example**
+
+The following example demonstrates training a GLM with a Gaussian response and identity link
+function and extracting model summary statistics.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+<!--- TODO -->
+</div>
+
+<div data-lang="java" markdown="1">
+<!--- TODO -->
+</div>
+
+<div data-lang="python" markdown="1">
+<!--- TODO -->
+</div>
+
+</div>
+
+### Implementation (developer)
+
+The `spark.ml` GLM implements the method of iteratively reweighted least squares (IRLS) for finding
+the optimal regression coefficients. GLMs seek to find a maximum likelihood estimate of the
+regression coefficients by finding zeros of the score equation. In practice, a first-order Taylor
+approximation of the score equation is cast to a weighted least squares regression and solved
+iteratively until convergence.
+
 
 ## Decision tree regression
 
