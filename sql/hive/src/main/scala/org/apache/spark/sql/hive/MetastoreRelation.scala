@@ -91,6 +91,16 @@ private[hive] case class MetastoreRelation(
       catalogTable.partitionColumnNames.contains(c.getName)
     }
     sd.setCols(schema.asJava)
+
+    if (catalogTable.bucketColumnNames.nonEmpty) {
+      sd.setBucketCols(catalogTable.bucketColumnNames.toList.asJava)
+      sd.setNumBuckets(catalogTable.numBuckets)
+
+      if (catalogTable.sortColumnNames.nonEmpty) {
+        sd.setSortCols(catalogTable.sortColumnNames.toList.asJava)
+      }
+    }
+
     tTable.setPartitionKeys(partCols.asJava)
 
     catalogTable.storage.locationUri.foreach(sd.setLocation)
