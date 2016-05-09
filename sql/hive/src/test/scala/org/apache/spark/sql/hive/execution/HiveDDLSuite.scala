@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -54,6 +55,34 @@ class HiveDDLSuite
     val filesystemPath = new Path(expectedTablePath)
     val fs = filesystemPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
+  }
+
+  test("case insensitive tables") {
+    assert(hiveContext.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        val tabName = "tAb1"
+        val tabNameToLowerCase = tabName.toLowerCase
+        withTable(tabName) {
+          // use a column name in upper case.
+          val colName = "C1"
+          assert(!tableDirectoryExists(TableIdentifier(tabNameToLowerCase)))
+          sql(s"CREATE TABLE $tabName($colName int)")
+
+          // create another table in the lower case.
+          val message = intercept[AnalysisException] {
+            sql(s"CREATE TABLE $tabNameToLowerCase($colName int)")
+          }.getMessage
+          assert(message.contains("AlreadyExistsException(message:Table tab1 already exists)"))
+
+          // use the table's column names in upper case.
+          sql(s"SELECT $colName FROM $tabName")
+          assert(tableDirectoryExists(TableIdentifier(tabNameToLowerCase)))
+          sql(s"DROP TABLE $tabName")
+          assert(!tableDirectoryExists(TableIdentifier(tabNameToLowerCase)))
+        }
+      }
+    }
   }
 
   test("drop tables") {
