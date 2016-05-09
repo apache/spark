@@ -66,7 +66,7 @@ case class TypedAggregateExpression(
     outputExternalType: DataType,
     dataType: DataType) extends DeclarativeAggregate with NonSQLExpression {
 
-  override def nullable: Boolean = true
+  override def nullable: Boolean = false
 
   override def deterministic: Boolean = true
 
