@@ -55,7 +55,7 @@ private[ann] object BreezeUtil {
    * @param y y
    */
   def dgemv(alpha: Double, a: BDM[Double], x: BDV[Double], beta: Double, y: BDV[Double]): Unit = {
-    require(a.cols == x.length, "A & b Dimension mismatch!")
+    require(a.cols == x.length, "A & x Dimension mismatch!")
     NativeBLAS.dgemv(transposeString(a), a.rows, a.cols,
       alpha, a.data, a.offset, a.majorStride, x.data, x.offset, x.stride,
       beta, y.data, y.offset, y.stride)
