@@ -138,13 +138,6 @@ class BlockManagerMasterEndpoint(
           }
         case None => context.reply(false)
       }
-
-    case GetRackInfo(host) => context.reply(getRackInfoForHost(host))
-
-  }
-
-  private def getRackInfoForHost(host: String): String = {
-    s"$host-1"
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {
