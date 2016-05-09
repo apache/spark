@@ -136,9 +136,9 @@ private[sql] object Dataset {
  *   Dataset<Row> people = spark.read().parquet("...");
  *   Dataset<Row> department = spark.read().parquet("...");
  *
- *   people.filter("age".gt(30))
+ *   people.filter(people.col("age").gt(30))
  *     .join(department, people.col("deptId").equalTo(department("id")))
- *     .groupBy(department.col("name"), "gender")
+ *     .groupBy("name", "gender")
  *     .agg(avg(people.col("salary")), max(people.col("age")));
  * }}}
  *
