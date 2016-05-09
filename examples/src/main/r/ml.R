@@ -108,5 +108,19 @@ showDF(samePredictions)
 
 unlink(modelPath)
 
+############################ fit models with spark.lapply #####################################
+
+# Perform distributed training of multiple models with spark.lapply
+families <- c("gaussian", "poisson")
+train <- function(family) {
+  model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
+  summary(model)
+}
+model.summaries <- spark.lapply(sc, families, train)
+
+# Print the summary of each model
+print(model.summaries)
+
+
 # Stop the SparkContext now
 sparkR.stop()
