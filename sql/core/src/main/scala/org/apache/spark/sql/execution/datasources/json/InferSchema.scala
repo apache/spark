@@ -82,6 +82,17 @@ private[sql] object InferSchema {
     }
   }
 
+  private def isSorted(arr: Array[StructField]): Boolean = {
+    var i: Int = 0
+    while (i < arr.length - 1) {
+      if (structFieldComparator.compare(arr(i), arr(i + 1)) > 0) {
+        return false
+      }
+      i += 1
+    }
+    true
+  }
+
   /**
    * Infer the type of a json document from the parser's token stream
    */
@@ -263,6 +274,9 @@ private[sql] object InferSchema {
           // Both fields1 and fields2 should be sorted by name, since inferField performs sorting.
           // Therefore, we can take advantage of the fact that we're merging sorted lists and skip
           // building a hash map or performing additional sorting.
+          assert(isSorted(fields1), s"StructType's fields were not sorted: ${fields1.toSeq}")
+          assert(isSorted(fields2), s"StructType's fields were not sorted: ${fields2.toSeq}")
+
           val newFields = new java.util.ArrayList[StructField]()
 
           var f1Idx = 0
