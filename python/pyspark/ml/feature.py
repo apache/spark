@@ -377,8 +377,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     The return vector is scaled such that the transform matrix is
     unitary (aka scaled DCT-II).
 
-    More information on
-    `https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia`.
+    .. seealso:: `More information on Wikipedia \
+    <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df1 = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
@@ -1108,8 +1108,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     """
     .. note:: Experimental
 
-    Perform feature expansion in a polynomial space. As said in wikipedia of Polynomial Expansion,
-    which is available at `http://en.wikipedia.org/wiki/Polynomial_expansion`, "In mathematics, an
+    Perform feature expansion in a polynomial space. As said in `wikipedia of Polynomial Expansion
+    <http://en.wikipedia.org/wiki/Polynomial_expansion>`_, "In mathematics, an
     expansion of a product of sums expresses it as a sum of products by using the fact that
     multiplication distributes over addition". Take a 2-variable feature vector as an example:
     `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
@@ -2432,9 +2432,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
 
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '.', ':', '+', and '-'. Also see the R formula
-    docs:
-    http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+    operators, including '~', '.', ':', '+', and '-'. Also see the `R formula docs
+    <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, 1.0, "a"),

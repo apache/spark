@@ -353,7 +353,9 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
         Returns the receiver operating characteristic (ROC) curve,
         which is an Dataframe having two fields (FPR, TPR) with
         (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
-        Reference: http://en.wikipedia.org/wiki/Receiver_operating_characteristic
+
+        .. seealso:: `Wikipedia reference \
+        <http://en.wikipedia.org/wiki/Receiver_operating_characteristic>`_
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LogisticRegression.weightCol`. This will change in later Spark
@@ -489,7 +491,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              TreeClassifierParams, HasCheckpointInterval, HasSeed, JavaMLWritable,
                              JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
+    `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
@@ -616,7 +618,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
                              RandomForestParams, TreeClassifierParams, HasCheckpointInterval,
                              JavaMLWritable, JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
+    `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for classification.
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
@@ -734,10 +736,20 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
                     GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
                     JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
+    `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for classification.
     It supports binary labels, as well as both continuous and categorical features.
     Note: Multiclass labels are not currently supported.
+
+    The implementation is based upon: J.H. Friedman. "Stochastic Gradient Boosting." 1999.
+
+    Notes on Gradient Boosting vs. TreeBoost:
+    - This implementation is for Stochastic Gradient Boosting, not for TreeBoost.
+    - Both algorithms learn tree ensembles by minimizing loss functions.
+    - TreeBoost (Friedman, 1999) additionally modifies the outputs at tree leaf nodes
+    based on the loss function, whereas the original gradient boosting method does not.
+    - We expect to implement TreeBoost in the future:
+    `SPARK-4240 <https://issues.apache.org/jira/browse/SPARK-4240>`_
 
     >>> from numpy import allclose
     >>> from pyspark.mllib.linalg import Vectors
@@ -863,12 +875,12 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
                  HasRawPredictionCol, JavaMLWritable, JavaMLReadable):
     """
     Naive Bayes Classifiers.
-    It supports both Multinomial and Bernoulli NB. Multinomial NB
-    (`http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html`)
+    It supports both Multinomial and Bernoulli NB. `Multinomial NB
+    <http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html>`_
     can handle finitely supported discrete data. For example, by converting documents into
     TF-IDF vectors, it can be used for document classification. By making every vector a
-    binary (0/1) data, it can also be used as Bernoulli NB
-    (`http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html`).
+    binary (0/1) data, it can also be used as `Bernoulli NB
+    <http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html>`_.
     The input feature values must be nonnegative.
 
     >>> from pyspark.sql import Row
