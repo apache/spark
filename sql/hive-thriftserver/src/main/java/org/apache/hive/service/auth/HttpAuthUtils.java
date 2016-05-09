@@ -56,7 +56,7 @@ public final class HttpAuthUtils {
   private static final String COOKIE_CLIENT_USER_NAME = "cu";
   private static final String COOKIE_CLIENT_RAND_NUMBER = "rn";
   private static final String COOKIE_KEY_VALUE_SEPARATOR = "=";
-  private final static Set<String> COOKIE_ATTRIBUTES =
+  private static final Set<String> COOKIE_ATTRIBUTES =
     new HashSet<String>(Arrays.asList(COOKIE_CLIENT_USER_NAME, COOKIE_CLIENT_RAND_NUMBER));
 
   /**
@@ -93,10 +93,10 @@ public final class HttpAuthUtils {
    */
   public static String createCookieToken(String clientUserName) {
     StringBuffer sb = new StringBuffer();
-    sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName).
-    append(COOKIE_ATTR_SEPARATOR);
-    sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR).
-    append((new Random(System.currentTimeMillis())).nextLong());
+    sb.append(COOKIE_CLIENT_USER_NAME).append(COOKIE_KEY_VALUE_SEPARATOR).append(clientUserName)
+      .append(COOKIE_ATTR_SEPARATOR);
+    sb.append(COOKIE_CLIENT_RAND_NUMBER).append(COOKIE_KEY_VALUE_SEPARATOR)
+      .append((new Random(System.currentTimeMillis())).nextLong());
     return sb.toString();
   }
 

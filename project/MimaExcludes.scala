@@ -694,6 +694,10 @@ object MimaExcludes {
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.classification.LogisticRegressionModel.weights"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.regression.LinearRegressionModel.weights")
       ) ++ Seq(
+        // [SPARK-10653] [Core] Remove unnecessary things from SparkEnv
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.sparkFilesDir"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkEnv.blockTransferService")
+      ) ++ Seq(
         // SPARK-14654: New accumulator API
         ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ExceptionFailure$"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ExceptionFailure.apply"),

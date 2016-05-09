@@ -17,18 +17,19 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
 # $example on$
 from pyspark.ml.feature import SQLTransformer
 # $example off$
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="SQLTransformerExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("SQLTransformerExample")\
+        .getOrCreate()
 
     # $example on$
-    df = sqlContext.createDataFrame([
+    df = spark.createDataFrame([
         (0, 1.0, 3.0),
         (2, 2.0, 5.0)
     ], ["id", "v1", "v2"])
@@ -37,4 +38,4 @@ if __name__ == "__main__":
     sqlTrans.transform(df).show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

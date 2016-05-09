@@ -30,7 +30,7 @@ import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
  * @param features List of features for this data point.
  */
 @BeanInfo
-private[spark] case class LabeledPoint(label: Double, features: Vector) {
+case class LabeledPoint(label: Double, features: Vector) {
   def asMLlib: OldLabeledPoint = {
     OldLabeledPoint(label, OldVectors.fromML(features))
   }

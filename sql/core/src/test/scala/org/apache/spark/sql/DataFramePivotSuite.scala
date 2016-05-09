@@ -180,4 +180,21 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
     )
   }
 
+  test("pivot with datatype not supported by PivotFirst") {
+    checkAnswer(
+      complexData.groupBy().pivot("b", Seq(true, false)).agg(max("a")),
+      Row(Seq(1, 1, 1), Seq(2, 2, 2)) :: Nil
+    )
+  }
+
+  test("pivot with datatype not supported by PivotFirst 2") {
+    checkAnswer(
+      courseSales.withColumn("e", expr("array(earnings, 7.0d)"))
+        .groupBy("year")
+        .pivot("course", Seq("dotNET", "Java"))
+        .agg(min($"e")),
+      Row(2012, Seq(5000.0, 7.0), Seq(20000.0, 7.0)) ::
+        Row(2013, Seq(48000.0, 7.0), Seq(30000.0, 7.0)) :: Nil
+    )
+  }
 }

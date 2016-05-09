@@ -19,12 +19,10 @@ package org.apache.spark.examples.ml;
 
 import java.util.regex.Pattern;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
 // $example on$
 import org.apache.spark.ml.clustering.KMeansModel;
@@ -72,16 +70,17 @@ public class JavaKMeansExample {
     int k = Integer.parseInt(args[1]);
 
     // Parses the arguments
-    SparkConf conf = new SparkConf().setAppName("JavaKMeansExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaKMeansExample")
+      .getOrCreate();
 
     // $example on$
     // Loads data
-    JavaRDD<Row> points = jsc.textFile(inputFile).map(new ParsePoint());
+    JavaRDD<Row> points = spark.read().text(inputFile).javaRDD().map(new ParsePoint());
     StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
     StructType schema = new StructType(fields);
-    Dataset<Row> dataset = sqlContext.createDataFrame(points, schema);
+    Dataset<Row> dataset = spark.createDataFrame(points, schema);
 
     // Trains a k-means model
     KMeans kmeans = new KMeans()
@@ -96,6 +95,6 @@ public class JavaKMeansExample {
     }
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

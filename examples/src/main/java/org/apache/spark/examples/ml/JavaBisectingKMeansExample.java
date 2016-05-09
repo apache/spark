@@ -18,12 +18,10 @@
 package org.apache.spark.examples.ml;
 
 import java.util.Arrays;
+import java.util.List;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 // $example on$
 import org.apache.spark.ml.clustering.BisectingKMeans;
 import org.apache.spark.ml.clustering.BisectingKMeansModel;
@@ -44,25 +42,26 @@ import org.apache.spark.sql.types.StructType;
 public class JavaBisectingKMeansExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaBisectingKMeansExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaBisectingKMeansExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(Vectors.dense(0.1, 0.1, 0.1)),
       RowFactory.create(Vectors.dense(0.3, 0.3, 0.25)),
       RowFactory.create(Vectors.dense(0.1, 0.1, -0.1)),
       RowFactory.create(Vectors.dense(20.3, 20.1, 19.9)),
       RowFactory.create(Vectors.dense(20.2, 20.1, 19.7)),
       RowFactory.create(Vectors.dense(18.9, 20.0, 19.7))
-    ));
+    );
 
     StructType schema = new StructType(new StructField[]{
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
     });
 
-    Dataset<Row> dataset = jsql.createDataFrame(data, schema);
+    Dataset<Row> dataset = spark.createDataFrame(data, schema);
 
     BisectingKMeans bkm = new BisectingKMeans().setK(2);
     BisectingKMeansModel model = bkm.fit(dataset);
@@ -76,6 +75,6 @@ public class JavaBisectingKMeansExample {
     }
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

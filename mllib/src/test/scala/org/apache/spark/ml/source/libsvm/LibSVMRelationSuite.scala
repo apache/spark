@@ -108,5 +108,6 @@ class LibSVMRelationSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("select features from libsvm relation") {
     val df = sqlContext.read.format("libsvm").load(path)
     df.select("features").rdd.map { case Row(d: Vector) => d }.first
+    df.select("features").collect
   }
 }

@@ -232,4 +232,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       "a" -> Seq(1, 2)
     )
   }
+
+  test("spark-15051 alias of aggregator in DataFrame/Dataset[Row]") {
+    val df1 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
+    checkAnswer(df1.agg(RowAgg.toColumn as "b"), Row(6) :: Nil)
+
+    val df2 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
+    checkAnswer(df2.agg(RowAgg.toColumn as "b").select("b"), Row(6) :: Nil)
+  }
 }
