@@ -25,10 +25,12 @@ import java.util.Map;
  * Possible values of SASL quality-of-protection value.
  */
 public enum SaslQOP {
-  AUTH("auth"), // Authentication only.
-  AUTH_INT("auth-int"), // Authentication and integrity checking by using signatures.
-  AUTH_CONF("auth-conf"); // Authentication, integrity and confidentiality checking
-                          // by using signatures and encryption.
+  // Authentication only.
+  AUTH("auth"),
+  // Authentication and integrity checking by using signatures.
+  AUTH_INT("auth-int"),
+  // Authentication, integrity and confidentiality checking by using signatures and encryption.
+  AUTH_CONF("auth-conf");
 
   public final String saslQop;
 

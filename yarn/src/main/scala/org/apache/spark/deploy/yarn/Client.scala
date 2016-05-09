@@ -158,7 +158,7 @@ private[spark] class Client(
       val newAppResponse = newApp.getNewApplicationResponse()
       appId = newAppResponse.getApplicationId()
       reportLauncherState(SparkAppHandle.State.SUBMITTED)
-      launcherBackend.setAppId(appId.toString())
+      launcherBackend.setAppId(appId.toString)
 
       // Verify whether the cluster has enough resources for our AM
       verifyClusterResources(newAppResponse)
@@ -168,7 +168,7 @@ private[spark] class Client(
       val appContext = createApplicationSubmissionContext(newApp, containerContext)
 
       // Finally, submit and monitor the application
-      logInfo(s"Submitting application ${appId.getId} to ResourceManager")
+      logInfo(s"Submitting application $appId to ResourceManager")
       yarnClient.submitApplication(appContext)
       appId
     } catch {

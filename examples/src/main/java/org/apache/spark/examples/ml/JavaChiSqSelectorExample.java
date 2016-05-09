@@ -17,14 +17,12 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.spark.ml.feature.ChiSqSelector;
 import org.apache.spark.mllib.linalg.VectorUDT;
@@ -39,23 +37,24 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaChiSqSelectorExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaChiSqSelectorExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaChiSqSelectorExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(7, Vectors.dense(0.0, 0.0, 18.0, 1.0), 1.0),
       RowFactory.create(8, Vectors.dense(0.0, 1.0, 12.0, 0.0), 0.0),
       RowFactory.create(9, Vectors.dense(1.0, 0.0, 15.0, 0.1), 0.0)
-    ));
+    );
     StructType schema = new StructType(new StructField[]{
       new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
       new StructField("clicked", DataTypes.DoubleType, false, Metadata.empty())
     });
 
-    Dataset<Row> df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = spark.createDataFrame(data, schema);
 
     ChiSqSelector selector = new ChiSqSelector()
       .setNumTopFeatures(1)
@@ -66,6 +65,6 @@ public class JavaChiSqSelectorExample {
     Dataset<Row> result = selector.fit(df).transform(df);
     result.show();
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 }

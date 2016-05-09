@@ -26,6 +26,15 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
   test("registering as a table") {
+    testRegisterAsTable()
+  }
+
+  ignore("stress test") {
+    // Ignore the stress test as it takes several minutes to run
+    (0 until 1000).foreach(_ => testRegisterAsTable())
+  }
+
+  private def testRegisterAsTable(): Unit = {
     val input = MemoryStream[Int]
     val query = input.toDF().write
       .format("memory")
