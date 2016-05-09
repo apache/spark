@@ -61,6 +61,8 @@ class BlockManagerId private (
 
   def port: Int = port_
 
+  def rack: Option[String] = rackInfo_
+
   def isDriver: Boolean = {
     executorId == SparkContext.DRIVER_IDENTIFIER ||
       executorId == SparkContext.LEGACY_DRIVER_IDENTIFIER
@@ -92,13 +94,14 @@ class BlockManagerId private (
   @throws(classOf[IOException])
   private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
-  override def toString: String = s"BlockManagerId($executorId, $host, $port)"
+  override def toString: String = s"BlockManagerId($executorId, $host, $port, $rack)"
 
-  override def hashCode: Int = (executorId.hashCode * 41 + host.hashCode) * 41 + port
+  override def hashCode: Int =
+    ((executorId.hashCode * 41 + host.hashCode) * 41 + port) * 41 + rack.hashCode
 
   override def equals(that: Any): Boolean = that match {
     case id: BlockManagerId =>
-      executorId == id.executorId && port == id.port && host == id.host
+      executorId == id.executorId && port == id.port && host == id.host && rack == id.rack
     case _ =>
       false
   }

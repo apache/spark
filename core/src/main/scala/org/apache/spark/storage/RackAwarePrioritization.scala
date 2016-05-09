@@ -48,11 +48,11 @@ class DefaultRackAwarePrioritization(host: String) extends RackAwarePriotization
   override def prioritize(peers: Seq[BlockManagerId], blockId: BlockId): Seq[BlockManagerId] = {
     val random = new Random(blockId.hashCode)
 
-    logInfo(s"Input peers : ${peers.mkString(", ")}")
-    val peersOnOtherHosts = peers.filter(p => !p.host.equals(host)).sortBy(_ => random.nextInt)
-    val peersOnHost = peers.filter(p => p.host.equals(host)).sortBy(_ => random.nextInt)
-    val ret = peersOnOtherHosts ++ peersOnHost
-    logInfo(s"Prioritized peers : ${ret.mkString(", ")}")
+    logDebug(s"Input peers : ${peers.mkString(", ")}")
+    val peersOnOtherHosts = peers.filter(p => !p.host.equals(host))
+    val peersOnHost = peers.filter(p => p.host.equals(host))
+    val ret = random.shuffle(peersOnOtherHosts) ++ random.shuffle(peersOnHost)
+    logDebug(s"Prioritized peers : ${ret.mkString(", ")}")
     ret
   }
 }

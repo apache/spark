@@ -148,8 +148,6 @@ private[spark] class BlockManager(
   private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
 
-  private val rackAwareReplication = conf.getBoolean("spark.replication.rackawareness", false)
-
   private var rackAwarePrioritizer: RackAwarePriotization = _
 
   /**
@@ -165,21 +163,22 @@ private[spark] class BlockManager(
     blockTransferService.init(this)
     shuffleClient.init(appId)
 
-    val rackInfo = if (rackAwareReplication) {
-      logInfo("Rack aware block replication enabled. Getting topology information")
+    val rackInfo = {
       val rackStr = master.getRackInfo(blockTransferService.hostName)
-      logInfo(s"Obtained $rackStr")
-      if (rackStr.isEmpty) None else Some(rackStr)
-    } else {
-      None
+      if (rackStr.isEmpty) {
+        None
+      } else {
+        Some(rackStr)
+      }
     }
 
-    rackAwarePrioritizer = if (rackAwareReplication) {
-      val priorityClass = conf.get("spark.replication.rackawareness.prioritizer", "")
-      assert(!priorityClass.isEmpty, "Need to specify a class for prioritizing " +
-        "peers when using rack aware block replication")
-      Utils.classForName(priorityClass).asInstanceOf[RackAwarePriotization]
+    val priorityClass = conf.get("spark.replication.rackawareness.prioritizer", "")
+    rackAwarePrioritizer = if (!priorityClass.isEmpty) {
+      val ret = Utils.classForName(priorityClass).asInstanceOf[RackAwarePriotization]
+      logInfo(s"Using $priorityClass for prioritizing peers")
+      ret
     } else {
+      logInfo("Using DefaultRackAwarePrioritization for prioritizing peers")
       new DefaultRackAwarePrioritization(blockTransferService.hostName)
     }
 
@@ -199,6 +198,8 @@ private[spark] class BlockManager(
     if (externalShuffleServiceEnabled && !blockManagerId.isDriver) {
       registerWithExternalShuffleServer()
     }
+
+    logInfo(s"Initialized BlockManager: $blockManagerId")
   }
 
   private def registerWithExternalShuffleServer() {
@@ -1200,9 +1201,10 @@ private[spark] class BlockManager(
             // we have a failed replication, so we get the list of peers again
             // we don't want peers we have already replicated to and the ones that
             // have failed previously
-            val updatedPeers = rackAwarePrioritizer.prioritize(getPeers(true), blockId).filter{p =>
+            val filteredPeers = getPeers(true).filter{p =>
               !(updatedFailedPeers.contains(p) || peersReplicatedTo.contains(p))
             }
+            val updatedPeers = rackAwarePrioritizer.prioritize(filteredPeers, blockId)
             (numFailures + 1, updatedPeers, peersReplicatedTo, updatedFailedPeers)
         }
 
