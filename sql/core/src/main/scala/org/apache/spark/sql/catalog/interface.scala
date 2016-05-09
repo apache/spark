@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.DefinedByConstructorParams
 // Note: all classes here are expected to be wrapped in Datasets and so must extend
 // DefinedByConstructorParams for the catalog to be able to create encoders for them.
 
-class Database(
+case class Database(
     val name: String,
     @Nullable val description: String,
     val locationUri: String)
@@ -41,7 +41,7 @@ class Database(
 }
 
 
-class Table(
+case class Table(
     val name: String,
     @Nullable val database: String,
     @Nullable val description: String,
@@ -61,7 +61,7 @@ class Table(
 }
 
 
-class Column(
+case class Column(
     val name: String,
     @Nullable val description: String,
     val dataType: String,
@@ -84,7 +84,7 @@ class Column(
 
 
 // TODO(andrew): should we include the database here?
-class Function(
+case class Function(
     val name: String,
     @Nullable val description: String,
     val className: String,
