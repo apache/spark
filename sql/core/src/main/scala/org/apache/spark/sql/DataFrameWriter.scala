@@ -513,7 +513,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         df.logicalPlan,
         overwrite,
         ifNotExists = false,
-        isMatchByName = matchOutputColumnsByName)).toRdd
+        options = extraOptions.toMap)).toRdd
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -577,10 +577,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def byName: DataFrameWriter = {
     extraOptions.put("matchByName", "true")
     this
-  }
-
-  private def matchOutputColumnsByName: Boolean = {
-    extraOptions.getOrElse("matchByName", "false").toBoolean
   }
 
   /**

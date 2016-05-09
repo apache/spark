@@ -177,7 +177,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       query,
       overwrite = ctx.OVERWRITE != null,
       ifNotExists = ctx.EXISTS != null,
-      isMatchByName = false /* SQL always matches by position */)
+      Map.empty /* SQL always matches by position */)
   }
 
   /**
