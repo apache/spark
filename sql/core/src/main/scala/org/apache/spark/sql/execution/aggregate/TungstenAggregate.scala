@@ -595,6 +595,37 @@ case class TungstenAggregate(
      """
   }
 
+  /**
+   * Generate the codes for class variables representing the elements in aggregation buffer.
+   */
+  private def initBufferVariable(
+      ctx: CodegenContext,
+      bufferAttributes: Seq[Attribute]): Seq[ExprCode] = {
+    bufferAttributes.map(_.dataType).zipWithIndex.map { case (dt, i) =>
+      val attrName = ctx.freshName("bufferAttr")
+      val attrIsNull = ctx.freshName("bufferAttrIsNull")
+      ctx.addMutableState(ctx.javaType(dt), attrName, s"$attrName = ${ctx.defaultValue(dt)};")
+      ctx.addMutableState("boolean", attrIsNull, s"$attrIsNull = true;")
+      ExprCode("", attrIsNull, attrName)
+    }
+  }
+
+  /**
+   * Generate the codes that update aggregation buffer.
+   */
+  private def genCodeForUpdateAggBuffer(
+      ctx: CodegenContext,
+      aggBuffer: String,
+      bufferVars: Seq[ExprCode],
+      updateExprs: Seq[Expression],
+      isVectorized: Boolean): Seq[String] = {
+    bufferVars.zipWithIndex.map { case (ev, i) =>
+      val dt = updateExprs(i).dataType
+      ctx.updateColumn(aggBuffer, dt, i, ev, updateExprs(i).nullable,
+        isVectorized = isVectorized)
+    }
+  }
+
   private def doConsumeWithKeys(ctx: CodegenContext, input: Seq[ExprCode]): String = {
 
     // create grouping key
@@ -622,8 +653,11 @@ case class TungstenAggregate(
     ctx.currentVars = input
     val hashEval = BindReferences.bindReference(hashExpr, child.output).genCode(ctx)
 
+    // init class variables representing the elements in aggregation buffer
+    val bufferVars = initBufferVariable(ctx, aggregateBufferAttributes)
+
     val inputAttr = aggregateBufferAttributes ++ child.output
-    ctx.currentVars = new Array[ExprCode](aggregateBufferAttributes.length) ++ input
+    ctx.currentVars = bufferVars ++ input
 
     val (checkFallbackForGeneratedHashMap, checkFallbackForBytesToBytesMap, resetCounter,
     incCounter) = if (testFallbackStartsAt.isDefined) {
@@ -635,6 +669,9 @@ case class TungstenAggregate(
       ("true", "true", "", "")
     }
 
+    val updateVectorizedRow =
+      genCodeForUpdateAggBuffer(ctx, vectorizedRowBuffer, bufferVars, updateExpr, true)
+
     // We first generate code to probe and update the vectorized hash map. If the probe is
     // successful the corresponding vectorized row buffer will hold the mutable row
     val findOrInsertInVectorizedHashMap: Option[String] = {
@@ -643,10 +680,16 @@ case class TungstenAggregate(
           s"""
              |if ($checkFallbackForGeneratedHashMap) {
              |  ${vectorizedRowKeys.map(_.code).mkString("\n")}
+             |  org.apache.spark.sql.execution.vectorized.ColumnarBatch.Row newRowBuffer = null;
              |  if (${vectorizedRowKeys.map("!" + _.isNull).mkString(" && ")}) {
-             |    $vectorizedRowBuffer = $vectorizedHashMapTerm.findOrInsert(
+             |    newRowBuffer = $vectorizedHashMapTerm.findOrInsert(
              |        ${vectorizedRowKeys.map(_.value).mkString(", ")});
              |  }
+             |  if (newRowBuffer != $vectorizedRowBuffer && $vectorizedRowBuffer != null) {
+             |    // update vectorized row
+             |    ${updateVectorizedRow.mkString("\n").trim}
+             |  }
+             |  $vectorizedRowBuffer = newRowBuffer;
              |}
          """.stripMargin)
       } else {
@@ -656,17 +699,19 @@ case class TungstenAggregate(
 
     val updateRowInVectorizedHashMap: Option[String] = {
       if (isVectorizedHashMapEnabled) {
-        ctx.INPUT_ROW = vectorizedRowBuffer
+        // We use currentVars that contains bufferVars and input
+        ctx.INPUT_ROW = null // vectorizedRowBuffer
         val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
         val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
         val effectiveCodes = subExprs.codes.mkString("\n")
         val vectorizedRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
           boundUpdateExpr.map(_.genCode(ctx))
         }
-        val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
-          val dt = updateExpr(i).dataType
-          ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable,
-            isVectorized = true)
+        val updateBufferVars = vectorizedRowEvals.zip(bufferVars).map { case (update, buffer) =>
+          s"""
+             |${buffer.value} = ${update.value};
+             |${buffer.isNull} = ${update.isNull};
+           """.stripMargin
         }
         Option(
           s"""
@@ -674,11 +719,14 @@ case class TungstenAggregate(
              |$effectiveCodes
              |// evaluate aggregate function
              |${evaluateVariables(vectorizedRowEvals)}
-             |// update vectorized row
-             |${updateVectorizedRow.mkString("\n").trim}
+             |// update buffer variables
+             |${updateBufferVars.mkString("\n").trim}
            """.stripMargin)
       } else None
     }
+
+    val updateUnsafeRowBuffer =
+      genCodeForUpdateAggBuffer(ctx, unsafeRowBuffer, bufferVars, updateExpr, false)
 
     // Next, we generate code to probe and update the unsafe row hash map.
     val findOrInsertInUnsafeRowMap: String = {
@@ -687,12 +735,14 @@ case class TungstenAggregate(
          |   // generate grouping key
          |   ${unsafeRowKeyCode.code.trim}
          |   ${hashEval.code.trim}
+         |   UnsafeRow newUnsafeRowBuffer = null;
          |   if ($checkFallbackForBytesToBytesMap) {
          |     // try to get the buffer from hash map
-         |     $unsafeRowBuffer =
+         |     newUnsafeRowBuffer =
          |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
+         |
          |   }
-         |   if ($unsafeRowBuffer == null) {
+         |   if (newUnsafeRowBuffer == null) {
          |     if ($sorterTerm == null) {
          |       $sorterTerm = $hashMapTerm.destructAndCreateExternalSorter();
          |     } else {
@@ -700,37 +750,45 @@ case class TungstenAggregate(
          |     }
          |     $resetCounter
          |     // the hash map had be spilled, it should have enough memory now,
-         |     // try  to allocate buffer again.
-         |     $unsafeRowBuffer =
+         |     // try to allocate buffer again.
+         |     newUnsafeRowBuffer =
          |       $hashMapTerm.getAggregationBufferFromUnsafeRow($unsafeRowKeys, ${hashEval.value});
-         |     if ($unsafeRowBuffer == null) {
+         |     if (newUnsafeRowBuffer == null) {
          |       // failed to allocate the first page
          |       throw new OutOfMemoryError("No enough memory for aggregation");
          |     }
          |   }
+         |   if (newUnsafeRowBuffer != $unsafeRowBuffer && $unsafeRowBuffer != null) {
+         |     // update unsafe row buffer
+         |     ${updateUnsafeRowBuffer.mkString("\n").trim}
+         |   }
+         |   $unsafeRowBuffer = newUnsafeRowBuffer;
          | }
        """.stripMargin
     }
 
     val updateRowInUnsafeRowMap: String = {
-      ctx.INPUT_ROW = unsafeRowBuffer
+      // We use currentVars that contains bufferVars and input
+      ctx.INPUT_ROW = null // unsafeRowBuffer
       val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
       val effectiveCodes = subExprs.codes.mkString("\n")
       val unsafeRowBufferEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
         boundUpdateExpr.map(_.genCode(ctx))
       }
-      val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
-        val dt = updateExpr(i).dataType
-        ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
+      val updateBufferVars = unsafeRowBufferEvals.zip(bufferVars).map { case (update, buffer) =>
+        s"""
+           |${buffer.value} = ${update.value};
+           |${buffer.isNull} = ${update.isNull};
+         """.stripMargin
       }
       s"""
          |// common sub-expressions
          |$effectiveCodes
          |// evaluate aggregate function
          |${evaluateVariables(unsafeRowBufferEvals)}
-         |// update unsafe row buffer
-         |${updateUnsafeRowBuffer.mkString("\n").trim}
+         |// update buffer variables
+         |${updateBufferVars.mkString("\n").trim}
            """.stripMargin
     }
 
