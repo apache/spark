@@ -190,14 +190,40 @@ public class YarnShuffleService extends AuxiliaryService {
     logger.info("Stopping container {}", containerId);
   }
 
+  private File getRegisteredExecutorFile(String dir) {
+    return new File(new Path(dir).toUri().getPath(), "registeredExecutors.ldb");
+  }
+
   private File findRegisteredExecutorFile(String[] localDirs) {
-    for (String dir: localDirs) {
-      File f = new File(new Path(dir).toUri().getPath(), "registeredExecutors.ldb");
-      if (f.exists()) {
-        return f;
+    File result = null;
+    for (String dir : localDirs) {
+      File currentFile = getRegisteredExecutorFile(dir);
+      if (currentFile.exists()) {
+        if (result == null) {
+          result = currentFile;
+        } else if (currentFile.lastModified() > result.lastModified()) {
+          result.delete();
+          result = currentFile;
+        }
       }
     }
-    return new File(new Path(localDirs[0]).toUri().getPath(), "registeredExecutors.ldb");
+
+    long minFreeSpace = 200 * 1024 * 1024;
+    if (result == null || !(result.canRead() && result.canWrite())) {
+      for (String dir: localDirs) {
+        File current = new File(dir);
+        if (current.exists() && current.isDirectory()
+            && current.canRead() && current.canWrite()
+            && current.getFreeSpace() >= minFreeSpace) {
+          result = getRegisteredExecutorFile(dir);
+          if ( !result.exists() || (result.exists() && result.delete())) {
+            break;
+          }
+        }
+      }
+    }
+
+    return result;
   }
 
   /**

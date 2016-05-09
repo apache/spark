@@ -237,4 +237,42 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
   }
 
+  test("filter non-exist folder for storing executor meta") {
+    Array("test1", "test2", "test3").map(new File(_))
+      .filter(_.exists()).foreach(FileUtils.deleteDirectory)
+    val t1 = new File("test2/")
+    t1.mkdir()
+    t1.setWritable(false)
+    val t2 = new File("test3/")
+    t2.mkdir()
+
+    // missing dir: test1 and readonly dir: test2
+    yarnConfig.set("yarn.nodemanager.local-dirs", "test1,test2,test3")
+    s1 = new YarnShuffleService
+    s1.serviceInit(yarnConfig)
+    assert(s1.registeredExecutorFile.getParent == "test3")
+    s1.stop()
+
+    // create a new registeredExecutorFile with fresh timestamp
+    s2 = new YarnShuffleService
+    yarnConfig.set("yarn.nodemanager.local-dirs", "test3")
+    s2.serviceInit(yarnConfig)
+    s2.stop()
+
+    // test choose the lastest meta file
+    val t3 = new File("test1")
+    t3.mkdir()
+    s2 = new YarnShuffleService
+    yarnConfig.set("yarn.nodemanager.local-dirs", "test1,test2,test3")
+    s2.serviceInit(yarnConfig)
+    assert(s2.registeredExecutorFile.getParent == "test3")
+    s2.stop()
+
+    // the meta file is readonly
+    s2.registeredExecutorFile.setWritable(false)
+    s3 = new YarnShuffleService
+    s3.serviceInit(yarnConfig)
+    s2.registeredExecutorFile.setWritable(true)
+    assert(s3.registeredExecutorFile.getParent == "test1")
+  }
 }
