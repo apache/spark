@@ -28,7 +28,10 @@ import org.apache.spark.sql.Row;
 
 public class JavaStandardScalerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaStandardScalerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaStandardScalerExample")
+      .getOrCreate();
 
     // $example on$
     Dataset<Row> dataFrame =

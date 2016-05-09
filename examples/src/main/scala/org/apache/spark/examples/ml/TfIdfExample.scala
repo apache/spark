@@ -26,7 +26,10 @@ import org.apache.spark.sql.SparkSession
 object TfIdfExample {
 
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("TfIdfExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("TfIdfExample")
+      .getOrCreate()
 
     // $example on$
     val sentenceData = spark.createDataFrame(Seq(

@@ -25,7 +25,10 @@ from pyspark.sql.types import Row
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("VectorSlicerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("VectorSlicerExample")\
+        .getOrCreate()
 
     # $example on$
     df = spark.createDataFrame([

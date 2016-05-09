@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
@@ -35,11 +33,15 @@ import org.apache.spark.sql.SparkSession;
 public class JavaGradientBoostedTreeClassifierExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaGradientBoostedTreeClassifierExample").getOrCreate();
+      .builder()
+      .appName("JavaGradientBoostedTreeClassifierExample")
+      .getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
-    Dataset<Row> data = spark.read().format("libsvm")
+    Dataset<Row> data = spark
+      .read()
+      .format("libsvm")
       .load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.

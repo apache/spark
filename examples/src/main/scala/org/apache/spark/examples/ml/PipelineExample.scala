@@ -30,7 +30,10 @@ import org.apache.spark.sql.SparkSession
 object PipelineExample {
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("PipelineExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("PipelineExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training documents from a list of (id, text, label) tuples.
