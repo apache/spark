@@ -69,7 +69,7 @@ if __name__ == "__main__":
     # Register this DataFrame as a temporary table.
     people.registerTempTable("people")
 
-    # SQL statements can be run by using the sql methods provided by sqlContext
+    # SQL statements can be run by using the sql methods provided by `spark`
     teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
     for each in teenagers.collect():
