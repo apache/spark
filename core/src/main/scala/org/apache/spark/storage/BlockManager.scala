@@ -165,7 +165,7 @@ private[spark] class BlockManager(
 
     val rackInfo = {
       val rackStr = master.getRackInfo(blockTransferService.hostName)
-      if (rackStr.isEmpty) {
+      if (rackStr == null || rackStr.isEmpty) {
         None
       } else {
         Some(rackStr)
