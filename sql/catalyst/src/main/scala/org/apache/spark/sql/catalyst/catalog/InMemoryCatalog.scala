@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.util.StringUtils
  *
  * All public methods should be synchronized for thread-safety.
  */
-class InMemoryCatalog extends ExternalCatalog {
+class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends ExternalCatalog {
   import CatalogTypes.TablePartitionSpec
 
   private class TableDesc(var table: CatalogTable) {
@@ -110,7 +110,7 @@ class InMemoryCatalog extends ExternalCatalog {
     }
   }
 
-  private val fs = FileSystem.get(new Configuration)
+  private val fs = FileSystem.get(hadoopConfig)
 
   // --------------------------------------------------------------------------
   // Databases
@@ -400,6 +400,7 @@ class InMemoryCatalog extends ExternalCatalog {
     require(specs.size == newSpecs.size, "number of old and new partition specs differ")
     requirePartitionsExist(db, table, specs)
     requirePartitionsNotExist(db, table, newSpecs)
+
     val tableDir = new Path(catalog(db).db.locationUri, table)
     val partitionColumnNames = getTable(db, table).partitionColumnNames
     // TODO: we should follow hive to roll back if one partition path failed to rename.
