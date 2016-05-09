@@ -16,7 +16,7 @@
 #
 
 # To run this example use
-# ./bin/sparkR examples/src/main/r/ml.R
+# ./bin/spark-submit examples/src/main/r/ml.R
 
 # Load SparkR library into your R session
 library(SparkR)
@@ -25,30 +25,88 @@ library(SparkR)
 sc <- sparkR.init(appName="SparkR-ML-example")
 sqlContext <- sparkRSQL.init(sc)
 
-# Train GLM of family 'gaussian'
+############################ spark.glm and glm ##############################################
+
+# Fit a generalized linear model with spark.glm
 training1 <- suppressWarnings(createDataFrame(sqlContext, iris))
 test1 <- training1
-model1 <- glm(Sepal_Length ~ Sepal_Width + Species, training1, family = "gaussian")
+model1 <- spark.glm(training1, Sepal_Length ~ Sepal_Width + Species, family = "gaussian")
 
 # Model summary
 summary(model1)
 
 # Prediction
 predictions1 <- predict(model1, test1)
-head(select(predictions1, "Sepal_Length", "prediction"))
+showDF(predictions1)
 
-# Train GLM of family 'binomial'
-training2 <- filter(training1, training1$Species != "setosa")
+# Fit a generalized linear model with glm (R-compliant)
+sameModel <- glm(Sepal_Length ~ Sepal_Width + Species, training1, family = "gaussian")
+summary(sameModel)
+
+############################ spark.survreg ##############################################
+
+# Use the ovarian dataset available in R survival package
+library(survival)
+
+# Fit an accelerated failure time (AFT) survival regression model with spark.survreg
+training2 <- suppressWarnings(createDataFrame(sqlContext, ovarian))
 test2 <- training2
-model2 <- glm(Species ~ Sepal_Length + Sepal_Width, data = training2, family = "binomial")
+model2 <- spark.survreg(training2, Surv(futime, fustat) ~ ecog_ps + rx)
 
 # Model summary
 summary(model2)
 
-# Prediction (Currently the output of prediction for binomial GLM is the indexed label,
-# we need to transform back to the original string label later)
+# Prediction
 predictions2 <- predict(model2, test2)
-head(select(predictions2, "Species", "prediction"))
+showDF(predictions2)
+
+############################ spark.naiveBayes ##############################################
+
+# Fit a Bernoulli naive Bayes model with spark.naiveBayes
+titanic <- as.data.frame(Titanic)
+training3 <- suppressWarnings(createDataFrame(sqlContext, titanic[titanic$Freq > 0, -5]))
+test3 <- training3
+model3 <- spark.naiveBayes(training3, Survived ~ Class + Sex + Age)
+
+# Model summary
+summary(model3)
+
+# Prediction
+predictions3 <- predict(model3, test3)
+showDF(predictions3)
+
+############################ spark.kmeans ##############################################
+
+# Fit a k-means model with spark.kmeans
+training4 <- suppressWarnings(createDataFrame(sqlContext, iris))
+test4 <- training4
+model4 <- spark.kmeans(training4, ~ Sepal_Length + Sepal_Width + Petal_Length + Petal_Width, k = 3)
+
+# Model summary
+summary(model4)
+
+# Get fitted result from the k-means model
+showDF(fitted(model4))
+
+# Prediction
+predictions4 <- predict(model4, test4)
+showDF(predictions4)
+
+############################ model read/write ##############################################
+
+# Save and then load a fitted MLlib model
+modelPath <- tempfile(pattern = "ml", fileext = ".tmp")
+write.ml(model1, modelPath)
+sameModel <- read.ml(modelPath)
+
+# Check model summary
+summary(sameModel)
+
+# Check model prediction
+samePredictions <- predict(sameModel, test1)
+showDF(samePredictions)
+
+unlink(modelPath)
 
 # Stop the SparkContext now
 sparkR.stop()
