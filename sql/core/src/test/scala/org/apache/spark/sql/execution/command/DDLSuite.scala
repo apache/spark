@@ -66,7 +66,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
-      CatalogDatabase(name, "", spark.conf.get(SQLConf.WAREHOUSE_PATH), Map()),
+      CatalogDatabase(name, "", sqlContext.conf.warehousePath, Map()),
       ignoreIfExists = false)
   }
 
