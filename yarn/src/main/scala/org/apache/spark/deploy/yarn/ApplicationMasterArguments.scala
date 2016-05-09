@@ -27,9 +27,13 @@ class ApplicationMasterArguments(val args: Array[String]) {
   var primaryPyFile: String = null
   var pyFiles: String = null
   var userArgs: Seq[String] = Seq[String]()
+  var enablePS: Boolean = false
   var executorMemory = 1024
+  var psServerMemory = 1024
   var executorCores = 1
+  var psServerCores = 1
   var numExecutors = DEFAULT_NUMBER_EXECUTORS
+  var numPSServers = DEFAULT_NUMBER_PS_SERVERS
 
   parseArgs(args.toList)
 
@@ -62,6 +66,10 @@ class ApplicationMasterArguments(val args: Array[String]) {
           userArgsBuffer += value
           args = tail
 
+        case ("--enablePS") :: value :: tail =>
+          enablePS = value.toBoolean
+          args = tail
+
         case ("--num-workers" | "--num-executors") :: IntParam(value) :: tail =>
           numExecutors = value
           args = tail
@@ -72,6 +80,18 @@ class ApplicationMasterArguments(val args: Array[String]) {
 
         case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
           executorCores = value
+          args = tail
+
+        case ("--num-servers") :: IntParam(value) :: tail =>
+          numPSServers = value
+          args = tail
+
+        case ("--server-memory") :: MemoryParam(value) :: tail =>
+          psServerMemory = value
+          args = tail
+
+        case ("--server-cores") :: IntParam(value) :: tail =>
+          psServerCores = value
           args = tail
 
         case _ =>
@@ -96,9 +116,13 @@ class ApplicationMasterArguments(val args: Array[String]) {
       |                       place on the PYTHONPATH for Python apps.
       |  --args ARGS          Arguments to be passed to your application's main class.
       |                       Multiple invocations are possible, each will be passed in order.
+      |  --enablePS           enable parameter server
       |  --num-executors NUM    Number of executors to start (Default: 2)
       |  --executor-cores NUM   Number of cores for the executors (Default: 1)
       |  --executor-memory MEM  Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+      |  --num-servers NUM    Number of servers to start (Default: 1)
+      |  --server-cores NUM   Number of cores for the server (Default: 1)
+      |  --server-memory MEM  Memory per server (e.g. 1000M, 2G) (Default: 1G)
       """.stripMargin)
     System.exit(exitCode)
   }

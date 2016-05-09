@@ -15,19 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
-
-import java.nio.ByteBuffer
-
-import org.apache.spark.TaskState.TaskState
-import org.apache.spark.ps.PSClient
+package org.apache.spark.ps.strategy
 
 /**
- * A pluggable interface used by the Executor to send updates to the cluster scheduler.
+ * ConsistencyStrategy
+ * Created by genmao.ygm on 15-3-19.
  */
-private[spark] trait ExecutorBackend {
-  def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer)
-
-  def getPSClient: Option[PSClient]
+private[ps] trait ConsistencyStrategy {
+  def doConsistent(clock: Int): Unit
 }
-

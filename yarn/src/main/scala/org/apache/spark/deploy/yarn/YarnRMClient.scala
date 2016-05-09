@@ -55,6 +55,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
    * @param uiHistoryAddress Address of the application on the History Server.
    */
   def register(
+      enablePS: Boolean,
       conf: YarnConfiguration,
       sparkConf: SparkConf,
       preferredNodeLocations: Map[String, Set[SplitInfo]],
@@ -72,7 +73,7 @@ private[spark] class YarnRMClient(args: ApplicationMasterArguments) extends Logg
       amClient.registerApplicationMaster(Utils.localHostName(), 0, uiAddress)
       registered = true
     }
-    new YarnAllocator(conf, sparkConf, amClient, getAttemptId(), args, securityMgr)
+    new YarnAllocator(enablePS, conf, sparkConf, amClient, getAttemptId(), args, securityMgr)
   }
 
   /**

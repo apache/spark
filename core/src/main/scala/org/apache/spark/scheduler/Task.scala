@@ -24,6 +24,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{TaskContextHelper, TaskContextImpl, TaskContext}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.ps.PSClient
 import org.apache.spark.serializer.SerializerInstance
 import org.apache.spark.util.ByteBufferInputStream
 import org.apache.spark.util.Utils
@@ -51,9 +52,9 @@ private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) ex
    * @param attemptNumber how many times this task has been attempted (0 for the first attempt)
    * @return the result of the task
    */
-  final def run(taskAttemptId: Long, attemptNumber: Int): T = {
-    context = new TaskContextImpl(stageId = stageId, partitionId = partitionId,
-      taskAttemptId = taskAttemptId, attemptNumber = attemptNumber, runningLocally = false)
+  final def run(psClient: Option[PSClient], taskAttemptId: Long, attemptNumber: Int): T = {
+    context = new TaskContextImpl(
+      stageId, partitionId, taskAttemptId, attemptNumber, psClient, false)
     TaskContextHelper.setTaskContext(context)
     context.taskMetrics.setHostname(Utils.localHostName())
     taskThread = Thread.currentThread()

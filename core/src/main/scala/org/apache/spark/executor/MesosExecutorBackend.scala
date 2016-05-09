@@ -28,6 +28,7 @@ import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
 import org.apache.spark.{Logging, TaskState, SparkConf, SparkEnv}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.ps.PSClient
 import org.apache.spark.scheduler.cluster.mesos.{MesosTaskLaunchData}
 import org.apache.spark.util.{SignalLogger, Utils}
 
@@ -47,6 +48,8 @@ private[spark] class MesosExecutorBackend
       .setData(ByteString.copyFrom(data))
       .build())
   }
+
+  override def getPSClient: Option[PSClient] = None
 
   override def registered(
       driver: ExecutorDriver,

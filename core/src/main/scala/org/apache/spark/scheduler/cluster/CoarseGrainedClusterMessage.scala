@@ -19,6 +19,9 @@ package org.apache.spark.scheduler.cluster
 
 import java.nio.ByteBuffer
 
+import scala.Predef._
+
+import org.apache.spark.ps.ServerInfo
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{SerializableBuffer, Utils}
 
@@ -84,5 +87,17 @@ private[spark] object CoarseGrainedClusterMessages {
   case class RequestExecutors(requestedTotal: Int) extends CoarseGrainedClusterMessage
 
   case class KillExecutors(executorIds: Seq[String]) extends CoarseGrainedClusterMessage
+
+  case class RegisterServer(
+      executorId: String,
+      hostPort: String,
+      cores: Int,
+      containerId: String) extends CoarseGrainedClusterMessage {
+    Utils.checkHostPort(hostPort, "Expected host port")
+  }
+
+  case class RegisteredServer(serverId: Long) extends CoarseGrainedClusterMessage
+
+  case class AddNewPSServer(serverInfo: ServerInfo) extends CoarseGrainedClusterMessage
 
 }

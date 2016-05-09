@@ -505,7 +505,11 @@ private[spark] class Client(
         Seq(
           "--executor-memory", args.executorMemory.toString + "m",
           "--executor-cores", args.executorCores.toString,
-          "--num-executors ", args.numExecutors.toString)
+          "--num-executors ", args.numExecutors.toString,
+          "--server-memory", args.psServerMemory + "m",
+          "--server-cores", args.psServerCores.toString,
+          "--num-servers", args.numPSservers.toString,
+          "--enablePS", args.enablePS.toString)
 
     // Command for the ApplicationMaster
     val commands = prefixEnv ++ Seq(

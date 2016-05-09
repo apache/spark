@@ -41,6 +41,10 @@ private[spark] class ClientArguments(args: Array[String]) {
   var supervise: Boolean = DEFAULT_SUPERVISE
   var memory: Int = DEFAULT_MEMORY
   var cores: Int = DEFAULT_CORES
+  var psServerMemory = DEFAULT_MEMORY
+  var psServerCores = DEFAULT_CORES
+  var numPSservers = DEFAULT_NUMBER_PS_SERVERS
+  var enablePS: Boolean = false
   private var _driverOptions = ListBuffer[String]()
   def driverOptions = _driverOptions.toSeq
 
@@ -56,6 +60,22 @@ private[spark] class ClientArguments(args: Array[String]) {
 
     case ("--memory" | "-m") :: MemoryParam(value) :: tail =>
       memory = value
+      parse(tail)
+
+    case ("--num-servers") :: IntParam(value) :: tail =>
+      numPSservers = value
+      parse(tail)
+
+    case ("--server-memory") :: MemoryParam(value) :: tail =>
+      psServerMemory = value
+      parse(tail)
+
+    case ("--server-cores") :: IntParam(value) :: tail =>
+      psServerCores = value
+      parse(tail)
+
+    case ("--enablePS") :: value :: tail =>
+      enablePS = value.toBoolean
       parse(tail)
 
     case ("--supervise" | "-s") :: tail =>
@@ -119,6 +139,7 @@ private[spark] class ClientArguments(args: Array[String]) {
 object ClientArguments {
   private[spark] val DEFAULT_CORES = 1
   private[spark] val DEFAULT_MEMORY = 512 // MB
+  private[spark] val DEFAULT_NUMBER_PS_SERVERS = 1
   private[spark] val DEFAULT_SUPERVISE = false
 
   def isValidJarUrl(s: String): Boolean = {

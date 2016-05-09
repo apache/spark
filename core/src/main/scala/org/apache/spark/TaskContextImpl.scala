@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.ps.PSClient
 import org.apache.spark.util.{TaskCompletionListener, TaskCompletionListenerException}
 
 import scala.collection.mutable.ArrayBuffer
@@ -27,6 +28,7 @@ private[spark] class TaskContextImpl(
     val partitionId: Int,
     override val taskAttemptId: Long,
     override val attemptNumber: Int,
+    val psClient: Option[PSClient] = None,
     val runningLocally: Boolean = false,
     val taskMetrics: TaskMetrics = TaskMetrics.empty)
   extends TaskContext
@@ -92,5 +94,7 @@ private[spark] class TaskContextImpl(
   override def isRunningLocally(): Boolean = runningLocally
 
   override def isInterrupted(): Boolean = interrupted
+
+  override def getPSClient: PSClient = psClient.get
 }
 
