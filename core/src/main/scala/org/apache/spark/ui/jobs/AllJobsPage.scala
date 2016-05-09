@@ -99,7 +99,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
            |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
-           |     'data-title="${Utility.escape(escapedDesc)} (Job ${jobId})<br>' +
+           |     "data-title=\\"${Utility.escape(escapedDesc)} (Job ${jobId})<br>" +
            |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
@@ -109,7 +109,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                        ""
                      }
                   }">' +
-           |    '${escapedDesc} (Job ${jobId})</div>'
+           |    "${escapedDesc} (Job ${jobId})</div>"
            |}
          """.stripMargin
       jobEventJsonAsStr
