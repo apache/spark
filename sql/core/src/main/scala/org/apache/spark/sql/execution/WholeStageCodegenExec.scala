@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
-import org.apache.spark.sql.execution.metric.{LongSQLMetricValue, SQLMetrics}
+import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -55,11 +55,7 @@ trait CodegenSupport extends SparkPlan {
    * @return name of the variable representing the metric
    */
   def metricTerm(ctx: CodegenContext, name: String): String = {
-    val metric = ctx.addReferenceObj(name, longMetric(name))
-    val value = ctx.freshName("metricValue")
-    val cls = classOf[LongSQLMetricValue].getName
-    ctx.addMutableState(cls, value, s"$value = ($cls) $metric.localValue();")
-    value
+    ctx.addReferenceObj(name, longMetric(name))
   }
 
   /**
@@ -117,7 +113,7 @@ trait CodegenSupport extends SparkPlan {
   protected def doProduce(ctx: CodegenContext): String
 
   /**
-   * Consume the generated columns or row from current SparkPlan, call it's parent's doConsume().
+   * Consume the generated columns or row from current SparkPlan, call its parent's `doConsume()`.
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
@@ -224,8 +220,8 @@ trait CodegenSupport extends SparkPlan {
 /**
  * InputAdapter is used to hide a SparkPlan from a subtree that support codegen.
  *
- * This is the leaf node of a tree with WholeStageCodegen, is used to generate code that consumes
- * an RDD iterator of InternalRow.
+ * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
+ * that consumes an RDD iterator of InternalRow.
  */
 case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 
