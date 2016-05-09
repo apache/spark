@@ -1434,8 +1434,8 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
     @since("2.0.0")
     def predictionCol(self):
         """
-        Field in :py:attr:`predictions`
-        which gives the predicted value of the label at each instance.
+        Field in :py:attr:`predictions` which gives the predicted value of each instance.
+        This is set to a new column name if the original model's `predictionCol` is not set.
         """
         return self._call_java("predictionCol")
 
