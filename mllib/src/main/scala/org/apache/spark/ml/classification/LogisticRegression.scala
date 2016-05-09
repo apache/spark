@@ -745,13 +745,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
   def countInvalid: Long = totalInvalidCnt
 
   /** @return The number of distinct labels in the input dataset. */
-  def numClasses: Int = try {
-    distinctMap.keySet.max + 1
-  } catch {
-    case e: UnsupportedOperationException =>
-      val msg = "There are no valid labels in the input dataset."
-      throw new SparkException(msg)
-  }
+  def numClasses: Int = if (distinctMap.isEmpty) 0 else distinctMap.keySet.max + 1
 
   /** @return The weightSum of each label in the input dataset. */
   def histogram: Array[Double] = {
