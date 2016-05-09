@@ -61,7 +61,7 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
       }"""
 
-    val code = new SourceCode(codeBody, ctx.getPlaceHolderAndCommentMap())
+    val code = new SourceCode(codeBody, ctx.getPlaceHolderToCommentMap())
     lazy val formatted = CodeFormatter.format(code)
     logDebug(s"Generated predicate '$predicate':\n$formatted")
 

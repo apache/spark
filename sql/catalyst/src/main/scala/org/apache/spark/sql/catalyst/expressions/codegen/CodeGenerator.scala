@@ -723,7 +723,7 @@ class CodegenContext {
   /**
    * Get a immutable map of the pair of a place holder and a corresponding comment
    */
-  def getPlaceHolderAndCommentMap(): immutable.Map[String, String] = {
+  def getPlaceHolderToCommentMap(): immutable.Map[String, String] = {
     immutable.Map() ++ placeHolderToCommentMap
   }
 }

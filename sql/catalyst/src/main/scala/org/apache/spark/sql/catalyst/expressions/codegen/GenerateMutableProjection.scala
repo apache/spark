@@ -133,7 +133,7 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
       }
     """
 
-    val code = new SourceCode(codeBody, ctx.getPlaceHolderAndCommentMap())
+    val code = new SourceCode(codeBody, ctx.getPlaceHolderToCommentMap())
     lazy val formatted = CodeFormatter.format(code)
     logDebug(s"code for ${expressions.mkString(",")}:\n$formatted")
 

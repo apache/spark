@@ -334,7 +334,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
     // try to compile, helpful for debug
     val cleanedSource =
-      new SourceCode(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderAndCommentMap())
+      new SourceCode(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToCommentMap())
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
     (ctx, cleanedSource)
