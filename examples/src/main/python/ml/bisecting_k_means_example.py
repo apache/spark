@@ -19,9 +19,6 @@ from __future__ import print_function
 
 # $example on$
 from pyspark.ml.clustering import BisectingKMeans, BisectingKMeansModel
-from pyspark.mllib.linalg import VectorUDT, _convert_to_vector, Vectors
-from pyspark.mllib.linalg import Vectors
-from pyspark.sql.types import Row
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -36,21 +33,20 @@ if __name__ == "__main__":
         .getOrCreate()
 
     # $example on$
-    data = spark.read.text("data/mllib/kmeans_data.txt").rdd
-    parsed = data\
-        .map(lambda row: Row(features=Vectors.dense([float(x) for x in row.value.split(' ')])))
-    training = spark.createDataFrame(parsed)
+    # Loads data.
+    dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    kmeans = BisectingKMeans().setK(2).setSeed(1).setFeaturesCol("features")
+    # Trains a bisecting k-means model.
+    bkm = BisectingKMeans().setK(2).setSeed(1)
+    model = bkm.fit(dataset)
 
-    model = kmeans.fit(training)
+    # Evaluate clustering.
+    cost = model.computeCost(dataset)
+    print("Compute Cost = " + str(cost))
 
-    # Evaluate clustering
-    cost = model.computeCost(training)
-    print("Bisecting K-means Cost = " + str(cost))
-
-    centers = model.clusterCenters()
+    # Shows the result.
     print("Cluster Centers: ")
+    centers = model.clusterCenters()
     for center in centers:
         print(center)
     # $example off$
