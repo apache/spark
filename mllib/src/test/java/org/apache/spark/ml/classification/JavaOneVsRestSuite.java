@@ -17,21 +17,22 @@
 
 package org.apache.spark.ml.classification;
 
+import java.io.Serializable;
+import java.util.List;
+
+import scala.collection.JavaConverters;
+
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import scala.collection.JavaConverters;
-
-import java.io.Serializable;
-import java.util.List;
-
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 
 public class JavaOneVsRestSuite implements Serializable {

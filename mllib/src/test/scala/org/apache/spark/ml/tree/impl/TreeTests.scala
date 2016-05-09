@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tree.impl
 
 import scala.collection.JavaConverters._
-
 import org.apache.spark.{SparkContext, SparkFunSuite}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
@@ -26,7 +25,7 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SQLContext, SparkSession}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
@@ -42,8 +41,9 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
-    val spark = SQLContext.getOrCreate(data.sparkContext)
+    val spark = new SparkSession(data.sparkContext)
     import spark.implicits._
+
     val df = data.toDF()
     val numFeatures = data.first().features.size
     val featuresAttributes = Range(0, numFeatures).map { feature =>
