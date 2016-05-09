@@ -190,6 +190,18 @@ or
 Java 8 tests are automatically enabled when a Java 8 JDK is detected.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
+# Running Docker based Integration Test Suites
+
+Running only docker based integration tests and nothing else.
+
+    mvn install -DskipTests
+    mvn -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+
+or
+
+    sbt docker-integration-tests/test
+
+
 # Packaging without Hadoop Dependencies for YARN
 
 The assembly directory produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with `yarn.application.classpath`.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself.

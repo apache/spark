@@ -229,7 +229,9 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns the explained variance regression score.
         explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-        Reference: http://en.wikipedia.org/wiki/Explained_variation
+
+        .. seealso:: `Wikipedia explain variation \
+        <http://en.wikipedia.org/wiki/Explained_variation>`_
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -283,7 +285,9 @@ class LinearRegressionSummary(JavaWrapper):
     def r2(self):
         """
         Returns R^2^, the coefficient of determination.
-        Reference: http://en.wikipedia.org/wiki/Coefficient_of_determination
+
+        .. seealso:: `Wikipedia coefficient of determination \
+        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -627,7 +631,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
                             HasSeed, JavaMLWritable, JavaMLReadable, HasVarianceCol):
     """
-    `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
+    `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -782,7 +786,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
                             JavaMLWritable, JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
+    `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -890,7 +894,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
                    JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
+    `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 

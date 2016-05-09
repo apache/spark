@@ -339,9 +339,9 @@ setGeneric("join", function(x, y, ...) { standardGeneric("join") })
 # @export
 setGeneric("leftOuterJoin", function(x, y, numPartitions) { standardGeneric("leftOuterJoin") })
 
-# @rdname partitionBy
-# @export
-setGeneric("partitionBy", function(x, numPartitions, ...) { standardGeneric("partitionBy") })
+#' @rdname partitionBy
+#' @export
+setGeneric("partitionBy", function(x, ...) { standardGeneric("partitionBy") })
 
 # @rdname reduceByKey
 # @seealso groupByKey
@@ -533,7 +533,7 @@ setGeneric("mutate", function(.data, ...) {standardGeneric("mutate") })
 
 #' @rdname arrange
 #' @export
-setGeneric("orderBy", function(x, col) { standardGeneric("orderBy") })
+setGeneric("orderBy", function(x, col, ...) { standardGeneric("orderBy") })
 
 #' @rdname schema
 #' @export
@@ -733,6 +733,27 @@ setGeneric("when", function(condition, value) { standardGeneric("when") })
 #' @export
 setGeneric("otherwise", function(x, value) { standardGeneric("otherwise") })
 
+#' @rdname over
+#' @export
+setGeneric("over", function(x, window) { standardGeneric("over") })
+
+###################### WindowSpec Methods ##########################
+
+#' @rdname rowsBetween
+#' @export
+setGeneric("rowsBetween", function(x, start, end) { standardGeneric("rowsBetween") })
+
+#' @rdname rangeBetween
+#' @export
+setGeneric("rangeBetween", function(x, start, end) { standardGeneric("rangeBetween") })
+
+#' @rdname window.partitionBy
+#' @export
+setGeneric("window.partitionBy", function(col, ...) { standardGeneric("window.partitionBy") })
+
+#' @rdname window.orderBy
+#' @export
+setGeneric("window.orderBy", function(col, ...) { standardGeneric("window.orderBy") })
 
 ###################### Expression Function Methods ##########################
 

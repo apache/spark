@@ -28,7 +28,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, SimpleFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException, NoSuchPermanentFunctionException, SimpleFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
@@ -301,6 +301,15 @@ class SessionCatalog(
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
+      if (newName.database.isDefined) {
+        throw new AnalysisException(
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
+            s"name '${newName.database.get}' in the destination table")
+      }
+      if (tempTables.contains(newTableName)) {
+        throw new AnalysisException(
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination table already exists")
+      }
       val table = tempTables(oldTableName)
       tempTables.remove(oldTableName)
       tempTables.put(newTableName, table)
@@ -644,9 +653,7 @@ class SessionCatalog(
   }
 
   protected def failFunctionLookup(name: String): Nothing = {
-    throw new AnalysisException(s"Undefined function: '$name'. This function is " +
-      s"neither a registered temporary function nor " +
-      s"a permanent function registered in the database '$currentDb'.")
+    throw new NoSuchFunctionException(db = currentDb, func = name)
   }
 
   /**
@@ -709,7 +716,7 @@ class SessionCatalog(
       externalCatalog.getFunction(currentDb, name.funcName)
     } catch {
       case e: AnalysisException => failFunctionLookup(name.funcName)
-      case e: NoSuchFunctionException => failFunctionLookup(name.funcName)
+      case e: NoSuchPermanentFunctionException => failFunctionLookup(name.funcName)
     }
     loadFunctionResources(catalogFunction.resources)
     // Please note that qualifiedName is provided by the user. However,
