@@ -21,6 +21,7 @@ import java.io.{DataOutputStream, File, FileOutputStream}
 import scala.annotation.tailrec
 
 import org.apache.commons.io.FileUtils
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
@@ -29,6 +30,7 @@ import org.scalatest.{BeforeAndAfterEach, Matchers}
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
 import org.apache.spark.network.shuffle.protocol.ExecutorShuffleInfo
+import org.apache.spark.util.Utils
 
 class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAndAfterEach {
   private[yarn] var yarnConfig: YarnConfiguration = new YarnConfiguration
@@ -234,7 +236,25 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     s3.initializeApplication(app2Data)
     ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver3) should be (Some(shuffleInfo2))
     s3.stop()
-
   }
 
+  test("get correct recovery path") {
+    // Test recovery path is set outside the shuffle service, this is to simulate NM recovery
+    // enabled scenario, where recovery path will be set by yarn.
+    s1 = new YarnShuffleService
+    val recoveryPath = new Path(Utils.createTempDir().toURI)
+    s1.setRecoveryPath(recoveryPath)
+
+    s1.init(yarnConfig)
+    s1._recoveryPath should be (recoveryPath)
+    s1.stop()
+
+    // Test recovery path is set inside the shuffle service, this will be happened when NM
+    // recovery is not enabled or there's no NM recovery (Hadoop 2.5-).
+    s2 = new YarnShuffleService
+    s2.init(yarnConfig)
+    s2._recoveryPath should be
+      (new Path(yarnConfig.getTrimmedStrings("yarn.nodemanager.local-dirs")(0)))
+    s2.stop()
+  }
 }

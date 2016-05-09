@@ -75,6 +75,12 @@ public class YarnShuffleService extends AuxiliaryService {
   // The actual server that serves shuffle files
   private TransportServer shuffleServer = null;
 
+  private Configuration _conf = null;
+
+  // The recovery path used to shuffle service recovery
+  @VisibleForTesting
+  Path _recoveryPath = null;
+
   // Handles registering executors and opening shuffle blocks
   @VisibleForTesting
   ExternalShuffleBlockHandler blockHandler;
@@ -112,6 +118,7 @@ public class YarnShuffleService extends AuxiliaryService {
    */
   @Override
   protected void serviceInit(Configuration conf) {
+    _conf = conf;
 
     // In case this NM was killed while there were running spark applications, we need to restore
     // lost state for the existing executors.  We look for an existing file in the NM's local dirs.
@@ -119,7 +126,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // an application was stopped while the NM was down, we expect yarn to call stopApplication()
     // when it comes back
     registeredExecutorFile =
-      findRegisteredExecutorFile(conf.getTrimmedStrings("yarn.nodemanager.local-dirs"));
+      new File(getRecoveryPath().toUri().getPath(), "registeredExecutors.ldb");
 
     TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
@@ -190,16 +197,6 @@ public class YarnShuffleService extends AuxiliaryService {
     logger.info("Stopping container {}", containerId);
   }
 
-  private File findRegisteredExecutorFile(String[] localDirs) {
-    for (String dir: localDirs) {
-      File f = new File(new Path(dir).toUri().getPath(), "registeredExecutors.ldb");
-      if (f.exists()) {
-        return f;
-      }
-    }
-    return new File(new Path(localDirs[0]).toUri().getPath(), "registeredExecutors.ldb");
-  }
-
   /**
    * Close the shuffle server to clean up any associated state.
    */
@@ -221,5 +218,44 @@ public class YarnShuffleService extends AuxiliaryService {
   @Override
   public ByteBuffer getMetaData() {
     return ByteBuffer.allocate(0);
+  }
+
+  /**
+   * Set the recovery path for shuffle service recovery when NM is restarted. The method will be
+   * overrode and called when Hadoop version is 2.5+ and NM recovery is enabled, otherwise we
+   * have to manually call this to set our own recovery path.
+   */
+  public void setRecoveryPath(Path recoveryPath) {
+    _recoveryPath = recoveryPath;
+  }
+
+  /**
+   * Get the recovery path, this will override the default one to get the our own maintained
+   * recovery path.
+   */
+  protected Path getRecoveryPath() {
+    String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
+    for (String dir : localDirs) {
+      File f = new File(new Path(dir).toUri().getPath(), "registeredExecutors.ldb");
+      if (f.exists()) {
+        if (_recoveryPath == null) {
+          // If NM recovery is not enabled, we should specify the recovery path using NM local
+          // dirs, which is compatible with the old code.
+          _recoveryPath = new Path(dir);
+        } else {
+          // If NM recovery is enabled and recovery file is existed in old NM local dirs, which
+          // means old version of Spark already generated the recovery file, we should copy the
+          // old file in to a new recovery path for the compatibility.
+          f.renameTo(new File(_recoveryPath.toUri().getPath(), "registeredExecutors.ldb"));
+        }
+        break;
+      }
+    }
+
+    if (_recoveryPath == null) {
+      _recoveryPath = new Path(localDirs[0]);
+    }
+
+    return _recoveryPath;
   }
 }
