@@ -261,8 +261,8 @@ class Params(Identifiable):
         """
         if self._params is None:
             param_attrs = list(filter(lambda attr: isinstance(attr, Param),
-                                       [getattr(self, x) for x in dir(self) if x != "params" and
-                                        not isinstance(getattr(type(self), x, None), property)]))
+                                      [getattr(self, x) for x in dir(self) if x != "params" and
+                                       not isinstance(getattr(type(self), x, None), property)]))
             self._params = sorted(param_attrs, key=lambda x: x.name)
         return self._params
 
