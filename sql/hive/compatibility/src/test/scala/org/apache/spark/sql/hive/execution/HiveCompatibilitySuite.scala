@@ -62,15 +62,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Ensures that the plans generation use metastore relation and not OrcRelation
     // Was done because SqlBuilder does not work with plans having logical relation
     TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, false)
-
-    // The following settings are used for generating golden files with Hive.
-    val testTempDir = Utils.createTempDir()
-    TestHive.sql("set hive.plan.serialization.format=kryo")
-    // Explicitly set fs to local fs.
-    TestHive.sql(s"set fs.default.name=file://$testTempDir/")
-    // Ask Hive to run jobs in-process as a single map and reduce task.
-    TestHive.sql("set mapred.job.tracker=local")
-
     RuleExecutor.resetTime()
   }
 
