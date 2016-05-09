@@ -260,9 +260,10 @@ class Params(Identifiable):
         :py:class:`Param`.
         """
         if self._params is None:
-            self._params = list(filter(lambda attr: isinstance(attr, Param),
+            param_attrs = list(filter(lambda attr: isinstance(attr, Param),
                                        [getattr(self, x) for x in dir(self) if x != "params" and
                                         not isinstance(getattr(type(self), x, None), property)]))
+            self._params = sorted(param_attrs, key=lambda x: x.name)
         return self._params
 
     @since("1.4.0")

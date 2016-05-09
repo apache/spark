@@ -382,7 +382,7 @@ class FeatureTests(PySparkTestCase):
             (DenseVector([0.0, 1.0]),),
             (DenseVector([3.0, 0.2]),)], ["tf"])
         idf0 = IDF(inputCol="tf")
-        self.assertListEqual(idf0.params, [idf0.inputCol, idf0.outputCol, idf0.minDocFreq])
+        self.assertListEqual(idf0.params, [idf0.inputCol, idf0.minDocFreq, idf0.outputCol])
         idf0m = idf0.fit(dataset, {idf0.outputCol: "idf"})
         self.assertEqual(idf0m.uid, idf0.uid,
                          "Model should inherit the UID from its parent estimator.")
