@@ -82,6 +82,8 @@ trait ObjectConsumer extends UnaryNode {
 
 /**
  * Takes the object from child and projects it as new attribute.
+ * This logical plan is just used to preserve expr id temporarily and will be removed before
+ * the end of optimization phase.
  */
 case class ObjectProject(
     outputObjAttr: Attribute,

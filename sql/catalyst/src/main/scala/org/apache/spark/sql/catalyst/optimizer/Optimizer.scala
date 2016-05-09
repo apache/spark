@@ -21,7 +21,7 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
+import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
@@ -102,7 +102,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCasts,
       SimplifyCaseConversionExpressions,
       RewriteCorrelatedScalarSubquery,
-      EliminateSerialization) ::
+      EliminateSerialization,
+      RemoveExtraProjectForSerialization) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -156,6 +157,28 @@ object SamplePushDown extends Rule[LogicalPlan] {
 }
 
 /**
+ * Removes extra Project added in EliminateSerialization rule.
+ */
+object RemoveExtraProjectForSerialization extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val objectProject = plan.find(_.isInstanceOf[ObjectProject]).map { case o: ObjectProject =>
+      val replaceFrom = o.outputObjAttr
+      val replaceTo = o.child.output.head
+      plan.transformAllExpressions {
+        case a: Attribute if a.equals(replaceFrom) => replaceTo
+      }.transform {
+        case op: ObjectProject if o == op => op.child
+      }
+    }
+    if (objectProject.isDefined) {
+      objectProject.get
+    } else {
+      plan
+    }
+  }
+}
+
+/**
  * Removes cases where we are unnecessarily going between the object and serialized (InternalRow)
  * representation of data item.  For example back to back map operations.
  */
@@ -163,22 +186,9 @@ object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
-      val outputObject = if (d.outputObjectType.isInstanceOf[ObjectType]) {
-        ScalaReflection.dataTypeFor(d.outputObjectType.asInstanceOf[ObjectType].cls) match {
-          case o: ObjectType => true
-          case _ => false
-        }
-      } else {
-        false
-      }
-
-      if (outputObject) {
-        ObjectProject(d.output.head, s.child)
-      } else {
-        // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
-        val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
-        Project(objAttr :: Nil, s.child)
-      }
+      // Adds an extra ObjectProject here, to preserve the output expr id of `DeserializeToObject`.
+      // We will remove it later.
+      ObjectProject(d.output.head, s.child)
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
