@@ -519,7 +519,8 @@ private[hive] class TestHiveSessionState(
   override lazy val conf: SQLConf = {
     new SQLConf {
       clear()
-      override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE, false)
+      // Hive-backed catalog is case incensitive
+      override def caseSensitiveAnalysis: Boolean = false
       override def clear(): Unit = {
         super.clear()
         TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }

@@ -17,14 +17,12 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
 /**
@@ -56,6 +54,11 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       functionRegistry,
       conf,
       newHadoopConf())
+  }
+
+  override lazy val conf: SQLConf = new SQLConf {
+    // Hive-backed catalog is case incensitive
+    override def caseSensitiveAnalysis: Boolean = false
   }
 
   /**

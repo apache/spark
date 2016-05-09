@@ -21,6 +21,7 @@ import java.sql.{Date, Timestamp}
 
 import org.apache.hadoop.fs.Path
 
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
@@ -29,6 +30,7 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -892,21 +894,26 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Row(0, "1") :: Row(22, "2") :: Row(0, "3") :: Row(44, "4") :: Row(0, "5") :: Nil)
   }
 
-  test("SPARK-7269 Check analysis failed in case in-sensitive") {
-    Seq(1, 2, 3).map { i =>
-      (i.toString, i.toString)
-    }.toDF("key", "value").registerTempTable("df_analysis")
-    sql("SELECT kEy from df_analysis group by key").collect()
-    sql("SELECT kEy+3 from df_analysis group by key+3").collect()
-    sql("SELECT kEy+3, a.kEy, A.kEy from df_analysis A group by key").collect()
-    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by cast(key+1 as int)").collect()
-    sql("SELECT cast(kEy+1 as Int) from df_analysis A group by key+1").collect()
-    sql("SELECT 2 from df_analysis A group by key+1").collect()
-    intercept[AnalysisException] {
-      sql("SELECT kEy+1 from df_analysis group by key+3")
-    }
-    intercept[AnalysisException] {
-      sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
+  test("Check analysis failed due to case in-sensitive in Hive") {
+    assert(sparkSession.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "hive")
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        Seq(1, 2, 3).map { i =>
+          (i.toString, i.toString)
+        }.toDF("key", "value").registerTempTable("df_analysis")
+        sql("SELECT kEy from df_analysis group by key").collect()
+        sql("SELECT kEy+3 from df_analysis group by key+3").collect()
+        sql("SELECT kEy+3, a.kEy, A.kEy from df_analysis A group by key").collect()
+        sql("SELECT cast(kEy+1 as Int) from df_analysis A group by cast(key+1 as int)").collect()
+        sql("SELECT cast(kEy+1 as Int) from df_analysis A group by key+1").collect()
+        sql("SELECT 2 from df_analysis A group by key+1").collect()
+        intercept[AnalysisException] {
+          sql("SELECT kEy+1 from df_analysis group by key+3")
+        }
+        intercept[AnalysisException] {
+          sql("SELECT cast(key+2 as Int) from df_analysis A group by cast(key+1 as int)")
+        }
+      }
     }
   }
 
