@@ -229,7 +229,7 @@ private[hive] trait HiveClient {
 
   /** Return an existing function in the database, assuming it exists. */
   final def getFunction(db: String, name: String): CatalogFunction = {
-    getFunctionOption(db, name).getOrElse(throw new NoSuchFunctionException(db, name))
+    getFunctionOption(db, name).getOrElse(throw new NoSuchPermanentFunctionException(db, name))
   }
 
   /** Return an existing function in the database, or None if it doesn't exist. */

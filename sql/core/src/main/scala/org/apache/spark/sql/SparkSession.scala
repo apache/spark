@@ -18,9 +18,7 @@
 package org.apache.spark.sql
 
 import java.beans.Introspector
-import java.util.Properties
 
-import scala.collection.immutable
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -29,7 +27,8 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
-import org.apache.spark.internal.config.{CATALOG_IMPLEMENTATION, ConfigEntry}
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
@@ -40,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -48,14 +47,24 @@ import org.apache.spark.util.Utils
 
 
 /**
- * The entry point to Spark execution.
+ * The entry point to programming Spark with the Dataset and DataFrame API.
+ *
+ * To create a SparkSession, use the following builder pattern:
+ *
+ * {{{
+ *   SparkSession.builder()
+ *     .master("local")
+ *     .appName("Word Count")
+ *     .config("spark.some.config.option", "some-value").
+ *     .getOrCreate()
+ * }}}
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
-  extends Serializable { self =>
+  extends Serializable with Logging { self =>
 
-  def this(sc: SparkContext) {
+  private[sql] def this(sc: SparkContext) {
     this(sc, None)
   }
 
@@ -63,6 +72,19 @@ class SparkSession private(
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
+
+  {
+    val defaultWarehousePath =
+      SQLConf.WAREHOUSE_PATH
+        .defaultValueString
+        .replace("${system:user.dir}", System.getProperty("user.dir"))
+    val warehousePath = sparkContext.conf.get(
+      SQLConf.WAREHOUSE_PATH.key,
+      defaultWarehousePath)
+    sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
+    sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
+    logInfo(s"Setting warehouse location to $warehousePath")
+  }
 
   /**
    * State shared across sessions, including the [[SparkContext]], cached data, listener,
@@ -93,14 +115,17 @@ class SparkSession private(
   @transient
   private var _wrapped: SQLContext = _
 
-  protected[sql] def wrapped: SQLContext = {
+  @transient
+  private val _wrappedLock = new Object
+
+  protected[sql] def wrapped: SQLContext = _wrappedLock.synchronized {
     if (_wrapped == null) {
       _wrapped = new SQLContext(self, isRootContext = false)
     }
     _wrapped
   }
 
-  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = {
+  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = _wrappedLock.synchronized {
     _wrapped = sqlContext
   }
 
@@ -552,7 +577,7 @@ class SparkSession private(
    * common Scala objects into [[DataFrame]]s.
    *
    * {{{
-   *   val sparkSession = new SparkSession(sc)
+   *   val sparkSession = SparkSession.builder.getOrCreate()
    *   import sparkSession.implicits._
    * }}}
    *
@@ -564,6 +589,15 @@ class SparkSession private(
     protected override def _sqlContext: SQLContext = wrapped
   }
   // scalastyle:on
+
+  /**
+   * Stop the underlying [[SparkContext]].
+   *
+   * @since 2.0.0
+   */
+  def stop(): Unit = {
+    sparkContext.stop()
+  }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
     sessionState.sqlParser.parsePlan(sql)
@@ -621,6 +655,122 @@ class SparkSession private(
 
 object SparkSession {
 
+  /**
+   * Builder for [[SparkSession]].
+   */
+  class Builder {
+
+    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+
+    /**
+     * Sets a name for the application, which will be shown in the Spark web UI.
+     *
+     * @since 2.0.0
+     */
+    def appName(name: String): Builder = config("spark.app.name", name)
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: String): Builder = synchronized {
+      options += key -> value
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: Long): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: Double): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: Boolean): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a list of config options based on the given [[SparkConf]].
+     *
+     * @since 2.0.0
+     */
+    def config(conf: SparkConf): Builder = synchronized {
+      conf.getAll.foreach { case (k, v) => options += k -> v }
+      this
+    }
+
+    /**
+     * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to
+     * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
+     *
+     * @since 2.0.0
+     */
+    def master(master: String): Builder = config("spark.master", master)
+
+    /**
+     * Enables Hive support, including connectivity to a persistent Hive metastore, support for
+     * Hive serdes, and Hive user-defined functions.
+     *
+     * @since 2.0.0
+     */
+    def enableHiveSupport(): Builder = synchronized {
+      if (hiveClassesArePresent) {
+        config(CATALOG_IMPLEMENTATION.key, "hive")
+      } else {
+        throw new IllegalArgumentException(
+          "Unable to instantiate SparkSession with Hive support because " +
+            "Hive classes are not found.")
+      }
+    }
+
+    /**
+     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new one
+     * based on the options set in this builder.
+     *
+     * @since 2.0.0
+     */
+    def getOrCreate(): SparkSession = synchronized {
+      // Step 1. Create a SparkConf
+      // Step 2. Get a SparkContext
+      // Step 3. Get a SparkSession
+      val sparkConf = new SparkConf()
+      options.foreach { case (k, v) => sparkConf.set(k, v) }
+      val sparkContext = SparkContext.getOrCreate(sparkConf)
+
+      SQLContext.getOrCreate(sparkContext).sparkSession
+    }
+  }
+
+  /**
+   * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
+   * @since 2.0.0
+   */
+  def builder: Builder = new Builder
+
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
 
@@ -666,19 +816,6 @@ object SparkSession {
       true
     } catch {
       case _: ClassNotFoundException | _: NoClassDefFoundError => false
-    }
-  }
-
-  /**
-   * Create a new [[SparkSession]] with a catalog backed by Hive.
-   */
-  def withHiveSupport(sc: SparkContext): SparkSession = {
-    if (hiveClassesArePresent) {
-      sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-      new SparkSession(sc)
-    } else {
-      throw new IllegalArgumentException(
-        "Unable to instantiate SparkSession with Hive support because Hive classes are not found.")
     }
   }
 

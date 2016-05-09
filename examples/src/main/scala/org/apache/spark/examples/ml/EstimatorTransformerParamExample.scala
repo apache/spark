@@ -18,25 +18,25 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.sql.Row
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object EstimatorTransformerParamExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("EstimatorTransformerParamExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("EstimatorTransformerParamExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training data from a list of (label, features) tuples.
-    val training = sqlContext.createDataFrame(Seq(
+    val training = spark.createDataFrame(Seq(
       (1.0, Vectors.dense(0.0, 1.1, 0.1)),
       (0.0, Vectors.dense(2.0, 1.0, -1.0)),
       (0.0, Vectors.dense(2.0, 1.3, 1.0)),
@@ -76,7 +76,7 @@ object EstimatorTransformerParamExample {
     println("Model 2 was fit using parameters: " + model2.parent.extractParamMap)
 
     // Prepare test data.
-    val test = sqlContext.createDataFrame(Seq(
+    val test = spark.createDataFrame(Seq(
       (1.0, Vectors.dense(-1.0, 1.5, 1.3)),
       (0.0, Vectors.dense(3.0, 2.0, -0.1)),
       (1.0, Vectors.dense(0.0, 2.2, -1.5))
@@ -94,7 +94,7 @@ object EstimatorTransformerParamExample {
       }
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

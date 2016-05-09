@@ -22,9 +22,6 @@ import java.nio.charset.UnsupportedCharsetException
 import java.sql.{Date, Timestamp}
 import java.text.SimpleDateFormat
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
@@ -46,6 +43,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val disableCommentsFile = "disable_comments.csv"
   private val boolFile = "bool.csv"
   private val simpleSparseFile = "simple_sparse.csv"
+  private val numbersFile = "numbers.csv"
   private val datesFile = "dates.csv"
   private val unescapedQuotesFile = "unescaped-quotes.csv"
 
@@ -534,5 +532,27 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
+  test("nulls, NaNs and Infinity values can be parsed") {
+    val numbers = sqlContext
+      .read
+      .format("csv")
+      .schema(StructType(List(
+        StructField("int", IntegerType, true),
+        StructField("long", LongType, true),
+        StructField("float", FloatType, true),
+        StructField("double", DoubleType, true)
+      )))
+      .options(Map(
+        "header" -> "true",
+        "mode" -> "DROPMALFORMED",
+        "nullValue" -> "--",
+        "nanValue" -> "NAN",
+        "negativeInf" -> "-INF",
+        "positiveInf" -> "INF"))
+      .load(testFile(numbersFile))
+
+    assert(numbers.count() == 8)
   }
 }

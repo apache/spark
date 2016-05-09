@@ -54,7 +54,8 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       sparkSession,
       functionResourceLoader,
       functionRegistry,
-      conf)
+      conf,
+      newHadoopConf())
   }
 
   /**

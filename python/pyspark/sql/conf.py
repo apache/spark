@@ -23,7 +23,6 @@ class RuntimeConfig(object):
     """User-facing configuration API, accessible through `SparkSession.conf`.
 
     Options set here are automatically propagated to the Hadoop configuration during I/O.
-    This a thin wrapper around its Scala implementation org.apache.spark.sql.RuntimeConfig.
     """
 
     def __init__(self, jconf):

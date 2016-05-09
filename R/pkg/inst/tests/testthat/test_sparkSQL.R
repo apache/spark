@@ -1196,9 +1196,9 @@ test_that("date functions on a DataFrame", {
                c(as.POSIXlt("2012-12-13 21:34:00 UTC"), as.POSIXlt("2014-12-15 10:24:34 UTC")))
   expect_equal(collect(select(df2, to_utc_timestamp(df2$b, "JST")))[, 1],
                c(as.POSIXlt("2012-12-13 03:34:00 UTC"), as.POSIXlt("2014-12-14 16:24:34 UTC")))
-  expect_more_than(collect(select(df2, unix_timestamp()))[1, 1], 0)
-  expect_more_than(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
-  expect_more_than(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp()))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp(df2$b)))[1, 1], 0)
+  expect_gt(collect(select(df2, unix_timestamp(lit("2015-01-01"), "yyyy-MM-dd")))[1, 1], 0)
 
   l3 <- list(list(a = 1000), list(a = -1000))
   df3 <- createDataFrame(sqlContext, l3)
@@ -1502,7 +1502,6 @@ test_that("toJSON() returns an RDD of the correct values", {
 
 test_that("showDF()", {
   df <- read.json(sqlContext, jsonPath)
-  s <- capture.output(showDF(df))
   expected <- paste("+----+-------+\n",
                     "| age|   name|\n",
                     "+----+-------+\n",
@@ -1510,7 +1509,7 @@ test_that("showDF()", {
                     "|  30|   Andy|\n",
                     "|  19| Justin|\n",
                     "+----+-------+\n", sep = "")
-  expect_output(s, expected)
+  expect_output(showDF(df), expected)
 })
 
 test_that("isLocal()", {
@@ -1896,7 +1895,7 @@ test_that("Method as.data.frame as a synonym for collect()", {
   expect_equal(as.data.frame(irisDF2), collect(irisDF2))
 
   # Make sure as.data.frame in the R base package is not covered
-  expect_that(as.data.frame(c(1, 2)), not(throws_error()))
+  expect_error(as.data.frame(c(1, 2)), NA)
 })
 
 test_that("attach() on a DataFrame", {
@@ -2081,6 +2080,78 @@ test_that("dapply() on a DataFrame", {
   result <- collect(df2)
   expected <- expected[, c("a", "b", "c")]
   expect_identical(expected, result)
+})
+
+test_that("repartition by columns on DataFrame", {
+  df <- createDataFrame (
+    sqlContext,
+    list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
+    c("a", "b", "c", "d"))
+
+  # no column and number of partitions specified
+  retError <- tryCatch(repartition(df), error = function(e) e)
+  expect_equal(grepl
+    ("Please, specify the number of partitions and/or a column\\(s\\)", retError), TRUE)
+
+  # repartition by column and number of partitions
+  actual <- repartition(df, 3L, col = df$"a")
+
+  # since we cannot access the number of partitions from dataframe, checking
+  # that at least the dimensions are identical
+  expect_identical(dim(df), dim(actual))
+
+  # repartition by number of partitions
+  actual <- repartition(df, 13L)
+  expect_identical(dim(df), dim(actual))
+
+  # a test case with a column and dapply
+  schema <-  structType(structField("a", "integer"), structField("avg", "double"))
+  df <- repartition(df, col = df$"a")
+  df1 <- dapply(
+    df,
+    function(x) {
+      y <- (data.frame(x$a[1], mean(x$b)))
+    },
+    schema)
+
+  # Number of partitions is equal to 2
+  expect_equal(nrow(df1), 2)
+})
+
+test_that("Window functions on a DataFrame", {
+  ssc <- callJMethod(sc, "sc")
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+  },
+  error = function(err) {
+    skip("Hive is not build with SparkSQL, skipped")
+  })
+
+  df <- createDataFrame(hiveCtx,
+                        list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
+                        schema = c("key", "value"))
+  ws <- orderBy(window.partitionBy("key"), "value")
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expected <- data.frame(key = c(1L, NA, 2L, NA),
+                       value = c("1", NA, "2", NA),
+                       stringsAsFactors = FALSE)
+  expect_equal(result, expected)
+
+  ws <- orderBy(window.partitionBy(df$key), df$value)
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy("value"), "key")
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy(df$value), df$key)
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
 })
 
 unlink(parquetPath)

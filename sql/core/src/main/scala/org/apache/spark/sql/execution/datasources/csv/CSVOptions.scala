@@ -90,6 +90,12 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
+  val nanValue = parameters.getOrElse("nanValue", "NaN")
+
+  val positiveInf = parameters.getOrElse("positiveInf", "Inf")
+  val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
+
+
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
@@ -110,4 +116,13 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
   val isCommentSet = this.comment != '\u0000'
 
   val rowSeparator = "\n"
+}
+
+object CSVOptions {
+
+  def apply(): CSVOptions = new CSVOptions(Map.empty)
+
+  def apply(paramName: String, paramValue: String): CSVOptions = {
+    new CSVOptions(Map(paramName -> paramValue))
+  }
 }

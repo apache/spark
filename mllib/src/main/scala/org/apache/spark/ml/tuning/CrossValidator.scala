@@ -30,7 +30,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.HasSeed
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -39,7 +38,7 @@ import org.apache.spark.sql.types.StructType
 /**
  * Params for [[CrossValidator]] and [[CrossValidatorModel]].
  */
-private[ml] trait CrossValidatorParams extends ValidatorParams with HasSeed {
+private[ml] trait CrossValidatorParams extends ValidatorParams {
   /**
    * Param for number of folds for cross validation.  Must be >= 2.
    * Default: 3
@@ -179,11 +178,13 @@ object CrossValidator extends MLReadable[CrossValidator] {
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
+      val seed = (metadata.params \ "seed").extract[Long]
       new CrossValidator(metadata.uid)
         .setEstimator(estimator)
         .setEvaluator(evaluator)
         .setEstimatorParamMaps(estimatorParamMaps)
         .setNumFolds(numFolds)
+        .setSeed(seed)
     }
   }
 }
@@ -267,14 +268,16 @@ object CrossValidatorModel extends MLReadable[CrossValidatorModel] {
       val (metadata, estimator, evaluator, estimatorParamMaps) =
         ValidatorParams.loadImpl(path, sc, className)
       val numFolds = (metadata.params \ "numFolds").extract[Int]
+      val seed = (metadata.params \ "seed").extract[Long]
       val bestModelPath = new Path(path, "bestModel").toString
       val bestModel = DefaultParamsReader.loadParamsInstance[Model[_]](bestModelPath, sc)
       val avgMetrics = (metadata.metadata \ "avgMetrics").extract[Seq[Double]].toArray
-      val cv = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics)
-      cv.set(cv.estimator, estimator)
-        .set(cv.evaluator, evaluator)
-        .set(cv.estimatorParamMaps, estimatorParamMaps)
-        .set(cv.numFolds, numFolds)
+      val model = new CrossValidatorModel(metadata.uid, bestModel, avgMetrics)
+      model.set(model.estimator, estimator)
+        .set(model.evaluator, evaluator)
+        .set(model.estimatorParamMaps, estimatorParamMaps)
+        .set(model.numFolds, numFolds)
+        .set(model.seed, seed)
     }
   }
 }
