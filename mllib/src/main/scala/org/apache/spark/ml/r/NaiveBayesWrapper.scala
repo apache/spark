@@ -56,7 +56,7 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
   val PREDICTED_LABEL_INDEX_COL = "pred_label_idx"
   val PREDICTED_LABEL_COL = "prediction"
 
-  def fit(formula: String, data: DataFrame, laplace: Double): NaiveBayesWrapper = {
+  def fit(formula: String, data: DataFrame, smoothing: Double): NaiveBayesWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
       .fit(data)
@@ -70,7 +70,7 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
     val features = featureAttrs.map(_.name.get)
     // assemble and fit the pipeline
     val naiveBayes = new NaiveBayes()
-      .setSmoothing(laplace)
+      .setSmoothing(smoothing)
       .setModelType("bernoulli")
       .setPredictionCol(PREDICTED_LABEL_INDEX_COL)
     val idxToStr = new IndexToString()
