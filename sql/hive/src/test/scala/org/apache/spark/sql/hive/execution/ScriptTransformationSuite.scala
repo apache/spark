@@ -110,7 +110,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
     assert(e.getMessage().contains("intentional exception"))
   }
 
-  test("script transformation should fail when user specifies a bad script command") {
+  test("SPARK-14400 script transformation should fail for bad script command") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
 
     val e = intercept[SparkException] {
@@ -120,8 +120,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
           script = "some_non_existent_command",
           output = Seq(AttributeReference("a", StringType)()),
           child = rowsDf.queryExecution.sparkPlan,
-          ioschema = serdeIOSchema
-        )(hiveContext)
+          ioschema = serdeIOSchema)
       SparkPlanTest.executePlan(plan, hiveContext)
     }
     assert(e.getMessage.contains("Subprocess exited with status"))
