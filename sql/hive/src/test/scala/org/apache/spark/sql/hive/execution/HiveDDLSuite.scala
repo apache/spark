@@ -536,7 +536,7 @@ class HiveDDLSuite
     withTable("t1") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        sqlContext.range(1).write.parquet(path)
+        spark.range(1).write.parquet(path)
         sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
 
         val desc = sql("DESC FORMATTED t1").collect().toSeq
@@ -548,7 +548,7 @@ class HiveDDLSuite
 
   test("desc table for data source table - partitioned bucketed table") {
     withTable("t1") {
-      sqlContext
+      spark
         .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
         .bucketBy(2, "b").sortBy("c").partitionBy("d")
         .saveAsTable("t1")
