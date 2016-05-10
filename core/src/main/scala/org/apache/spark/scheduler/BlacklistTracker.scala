@@ -22,8 +22,6 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
-import org.apache.spark.Success
-import org.apache.spark.TaskEndReason
 import org.apache.spark.util.Clock
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.ThreadUtils
@@ -110,33 +108,34 @@ private[spark] class BlacklistTracker(
     }
   }
 
-  def updateFailedExecutors(
-      stageId: Int, partition: Int,
-      info: TaskInfo,
-      reason: TaskEndReason) : Unit = synchronized {
+  def taskSucceeded(
+      stageId: Int,
+      partition: Int,
+      info: TaskInfo): Unit = synchronized {
+    // when an executor successfully completes any task, we remove it from the blacklist
+    // for *all* tasks
+    removeFailedExecutorsForTaskId(info.executorId, stageId, partition)
+  }
 
+  def taskFailed(
+      stageId: Int,
+      partition: Int,
+      info: TaskInfo): Unit = synchronized {
+    // If the task failed, update latest failure time and failedTaskIds
     val atomTask = StageAndPartition(stageId, partition)
-    reason match {
-      // If the task succeeded, remove related record from executorIdToFailureStatus
-      case Success =>
-        removeFailedExecutorsForTaskId(info.executorId, stageId, partition)
-
-      // If the task failed, update latest failure time and failedTaskIds
-      case _ =>
-        val executorId = info.executorId
-        executorIdToFailureStatus.get(executorId) match {
-          case Some(failureStatus) =>
-            failureStatus.updatedTime = clock.getTimeMillis()
-            val failedTimes = failureStatus.numFailuresPerTask.getOrElse(atomTask, 0) + 1
-            failureStatus.numFailuresPerTask(atomTask) = failedTimes
-          case None =>
-            val failedTasks = mutable.HashMap(atomTask -> 1)
-            val failureStatus = new FailureStatus(
-              clock.getTimeMillis(), info.host, failedTasks)
-            executorIdToFailureStatus(executorId) = failureStatus
-        }
-        invalidateCache()
+    val executorId = info.executorId
+    executorIdToFailureStatus.get(executorId) match {
+      case Some(failureStatus) =>
+        failureStatus.updatedTime = clock.getTimeMillis()
+        val failedTimes = failureStatus.numFailuresPerTask.getOrElse(atomTask, 0) + 1
+        failureStatus.numFailuresPerTask(atomTask) = failedTimes
+      case None =>
+        val failedTasks = mutable.HashMap(atomTask -> 1)
+        val failureStatus = new FailureStatus(
+          clock.getTimeMillis(), info.host, failedTasks)
+        executorIdToFailureStatus(executorId) = failureStatus
     }
+    invalidateCache()
   }
 
   /** remove the executorId from executorIdToFailureStatus */

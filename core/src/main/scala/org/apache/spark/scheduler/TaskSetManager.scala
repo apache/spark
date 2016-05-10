@@ -616,7 +616,7 @@ private[spark] class TaskSetManager(
     }
 
     blacklistTracker.foreach{
-      _.updateFailedExecutors(stageId, tasks(index).partitionId, info, Success)
+      _.taskSucceeded(stageId, tasks(index).partitionId, info)
     }
     maybeFinishTaskSet()
   }
@@ -702,7 +702,7 @@ private[spark] class TaskSetManager(
 
     // always add to failed executors
     blacklistTracker.foreach {
-      _.updateFailedExecutors(stageId, tasks(index).partitionId, info, reason)
+      _.taskFailed(stageId, tasks(index).partitionId, info)
     }
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
