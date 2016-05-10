@@ -198,7 +198,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
                        """metric name in evaluation - one of:
-                       rmse - default root mean squared error
+                       rmse - root mean squared error (default)
                        mse - mean squared error
                        r2 - r^2 metric
                        mae - mean absolute error.""",
