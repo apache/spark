@@ -18,7 +18,6 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
-import java.util.UUID
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -441,6 +440,18 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       intercept[AnalysisException] {
         createFileStream("parquet", src.getCanonicalPath)
       }
+    }
+  }
+
+  test("throws an exception when the given path is not a directory.") {
+    withTempDir { src =>
+      val e = intercept[IllegalArgumentException] {
+        val fileName = s"${src.getCanonicalPath}/tmp1.txt"
+        stringToFile(new File(fileName), "a\nb\nc")
+        val textStream = createFileStream("text", fileName)
+        testStream(textStream.toDF())(StopStream)
+      }
+      assert("'path' must be a directory" === e.getMessage)
     }
   }
 
