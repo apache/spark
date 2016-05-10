@@ -85,7 +85,7 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
  * (but do NOT actually execute it).
  *
  * {{{
- *   EXPLAIN (EXTENDED|CODEGEN) SELECT * FROM ...
+ *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
  * }}}
  *
  * @param logicalPlan plan to explain
