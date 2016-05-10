@@ -61,7 +61,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   @volatile private[this] var myMemoryThreshold = initialMemoryThreshold
 
   // Number of elements read from input since last spill
-  @volatile private[this] var _elementsRead = 0L
+  private[this] var _elementsRead = 0L
 
   // Number of bytes spilled in total
   @volatile private[this] var _memoryBytesSpilled = 0L
@@ -111,7 +111,6 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
       if (!isSpilled) {
         0L
       } else {
-        _elementsRead = 0
         val freeMemory = myMemoryThreshold - initialMemoryThreshold
         _memoryBytesSpilled += freeMemory
         releaseMemory()
