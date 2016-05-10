@@ -35,7 +35,7 @@ class DDLCommandSuite extends PlanTest {
       parser.parsePlan(sql)
     }
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
-    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p)) }
+    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p.toLowerCase)) }
   }
 
   test("create database") {
@@ -208,7 +208,9 @@ class DDLCommandSuite extends PlanTest {
   }
 
   test("create external table - location must be specified") {
-    assertUnsupported("CREATE EXTERNAL TABLE my_tab")
+    assertUnsupported(
+      sql = "CREATE EXTERNAL TABLE my_tab",
+      containsThesePhrases = Seq("create external table", "location"))
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
     parser.parsePlan(query) match {
       case ct: CreateTable =>
