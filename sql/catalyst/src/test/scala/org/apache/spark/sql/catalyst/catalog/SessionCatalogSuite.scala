@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.catalog
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{AlreadyExistTableException, NoSuchDatabaseException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Range, SubqueryAlias}
 
@@ -189,7 +189,7 @@ class SessionCatalogSuite extends SparkFunSuite {
       catalog.createTable(newTable("tbl1", "does_not_exist"), ignoreIfExists = true)
     }
     // Table already exists
-    intercept[AlreadyExistTableException] {
+    intercept[TableAlreadyExistsException] {
       catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = false)
     }
     catalog.createTable(newTable("tbl1", "db2"), ignoreIfExists = true)
@@ -283,7 +283,7 @@ class SessionCatalogSuite extends SparkFunSuite {
         TableIdentifier("tblone", Some("db2")), TableIdentifier("tblones", Some("db1")))
     }
     // The new table already exists
-    intercept[AlreadyExistTableException] {
+    intercept[TableAlreadyExistsException] {
       sessionCatalog.renameTable(
         TableIdentifier("tblone", Some("db2")), TableIdentifier("table_two", Some("db2")))
     }

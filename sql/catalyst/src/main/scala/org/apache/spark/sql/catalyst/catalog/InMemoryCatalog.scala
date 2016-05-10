@@ -67,8 +67,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
 
   private def requireFunctionNotExists(db: String, funcName: String): Unit = {
     if (functionExists(db, funcName)) {
-      throw new AnalysisException(
-        s"Function already exists: '$funcName' exists in database '$db'")
+      throw new FunctionAlreadyExistsException(db = db, func = funcName)
     }
   }
 
@@ -80,8 +79,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
 
   private def requireTableNotExists(db: String, table: String): Unit = {
     if (tableExists(db, table)) {
-      throw new AnalysisException(
-        s"Table or view exists: '$table' exists in database '$db'")
+      throw new TableAlreadyExistsException(db = db, table = table)
     }
   }
 
@@ -102,7 +100,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       specs: Seq[TablePartitionSpec]): Unit = {
     specs foreach { s =>
       if (partitionExists(db, table, s)) {
-        throw new AnalysisException(
+        throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
           s"Partition exists: database '$db' table '$table' already contains: '$s'")
       }
     }
@@ -119,7 +117,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       ignoreIfExists: Boolean): Unit = synchronized {
     if (catalog.contains(dbDefinition.name)) {
       if (!ignoreIfExists) {
-        throw new AlreadyExistDatabaseException(dbDefinition.name)
+        throw new DatabaseAlreadyExistsException(dbDefinition.name)
       }
     } else {
       try {
@@ -200,7 +198,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     val table = tableDefinition.identifier.table
     if (tableExists(db, table)) {
       if (!ignoreIfExists) {
-        throw new AlreadyExistTableException(db = db, table = table)
+        throw new TableAlreadyExistsException(db = db, table = table)
       }
     } else {
       if (tableDefinition.tableType == CatalogTableType.MANAGED) {
@@ -326,7 +324,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     if (!ignoreIfExists) {
       val dupSpecs = parts.collect { case p if existingParts.contains(p.spec) => p.spec }
       if (dupSpecs.nonEmpty) {
-        throw new AlreadyExistPartitionsException(db = db, table = table, specs = dupSpecs)
+        throw new PartitionsAlreadyExistException(db = db, table = table, specs = dupSpecs)
       }
     }
 
@@ -461,7 +459,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
     if (functionExists(db, func.identifier.funcName)) {
-      throw new AlreadyExistFunctionException(db = db, func = func.identifier.funcName)
+      throw new FunctionAlreadyExistsException(db = db, func = func.identifier.funcName)
     } else {
       catalog(db).functions.put(func.identifier.funcName, func)
     }

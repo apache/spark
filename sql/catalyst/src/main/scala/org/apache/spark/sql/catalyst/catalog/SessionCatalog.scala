@@ -117,6 +117,12 @@ class SessionCatalog(
     }
   }
 
+  private def requireTableNotExists(name: TableIdentifier): Unit = {
+    if (tableExists(name)) {
+      val db = name.database.getOrElse(currentDb)
+      throw new TableAlreadyExistsException(db = db, table = name.table)
+    }
+  }
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -297,7 +303,7 @@ class SessionCatalog(
       overrideIfExists: Boolean): Unit = synchronized {
     val table = formatTableName(name)
     if (tempTables.contains(table) && !overrideIfExists) {
-      throw new AlreadyExistTempTableException(name)
+      throw new TempTableAlreadyExistsException(name)
     }
     tempTables.put(table, tableDefinition)
   }
@@ -322,9 +328,7 @@ class SessionCatalog(
     val newTableName = formatTableName(newName.table)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       requireTableExists(oldName)
-      if (tableExists(newName)) {
-        throw new AlreadyExistTableException(db = db, table = newTableName)
-      }
+      requireTableNotExists(newName)
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
       if (newName.database.isDefined) {
@@ -603,7 +607,7 @@ class SessionCatalog(
     if (!functionExists(identifier)) {
       externalCatalog.createFunction(db, newFuncDefinition)
     } else if (!ignoreIfExists) {
-      throw new AlreadyExistFunctionException(db = db, func = identifier.toString)
+      throw new FunctionAlreadyExistsException(db = db, func = identifier.toString)
     }
   }
 
@@ -688,7 +692,7 @@ class SessionCatalog(
       funcDefinition: FunctionBuilder,
       ignoreIfExists: Boolean): Unit = {
     if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
-      throw new AlreadyExistTempFunctionException(name)
+      throw new TempFunctionAlreadyExistsException(name)
     }
     functionRegistry.registerFunction(name, info, funcDefinition)
   }
