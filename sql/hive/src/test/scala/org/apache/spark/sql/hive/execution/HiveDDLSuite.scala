@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -529,6 +529,60 @@ class HiveDDLSuite
       assert(
         sql(s"DESC EXTENDED $tabName").collect()
           .exists(_.getString(0) == "# Detailed Table Information"))
+    }
+  }
+
+  test("desc table for data source table - no user-defined schema") {
+    withTable("t1") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sqlContext.range(1).write.parquet(path)
+        sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
+
+        val desc = sql("DESC FORMATTED t1").collect().toSeq
+
+        assert(desc.contains(Row("# Schema of this table is inferred at runtime", "", "")))
+      }
+    }
+  }
+
+  test("desc table for data source table - partitioned bucketed table") {
+    withTable("t1") {
+      sqlContext
+        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
+        .bucketBy(2, "b").sortBy("c").partitionBy("d")
+        .saveAsTable("t1")
+
+      val formattedDesc = sql("DESC FORMATTED t1").collect()
+
+      assert(formattedDesc.containsSlice(
+        Seq(
+          Row("a", "bigint", ""),
+          Row("b", "bigint", ""),
+          Row("c", "bigint", ""),
+          Row("d", "bigint", ""),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "", ""),
+          Row("d", "", ""),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Database:", "default", "")
+        )
+      ))
+
+      assert(formattedDesc.containsSlice(
+        Seq(
+          Row("Table Type:", "MANAGED", "")
+        )
+      ))
+
+      assert(formattedDesc.containsSlice(
+        Seq(
+          Row("Num Buckets:", "2", ""),
+          Row("Bucket Columns:", "[b]", ""),
+          Row("Sort Columns:", "[c]", "")
+        )
+      ))
     }
   }
 }
