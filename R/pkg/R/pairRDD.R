@@ -205,8 +205,10 @@ setMethod("flatMapValues",
 #' @aliases partitionBy,RDD,integer-method
 #' @noRd
 setMethod("partitionBy",
-          signature(x = "RDD", numPartitions = "numeric"),
+          signature(x = "RDD"),
           function(x, numPartitions, partitionFunc = hashCode) {
+            stopifnot(is.numeric(numPartitions))
+
             partitionFunc <- cleanClosure(partitionFunc)
             serializedHashFuncBytes <- serialize(partitionFunc, connection = NULL)
 

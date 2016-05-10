@@ -19,16 +19,17 @@ package org.apache.spark.sql.execution.command
 
 import java.io.File
 import java.net.URI
+import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
-import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{BooleanType, MetadataBuilder, StringType, StructType}
 import org.apache.spark.util.Utils
 
 case class CreateTableAsSelectLogicalPlan(
@@ -162,37 +163,36 @@ case class LoadData(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(table)) {
-      throw new AnalysisException(
-        s"Table in LOAD DATA does not exist: '$table'")
+      throw new AnalysisException(s"Target table in LOAD DATA does not exist: '$table'")
     }
-
     val targetTable = catalog.getTableMetadataOption(table).getOrElse {
-      throw new AnalysisException(
-        s"Table in LOAD DATA cannot be temporary: '$table'")
+      throw new AnalysisException(s"Target table in LOAD DATA cannot be temporary: '$table'")
     }
-
     if (DDLUtils.isDatasourceTable(targetTable)) {
-      throw new AnalysisException(
-        "LOAD DATA is not supported for datasource tables")
+      throw new AnalysisException(s"LOAD DATA is not supported for datasource tables: '$table'")
     }
-
     if (targetTable.partitionColumnNames.nonEmpty) {
-      if (partition.isEmpty || targetTable.partitionColumnNames.size != partition.get.size) {
-        throw new AnalysisException(
-          "LOAD DATA to partitioned table must specify a specific partition of " +
-          "the table by specifying values for all of the partitioning columns.")
+      if (partition.isEmpty) {
+        throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+          s"but no partition spec is provided")
       }
-
+      if (targetTable.partitionColumnNames.size != partition.get.size) {
+        throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+          s"but number of columns in provided partition spec (${partition.get.size}) " +
+          s"do not match number of partitioned columns in table " +
+          s"(s${targetTable.partitionColumnNames.size})")
+      }
       partition.get.keys.foreach { colName =>
         if (!targetTable.partitionColumnNames.contains(colName)) {
-          throw new AnalysisException(
-            s"LOAD DATA to partitioned table specifies a non-existing partition column: '$colName'")
+          throw new AnalysisException(s"LOAD DATA target table '$table' is partitioned, " +
+            s"but the specified partition spec refers to a column that is not partitioned: " +
+            s"'$colName'")
         }
       }
     } else {
       if (partition.nonEmpty) {
-        throw new AnalysisException(
-          "LOAD DATA to non-partitioned table cannot specify partition.")
+        throw new AnalysisException(s"LOAD DATA target table '$table' is not partitioned, " +
+          s"but a partition spec was provided.")
       }
     }
 
@@ -200,7 +200,7 @@ case class LoadData(
       if (isLocal) {
         val uri = Utils.resolveURI(path)
         if (!new File(uri.getPath()).exists()) {
-          throw new AnalysisException(s"LOAD DATA with non-existing path: $path")
+          throw new AnalysisException(s"LOAD DATA input path does not exist: $path")
         }
         uri
       } else {
@@ -231,7 +231,7 @@ case class LoadData(
 
           if (scheme == null) {
             throw new AnalysisException(
-              "LOAD DATA with non-local path must specify URI Scheme.")
+              s"LOAD DATA: URI scheme is required for non-local input paths: '$path'")
           }
 
           // Follow Hive's behavior:
@@ -270,10 +270,10 @@ case class LoadData(
 /**
  * Command that looks like
  * {{{
- *   DESCRIBE (EXTENDED) table_name;
+ *   DESCRIBE [EXTENDED|FORMATTED] table_name;
  * }}}
  */
-case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
+case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isFormatted: Boolean)
   extends RunnableCommand {
 
   override val output: Seq[Attribute] = Seq(
@@ -288,30 +288,131 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    sparkSession.sessionState.catalog.lookupRelation(table) match {
-      case catalogRelation: CatalogRelation =>
-        catalogRelation.catalogTable.schema.foreach { column =>
-          result += Row(column.name, column.dataType, column.comment.orNull)
-        }
+    val catalog = sparkSession.sessionState.catalog
 
-        if (catalogRelation.catalogTable.partitionColumns.nonEmpty) {
-          result += Row("# Partition Information", "", "")
-          result += Row(s"# ${output(0).name}", output(1).name, output(2).name)
+    if (catalog.isTemporaryTable(table)) {
+      describeSchema(catalog.lookupRelation(table).schema, result)
+    } else {
+      val metadata = catalog.getTableMetadata(table)
 
-          catalogRelation.catalogTable.partitionColumns.foreach { col =>
-            result += Row(col.name, col.dataType, col.comment.orNull)
-          }
-        }
-
-      case relation =>
-        relation.schema.fields.foreach { field =>
-          val comment =
-            if (field.metadata.contains("comment")) field.metadata.getString("comment") else ""
-          result += Row(field.name, field.dataType.simpleString, comment)
-        }
+      if (isExtended) {
+        describeExtended(metadata, result)
+      } else if (isFormatted) {
+        describeFormatted(metadata, result)
+      } else {
+        describe(metadata, result)
+      }
     }
 
     result
+  }
+
+  // Shows data columns and partitioned columns (if any)
+  private def describe(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(table)) {
+      val schema = DDLUtils.getSchemaFromTableProperties(table)
+
+      if (schema.isEmpty) {
+        append(buffer, "# Schema of this table is inferred at runtime", "", "")
+      } else {
+        schema.foreach(describeSchema(_, buffer))
+      }
+
+      val partCols = DDLUtils.getPartitionColumnsFromTableProperties(table)
+      if (partCols.nonEmpty) {
+        append(buffer, "# Partition Information", "", "")
+        append(buffer, s"# ${output.head.name}", "", "")
+        partCols.foreach(col => append(buffer, col, "", ""))
+      }
+    } else {
+      describeSchema(table.schema, buffer)
+
+      if (table.partitionColumns.nonEmpty) {
+        append(buffer, "# Partition Information", "", "")
+        append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+        describeSchema(table.partitionColumns, buffer)
+      }
+    }
+  }
+
+  private def describeExtended(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    describe(table, buffer)
+
+    append(buffer, "", "", "")
+    append(buffer, "# Detailed Table Information", table.toString, "")
+  }
+
+  private def describeFormatted(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    describe(table, buffer)
+
+    append(buffer, "", "", "")
+    append(buffer, "# Detailed Table Information", "", "")
+    append(buffer, "Database:", table.database, "")
+    append(buffer, "Owner:", table.owner, "")
+    append(buffer, "Create Time:", new Date(table.createTime).toString, "")
+    append(buffer, "Last Access Time:", new Date(table.lastAccessTime).toString, "")
+    append(buffer, "Location:", table.storage.locationUri.getOrElse(""), "")
+    append(buffer, "Table Type:", table.tableType.name, "")
+
+    append(buffer, "Table Parameters:", "", "")
+    table.properties.filterNot {
+      // Hides schema properties that hold user-defined schema, partition columns, and bucketing
+      // information since they are already extracted and shown in other parts.
+      case (key, _) => key.startsWith("spark.sql.sources.schema")
+    }.foreach { case (key, value) =>
+      append(buffer, s"  $key", value, "")
+    }
+
+    describeStorageInfo(table, buffer)
+  }
+
+  private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    append(buffer, "", "", "")
+    append(buffer, "# Storage Information", "", "")
+    metadata.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
+    metadata.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
+    metadata.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
+    append(buffer, "Compressed:", if (metadata.storage.compressed) "Yes" else "No", "")
+    describeBucketingInfo(metadata, buffer)
+
+    append(buffer, "Storage Desc Parameters:", "", "")
+    metadata.storage.serdeProperties.foreach { case (key, value) =>
+      append(buffer, s"  $key", value, "")
+    }
+  }
+
+  private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(metadata)) {
+      val numBuckets = DDLUtils.getNumBucketFromTableProperties(metadata)
+      val bucketCols = DDLUtils.getBucketingColumnsFromTableProperties(metadata)
+      val sortCols = DDLUtils.getSortingColumnsFromTableProperties(metadata)
+      append(buffer, "Num Buckets:", numBuckets.map(_.toString).getOrElse(""), "")
+      append(buffer, "Bucket Columns:", bucketCols.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", sortCols.mkString("[", ", ", "]"), "")
+    } else {
+      append(buffer, "Num Buckets:", metadata.numBuckets.toString, "")
+      append(buffer, "Bucket Columns:", metadata.bucketColumnNames.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", metadata.sortColumnNames.mkString("[", ", ", "]"), "")
+    }
+  }
+
+  private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
+    schema.foreach { column =>
+      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
+    }
+  }
+
+  private def describeSchema(schema: StructType, buffer: ArrayBuffer[Row]): Unit = {
+    schema.foreach { column =>
+      val comment =
+        if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
+      append(buffer, column.name, column.dataType.simpleString, comment)
+    }
+  }
+
+  private def append(
+      buffer: ArrayBuffer[Row], column: String, dataType: String, comment: String): Unit = {
+    buffer += Row(column, dataType, comment)
   }
 }
 

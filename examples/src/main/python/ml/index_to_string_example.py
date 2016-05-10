@@ -17,18 +17,19 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
 # $example on$
 from pyspark.ml.feature import IndexToString, StringIndexer
 # $example off$
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="IndexToStringExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("IndexToStringExample")\
+        .getOrCreate()
 
     # $example on$
-    df = sqlContext.createDataFrame(
+    df = spark.createDataFrame(
         [(0, "a"), (1, "b"), (2, "c"), (3, "a"), (4, "a"), (5, "c")],
         ["id", "category"])
 
@@ -42,4 +43,4 @@ if __name__ == "__main__":
     converted.select("id", "originalCategory").show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

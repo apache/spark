@@ -17,14 +17,13 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
+import java.util.List;
+
 import com.google.common.collect.Lists;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.attribute.Attribute;
 import org.apache.spark.ml.attribute.AttributeGroup;
 import org.apache.spark.ml.attribute.NumericAttribute;
@@ -38,9 +37,10 @@ import org.apache.spark.sql.types.*;
 
 public class JavaVectorSlicerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaVectorSlicerExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaVectorSlicerExample")
+      .getOrCreate();
 
     // $example on$
     Attribute[] attrs = new Attribute[]{
@@ -50,13 +50,13 @@ public class JavaVectorSlicerExample {
     };
     AttributeGroup group = new AttributeGroup("userFeatures", attrs);
 
-    JavaRDD<Row> jrdd = jsc.parallelize(Lists.newArrayList(
+    List<Row> data = Lists.newArrayList(
       RowFactory.create(Vectors.sparse(3, new int[]{0, 1}, new double[]{-2.0, 2.3})),
       RowFactory.create(Vectors.dense(-2.0, 2.3, 0.0))
-    ));
+    );
 
     Dataset<Row> dataset =
-        jsql.createDataFrame(jrdd, (new StructType()).add(group.toStructField()));
+      spark.createDataFrame(data, (new StructType()).add(group.toStructField()));
 
     VectorSlicer vectorSlicer = new VectorSlicer()
       .setInputCol("userFeatures").setOutputCol("features");
@@ -68,7 +68,7 @@ public class JavaVectorSlicerExample {
 
     System.out.println(output.select("userFeatures", "features").first());
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 }
 
