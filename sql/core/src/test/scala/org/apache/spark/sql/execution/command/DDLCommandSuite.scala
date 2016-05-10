@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -204,6 +205,19 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
+  }
+
+  test("create external table - location must be specified") {
+    assertUnsupported("CREATE EXTERNAL TABLE my_tab")
+    val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
+    parser.parsePlan(query) match {
+      case ct: CreateTable =>
+        assert(ct.table.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.table.storage.locationUri == Some("/something/anything"))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query")
+    }
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;
