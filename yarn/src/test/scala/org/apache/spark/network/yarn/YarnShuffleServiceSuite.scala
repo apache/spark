@@ -257,4 +257,67 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
       (new Path(yarnConfig.getTrimmedStrings("yarn.nodemanager.local-dirs")(0)))
     s2.stop()
   }
-}
+
+  test("moving recovery file form NM local dir to recovery path") {
+    // This is to test when Hadoop is upgrade to 2.5+ and NM recovery is enabled, we should move
+    // old recovery file to the new path to keep compatibility
+
+    // Simulate s1 is running on old version of Hadoop in which recovery file is in the NM local
+    // dir.
+    s1 = new YarnShuffleService
+    s1.init(yarnConfig)
+    val app1Id = ApplicationId.newInstance(0, 1)
+    val app1Data: ApplicationInitializationContext =
+      new ApplicationInitializationContext("user", app1Id, null)
+    s1.initializeApplication(app1Data)
+    val app2Id = ApplicationId.newInstance(0, 2)
+    val app2Data: ApplicationInitializationContext =
+      new ApplicationInitializationContext("user", app2Id, null)
+    s1.initializeApplication(app2Data)
+
+    val execStateFile = s1.registeredExecutorFile
+    execStateFile should not be (null)
+    val shuffleInfo1 = new ExecutorShuffleInfo(Array("/foo", "/bar"), 3, SORT_MANAGER)
+    val shuffleInfo2 = new ExecutorShuffleInfo(Array("/bippy"), 5, SORT_MANAGER)
+
+    val blockHandler = s1.blockHandler
+    val blockResolver = ShuffleTestAccessor.getBlockResolver(blockHandler)
+    ShuffleTestAccessor.registeredExecutorFile(blockResolver) should be (execStateFile)
+
+    blockResolver.registerExecutor(app1Id.toString, "exec-1", shuffleInfo1)
+    blockResolver.registerExecutor(app2Id.toString, "exec-2", shuffleInfo2)
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", blockResolver) should
+      be (Some(shuffleInfo1))
+    ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", blockResolver) should
+      be (Some(shuffleInfo2))
+
+    assert(execStateFile.exists(), s"$execStateFile did not exist")
+
+    s1.stop()
+
+    // Simulate s2 is running on Hadoop 2.5+ with NM recovery is enabled.
+    assert(execStateFile.exists())
+    val recoveryPath = new Path(Utils.createTempDir().toURI)
+    s2 = new YarnShuffleService
+    s2.setRecoveryPath(recoveryPath)
+    s2.init(yarnConfig)
+
+    val execStateFile2 = s2.registeredExecutorFile
+    recoveryPath.toString should be (new Path(execStateFile2.getParentFile.toURI).toString)
+    // File is already moved to the new recovery path.
+    assert(!execStateFile.exists())
+
+    val handler2 = s2.blockHandler
+    val resolver2 = ShuffleTestAccessor.getBlockResolver(handler2)
+
+    // now we reinitialize only one of the apps, and expect yarn to tell us that app2 was stopped
+    // during the restart
+    // Since recovery file is got from old path, so the previous state should be stored.
+    s2.initializeApplication(app1Data)
+    s2.stopApplication(new ApplicationTerminationContext(app2Id))
+    ShuffleTestAccessor.getExecutorInfo(app1Id, "exec-1", resolver2) should be (Some(shuffleInfo1))
+    ShuffleTestAccessor.getExecutorInfo(app2Id, "exec-2", resolver2) should be (None)
+
+    s2.stop()
+  }
+ }

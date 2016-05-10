@@ -68,6 +68,8 @@ public class YarnShuffleService extends AuxiliaryService {
   private static final String SPARK_AUTHENTICATE_KEY = "spark.authenticate";
   private static final boolean DEFAULT_SPARK_AUTHENTICATE = false;
 
+  private static final String RECOVERY_FILE_NAME = "registeredExecutor.ldb";
+
   // An entity that manages the shuffle secret per application
   // This is used only if authentication is enabled
   private ShuffleSecretManager secretManager;
@@ -126,7 +128,7 @@ public class YarnShuffleService extends AuxiliaryService {
     // an application was stopped while the NM was down, we expect yarn to call stopApplication()
     // when it comes back
     registeredExecutorFile =
-      new File(getRecoveryPath().toUri().getPath(), "registeredExecutors.ldb");
+      new File(getRecoveryPath().toUri().getPath(), RECOVERY_FILE_NAME);
 
     TransportConf transportConf = new TransportConf("shuffle", new HadoopConfigProvider(conf));
     // If authentication is enabled, set up the shuffle server to use a
@@ -230,23 +232,23 @@ public class YarnShuffleService extends AuxiliaryService {
   }
 
   /**
-   * Get the recovery path, this will override the default one to get the our own maintained
+   * Get the recovery path, this will override the default one to get our own maintained
    * recovery path.
    */
   protected Path getRecoveryPath() {
     String[] localDirs = _conf.getTrimmedStrings("yarn.nodemanager.local-dirs");
     for (String dir : localDirs) {
-      File f = new File(new Path(dir).toUri().getPath(), "registeredExecutors.ldb");
+      File f = new File(new Path(dir).toUri().getPath(), RECOVERY_FILE_NAME);
       if (f.exists()) {
         if (_recoveryPath == null) {
           // If NM recovery is not enabled, we should specify the recovery path using NM local
           // dirs, which is compatible with the old code.
           _recoveryPath = new Path(dir);
         } else {
-          // If NM recovery is enabled and recovery file is existed in old NM local dirs, which
+          // If NM recovery is enabled and the recovery file exists in old NM local dirs, which
           // means old version of Spark already generated the recovery file, we should copy the
           // old file in to a new recovery path for the compatibility.
-          f.renameTo(new File(_recoveryPath.toUri().getPath(), "registeredExecutors.ldb"));
+          f.renameTo(new File(_recoveryPath.toUri().getPath(), RECOVERY_FILE_NAME));
         }
         break;
       }
