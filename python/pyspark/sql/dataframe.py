@@ -697,7 +697,7 @@ class DataFrame(object):
         +---+-----+
 
         """
-        if not isinstance(col, str):
+        if not isinstance(col, basestring):
             raise ValueError("col must be a string, but got %r" % type(col))
         if not isinstance(fractions, dict):
             raise ValueError("fractions must be a dict but got %r" % type(fractions))
@@ -1509,18 +1509,18 @@ class DataFrame(object):
            Added support for multiple columns.
         """
 
-        if not isinstance(col, (str, list, tuple)):
+        if not isinstance(col, (basestring, list, tuple)):
             raise ValueError("col should be a string, list or tuple, but got %r" % type(col))
 
-        isStr = isinstance(col, str)
+        isStr = isinstance(col, basestring)
 
         if isinstance(col, tuple):
             col = list(col)
-        elif isinstance(col, str):
+        elif isStr:
             col = [col]
 
         for c in col:
-            if not isinstance(c, str):
+            if not isinstance(c, basestring):
                 raise ValueError("columns should be strings, but got %r" % type(c))
         col = _to_list(self._sc, col)
 
@@ -1552,9 +1552,9 @@ class DataFrame(object):
         :param col2: The name of the second column
         :param method: The correlation method. Currently only supports "pearson"
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         if not method:
             method = "pearson"
@@ -1572,9 +1572,9 @@ class DataFrame(object):
         :param col1: The name of the first column
         :param col2: The name of the second column
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return self._jdf.stat().cov(col1, col2)
 
@@ -1594,9 +1594,9 @@ class DataFrame(object):
         :param col2: The name of the second column. Distinct items will make the column names
             of the DataFrame.
         """
-        if not isinstance(col1, str):
+        if not isinstance(col1, basestring):
             raise ValueError("col1 should be a string.")
-        if not isinstance(col2, str):
+        if not isinstance(col2, basestring):
             raise ValueError("col2 should be a string.")
         return DataFrame(self._jdf.stat().crosstab(col1, col2), self.sql_ctx)
 

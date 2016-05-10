@@ -319,6 +319,13 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         self.assertTrue(all([testParams.hasParam(p.name) for p in testParams.params]))
         self.assertFalse(testParams.hasParam("notAParameter"))
+        self.assertTrue(testParams.hasParam(u"maxIter"))
+
+    def test_resolveparam(self):
+        testParams = TestParams()
+        self.assertEqual(testParams._resolveParam(testParams.maxIter), testParams.maxIter)
+        self.assertEqual(testParams._resolveParam("maxIter"), testParams.maxIter)
+        self.assertEqual(testParams._resolveParam(u"maxIter"), testParams.maxIter)
 
     def test_params(self):
         testParams = TestParams()
