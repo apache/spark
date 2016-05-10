@@ -44,5 +44,5 @@ script:
   - dev/check-license &&
     dev/lint-python &&
     dev/lint-scala &&
-    dev/lint-java &&
-    (build/mvn -DskipTests -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver compile test-compile | grep -v 'org/maven2/')
+    (build/mvn -T 2 -DskipTests -Ddoc-jar.skip=true -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver install | grep -v 'org/maven2/' | grep -v 'from the shaded jar') &&
+    dev/lint-java
