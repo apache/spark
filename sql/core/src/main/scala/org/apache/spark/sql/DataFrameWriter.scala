@@ -357,8 +357,22 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * Inserts the content of the [[DataFrame]] to the specified table. It requires that
    * the schema of the [[DataFrame]] is the same as the schema of the table.
    *
-   * Note: Unlike `saveAsTable`, `insertInto` ignores the column names. If the column order or names
-   * doesn't match the table's, you may get unexpected results.
+   * Note: Unlike `saveAsTable`, `insertInto` ignores the column names and just uses position-based
+   * resolution. For example:
+   *
+   * {{{
+   *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
+   *    scala> Seq((3, 4)).toDF("j", "i").write.insertInto("t1")
+   *    scala> Seq((5, 6)).toDF("a", "b").write.insertInto("t1")
+   *    scala> sql("select * from t1").show
+   *    +---+---+
+   *    |  i|  j|
+   *    +---+---+
+   *    |  5|  6|
+   *    |  3|  4|
+   *    |  1|  2|
+   *    +---+---+
+   * }}}
    *
    * Because it inserts data to an existing table, format or options will be ignored.
    *
@@ -454,9 +468,22 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
    * the same as that of the existing table.
    *
-   * When `mode` is `Append`, the format or options will be ignored. The column order in the schema
-   * of the [[DataFrame]] doesn't need to be same as that of the existing table. Unlike
-   * `insertInto`, `saveAsTable` will use the column names to find the correct column positions.
+   * When `mode` is `Append`, if there is an existing table, we will use the format and options of
+   * the existing table. The column order in the schema of the [[DataFrame]] doesn't need to be same
+   * as that of the existing table. Unlike `insertInto`, `saveAsTable` will use the column names to
+   * find the correct column positions. For example:
+   *
+   * {{{
+   *    scala> Seq((1, 2)).toDF("i", "j").write.mode("overwrite").saveAsTable("t1")
+   *    scala> Seq((3, 4)).toDF("j", "i").write.mode("append").saveAsTable("t1")
+   *    scala> sql("select * from t1").show
+   *    +---+---+
+   *    |  i|  j|
+   *    +---+---+
+   *    |  1|  2|
+   *    |  4|  3|
+   *    +---+---+
+   * }}}
    *
    * When the DataFrame is created from a non-partitioned [[HadoopFsRelation]] with a single input
    * path, and the data source provider can be mapped to an existing Hive builtin SerDe (i.e. ORC
