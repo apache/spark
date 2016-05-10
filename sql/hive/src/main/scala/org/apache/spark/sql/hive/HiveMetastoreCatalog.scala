@@ -271,7 +271,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         Some(partitionSpec))
 
       val hadoopFsRelation = cached.getOrElse {
-        val fileCatalog = new MetaStoreFileCatalog(sparkSession, partitionSpec)
+        val basePath = new Path(metastoreRelation.catalogTable.storage.locationUri.get)
+        val fileCatalog = new MetaStoreFileCatalog(sparkSession, basePath, partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
           val inferredSchema =
@@ -530,29 +531,28 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 /**
  * An override of the standard HDFS listing based catalog, that overrides the partition spec with
  * the information from the metastore.
+ * @param tableBasePath The default base path of the Hive metastore table
+ * @param partitionSpec The partition specifications from Hive metastore
  */
 private[hive] class MetaStoreFileCatalog(
     sparkSession: SparkSession,
-    val partitionSpecFromHive: PartitionSpec)
+    tableBasePath: Path,
+    override val partitionSpec: PartitionSpec)
   extends ListingFileCatalog(
     sparkSession,
-    MetaStoreFileCatalog.getPathsFromPartitionSpec(partitionSpecFromHive),
+    MetaStoreFileCatalog.getPaths(tableBasePath, partitionSpec),
     Map.empty,
-    Some(partitionSpecFromHive.partitionColumns)) {
-
-  override def partitionSpec(): PartitionSpec = partitionSpecFromHive
-
-  override def equals(other: Any): Boolean = other match {
-    case m: MetaStoreFileCatalog => partitionSpecFromHive == m.partitionSpecFromHive
-    case _ => false
-  }
-
-  override def hashCode(): Int = partitionSpecFromHive.hashCode()
+    Some(partitionSpec.partitionColumns)) {
 }
 
 private[hive] object MetaStoreFileCatalog {
-  def getPathsFromPartitionSpec(partitionSpec: PartitionSpec): Seq[Path] = {
-    partitionSpec.partitions.map(_.path)
+  /** Get the list of non-overalapping paths to list files in the for a metastore table */
+  def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
+    val basePathStr = tableBasePath.toUri.toString
+    val partitionsOutsideBasePath = partitionSpec
+      .partitions
+      .filterNot(_.path.toUri.toString.startsWith(basePathStr)) // not contained in the base path
+    Seq(tableBasePath) ++ partitionsOutsideBasePath.map(_.path)
   }
 }
 
