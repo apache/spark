@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
+import org.apache.spark.sql.catalyst.catalog.{FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
@@ -157,13 +158,17 @@ class DDLCommandSuite extends PlanTest {
       None,
       "helloworld",
       "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(("jar", "/path/to/jar1"), ("jar", "/path/to/jar2")),
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar1"),
+        FunctionResource(FunctionResourceType.fromString("jar"), "/path/to/jar2")),
       isTemp = true)
     val expected2 = CreateFunction(
       Some("hello"),
       "world",
       "com.matthewrathbone.example.SimpleUDFExample",
-      Seq(("archive", "/path/to/archive"), ("file", "/path/to/file")),
+      Seq(
+        FunctionResource(FunctionResourceType.fromString("archive"), "/path/to/archive"),
+        FunctionResource(FunctionResourceType.fromString("file"), "/path/to/file")),
       isTemp = false)
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)

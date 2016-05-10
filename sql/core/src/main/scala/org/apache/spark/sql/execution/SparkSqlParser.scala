@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
@@ -430,7 +430,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       val resourceType = resource.identifier.getText.toLowerCase
       resourceType match {
         case "jar" | "file" | "archive" =>
-          resourceType -> string(resource.STRING)
+          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
         case other =>
           throw operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
       }
