@@ -24,8 +24,9 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.DatabaseAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
-import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
@@ -37,7 +38,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
-      sqlContext.sessionState.catalog.reset()
+      spark.sessionState.catalog.reset()
     } finally {
       super.afterEach()
     }
@@ -66,10 +67,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   private def createDatabase(catalog: SessionCatalog, name: String): Unit = {
     catalog.createDatabase(
-      CatalogDatabase(name, "", sqlContext.conf.warehousePath, Map()), ignoreIfExists = false)
+      CatalogDatabase(name, "", spark.sessionState.conf.warehousePath, Map()),
+      ignoreIfExists = false)
   }
 
-  private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
+  private def generateTable(catalog: SessionCatalog, name: TableIdentifier): CatalogTable = {
     val storage =
       CatalogStorageFormat(
         locationUri = Some(catalog.defaultTablePath(name)),
@@ -78,12 +80,23 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         serde = None,
         compressed = false,
         serdeProperties = Map())
-    catalog.createTable(CatalogTable(
+    CatalogTable(
       identifier = name,
       tableType = CatalogTableType.EXTERNAL,
       storage = storage,
-      schema = Seq(),
-      createTime = 0L), ignoreIfExists = false)
+      schema = Seq(
+        CatalogColumn("col1", "int"),
+        CatalogColumn("col2", "string"),
+        CatalogColumn("a", "int"),
+        CatalogColumn("b", "int"),
+        CatalogColumn("c", "int"),
+        CatalogColumn("d", "int")),
+      partitionColumnNames = Seq("a", "b", "c", "d"),
+      createTime = 0L)
+  }
+
+  private def createTable(catalog: SessionCatalog, name: TableIdentifier): Unit = {
+    catalog.createTable(generateTable(catalog, name), ignoreIfExists = false)
   }
 
   private def createTablePartition(
@@ -100,7 +113,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("the qualified path of a database is stored in the catalog") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
 
     withTempDir { tmpDir =>
       val path = tmpDir.toString
@@ -200,10 +213,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
               expectedLocation,
               Map.empty))
 
-            val message = intercept[AnalysisException] {
+            intercept[DatabaseAlreadyExistsException] {
               sql(s"CREATE DATABASE $dbName")
-            }.getMessage
-            assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+            }
           } finally {
             catalog.reset()
           }
@@ -263,22 +275,22 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
     databaseNames.foreach { dbName =>
       val dbNameWithoutBackTicks = cleanIdentifier(dbName)
-      assert(!sqlContext.sessionState.catalog.databaseExists(dbNameWithoutBackTicks))
+      assert(!spark.sessionState.catalog.databaseExists(dbNameWithoutBackTicks))
 
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"DESCRIBE DATABASE EXTENDED $dbName")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       sql(s"DROP DATABASE IF EXISTS $dbName")
     }
@@ -323,57 +335,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("create table in default db") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent1 = TableIdentifier("tab1", None)
     createTable(catalog, tableIdent1)
     val expectedTableIdent = tableIdent1.copy(database = Some("default"))
-    val expectedLocation =
-      catalog.getDatabaseMetadata("default").locationUri + "/tab1"
-    val expectedStorage =
-      CatalogStorageFormat(
-        locationUri = Some(expectedLocation),
-        inputFormat = None,
-        outputFormat = None,
-        serde = None,
-        compressed = false,
-        serdeProperties = Map())
-    val expectedTable =
-      CatalogTable(
-        identifier = expectedTableIdent,
-        tableType = CatalogTableType.EXTERNAL,
-        storage = expectedStorage,
-        schema = Seq(),
-        createTime = 0L)
+    val expectedTable = generateTable(catalog, expectedTableIdent)
     assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
   }
 
   test("create table in a specific db") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     createDatabase(catalog, "dbx")
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
     createTable(catalog, tableIdent1)
-    val expectedLocation =
-      catalog.getDatabaseMetadata("dbx").locationUri + "/tab1"
-    val expectedStorage =
-      CatalogStorageFormat(
-        locationUri = Some(expectedLocation),
-        inputFormat = None,
-        outputFormat = None,
-        serde = None,
-        compressed = false,
-        serdeProperties = Map())
-    val expectedTable =
-      CatalogTable(
-        identifier = tableIdent1,
-        tableType = CatalogTableType.EXTERNAL,
-        storage = expectedStorage,
-        schema = Seq(),
-        createTime = 0L)
+    val expectedTable = generateTable(catalog, tableIdent1)
     assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
   }
 
   test("alter table: rename") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent1 = TableIdentifier("tab1", Some("dbx"))
     val tableIdent2 = TableIdentifier("tab2", Some("dbx"))
     createDatabase(catalog, "dbx")
@@ -465,7 +445,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: set properties") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
@@ -492,7 +472,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: unset properties") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
@@ -533,7 +513,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: bucketing is not supported") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
@@ -544,7 +524,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: skew is not supported") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
@@ -581,7 +561,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: rename partition") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1")
     val part2 = Map("b" -> "2")
@@ -665,16 +645,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A'"),
-      Row("showdb1A") :: Nil)
+      Row("showdb1a") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE 'showdb1A'"),
-      Row("showdb1A") :: Nil)
+      Row("showdb1a") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A|*db2B'"),
-      Row("showdb1A") ::
-        Row("showdb2B") :: Nil)
+      Row("showdb1a") ::
+        Row("showdb2b") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE 'non-existentdb'"),
@@ -682,7 +662,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("drop table - temporary table") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     sql(
       """
         |CREATE TEMPORARY TABLE tab1
@@ -707,7 +687,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   private def testDropTable(isDatasourceTable: Boolean): Unit = {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
@@ -726,7 +706,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     // SQLContext does not support create view. Log an error message, if tab1 does not exists
     sql("DROP VIEW tab1")
 
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
@@ -747,7 +727,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   private def testSetLocation(isDatasourceTable: Boolean): Unit = {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val partSpec = Map("a" -> "1")
     createDatabase(catalog, "dbx")
@@ -805,7 +785,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   private def testSetSerde(isDatasourceTable: Boolean): Unit = {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")
     createTable(catalog, tableIdent)
@@ -851,7 +831,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   private def testAddPartitions(isDatasourceTable: Boolean): Unit = {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1")
     val part2 = Map("b" -> "2")
@@ -901,7 +881,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   private def testDropPartitions(isDatasourceTable: Boolean): Unit = {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     val part1 = Map("a" -> "1")
     val part2 = Map("b" -> "2")
@@ -945,6 +925,28 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
     if (!isDatasourceTable) {
       assert(catalog.listPartitions(tableIdent).map(_.spec) == Seq(part1))
+    }
+  }
+
+  test("drop build-in function") {
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        // partition to add already exists
+        var e = intercept[AnalysisException] {
+          sql("DROP TEMPORARY FUNCTION year")
+        }
+        assert(e.getMessage.contains("Cannot drop native function 'year'"))
+
+        e = intercept[AnalysisException] {
+          sql("DROP TEMPORARY FUNCTION YeAr")
+        }
+        assert(e.getMessage.contains("Cannot drop native function 'YeAr'"))
+
+        e = intercept[AnalysisException] {
+          sql("DROP TEMPORARY FUNCTION `YeAr`")
+        }
+        assert(e.getMessage.contains("Cannot drop native function 'YeAr'"))
+      }
     }
   }
 
@@ -998,5 +1000,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Row("Function: ^") ::
         Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
     )
+  }
+
+  test("drop default database") {
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        var message = intercept[AnalysisException] {
+          sql("DROP DATABASE default")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+
+        message = intercept[AnalysisException] {
+          sql("DROP DATABASE DeFault")
+        }.getMessage
+        if (caseSensitive == "true") {
+          assert(message.contains("Database 'DeFault' not found"))
+        } else {
+          assert(message.contains("Can not drop default database"))
+        }
+      }
+    }
   }
 }

@@ -724,6 +724,7 @@ abstract class RDD[T: ClassTag](
    *                        def printRDDElement(record:(String, Seq[String]), f:String=&gt;Unit) =
    *                          for (e &lt;- record._2) {f(e)}
    * @param separateWorkingDir Use separate working directories for each task.
+   * @param bufferSize Buffer size for the stdin writer for the piped process.
    * @return the result RDD
    */
   def pipe(
@@ -731,11 +732,13 @@ abstract class RDD[T: ClassTag](
       env: Map[String, String] = Map(),
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
-      separateWorkingDir: Boolean = false): RDD[String] = withScope {
+      separateWorkingDir: Boolean = false,
+      bufferSize: Int = 8192): RDD[String] = withScope {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,
-      separateWorkingDir)
+      separateWorkingDir,
+      bufferSize)
   }
 
   /**

@@ -334,9 +334,15 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           partitionColumns = normalizedParCols.getOrElse(Nil))
 
       val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
-      val checkpointLocation = extraOptions.getOrElse("checkpointLocation",
-        new Path(df.sparkSession.sessionState.conf.checkpointLocation.get, queryName).toUri.toString
-      )
+      val checkpointLocation = extraOptions.get("checkpointLocation")
+        .orElse {
+          df.sparkSession.sessionState.conf.checkpointLocation.map { l =>
+            new Path(l, queryName).toUri.toString
+          }
+        }.getOrElse {
+          throw new AnalysisException("checkpointLocation must be specified either " +
+            "through option() or SQLConf")
+        }
 
       df.sparkSession.sessionState.continuousQueryManager.startQuery(
         queryName,

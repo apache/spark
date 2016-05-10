@@ -32,7 +32,7 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
          |${readParquetSchema(parquetFilePath.toString)}
        """.stripMargin)
 
-    checkAnswer(sqlContext.read.parquet(parquetFilePath.toString), (0 until 10).map { i =>
+    checkAnswer(spark.read.parquet(parquetFilePath.toString), (0 until 10).map { i =>
       val suits = Array("SPADES", "HEARTS", "DIAMONDS", "CLUBS")
 
       val nonNullablePrimitiveValues = Seq(
@@ -139,7 +139,7 @@ class ParquetThriftCompatibilitySuite extends ParquetCompatibilityTest with Shar
       logParquetSchema(path)
 
       checkAnswer(
-        sqlContext.read.parquet(path),
+        spark.read.parquet(path),
         Seq(
           Row(Seq(Seq(0, 1), Seq(2, 3))),
           Row(Seq(Seq(4, 5), Seq(6, 7)))))

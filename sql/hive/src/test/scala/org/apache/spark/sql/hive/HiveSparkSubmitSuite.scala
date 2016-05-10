@@ -555,7 +555,7 @@ object SparkSQLConfTest extends Logging {
 object SPARK_9757 extends QueryTest {
   import org.apache.spark.sql.functions._
 
-  protected var sqlContext: SQLContext = _
+  protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
@@ -567,7 +567,7 @@ object SPARK_9757 extends QueryTest {
         .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
-    sqlContext = hiveContext
+    spark = hiveContext.sparkSession
     import hiveContext.implicits._
 
     val dir = Utils.createTempDir()
@@ -602,7 +602,7 @@ object SPARK_9757 extends QueryTest {
 object SPARK_11009 extends QueryTest {
   import org.apache.spark.sql.functions._
 
-  protected var sqlContext: SQLContext = _
+  protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
@@ -613,10 +613,10 @@ object SPARK_11009 extends QueryTest {
         .set("spark.sql.shuffle.partitions", "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
-    sqlContext = hiveContext
+    spark = hiveContext.sparkSession
 
     try {
-      val df = sqlContext.range(1 << 20)
+      val df = spark.range(1 << 20)
       val df2 = df.select((df("id") % 1000).alias("A"), (df("id") / 1000).alias("B"))
       val ws = Window.partitionBy(df2("A")).orderBy(df2("B"))
       val df3 = df2.select(df2("A"), df2("B"), row_number().over(ws).alias("rn")).filter("rn < 0")
@@ -633,7 +633,7 @@ object SPARK_14244 extends QueryTest {
   import org.apache.spark.sql.expressions.Window
   import org.apache.spark.sql.functions._
 
-  protected var sqlContext: SQLContext = _
+  protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
@@ -644,13 +644,13 @@ object SPARK_14244 extends QueryTest {
         .set("spark.sql.shuffle.partitions", "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
-    sqlContext = hiveContext
+    spark = hiveContext.sparkSession
 
     import hiveContext.implicits._
 
     try {
       val window = Window.orderBy('id)
-      val df = sqlContext.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
+      val df = spark.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()
