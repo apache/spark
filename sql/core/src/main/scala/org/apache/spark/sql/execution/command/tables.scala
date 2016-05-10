@@ -309,12 +309,29 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   // Shows data columns and partitioned columns (if any)
   private def describe(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    describeSchema(table.schema, buffer)
+    if (DDLUtils.isDatasourceTable(table)) {
+      val schema = DDLUtils.getSchemaFromTableProperties(table)
 
-    if (table.partitionColumns.nonEmpty) {
-      append(buffer, "# Partition Information", "", "")
-      append(buffer, s"# ${output(0).name}", output(1).name, output(2).name)
-      describeSchema(table.partitionColumns, buffer)
+      if (schema.isEmpty) {
+        append(buffer, "# Schema of this table is inferred at runtime", "", "")
+      } else {
+        schema.foreach(describeSchema(_, buffer))
+      }
+
+      val partCols = DDLUtils.getPartitionColumnsFromTableProperties(table)
+      if (partCols.nonEmpty) {
+        append(buffer, "# Partition Information", "", "")
+        append(buffer, s"# ${output.head.name}", "", "")
+        partCols.foreach(col => append(buffer, col, "", ""))
+      }
+    } else {
+      describeSchema(table.schema, buffer)
+
+      if (table.partitionColumns.nonEmpty) {
+        append(buffer, "# Partition Information", "", "")
+        append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+        describeSchema(table.partitionColumns, buffer)
+      }
     }
   }
 
@@ -338,23 +355,44 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     append(buffer, "Table Type:", table.tableType.name, "")
 
     append(buffer, "Table Parameters:", "", "")
-    table.properties.foreach { case (key, value) =>
+    table.properties.filterNot {
+      // Hides schema properties that hold user-defined schema, partition columns, and bucketing
+      // information since they are already extracted and shown in other parts.
+      case (key, _) => key.startsWith("spark.sql.sources.schema")
+    }.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
 
+    describeStorageInfo(table, buffer)
+  }
+
+  private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Storage Information", "", "")
-    table.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
-    table.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
-    table.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
-    append(buffer, "Compressed:", if (table.storage.compressed) "Yes" else "No", "")
-    append(buffer, "Num Buckets:", table.numBuckets.toString, "")
-    append(buffer, "Bucket Columns:", table.bucketColumnNames.mkString("[", ", ", "]"), "")
-    append(buffer, "Sort Columns:", table.sortColumnNames.mkString("[", ", ", "]"), "")
+    metadata.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
+    metadata.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
+    metadata.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
+    append(buffer, "Compressed:", if (metadata.storage.compressed) "Yes" else "No", "")
+    describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    table.storage.serdeProperties.foreach { case (key, value) =>
+    metadata.storage.serdeProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
+    }
+  }
+
+  private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(metadata)) {
+      val numBuckets = DDLUtils.getNumBucketFromTableProperties(metadata)
+      val bucketCols = DDLUtils.getBucketingColumnsFromTableProperties(metadata)
+      val sortCols = DDLUtils.getSortingColumnsFromTableProperties(metadata)
+      append(buffer, "Num Buckets:", numBuckets.map(_.toString).getOrElse(""), "")
+      append(buffer, "Bucket Columns:", bucketCols.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", sortCols.mkString("[", ", ", "]"), "")
+    } else {
+      append(buffer, "Num Buckets:", metadata.numBuckets.toString, "")
+      append(buffer, "Bucket Columns:", metadata.bucketColumnNames.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", metadata.sortColumnNames.mkString("[", ", ", "]"), "")
     }
   }
 
