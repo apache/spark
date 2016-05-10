@@ -58,7 +58,10 @@ public class JavaOneVsRestExample {
   public static void main(String[] args) {
     // parse the arguments
     Params params = parse(args);
-    SparkSession spark = SparkSession.builder().appName("JavaOneVsRestExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaOneVsRestExample")
+      .getOrCreate();
 
     // $example on$
     // configure the base classifier

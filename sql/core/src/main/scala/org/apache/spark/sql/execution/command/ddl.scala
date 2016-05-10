@@ -40,7 +40,10 @@ import org.apache.spark.sql.types._
  * unless 'ifNotExists' is true.
  * The syntax of using this command in SQL is:
  * {{{
- *    CREATE DATABASE|SCHEMA [IF NOT EXISTS] database_name
+ *   CREATE (DATABASE|SCHEMA) [IF NOT EXISTS] database_name
+ *     [COMMENT database_comment]
+ *     [LOCATION database_directory]
+ *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}
  */
 case class CreateDatabase(

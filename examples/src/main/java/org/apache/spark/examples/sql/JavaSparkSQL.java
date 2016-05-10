@@ -51,7 +51,10 @@ public class JavaSparkSQL {
   }
 
   public static void main(String[] args) throws Exception {
-    SparkSession spark = SparkSession.builder().appName("JavaSparkSQL").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaSparkSQL")
+      .getOrCreate();
 
     System.out.println("=== Data source: RDD ===");
     // Load a text file and convert each line to a Java Bean.
@@ -130,7 +133,7 @@ public class JavaSparkSQL {
     // Register this DataFrame as a table.
     peopleFromJsonFile.registerTempTable("people");
 
-    // SQL statements can be run by using the sql methods provided by sqlContext.
+    // SQL statements can be run by using the sql methods provided by `spark`
     Dataset<Row> teenagers3 = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
     // The results of SQL queries are DataFrame and support all the normal RDD operations.
@@ -147,7 +150,8 @@ public class JavaSparkSQL {
     // a RDD[String] storing one JSON object per string.
     List<String> jsonData = Arrays.asList(
           "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
-    JavaRDD<String> anotherPeopleRDD = spark.createDataFrame(jsonData, String.class).toJSON().javaRDD();
+    JavaRDD<String> anotherPeopleRDD = spark
+      .createDataFrame(jsonData, String.class).toJSON().javaRDD();
     Dataset<Row> peopleFromJsonRDD = spark.read().json(anotherPeopleRDD);
 
     // Take a look at the schema of this new DataFrame.

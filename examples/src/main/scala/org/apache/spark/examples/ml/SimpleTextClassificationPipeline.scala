@@ -42,7 +42,10 @@ case class Document(id: Long, text: String)
 object SimpleTextClassificationPipeline {
 
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("SimpleTextClassificationPipeline").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("SimpleTextClassificationPipeline")
+      .getOrCreate()
     import spark.implicits._
 
     // Prepare training documents, which are labeled.

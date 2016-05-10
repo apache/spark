@@ -24,7 +24,10 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("ElementwiseProductExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("ElementwiseProductExample")\
+        .getOrCreate()
 
     # $example on$
     data = [(Vectors.dense([1.0, 2.0, 3.0]),), (Vectors.dense([4.0, 5.0, 6.0]),)]

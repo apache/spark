@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SparkSession;
 
@@ -27,7 +25,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.ElementwiseProduct;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
@@ -42,7 +39,9 @@ import org.apache.spark.sql.types.StructType;
 public class JavaElementwiseProductExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaElementwiseProductExample").getOrCreate();
+      .builder()
+      .appName("JavaElementwiseProductExample")
+      .getOrCreate();
 
     // $example on$
     // Create some vector data; also works for sparse vectors

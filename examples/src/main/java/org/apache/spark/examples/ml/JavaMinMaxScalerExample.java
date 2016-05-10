@@ -28,10 +28,16 @@ import org.apache.spark.sql.Row;
 
 public class JavaMinMaxScalerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaMinMaxScalerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaMinMaxScalerExample")
+      .getOrCreate();
 
     // $example on$
-    Dataset<Row> dataFrame = spark.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> dataFrame = spark
+      .read()
+      .format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
     MinMaxScaler scaler = new MinMaxScaler()
       .setInputCol("features")
       .setOutputCol("scaledFeatures");

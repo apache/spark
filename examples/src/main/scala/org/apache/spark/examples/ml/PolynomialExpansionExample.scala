@@ -26,7 +26,10 @@ import org.apache.spark.sql.SparkSession
 
 object PolynomialExpansionExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("PolynomialExpansionExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("PolynomialExpansionExample")
+      .getOrCreate()
 
     // $example on$
     val data = Array(

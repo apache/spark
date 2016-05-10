@@ -36,7 +36,10 @@ import org.apache.spark.sql.types.StructType;
 public class JavaStopWordsRemoverExample {
 
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaStopWordsRemoverExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaStopWordsRemoverExample")
+      .getOrCreate();
 
     // $example on$
     StopWordsRemover remover = new StopWordsRemover()

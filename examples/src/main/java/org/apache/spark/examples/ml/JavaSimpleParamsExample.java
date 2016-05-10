@@ -40,7 +40,10 @@ import org.apache.spark.sql.SparkSession;
 public class JavaSimpleParamsExample {
 
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaSimpleParamsExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaSimpleParamsExample")
+      .getOrCreate();
 
     // Prepare training data.
     // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
