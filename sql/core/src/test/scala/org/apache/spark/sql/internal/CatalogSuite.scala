@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
@@ -272,10 +272,10 @@ class CatalogSuite
     val function = new Function("nama", "descripta", "classa", isTemporary = false)
     val column = new Column(
       "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
-    val dbFields = db.constructorParams
-    val tableFields = table.constructorParams
-    val functionFields = function.constructorParams
-    val columnFields = column.constructorParams
+    val dbFields = ScalaReflection.getConstructorParameterValues(db)
+    val tableFields = ScalaReflection.getConstructorParameterValues(table)
+    val functionFields = ScalaReflection.getConstructorParameterValues(function)
+    val columnFields = ScalaReflection.getConstructorParameterValues(column)
     assert(dbFields == Seq("nama", "descripta", "locata"))
     assert(tableFields == Seq("nama", "databasa", "descripta", "typa", false))
     assert(functionFields == Seq("nama", "descripta", "classa", false))

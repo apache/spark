@@ -246,7 +246,7 @@ class Dataset[T] private[sql](
       case r: Row => r
       case tuple: Product => Row.fromTuple(tuple)
       case definedByCtor: DefinedByConstructorParams =>
-        Row.fromSeq(definedByCtor.constructorParams)
+        Row.fromSeq(ScalaReflection.getConstructorParameterValues(definedByCtor))
       case o => Row(o)
     }.map { row =>
       row.toSeq.map { cell =>

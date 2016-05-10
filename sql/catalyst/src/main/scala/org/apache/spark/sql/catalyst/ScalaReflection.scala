@@ -29,18 +29,7 @@ import org.apache.spark.unsafe.types.UTF8String
  * for classes whose fields are entirely defined by constructor params but should not be
  * case classes.
  */
-private[sql] trait DefinedByConstructorParams {
-
-  /**
-   * Return the values of this instance's constructor parameters.
-   */
-  private[sql] def constructorParams: Seq[AnyRef] = {
-    ScalaReflection.getConstructorParameters(getClass).map { case (name, _) =>
-      getClass.getMethod(name).invoke(this)
-    }
-  }
-
-}
+private[sql] trait DefinedByConstructorParams
 
 
 /**
@@ -667,6 +656,15 @@ object ScalaReflection extends ScalaReflection {
     val classSymbol = m.staticClass(cls.getName)
     val t = classSymbol.selfType
     constructParams(t).map(_.name.toString)
+  }
+
+  /**
+   * Returns the parameter values for the primary constructor of this class.
+   */
+  def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
+    getConstructorParameterNames(obj.getClass).map { name =>
+      obj.getClass.getMethod(name).invoke(obj)
+    }
   }
 
   /*
