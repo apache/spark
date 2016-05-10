@@ -325,7 +325,11 @@ private[spark] abstract class MockBackend(
         executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
         freeCores += taskScheduler.CPUS_PER_TASK
       }
-      reviveOffers()
+      // optimization (which is used by the actual backends too) -- don't revive offers on *all*
+      // executors when a task completes, just on the one which completed
+      val exec = executorIdToExecutor(task.executorId)
+      reviveWithOffers(Seq(WorkerOffer(executorId = exec.executorId, host = exec.host,
+          cores = exec.freeCores)))
     }
   }
 
@@ -381,7 +385,10 @@ private[spark] abstract class MockBackend(
    * scheduling.
    */
   override def reviveOffers(): Unit = {
-    val offers: Seq[WorkerOffer] = generateOffers()
+    reviveWithOffers(generateOffers())
+  }
+
+  def reviveWithOffers(offers: Seq[WorkerOffer]): Unit = {
     val newTaskDescriptions = taskScheduler.resourceOffers(offers).flatten
     // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
     // tests from introducing a race if they need it
@@ -504,9 +511,9 @@ class TestTaskScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
     super.submitTasks(taskSet)
   }
 
-  override def taskSetFinished(manager: TaskSetManager): Unit = {
+  override def taskSetFinished(manager: TaskSetManager, success: Boolean): Unit = {
     runningTaskSets -= manager.taskSet
-    super.taskSetFinished(manager)
+    super.taskSetFinished(manager, success)
   }
 }
 
@@ -590,7 +597,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    * (a) map output is available whenever we run stage 1
    * (b) we get a second attempt for stage 0 & stage 1
    */
-  testScheduler("job with fetch failure") {
+  testNoBlacklist("job with fetch failure") {
     val input = new MockRDD(sc, 2, Nil)
     val shuffledRdd = shuffle(10, input)
     val shuffleId = shuffledRdd.shuffleDeps.head.shuffleId
@@ -621,12 +628,12 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       val duration = Duration(1, SECONDS)
       awaitJobTermination(jobFuture, duration)
     }
+    assertDataStructuresEmpty()
     assert(results === (0 until 10).map { idx => idx -> (42 + idx) }.toMap)
     assert(stageToAttempts === Map(0 -> Set(0, 1), 1 -> Set(0, 1)))
-    assertDataStructuresEmpty()
   }
 
-  testScheduler("job failure after 4 attempts") {
+  testNoBlacklist("job failure after 4 attempts") {
     def runBackend(): Unit = {
       val (taskDescription, _) = backend.beginTask()
       backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
@@ -638,5 +645,12 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       failure.getMessage.contains("test task failure")
     }
     assertDataStructuresEmpty(noFailure = false)
+  }
+
+
+  def testNoBlacklist(name: String)(body: => Unit): Unit = {
+    // in these simple tests, we only have one executor, so it doens't make sense to turn on the
+    // blacklist.  Just an artifact of this simple test-framework still kinda acting like local-mode
+    testScheduler(name, extraConfs = Seq("spark.scheduler.blacklist.enabled" -> "false"))(body)
   }
 }

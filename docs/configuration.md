@@ -1156,24 +1156,10 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td><code>spark.scheduler.blacklist.timeout</code></td>
-  <td>0s</td>
+  <td><code>spark.scheduler.blacklist.MORE</code></td>
+  <td>TODO</td>
   <td>
-    If executor blacklisting is enabled, this controls how long an executor remains in the blacklist before it is returned to the pool of available executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.scheduler.blacklist.recoverPeriod</code></td>
-  <td>60s</td>
-  <td>
-    If executor blacklisting is enabled, this controls how often to check if executors can be returned to the pool of active executors.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.scheduler.blacklist.advancedStrategy</code></td>
-  <td>false</td>
-  <td>
-    set to tree to enable experimental advanced blacklist strategy. Comparing with the standard behavior before spark 1.6, it enables blacklist on node level.
+    TODO
   </td>
 </tr>
 <tr>
