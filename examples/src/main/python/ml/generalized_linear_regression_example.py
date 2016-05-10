@@ -30,13 +30,13 @@ if __name__ == "__main__":
 
     # $example on$
     # Load training data
-    training = spark.read.format("libsvm")\
+    dataset = spark.read.format("libsvm")\
         .load("data/mllib/sample_linear_regression_data.txt")
 
     glr = GeneralizedLinearRegression(family="gaussian", link="identity", maxIter=10, regParam=0.3)
 
     # Fit the model
-    model = glr.fit(training)
+    model = glr.fit(dataset)
 
     # Print the coefficients and intercept for generalized linear regression model
     print("Coefficients: " + str(model.coefficients))

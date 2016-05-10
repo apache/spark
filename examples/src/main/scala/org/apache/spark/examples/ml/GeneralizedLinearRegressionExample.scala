@@ -33,7 +33,7 @@ object GeneralizedLinearRegressionExample {
 
     // $example on$
     // Load training data
-    val training = spark.read.format("libsvm")
+    val dataset = spark.read.format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt")
 
     val glr = new GeneralizedLinearRegression()
@@ -43,7 +43,7 @@ object GeneralizedLinearRegressionExample {
       .setRegParam(0.3)
 
     // Fit the model
-    val model = glr.fit(training)
+    val model = glr.fit(dataset)
 
     // Print the coefficients and intercept for generalized linear regression model
     println(s"Coefficients: ${model.coefficients} Intercept: ${model.intercept}")

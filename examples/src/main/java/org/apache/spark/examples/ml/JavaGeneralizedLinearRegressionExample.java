@@ -36,7 +36,7 @@ public class JavaGeneralizedLinearRegressionExample {
 
     // $example on$
     // Load training data
-    Dataset<Row> training = spark.read().format("libsvm")
+    Dataset<Row> dataset = spark.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
     GeneralizedLinearRegression glr = new GeneralizedLinearRegression()
@@ -46,7 +46,7 @@ public class JavaGeneralizedLinearRegressionExample {
       .setRegParam(0.3);
 
     // Fit the model
-    GeneralizedLinearRegressionModel model = glr.fit(training);
+    GeneralizedLinearRegressionModel model = glr.fit(dataset);
 
     // Print the coefficients and intercept for generalized linear regression model
     System.out.println("Coefficients: "
