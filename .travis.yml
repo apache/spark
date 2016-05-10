@@ -37,12 +37,9 @@ cache:
 notifications:
   email: false
 
-install: true
+install:
+  - export MAVEN_SKIP_RC=1
+  - build/mvn -T 4 -q -DskipTests -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver install
 
 script:
-  - export MAVEN_SKIP_RC=1
-  - dev/check-license &&
-    dev/lint-python &&
-    dev/lint-scala &&
-    (build/mvn -T 2 -DskipTests -Ddoc-jar.skip=true -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver install | grep -v 'org/maven2/' | grep -v 'from the shaded jar') &&
-    dev/lint-java
+  - dev/lint-java
