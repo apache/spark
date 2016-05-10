@@ -848,7 +848,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   import GeneralizedLinearRegression._
 
   /**
-   * Field in "predictions" which gives the prediction value of each instance.
+   * Field in "predictions" which gives the predicted value of each instance.
    * This is set to a new column name if the original model's `predictionCol` is not set.
    */
   @Since("2.0.0")

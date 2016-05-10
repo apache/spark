@@ -910,7 +910,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
-    def test_linear_regression_summary(self):
+    def test_glr_summary(self):
         from pyspark.mllib.linalg import Vectors
         sqlContext = SQLContext(self.sc)
         df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
