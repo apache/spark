@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql.QueryTest
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
@@ -130,12 +131,72 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     val newTableName = s"${table.table}_new"
 
     withTable(newTableName) {
-      assertResult(expected) {
-        val newDDL = shownDDL.replaceFirst(table.table, newTableName)
-        sql(newDDL)
-        val newTable = sqlContext.externalCatalog.getTable(db, table.table)
-        newTable.copy(identifier = table)
-      }
+      val newDDL = shownDDL.replaceFirst(table.table, newTableName)
+      sql(newDDL)
+      val actual = sqlContext.externalCatalog.getTable(db, newTableName)
+      checkCatalogTables(expected, actual)
     }
+  }
+
+  private def checkCatalogTables(expected: CatalogTable, actual: CatalogTable): Unit = {
+    def normalize(table: CatalogTable): CatalogTable = {
+      val nondeterministicProps = Set(
+        "CreateTime",
+        "transient_lastDdlTime",
+        "grantTime",
+        "lastUpdateTime",
+        "last_modified_by",
+        "last_modified_time",
+        "Owner:",
+        "COLUMN_STATS_ACCURATE",
+        // The following are hive specific schema parameters which we do not need to match exactly.
+        "numFiles",
+        "numRows",
+        "rawDataSize",
+        "totalSize",
+        "totalNumberFiles",
+        "maxFileSize",
+        "minFileSize"
+      )
+
+      def replaceTableName(str: String): String = {
+        str.replaceAll(table.identifier.table, expected.identifier.table)
+      }
+
+      val normalizedProps = table
+        .properties
+        .get("path")
+        .map(replaceTableName)
+        .map(table.properties.updated("path", _))
+        .getOrElse(table.properties)
+        .filterKeys(!nondeterministicProps.contains(_))
+
+      val normalizedLocationUri = table.storage.locationUri.map(replaceTableName)
+
+      val normalizedSerdeProps = {
+        val props = table.storage.serdeProperties
+        props
+          .get("path")
+          .map(replaceTableName)
+          .map(props.updated("path", _))
+          .getOrElse(props)
+      }
+
+      table
+        .copy(
+          identifier = expected.identifier,
+          createTime = 0L,
+          lastAccessTime = 0L,
+          properties = normalizedProps
+        )
+        .withNewStorage(
+          locationUri = normalizedLocationUri,
+          serdeProperties = normalizedSerdeProps
+        )
+    }
+
+    val normalize1 = normalize(expected)
+    val normalize2 = normalize(actual)
+    assert(normalize1 == normalize2)
   }
 }

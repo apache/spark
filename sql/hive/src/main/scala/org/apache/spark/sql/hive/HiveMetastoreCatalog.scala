@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import scala.collection.JavaConverters._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewCommand}
+import org.apache.spark.sql.execution.command.CreateTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
 import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
@@ -44,7 +44,6 @@ import org.apache.spark.sql.types._
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
 private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
-  private val conf = sparkSession.conf
   private val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
   private val client = sparkSession.sharedState.asInstanceOf[HiveSharedState].metadataHive
 
@@ -110,7 +109,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
 
         // We only need names at here since userSpecifiedSchema we loaded from the metastore
-        // contains partition columns. We can always get datatypes of partitioning columns
+        // contains partition columns. We can always get data types of partitioning columns
         // from userSpecifiedSchema.
         val partitionColumns = getColumnNames("part")
 
