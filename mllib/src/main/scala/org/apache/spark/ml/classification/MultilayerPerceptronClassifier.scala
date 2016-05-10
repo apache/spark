@@ -76,7 +76,7 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
    */
   final val solver: Param[String] = new Param[String](this, "solver",
     "Allows setting the solver: minibatch gradient descent (gd) or l-bfgs. " +
-      "(Default l-bfgs)",
+      "(Default: l-bfgs)",
     ParamValidators.inArray[String](Array("gd", "l-bfgs")))
 
   /** @group getParam */
