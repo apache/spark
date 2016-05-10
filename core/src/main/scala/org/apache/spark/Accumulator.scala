@@ -17,9 +17,6 @@
 
 package org.apache.spark
 
-import org.apache.spark.storage.{BlockId, BlockStatus}
-
-
 /**
  * A simpler value of [[Accumulable]] where the result type being accumulated is the same
  * as the types of elements being merged, i.e. variables that are only "added" to through an
@@ -27,16 +24,17 @@ import org.apache.spark.storage.{BlockId, BlockStatus}
  * They can be used to implement counters (as in MapReduce) or sums. Spark natively supports
  * accumulators of numeric value types, and programmers can add support for new types.
  *
- * An accumulator is created from an initial value `v` by calling [[SparkContext#accumulator]].
- * Tasks running on the cluster can then add to it using the [[Accumulable#+=]] operator.
+ * An accumulator is created from an initial value `v` by calling
+ * [[SparkContext#accumulator SparkContext.accumulator]].
+ * Tasks running on the cluster can then add to it using the [[Accumulable#+= +=]] operator.
  * However, they cannot read its value. Only the driver program can read the accumulator's value,
- * using its value method.
+ * using its [[#value]] method.
  *
  * The interpreter session below shows an accumulator being used to add up the elements of an array:
  *
  * {{{
  * scala> val accum = sc.accumulator(0)
- * accum: spark.Accumulator[Int] = 0
+ * accum: org.apache.spark.Accumulator[Int] = 0
  *
  * scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
  * ...
@@ -117,18 +115,4 @@ object AccumulatorParam {
     def addInPlace(t1: String, t2: String): String = t2
     def zero(initialValue: String): String = ""
   }
-
-  // Note: this is expensive as it makes a copy of the list every time the caller adds an item.
-  // A better way to use this is to first accumulate the values yourself then them all at once.
-  @deprecated("use AccumulatorV2", "2.0.0")
-  private[spark] class ListAccumulatorParam[T] extends AccumulatorParam[Seq[T]] {
-    def addInPlace(t1: Seq[T], t2: Seq[T]): Seq[T] = t1 ++ t2
-    def zero(initialValue: Seq[T]): Seq[T] = Seq.empty[T]
-  }
-
-  // For the internal metric that records what blocks are updated in a particular task
-  @deprecated("use AccumulatorV2", "2.0.0")
-  private[spark] object UpdatedBlockStatusesAccumulatorParam
-    extends ListAccumulatorParam[(BlockId, BlockStatus)]
-
 }

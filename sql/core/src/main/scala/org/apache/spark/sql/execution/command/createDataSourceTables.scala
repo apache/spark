@@ -97,7 +97,7 @@ case class CreateDataSourceTableCommand(
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       bucketSpec = None,
-      options = optionsWithPath).resolveRelation()
+      options = optionsWithPath).resolveRelation(checkPathExist = false)
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
@@ -349,6 +349,7 @@ object CreateDataSourceTableUtils extends Logging {
           inputFormat = None,
           outputFormat = None,
           serde = None,
+          compressed = false,
           serdeProperties = options
         ),
         properties = tableProperties.toMap)
@@ -368,6 +369,7 @@ object CreateDataSourceTableUtils extends Logging {
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
           serde = serde.serde,
+          compressed = false,
           serdeProperties = options
         ),
         schema = relation.schema.map { f =>
@@ -380,7 +382,8 @@ object CreateDataSourceTableUtils extends Logging {
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
-    val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
+    val resolvedRelation = dataSource.resolveRelation(checkPathExist = false)
+    val (hiveCompatibleTable, logMessage) = (maybeSerDe, resolvedRelation) match {
       case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +

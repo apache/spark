@@ -608,6 +608,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * scheduler pool. User-defined properties may also be set here. These properties are propagated
    * through to worker tasks and can be accessed there via
    * [[org.apache.spark.TaskContext#getLocalProperty]].
+   *
+   * These properties are inherited by child threads spawned from this thread. This
+   * may have unexpected consequences when working with thread pools. The standard java
+   * implementation of thread pools have worker threads spawn other worker threads.
+   * As a result, local properties may propagate unpredictably.
    */
   def setLocalProperty(key: String, value: String) {
     if (value == null) {
@@ -1331,28 +1336,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
-    register(acc, name)
-    acc
-  }
-
-  /**
-   * Create and register an average accumulator, which accumulates double inputs by recording the
-   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
-   * returned if no input is added.
-   */
-  def averageAccumulator: AverageAccumulator = {
-    val acc = new AverageAccumulator
-    register(acc)
-    acc
-  }
-
-  /**
-   * Create and register an average accumulator, which accumulates double inputs by recording the
-   * total sum and total count, and produce the output by sum / total.  Note that Double.NaN will be
-   * returned if no input is added.
-   */
-  def averageAccumulator(name: String): AverageAccumulator = {
-    val acc = new AverageAccumulator
     register(acc, name)
     acc
   }

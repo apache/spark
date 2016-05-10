@@ -229,7 +229,9 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns the explained variance regression score.
         explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-        Reference: http://en.wikipedia.org/wiki/Explained_variation
+
+        .. seealso:: `Wikipedia explain variation \
+        <http://en.wikipedia.org/wiki/Explained_variation>`_
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -283,7 +285,9 @@ class LinearRegressionSummary(JavaWrapper):
     def r2(self):
         """
         Returns R^2^, the coefficient of determination.
-        Reference: http://en.wikipedia.org/wiki/Coefficient_of_determination
+
+        .. seealso:: `Wikipedia coefficient of determination \
+        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -469,8 +473,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`isotonic`.
         """
-        self._set(isotonic=value)
-        return self
+        return self._set(isotonic=value)
 
     def getIsotonic(self):
         """
@@ -482,8 +485,7 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Sets the value of :py:attr:`featureIndex`.
         """
-        self._set(featureIndex=value)
-        return self
+        return self._set(featureIndex=value)
 
     def getFeatureIndex(self):
         """
@@ -532,8 +534,7 @@ class TreeEnsembleParams(DecisionTreeParams):
         """
         Sets the value of :py:attr:`subsamplingRate`.
         """
-        self._set(subsamplingRate=value)
-        return self
+        return self._set(subsamplingRate=value)
 
     @since("1.4.0")
     def getSubsamplingRate(self):
@@ -562,8 +563,7 @@ class TreeRegressorParams(Params):
         """
         Sets the value of :py:attr:`impurity`.
         """
-        self._set(impurity=value)
-        return self
+        return self._set(impurity=value)
 
     @since("1.4.0")
     def getImpurity(self):
@@ -595,8 +595,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`numTrees`.
         """
-        self._set(numTrees=value)
-        return self
+        return self._set(numTrees=value)
 
     @since("1.4.0")
     def getNumTrees(self):
@@ -610,8 +609,7 @@ class RandomForestParams(TreeEnsembleParams):
         """
         Sets the value of :py:attr:`featureSubsetStrategy`.
         """
-        self._set(featureSubsetStrategy=value)
-        return self
+        return self._set(featureSubsetStrategy=value)
 
     @since("1.4.0")
     def getFeatureSubsetStrategy(self):
@@ -633,7 +631,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
                             HasSeed, JavaMLWritable, JavaMLReadable, HasVarianceCol):
     """
-    `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
+    `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -788,7 +786,7 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
                             JavaMLWritable, JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
+    `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -896,7 +894,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
                    JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
+    `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -982,8 +980,7 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         """
         Sets the value of :py:attr:`lossType`.
         """
-        self._set(lossType=value)
-        return self
+        return self._set(lossType=value)
 
     @since("1.4.0")
     def getLossType(self):
@@ -1120,8 +1117,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`censorCol`.
         """
-        self._set(censorCol=value)
-        return self
+        return self._set(censorCol=value)
 
     @since("1.6.0")
     def getCensorCol(self):
@@ -1135,8 +1131,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantileProbabilities`.
         """
-        self._set(quantileProbabilities=value)
-        return self
+        return self._set(quantileProbabilities=value)
 
     @since("1.6.0")
     def getQuantileProbabilities(self):
@@ -1150,8 +1145,7 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         """
         Sets the value of :py:attr:`quantilesCol`.
         """
-        self._set(quantilesCol=value)
-        return self
+        return self._set(quantilesCol=value)
 
     @since("1.6.0")
     def getQuantilesCol(self):
@@ -1300,8 +1294,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`family`.
         """
-        self._set(family=value)
-        return self
+        return self._set(family=value)
 
     @since("2.0.0")
     def getFamily(self):
@@ -1315,8 +1308,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         """
         Sets the value of :py:attr:`link`.
         """
-        self._set(link=value)
-        return self
+        return self._set(link=value)
 
     @since("2.0.0")
     def getLink(self):

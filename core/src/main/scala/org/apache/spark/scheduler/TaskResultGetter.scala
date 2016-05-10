@@ -27,7 +27,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{ThreadUtils, Utils}
+import org.apache.spark.util.{LongAccumulator, ThreadUtils, Utils}
 
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.

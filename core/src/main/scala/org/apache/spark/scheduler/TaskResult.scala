@@ -22,9 +22,9 @@ import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{AccumulatorV2, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.storage.BlockId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]

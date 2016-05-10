@@ -213,7 +213,7 @@ private[sql] trait SQLTestUtils
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
-    val withoutFilters = df.queryExecution.sparkPlan transform {
+    val withoutFilters = df.queryExecution.sparkPlan.transform {
       case FilterExec(_, child) => child
     }
 

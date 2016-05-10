@@ -18,20 +18,20 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.feature.Normalizer
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object NormalizerExample {
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("NormalizerExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("NormalizerExample")
+      .getOrCreate()
 
     // $example on$
-    val dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     // Normalize each Vector using $L^1$ norm.
     val normalizer = new Normalizer()
@@ -46,7 +46,8 @@ object NormalizerExample {
     val lInfNormData = normalizer.transform(dataFrame, normalizer.p -> Double.PositiveInfinity)
     lInfNormData.show()
     // $example off$
-    sc.stop()
+
+    spark.stop()
   }
 }
 // scalastyle:on println
