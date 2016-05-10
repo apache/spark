@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
@@ -35,30 +35,36 @@ import org.apache.spark.streaming.{Seconds, StreamingContext, TestOutputStream}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.util.{ManualClock, Utils}
 
-class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   val maxAttempts = 5
   val batchDuration = Seconds(1)
+
+  @transient private var _sc: SparkContext = _
+
+  def sc: SparkContext = _sc
 
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName(this.getClass.getSimpleName)
     .set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
-    .set("spark.driver.allowMultipleContexts", "true")
 
   val utils = new PollingFlumeTestUtils
-  var sscCopy: StreamingContext = null
+
+  override def beforeAll(): Unit = {
+    _sc = new SparkContext(conf)
+  }
+
+  override def afterAll(): Unit = {
+    _sc.stop()
+  }
+
   test("flume polling test") {
     testMultipleTimes(testFlumePolling)
   }
 
   test("flume polling test multiple hosts") {
     testMultipleTimes(testFlumePollingMultipleHost)
-  }
-
-  after {
-    // stop underlying sparkcontext, when 'sscCopy' is the last ssc of this suite
-    sscCopy.stop()
   }
 
   /**
@@ -104,7 +110,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
 
   def writeAndVerify(sinkPorts: Seq[Int]): Unit = {
     // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
+    val ssc = new StreamingContext(_sc, batchDuration)
     val addresses = sinkPorts.map(port => new InetSocketAddress("localhost", port))
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
@@ -131,7 +137,6 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
     } finally {
       // here stop ssc only, but not underlying sparkcontext
       ssc.stop(false)
-      sscCopy = ssc
     }
   }
 
