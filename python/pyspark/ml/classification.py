@@ -1078,8 +1078,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     >>> mlp2 = MultilayerPerceptronClassifier.load(mlp_path)
     >>> mlp2.getBlockSize()
     1
-    >>> mlp2.getStepSize()
-    0.03
     >>> model_path = temp_path + "/mlp_model"
     >>> model.save(model_path)
     >>> model2 = MultilayerPerceptronClassificationModel.load(model_path)
