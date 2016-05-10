@@ -271,8 +271,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         Some(partitionSpec))
 
       val hadoopFsRelation = cached.getOrElse {
-        val paths = new Path(metastoreRelation.catalogTable.storage.locationUri.get) :: Nil
-        val fileCatalog = new MetaStoreFileCatalog(sparkSession, paths, partitionSpec)
+        val fileCatalog = new MetaStoreFileCatalog(sparkSession, partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
           val inferredSchema =
@@ -534,15 +533,27 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
  */
 private[hive] class MetaStoreFileCatalog(
     sparkSession: SparkSession,
-    paths: Seq[Path],
-    partitionSpecFromHive: PartitionSpec)
+    val partitionSpecFromHive: PartitionSpec)
   extends ListingFileCatalog(
     sparkSession,
-    paths,
+    MetaStoreFileCatalog.getPathsFromPartitionSpec(partitionSpecFromHive),
     Map.empty,
     Some(partitionSpecFromHive.partitionColumns)) {
 
   override def partitionSpec(): PartitionSpec = partitionSpecFromHive
+
+  override def equals(other: Any): Boolean = other match {
+    case m: MetaStoreFileCatalog => partitionSpecFromHive == m.partitionSpecFromHive
+    case _ => false
+  }
+
+  override def hashCode(): Int = partitionSpecFromHive.hashCode()
+}
+
+private[hive] object MetaStoreFileCatalog {
+  def getPathsFromPartitionSpec(partitionSpec: PartitionSpec): Seq[Path] = {
+    partitionSpec.partitions.map(_.path)
+  }
 }
 
 /**

@@ -529,6 +529,29 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
     dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")
   }
+
+  test("explicitly added partitions should be readable") {
+    withTempDir { src =>
+      val partitionDir = new File(src, "partition").getCanonicalPath
+
+      Seq("foo", "bar").toDF("a").registerTempTable("test_temp")
+      sql("CREATE TABLE test_added_partitions (a string) PARTITIONED BY (b int) STORED AS PARQUET")
+      sql("INSERT INTO test_added_partitions PARTITION(b='0') SELECT a from test_temp")
+      checkAnswer(
+        sql("SELECT * FROM test_added_partitions"),
+        Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+
+      sql(s"ALTER TABLE test_added_partitions ADD PARTITION (b='1') LOCATION '$partitionDir'")
+      checkAnswer(
+        sql("SELECT * FROM test_added_partitions"),
+        Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+
+      Seq("baz").toDF("a").write.mode(SaveMode.Overwrite).parquet(partitionDir)
+      checkAnswer(
+        sql("SELECT * FROM test_added_partitions"),
+        Seq(("foo", 0), ("bar", 0), ("baz", 1)).toDF("a", "b"))
+    }
+  }
 }
 
 /**
