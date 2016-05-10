@@ -275,6 +275,7 @@ class SessionCatalog(
       holdDDLTime: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
+    requireDbExists(db)
     requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime)
   }
@@ -294,7 +295,8 @@ class SessionCatalog(
       isSkewedStoreAsSubdir: Boolean): Unit = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
-    requireTableExists(name)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
       inheritTableSpecs, isSkewedStoreAsSubdir)
   }
@@ -335,6 +337,7 @@ class SessionCatalog(
    */
   def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
     val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
+    requireDbExists(db)
     val newDb = formatDatabaseName(newName.database.getOrElse(currentDb))
     if (db != newDb) {
       throw new AnalysisException(
@@ -343,8 +346,8 @@ class SessionCatalog(
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
-      requireTableExists(oldName)
-      requireTableNotExists(newName)
+      requireTableExists(TableIdentifier(oldTableName, Some(db)))
+      requireTableNotExists(TableIdentifier(newTableName, Some(db)))
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
       if (newName.database.isDefined) {
@@ -373,9 +376,10 @@ class SessionCatalog(
     val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
+      requireDbExists(db)
       // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
       // Instead, log it as an error message.
-      if (tableExists(name)) {
+      if (tableExists(TableIdentifier(table, Option(db)))) {
         externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
       } else if (!ignoreIfNotExists) {
         throw new NoSuchTableException(db = db, table = table)
@@ -517,7 +521,7 @@ class SessionCatalog(
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
-    requireTableExists(tableName)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
   }
 
@@ -532,7 +536,7 @@ class SessionCatalog(
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
-    requireTableExists(tableName)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
   }
 
@@ -549,7 +553,7 @@ class SessionCatalog(
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
-    requireTableExists(tableName)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -566,7 +570,7 @@ class SessionCatalog(
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
-    requireTableExists(tableName)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.alterPartitions(db, table, parts)
   }
 
@@ -578,7 +582,7 @@ class SessionCatalog(
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
-    requireTableExists(tableName)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.getPartition(db, table, spec)
   }
 
@@ -595,7 +599,7 @@ class SessionCatalog(
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
-    requireTableExists(tableName)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.listPartitions(db, table, partialSpec)
   }
 

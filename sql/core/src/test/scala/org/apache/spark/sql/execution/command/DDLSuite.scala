@@ -1013,7 +1013,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql("DROP DATABASE DeFault")
         }.getMessage
         if (caseSensitive == "true") {
-          assert(message.contains("Database 'DeFault' does not exist"))
+          assert(message.contains("Database 'DeFault' not found"))
         } else {
           assert(message.contains("Can not drop default database"))
         }

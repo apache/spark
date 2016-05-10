@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 
 
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
  * can be accessed in multiple threads. This is an external catalog because it is expected to
  * interact with external systems.
  *
- * Implementations should throw [[AnalysisException]] when table or database don't exist.
+ * Implementations should throw [[NoSuchDatabaseException]] when table or database don't exist.
  */
 abstract class ExternalCatalog {
   import CatalogTypes.TablePartitionSpec
@@ -158,7 +157,6 @@ abstract class ExternalCatalog {
    * A partial partition spec may optionally be provided to filter the partitions returned.
    * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
    * then a partial spec of (a='1') will return the first two only.
- *
    * @param db database name
    * @param table table name
    * @param partialSpec  partition spec

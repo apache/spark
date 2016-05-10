@@ -101,7 +101,6 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     specs foreach { s =>
       if (partitionExists(db, table, s)) {
         throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
-          s"Partition exists: database '$db' table '$table' already contains: '$s'")
       }
     }
   }
