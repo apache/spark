@@ -20,6 +20,8 @@ package org.apache.spark.sql.internal
 import java.io.File
 import java.util.Properties
 
+import org.apache.spark.sql.catalyst.rules.Rule
+
 import scala.collection.JavaConverters._
 
 import org.apache.hadoop.conf.Configuration
@@ -164,6 +166,13 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   // ------------------------------------------------------
 
   def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
+
+  def codegenForExecution(plan: SparkPlan): SparkPlan = {
+    codegenRules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  }
+
+  protected def codegenRules: Seq[Rule[SparkPlan]] =
+    Seq(CollapseCodegenStages(sparkSession.sessionState.conf))
 
   def refreshTable(tableName: String): Unit = {
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))

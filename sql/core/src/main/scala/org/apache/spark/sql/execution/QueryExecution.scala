@@ -21,6 +21,7 @@ import java.nio.charset.StandardCharsets
 import java.sql.Timestamp
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.adaptive.QueryFragmentTransformer
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
@@ -79,7 +80,12 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   // executedPlan should not be used to initialize any SparkPlan. It should be
   // only used for execution.
-  lazy val executedPlan: SparkPlan = prepareForExecution(sparkPlan)
+  lazy val executedPlan: SparkPlan =
+    if (sparkSession.sessionState.conf.adaptiveExecution2Enabled) {
+      prepareForAdaptiveExecution(sparkPlan)
+    } else {
+      prepareForExecution(sparkPlan)
+    }
 
   /** Internal version of the RDD. Avoids copies and has no schema */
   lazy val toRdd: RDD[InternalRow] = executedPlan.execute()
@@ -99,6 +105,17 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     EnsureRequirements(sparkSession.sessionState.conf),
     CollapseCodegenStages(sparkSession.sessionState.conf),
     ReuseExchange(sparkSession.sessionState.conf))
+
+  protected def prepareForAdaptiveExecution(plan: SparkPlan): SparkPlan = {
+    preparationsForAdaptive.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
+  }
+
+  protected def preparationsForAdaptive: Seq[Rule[SparkPlan]] = Seq(
+    python.ExtractPythonUDFs,
+    PlanSubqueries(sparkSession),
+    EnsureRequirements(sparkSession.sessionState.conf),
+    ReuseExchange(sparkSession.sessionState.conf),
+    QueryFragmentTransformer(sparkSession.sessionState.conf))
 
   protected def stringOrError[A](f: => A): String =
     try f.toString catch { case e: Throwable => e.toString }
