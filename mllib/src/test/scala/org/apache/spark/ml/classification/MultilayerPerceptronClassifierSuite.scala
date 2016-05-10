@@ -18,11 +18,11 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.classification.LogisticRegressionSuite._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 import org.apache.spark.mllib.util.MLlibTestSparkContext
