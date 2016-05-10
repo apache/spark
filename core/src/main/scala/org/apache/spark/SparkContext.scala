@@ -539,7 +539,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _executorAllocationManager.foreach(_.start())
 
     // By default blacklistTracker is enabled.
-    _blacklistTracker = if (_conf.getBoolean("spark.scheduler.blacklist.enabled", true)){
+    _blacklistTracker = if (_conf.getBoolean("spark.scheduler.blacklist.enabled", true)) {
       Some(new BlacklistTracker(_conf))
     } else {
       None

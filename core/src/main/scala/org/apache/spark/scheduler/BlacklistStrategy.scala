@@ -60,9 +60,8 @@ private[scheduler] trait BlacklistStrategy {
 
     val now = clock.getTimeMillis()
     val expiredKey = executorIdToFailureStatus.filter {
-      case (executorid, failureStatus) => {
+      case (executorid, failureStatus) =>
         (now - failureStatus.updatedTime) >= expireTimeInMilliseconds
-      }
     }.keySet
 
     if (expiredKey.isEmpty) {
