@@ -279,10 +279,10 @@ class CatalogSuite
     assert(tableFields == Seq("nama", "databasa", "descripta", "typa", false))
     assert(functionFields == Seq("nama", "descripta", "classa", false))
     assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
-    val dbString = CatalogImpl.makeDataset(Seq(db), sparkSession).showString(10)
-    val tableString = CatalogImpl.makeDataset(Seq(table), sparkSession).showString(10)
-    val functionString = CatalogImpl.makeDataset(Seq(function), sparkSession).showString(10)
-    val columnString = CatalogImpl.makeDataset(Seq(column), sparkSession).showString(10)
+    val dbString = CatalogImpl.makeDataset(Seq(db), spark).showString(10)
+    val tableString = CatalogImpl.makeDataset(Seq(table), spark).showString(10)
+    val functionString = CatalogImpl.makeDataset(Seq(function), spark).showString(10)
+    val columnString = CatalogImpl.makeDataset(Seq(column), spark).showString(10)
     dbFields.foreach { f => assert(dbString.contains(f.toString)) }
     tableFields.foreach { f => assert(tableString.contains(f.toString)) }
     functionFields.foreach { f => assert(functionString.contains(f.toString)) }
