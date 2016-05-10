@@ -687,12 +687,8 @@ class SessionCatalog(
    * Loads resources such as JARs and Files for a function. Every resource is represented
    * by a tuple (resource type, resource uri).
    */
-  def loadFunctionResources(resources: Seq[(String, String)]): Unit = {
-    resources.foreach { case (resourceType, uri) =>
-      val functionResource =
-        FunctionResource(FunctionResourceType.fromString(resourceType.toLowerCase), uri)
-      functionResourceLoader.loadResource(functionResource)
-    }
+  def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
+    resources.foreach(functionResourceLoader.loadResource)
   }
 
   /**
