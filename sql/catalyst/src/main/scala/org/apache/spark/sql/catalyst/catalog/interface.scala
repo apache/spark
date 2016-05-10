@@ -33,11 +33,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  * @param resources resource types and Uris used by the function
  */
-// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
 case class CatalogFunction(
     identifier: FunctionIdentifier,
     className: String,
-    resources: Seq[(String, String)])
+    resources: Seq[FunctionResource])
 
 
 /**

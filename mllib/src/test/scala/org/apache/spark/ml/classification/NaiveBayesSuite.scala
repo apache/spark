@@ -43,7 +43,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
       Array(0.10, 0.10, 0.70, 0.10)  // label 2
     ).map(_.map(math.log))
 
-    dataset = sqlContext.createDataFrame(generateNaiveBayesInput(pi, theta, 100, 42))
+    dataset = spark.createDataFrame(generateNaiveBayesInput(pi, theta, 100, 42))
   }
 
   def validatePrediction(predictionAndLabels: DataFrame): Unit = {
@@ -127,7 +127,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
 
-    val testDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
+    val testDataset = spark.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 42, "multinomial"))
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial")
     val model = nb.fit(testDataset)
@@ -135,7 +135,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     validateModelFit(pi, theta, model)
     assert(model.hasParent)
 
-    val validationDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
+    val validationDataset = spark.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 17, "multinomial"))
 
     val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
@@ -157,7 +157,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val pi = Vectors.dense(piArray)
     val theta = new DenseMatrix(3, 12, thetaArray.flatten, true)
 
-    val testDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
+    val testDataset = spark.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 45, "bernoulli"))
     val nb = new NaiveBayes().setSmoothing(1.0).setModelType("bernoulli")
     val model = nb.fit(testDataset)
@@ -165,7 +165,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     validateModelFit(pi, theta, model)
     assert(model.hasParent)
 
-    val validationDataset = sqlContext.createDataFrame(generateNaiveBayesInput(
+    val validationDataset = spark.createDataFrame(generateNaiveBayesInput(
       piArray, thetaArray, nPoints, 20, "bernoulli"))
 
     val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
@@ -188,7 +188,7 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   test("should support all NumericType labels and not support other types") {
     val nb = new NaiveBayes()
     MLTestingUtils.checkNumericTypes[NaiveBayesModel, NaiveBayes](
-      nb, isClassification = true, sqlContext) { (expected, actual) =>
+      nb, isClassification = true, spark) { (expected, actual) =>
         assert(expected.pi === actual.pi)
         assert(expected.theta === actual.theta)
       }

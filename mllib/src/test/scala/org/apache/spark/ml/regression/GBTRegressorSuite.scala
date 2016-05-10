@@ -72,7 +72,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   }
 
   test("GBTRegressor behaves reasonably on toy data") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       LabeledPoint(10, Vectors.dense(1, 2, 3, 4)),
       LabeledPoint(-5, Vectors.dense(6, 3, 2, 1)),
       LabeledPoint(11, Vectors.dense(2, 2, 3, 4)),
@@ -99,7 +99,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
     val path = tempDir.toURI.toString
     sc.setCheckpointDir(path)
 
-    val df = sqlContext.createDataFrame(data)
+    val df = spark.createDataFrame(data)
     val gbt = new GBTRegressor()
       .setMaxDepth(2)
       .setMaxIter(5)
@@ -115,7 +115,7 @@ class GBTRegressorSuite extends SparkFunSuite with MLlibTestSparkContext
   test("should support all NumericType labels and not support other types") {
     val gbt = new GBTRegressor().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[GBTRegressionModel, GBTRegressor](
-      gbt, isClassification = false, sqlContext) { (expected, actual) =>
+      gbt, isClassification = false, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }

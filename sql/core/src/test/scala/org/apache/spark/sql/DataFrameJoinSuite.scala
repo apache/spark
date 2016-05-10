@@ -154,7 +154,7 @@ class DataFrameJoinSuite extends QueryTest with SharedSQLContext {
     // SPARK-12275: no physical plan for BroadcastHint in some condition
     withTempPath { path =>
       df1.write.parquet(path.getCanonicalPath)
-      val pf1 = sqlContext.read.parquet(path.getCanonicalPath)
+      val pf1 = spark.read.parquet(path.getCanonicalPath)
       assert(df1.join(broadcast(pf1)).count() === 4)
     }
   }
