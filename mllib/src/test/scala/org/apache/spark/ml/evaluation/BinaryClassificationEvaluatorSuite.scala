@@ -42,21 +42,21 @@ class BinaryClassificationEvaluatorSuite
     val evaluator = new BinaryClassificationEvaluator()
       .setMetricName("areaUnderPR")
 
-    val vectorDF = sqlContext.createDataFrame(Seq(
+    val vectorDF = spark.createDataFrame(Seq(
       (0d, Vectors.dense(12, 2.5)),
       (1d, Vectors.dense(1, 3)),
       (0d, Vectors.dense(10, 2))
     )).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(vectorDF) === 1.0)
 
-    val doubleDF = sqlContext.createDataFrame(Seq(
+    val doubleDF = spark.createDataFrame(Seq(
       (0d, 0d),
       (1d, 1d),
       (0d, 0d)
     )).toDF("label", "rawPrediction")
     assert(evaluator.evaluate(doubleDF) === 1.0)
 
-    val stringDF = sqlContext.createDataFrame(Seq(
+    val stringDF = spark.createDataFrame(Seq(
       (0d, "0d"),
       (1d, "1d"),
       (0d, "0d")
@@ -71,6 +71,6 @@ class BinaryClassificationEvaluatorSuite
 
   test("should support all NumericType labels and not support other types") {
     val evaluator = new BinaryClassificationEvaluator().setRawPredictionCol("prediction")
-    MLTestingUtils.checkNumericTypes(evaluator, sqlContext)
+    MLTestingUtils.checkNumericTypes(evaluator, spark)
   }
 }

@@ -105,7 +105,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       }
 
       // Read the bucket file into a dataframe, so that it's easier to test.
-      val readBack = sqlContext.read.format(source)
+      val readBack = spark.read.format(source)
         .load(bucketFile.getAbsolutePath)
         .select(columns: _*)
 

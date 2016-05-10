@@ -212,18 +212,22 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create an [[ExplainCommand]] logical plan.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+   * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
-    val options = ctx.explainOption.asScala
-    if (options.exists(_.FORMATTED != null)) {
+    if (ctx.FORMATTED != null) {
       throw operationNotAllowed("EXPLAIN FORMATTED", ctx)
     }
+    if (ctx.LOGICAL != null) {
+      throw operationNotAllowed("EXPLAIN LOGICAL", ctx)
+    }
 
-    // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
-        codegen = options.exists(_.CODEGEN != null))
+      ExplainCommand(statement, extended = ctx.EXTENDED != null, codegen = ctx.CODEGEN != null)
     } else {
       ExplainCommand(OneRowRelation)
     }

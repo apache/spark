@@ -30,11 +30,11 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   override def beforeAll(): Unit = {
     // Create a simple table with two columns: id and id1
-    sqlContext.range(1, 10).selectExpr("id", "id id1").write.format("json").saveAsTable("jt")
+    spark.range(1, 10).selectExpr("id", "id id1").write.format("json").saveAsTable("jt")
   }
 
   override def afterAll(): Unit = {
-    sqlContext.sql(s"DROP TABLE IF EXISTS jt")
+    spark.sql(s"DROP TABLE IF EXISTS jt")
   }
 
   test("nested views (interleaved with temporary views)") {
@@ -277,11 +277,11 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withSQLConf(
       SQLConf.NATIVE_VIEW.key -> "true", SQLConf.CANONICAL_NATIVE_VIEW.key -> "true") {
       withTable("add_col") {
-        sqlContext.range(10).write.saveAsTable("add_col")
+        spark.range(10).write.saveAsTable("add_col")
         withView("v") {
           sql("CREATE VIEW v AS SELECT * FROM add_col")
-          sqlContext.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
-          checkAnswer(sql("SELECT * FROM v"), sqlContext.range(10).toDF())
+          spark.range(10).select('id, 'id as 'a).write.mode("overwrite").saveAsTable("add_col")
+          checkAnswer(sql("SELECT * FROM v"), spark.range(10).toDF())
         }
       }
     }
@@ -291,8 +291,8 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // make sure the new flag can handle some complex cases like join and schema change.
     withSQLConf(SQLConf.NATIVE_VIEW.key -> "true") {
       withTable("jt1", "jt2") {
-        sqlContext.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
-        sqlContext.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")
+        spark.range(1, 10).toDF("id1").write.format("json").saveAsTable("jt1")
+        spark.range(1, 10).toDF("id2").write.format("json").saveAsTable("jt2")
         sql("CREATE VIEW testView AS SELECT * FROM jt1 JOIN jt2 ON id1 == id2")
         checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
