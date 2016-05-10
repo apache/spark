@@ -301,6 +301,15 @@ class SessionCatalog(
     if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
+      if (newName.database.isDefined) {
+        throw new AnalysisException(
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
+            s"name '${newName.database.get}' in the destination table")
+      }
+      if (tempTables.contains(newTableName)) {
+        throw new AnalysisException(
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination table already exists")
+      }
       val table = tempTables(oldTableName)
       tempTables.remove(oldTableName)
       tempTables.put(newTableName, table)

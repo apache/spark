@@ -61,7 +61,29 @@ abstract class PartitioningAwareFileCatalog(
     }
   }
 
-  override def allFiles(): Seq[FileStatus] = leafFiles.values.toSeq
+  override def allFiles(): Seq[FileStatus] = {
+    if (partitionSpec().partitionColumns.isEmpty) {
+      // For each of the input paths, get the list of files inside them
+      paths.flatMap { path =>
+        // Make the path qualified (consistent with listLeafFiles and listLeafFilesInParallel).
+        val fs = path.getFileSystem(hadoopConf)
+        val qualifiedPath = fs.makeQualified(path)
+
+        // There are three cases possible with each path
+        // 1. The path is a directory and has children files in it. Then it must be present in
+        //    leafDirToChildrenFiles as those children files will have been found as leaf files.
+        //    Find its children files from leafDirToChildrenFiles and include them.
+        // 2. The path is a file, then it will be present in leafFiles. Include this path.
+        // 3. The path is a directory, but has no children files. Do not include this path.
+
+        leafDirToChildrenFiles.get(qualifiedPath)
+          .orElse { leafFiles.get(qualifiedPath).map(Array(_)) }
+          .getOrElse(Array.empty)
+      }
+    } else {
+      leafFiles.values.toSeq
+    }
+  }
 
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
