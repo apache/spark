@@ -402,8 +402,7 @@ class DataFrameReader(object):
     def orc(self, path):
         """Loads an ORC file, returning the result as a :class:`DataFrame`.
 
-        .. note:: Currently ORC support is only available together with
-        :class:`HiveContext`.
+        .. note:: Currently ORC support is only available together with :class:`HiveContext`.
 
         >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
@@ -423,7 +422,7 @@ class DataFrameReader(object):
 
         If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster;
+        .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
@@ -811,8 +810,7 @@ class DataFrameWriter(object):
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
-        .. note:: Currently ORC support is only available together with
-        :class:`HiveContext`.
+        .. note:: Currently ORC support is only available together with :class:`HiveContext`.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.
@@ -840,7 +838,7 @@ class DataFrameWriter(object):
     def jdbc(self, url, table, mode=None, properties=None):
         """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster;\
+        .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
