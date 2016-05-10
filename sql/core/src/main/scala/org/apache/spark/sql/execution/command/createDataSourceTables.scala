@@ -58,7 +58,7 @@ case class CreateDataSourceTableCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
 
-    sessionState.catalog.validateDatabaseName(tableIdent.database)
+    tableIdent.database.foreach(sessionState.catalog.validateDatabaseName)
     sessionState.catalog.validateTableName(tableIdent.table)
 
     val tableName = tableIdent.unquotedString
@@ -127,7 +127,7 @@ case class CreateDataSourceTableAsSelectCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
 
-    sessionState.catalog.validateDatabaseName(tableIdent.database)
+    tableIdent.database.foreach(sessionState.catalog.validateDatabaseName)
     sessionState.catalog.validateTableName(tableIdent.table)
 
     val tableName = tableIdent.unquotedString

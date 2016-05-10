@@ -101,15 +101,8 @@ class SessionCatalog(
    * This method is intended to have the same behavior of
    * org.apache.hadoop.hive.metastore.MetaStoreUtils.validateName.
    */
-  protected[this] def validateName(name: String): Boolean = {
+  private def validateName(name: String): Boolean = {
     validName.pattern.matcher(name).matches()
-  }
-
-  /**
-   * Validate database names
-   */
-  def validateDatabaseName(dbName: Option[String]): Unit = {
-    if (dbName.isDefined) validateDatabaseName(dbName.get)
   }
 
   def validateDatabaseName(dbName: String): Unit = {
@@ -119,9 +112,6 @@ class SessionCatalog(
     }
   }
 
-  /**
-   * Validate table names
-   */
   def validateTableName(tableName: String): Unit = {
     if (!validateName(tableName)) {
       throw new AnalysisException(s"Table name '$tableName' is not a valid name. " +
@@ -288,7 +278,9 @@ class SessionCatalog(
       isOverwrite: Boolean,
       holdDDLTime: Boolean): Unit = {
     val db = name.database.getOrElse(getCurrentDatabase)
+    validateDatabaseName(db)
     val table = formatTableName(name.table)
+    validateTableName(table)
     externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime)
   }
 
@@ -306,7 +298,9 @@ class SessionCatalog(
       inheritTableSpecs: Boolean,
       isSkewedStoreAsSubdir: Boolean): Unit = {
     val db = name.database.getOrElse(getCurrentDatabase)
+    validateDatabaseName(db)
     val table = formatTableName(name.table)
+    validateTableName(table)
     externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
       inheritTableSpecs, isSkewedStoreAsSubdir)
   }

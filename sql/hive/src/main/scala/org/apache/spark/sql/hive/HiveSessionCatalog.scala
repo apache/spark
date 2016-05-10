@@ -90,13 +90,13 @@ private[sql] class HiveSessionCatalog(
   val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
 
   override def refreshTable(name: TableIdentifier): Unit = {
-    validateDatabaseName(name.database)
+    name.database.foreach(validateDatabaseName)
     validateTableName(name.table)
     metastoreCatalog.refreshTable(name)
   }
 
   override def invalidateTable(name: TableIdentifier): Unit = {
-    validateDatabaseName(name.database)
+    name.database.foreach(validateDatabaseName)
     validateTableName(name.table)
     metastoreCatalog.invalidateTable(name)
   }
@@ -106,14 +106,14 @@ private[sql] class HiveSessionCatalog(
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
-    validateDatabaseName(name.database)
+    name.database.foreach(validateDatabaseName)
     validateTableName(name.table)
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
-    validateDatabaseName(table.database)
+    table.database.foreach(validateDatabaseName)
     validateTableName(table.table)
     val key = metastoreCatalog.getQualifiedTableName(table)
     metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
