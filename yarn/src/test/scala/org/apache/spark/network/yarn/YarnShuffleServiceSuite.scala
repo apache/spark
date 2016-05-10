@@ -19,13 +19,15 @@ package org.apache.spark.network.yarn
 import java.io.{DataOutputStream, File, FileOutputStream}
 
 import scala.annotation.tailrec
+import scala.concurrent.duration._
 
-import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.concurrent.Timeouts
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
@@ -42,15 +44,8 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
     yarnConfig.set(YarnConfiguration.NM_AUX_SERVICE_FMT.format("spark_shuffle"),
       classOf[YarnShuffleService].getCanonicalName)
     yarnConfig.setInt("spark.shuffle.service.port", 0)
-
-    yarnConfig.get("yarn.nodemanager.local-dirs").split(",").foreach { dir =>
-      val d = new File(dir)
-      if (d.exists()) {
-        FileUtils.deleteDirectory(d)
-      }
-      FileUtils.forceMkdir(d)
-      logInfo(s"creating yarn.nodemanager.local-dirs: $d")
-    }
+    val localDir = Utils.createTempDir()
+    yarnConfig.set("yarn.nodemanager.local-dirs", localDir.getAbsolutePath)
   }
 
   var s1: YarnShuffleService = null
@@ -304,6 +299,9 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile2 = s2.registeredExecutorFile
     recoveryPath.toString should be (new Path(execStateFile2.getParentFile.toURI).toString)
+    eventually(timeout(10 seconds), interval(5 millis)) {
+      assert(!execStateFile.exists())
+    }
 
     val handler2 = s2.blockHandler
     val resolver2 = ShuffleTestAccessor.getBlockResolver(handler2)

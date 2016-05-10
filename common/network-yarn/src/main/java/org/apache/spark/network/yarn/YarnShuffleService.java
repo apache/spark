@@ -248,7 +248,11 @@ public class YarnShuffleService extends AuxiliaryService {
           // If NM recovery is enabled and the recovery file exists in old NM local dirs, which
           // means old version of Spark already generated the recovery file, we should copy the
           // old file in to a new recovery path for the compatibility.
-          f.renameTo(new File(_recoveryPath.toUri().getPath(), RECOVERY_FILE_NAME));
+          if (!f.renameTo(new File(_recoveryPath.toUri().getPath(), RECOVERY_FILE_NAME))) {
+            // Fail to move recovery file to new path
+            logger.error("Failed to move recovery file {} to the path {}",
+              RECOVERY_FILE_NAME, _recoveryPath.toString());
+          }
         }
         break;
       }
