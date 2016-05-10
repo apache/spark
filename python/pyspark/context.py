@@ -209,6 +209,12 @@ class SparkContext(object):
                     self._python_includes.append(filename)
                     sys.path.insert(1, os.path.join(SparkFiles.getRootDirectory(), filename))
 
+        # Apply requirements file set by spark-submit.
+        for path in self._conf.get("spark.submit.pyRequirements", "").split(","):
+            if path != "":
+                (dirname, filename) = os.path.split(path)
+                self.addRequirementsFile(os.path.join(SparkFiles.getRootDirectory(), filename))
+
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
         self._temp_dir = \
