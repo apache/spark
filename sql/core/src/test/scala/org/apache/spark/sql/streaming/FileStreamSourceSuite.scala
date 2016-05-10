@@ -103,9 +103,9 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
 
     val reader =
       if (schema.isDefined) {
-        sqlContext.read.format(format).schema(schema.get)
+        spark.read.format(format).schema(schema.get)
       } else {
-        sqlContext.read.format(format)
+        spark.read.format(format)
       }
     reader.stream(path)
   }
@@ -149,7 +149,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       format: Option[String],
       path: Option[String],
       schema: Option[StructType] = None): StructType = {
-    val reader = sqlContext.read
+    val reader = spark.read
     format.foreach(reader.format)
     schema.foreach(reader.schema)
     val df =
