@@ -191,20 +191,22 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
     }
-    checkAnswer(sql("SHOW functions abs"), Row("abs"))
-    checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
-    checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
-    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    checkAnswer(sql("SHOW functions `~`"), Row("~"))
-    checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-    checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
-    // this probably will failed if we add more function with `sha` prefixing.
-    checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
-    // Test '|' for alternation.
-    checkAnswer(
-      sql("SHOW functions 'sha*|weekofyea*'"),
-      Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+    withTempDatabase { db =>
+      checkAnswer(sql("SHOW functions abs"), Row("abs"))
+      checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
+      checkAnswer(sql(s"SHOW functions $db.abs"), Row("abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
+      checkAnswer(sql("SHOW functions `~`"), Row("~"))
+      checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
+      checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
+      // this probably will failed if we add more function with `sha` prefixing.
+      checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+      // Test '|' for alternation.
+      checkAnswer(
+        sql("SHOW functions 'sha*|weekofyea*'"),
+        Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+    }
   }
 
   test("describe functions - built-in functions") {

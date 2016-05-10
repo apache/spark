@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 
 
 /**
@@ -34,7 +35,7 @@ abstract class ExternalCatalog {
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database '$db' does not exist")
+      throw new NoSuchDatabaseException(db)
     }
   }
 
@@ -157,6 +158,7 @@ abstract class ExternalCatalog {
    * A partial partition spec may optionally be provided to filter the partitions returned.
    * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
    * then a partial spec of (a='1') will return the first two only.
+ *
    * @param db database name
    * @param table table name
    * @param partialSpec  partition spec
