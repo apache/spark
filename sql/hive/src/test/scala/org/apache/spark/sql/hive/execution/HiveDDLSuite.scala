@@ -36,7 +36,7 @@ class HiveDDLSuite
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
-      sqlContext.sessionState.catalog.reset()
+      spark.sessionState.catalog.reset()
     } finally {
       super.afterEach()
     }
@@ -212,7 +212,7 @@ class HiveDDLSuite
   test("drop views") {
     withTable("tab1") {
       val tabName = "tab1"
-      sqlContext.range(10).write.saveAsTable("tab1")
+      spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         val viewName = "view1"
 
@@ -233,7 +233,7 @@ class HiveDDLSuite
   test("alter views - rename") {
     val tabName = "tab1"
     withTable(tabName) {
-      sqlContext.range(10).write.saveAsTable(tabName)
+      spark.range(10).write.saveAsTable(tabName)
       val oldViewName = "view1"
       val newViewName = "view2"
       withView(oldViewName, newViewName) {
@@ -252,7 +252,7 @@ class HiveDDLSuite
   test("alter views - set/unset tblproperties") {
     val tabName = "tab1"
     withTable(tabName) {
-      sqlContext.range(10).write.saveAsTable(tabName)
+      spark.range(10).write.saveAsTable(tabName)
       val viewName = "view1"
       withView(viewName) {
         val catalog = hiveContext.sessionState.catalog
@@ -290,7 +290,7 @@ class HiveDDLSuite
   test("alter views and alter table - misuse") {
     val tabName = "tab1"
     withTable(tabName) {
-      sqlContext.range(10).write.saveAsTable(tabName)
+      spark.range(10).write.saveAsTable(tabName)
       val oldViewName = "view1"
       val newViewName = "view2"
       withView(oldViewName, newViewName) {
@@ -354,7 +354,7 @@ class HiveDDLSuite
 
   test("drop view using drop table") {
     withTable("tab1") {
-      sqlContext.range(10).write.saveAsTable("tab1")
+      spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
         val message = intercept[AnalysisException] {
@@ -383,7 +383,7 @@ class HiveDDLSuite
   }
 
   private def createDatabaseWithLocation(tmpDir: File, dirExists: Boolean): Unit = {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val dbName = "db1"
     val tabName = "tab1"
     val fs = new Path(tmpDir.toString).getFileSystem(hiveContext.sessionState.newHadoopConf())
@@ -442,7 +442,7 @@ class HiveDDLSuite
         assert(!fs.exists(dbPath))
 
         sql(s"CREATE DATABASE $dbName")
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
         val db1 = catalog.getDatabaseMetadata(dbName)
         assert(db1 == CatalogDatabase(
@@ -518,7 +518,7 @@ class HiveDDLSuite
   test("desc table for data source table") {
     withTable("tab1") {
       val tabName = "tab1"
-      sqlContext.range(1).write.format("json").saveAsTable(tabName)
+      spark.range(1).write.format("json").saveAsTable(tabName)
 
       assert(sql(s"DESC $tabName").collect().length == 1)
 

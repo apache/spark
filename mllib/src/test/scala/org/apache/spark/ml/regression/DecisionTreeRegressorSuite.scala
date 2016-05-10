@@ -120,7 +120,7 @@ class DecisionTreeRegressorSuite
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeRegressor().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeRegressionModel, DecisionTreeRegressor](
-      dt, isClassification = false, sqlContext) { (expected, actual) =>
+      dt, isClassification = false, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }
