@@ -102,7 +102,8 @@ class NaiveBayes @Since("1.5.0") (
   setDefault(modelType -> OldNaiveBayes.Multinomial)
 
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
-    val oldDataset: RDD[OldLabeledPoint] = extractLabeledPoints(dataset).map(_.asMLlib)
+    val oldDataset: RDD[OldLabeledPoint] =
+      extractLabeledPoints(dataset).map(OldLabeledPoint.fromML)
     val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
     NaiveBayesModel.fromOld(oldModel, this)
   }

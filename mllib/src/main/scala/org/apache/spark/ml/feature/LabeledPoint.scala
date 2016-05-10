@@ -20,8 +20,6 @@ package org.apache.spark.ml.feature
 import scala.beans.BeanInfo
 
 import org.apache.spark.ml.linalg.Vector
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
-import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 
 /**
  * Class that represents the features and labels of a data point.
@@ -30,10 +28,7 @@ import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
  * @param features List of features for this data point.
  */
 @BeanInfo
-case class LabeledPoint(label: Double, features: Vector) {
-  def asMLlib: OldLabeledPoint = {
-    OldLabeledPoint(label, OldVectors.fromML(features))
-  }
+private[spark] case class LabeledPoint(label: Double, features: Vector) {
   override def toString: String = {
     s"($label,$features)"
   }

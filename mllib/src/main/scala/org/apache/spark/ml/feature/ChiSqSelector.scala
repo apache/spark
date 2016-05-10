@@ -27,6 +27,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -81,7 +82,7 @@ final class ChiSqSelector(override val uid: String)
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(labelCol), $(featuresCol)).rdd.map {
       case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features).asMLlib
+        OldLabeledPoint.fromML(LabeledPoint(label, features))
     }
     val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
     copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
