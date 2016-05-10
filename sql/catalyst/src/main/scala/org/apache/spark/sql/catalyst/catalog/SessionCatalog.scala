@@ -432,6 +432,14 @@ class SessionCatalog(
     }
   }
 
+ /**
+  * Return whether a temp table with the specified name exists.
+  */
+  def tempTableExists(name: TableIdentifier): Boolean = {
+    assert(name.database.isEmpty)
+    tempTables.contains(formatTableName(name.table))
+  }
+
   /**
    * Return whether a table with the specified name is a temporary table.
    *
