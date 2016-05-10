@@ -281,7 +281,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     ))
 
     val fakeRDD = new FileScanRDD(
-      sqlContext.sparkSession,
+      spark,
       (file: PartitionedFile) => Iterator.empty,
       Seq(partition)
     )
@@ -399,7 +399,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         util.stringToFile(file, "*" * size)
     }
 
-    val df = sqlContext.read
+    val df = spark.read
       .format(classOf[TestFileFormat].getName)
       .load(tempDir.getCanonicalPath)
 
@@ -409,7 +409,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           l.copy(relation =
             r.copy(bucketSpec = Some(BucketSpec(numBuckets = buckets, "c1" :: Nil, Nil))))
       }
-      Dataset.ofRows(sqlContext.sparkSession, bucketed)
+      Dataset.ofRows(spark, bucketed)
     } else {
       df
     }

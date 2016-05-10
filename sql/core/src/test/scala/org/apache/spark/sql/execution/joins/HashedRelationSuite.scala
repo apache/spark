@@ -25,7 +25,7 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
@@ -112,14 +112,14 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("LongToUnsafeRowMap") {
     val unsafeProj = UnsafeProjection.create(
-      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
-    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
-    val key = Seq(BoundReference(0, IntegerType, false))
+      Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
+    val key = Seq(BoundReference(0, LongType, false))
     val longRelation = LongHashedRelation(rows.iterator, key, 10, mm)
     assert(longRelation.keyIsUnique)
     (0 until 100).foreach { i =>
       val row = longRelation.getValue(i)
-      assert(row.getInt(0) === i)
+      assert(row.getLong(0) === i)
       assert(row.getInt(1) === i + 1)
     }
 
@@ -128,9 +128,9 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray
       assert(rows.length === 2)
-      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
-      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getLong(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
 
@@ -145,9 +145,9 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     (0 until 100).foreach { i =>
       val rows = relation.get(i).toArray
       assert(rows.length === 2)
-      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
-      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getLong(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
   }
@@ -155,20 +155,20 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
   test("Spark-14521") {
     val ser = new KryoSerializer(
       (new SparkConf).set("spark.kryo.referenceTracking", "false")).newInstance()
-    val key = Seq(BoundReference(0, IntegerType, false))
+    val key = Seq(BoundReference(0, LongType, false))
 
     // Testing Kryo serialization of HashedRelation
     val unsafeProj = UnsafeProjection.create(
-      Seq(BoundReference(0, IntegerType, false), BoundReference(1, IntegerType, true)))
-    val rows = (0 until 100).map(i => unsafeProj(InternalRow(i, i + 1)).copy())
+      Seq(BoundReference(0, LongType, false), BoundReference(1, IntegerType, true)))
+    val rows = (0 until 100).map(i => unsafeProj(InternalRow(Int.int2long(i), i + 1)).copy())
     val longRelation = LongHashedRelation(rows.iterator ++ rows.iterator, key, 100, mm)
     val longRelation2 = ser.deserialize[LongHashedRelation](ser.serialize(longRelation))
     (0 until 100).foreach { i =>
       val rows = longRelation2.get(i).toArray
       assert(rows.length === 2)
-      assert(rows(0).getInt(0) === i)
+      assert(rows(0).getLong(0) === i)
       assert(rows(0).getInt(1) === i + 1)
-      assert(rows(1).getInt(0) === i)
+      assert(rows(1).getLong(0) === i)
       assert(rows(1).getInt(1) === i + 1)
     }
 

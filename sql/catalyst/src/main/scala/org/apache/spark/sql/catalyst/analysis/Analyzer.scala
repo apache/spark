@@ -22,16 +22,17 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.catalyst.trees.TreeNodeRef
-import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
 /**
@@ -91,6 +92,7 @@ class Analyzer(
       ResolvePivot ::
       ResolveOrdinalInOrderByAndGroupBy ::
       ResolveMissingReferences ::
+      ExtractGenerator ::
       ResolveGenerate ::
       ResolveFunctions ::
       ResolveAliases ::
@@ -178,8 +180,8 @@ class Analyzer(
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
-              case e: ExtractValue => Alias(e, usePrettyExpression(e).sql)()
-              case e => Alias(e, optionalAliasName.getOrElse(usePrettyExpression(e).sql))()
+              case e: ExtractValue => Alias(e, toPrettySQL(e))()
+              case e => Alias(e, optionalAliasName.getOrElse(toPrettySQL(e)))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
@@ -442,8 +444,43 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+        val table = lookupTableFromCatalog(u)
+        // adding the table's partitions or validate the query's partition info
+        table match {
+          case relation: CatalogRelation if relation.catalogTable.partitionColumns.nonEmpty =>
+            val tablePartitionNames = relation.catalogTable.partitionColumns.map(_.name)
+            if (parts.keys.nonEmpty) {
+              // the query's partitioning must match the table's partitioning
+              // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
+              // TODO: add better checking to pre-inserts to avoid needing this here
+              if (tablePartitionNames.size != parts.keySet.size) {
+                throw new AnalysisException(
+                  s"""Requested partitioning does not match the ${u.tableIdentifier} table:
+                     |Requested partitions: ${parts.keys.mkString(",")}
+                     |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
+              }
+              // Assume partition columns are correctly placed at the end of the child's output
+              i.copy(table = EliminateSubqueryAliases(table))
+            } else {
+              // Set up the table's partition scheme with all dynamic partitions by moving partition
+              // columns to the end of the column list, in partition order.
+              val (inputPartCols, columns) = child.output.partition { attr =>
+                tablePartitionNames.contains(attr.name)
+              }
+              // All partition columns are dynamic because this InsertIntoTable had no partitioning
+              val partColumns = tablePartitionNames.map { name =>
+                inputPartCols.find(_.name == name).getOrElse(
+                  throw new AnalysisException(s"Cannot find partition column $name"))
+              }
+              i.copy(
+                table = EliminateSubqueryAliases(table),
+                partition = tablePartitionNames.map(_ -> None).toMap,
+                child = Project(columns ++ partColumns, child))
+            }
+          case _ =>
+            i.copy(table = EliminateSubqueryAliases(table))
+        }
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
         if (table.database.isDefined && conf.runSQLonFile &&
@@ -957,7 +994,8 @@ class Analyzer(
         localPredicateReferences -- p.outputSet
       }
 
-      val transformed = sub transformUp {
+      // Simplify the predicates before pulling them out.
+      val transformed = BooleanSimplification(sub) transformUp {
         case f @ Filter(cond, child) =>
           // Find all predicates with an outer reference.
           val (correlated, local) = splitConjunctivePredicates(cond).partition(containsOuter)
@@ -1278,20 +1316,54 @@ class Analyzer(
   }
 
   /**
-   * Rewrites table generating expressions that either need one or more of the following in order
-   * to be resolved:
-   *  - concrete attribute references for their output.
-   *  - to be relocated from a SELECT clause (i.e. from  a [[Project]]) into a [[Generate]]).
+   * Extracts [[Generator]] from the projectList of a [[Project]] operator and create [[Generate]]
+   * operator under [[Project]].
    *
-   * Names for the output [[Attribute]]s are extracted from [[Alias]] or [[MultiAlias]] expressions
-   * that wrap the [[Generator]]. If more than one [[Generator]] is found in a Project, an
-   * [[AnalysisException]] is throw.
+   * This rule will throw [[AnalysisException]] for following cases:
+   * 1. [[Generator]] is nested in expressions, e.g. `SELECT explode(list) + 1 FROM tbl`
+   * 2. more than one [[Generator]] is found in projectList,
+   *    e.g. `SELECT explode(list), explode(list) FROM tbl`
+   * 3. [[Generator]] is found in other operators that are not [[Project]] or [[Generate]],
+   *    e.g. `SELECT * FROM tbl SORT BY explode(list)`
    */
-  object ResolveGenerate extends Rule[LogicalPlan] {
+  object ExtractGenerator extends Rule[LogicalPlan] {
+    private def hasGenerator(expr: Expression): Boolean = {
+      expr.find(_.isInstanceOf[Generator]).isDefined
+    }
+
+    private def hasNestedGenerator(expr: NamedExpression): Boolean = expr match {
+      case UnresolvedAlias(_: Generator, _) => false
+      case Alias(_: Generator, _) => false
+      case MultiAlias(_: Generator, _) => false
+      case other => hasGenerator(other)
+    }
+
+    private def trimAlias(expr: NamedExpression): Expression = expr match {
+      case UnresolvedAlias(child, _) => child
+      case Alias(child, _) => child
+      case MultiAlias(child, _) => child
+      case _ => expr
+    }
+
+    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
+    private object AliasedGenerator {
+      def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
+        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
+        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
+        case _ => None
+      }
+    }
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case p: Generate if !p.child.resolved || !p.generator.resolved => p
-      case g: Generate if !g.resolved =>
-        g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
+      case Project(projectList, _) if projectList.exists(hasNestedGenerator) =>
+        val nestedGenerator = projectList.find(hasNestedGenerator).get
+        throw new AnalysisException("Generators are not supported when it's nested in " +
+          "expressions, but got: " + toPrettySQL(trimAlias(nestedGenerator)))
+
+      case Project(projectList, _) if projectList.count(hasGenerator) > 1 =>
+        val generators = projectList.filter(hasGenerator).map(trimAlias)
+        throw new AnalysisException("Only one generator allowed per select clause but found " +
+          generators.size + ": " + generators.map(toPrettySQL).mkString(", "))
 
       case p @ Project(projectList, child) =>
         // Holds the resolved generator, if one exists in the project list.
@@ -1299,11 +1371,9 @@ class Analyzer(
 
         val newProjectList = projectList.flatMap {
           case AliasedGenerator(generator, names) if generator.childrenResolved =>
-            if (resolvedGenerator != null) {
-              failAnalysis(
-                s"Only one generator allowed per select but ${resolvedGenerator.nodeName} and " +
-                s"and ${generator.nodeName} found.")
-            }
+            // It's a sanity check, this should not happen as the previous case will throw
+            // exception earlier.
+            assert(resolvedGenerator == null, "More than one generator found in SELECT.")
 
             resolvedGenerator =
               Generate(
@@ -1311,7 +1381,7 @@ class Analyzer(
                 join = projectList.size > 1, // Only join if there are other expressions in SELECT.
                 outer = false,
                 qualifier = None,
-                generatorOutput = makeGeneratorOutput(generator, names),
+                generatorOutput = ResolveGenerate.makeGeneratorOutput(generator, names),
                 child)
 
             resolvedGenerator.generatorOutput
@@ -1323,44 +1393,50 @@ class Analyzer(
         } else {
           p
         }
-    }
 
-    /** Extracts a [[Generator]] expression and any names assigned by aliases to their output. */
-    private object AliasedGenerator {
-      def unapply(e: Expression): Option[(Generator, Seq[String])] = e match {
-        case Alias(g: Generator, name) if g.resolved && g.elementTypes.size > 1 =>
-          // If not given the default names, and the TGF with multiple output columns
-          failAnalysis(
-            s"""Expect multiple names given for ${g.getClass.getName},
-               |but only single name '${name}' specified""".stripMargin)
-        case Alias(g: Generator, name) if g.resolved => Some((g, name :: Nil))
-        case MultiAlias(g: Generator, names) if g.resolved => Some(g, names)
-        case _ => None
-      }
+      case g: Generate => g
+
+      case p if p.expressions.exists(hasGenerator) =>
+        throw new AnalysisException("Generators are not supported outside the SELECT clause, but " +
+          "got: " + p.simpleString)
+    }
+  }
+
+  /**
+   * Rewrites table generating expressions that either need one or more of the following in order
+   * to be resolved:
+   *  - concrete attribute references for their output.
+   *  - to be relocated from a SELECT clause (i.e. from  a [[Project]]) into a [[Generate]]).
+   *
+   * Names for the output [[Attribute]]s are extracted from [[Alias]] or [[MultiAlias]] expressions
+   * that wrap the [[Generator]].
+   */
+  object ResolveGenerate extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case g: Generate if !g.child.resolved || !g.generator.resolved => g
+      case g: Generate if !g.resolved =>
+        g.copy(generatorOutput = makeGeneratorOutput(g.generator, g.generatorOutput.map(_.name)))
     }
 
     /**
      * Construct the output attributes for a [[Generator]], given a list of names.  If the list of
      * names is empty names are assigned from field names in generator.
      */
-    private def makeGeneratorOutput(
+    private[sql] def makeGeneratorOutput(
         generator: Generator,
         names: Seq[String]): Seq[Attribute] = {
-      val elementTypes = generator.elementTypes
+      val elementAttrs = generator.elementSchema.toAttributes
 
-      if (names.length == elementTypes.length) {
-        names.zip(elementTypes).map {
-          case (name, (t, nullable, _)) =>
-            AttributeReference(name, t, nullable)()
+      if (names.length == elementAttrs.length) {
+        names.zip(elementAttrs).map {
+          case (name, attr) => attr.withName(name)
         }
       } else if (names.isEmpty) {
-        elementTypes.map {
-          case (t, nullable, name) => AttributeReference(name, t, nullable)()
-        }
+        elementAttrs
       } else {
         failAnalysis(
           "The number of aliases supplied in the AS clause does not match the number of columns " +
-          s"output by the UDTF expected ${elementTypes.size} aliases but got " +
+          s"output by the UDTF expected ${elementAttrs.size} aliases but got " +
           s"${names.mkString(",")} ")
       }
     }

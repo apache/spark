@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types._
 
 case class OrcData(intField: Int, stringField: String)
 
@@ -182,12 +183,16 @@ class OrcSourceSuite extends OrcSuite {
 
   test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
     // The `LessThan` should be converted while the `StringContains` shouldn't
+    val schema = new StructType(
+      Array(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", StringType, nullable = true)))
     assertResult(
       """leaf-0 = (LESS_THAN a 10)
         |expr = leaf-0
       """.stripMargin.trim
     ) {
-      OrcFilters.createFilter(Array(
+      OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
         StringContains("b", "prefix")
       )).get.toString
@@ -199,7 +204,7 @@ class OrcSourceSuite extends OrcSuite {
         |expr = leaf-0
       """.stripMargin.trim
     ) {
-      OrcFilters.createFilter(Array(
+      OrcFilters.createFilter(schema, Array(
         LessThan("a", 10),
         Not(And(
           GreaterThan("a", 1),

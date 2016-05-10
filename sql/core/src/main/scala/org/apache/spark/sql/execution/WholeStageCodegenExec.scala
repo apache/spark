@@ -105,7 +105,7 @@ trait CodegenSupport extends SparkPlan {
   protected def doProduce(ctx: CodegenContext): String
 
   /**
-   * Consume the generated columns or row from current SparkPlan, call it's parent's doConsume().
+   * Consume the generated columns or row from current SparkPlan, call its parent's `doConsume()`.
    */
   final def consume(ctx: CodegenContext, outputVars: Seq[ExprCode], row: String = null): String = {
     val inputVars =
@@ -212,8 +212,8 @@ trait CodegenSupport extends SparkPlan {
 /**
  * InputAdapter is used to hide a SparkPlan from a subtree that support codegen.
  *
- * This is the leaf node of a tree with WholeStageCodegen, is used to generate code that consumes
- * an RDD iterator of InternalRow.
+ * This is the leaf node of a tree with WholeStageCodegen that is used to generate code
+ * that consumes an RDD iterator of InternalRow.
  */
 case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupport {
 

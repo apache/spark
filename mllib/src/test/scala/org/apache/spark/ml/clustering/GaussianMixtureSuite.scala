@@ -32,7 +32,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
   }
 
   test("default parameters") {

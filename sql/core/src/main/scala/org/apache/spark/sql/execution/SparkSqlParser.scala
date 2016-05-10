@@ -212,18 +212,22 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create an [[ExplainCommand]] logical plan.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+   * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
-    val options = ctx.explainOption.asScala
-    if (options.exists(_.FORMATTED != null)) {
+    if (ctx.FORMATTED != null) {
       throw operationNotAllowed("EXPLAIN FORMATTED", ctx)
     }
+    if (ctx.LOGICAL != null) {
+      throw operationNotAllowed("EXPLAIN LOGICAL", ctx)
+    }
 
-    // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
-        codegen = options.exists(_.CODEGEN != null))
+      ExplainCommand(statement, extended = ctx.EXTENDED != null, codegen = ctx.CODEGEN != null)
     } else {
       ExplainCommand(OneRowRelation)
     }
@@ -243,10 +247,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitDescribeTable(ctx: DescribeTableContext): LogicalPlan = withOrigin(ctx) {
     // FORMATTED and columns are not supported. Return null and let the parser decide what to do
     // with this (create an exception or pass it on to a different system).
-    if (ctx.describeColName != null || ctx.FORMATTED != null || ctx.partitionSpec != null) {
+    if (ctx.describeColName != null || ctx.partitionSpec != null) {
       null
     } else {
-      DescribeTableCommand(visitTableIdentifier(ctx.tableIdentifier), ctx.EXTENDED != null)
+      DescribeTableCommand(
+        visitTableIdentifier(ctx.tableIdentifier),
+        ctx.EXTENDED != null,
+        ctx.FORMATTED() != null)
     }
   }
 
@@ -304,7 +311,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
-      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
+      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = true)
     }
   }
 
@@ -766,6 +773,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // Note: Keep this unspecified because we use the presence of the serde to decide
         // whether to convert a table created by CTAS to a datasource table.
         serde = None,
+        compressed = false,
         serdeProperties = Map())
     }
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
@@ -777,6 +785,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
       outputFormat = fileStorage.outputFormat.orElse(defaultStorage.outputFormat),
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
+      compressed = false,
       serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
 
     // TODO support the sql text - have a proper location for this!
@@ -830,7 +839,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /** Empty storage format for default values and copies. */
-  private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, Map.empty)
+  private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, false, Map.empty)
 
   /**
    * Create a [[CatalogStorageFormat]].
@@ -911,6 +920,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       entry("field.delim", ctx.fieldsTerminatedBy) ++
         entry("serialization.format", ctx.fieldsTerminatedBy) ++
         entry("escape.delim", ctx.escapedBy) ++
+        // The following typo is inherited from Hive...
         entry("colelction.delim", ctx.collectionItemsTerminatedBy) ++
         entry("mapkey.delim", ctx.keysTerminatedBy) ++
         Option(ctx.linesSeparatedBy).toSeq.map { token =>
@@ -929,7 +939,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * For example:
    * {{{
-   *   CREATE VIEW [IF NOT EXISTS] [db_name.]view_name
+   *   CREATE [TEMPORARY] VIEW [IF NOT EXISTS] [db_name.]view_name
    *   [(column_name [COMMENT column_comment], ...) ]
    *   [COMMENT view_comment]
    *   [TBLPROPERTIES (property_name = property_value, ...)]
@@ -952,7 +962,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         ctx.query,
         Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
         ctx.EXISTS != null,
-        ctx.REPLACE != null
+        ctx.REPLACE != null,
+        ctx.TEMPORARY != null
       )
     }
   }
@@ -969,7 +980,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx.query,
       Map.empty,
       allowExist = false,
-      replace = true)
+      replace = true,
+      isTemporary = false)
   }
 
   /**
@@ -983,7 +995,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       query: QueryContext,
       properties: Map[String, String],
       allowExist: Boolean,
-      replace: Boolean): LogicalPlan = {
+      replace: Boolean,
+      isTemporary: Boolean): LogicalPlan = {
     val sql = Option(source(query))
     val tableDesc = CatalogTable(
       identifier = visitTableIdentifier(name),
@@ -994,7 +1007,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       viewOriginalText = sql,
       viewText = sql,
       comment = comment)
-    CreateViewCommand(tableDesc, plan(query), allowExist, replace, command(ctx))
+    CreateViewCommand(tableDesc, plan(query), allowExist, replace, isTemporary, command(ctx))
   }
 
   /**
@@ -1051,7 +1064,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
       case c: RowFormatSerdeContext =>
         // Use a serde format.
-        val CatalogStorageFormat(None, None, None, Some(name), props) = visitRowFormatSerde(c)
+        val CatalogStorageFormat(None, None, None, Some(name), _, props) = visitRowFormatSerde(c)
 
         // SPARK-10310: Special cases LazySimpleSerDe
         val recordHandler = if (name == "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe") {

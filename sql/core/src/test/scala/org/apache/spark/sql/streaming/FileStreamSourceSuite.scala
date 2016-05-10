@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -84,10 +85,13 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       AddParquetFileData(seq.toDS().toDF(), src, tmp)
     }
 
+    /** Write parquet files in a temp dir, and move the individual files to the 'src' dir */
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
-      val file = Utils.tempFileWith(new File(tmp, "parquet"))
-      df.write.parquet(file.getCanonicalPath)
-      file.renameTo(new File(src, file.getName))
+      val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
+      df.write.parquet(tmpDir.getCanonicalPath)
+      tmpDir.listFiles().foreach { f =>
+        f.renameTo(new File(src, s"${f.getName}"))
+      }
     }
   }
 
@@ -99,9 +103,9 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
 
     val reader =
       if (schema.isDefined) {
-        sqlContext.read.format(format).schema(schema.get)
+        spark.read.format(format).schema(schema.get)
       } else {
-        sqlContext.read.format(format)
+        spark.read.format(format)
       }
     reader.stream(path)
   }
@@ -145,7 +149,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       format: Option[String],
       path: Option[String],
       schema: Option[StructType] = None): StructType = {
-    val reader = sqlContext.read
+    val reader = spark.read
     format.foreach(reader.format)
     schema.foreach(reader.schema)
     val df =
@@ -210,8 +214,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
-      Seq("a", "b", "c").toDS().as("userColumn").toDF()
-        .write.parquet(new File(src, "1").getCanonicalPath)
+      Seq("a", "b", "c").toDS().as("userColumn").toDF().write
+        .mode(org.apache.spark.sql.SaveMode.Overwrite)
+        .parquet(src.getCanonicalPath)
       val schema = createFileStreamSourceAndGetSchema(
         format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
       assert(schema === new StructType().add("value", StringType))
@@ -268,7 +273,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
@@ -292,7 +297,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
           "{'value': 'drop4'}\n{'value': 'keep5'}\n{'value': 'keep6'}",
           src,
           tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData(
           "{'value': 'drop7'}\n{'value': 'keep8'}\n{'value': 'keep9'}",
@@ -385,7 +390,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddParquetFileData(Seq("drop4", "keep5", "keep6"), src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddParquetFileData(Seq("drop7", "keep8", "keep9"), src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
@@ -449,7 +454,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")

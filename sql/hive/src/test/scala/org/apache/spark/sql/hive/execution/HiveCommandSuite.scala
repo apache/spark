@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -122,10 +122,10 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show tblproperties for datasource table - errors") {
-    val message1 = intercept[AnalysisException] {
+    val message1 = intercept[NoSuchTableException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("'badtable' not found in database 'default'"))
+    assert(message1.contains("Table or view 'badtable' not found in database 'default'"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
