@@ -201,7 +201,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
                        rmse - default root mean squared error
                        mse - mean squared error
                        r2 - r^2 metric
-                       mae - mean absolute error""",
+                       mae - mean absolute error.""",
                        typeConverter=TypeConverters.toString)
 
     @keyword_only
