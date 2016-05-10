@@ -19,7 +19,6 @@ package org.apache.spark.network.yarn
 import java.io.{DataOutputStream, File, FileOutputStream}
 
 import scala.annotation.tailrec
-import scala.concurrent.duration._
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.fs.Path
@@ -27,8 +26,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationId
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.server.api.{ApplicationInitializationContext, ApplicationTerminationContext}
 import org.scalatest.{BeforeAndAfterEach, Matchers}
-import org.scalatest.concurrent.Eventually._
-import org.scalatest.concurrent.Timeouts
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.network.shuffle.ShuffleTestAccessor
@@ -307,10 +304,6 @@ class YarnShuffleServiceSuite extends SparkFunSuite with Matchers with BeforeAnd
 
     val execStateFile2 = s2.registeredExecutorFile
     recoveryPath.toString should be (new Path(execStateFile2.getParentFile.toURI).toString)
-    // File is already moved to the new recovery path.
-    eventually(timeout(10 seconds), interval(5 millis)) {
-      assert(!execStateFile.exists())
-    }
 
     val handler2 = s2.blockHandler
     val resolver2 = ShuffleTestAccessor.getBlockResolver(handler2)
