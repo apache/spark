@@ -24,6 +24,7 @@ import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.analysis.DatabaseAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -212,10 +213,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
               expectedLocation,
               Map.empty))
 
-            val message = intercept[AnalysisException] {
+            intercept[DatabaseAlreadyExistsException] {
               sql(s"CREATE DATABASE $dbName")
-            }.getMessage
-            assert(message.contains(s"Database '$dbNameWithoutBackTicks' already exists."))
+            }
           } finally {
             catalog.reset()
           }
@@ -280,17 +280,17 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var message = intercept[AnalysisException] {
         sql(s"DROP DATABASE $dbName")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"ALTER DATABASE $dbName SET DBPROPERTIES ('d'='d')")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       message = intercept[AnalysisException] {
         sql(s"DESCRIBE DATABASE EXTENDED $dbName")
       }.getMessage
-      assert(message.contains(s"Database '$dbNameWithoutBackTicks' does not exist"))
+      assert(message.contains(s"Database '$dbNameWithoutBackTicks' not found"))
 
       sql(s"DROP DATABASE IF EXISTS $dbName")
     }
@@ -1014,7 +1014,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
           sql("DROP DATABASE DeFault")
         }.getMessage
         if (caseSensitive == "true") {
-          assert(message.contains("Database 'DeFault' does not exist"))
+          assert(message.contains("Database 'DeFault' not found"))
         } else {
           assert(message.contains("Can not drop default database"))
         }
