@@ -43,6 +43,7 @@ import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBibl
 import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 
@@ -74,10 +75,6 @@ object SparkSubmit {
   private val CLIENT = 1
   private val CLUSTER = 2
   private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
-
-  // A special jar name that indicates the class being run is inside of Spark itself, and therefore
-  // no user jar is needed.
-  private val SPARK_INTERNAL = "spark-internal"
 
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
@@ -575,7 +572,7 @@ object SparkSubmit {
         childArgs += ("--primary-r-file", mainFile)
         childArgs += ("--class", "org.apache.spark.deploy.RRunner")
       } else {
-        if (args.primaryResource != SPARK_INTERNAL) {
+        if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
           childArgs += ("--jar", args.primaryResource)
         }
         childArgs += ("--class", args.mainClass)
@@ -795,7 +792,7 @@ object SparkSubmit {
   }
 
   private[deploy] def isInternal(res: String): Boolean = {
-    res == SPARK_INTERNAL
+    res == SparkLauncher.NO_RESOURCE
   }
 
   /**

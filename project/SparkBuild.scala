@@ -382,7 +382,8 @@ object SparkBuild extends PomBuild {
 
   enable(Java8TestSettings.settings)(java8Tests)
 
-  enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
+  // SPARK-14738 - Remove docker tests from main Spark build
+  // enable(DockerIntegrationTests.settings)(dockerIntegrationTests)
 
   /**
    * Adds the ability to run the spark shell directly from SBT without building an assembly
