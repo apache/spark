@@ -637,9 +637,7 @@ class SessionCatalog(
    * by a tuple (resource type, resource uri).
    */
   def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
-    resources.foreach { case functionResource =>
-      functionResourceLoader.loadResource(functionResource)
-    }
+    resources.foreach(functionResourceLoader.loadResource)
   }
 
   /**
