@@ -700,7 +700,7 @@ case class TungstenAggregate(
     val updateRowInVectorizedHashMap: Option[String] = {
       if (isVectorizedHashMapEnabled) {
         // We use currentVars that contains bufferVars and input
-        ctx.INPUT_ROW = null // vectorizedRowBuffer
+        ctx.INPUT_ROW = null
         val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
         val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
         val effectiveCodes = subExprs.codes.mkString("\n")
@@ -769,7 +769,7 @@ case class TungstenAggregate(
 
     val updateRowInUnsafeRowMap: String = {
       // We use currentVars that contains bufferVars and input
-      ctx.INPUT_ROW = null // unsafeRowBuffer
+      ctx.INPUT_ROW = null
       val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
       val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
       val effectiveCodes = subExprs.codes.mkString("\n")
