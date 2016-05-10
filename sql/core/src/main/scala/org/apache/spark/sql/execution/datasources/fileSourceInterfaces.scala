@@ -159,8 +159,8 @@ case class HadoopFsRelation(
 
   override def toString: String = {
     fileFormat match {
-      case source: DataSourceRegister => "Scan " + source.shortName()
-      case _ => "Scan"
+      case source: DataSourceRegister => source.shortName()
+      case _ => "HadoopFiles"
     }
   }
 

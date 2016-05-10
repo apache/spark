@@ -132,9 +132,9 @@ private[sql] trait DataSourceScanExec extends LeafExecNode {
   val metastoreTableIdentifier: Option[TableIdentifier]
 
   override val nodeName: String = if (metastoreTableIdentifier.isEmpty) {
-    relation.toString
+    "Scan " + relation.toString
   } else {
-    relation.toString + " " + metastoreTableIdentifier.get.unquotedString
+    "Scan " + relation.toString + " " + metastoreTableIdentifier.get.unquotedString
   }
 
   // Ignore rdd when checking results
@@ -186,7 +186,7 @@ private[sql] case class RowDataSourceScanExec(
       key + ": " + StringUtils.abbreviate(value, 100)
     }
 
-    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+    s"$nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -240,7 +240,7 @@ private[sql] case class BatchedDataSourceScanExec(
       key + ": " + StringUtils.abbreviate(value, 100)
     }
     val metadataStr = metadataEntries.mkString(" ", ", ", "")
-    s"BatchedScan $nodeName${output.mkString("[", ",", "]")}$metadataStr"
+    s"Batched$nodeName${output.mkString("[", ",", "]")}$metadataStr"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
