@@ -41,7 +41,7 @@ object LocalLR {
   def generateData: Array[DataPoint] = {
     def generatePoint(i: Int): DataPoint = {
       val y = if (i % 2 == 0) -1 else 1
-      val x = DenseVector.fill(D){rand.nextGaussian + y * R}
+      val x = DenseVector.fill(D) {rand.nextGaussian + y * R}
       DataPoint(x, y)
     }
     Array.tabulate(N)(generatePoint)
@@ -62,7 +62,7 @@ object LocalLR {
 
     val data = generateData
     // Initialize w to a random value
-    var w = DenseVector.fill(D){2 * rand.nextDouble - 1}
+    var w = DenseVector.fill(D) {2 * rand.nextDouble - 1}
     println("Initial w: " + w)
 
     for (i <- 1 to ITERATIONS) {

@@ -157,8 +157,11 @@ wrapInt <- function(value) {
 
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
+#
+# TODO: this function does not handle integer overflow well
 mult31AndAdd <- function(val, addVal) {
-  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
+  vec[is.na(vec)] <- 0
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
@@ -202,7 +205,7 @@ serializeToString <- function(rdd) {
 # This function amortizes the allocation cost by doubling
 # the size of the list every time it fills up.
 addItemToAccumulator <- function(acc, item) {
-  if(acc$counter == acc$size) {
+  if (acc$counter == acc$size) {
     acc$size <- acc$size * 2
     length(acc$data) <- acc$size
   }
@@ -626,13 +629,13 @@ convertNamedListToEnv <- function(namedList) {
 
 # Assign a new environment for attach() and with() methods
 assignNewEnv <- function(data) {
-  stopifnot(class(data) == "DataFrame")
+  stopifnot(class(data) == "SparkDataFrame")
   cols <- columns(data)
   stopifnot(length(cols) > 0)
 
   env <- new.env()
   for (i in 1:length(cols)) {
-    assign(x = cols[i], value = data[, cols[i]], envir = env)
+    assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
 }
@@ -649,4 +652,15 @@ convertToJSaveMode <- function(mode) {
  }
  jmode <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "saveMode", mode)
  jmode
+}
+
+varargsToJProperties <- function(...) {
+  pairs <- list(...)
+  props <- newJObject("java.util.Properties")
+  if (length(pairs) > 0) {
+    lapply(ls(pairs), function(k) {
+      callJMethod(props, "setProperty", as.character(k), as.character(pairs[[k]]))
+    })
+  }
+  props
 }

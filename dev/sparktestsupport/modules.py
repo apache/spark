@@ -151,6 +151,18 @@ hive_thriftserver = Module(
 )
 
 
+hivecontext_compatibility = Module(
+    name="hivecontext-compatibility",
+    dependencies=[hive],
+    source_file_regexes=[
+        "sql/hivecontext-compatibility/",
+    ],
+    sbt_test_goals=[
+        "hivecontext-compatibility/test"
+    ]
+)
+
+
 sketch = Module(
     name="sketch",
     dependencies=[],
@@ -195,8 +207,8 @@ streaming_kinesis_asl = Module(
     name="streaming-kinesis-asl",
     dependencies=[],
     source_file_regexes=[
-        "extras/kinesis-asl/",
-        "extras/kinesis-asl-assembly/",
+        "external/kinesis-asl/",
+        "external/kinesis-asl-assembly/",
     ],
     build_profile_flags=[
         "-Pkinesis-asl",
@@ -206,43 +218,6 @@ streaming_kinesis_asl = Module(
     },
     sbt_test_goals=[
         "streaming-kinesis-asl/test",
-    ]
-)
-
-
-streaming_zeromq = Module(
-    name="streaming-zeromq",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/zeromq",
-    ],
-    sbt_test_goals=[
-        "streaming-zeromq/test",
-    ]
-)
-
-
-streaming_twitter = Module(
-    name="streaming-twitter",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/twitter",
-    ],
-    sbt_test_goals=[
-        "streaming-twitter/test",
-    ]
-)
-
-
-streaming_mqtt = Module(
-    name="streaming-mqtt",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/mqtt",
-        "external/mqtt-assembly",
-    ],
-    sbt_test_goals=[
-        "streaming-mqtt/test",
     ]
 )
 
@@ -272,18 +247,6 @@ streaming_flume_sink = Module(
 )
 
 
-streaming_akka = Module(
-    name="streaming-akka",
-    dependencies=[streaming],
-    source_file_regexes=[
-        "external/akka",
-    ],
-    sbt_test_goals=[
-        "streaming-akka/test",
-    ]
-)
-
-
 streaming_flume = Module(
     name="streaming-flume",
     dependencies=[streaming],
@@ -305,9 +268,21 @@ streaming_flume_assembly = Module(
 )
 
 
+mllib_local = Module(
+    name="mllib-local",
+    dependencies=[],
+    source_file_regexes=[
+        "mllib-local",
+    ],
+    sbt_test_goals=[
+        "mllib-local/test",
+    ]
+)
+
+
 mllib = Module(
     name="mllib",
-    dependencies=[streaming, sql],
+    dependencies=[mllib_local, streaming, sql],
     source_file_regexes=[
         "data/mllib/",
         "mllib/",
@@ -359,6 +334,9 @@ pyspark_sql = Module(
     python_test_goals=[
         "pyspark.sql.types",
         "pyspark.sql.context",
+        "pyspark.sql.session",
+        "pyspark.sql.conf",
+        "pyspark.sql.catalog",
         "pyspark.sql.column",
         "pyspark.sql.dataframe",
         "pyspark.sql.group",
@@ -377,7 +355,6 @@ pyspark_streaming = Module(
         streaming,
         streaming_kafka,
         streaming_flume_assembly,
-        streaming_mqtt,
         streaming_kinesis_asl
     ],
     source_file_regexes=[
@@ -473,7 +450,7 @@ yarn = Module(
     dependencies=[],
     source_file_regexes=[
         "yarn/",
-        "network/yarn/",
+        "common/network-yarn/",
     ],
     sbt_test_goals=[
         "yarn/test",

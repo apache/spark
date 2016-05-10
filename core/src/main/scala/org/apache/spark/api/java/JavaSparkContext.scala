@@ -295,13 +295,14 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaRDD(sc.binaryRecords(path, recordLength))
   }
 
-  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    * */
+  /**
+   * Get an RDD for a Hadoop SequenceFile with given key and value types.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
+   */
   def sequenceFile[K, V](path: String,
     keyClass: Class[K],
     valueClass: Class[V],
@@ -312,13 +313,14 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minPartitions))
   }
 
-  /** Get an RDD for a Hadoop SequenceFile.
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    */
+  /**
+   * Get an RDD for a Hadoop SequenceFile.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
+   */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]):
   JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = ClassTag(keyClass)
@@ -351,7 +353,7 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    *
@@ -383,7 +385,7 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    *
    * @param conf JobConf for setting up the dataset. Note: This will be put into a Broadcast.
@@ -411,13 +413,14 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaHadoopRDD(rdd.asInstanceOf[HadoopRDD[K, V]])
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary InputFormat.
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    */
+  /**
+   * Get an RDD for a Hadoop file with an arbitrary InputFormat.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
+   */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
     path: String,
     inputFormatClass: Class[F],
@@ -431,13 +434,14 @@ class JavaSparkContext(val sc: SparkContext)
     new JavaHadoopRDD(rdd.asInstanceOf[HadoopRDD[K, V]])
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary InputFormat
-    *
-    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
-    * record, directly caching the returned RDD will create many references to the same object.
-    * If you plan to directly cache Hadoop writable objects, you should first copy them using
-    * a `map` function.
-    */
+  /**
+   * Get an RDD for a Hadoop file with an arbitrary InputFormat
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
+   */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
     path: String,
     inputFormatClass: Class[F],
@@ -708,8 +712,13 @@ class JavaSparkContext(val sc: SparkContext)
   }
 
   /**
-   * Set a local property that affects jobs submitted from this thread, such as the
-   * Spark fair scheduler pool.
+   * Set a local property that affects jobs submitted from this thread, and all child
+   * threads, such as the Spark fair scheduler pool.
+   *
+   * These properties are inherited by child threads spawned from this thread. This
+   * may have unexpected consequences when working with thread pools. The standard java
+   * implementation of thread pools have worker threads spawn other worker threads.
+   * As a result, local properties may propagate unpredictably.
    */
   def setLocalProperty(key: String, value: String): Unit = sc.setLocalProperty(key, value)
 
@@ -774,6 +783,16 @@ class JavaSparkContext(val sc: SparkContext)
 
   /** Cancel all jobs that have been scheduled or are running. */
   def cancelAllJobs(): Unit = sc.cancelAllJobs()
+
+  /**
+   * Returns an Java map of JavaRDDs that have marked themselves as persistent via cache() call.
+   * Note that this does not necessarily mean the caching or computation was successful.
+   */
+  def getPersistentRDDs: JMap[java.lang.Integer, JavaRDD[_]] = {
+    sc.getPersistentRDDs.mapValues(s => JavaRDD.fromRDD(s))
+      .asJava.asInstanceOf[JMap[java.lang.Integer, JavaRDD[_]]]
+  }
+
 }
 
 object JavaSparkContext {

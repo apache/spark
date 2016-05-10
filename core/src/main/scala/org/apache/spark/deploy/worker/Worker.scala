@@ -29,15 +29,16 @@ import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Random, Success}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{Logging, SecurityManager, SparkConf}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.deploy.{Command, ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.ExternalShuffleService
 import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
+import org.apache.spark.internal.Logging
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.rpc._
-import org.apache.spark.util.{SignalLogger, ThreadUtils, Utils}
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 private[deploy] class Worker(
     override val rpcEnv: RpcEnv,
@@ -148,7 +149,7 @@ private[deploy] class Worker(
   // time so that we can register with all masters.
   private val registerMasterThreadPool = ThreadUtils.newDaemonCachedThreadPool(
     "worker-register-master-threadpool",
-    masterRpcAddresses.size // Make sure we can register with all masters at the same time
+    masterRpcAddresses.length // Make sure we can register with all masters at the same time
   )
 
   var coresUsed = 0
@@ -374,6 +375,11 @@ private[deploy] class Worker(
           }, CLEANUP_INTERVAL_MILLIS, CLEANUP_INTERVAL_MILLIS, TimeUnit.MILLISECONDS)
         }
 
+        val execs = executors.values.map { e =>
+          new ExecutorDescription(e.appId, e.execId, e.cores, e.state)
+        }
+        masterRef.send(WorkerLatestState(workerId, execs.toList, drivers.keys.toSeq))
+
       case RegisterWorkerFailed(message) =>
         if (!registered) {
           logError("Worker registration failed: " + message)
@@ -394,7 +400,7 @@ private[deploy] class Worker(
       // rpcEndpoint.
       // Copy ids so that it can be used in the cleanup thread.
       val appIds = executors.values.map(_.appId).toSet
-      val cleanupFuture = concurrent.future {
+      val cleanupFuture = concurrent.Future {
         val appDirs = workDir.listFiles()
         if (appDirs == null) {
           throw new IOException("ERROR: Failed to list files in " + appDirs)
@@ -445,13 +451,12 @@ private[deploy] class Worker(
           // Create local dirs for the executor. These are passed to the executor via the
           // SPARK_EXECUTOR_DIRS environment variable, and deleted by the Worker when the
           // application finishes.
-          val appLocalDirs = appDirectories.get(appId).getOrElse {
+          val appLocalDirs = appDirectories.getOrElse(appId,
             Utils.getOrCreateLocalRootDirs(conf).map { dir =>
               val appDir = Utils.createDirectory(dir, namePrefix = "executor")
               Utils.chmod700(appDir)
               appDir.getAbsolutePath()
-            }.toSeq
-          }
+            }.toSeq)
           appDirectories(appId) = appLocalDirs
           val manager = new ExecutorRunner(
             appId,
@@ -475,7 +480,7 @@ private[deploy] class Worker(
           memoryUsed += memory_
           sendToMaster(ExecutorStateChanged(appId, execId, manager.state, None, None))
         } catch {
-          case e: Exception => {
+          case e: Exception =>
             logError(s"Failed to launch executor $appId/$execId for ${appDesc.name}.", e)
             if (executors.contains(appId + "/" + execId)) {
               executors(appId + "/" + execId).kill()
@@ -483,7 +488,6 @@ private[deploy] class Worker(
             }
             sendToMaster(ExecutorStateChanged(appId, execId, ExecutorState.FAILED,
               Some(e.toString), None))
-          }
         }
       }
 
@@ -492,7 +496,7 @@ private[deploy] class Worker(
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor " + execId)
+        logWarning("Invalid Master (" + masterUrl + ") attempted to kill executor " + execId)
       } else {
         val fullId = appId + "/" + execId
         executors.get(fullId) match {
@@ -504,7 +508,7 @@ private[deploy] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, driverDesc) => {
+    case LaunchDriver(driverId, driverDesc) =>
       logInfo(s"Asked to launch driver $driverId")
       val driver = new DriverRunner(
         conf,
@@ -520,9 +524,8 @@ private[deploy] class Worker(
 
       coresUsed += driverDesc.cores
       memoryUsed += driverDesc.mem
-    }
 
-    case KillDriver(driverId) => {
+    case KillDriver(driverId) =>
       logInfo(s"Asked to kill driver $driverId")
       drivers.get(driverId) match {
         case Some(runner) =>
@@ -530,11 +533,9 @@ private[deploy] class Worker(
         case None =>
           logError(s"Asked to kill unknown driver $driverId")
       }
-    }
 
-    case driverStateChanged @ DriverStateChanged(driverId, state, exception) => {
+    case driverStateChanged @ DriverStateChanged(driverId, state, exception) =>
       handleDriverStateChanged(driverStateChanged)
-    }
 
     case ReregisterWithMaster =>
       reregisterWithMaster()

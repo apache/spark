@@ -17,18 +17,16 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
 import org.apache.spark.ml.feature.IndexToString;
 import org.apache.spark.ml.feature.StringIndexer;
 import org.apache.spark.ml.feature.StringIndexerModel;
-import org.apache.spark.sql.DataFrame;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.types.DataTypes;
@@ -39,37 +37,38 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaIndexToStringExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaIndexToStringExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaIndexToStringExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Row> jrdd = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(0, "a"),
       RowFactory.create(1, "b"),
       RowFactory.create(2, "c"),
       RowFactory.create(3, "a"),
       RowFactory.create(4, "a"),
       RowFactory.create(5, "c")
-    ));
+    );
     StructType schema = new StructType(new StructField[]{
       new StructField("id", DataTypes.IntegerType, false, Metadata.empty()),
       new StructField("category", DataTypes.StringType, false, Metadata.empty())
     });
-    DataFrame df = sqlContext.createDataFrame(jrdd, schema);
+    Dataset<Row> df = spark.createDataFrame(data, schema);
 
     StringIndexerModel indexer = new StringIndexer()
       .setInputCol("category")
       .setOutputCol("categoryIndex")
       .fit(df);
-    DataFrame indexed = indexer.transform(df);
+    Dataset<Row> indexed = indexer.transform(df);
 
     IndexToString converter = new IndexToString()
       .setInputCol("categoryIndex")
       .setOutputCol("originalCategory");
-    DataFrame converted = converter.transform(indexed);
+    Dataset<Row> converted = converter.transform(indexed);
     converted.select("id", "originalCategory").show();
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 }

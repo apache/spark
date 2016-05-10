@@ -20,7 +20,7 @@
 /**
  * <h2>ML attributes</h2>
  *
- * The ML pipeline API uses {@link org.apache.spark.sql.DataFrame}s as ML datasets.
+ * The ML pipeline API uses {@link org.apache.spark.sql.Dataset}s as ML datasets.
  * Each dataset consists of typed columns, e.g., string, double, vector, etc.
  * However, knowing only the column type may not be sufficient to handle the data properly.
  * For instance, a double column with values 0.0, 1.0, 2.0, ... may represent some label indices,

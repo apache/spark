@@ -225,11 +225,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to the driver. For instance, GC settings or other logging.
+    Note that it is illegal to set maximum heap size (-Xmx) settings with this option. Maximum heap
+    size settings can be set with <code>spark.driver.memory</code> in the cluster mode and through
+    the <code>--driver-memory</code> command line option in the client mode.
 
     <br /><em>Note:</em> In client mode, this config must not be set through the <code>SparkConf</code>
     directly in your application, because the driver JVM has already started at that point.
     Instead, please set this through the <code>--driver-java-options</code> command line option or in
-    your default properties file.</td>
+    your default properties file.
   </td>
 </tr>
 <tr>
@@ -249,7 +252,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     (Experimental) Whether to give user-added jars precedence over Spark's own jars when loading
-    classes in the the driver. This feature can be used to mitigate conflicts between Spark's
+    classes in the driver. This feature can be used to mitigate conflicts between Spark's
     dependencies and user dependencies. It is currently an experimental feature.
 
     This is used in cluster mode only.
@@ -269,9 +272,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>(none)</td>
   <td>
     A string of extra JVM options to pass to executors. For instance, GC settings or other logging.
-    Note that it is illegal to set Spark properties or heap size settings with this option. Spark
-    properties should be set using a SparkConf object or the spark-defaults.conf file used with the
-    spark-submit script. Heap size settings can be set with spark.executor.memory.
+    Note that it is illegal to set Spark properties or maximum heap size (-Xmx) settings with this
+    option. Spark properties should be set using a SparkConf object or the spark-defaults.conf file
+    used with the spark-submit script. Maximum heap size settings can be set with spark.executor.memory.
   </td>
 </tr>
 <tr>
@@ -293,7 +296,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>
-    Set the max size of the file by which the executor logs will be rolled over.
+    Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -305,7 +308,7 @@ Apart from these, the following properties are also available, and may be useful
     Set the strategy of rolling of executor logs. By default it is disabled. It can
     be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
     use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
-    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
     the maximum file size for rolling.
   </td>
 </tr>
@@ -373,7 +376,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Reuse Python worker or not. If yes, it will use a fixed number of Python workers,
     does not need to fork() a Python process for every tasks. It will be very useful
-    if there is large broadcast, then the broadcast will not be needed to transfered
+    if there is large broadcast, then the broadcast will not be needed to transferred
     from JVM to Python worker for every task.
   </td>
 </tr>
@@ -389,6 +392,16 @@ Apart from these, the following properties are also available, and may be useful
     Maximum size of map outputs to fetch simultaneously from each reduce task. Since
     each output requires us to create a buffer to receive it, this represents a fixed memory
     overhead per reduce task, so keep it small unless you have a large amount of memory.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.reducer.maxReqsInFlight</code></td>
+  <td>Int.MaxValue</td>
+  <td>
+    This configuration limits the number of remote requests to fetch blocks at any given point.
+    When the number of hosts in the cluster increase, it might lead to very large number
+    of in-bound connections to one or more nodes, causing the workers to fail under load.
+    By allowing it to limit the number of fetch requests, this scenario can be mitigated.
   </td>
 </tr>
 <tr>
@@ -440,15 +453,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     (Netty only) How long to wait between retries of fetches. The maximum delay caused by retrying
     is 15 seconds by default, calculated as <code>maxRetries * retryWait</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.shuffle.manager</code></td>
-  <td>sort</td>
-  <td>
-    Implementation to use for shuffling data. There are two implementations available:
-    <code>sort</code> and <code>hash</code>.
-    Sort-based shuffle is more memory-efficient and is the default option starting in 1.2.
   </td>
 </tr>
 <tr>
@@ -574,6 +578,13 @@ Apart from these, the following properties are also available, and may be useful
     How many finished batches the Spark UI and status APIs remember before garbage collecting.
   </td>
 </tr>
+<tr>
+  <td><code>spark.ui.retainedDeadExecutors</code></td>
+  <td>100</td>
+  <td>
+    How many dead executors the Spark UI and status APIs remember before garbage collecting.
+  </td>
+</tr>
 </table>
 
 #### Compression and Serialization
@@ -584,13 +595,6 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Whether to compress broadcast variables before sending them. Generally a good idea.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.closure.serializer</code></td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Serializer class to use for closures. Currently only the Java serializer is supported.
   </td>
 </tr>
 <tr>
@@ -759,7 +763,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.memory.offHeap.size</code></td>
   <td>0</td>
   <td>
-    The absolute amount of memory which can be used for off-heap allocation.
+    The absolute amount of memory in bytes which can be used for off-heap allocation.
     This setting has no impact on heap memory usage, so if your executors' total memory consumption must fit within some hard limit then be sure to shrink your JVM heap size accordingly.
     This must be set to a positive value when <code>spark.memory.offHeap.enabled=true</code>.
   </td>
@@ -825,13 +829,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.executor.cores</code></td>
-  <td>1 in YARN mode, all the available cores on the worker in standalone mode.</td>
   <td>
-    The number of cores to use on each executor. For YARN and standalone mode only.
+    1 in YARN mode, all the available cores on the worker in
+    standalone and Mesos coarse-grained modes.
+  </td>
+  <td>
+    The number of cores to use on each executor.
 
-    In standalone mode, setting this parameter allows an application to run multiple executors on
-    the same worker, provided that there are enough cores on that worker. Otherwise, only one
-    executor per application will run on each worker.
+    In standalone and Mesos coarse-grained modes, setting this
+    parameter allows an application to run multiple executors on the
+    same worker, provided that there are enough cores on that
+    worker. Otherwise, only one executor per application will run on
+    each worker.
   </td>
 </tr>
 <tr>
@@ -912,30 +921,6 @@ Apart from these, the following properties are also available, and may be useful
     Size of a block above which Spark memory maps when reading a block from disk.
     This prevents Spark from memory mapping very small blocks. In general, memory
     mapping has high overhead for blocks close to or below the page size of the operating system.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.externalBlockStore.blockManager</code></td>
-  <td>org.apache.spark.storage.TachyonBlockManager</td>
-  <td>
-    Implementation of external block manager (file system) that store RDDs. The file system's URL is set by
-    <code>spark.externalBlockStore.url</code>.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.externalBlockStore.baseDir</code></td>
-  <td>System.getProperty("java.io.tmpdir")</td>
-  <td>
-    Directories of the external block store that store RDDs. The file system's URL is set by
-   <code>spark.externalBlockStore.url</code> It can also be a comma-separated list of multiple
-    directories on Tachyon file system.
-  </td>
-</tr>
-<tr>
-  <td><code>spark.externalBlockStore.url</code></td>
-  <td>tachyon://localhost:19998 for Tachyon</td>
-  <td>
-    The URL of the underlying external blocker file system in the external block store.
   </td>
 </tr>
 </table>
@@ -1169,8 +1154,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to use dynamic resource allocation, which scales the number of executors registered
-    with this application up and down based on the workload. Note that this is currently only
-    available on YARN mode. For more detail, see the description
+    with this application up and down based on the workload. 
+    For more detail, see the description
     <a href="job-scheduling.html#dynamic-resource-allocation">here</a>.
     <br><br>
     This requires <code>spark.shuffle.service.enabled</code> to be set.
@@ -1246,7 +1231,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.acls.enable</code></td>
   <td>false</td>
   <td>
-    Whether Spark acls should are enabled. If enabled, this checks to see if the user has
+    Whether Spark acls should be enabled. If enabled, this checks to see if the user has
     access permissions to view or modify the job.  Note this requires the user to be known,
     so if the user comes across as null no checks are done. Filters can be used with the UI
     to authenticate and set the user.
@@ -1258,8 +1243,33 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work. Putting a "*" in the list means any user can have the priviledge
-    of admin.
+    help debug when things do not work. Putting a "*" in the list means any user can have the
+    privilege of admin.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have view and modify access to all Spark jobs.
+    This can be used if you have a set of administrators or developers who help maintain and debug
+    the underlying infrastructure. Putting a "*" in the list means any user in any group can have
+    the privilege of admin. The user groups are obtained from the instance of the groups mapping
+    provider specified by <code>spark.user.groups.mapping</code>. Check the entry
+    <code>spark.user.groups.mapping</code> for more details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.user.groups.mapping</code></td>
+  <td><code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code></td>
+  <td>
+    The list of groups for a user are determined by a group mapping service defined by the trait
+    org.apache.spark.security.GroupMappingServiceProvider which can configured by this property.
+    A default unix shell based implementation is provided <code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code>
+    which can be specified to resolve a list of groups for a user.
+    <em>Note:</em> This implementation supports only a Unix/Linux based environment. Windows environment is
+    currently <b>not</b> supported. However, a new platform/protocol can be supported by implementing
+    the trait <code>org.apache.spark.security.GroupMappingServiceProvider</code>.
   </td>
 </tr>
 <tr>
@@ -1321,6 +1331,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.modify.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have modify access to the Spark job. This can be used if you
+    have a set of administrators or developers from the same team to have access to control the job.
+    Putting a "*" in the list means any user in any group has the access to modify the Spark job.
+    The user groups are obtained from the instance of the groups mapping provider specified by
+    <code>spark.user.groups.mapping</code>. Check the entry <code>spark.user.groups.mapping</code>
+    for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
@@ -1341,6 +1363,18 @@ Apart from these, the following properties are also available, and may be useful
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access. Putting a "*" in the list means any user can
     have view access to this Spark job.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.view.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have view access to the Spark web ui to view the Spark Job
+    details. This can be used if you have a set of administrators or developers or users who can
+    monitor the Spark job submitted. Putting a "*" in the list means any user in any group can view
+    the Spark job details on the Spark web ui. The user groups are obtained from the instance of the
+    groups mapping provider specified by <code>spark.user.groups.mapping</code>. Check the entry
+    <code>spark.user.groups.mapping</code> for more details.
   </td>
 </tr>
 </table>
@@ -1460,6 +1494,14 @@ Apart from these, the following properties are also available, and may be useful
     maximum receiving rate of receivers. This rate is upper bounded by the values
     <code>spark.streaming.receiver.maxRate</code> and <code>spark.streaming.kafka.maxRatePerPartition</code>
     if they are set (see below).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.streaming.backpressure.initialRate</code></td>
+  <td>not set</td>
+  <td>
+    This is the initial maximum receiving rate at which each receiver will receive data for the
+    first batch when the backpressure mechanism is enabled.
   </td>
 </tr>
 <tr>
@@ -1585,6 +1627,29 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 </table>
 
+#### Deploy
+
+<table class="table">
+  <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+  <tr>
+    <td><code>spark.deploy.recoveryMode</code></td>
+    <td>NONE</td>
+    <td>The recovery mode setting to recover submitted Spark jobs with cluster mode when it failed and relaunches.
+    This is only applicable for cluster mode when running with Standalone or Mesos.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.url</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper URL to connect to.</td>
+  </tr>
+  <tr>
+    <td><code>spark.deploy.zookeeper.dir</code></td>
+    <td>None</td>
+    <td>When `spark.deploy.recoveryMode` is set to ZOOKEEPER, this configuration is used to set the zookeeper directory to store recovery state.</td>
+  </tr>
+</table>
+
+
 #### Cluster Managers
 Each cluster manager in Spark has additional configuration options. Configurations
 can be found on the pages for each mode:
@@ -1616,7 +1681,7 @@ The following variables can be set in `spark-env.sh`:
   </tr>
   <tr>
     <td><code>PYSPARK_PYTHON</code></td>
-    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python</code>).</td>
+    <td>Python binary executable to use for PySpark in both driver and workers (default is <code>python2.7</code> if available, otherwise <code>python</code>).</td>
   </tr>
   <tr>
     <td><code>PYSPARK_DRIVER_PYTHON</code></td>
@@ -1654,7 +1719,7 @@ Spark uses [log4j](http://logging.apache.org/log4j/) for logging. You can config
 # Overriding configuration directory
 
 To specify a different configuration directory other than the default "SPARK_HOME/conf",
-you can set SPARK_CONF_DIR. Spark will use the the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
+you can set SPARK_CONF_DIR. Spark will use the configuration files (spark-defaults.conf, spark-env.sh, log4j.properties, etc)
 from this directory.
 
 # Inheriting Hadoop Cluster Configuration

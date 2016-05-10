@@ -29,7 +29,8 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
-import org.apache.spark.sql.execution.datasources.{LogicalRelation, Partition, PartitioningUtils, PartitionSpec}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitionDirectory => Partition, PartitioningUtils, PartitionSpec}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -188,6 +189,29 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
 
     checkThrows[AssertionError]("file://path/=10", "Empty partition column name")
     checkThrows[AssertionError]("file://path/a=", "Empty partition column value")
+  }
+
+  test("parse partition with base paths") {
+    // when the basePaths is the same as the path to a leaf directory
+    val partitionSpec1: Option[PartitionValues] = parsePartition(
+      path = new Path("file://path/a=10"),
+      defaultPartitionName = defaultPartitionName,
+      typeInference = true,
+      basePaths = Set(new Path("file://path/a=10")))._1
+
+    assert(partitionSpec1.isEmpty)
+
+    // when the basePaths is the path to a base directory of leaf directories
+    val partitionSpec2: Option[PartitionValues] = parsePartition(
+      path = new Path("file://path/a=10"),
+      defaultPartitionName = defaultPartitionName,
+      typeInference = true,
+      basePaths = Set(new Path("file://path")))._1
+
+    assert(partitionSpec2 ==
+      Option(PartitionValues(
+        ArrayBuffer("a"),
+        ArrayBuffer(Literal.create(10, IntegerType)))))
   }
 
   test("parse partitions") {
@@ -412,6 +436,43 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
   }
 
+  test("read partitioned table using different path options") {
+    withTempDir { base =>
+      val pi = 1
+      val ps = "foo"
+      val path = makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps)
+      makeParquetFile(
+        (1 to 10).map(i => ParquetData(i, i.toString)), path)
+
+      // when the input is the base path containing partitioning directories
+      val baseDf = sqlContext.read.parquet(base.getCanonicalPath)
+      assert(baseDf.schema.map(_.name) === Seq("intField", "stringField", "pi", "ps"))
+
+      // when the input is a path to the leaf directory containing a parquet file
+      val partDf = sqlContext.read.parquet(path.getCanonicalPath)
+      assert(partDf.schema.map(_.name) === Seq("intField", "stringField"))
+
+      path.listFiles().foreach { f =>
+        if (f.getName.toLowerCase().endsWith(".parquet")) {
+          // when the input is a path to a parquet file
+          val df = sqlContext.read.parquet(f.getCanonicalPath)
+          assert(df.schema.map(_.name) === Seq("intField", "stringField"))
+        }
+      }
+
+      path.listFiles().foreach { f =>
+        if (f.getName.toLowerCase().endsWith(".parquet")) {
+          // when the input is a path to a parquet file but `basePath` is overridden to
+          // the base path containing partitioning directories
+          val df = sqlContext
+            .read.option("basePath", base.getCanonicalPath)
+            .parquet(f.getCanonicalPath)
+          assert(df.schema.map(_.name) === Seq("intField", "stringField", "pi", "ps"))
+        }
+      }
+    }
+  }
+
   test("read partitioned table - partition key included in Parquet file") {
     withTempDir { base =>
       for {
@@ -563,7 +624,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
       val queryExecution = sqlContext.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
-        case LogicalRelation(relation: ParquetRelation, _, _) =>
+        case LogicalRelation(relation: HadoopFsRelation, _, _) =>
           assert(relation.partitionSpec === PartitionSpec.emptySpec)
       }.getOrElse {
         fail(s"Expecting a ParquetRelation2, but got:\n$queryExecution")
@@ -700,6 +761,76 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           .parquet(
             s"${tablePath.getCanonicalPath}/b=1",
             s"${tablePath.getCanonicalPath}/b=2")
+      }
+    }
+  }
+
+  test("use basePath and file globbing to selectively load partitioned table") {
+    withTempPath { dir =>
+
+      val df = Seq(
+        (1, "foo", 100),
+        (1, "bar", 200),
+        (2, "foo", 300),
+        (2, "bar", 400)
+      ).toDF("p1", "p2", "v")
+      df.write
+        .mode(SaveMode.Overwrite)
+        .partitionBy("p1", "p2")
+        .parquet(dir.getCanonicalPath)
+
+      def check(path: String, basePath: String, expectedDf: DataFrame): Unit = {
+        val testDf = sqlContext.read
+          .option("basePath", basePath)
+          .parquet(path)
+        checkAnswer(testDf, expectedDf)
+      }
+
+      // Should find all the data with partitioning columns when base path is set to the root
+      val resultDf = df.select("v", "p1", "p2")
+      check(path = s"$dir", basePath = s"$dir", resultDf)
+      check(path = s"$dir/*", basePath = s"$dir", resultDf)
+      check(path = s"$dir/*/*", basePath = s"$dir", resultDf)
+      check(path = s"$dir/*/*/*", basePath = s"$dir", resultDf)
+
+      // Should find selective partitions of the data if the base path is not set to root
+
+      check(          // read from ../p1=1 with base ../p1=1, should not infer p1 col
+        path = s"$dir/p1=1/*",
+        basePath = s"$dir/p1=1/",
+        resultDf.filter("p1 = 1").drop("p1"))
+
+      check(          // red from ../p1=1/p2=foo with base ../p1=1/ should not infer p1
+        path = s"$dir/p1=1/p2=foo/*",
+        basePath = s"$dir/p1=1/",
+        resultDf.filter("p1 = 1").filter("p2 = 'foo'").drop("p1"))
+
+      check(          // red from ../p1=1/p2=foo with base ../p1=1/p2=foo, should not infer p1, p2
+        path = s"$dir/p1=1/p2=foo/*",
+        basePath = s"$dir/p1=1/p2=foo/",
+        resultDf.filter("p1 = 1").filter("p2 = 'foo'").drop("p1", "p2"))
+    }
+  }
+
+  test("_SUCCESS should not break partitioning discovery") {
+    Seq(1, 32).foreach { threshold =>
+      // We have two paths to list files, one at driver side, another one that we use
+      // a Spark job. We need to test both ways.
+      withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> threshold.toString) {
+        withTempPath { dir =>
+          val tablePath = new File(dir, "table")
+          val df = (1 to 3).map(i => (i, i, i, i)).toDF("a", "b", "c", "d")
+
+          df.write
+            .format("parquet")
+            .partitionBy("b", "c", "d")
+            .save(tablePath.getCanonicalPath)
+
+          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
+          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
+          Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
+          checkAnswer(sqlContext.read.format("parquet").load(tablePath.getCanonicalPath), df)
+        }
       }
     }
   }

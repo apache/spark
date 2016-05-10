@@ -22,6 +22,7 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.parquet.schema.MessageTypeParser
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -260,7 +261,7 @@ class ParquetSchemaInferenceSuite extends ParquetSchemaTest {
     int96AsTimestamp = true,
     writeLegacyParquetFormat = true)
 
-  testSchemaInference[Tuple1[Pair[Int, String]]](
+  testSchemaInference[Tuple1[(Int, String)]](
     "struct",
     """
       |message root {
@@ -447,6 +448,35 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
           StructField("firstField", StringType, nullable = true),
           StructField("secondField", StringType, nullable = true))))
     }.getMessage.contains("detected conflicting schemas"))
+  }
+
+  test("schema merging failure error message") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sqlContext.range(3).write.parquet(s"$path/p=1")
+      sqlContext.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
+
+      val message = intercept[SparkException] {
+        sqlContext.read.option("mergeSchema", "true").parquet(path).schema
+      }.getMessage
+
+      assert(message.contains("Failed merging schema of file"))
+    }
+
+    // test for second merging (after read Parquet schema in parallel done)
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sqlContext.range(3).write.parquet(s"$path/p=1")
+      sqlContext.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
+
+      sqlContext.sparkContext.conf.set("spark.default.parallelism", "20")
+
+      val message = intercept[SparkException] {
+        sqlContext.read.option("mergeSchema", "true").parquet(path).schema
+      }.getMessage
+
+      assert(message.contains("Failed merging schema:"))
+    }
   }
 
   // =======================================================

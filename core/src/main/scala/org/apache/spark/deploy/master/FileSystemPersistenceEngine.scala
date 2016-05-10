@@ -21,7 +21,7 @@ import java.io._
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer}
 import org.apache.spark.util.Utils
 

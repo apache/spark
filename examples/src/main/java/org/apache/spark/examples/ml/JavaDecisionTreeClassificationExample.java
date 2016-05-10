@@ -17,8 +17,6 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml;
 // $example on$
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
@@ -26,19 +24,22 @@ import org.apache.spark.ml.classification.DecisionTreeClassifier;
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
 import org.apache.spark.ml.feature.*;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaDecisionTreeClassificationExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaDecisionTreeClassificationExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder().appName("JavaDecisionTreeClassificationExample").getOrCreate();
 
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
-    DataFrame data = sqlContext.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> data = spark
+      .read()
+      .format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
 
     // Index labels, adding metadata to the label column.
     // Fit on whole dataset to include all labels in index.
@@ -55,9 +56,9 @@ public class JavaDecisionTreeClassificationExample {
       .fit(data);
 
     // Split the data into training and test sets (30% held out for testing)
-    DataFrame[] splits = data.randomSplit(new double[]{0.7, 0.3});
-    DataFrame trainingData = splits[0];
-    DataFrame testData = splits[1];
+    Dataset<Row>[] splits = data.randomSplit(new double[]{0.7, 0.3});
+    Dataset<Row> trainingData = splits[0];
+    Dataset<Row> testData = splits[1];
 
     // Train a DecisionTree model.
     DecisionTreeClassifier dt = new DecisionTreeClassifier()
@@ -78,7 +79,7 @@ public class JavaDecisionTreeClassificationExample {
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
-    DataFrame predictions = model.transform(testData);
+    Dataset<Row> predictions = model.transform(testData);
 
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5);
@@ -95,5 +96,7 @@ public class JavaDecisionTreeClassificationExample {
       (DecisionTreeClassificationModel) (model.stages()[2]);
     System.out.println("Learned classification tree model:\n" + treeModel.toDebugString());
     // $example off$
+
+    spark.stop();
   }
 }

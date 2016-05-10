@@ -17,26 +17,24 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.regression.LinearRegression;
 import org.apache.spark.ml.regression.LinearRegressionModel;
 import org.apache.spark.ml.regression.LinearRegressionTrainingSummary;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 // $example off$
 
 public class JavaLinearRegressionWithElasticNetExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaLinearRegressionWithElasticNetExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder().appName("JavaLinearRegressionWithElasticNetExample").getOrCreate();
 
     // $example on$
     // Load training data
-    DataFrame training = sqlContext.read().format("libsvm")
+    Dataset<Row> training = spark.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
     LinearRegression lr = new LinearRegression()
@@ -60,6 +58,6 @@ public class JavaLinearRegressionWithElasticNetExample {
     System.out.println("r2: " + trainingSummary.r2());
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

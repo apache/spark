@@ -17,114 +17,233 @@
 
 package org.apache.spark.sql.execution.joins
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.metric.LongSQLMetric
-
+import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
+import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.types.{IntegralType, LongType}
 
 trait HashJoin {
   self: SparkPlan =>
 
   val leftKeys: Seq[Expression]
   val rightKeys: Seq[Expression]
+  val joinType: JoinType
   val buildSide: BuildSide
   val condition: Option[Expression]
   val left: SparkPlan
   val right: SparkPlan
+
+  override def output: Seq[Attribute] = {
+    joinType match {
+      case Inner =>
+        left.output ++ right.output
+      case LeftOuter =>
+        left.output ++ right.output.map(_.withNullability(true))
+      case RightOuter =>
+        left.output.map(_.withNullability(true)) ++ right.output
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
+      case LeftExistence(_) =>
+        left.output
+      case x =>
+        throw new IllegalArgumentException(s"HashJoin should not take $x as the JoinType")
+    }
+  }
+
+  override def outputPartitioning: Partitioning = streamedPlan.outputPartitioning
 
   protected lazy val (buildPlan, streamedPlan) = buildSide match {
     case BuildLeft => (left, right)
     case BuildRight => (right, left)
   }
 
-  protected lazy val (buildKeys, streamedKeys) = buildSide match {
-    case BuildLeft => (leftKeys, rightKeys)
-    case BuildRight => (rightKeys, leftKeys)
+  protected lazy val (buildKeys, streamedKeys) = {
+    require(leftKeys.map(_.dataType) == rightKeys.map(_.dataType),
+      "Join keys from two sides should have same types")
+    val lkeys = rewriteKeyExpr(leftKeys).map(BindReferences.bindReference(_, left.output))
+    val rkeys = rewriteKeyExpr(rightKeys).map(BindReferences.bindReference(_, right.output))
+    buildSide match {
+      case BuildLeft => (lkeys, rkeys)
+      case BuildRight => (rkeys, lkeys)
+    }
   }
 
-  override def output: Seq[Attribute] = left.output ++ right.output
+  /**
+   * Try to rewrite the key as LongType so we can use getLong(), if they key can fit with a long.
+   *
+   * If not, returns the original expressions.
+   */
+  private def rewriteKeyExpr(keys: Seq[Expression]): Seq[Expression] = {
+    var keyExpr: Expression = null
+    var width = 0
+    keys.foreach { e =>
+      e.dataType match {
+        case dt: IntegralType if dt.defaultSize <= 8 - width =>
+          if (width == 0) {
+            if (e.dataType != LongType) {
+              keyExpr = Cast(e, LongType)
+            } else {
+              keyExpr = e
+            }
+            width = dt.defaultSize
+          } else {
+            val bits = dt.defaultSize * 8
+            keyExpr = BitwiseOr(ShiftLeft(keyExpr, Literal(bits)),
+              BitwiseAnd(Cast(e, LongType), Literal((1L << bits) - 1)))
+            width -= bits
+          }
+        // TODO: support BooleanType, DateType and TimestampType
+        case other =>
+          return keys
+      }
+    }
+    keyExpr :: Nil
+  }
 
-  protected def buildSideKeyGenerator: Projection =
-    UnsafeProjection.create(buildKeys, buildPlan.output)
+  protected def buildSideKeyGenerator(): Projection =
+    UnsafeProjection.create(buildKeys)
 
-  protected def streamSideKeyGenerator: Projection =
-    UnsafeProjection.create(streamedKeys, streamedPlan.output)
+  protected def streamSideKeyGenerator(): UnsafeProjection =
+    UnsafeProjection.create(streamedKeys)
 
   @transient private[this] lazy val boundCondition = if (condition.isDefined) {
-    newPredicate(condition.getOrElse(Literal(true)), left.output ++ right.output)
+    newPredicate(condition.get, streamedPlan.output ++ buildPlan.output)
   } else {
     (r: InternalRow) => true
   }
 
-  protected def hashJoin(
+  protected def createResultProjection(): (InternalRow) => InternalRow = joinType match {
+    case LeftExistence(_) =>
+      UnsafeProjection.create(output, output)
+    case _ =>
+      // Always put the stream side on left to simplify implementation
+      // both of left and right side could be null
+      UnsafeProjection.create(
+        output, (streamedPlan.output ++ buildPlan.output).map(_.withNullability(true)))
+  }
+
+  private def innerJoin(
       streamIter: Iterator[InternalRow],
-      numStreamRows: LongSQLMetric,
-      hashedRelation: HashedRelation,
-      numOutputRows: LongSQLMetric): Iterator[InternalRow] =
-  {
-    new Iterator[InternalRow] {
-      private[this] var currentStreamedRow: InternalRow = _
-      private[this] var currentHashMatches: Seq[InternalRow] = _
-      private[this] var currentMatchPosition: Int = -1
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinRow = new JoinedRow
+    val joinKeys = streamSideKeyGenerator()
+    streamIter.flatMap { srow =>
+      joinRow.withLeft(srow)
+      val matches = hashedRelation.get(joinKeys(srow))
+      if (matches != null) {
+        matches.map(joinRow.withRight(_)).filter(boundCondition)
+      } else {
+        Seq.empty
+      }
+    }
+  }
 
-      // Mutable per row objects.
-      private[this] val joinRow = new JoinedRow
-      private[this] val resultProjection: (InternalRow) => InternalRow =
-        UnsafeProjection.create(self.schema)
+  private def outerJoin(
+      streamedIter: Iterator[InternalRow],
+    hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinedRow = new JoinedRow()
+    val keyGenerator = streamSideKeyGenerator()
+    val nullRow = new GenericInternalRow(buildPlan.output.length)
 
-      private[this] val joinKeys = streamSideKeyGenerator
-
-      override final def hasNext: Boolean = {
-        while (true) {
-          // check if it's end of current matches
-          if (currentHashMatches != null && currentMatchPosition == currentHashMatches.length) {
-            currentHashMatches = null
-            currentMatchPosition = -1
-          }
-
-          // find the next match
-          while (currentHashMatches == null && streamIter.hasNext) {
-            currentStreamedRow = streamIter.next()
-            numStreamRows += 1
-            val key = joinKeys(currentStreamedRow)
-            if (!key.anyNull) {
-              currentHashMatches = hashedRelation.get(key)
-              if (currentHashMatches != null) {
-                currentMatchPosition = 0
-              }
+    streamedIter.flatMap { currentRow =>
+      val rowKey = keyGenerator(currentRow)
+      joinedRow.withLeft(currentRow)
+      val buildIter = hashedRelation.get(rowKey)
+      new RowIterator {
+        private var found = false
+        override def advanceNext(): Boolean = {
+          while (buildIter != null && buildIter.hasNext) {
+            val nextBuildRow = buildIter.next()
+            if (boundCondition(joinedRow.withRight(nextBuildRow))) {
+              found = true
+              return true
             }
           }
-          if (currentHashMatches == null) {
-            return false
-          }
-
-          // found some matches
-          buildSide match {
-            case BuildRight => joinRow(currentStreamedRow, currentHashMatches(currentMatchPosition))
-            case BuildLeft => joinRow(currentHashMatches(currentMatchPosition), currentStreamedRow)
-          }
-          if (boundCondition(joinRow)) {
+          if (!found) {
+            joinedRow.withRight(nullRow)
+            found = true
             return true
-          } else {
-            currentMatchPosition += 1
           }
+          false
         }
-        false  // unreachable
-      }
+        override def getRow: InternalRow = joinedRow
+      }.toScala
+    }
+  }
 
-      override final def next(): InternalRow = {
-        // next() could be called without calling hasNext()
-        if (hasNext) {
-          currentMatchPosition += 1
-          numOutputRows += 1
-          resultProjection(joinRow)
-        } else {
-          throw new NoSuchElementException
-        }
-      }
+  private def semiJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
+    val joinedRow = new JoinedRow
+    streamIter.filter { current =>
+      val key = joinKeys(current)
+      lazy val buildIter = hashedRelation.get(key)
+      !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      })
+    }
+  }
+
+  private def existenceJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
+    val result = new GenericMutableRow(Array[Any](null))
+    val joinedRow = new JoinedRow
+    streamIter.map { current =>
+      val key = joinKeys(current)
+      lazy val buildIter = hashedRelation.get(key)
+      val exists = !key.anyNull && buildIter != null && (condition.isEmpty || buildIter.exists {
+        (row: InternalRow) => boundCondition(joinedRow(current, row))
+      })
+      result.setBoolean(0, exists)
+      joinedRow(current, result)
+    }
+  }
+
+  private def antiJoin(
+      streamIter: Iterator[InternalRow],
+      hashedRelation: HashedRelation): Iterator[InternalRow] = {
+    val joinKeys = streamSideKeyGenerator()
+    val joinedRow = new JoinedRow
+    streamIter.filter { current =>
+      val key = joinKeys(current)
+      lazy val buildIter = hashedRelation.get(key)
+      key.anyNull || buildIter == null || (condition.isDefined && !buildIter.exists {
+        row => boundCondition(joinedRow(current, row))
+      })
+    }
+  }
+
+  protected def join(
+      streamedIter: Iterator[InternalRow],
+      hashed: HashedRelation,
+      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+
+    val joinedIter = joinType match {
+      case Inner =>
+        innerJoin(streamedIter, hashed)
+      case LeftOuter | RightOuter =>
+        outerJoin(streamedIter, hashed)
+      case LeftSemi =>
+        semiJoin(streamedIter, hashed)
+      case LeftAnti =>
+        antiJoin(streamedIter, hashed)
+      case j: ExistenceJoin =>
+        existenceJoin(streamedIter, hashed)
+      case x =>
+        throw new IllegalArgumentException(
+          s"BroadcastHashJoin should not take $x as the JoinType")
+    }
+
+    val resultProj = createResultProjection
+    joinedIter.map { r =>
+      numOutputRows += 1
+      resultProj(r)
     }
   }
 }

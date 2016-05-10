@@ -17,41 +17,21 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.execution.RunnableCommand
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.execution.command.RunnableCommand
 import org.apache.spark.sql.types._
 
+
 /**
- * Returned for the "DESCRIBE [EXTENDED] [dbName.]tableName" command.
- * @param table The table to be described.
- * @param isExtended True if "DESCRIBE EXTENDED" is used. Otherwise, false.
- *                   It is effective only when the table is a Hive table.
+ * Used to represent the operation of create table using a data source.
+ *
+ * @param allowExisting If it is true, we will do nothing when the table already exists.
+ *                      If it is false, an exception will be thrown
  */
-case class DescribeCommand(
-    table: LogicalPlan,
-    isExtended: Boolean) extends LogicalPlan with Command {
-
-  override def children: Seq[LogicalPlan] = Seq.empty
-
-  override val output: Seq[Attribute] = Seq(
-    // Column names are based on Hive.
-    AttributeReference("col_name", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "name of the column").build())(),
-    AttributeReference("data_type", StringType, nullable = false,
-      new MetadataBuilder().putString("comment", "data type of the column").build())(),
-    AttributeReference("comment", StringType, nullable = true,
-      new MetadataBuilder().putString("comment", "comment of the column").build())()
-  )
-}
-
-/**
-  * Used to represent the operation of create table using a data source.
-  * @param allowExisting If it is true, we will do nothing when the table already exists.
-  *                      If it is false, an exception will be thrown
-  */
 case class CreateTableUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
@@ -59,7 +39,7 @@ case class CreateTableUsing(
     temporary: Boolean,
     options: Map[String, String],
     allowExisting: Boolean,
-    managedIfNoPath: Boolean) extends LogicalPlan with Command {
+    managedIfNoPath: Boolean) extends LogicalPlan with logical.Command {
 
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
@@ -67,8 +47,8 @@ case class CreateTableUsing(
 
 /**
  * A node used to support CTAS statements and saveAsTable for the data source API.
- * This node is a [[UnaryNode]] instead of a [[Command]] because we want the analyzer
- * can analyze the logical plan that will be used to populate the table.
+ * This node is a [[logical.UnaryNode]] instead of a [[logical.Command]] because we want the
+ * analyzer can analyze the logical plan that will be used to populate the table.
  * So, [[PreWriteCheck]] can detect cases that are not allowed.
  */
 case class CreateTableUsingAsSelect(
@@ -79,7 +59,7 @@ case class CreateTableUsingAsSelect(
     bucketSpec: Option[BucketSpec],
     mode: SaveMode,
     options: Map[String, String],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan) extends logical.UnaryNode {
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
 
@@ -89,12 +69,21 @@ case class CreateTempTableUsing(
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
-  def run(sqlContext: SQLContext): Seq[Row] = {
-    val resolved = ResolvedDataSource(
-      sqlContext, userSpecifiedSchema, Array.empty[String], bucketSpec = None, provider, options)
-    sqlContext.catalog.registerTable(
-      tableIdent,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary table '$tableIdent' should not have specified a database")
+  }
+
+  def run(sparkSession: SparkSession): Seq[Row] = {
+    val dataSource = DataSource(
+      sparkSession,
+      userSpecifiedSchema = userSpecifiedSchema,
+      className = provider,
+      options = options)
+    sparkSession.sessionState.catalog.createTempTable(
+      tableIdent.table,
+      Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }
@@ -108,19 +97,24 @@ case class CreateTempTableUsingAsSelect(
     options: Map[String, String],
     query: LogicalPlan) extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
-    val df = DataFrame(sqlContext, query)
-    val resolved = ResolvedDataSource(
-      sqlContext,
-      provider,
-      partitionColumns,
+  if (tableIdent.database.isDefined) {
+    throw new AnalysisException(
+      s"Temporary table '$tableIdent' should not have specified a database")
+  }
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val df = Dataset.ofRows(sparkSession, query)
+    val dataSource = DataSource(
+      sparkSession,
+      className = provider,
+      partitionColumns = partitionColumns,
       bucketSpec = None,
-      mode,
-      options,
-      df)
-    sqlContext.catalog.registerTable(
-      tableIdent,
-      DataFrame(sqlContext, LogicalRelation(resolved.relation)).logicalPlan)
+      options = options)
+    val result = dataSource.write(mode, df)
+    sparkSession.sessionState.catalog.createTempTable(
+      tableIdent.table,
+      Dataset.ofRows(sparkSession, LogicalRelation(result)).logicalPlan,
+      overrideIfExists = true)
 
     Seq.empty[Row]
   }
@@ -129,23 +123,23 @@ case class CreateTempTableUsingAsSelect(
 case class RefreshTable(tableIdent: TableIdentifier)
   extends RunnableCommand {
 
-  override def run(sqlContext: SQLContext): Seq[Row] = {
+  override def run(sparkSession: SparkSession): Seq[Row] = {
     // Refresh the given table's metadata first.
-    sqlContext.catalog.refreshTable(tableIdent)
+    sparkSession.sessionState.catalog.refreshTable(tableIdent)
 
     // If this table is cached as a InMemoryColumnarRelation, drop the original
     // cached version and make the new version cached lazily.
-    val logicalPlan = sqlContext.catalog.lookupRelation(tableIdent)
+    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
-    val isCached = sqlContext.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    val isCached = sparkSession.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {
       // Create a data frame to represent the table.
       // TODO: Use uncacheTable once it supports database name.
-      val df = DataFrame(sqlContext, logicalPlan)
+      val df = Dataset.ofRows(sparkSession, logicalPlan)
       // Uncache the logicalPlan.
-      sqlContext.cacheManager.tryUncacheQuery(df, blocking = true)
+      sparkSession.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.
-      sqlContext.cacheManager.cacheQuery(df, Some(tableIdent.table))
+      sparkSession.cacheManager.cacheQuery(df, Some(tableIdent.table))
     }
 
     Seq.empty[Row]
@@ -169,8 +163,3 @@ class CaseInsensitiveMap(map: Map[String, String]) extends Map[String, String]
 
   override def -(key: String): Map[String, String] = baseMap - key.toLowerCase
 }
-
-/**
- * The exception thrown from the DDL parser.
- */
-class DDLException(message: String) extends RuntimeException(message)

@@ -19,12 +19,13 @@ package org.apache.spark.sql
 
 import scala.language.implicitConversions
 
-import org.apache.spark.Logging
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.util.DataTypeParser
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.types._
@@ -58,15 +59,27 @@ class TypedColumn[-T, U](
    * on a decoded object.
    */
   private[sql] def withInputType(
-      inputEncoder: ExpressionEncoder[_],
-      schema: Seq[Attribute]): TypedColumn[T, U] = {
-    val boundEncoder = inputEncoder.bind(schema).asInstanceOf[ExpressionEncoder[Any]]
-    new TypedColumn[T, U](
-      expr transform { case ta: TypedAggregateExpression if ta.aEncoder.isEmpty =>
-        ta.copy(aEncoder = Some(boundEncoder), children = schema)
-      },
-      encoder)
+      inputDeserializer: Expression,
+      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
+    val unresolvedDeserializer = UnresolvedDeserializer(inputDeserializer, inputAttributes)
+    val newExpr = expr transform {
+      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
+        ta.copy(inputDeserializer = Some(unresolvedDeserializer))
+    }
+    new TypedColumn[T, U](newExpr, encoder)
   }
+
+  /**
+   * Gives the TypedColumn a name (alias).
+   * If the current TypedColumn has metadata associated with it, this metadata will be propagated
+   * to the new column.
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  override def name(alias: String): TypedColumn[T, U] =
+    new TypedColumn[T, U](super.name(alias).expr, encoder)
+
 }
 
 /**
@@ -77,7 +90,7 @@ class TypedColumn[-T, U](
  *
  * {{{
  *   df("columnName")            // On a specific DataFrame.
- *   col("columnName")           // A generic column no yet associcated with a DataFrame.
+ *   col("columnName")           // A generic column no yet associated with a DataFrame.
  *   col("columnName.field")     // Extracting a struct field
  *   col("`a.column.with.dots`") // Escape `.` in column names.
  *   $"columnName"               // Scala short hand for a named column.
@@ -104,10 +117,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
   def this(name: String) = this(name match {
     case "*" => UnresolvedStar(None)
-    case _ if name.endsWith(".*") => {
+    case _ if name.endsWith(".*") =>
       val parts = UnresolvedAttribute.parseAttributeName(name.substring(0, name.length - 2))
       UnresolvedStar(Some(parts))
-    }
     case _ => UnresolvedAttribute.quotedString(name)
   })
 
@@ -123,6 +135,8 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     // make it a NamedExpression.
     case u: UnresolvedAttribute => UnresolvedAlias(u)
 
+    case u: UnresolvedExtractValue => UnresolvedAlias(u)
+
     case expr: NamedExpression => expr
 
     // Leave an unaliased generator with an empty list of names since the analyzer will generate
@@ -131,7 +145,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(func.prettyString))
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(usePrettyExpression(func).sql))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
@@ -139,13 +153,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       case Cast(ne: NamedExpression, to) => UnresolvedAlias(Cast(ne, to))
     } match {
       case ne: NamedExpression => ne
-      case other => Alias(expr, expr.prettyString)()
+      case other => Alias(expr, usePrettyExpression(expr).sql)()
     }
 
-    case expr: Expression => Alias(expr, expr.prettyString)()
+    case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
 
-  override def toString: String = expr.prettyString
+  override def toString: String = usePrettyExpression(expr).sql
 
   override def equals(that: Any): Boolean = that match {
     case that: Column => that.expr.equals(this.expr)
@@ -255,6 +269,23 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * Inequality test.
    * {{{
    *   // Scala:
+   *   df.select( df("colA") =!= df("colB") )
+   *   df.select( !(df("colA") === df("colB")) )
+   *
+   *   // Java:
+   *   import static org.apache.spark.sql.functions.*;
+   *   df.filter( col("colA").notEqual(col("colB")) );
+   * }}}
+   *
+   * @group expr_ops
+   * @since 2.0.0
+    */
+  def =!= (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+
+  /**
+   * Inequality test.
+   * {{{
+   *   // Scala:
    *   df.select( df("colA") !== df("colB") )
    *   df.select( !(df("colA") === df("colB")) )
    *
@@ -265,8 +296,9 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    *
    * @group expr_ops
    * @since 1.3.0
-   */
-  def !== (other: Any): Column = withExpr{ Not(EqualTo(expr, lit(other).expr)) }
+    */
+  @deprecated("!== does not have the same precedence as ===, use =!= instead", "2.0.0")
+  def !== (other: Any): Column = this =!= other
 
   /**
    * Inequality test.
@@ -836,7 +868,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.4.0
    */
-  def alias(alias: String): Column = as(alias)
+  def alias(alias: String): Column = name(alias)
 
   /**
    * Gives the column an alias.
@@ -851,12 +883,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: String): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias)()
-    }
-  }
+  def as(alias: String): Column = name(alias)
 
   /**
    * (Scala-specific) Assigns the given aliases to the results of a table generating function.
@@ -895,12 +922,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def as(alias: Symbol): Column = withExpr {
-    expr match {
-      case ne: NamedExpression => Alias(expr, alias.name)(explicitMetadata = Some(ne.metadata))
-      case other => Alias(other, alias.name)()
-    }
-  }
+  def as(alias: Symbol): Column = name(alias.name)
 
   /**
    * Gives the column an alias with metadata.
@@ -914,6 +936,26 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    */
   def as(alias: String, metadata: Metadata): Column = withExpr {
     Alias(expr, alias)(explicitMetadata = Some(metadata))
+  }
+
+  /**
+   * Gives the column a name (alias).
+   * {{{
+   *   // Renames colA to colB in select output.
+   *   df.select($"colA".name("colB"))
+   * }}}
+   *
+   * If the current column has metadata associated with it, this metadata will be propagated
+   * to the new column.  If this not desired, use `as` with explicitly empty metadata.
+   *
+   * @group expr_ops
+   * @since 2.0.0
+   */
+  def name(alias: String): Column = withExpr {
+    expr match {
+      case ne: NamedExpression => Alias(expr, alias)(explicitMetadata = Some(ne.metadata))
+      case other => Alias(other, alias)()
+    }
   }
 
   /**
@@ -944,7 +986,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
    * @group expr_ops
    * @since 1.3.0
    */
-  def cast(to: String): Column = cast(DataTypeParser.parse(to))
+  def cast(to: String): Column = cast(CatalystSqlParser.parseDataType(to))
 
   /**
    * Returns an ordering used in sorting.
@@ -987,7 +1029,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     if (extended) {
       println(expr)
     } else {
-      println(expr.prettyString)
+      println(expr.sql)
     }
     // scalastyle:on println
   }

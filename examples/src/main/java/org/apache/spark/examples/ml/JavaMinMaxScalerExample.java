@@ -17,24 +17,27 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import org.apache.spark.ml.feature.MinMaxScaler;
 import org.apache.spark.ml.feature.MinMaxScalerModel;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
 // $example off$
 
 public class JavaMinMaxScalerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JaveMinMaxScalerExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaMinMaxScalerExample")
+      .getOrCreate();
 
     // $example on$
-    DataFrame dataFrame = jsql.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> dataFrame = spark
+      .read()
+      .format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
     MinMaxScaler scaler = new MinMaxScaler()
       .setInputCol("features")
       .setOutputCol("scaledFeatures");
@@ -43,9 +46,9 @@ public class JavaMinMaxScalerExample {
     MinMaxScalerModel scalerModel = scaler.fit(dataFrame);
 
     // rescale each feature to range [min, max].
-    DataFrame scaledData = scalerModel.transform(dataFrame);
+    Dataset<Row> scaledData = scalerModel.transform(dataFrame);
     scaledData.show();
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 }

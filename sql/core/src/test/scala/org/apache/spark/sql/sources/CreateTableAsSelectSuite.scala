@@ -22,7 +22,7 @@ import java.io.{File, IOException}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.execution.datasources.DDLException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
@@ -105,7 +105,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    val message = intercept[DDLException]{
+    val message = intercept[ParseException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
@@ -116,9 +116,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
         |SELECT a * 4 FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains(s"a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
-      "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
+    assert(message.toLowerCase.contains("operation not allowed"))
 
     // Overwrite the temporary table.
     sql(
@@ -156,7 +154,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {
-    val message = intercept[DDLException]{
+    val message = intercept[ParseException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
@@ -167,13 +165,11 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
         |SELECT b FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains("a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
-      "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
+    assert(message.toLowerCase.contains("operation not allowed"))
   }
 
   test("a CTAS statement with column definitions is not allowed") {
-    intercept[DDLException]{
+    intercept[AnalysisException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)

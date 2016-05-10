@@ -17,8 +17,8 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{Logging, TaskContext}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.TaskContext
+import org.apache.spark.internal.Logging
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
 import org.apache.spark.partial.PartialResult
@@ -103,7 +103,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the RDD contains infinity, NaN throws an exception
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
-  def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = self.withScope {
+  def histogram(bucketCount: Int): (Array[Double], Array[Long]) = self.withScope {
     // Scala's built-in range has issues. See #SI-8782
     def customRange(min: Double, max: Double, steps: Int): IndexedSeq[Double] = {
       val span = max - min
@@ -112,7 +112,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     // Compute the minimum and the maximum
     val (max: Double, min: Double) = self.mapPartitions { items =>
       Iterator(items.foldRight(Double.NegativeInfinity,
-        Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
+        Double.PositiveInfinity)((e: Double, x: (Double, Double)) =>
         (x._1.max(e), x._2.min(e))))
     }.reduce { (maxmin1, maxmin2) =>
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
@@ -142,7 +142,7 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    *  And on the input of 1 and 50 we would have a histogram of 1, 0, 1
    *
    * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
-   * from an O(log n) inseration to O(1) per element. (where n = # buckets) if you set evenBuckets
+   * from an O(log n) insertion to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.
    * buckets array must be at least two elements
@@ -166,8 +166,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       val counters = new Array[Long](buckets.length - 1)
       while (iter.hasNext) {
         bucketFunction(iter.next()) match {
-          case Some(x: Int) => {counters(x) += 1}
-          case _ => {}
+          case Some(x: Int) => counters(x) += 1
+          case _ => // No-Op
         }
       }
       Iterator(counters)

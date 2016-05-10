@@ -18,31 +18,28 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SQLConf, SQLContext}
-
+import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
  * A special [[SQLContext]] prepared for testing.
  */
-private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { self =>
+private[sql] class TestSQLContext(
+    @transient override val sparkSession: SparkSession,
+    isRootContext: Boolean)
+  extends SQLContext(sparkSession, isRootContext) { self =>
 
-  def this() {
-    this(new SparkContext("local[2]", "test-sql-context",
-      new SparkConf().set("spark.sql.testkey", "true")))
+  def this(sc: SparkContext) {
+    this(new TestSparkSession(sc), true)
   }
 
-  protected[sql] override lazy val conf: SQLConf = new SQLConf {
+  def this(sparkConf: SparkConf) {
+    this(new SparkContext("local[2]", "test-sql-context",
+      sparkConf.set("spark.sql.testkey", "true")))
+  }
 
-    clear()
-
-    override def clear(): Unit = {
-      super.clear()
-
-      // Make sure we start with the default test configs even after clear
-      TestSQLContext.overrideConfs.map {
-        case (key, value) => setConfString(key, value)
-      }
-    }
+  def this() {
+    this(new SparkConf)
   }
 
   // Needed for Java tests
@@ -53,7 +50,28 @@ private[sql] class TestSQLContext(sc: SparkContext) extends SQLContext(sc) { sel
   private object testData extends SQLTestData {
     protected override def sqlContext: SQLContext = self
   }
+
 }
+
+
+private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
+
+  @transient
+  protected[sql] override lazy val sessionState: SessionState = new SessionState(self) {
+    override lazy val conf: SQLConf = {
+      new SQLConf {
+        clear()
+        override def clear(): Unit = {
+          super.clear()
+          // Make sure we start with the default test configs even after clear
+          TestSQLContext.overrideConfs.foreach { case (key, value) => setConfString(key, value) }
+        }
+      }
+    }
+  }
+
+}
+
 
 private[sql] object TestSQLContext {
 

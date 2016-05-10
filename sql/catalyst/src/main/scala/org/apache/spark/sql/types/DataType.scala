@@ -62,6 +62,9 @@ abstract class DataType extends AbstractDataType {
   /** Readable string representation for the type. */
   def simpleString: String = typeName
 
+  /** String representation for the type saved in external catalogs. */
+  def catalogString: String = simpleString
+
   /** Readable string representation for the type with truncation */
   private[sql] def simpleString(maxNumberFields: Int): String = simpleString
 
@@ -103,7 +106,7 @@ object DataType {
 
   /** Given the string representation of a type, return its DataType */
   private def nameToType(name: String): DataType = {
-    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\d+)\s*\)""".r
+    val FIXED_DECIMAL = """decimal\(\s*(\d+)\s*,\s*(\-?\d+)\s*\)""".r
     name match {
       case "decimal" => DecimalType.USER_DEFAULT
       case FIXED_DECIMAL(precision, scale) => DecimalType(precision.toInt, scale.toInt)

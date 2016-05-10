@@ -87,12 +87,60 @@ public class CommandBuilderUtilsSuite {
     assertEquals("\"a \\\"b\\\" c\"", quoteForCommandString("a \"b\" c"));
   }
 
-  private void testOpt(String opts, List<String> expected) {
+  @Test
+  public void testJavaMajorVersion() {
+    assertEquals(6, javaMajorVersion("1.6.0_50"));
+    assertEquals(7, javaMajorVersion("1.7.0_79"));
+    assertEquals(8, javaMajorVersion("1.8.0_66"));
+    assertEquals(9, javaMajorVersion("9-ea"));
+    assertEquals(9, javaMajorVersion("9+100"));
+    assertEquals(9, javaMajorVersion("9"));
+    assertEquals(9, javaMajorVersion("9.1.0"));
+    assertEquals(10, javaMajorVersion("10"));
+  }
+
+  @Test
+  public void testAddPermGenSizeOpt() {
+    List<String> cmd = new ArrayList<>();
+
+    if (javaMajorVersion(System.getProperty("java.version")) > 7) {
+      // Does nothing in Java 8
+      addPermGenSizeOpt(cmd);
+      assertEquals(0, cmd.size());
+      cmd.clear();
+
+    } else {
+      addPermGenSizeOpt(cmd);
+      assertEquals(1, cmd.size());
+      assertTrue(cmd.get(0).startsWith("-XX:MaxPermSize="));
+      cmd.clear();
+
+      cmd.add("foo");
+      addPermGenSizeOpt(cmd);
+      assertEquals(2, cmd.size());
+      assertTrue(cmd.get(1).startsWith("-XX:MaxPermSize="));
+      cmd.clear();
+
+      cmd.add("-XX:MaxPermSize=512m");
+      addPermGenSizeOpt(cmd);
+      assertEquals(1, cmd.size());
+      assertEquals("-XX:MaxPermSize=512m", cmd.get(0));
+      cmd.clear();
+
+      cmd.add("'-XX:MaxPermSize=512m'");
+      addPermGenSizeOpt(cmd);
+      assertEquals(1, cmd.size());
+      assertEquals("'-XX:MaxPermSize=512m'", cmd.get(0));
+      cmd.clear();
+    }
+  }
+
+  private static void testOpt(String opts, List<String> expected) {
     assertEquals(String.format("test string failed to parse: [[ %s ]]", opts),
         expected, parseOptionString(opts));
   }
 
-  private void testInvalidOpt(String opts) {
+  private static void testInvalidOpt(String opts) {
     try {
       parseOptionString(opts);
       fail("Expected exception for invalid option string.");

@@ -17,11 +17,15 @@
 
 package org.apache.spark.sql.execution
 
-import java.util.concurrent.atomic.AtomicBoolean
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration._
 
-import org.apache.spark.Logging
+import org.apache.spark.{broadcast, SparkEnv}
+import org.apache.spark.internal.Logging
+import org.apache.spark.io.CompressionCodec
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.sql.{Row, SQLContext}
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -29,11 +33,14 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.execution.metric.{LongSQLMetric, SQLMetric}
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.ThreadUtils
 
 /**
  * The base class for physical operators.
+ *
+ * The naming convention is that physical operators end with "Exec" suffix, e.g. [[ProjectExec]].
  */
 abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializable {
 
@@ -43,12 +50,12 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * populated by the query planning infrastructure.
    */
   @transient
-  protected[spark] final val sqlContext = SQLContext.getActive().getOrElse(null)
+  protected[spark] final val sqlContext = SQLContext.getActive().orNull
 
   protected def sparkContext = sqlContext.sparkContext
 
   // sqlContext will be null when we are being deserialized on the slaves.  In this instance
-  // the value of subexpressionEliminationEnabled will be set by the desserializer after the
+  // the value of subexpressionEliminationEnabled will be set by the deserializer after the
   // constructor has run.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
     sqlContext.conf.subexpressionEliminationEnabled
@@ -56,12 +63,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     false
   }
 
-  /**
-   * Whether the "prepare" method is called.
-   */
-  private val prepareCalled = new AtomicBoolean(false)
-
-  /** Overridden make copy also propogates sqlContext to copied plan. */
+  /** Overridden make copy also propagates sqlContext to copied plan. */
   override def makeCopy(newArgs: Array[AnyRef]): SparkPlan = {
     SQLContext.setActive(sqlContext)
     super.makeCopy(newArgs)
@@ -75,13 +77,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Return all metrics containing metrics of this SparkPlan.
    */
-  private[sql] def metrics: Map[String, SQLMetric[_, _]] = Map.empty
+  private[sql] def metrics: Map[String, SQLMetric] = Map.empty
+
+  /**
+   * Reset all the metrics.
+   */
+  private[sql] def resetMetrics(): Unit = {
+    metrics.valuesIterator.foreach(_.reset())
+  }
 
   /**
    * Return a LongSQLMetric according to the name.
    */
-  private[sql] def longMetric(name: String): LongSQLMetric =
-    metrics(name).asInstanceOf[LongSQLMetric]
+  private[sql] def longMetric(name: String): SQLMetric = metrics(name)
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
@@ -98,24 +106,99 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   def requiredChildOrdering: Seq[Seq[SortOrder]] = Seq.fill(children.size)(Nil)
 
   /**
-   * Returns the result of this query as an RDD[InternalRow] by delegating to doExecute
-   * after adding query plan information to created RDDs for visualization.
-   * Concrete implementations of SparkPlan should override doExecute instead.
+   * Returns the result of this query as an RDD[InternalRow] by delegating to `doExecute` after
+   * preparations.
+   *
+   * Concrete implementations of SparkPlan should override `doExecute`.
    */
-  final def execute(): RDD[InternalRow] = {
+  final def execute(): RDD[InternalRow] = executeQuery {
+    doExecute()
+  }
+
+  /**
+   * Returns the result of this query as a broadcast variable by delegating to `doExecuteBroadcast`
+   * after preparations.
+   *
+   * Concrete implementations of SparkPlan should override `doExecuteBroadcast`.
+   */
+  final def executeBroadcast[T](): broadcast.Broadcast[T] = executeQuery {
+    doExecuteBroadcast()
+  }
+
+  /**
+   * Execute a query after preparing the query and adding query plan information to created RDDs
+   * for visualization.
+   */
+  protected final def executeQuery[T](query: => T): T = {
     RDDOperationScope.withScope(sparkContext, nodeName, false, true) {
       prepare()
-      doExecute()
+      waitForSubqueries()
+      query
     }
   }
+
+  /**
+   * List of (uncorrelated scalar subquery, future holding the subquery result) for this plan node.
+   * This list is populated by [[prepareSubqueries]], which is called in [[prepare]].
+   */
+  @transient
+  private val subqueryResults = new ArrayBuffer[(ScalarSubquery, Future[Array[InternalRow]])]
+
+  /**
+   * Finds scalar subquery expressions in this plan node and starts evaluating them.
+   * The list of subqueries are added to [[subqueryResults]].
+   */
+  protected def prepareSubqueries(): Unit = {
+    val allSubqueries = expressions.flatMap(_.collect {case e: ScalarSubquery => e})
+    allSubqueries.asInstanceOf[Seq[ScalarSubquery]].foreach { e =>
+      val futureResult = Future {
+        // Each subquery should return only one row (and one column). We take two here and throws
+        // an exception later if the number of rows is greater than one.
+        e.executedPlan.executeTake(2)
+      }(SparkPlan.subqueryExecutionContext)
+      subqueryResults += e -> futureResult
+    }
+  }
+
+  /**
+   * Blocks the thread until all subqueries finish evaluation and update the results.
+   */
+  protected def waitForSubqueries(): Unit = synchronized {
+    // fill in the result of subqueries
+    subqueryResults.foreach { case (e, futureResult) =>
+      val rows = ThreadUtils.awaitResult(futureResult, Duration.Inf)
+      if (rows.length > 1) {
+        sys.error(s"more than one row returned by a subquery used as an expression:\n${e.plan}")
+      }
+      if (rows.length == 1) {
+        assert(rows(0).numFields == 1,
+          s"Expects 1 field, but got ${rows(0).numFields}; something went wrong in analysis")
+        e.updateResult(rows(0).get(0, e.dataType))
+      } else {
+        // If there is no rows returned, the result should be null.
+        e.updateResult(null)
+      }
+    }
+    subqueryResults.clear()
+  }
+
+  /**
+   * Whether the "prepare" method is called.
+   */
+  private var prepared = false
 
   /**
    * Prepare a SparkPlan for execution. It's idempotent.
    */
   final def prepare(): Unit = {
-    if (prepareCalled.compareAndSet(false, true)) {
-      doPrepare()
-      children.foreach(_.prepare())
+    // doPrepare() may depend on it's children, we should call prepare() on all the children first.
+    children.foreach(_.prepare())
+    synchronized {
+      if (!prepared) {
+        prepareSubqueries()
+        doPrepare()
+        prepared = true
+      }
     }
   }
 
@@ -126,6 +209,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    *
    * Note: the prepare method has already walked down the tree, so the implementation doesn't need
    * to call children's prepare methods.
+   *
+   * This will only be called once, protected by `this`.
    */
   protected def doPrepare(): Unit = {}
 
@@ -136,10 +221,85 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   protected def doExecute(): RDD[InternalRow]
 
   /**
+   * Overridden by concrete implementations of SparkPlan.
+   * Produces the result of the query as a broadcast variable.
+   */
+  protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
+    throw new UnsupportedOperationException(s"$nodeName does not implement doExecuteBroadcast")
+  }
+
+  /**
+   * Packing the UnsafeRows into byte array for faster serialization.
+   * The byte arrays are in the following format:
+   * [size] [bytes of UnsafeRow] [size] [bytes of UnsafeRow] ... [-1]
+   *
+   * UnsafeRow is highly compressible (at least 8 bytes for any column), the byte array is also
+   * compressed.
+   */
+  private def getByteArrayRdd(n: Int = -1): RDD[Array[Byte]] = {
+    execute().mapPartitionsInternal { iter =>
+      var count = 0
+      val buffer = new Array[Byte](4 << 10)  // 4K
+      val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+      val bos = new ByteArrayOutputStream()
+      val out = new DataOutputStream(codec.compressedOutputStream(bos))
+      while (iter.hasNext && (n < 0 || count < n)) {
+        val row = iter.next().asInstanceOf[UnsafeRow]
+        out.writeInt(row.getSizeInBytes)
+        row.writeToStream(out, buffer)
+        count += 1
+      }
+      out.writeInt(-1)
+      out.flush()
+      out.close()
+      Iterator(bos.toByteArray)
+    }
+  }
+
+  /**
+   * Decode the byte arrays back to UnsafeRows and put them into buffer.
+   */
+  private def decodeUnsafeRows(bytes: Array[Byte]): Iterator[InternalRow] = {
+    val nFields = schema.length
+
+    val codec = CompressionCodec.createCodec(SparkEnv.get.conf)
+    val bis = new ByteArrayInputStream(bytes)
+    val ins = new DataInputStream(codec.compressedInputStream(bis))
+
+    new Iterator[InternalRow] {
+      private var sizeOfNextRow = ins.readInt()
+      override def hasNext: Boolean = sizeOfNextRow >= 0
+      override def next(): InternalRow = {
+        val bs = new Array[Byte](sizeOfNextRow)
+        ins.readFully(bs)
+        val row = new UnsafeRow(nFields)
+        row.pointTo(bs, sizeOfNextRow)
+        sizeOfNextRow = ins.readInt()
+        row
+      }
+    }
+  }
+
+  /**
    * Runs this query returning the result as an array.
    */
   def executeCollect(): Array[InternalRow] = {
-    execute().map(_.copy()).collect()
+    val byteArrayRdd = getByteArrayRdd()
+
+    val results = ArrayBuffer[InternalRow]()
+    byteArrayRdd.collect().foreach { bytes =>
+      decodeUnsafeRows(bytes).foreach(results.+=)
+    }
+    results.toArray
+  }
+
+  /**
+   * Runs this query returning the result as an iterator of InternalRow.
+   *
+   * Note: this will trigger multiple jobs (one for each partition).
+   */
+  def executeToIterator(): Iterator[InternalRow] = {
+    getByteArrayRdd().toLocalIterator.flatMap(decodeUnsafeRows)
   }
 
   /**
@@ -160,7 +320,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       return new Array[InternalRow](0)
     }
 
-    val childRDD = execute().map(_.copy())
+    val childRDD = getByteArrayRdd(n)
 
     val buf = new ArrayBuffer[InternalRow]
     val totalParts = childRDD.partitions.length
@@ -184,63 +344,39 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
       val left = n - buf.size
       val p = partsScanned.until(math.min(partsScanned + numPartsToTry, totalParts).toInt)
       val sc = sqlContext.sparkContext
-      val res = sc.runJob(childRDD, (it: Iterator[InternalRow]) => it.take(left).toArray, p)
+      val res = sc.runJob(childRDD,
+        (it: Iterator[Array[Byte]]) => if (it.hasNext) it.next() else Array.empty, p)
 
-      res.foreach(buf ++= _.take(n - buf.size))
+      res.foreach { r =>
+        decodeUnsafeRows(r.asInstanceOf[Array[Byte]]).foreach(buf.+=)
+      }
+
       partsScanned += p.size
     }
 
-    buf.toArray
+    if (buf.size > n) {
+      buf.take(n).toArray
+    } else {
+      buf.toArray
+    }
   }
-
-  private[this] def isTesting: Boolean = sys.props.contains("spark.testing")
 
   protected def newMutableProjection(
       expressions: Seq[Expression],
       inputSchema: Seq[Attribute],
-      useSubexprElimination: Boolean = false): () => MutableProjection = {
+      useSubexprElimination: Boolean = false): MutableProjection = {
     log.debug(s"Creating MutableProj: $expressions, inputSchema: $inputSchema")
-    try {
-      GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate mutable projection, fallback to interpreted", e)
-          () => new InterpretedMutableProjection(expressions, inputSchema)
-        }
-    }
+    GenerateMutableProjection.generate(expressions, inputSchema, useSubexprElimination)
   }
 
   protected def newPredicate(
       expression: Expression, inputSchema: Seq[Attribute]): (InternalRow) => Boolean = {
-    try {
-      GeneratePredicate.generate(expression, inputSchema)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate predicate, fallback to interpreted", e)
-          InterpretedPredicate.create(expression, inputSchema)
-        }
-    }
+    GeneratePredicate.generate(expression, inputSchema)
   }
 
   protected def newOrdering(
       order: Seq[SortOrder], inputSchema: Seq[Attribute]): Ordering[InternalRow] = {
-    try {
-      GenerateOrdering.generate(order, inputSchema)
-    } catch {
-      case e: Exception =>
-        if (isTesting) {
-          throw e
-        } else {
-          log.error("Failed to generate ordering, fallback to interpreted", e)
-          new InterpretedOrdering(order, inputSchema)
-        }
-    }
+    GenerateOrdering.generate(order, inputSchema)
   }
 
   /**
@@ -254,12 +390,24 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   }
 }
 
-private[sql] trait LeafNode extends SparkPlan {
+object SparkPlan {
+  private[execution] val subqueryExecutionContext = ExecutionContext.fromExecutorService(
+    ThreadUtils.newDaemonCachedThreadPool("subquery", 16))
+}
+
+private[sql] trait LeafExecNode extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
   override def producedAttributes: AttributeSet = outputSet
 }
 
-private[sql] trait UnaryNode extends SparkPlan {
+object UnaryExecNode {
+  def unapply(a: Any): Option[(SparkPlan, SparkPlan)] = a match {
+    case s: SparkPlan if s.children.size == 1 => Some((s, s.children.head))
+    case _ => None
+  }
+}
+
+private[sql] trait UnaryExecNode extends SparkPlan {
   def child: SparkPlan
 
   override def children: Seq[SparkPlan] = child :: Nil
@@ -267,7 +415,7 @@ private[sql] trait UnaryNode extends SparkPlan {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
-private[sql] trait BinaryNode extends SparkPlan {
+private[sql] trait BinaryExecNode extends SparkPlan {
   def left: SparkPlan
   def right: SparkPlan
 

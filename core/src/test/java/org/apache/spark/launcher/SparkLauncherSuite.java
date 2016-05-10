@@ -17,9 +17,6 @@
 
 package org.apache.spark.launcher;
 
-import java.io.BufferedReader;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -91,7 +88,7 @@ public class SparkLauncherSuite {
   @Test
   public void testChildProcLauncher() throws Exception {
     SparkSubmitOptionParser opts = new SparkSubmitOptionParser();
-    Map<String, String> env = new HashMap<String, String>();
+    Map<String, String> env = new HashMap<>();
     env.put("SPARK_PRINT_LAUNCH_COMMAND", "1");
 
     SparkLauncher launcher = new SparkLauncher(env)

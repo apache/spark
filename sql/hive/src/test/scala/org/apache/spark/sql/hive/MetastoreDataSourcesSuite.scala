@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import java.io.{File, IOException}
+import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -25,10 +25,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.parquet.ParquetRelation
-import org.apache.spark.sql.hive.client.{HiveTable, ManagedTable}
+import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -43,6 +45,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   var jsonFilePath: String = _
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     jsonFilePath = Utils.getSparkClassLoader.getResource("sample.json").getFile
   }
 
@@ -163,7 +166,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("check change without refresh") {
     withTempPath { tempDir =>
       withTable("jsonTable") {
-        (("a", "b") :: Nil).toDF().toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+        (("a", "b") :: Nil).toDF().toJSON.rdd.saveAsTextFile(tempDir.getCanonicalPath)
 
         sql(
           s"""CREATE TABLE jsonTable
@@ -178,7 +181,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           Row("a", "b"))
 
         Utils.deleteRecursively(tempDir)
-        (("a1", "b1", "c1") :: Nil).toDF().toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+        (("a1", "b1", "c1") :: Nil).toDF().toJSON.rdd.saveAsTextFile(tempDir.getCanonicalPath)
 
         // Schema is cached so the new column does not show. The updated values in existing columns
         // will show.
@@ -198,7 +201,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
   test("drop, change, recreate") {
     withTempPath { tempDir =>
-      (("a", "b") :: Nil).toDF().toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+      (("a", "b") :: Nil).toDF().toJSON.rdd.saveAsTextFile(tempDir.getCanonicalPath)
 
       withTable("jsonTable") {
         sql(
@@ -214,7 +217,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           Row("a", "b"))
 
         Utils.deleteRecursively(tempDir)
-        (("a", "b", "c") :: Nil).toDF().toJSON.saveAsTextFile(tempDir.getCanonicalPath)
+        (("a", "b", "c") :: Nil).toDF().toJSON.rdd.saveAsTextFile(tempDir.getCanonicalPath)
 
         sql("DROP TABLE jsonTable")
 
@@ -252,13 +255,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
         // Discard the cached relation.
-        invalidateTable("jsonTable")
+        sessionState.invalidateTable("jsonTable")
 
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
           sql("SELECT `c_!@(3)` FROM expectedJsonTable").collect().toSeq)
 
-        invalidateTable("jsonTable")
+        sessionState.invalidateTable("jsonTable")
         val expectedSchema = StructType(StructField("c_!@(3)", IntegerType, true) :: Nil)
 
         assert(expectedSchema === table("jsonTable").schema)
@@ -346,7 +349,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            """.stripMargin)
 
         // Discard the cached relation.
-        invalidateTable("ctasJsonTable")
+        sessionState.invalidateTable("ctasJsonTable")
 
         // Schema should not be changed.
         assert(table("ctasJsonTable").schema === table("jsonTable").schema)
@@ -368,9 +371,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
            |)
          """.stripMargin)
 
-      val expectedPath = catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
+      val expectedPath =
+        sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
-      val fs = filesystemPath.getFileSystem(sparkContext.hadoopConfiguration)
+      val fs = filesystemPath.getFileSystem(sqlContext.sessionState.newHadoopConf())
       if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
 
       // It is a managed table when we do not specify the location.
@@ -402,20 +406,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     }
   }
 
-  test("SPARK-5286 Fail to drop an invalid table when using the data source API") {
-    withTable("jsonTable") {
-      sql(
-        s"""CREATE TABLE jsonTable
-           |USING org.apache.spark.sql.json.DefaultSource
-           |OPTIONS (
-           |  path 'it is not a path at all!'
-           |)
-         """.stripMargin)
-
-      sql("DROP TABLE jsonTable").collect().foreach(i => logInfo(i.toString))
-    }
-  }
-
   test("SPARK-5839 HiveMetastoreCatalog does not recognize table aliases of data source tables.") {
     withTable("savedJsonTable") {
       // Save the df as a managed table (by not specifying the path).
@@ -434,7 +424,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         sql("SELECT * FROM savedJsonTable tmp where tmp.a > 5"),
         (6 to 10).map(i => Row(i, s"str$i")))
 
-      invalidateTable("savedJsonTable")
+      sessionState.invalidateTable("savedJsonTable")
 
       checkAnswer(
         sql("SELECT * FROM savedJsonTable where savedJsonTable.a < 5"),
@@ -472,8 +462,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
           // Drop table will also delete the data.
           sql("DROP TABLE savedJsonTable")
-          intercept[IOException] {
-            read.json(catalog.hiveDefaultTableFilePath(TableIdentifier("savedJsonTable")))
+          intercept[AnalysisException] {
+            read.json(
+              sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("savedJsonTable")))
           }
         }
 
@@ -511,13 +502,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         }
 
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "json") {
-          createExternalTable("createdJsonTable", tempPath.toString)
+          sparkSession.catalog.createExternalTable("createdJsonTable", tempPath.toString)
           assert(table("createdJsonTable").schema === df.schema)
           checkAnswer(sql("SELECT * FROM createdJsonTable"), df)
 
           assert(
             intercept[AnalysisException] {
-              createExternalTable("createdJsonTable", jsonFilePath.toString)
+              sparkSession.catalog.createExternalTable("createdJsonTable", jsonFilePath.toString)
             }.getMessage.contains("Table createdJsonTable already exists."),
             "We should complain that createdJsonTable already exists")
         }
@@ -529,7 +520,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         // Try to specify the schema.
         withSQLConf(SQLConf.DEFAULT_DATA_SOURCE_NAME.key -> "not a source name") {
           val schema = StructType(StructField("b", StringType, true) :: Nil)
-          createExternalTable(
+          sparkSession.catalog.createExternalTable(
             "createdJsonTable",
             "org.apache.spark.sql.json",
             schema,
@@ -540,23 +531,28 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             sql("SELECT b FROM savedJsonTable"))
 
           sql("DROP TABLE createdJsonTable")
-
-          assert(
-            intercept[RuntimeException] {
-              createExternalTable(
-                "createdJsonTable",
-                "org.apache.spark.sql.json",
-                schema,
-                Map.empty[String, String])
-            }.getMessage.contains("key not found: path"),
-            "We should complain that path is not specified.")
         }
       }
     }
   }
 
+  test("path required error") {
+    assert(
+      intercept[AnalysisException] {
+        sparkSession.catalog.createExternalTable(
+          "createdJsonTable",
+          "org.apache.spark.sql.json",
+          Map.empty[String, String])
+
+        table("createdJsonTable")
+      }.getMessage.contains("Unable to infer schema"),
+      "We should complain that path is not specified.")
+
+    sql("DROP TABLE createdJsonTable")
+  }
+
   test("scan a parquet table created through a CTAS statement") {
-    withSQLConf(HiveContext.CONVERT_METASTORE_PARQUET.key -> "true") {
+    withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempTable("jt") {
         (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
 
@@ -571,9 +567,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             Row(3) :: Row(4) :: Nil)
 
           table("test_parquet_ctas").queryExecution.optimizedPlan match {
-            case LogicalRelation(p: ParquetRelation, _, _) => // OK
+            case LogicalRelation(p: HadoopFsRelation, _, _) => // OK
             case _ =>
-              fail(s"test_parquet_ctas should have be converted to ${classOf[ParquetRelation]}")
+              fail(s"test_parquet_ctas should have be converted to ${classOf[HadoopFsRelation]}")
           }
         }
       }
@@ -626,7 +622,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("arrayInParquet")
 
-      refreshTable("arrayInParquet")
+      sessionState.refreshTable("arrayInParquet")
 
       checkAnswer(
         sql("SELECT a FROM arrayInParquet"),
@@ -685,7 +681,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("mapInParquet")
 
-      refreshTable("mapInParquet")
+      sessionState.refreshTable("mapInParquet")
 
       checkAnswer(
         sql("SELECT a FROM mapInParquet"),
@@ -699,23 +695,26 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("SPARK-6024 wide schema support") {
     withSQLConf(SQLConf.SCHEMA_STRING_LENGTH_THRESHOLD.key -> "4000") {
       withTable("wide_schema") {
-        // We will need 80 splits for this schema if the threshold is 4000.
-        val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
+        withTempDir { tempDir =>
+          // We will need 80 splits for this schema if the threshold is 4000.
+          val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
 
-        // Manually create a metastore data source table.
-        catalog.createDataSourceTable(
-          tableIdent = TableIdentifier("wide_schema"),
-          userSpecifiedSchema = Some(schema),
-          partitionColumns = Array.empty[String],
-          bucketSpec = None,
-          provider = "json",
-          options = Map("path" -> "just a dummy path"),
-          isExternal = false)
+          // Manually create a metastore data source table.
+          CreateDataSourceTableUtils.createDataSourceTable(
+            sparkSession = sqlContext.sparkSession,
+            tableIdent = TableIdentifier("wide_schema"),
+            userSpecifiedSchema = Some(schema),
+            partitionColumns = Array.empty[String],
+            bucketSpec = None,
+            provider = "json",
+            options = Map("path" -> tempDir.getCanonicalPath),
+            isExternal = false)
 
-        invalidateTable("wide_schema")
+          sessionState.invalidateTable("wide_schema")
 
-        val actualSchema = table("wide_schema").schema
-        assert(schema === actualSchema)
+          val actualSchema = table("wide_schema").schema
+          assert(schema === actualSchema)
+        }
       }
     }
   }
@@ -724,22 +723,27 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     val tableName = "spark6655"
     withTable(tableName) {
       val schema = StructType(StructField("int", IntegerType, true) :: Nil)
-      val hiveTable = HiveTable(
-        specifiedDatabase = Some("default"),
-        name = tableName,
+      val hiveTable = CatalogTable(
+        identifier = TableIdentifier(tableName, Some("default")),
+        tableType = CatalogTableType.MANAGED,
         schema = Seq.empty,
-        partitionColumns = Seq.empty,
+        storage = CatalogStorageFormat(
+          locationUri = None,
+          inputFormat = None,
+          outputFormat = None,
+          serde = None,
+          compressed = false,
+          serdeProperties = Map(
+            "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
+        ),
         properties = Map(
           "spark.sql.sources.provider" -> "json",
           "spark.sql.sources.schema" -> schema.json,
-          "EXTERNAL" -> "FALSE"),
-        tableType = ManagedTable,
-        serdeProperties = Map(
-          "path" -> catalog.hiveDefaultTableFilePath(TableIdentifier(tableName))))
+          "EXTERNAL" -> "FALSE"))
 
-      catalog.client.createTable(hiveTable)
+      sharedState.externalCatalog.createTable("default", hiveTable, ignoreIfExists = false)
 
-      invalidateTable(tableName)
+      sessionState.invalidateTable(tableName)
       val actualSchema = table(tableName).schema
       assert(schema === actualSchema)
     }
@@ -751,8 +755,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable(tableName) {
       df.write.format("parquet").partitionBy("d", "b").saveAsTable(tableName)
-      invalidateTable(tableName)
-      val metastoreTable = catalog.client.getTable("default", tableName)
+      sessionState.invalidateTable(tableName)
+      val metastoreTable = sharedState.externalCatalog.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
 
       val numPartCols = metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt
@@ -786,8 +790,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .bucketBy(8, "d", "b")
         .sortBy("c")
         .saveAsTable(tableName)
-      invalidateTable(tableName)
-      val metastoreTable = catalog.client.getTable("default", tableName)
+      sessionState.invalidateTable(tableName)
+      val metastoreTable = sharedState.externalCatalog.getTable("default", tableName)
       val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val expectedSortByColumns = StructType(df.schema("c") :: Nil)
 
@@ -901,35 +905,157 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     sqlContext.sql("""drop database if exists testdb8156 CASCADE""")
   }
 
+
   test("skip hive metadata on table creation") {
-    val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
+    withTempDir { tempPath =>
+      val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
-    catalog.createDataSourceTable(
-      tableIdent = TableIdentifier("not_skip_hive_metadata"),
-      userSpecifiedSchema = Some(schema),
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
-      provider = "parquet",
-      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "false"),
-      isExternal = false)
+      CreateDataSourceTableUtils.createDataSourceTable(
+        sparkSession = sqlContext.sparkSession,
+        tableIdent = TableIdentifier("not_skip_hive_metadata"),
+        userSpecifiedSchema = Some(schema),
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
+        provider = "parquet",
+        options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "false"),
+        isExternal = false)
 
-    // As a proxy for verifying that the table was stored in Hive compatible format, we verify that
-    // each column of the table is of native type StringType.
-    assert(catalog.client.getTable("default", "not_skip_hive_metadata").schema
-      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == StringType))
+      // As a proxy for verifying that the table was stored in Hive compatible format,
+      // we verify that each column of the table is of native type StringType.
+      assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
+        .forall(column => CatalystSqlParser.parseDataType(column.dataType) == StringType))
 
-    catalog.createDataSourceTable(
-      tableIdent = TableIdentifier("skip_hive_metadata"),
-      userSpecifiedSchema = Some(schema),
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
-      provider = "parquet",
-      options = Map("path" -> "just a dummy path", "skipHiveMetadata" -> "true"),
-      isExternal = false)
+      CreateDataSourceTableUtils.createDataSourceTable(
+        sparkSession = sqlContext.sparkSession,
+        tableIdent = TableIdentifier("skip_hive_metadata"),
+        userSpecifiedSchema = Some(schema),
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
+        provider = "parquet",
+        options = Map("path" -> tempPath.getCanonicalPath, "skipHiveMetadata" -> "true"),
+        isExternal = false)
 
-    // As a proxy for verifying that the table was stored in SparkSQL format, we verify that
-    // the table has a column type as array of StringType.
-    assert(catalog.client.getTable("default", "skip_hive_metadata").schema
-      .forall(column => HiveMetastoreTypes.toDataType(column.hiveType) == ArrayType(StringType)))
+      // As a proxy for verifying that the table was stored in SparkSQL format,
+      // we verify that the table has a column type as array of StringType.
+      assert(sharedState.externalCatalog.getTable("default", "skip_hive_metadata")
+        .schema.forall { c =>
+          CatalystSqlParser.parseDataType(c.dataType) == ArrayType(StringType) })
+    }
+  }
+
+  test("CTAS: persisted partitioned data source table") {
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |PARTITIONED BY (a)
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt === 1)
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numBuckets"))
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numBucketCols"))
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numSortCols"))
+
+        checkAnswer(table("t"), Row(2, 1))
+      }
+    }
+  }
+
+  test("CTAS: persisted bucketed data source table") {
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |CLUSTERED BY (a) SORTED BY (b) INTO 2 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numPartCols"))
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt === 1)
+
+        checkAnswer(table("t"), Row(1, 2))
+      }
+    }
+
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |CLUSTERED BY (a) INTO 2 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numPartCols"))
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
+        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numSortCols"))
+
+        checkAnswer(table("t"), Row(1, 2))
+      }
+    }
+  }
+
+  test("CTAS: persisted partitioned bucketed data source table") {
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |PARTITIONED BY (a)
+             |CLUSTERED BY (b) SORTED BY (c) INTO 2 BUCKETS
+             |AS SELECT 1 AS a, 2 AS b, 3 AS c
+           """.stripMargin
+        )
+
+        val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
+        assert(metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt === 1)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
+        assert(metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt === 1)
+
+        checkAnswer(table("t"), Row(2, 3, 1))
+      }
+    }
+  }
+
+  test("SPARK-15025: create datasource table with path with select") {
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |AS SELECT 1 AS a, 2 AS b, 3 AS c
+           """.stripMargin
+        )
+        sql("insert into t values (2, 3, 4)")
+        checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
+        val catalogTable = sharedState.externalCatalog.getTable("default", "t")
+        // there should not be a lowercase key 'path' now
+        assert(catalogTable.storage.serdeProperties.get("path").isEmpty)
+        assert(catalogTable.storage.serdeProperties.get("PATH").isDefined)
+      }
+    }
   }
 }

@@ -19,7 +19,11 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import java.io.File
 import java.nio.charset.UnsupportedCharsetException
-import java.sql.Timestamp
+import java.sql.{Date, Timestamp}
+import java.text.SimpleDateFormat
+
+import org.apache.hadoop.io.SequenceFile.CompressionType
+import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
@@ -28,6 +32,7 @@ import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsFile = "cars.csv"
+  private val carsMalformedFile = "cars-malformed.csv"
   private val carsFile8859 = "cars_iso-8859-1.csv"
   private val carsTsvFile = "cars.tsv"
   private val carsAltFile = "cars-alternative.csv"
@@ -36,6 +41,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
+  private val boolFile = "bool.csv"
+  private val simpleSparseFile = "simple_sparse.csv"
+  private val numbersFile = "numbers.csv"
+  private val datesFile = "dates.csv"
+  private val unescapedQuotesFile = "unescaped-quotes.csv"
 
   private def testFile(fileName: String): String = {
     Thread.currentThread().getContextClassLoader.getResource(fileName).toString
@@ -55,7 +65,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     val numRows = if (withHeader) numCars else numCars + 1
     // schema
     assert(df.schema.fieldNames.length === numColumns)
-    assert(df.collect().length === numRows)
+    assert(df.count === numRows)
 
     if (checkHeader) {
       if (withHeader) {
@@ -90,6 +100,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = false, checkTypes = false)
   }
 
+  test("simple csv test with calling another function to load") {
+    val cars = sqlContext
+      .read
+      .option("header", "false")
+      .csv(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
   test("simple csv test with type inference") {
     val cars = sqlContext
       .read
@@ -101,6 +120,18 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     verifyCars(cars, withHeader = true, checkTypes = true)
   }
 
+  test("test inferring booleans") {
+    val result = sqlContext.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(boolFile))
+
+    val expectedSchema = StructType(List(
+      StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
+  }
+
   test("test with alternative delimiter and quote") {
     val cars = sqlContext.read
       .format("csv")
@@ -108,6 +139,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsAltFile))
 
     verifyCars(cars, withHeader = true)
+  }
+
+  test("parse unescaped quotes with maxCharsPerColumn") {
+    val rows = sqlContext.read
+      .format("csv")
+      .option("maxCharsPerColumn", "4")
+      .load(testFile(unescapedQuotesFile))
+
+    val expectedRows = Seq(Row("\"a\"b", "ccc", "ddd"), Row("ab", "cc\"c", "ddd\""))
+
+    checkAnswer(rows, expectedRows)
   }
 
   test("bad encoding name") {
@@ -130,12 +172,13 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
          |OPTIONS (path "${testFile(carsFile8859)}", header "true",
          |charset "iso-8859-1", delimiter "þ")
       """.stripMargin.replaceAll("\n", " "))
-    //scalstyle:on
+    // scalastyle:on
 
     verifyCars(sqlContext.table("carsTable"), withHeader = true)
   }
 
   test("test aliases sep and encoding for delimiter and charset") {
+    // scalastyle:off
     val cars = sqlContext
       .read
       .format("csv")
@@ -143,6 +186,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("encoding", "iso-8859-1")
       .option("sep", "þ")
       .load(testFile(carsFile8859))
+    // scalastyle:on
 
     verifyCars(cars, withHeader = true)
   }
@@ -191,6 +235,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(exception.getMessage.contains("Malformed line in FAILFAST mode: 2015,Chevy,Volt"))
   }
 
+  test("test for tokens more than the fields in the schema") {
+    val cars = sqlContext
+      .read
+      .format("csv")
+      .option("header", "false")
+      .option("comment", "~")
+      .load(testFile(carsMalformedFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
   test("test with null quote character") {
     val cars = sqlContext.read
       .format("csv")
@@ -211,7 +266,6 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(result.collect.size === 0)
     assert(result.schema.fieldNames.size === 1)
   }
-
 
   test("DDL test with empty file") {
     sqlContext.sql(s"""
@@ -247,9 +301,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(testFile(carsFile))
 
       cars.coalesce(1).write
-        .format("csv")
         .option("header", "true")
-        .save(csvDir)
+        .csv(csvDir)
 
       val carsCopy = sqlContext.read
         .format("csv")
@@ -314,6 +367,54 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
+  test("inferring timestamp types via custom date format") {
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "true",
+      "dateFormat" -> "dd/MM/yyyy hh:mm")
+    val results = sqlContext.read
+      .format("csv")
+      .options(options)
+      .load(testFile(datesFile))
+      .select("date")
+      .collect()
+
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val expected =
+      Seq(Seq(new Timestamp(dateFormat.parse("26/08/2015 18:00").getTime)),
+        Seq(new Timestamp(dateFormat.parse("27/10/2014 18:30").getTime)),
+        Seq(new Timestamp(dateFormat.parse("28/01/2016 20:00").getTime)))
+    assert(results.toSeq.map(_.toSeq) === expected)
+  }
+
+  test("load date types via custom date format") {
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "false",
+      "dateFormat" -> "dd/MM/yyyy hh:mm")
+    val results = sqlContext.read
+      .format("csv")
+      .options(options)
+      .schema(customSchema)
+      .load(testFile(datesFile))
+      .select("date")
+      .collect()
+
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val expected = Seq(
+      new Date(dateFormat.parse("26/08/2015 18:00").getTime),
+      new Date(dateFormat.parse("27/10/2014 18:30").getTime),
+      new Date(dateFormat.parse("28/01/2016 20:00").getTime))
+    val dates = results.toSeq.map(_.toSeq.head)
+    expected.zip(dates).foreach {
+      case (expectedDate, date) =>
+        // As it truncates the hours, minutes and etc., we only check
+        // if the dates (days, months and years) are the same via `toString()`.
+        assert(expectedDate.toString === date.toString)
+    }
+  }
+
   test("setting comment to null disables comment support") {
     val results = sqlContext.read
       .format("csv")
@@ -365,7 +466,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .save(csvDir)
 
       val compressedFiles = new File(csvDir).listFiles()
-      assert(compressedFiles.exists(_.getName.endsWith(".gz")))
+      assert(compressedFiles.exists(_.getName.endsWith(".csv.gz")))
 
       val carsCopy = sqlContext.read
         .format("csv")
@@ -374,5 +475,84 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
       verifyCars(carsCopy, withHeader = true)
     }
+  }
+
+  test("SPARK-13543 Write the output as uncompressed via option()") {
+    val extraOptions = Map(
+      "mapreduce.output.fileoutputformat.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mapreduce.map.output.compress" -> "true",
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      val cars = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .options(extraOptions)
+        .load(testFile(carsFile))
+
+      cars.coalesce(1).write
+        .format("csv")
+        .option("header", "true")
+        .option("compression", "none")
+        .options(extraOptions)
+        .save(csvDir)
+
+      val compressedFiles = new File(csvDir).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".csv.gz")))
+
+      val carsCopy = sqlContext.read
+        .format("csv")
+        .option("header", "true")
+        .options(extraOptions)
+        .load(csvDir)
+
+      verifyCars(carsCopy, withHeader = true)
+    }
+  }
+
+  test("Schema inference correctly identifies the datatype when data is sparse.") {
+    val df = sqlContext.read
+      .format("csv")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(simpleSparseFile))
+
+    assert(
+      df.schema.fields.map(field => field.dataType).deep ==
+      Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+  }
+
+  test("old csv data source name works") {
+    val cars = sqlContext
+      .read
+      .format("com.databricks.spark.csv")
+      .option("header", "false")
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
+
+  test("nulls, NaNs and Infinity values can be parsed") {
+    val numbers = sqlContext
+      .read
+      .format("csv")
+      .schema(StructType(List(
+        StructField("int", IntegerType, true),
+        StructField("long", LongType, true),
+        StructField("float", FloatType, true),
+        StructField("double", DoubleType, true)
+      )))
+      .options(Map(
+        "header" -> "true",
+        "mode" -> "DROPMALFORMED",
+        "nullValue" -> "--",
+        "nanValue" -> "NAN",
+        "negativeInf" -> "-INF",
+        "positiveInf" -> "INF"))
+      .load(testFile(numbersFile))
+
+    assert(numbers.count() == 8)
   }
 }

@@ -48,7 +48,7 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 public final class JavaNetworkWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length < 2) {
       System.err.println("Usage: JavaNetworkWordCount <hostname> <port>");
       System.exit(1);
@@ -76,7 +76,7 @@ public final class JavaNetworkWordCount {
       new PairFunction<String, String, Integer>() {
         @Override
         public Tuple2<String, Integer> call(String s) {
-          return new Tuple2<String, Integer>(s, 1);
+          return new Tuple2<>(s, 1);
         }
       }).reduceByKey(new Function2<Integer, Integer, Integer>() {
         @Override

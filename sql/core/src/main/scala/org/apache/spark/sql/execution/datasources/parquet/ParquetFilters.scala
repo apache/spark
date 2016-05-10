@@ -234,7 +234,7 @@ private[sql] object ParquetFilters {
     //
     // For any comparison operator `cmp`, both `a cmp NULL` and `NULL cmp a` evaluate to `NULL`,
     // which can be casted to `false` implicitly. Please refer to the `eval` method of these
-    // operators and the `SimplifyFilters` rule for details.
+    // operators and the `PruneFilters` rule for details.
 
     // Hyukjin:
     // I added [[EqualNullSafe]] with [[org.apache.parquet.filter2.predicate.Operators.Eq]].

@@ -46,7 +46,7 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
   # RDD has three serialization types:
   # byte: The RDD stores data serialized in R.
   # string: The RDD stores data as strings.
-  # row: The RDD stores the serialized rows of a DataFrame.
+  # row: The RDD stores the serialized rows of a SparkDataFrame.
 
   # We use an environment to store mutable states inside an RDD object.
   # Note that R's call-by-value semantics makes modifying slots inside an
@@ -67,7 +67,7 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serializedMode,
 
 setMethod("show", "RDD",
           function(object) {
-              cat(paste(callJMethod(getJRDD(object), "toString"), "\n", sep=""))
+              cat(paste(callJMethod(getJRDD(object), "toString"), "\n", sep = ""))
           })
 
 setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) {
@@ -114,7 +114,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
 #' @noRd
 #' @param jrdd Java object reference to the backing JavaRDD
 #' @param serializedMode Use "byte" if the RDD stores data serialized in R, "string" if the RDD
-#' stores strings, and "row" if the RDD stores the rows of a DataFrame
+#' stores strings, and "row" if the RDD stores the rows of a SparkDataFrame
 #' @param isCached TRUE if the RDD is cached
 #' @param isCheckpointed TRUE if the RDD has been checkpointed
 RDD <- function(jrdd, serializedMode = "byte", isCached = FALSE,
@@ -1023,9 +1023,13 @@ setMethod("keyBy",
 #' @aliases repartition,RDD
 #' @noRd
 setMethod("repartition",
-          signature(x = "RDD", numPartitions = "numeric"),
+          signature(x = "RDD"),
           function(x, numPartitions) {
-            coalesce(x, numPartitions, TRUE)
+            if (!is.null(numPartitions) && is.numeric(numPartitions)) {
+              coalesce(x, numPartitions, TRUE)
+            } else {
+              stop("Please, specify the number of partitions")
+            }
           })
 
 #' Return a new RDD that is reduced into numPartitions partitions.

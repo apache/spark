@@ -67,42 +67,14 @@ object MLUtils {
       path: String,
       numFeatures: Int,
       minPartitions: Int): RDD[LabeledPoint] = {
-    val parsed = sc.textFile(path, minPartitions)
-      .map(_.trim)
-      .filter(line => !(line.isEmpty || line.startsWith("#")))
-      .map { line =>
-        val items = line.split(' ')
-        val label = items.head.toDouble
-        val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
-          val indexAndValue = item.split(':')
-          val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
-          val value = indexAndValue(1).toDouble
-          (index, value)
-        }.unzip
-
-        // check if indices are one-based and in ascending order
-        var previous = -1
-        var i = 0
-        val indicesLength = indices.length
-        while (i < indicesLength) {
-          val current = indices(i)
-          require(current > previous, s"indices should be one-based and in ascending order;"
-            + " found current=$current, previous=$previous; line=\"$line\"")
-          previous = current
-          i += 1
-        }
-
-        (label, indices.toArray, values.toArray)
-      }
+    val parsed = parseLibSVMFile(sc, path, minPartitions)
 
     // Determine number of features.
     val d = if (numFeatures > 0) {
       numFeatures
     } else {
       parsed.persist(StorageLevel.MEMORY_ONLY)
-      parsed.map { case (label, indices, values) =>
-        indices.lastOption.getOrElse(0)
-      }.reduce(math.max) + 1
+      computeNumFeatures(parsed)
     }
 
     parsed.map { case (label, indices, values) =>
@@ -110,17 +82,45 @@ object MLUtils {
     }
   }
 
-  // Convenient methods for `loadLibSVMFile`.
+  private[spark] def computeNumFeatures(rdd: RDD[(Double, Array[Int], Array[Double])]): Int = {
+    rdd.map { case (label, indices, values) =>
+      indices.lastOption.getOrElse(0)
+    }.reduce(math.max) + 1
+  }
 
-  @Since("1.0.0")
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
+  private[spark] def parseLibSVMFile(
       sc: SparkContext,
       path: String,
-      multiclass: Boolean,
-      numFeatures: Int,
-      minPartitions: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, numFeatures, minPartitions)
+      minPartitions: Int): RDD[(Double, Array[Int], Array[Double])] = {
+    sc.textFile(path, minPartitions)
+      .map(_.trim)
+      .filter(line => !(line.isEmpty || line.startsWith("#")))
+      .map(parseLibSVMRecord)
+  }
+
+  private[spark] def parseLibSVMRecord(line: String): (Double, Array[Int], Array[Double]) = {
+    val items = line.split(' ')
+    val label = items.head.toDouble
+    val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
+      val indexAndValue = item.split(':')
+      val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
+      val value = indexAndValue(1).toDouble
+      (index, value)
+    }.unzip
+
+    // check if indices are one-based and in ascending order
+    var previous = -1
+    var i = 0
+    val indicesLength = indices.length
+    while (i < indicesLength) {
+      val current = indices(i)
+      require(current > previous, s"indices should be one-based and in ascending order;"
+        + " found current=$current, previous=$previous; line=\"$line\"")
+      previous = current
+      i += 1
+    }
+    (label, indices.toArray, values.toArray)
+  }
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
@@ -132,23 +132,6 @@ object MLUtils {
       path: String,
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures, sc.defaultMinPartitions)
-
-  @Since("1.0.0")
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
-      sc: SparkContext,
-      path: String,
-      multiclass: Boolean,
-      numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, numFeatures)
-
-  @Since("1.0.0")
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
-      sc: SparkContext,
-      path: String,
-      multiclass: Boolean): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path)
 
   /**
    * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
@@ -215,48 +198,6 @@ object MLUtils {
   @Since("1.1.0")
   def loadLabeledPoints(sc: SparkContext, dir: String): RDD[LabeledPoint] =
     loadLabeledPoints(sc, dir, sc.defaultMinPartitions)
-
-  /**
-   * Load labeled data from a file. The data format used here is
-   * L, f1 f2 ...
-   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
-   *
-   * @param sc SparkContext
-   * @param dir Directory to the input data files.
-   * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
-   *         the label, and the second element represents the feature values (an array of Double).
-   *
-   * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
-   *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
-   */
-  @Since("1.0.0")
-  @deprecated("Should use MLUtils.loadLabeledPoints instead.", "1.0.1")
-  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
-    sc.textFile(dir).map { line =>
-      val parts = line.split(',')
-      val label = parts(0).toDouble
-      val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
-      LabeledPoint(label, features)
-    }
-  }
-
-  /**
-   * Save labeled data to a file. The data format used here is
-   * L, f1 f2 ...
-   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
-   *
-   * @param data An RDD of LabeledPoints containing data to be saved.
-   * @param dir Directory to save the data.
-   *
-   * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
-   *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
-   */
-  @Since("1.0.0")
-  @deprecated("Should use RDD[LabeledPoint].saveAsTextFile instead.", "1.0.1")
-  def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
-    val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
-    dataStr.saveAsTextFile(dir)
-  }
 
   /**
    * Return a k element array of pairs of RDDs with the first element of each pair

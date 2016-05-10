@@ -41,7 +41,7 @@ test_that("convertJListToRList() gives back (deserializes) the original JLists
 test_that("serializeToBytes on RDD", {
   # File content
   mockFile <- c("Spark is pretty.", "Spark is awesome.")
-  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  fileName <- tempfile(pattern = "spark-test", fileext = ".tmp")
   writeLines(mockFile, fileName)
 
   text.rdd <- textFile(sc, fileName)
@@ -86,8 +86,8 @@ test_that("cleanClosure on R functions", {
   f <- function(x) {
     defUse <- base::as.integer(x) + 1  # Test for access operators `::`.
     lapply(x, g) + 1  # Test for capturing function call "g"'s closure as a argument of lapply.
-    l$field[1,1] <- 3  # Test for access operators `$`.
-    res <- defUse + l$field[1,]  # Test for def-use chain of "defUse", and "" symbol.
+    l$field[1, 1] <- 3  # Test for access operators `$`.
+    res <- defUse + l$field[1, ]  # Test for def-use chain of "defUse", and "" symbol.
     f(res)  # Test for recursive calls.
   }
   newF <- cleanClosure(f)
@@ -132,11 +132,39 @@ test_that("cleanClosure on R functions", {
   expect_equal(actual, expected)
 
   # Test for broadcast variables.
-  a <- matrix(nrow=10, ncol=10, data=rnorm(100))
+  a <- matrix(nrow = 10, ncol = 10, data = rnorm(100))
   aBroadcast <- broadcast(sc, a)
   normMultiply <- function(x) { norm(aBroadcast$value) * x }
   newnormMultiply <- SparkR:::cleanClosure(normMultiply)
   env <- environment(newnormMultiply)
   expect_equal(ls(env), "aBroadcast")
   expect_equal(get("aBroadcast", envir = env, inherits = FALSE), aBroadcast)
+})
+
+test_that("varargsToJProperties", {
+  jprops <- newJObject("java.util.Properties")
+  expect_true(class(jprops) == "jobj")
+
+  jprops <- varargsToJProperties(abc = "123")
+  expect_true(class(jprops) == "jobj")
+  expect_equal(callJMethod(jprops, "getProperty", "abc"), "123")
+
+  jprops <- varargsToJProperties(abc = "abc", b = 1)
+  expect_equal(callJMethod(jprops, "getProperty", "abc"), "abc")
+  expect_equal(callJMethod(jprops, "getProperty", "b"), "1")
+
+  jprops <- varargsToJProperties()
+  expect_equal(callJMethod(jprops, "size"), 0L)
+})
+
+test_that("convertToJSaveMode", {
+  s <- convertToJSaveMode("error")
+  expect_true(class(s) == "jobj")
+  expect_match(capture.output(print.jobj(s)), "Java ref type org.apache.spark.sql.SaveMode id ")
+  expect_error(convertToJSaveMode("foo"),
+    'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
+})
+
+test_that("hashCode", {
+  expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
 })

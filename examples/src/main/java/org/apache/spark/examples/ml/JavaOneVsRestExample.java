@@ -19,8 +19,6 @@ package org.apache.spark.examples.ml;
 
 import org.apache.commons.cli.*;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.OneVsRest;
@@ -29,8 +27,9 @@ import org.apache.spark.ml.util.MetadataUtils;
 import org.apache.spark.mllib.evaluation.MulticlassMetrics;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.StructField;
 // $example off$
 
@@ -59,9 +58,10 @@ public class JavaOneVsRestExample {
   public static void main(String[] args) {
     // parse the arguments
     Params params = parse(args);
-    SparkConf conf = new SparkConf().setAppName("JavaOneVsRestExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaOneVsRestExample")
+      .getOrCreate();
 
     // $example on$
     // configure the base classifier
@@ -81,9 +81,9 @@ public class JavaOneVsRestExample {
     OneVsRest ovr = new OneVsRest().setClassifier(classifier);
 
     String input = params.input;
-    DataFrame inputData = jsql.read().format("libsvm").load(input);
-    DataFrame train;
-    DataFrame test;
+    Dataset<Row> inputData = spark.read().format("libsvm").load(input);
+    Dataset<Row> train;
+    Dataset<Row> test;
 
     // compute the train/ test split: if testInput is not provided use part of input
     String testInput = params.testInput;
@@ -91,11 +91,11 @@ public class JavaOneVsRestExample {
       train = inputData;
       // compute the number of features in the training set.
       int numFeatures = inputData.first().<Vector>getAs(1).size();
-      test = jsql.read().format("libsvm").option("numFeatures",
+      test = spark.read().format("libsvm").option("numFeatures",
         String.valueOf(numFeatures)).load(testInput);
     } else {
       double f = params.fracTest;
-      DataFrame[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
+      Dataset<Row>[] tmp = inputData.randomSplit(new double[]{1 - f, f}, 12345);
       train = tmp[0];
       test = tmp[1];
     }
@@ -104,7 +104,7 @@ public class JavaOneVsRestExample {
     OneVsRestModel ovrModel = ovr.fit(train.cache());
 
     // score the model on test data
-    DataFrame predictions = ovrModel.transform(test.cache())
+    Dataset<Row> predictions = ovrModel.transform(test.cache())
       .select("prediction", "label");
 
     // obtain metrics
@@ -130,7 +130,7 @@ public class JavaOneVsRestExample {
     System.out.println(results);
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 
   private static Params parse(String[] args) {

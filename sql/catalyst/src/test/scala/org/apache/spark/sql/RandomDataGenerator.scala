@@ -47,9 +47,9 @@ object RandomDataGenerator {
    */
   private val PROBABILITY_OF_NULL: Float = 0.1f
 
-  private val MAX_STR_LEN: Int = 1024
-  private val MAX_ARR_SIZE: Int = 128
-  private val MAX_MAP_SIZE: Int = 128
+  final val MAX_STR_LEN: Int = 1024
+  final val MAX_ARR_SIZE: Int = 128
+  final val MAX_MAP_SIZE: Int = 128
 
   /**
    * Helper function for constructing a biased random number generator which returns "interesting"
@@ -148,7 +148,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
@@ -163,7 +163,7 @@ object RandomDataGenerator {
             // for "0001-01-01 00:00:00.000000". We need to find a
             // number that is greater or equals to this number as a valid timestamp value.
             while (milliseconds < -62135740800000L) {
-              // 253402329599999L is the the number of milliseconds since
+              // 253402329599999L is the number of milliseconds since
               // January 1, 1970, 00:00:00 GMT for "9999-12-31 23:59:59.999999".
               milliseconds = rand.nextLong() % 253402329599999L
             }
@@ -196,23 +196,31 @@ object RandomDataGenerator {
       case ShortType => randomNumeric[Short](
         rand, _.nextInt().toShort, Seq(Short.MinValue, Short.MaxValue, 0.toShort))
       case NullType => Some(() => null)
-      case ArrayType(elementType, containsNull) => {
+      case ArrayType(elementType, containsNull) =>
         forType(elementType, nullable = containsNull, rand).map {
           elementGenerator => () => Seq.fill(rand.nextInt(MAX_ARR_SIZE))(elementGenerator())
         }
-      }
-      case MapType(keyType, valueType, valueContainsNull) => {
+      case MapType(keyType, valueType, valueContainsNull) =>
         for (
           keyGenerator <- forType(keyType, nullable = false, rand);
           valueGenerator <-
             forType(valueType, nullable = valueContainsNull, rand)
         ) yield {
           () => {
-            Seq.fill(rand.nextInt(MAX_MAP_SIZE))((keyGenerator(), valueGenerator())).toMap
+            val length = rand.nextInt(MAX_MAP_SIZE)
+            val keys = scala.collection.mutable.HashSet(Seq.fill(length)(keyGenerator()): _*)
+            // In case the number of different keys is not enough, set a max iteration to avoid
+            // infinite loop.
+            var count = 0
+            while (keys.size < length && count < MAX_MAP_SIZE) {
+              keys += keyGenerator()
+              count += 1
+            }
+            val values = Seq.fill(keys.size)(valueGenerator())
+            keys.zip(values).toMap
           }
         }
-      }
-      case StructType(fields) => {
+      case StructType(fields) =>
         val maybeFieldGenerators: Seq[Option[() => Any]] = fields.map { field =>
           forType(field.dataType, nullable = field.nullable, rand)
         }
@@ -222,8 +230,7 @@ object RandomDataGenerator {
         } else {
           None
         }
-      }
-      case udt: UserDefinedType[_] => {
+      case udt: UserDefinedType[_] =>
         val maybeSqlTypeGenerator = forType(udt.sqlType, nullable, rand)
         // Because random data generator at here returns scala value, we need to
         // convert it to catalyst value to call udt's deserialize.
@@ -243,7 +250,6 @@ object RandomDataGenerator {
         } else {
           None
         }
-      }
       case unsupportedType => None
     }
     // Handle nullability by wrapping the non-null value generator:
@@ -267,7 +273,7 @@ object RandomDataGenerator {
     val fields = mutable.ArrayBuffer.empty[Any]
     schema.fields.foreach { f =>
       f.dataType match {
-        case ArrayType(childType, nullable) => {
+        case ArrayType(childType, nullable) =>
           val data = if (f.nullable && rand.nextFloat() <= PROBABILITY_OF_NULL) {
             null
           } else {
@@ -284,10 +290,8 @@ object RandomDataGenerator {
             arr
           }
           fields += data
-        }
-        case StructType(children) => {
+        case StructType(children) =>
           fields += randomRow(rand, StructType(children))
-        }
         case _ =>
           val generator = RandomDataGenerator.forType(f.dataType, f.nullable, rand)
           assert(generator.isDefined, "Unsupported type")
