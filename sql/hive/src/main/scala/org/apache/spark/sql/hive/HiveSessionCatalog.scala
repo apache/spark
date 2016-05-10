@@ -61,6 +61,7 @@ private[sql] class HiveSessionCatalog(
 
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
+    validateTableName(table)
     if (name.database.isDefined || !tempTables.contains(table)) {
       val database = name.database.map(formatDatabaseName)
       val newName = name.copy(database = database, table = table)
@@ -90,10 +91,14 @@ private[sql] class HiveSessionCatalog(
   val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
 
   override def refreshTable(name: TableIdentifier): Unit = {
+    name.database.foreach(validateDatabaseName)
+    validateTableName(name.table)
     metastoreCatalog.refreshTable(name)
   }
 
   override def invalidateTable(name: TableIdentifier): Unit = {
+    name.database.foreach(validateDatabaseName)
+    validateTableName(name.table)
     metastoreCatalog.invalidateTable(name)
   }
 
@@ -102,11 +107,15 @@ private[sql] class HiveSessionCatalog(
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
+    name.database.foreach(validateDatabaseName)
+    validateTableName(name.table)
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
+    table.database.foreach(validateDatabaseName)
+    validateTableName(table.table)
     val key = metastoreCatalog.getQualifiedTableName(table)
     metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
   }
