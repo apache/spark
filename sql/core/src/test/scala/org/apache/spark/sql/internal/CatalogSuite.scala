@@ -22,7 +22,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, SparkSession}
 import org.apache.spark.sql.catalog.{Column, Database, Function, Table}
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, ScalaReflection, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.Range
@@ -264,6 +264,30 @@ class CatalogSuite
       nullable = false, isPartition = true, isBucket = true).toString ==
       "Column[name='namama', dataType='datatapa', " +
         "nullable='false', isPartition='true', isBucket='true']")
+  }
+
+  test("catalog classes format in Dataset.show") {
+    val db = new Database("nama", "descripta", "locata")
+    val table = new Table("nama", "databasa", "descripta", "typa", isTemporary = false)
+    val function = new Function("nama", "descripta", "classa", isTemporary = false)
+    val column = new Column(
+      "nama", "descripta", "typa", nullable = false, isPartition = true, isBucket = true)
+    val dbFields = ScalaReflection.getConstructorParameterValues(db)
+    val tableFields = ScalaReflection.getConstructorParameterValues(table)
+    val functionFields = ScalaReflection.getConstructorParameterValues(function)
+    val columnFields = ScalaReflection.getConstructorParameterValues(column)
+    assert(dbFields == Seq("nama", "descripta", "locata"))
+    assert(tableFields == Seq("nama", "databasa", "descripta", "typa", false))
+    assert(functionFields == Seq("nama", "descripta", "classa", false))
+    assert(columnFields == Seq("nama", "descripta", "typa", false, true, true))
+    val dbString = CatalogImpl.makeDataset(Seq(db), sparkSession).showString(10)
+    val tableString = CatalogImpl.makeDataset(Seq(table), sparkSession).showString(10)
+    val functionString = CatalogImpl.makeDataset(Seq(function), sparkSession).showString(10)
+    val columnString = CatalogImpl.makeDataset(Seq(column), sparkSession).showString(10)
+    dbFields.foreach { f => assert(dbString.contains(f.toString)) }
+    tableFields.foreach { f => assert(tableString.contains(f.toString)) }
+    functionFields.foreach { f => assert(functionString.contains(f.toString)) }
+    columnFields.foreach { f => assert(columnString.contains(f.toString)) }
   }
 
   // TODO: add tests for the rest of them

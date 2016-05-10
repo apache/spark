@@ -1553,4 +1553,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       assert(cause.getMessage.contains("Column ordering must be ASC, was 'DESC'"))
     }
   }
+
+  test("insert into datasource table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
+      Seq(1 -> "a").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
+      checkAnswer(sql("SELECT * FROM tbl"), Row(1, "a"))
+    }
+  }
 }
