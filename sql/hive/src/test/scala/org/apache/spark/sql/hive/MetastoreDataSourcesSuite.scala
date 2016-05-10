@@ -944,7 +944,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("CTAS: persisted partitioned data source table") {
-    withTempDir { dir =>
+    withTempPath { dir =>
       withTable("t") {
         val path = dir.getCanonicalPath
 
@@ -968,7 +968,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("CTAS: persisted bucketed data source table") {
-    withTempDir { dir =>
+    withTempPath { dir =>
       withTable("t") {
         val path = dir.getCanonicalPath
 
@@ -988,7 +988,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         checkAnswer(table("t"), Row(1, 2))
       }
+    }
 
+    withTempPath { dir =>
       withTable("t") {
         val path = dir.getCanonicalPath
 
@@ -1012,7 +1014,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   }
 
   test("CTAS: persisted partitioned bucketed data source table") {
-    withTempDir { dir =>
+    withTempPath { dir =>
       withTable("t") {
         val path = dir.getCanonicalPath
 
@@ -1032,6 +1034,27 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         assert(metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt === 1)
 
         checkAnswer(table("t"), Row(2, 3, 1))
+      }
+    }
+  }
+
+  test("SPARK-15025: create datasource table with path with select") {
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+
+        sql(
+          s"""CREATE TABLE t USING PARQUET
+             |OPTIONS (PATH '$path')
+             |AS SELECT 1 AS a, 2 AS b, 3 AS c
+           """.stripMargin
+        )
+        sql("insert into t values (2, 3, 4)")
+        checkAnswer(table("t"), Seq(Row(1, 2, 3), Row(2, 3, 4)))
+        val catalogTable = sharedState.externalCatalog.getTable("default", "t")
+        // there should not be a lowercase key 'path' now
+        assert(catalogTable.storage.serdeProperties.get("path").isEmpty)
+        assert(catalogTable.storage.serdeProperties.get("PATH").isDefined)
       }
     }
   }

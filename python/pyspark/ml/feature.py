@@ -377,8 +377,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     The return vector is scaled such that the transform matrix is
     unitary (aka scaled DCT-II).
 
-    More information on
-    `https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia`.
+    .. seealso:: `More information on Wikipedia \
+    <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> df1 = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
@@ -1108,8 +1108,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     """
     .. note:: Experimental
 
-    Perform feature expansion in a polynomial space. As said in wikipedia of Polynomial Expansion,
-    which is available at `http://en.wikipedia.org/wiki/Polynomial_expansion`, "In mathematics, an
+    Perform feature expansion in a polynomial space. As said in `wikipedia of Polynomial Expansion
+    <http://en.wikipedia.org/wiki/Polynomial_expansion>`_, "In mathematics, an
     expansion of a product of sums expresses it as a sum of products by using the fact that
     multiplication distributes over addition". Take a 2-variable feature vector as an example:
     `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
@@ -1738,28 +1738,23 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
                           "comparison over the stop words", typeConverter=TypeConverters.toBoolean)
 
     @keyword_only
-    def __init__(self, inputCol=None, outputCol=None, stopWords=None,
-                 caseSensitive=False):
+    def __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False):
         """
-        __init__(self, inputCol=None, outputCol=None, stopWords=None,\
-                 caseSensitive=false)
+        __init__(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false)
         """
         super(StopWordsRemover, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.StopWordsRemover",
                                             self.uid)
-        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWords
-        defaultStopWords = list(stopWordsObj.English())
-        self._setDefault(stopWords=defaultStopWords, caseSensitive=False)
+        self._setDefault(stopWords=StopWordsRemover.loadDefaultStopWords("english"),
+                         caseSensitive=False)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
-    def setParams(self, inputCol=None, outputCol=None, stopWords=None,
-                  caseSensitive=False):
+    def setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=False):
         """
-        setParams(self, inputCol="input", outputCol="output", stopWords=None,\
-                  caseSensitive=false)
+        setParams(self, inputCol=None, outputCol=None, stopWords=None, caseSensitive=false)
         Sets params for this StopWordRemover.
         """
         kwargs = self.setParams._input_kwargs
@@ -1768,30 +1763,41 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     @since("1.6.0")
     def setStopWords(self, value):
         """
-        Specify the stopwords to be filtered.
+        Sets the value of :py:attr:`stopWords`.
         """
         return self._set(stopWords=value)
 
     @since("1.6.0")
     def getStopWords(self):
         """
-        Get the stopwords.
+        Gets the value of :py:attr:`stopWords` or its default value.
         """
         return self.getOrDefault(self.stopWords)
 
     @since("1.6.0")
     def setCaseSensitive(self, value):
         """
-        Set whether to do a case sensitive comparison over the stop words
+        Sets the value of :py:attr:`caseSensitive`.
         """
         return self._set(caseSensitive=value)
 
     @since("1.6.0")
     def getCaseSensitive(self):
         """
-        Get whether to do a case sensitive comparison over the stop words.
+        Gets the value of :py:attr:`caseSensitive` or its default value.
         """
         return self.getOrDefault(self.caseSensitive)
+
+    @staticmethod
+    @since("2.0.0")
+    def loadDefaultStopWords(language):
+        """
+        Loads the default stop words for the given language.
+        Supported languages: danish, dutch, english, finnish, french, german, hungarian,
+        italian, norwegian, portuguese, russian, spanish, swedish, turkish
+        """
+        stopWordsObj = _jvm().org.apache.spark.ml.feature.StopWordsRemover
+        return list(stopWordsObj.loadDefaultStopWords(language))
 
 
 @inherit_doc
@@ -1843,7 +1849,7 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     @since("1.3.0")
     def setParams(self, inputCol=None, outputCol=None):
         """
-        setParams(self, inputCol="input", outputCol="output")
+        setParams(self, inputCol=None, outputCol=None)
         Sets params for this Tokenizer.
         """
         kwargs = self.setParams._input_kwargs
@@ -2426,9 +2432,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
 
     Implements the transforms required for fitting a dataset against an
     R model formula. Currently we support a limited subset of the R
-    operators, including '~', '.', ':', '+', and '-'. Also see the R formula
-    docs:
-    http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html
+    operators, including '~', '.', ':', '+', and '-'. Also see the `R formula docs
+    <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, 1.0, "a"),
