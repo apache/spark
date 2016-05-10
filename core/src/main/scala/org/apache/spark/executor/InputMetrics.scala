@@ -40,20 +40,22 @@ object DataReadMethod extends Enumeration with Serializable {
  */
 @DeveloperApi
 class InputMetrics private[spark] () extends Serializable {
-  private[executor] val _bytesRead = new LongAccumulator
-  private[executor] val _recordsRead = new LongAccumulator
+  import TaskMetrics.newLongAccum
+
+  private[executor] val _bytesRead = newLongAccum
+  private[executor] val _recordsRead = newLongAccum
 
   /**
    * Total number of bytes read.
    */
-  def bytesRead: Long = _bytesRead.sum
+  def bytesRead: Long = _bytesRead.acc.sum
 
   /**
    * Total number of records read.
    */
-  def recordsRead: Long = _recordsRead.sum
+  def recordsRead: Long = _recordsRead.acc.sum
 
-  private[spark] def incBytesRead(v: Long): Unit = _bytesRead.add(v)
-  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
-  private[spark] def setBytesRead(v: Long): Unit = _bytesRead.setValue(v)
+  private[spark] def incBytesRead(v: Long): Unit = _bytesRead.acc.add(v)
+  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.acc.add(v)
+  private[spark] def setBytesRead(v: Long): Unit = _bytesRead.acc.setValue(v)
 }

@@ -43,7 +43,7 @@ private[sql] case class LocalTableScanExec(
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     rdd.map { r =>
-      numOutputRows += 1
+      numOutputRows.acc += 1
       r
     }
   }

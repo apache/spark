@@ -341,7 +341,7 @@ private[sql] case class InMemoryTableScanExec(
 
       // update SQL metrics
       val withMetrics = cachedBatchesToScan.map { batch =>
-        numOutputRows += batch.numRows
+        numOutputRows.acc += batch.numRows
         batch
       }
 

@@ -209,7 +209,7 @@ class DAGScheduler(
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Seq[AccumulatorV2[_, _]],
+      accumUpdates: Seq[AccumulatorWrapper[_]],
       taskInfo: TaskInfo): Unit = {
     eventProcessLoop.post(
       CompletionEvent(task, reason, result, accumUpdates, taskInfo))
@@ -1091,16 +1091,17 @@ class DAGScheduler(
       event.accumUpdates.foreach { updates =>
         val id = updates.id
         // Find the corresponding accumulator on the driver and update it
-        val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
-          case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
+        val acc: AccumulatorWrapper[_] = AccumulatorContext.get(id) match {
+          case Some(accum) => accum.asInstanceOf[AccumulatorWrapper[_]]
           case None =>
             throw new SparkException(s"attempted to access non-existent accumulator $id")
         }
-        acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
+        acc.genericAcc.merge(updates.genericAcc)
         // To avoid UI cruft, ignore cases where value wasn't updated
-        if (acc.name.isDefined && !updates.isZero) {
-          stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.value))
-          event.taskInfo.accumulables += acc.toInfo(Some(updates.value), Some(acc.value))
+        if (acc.name.isDefined && !updates.genericAcc.isZero) {
+          stage.latestInfo.accumulables(id) = acc.toInfo(None, Some(acc.genericAcc.value))
+          event.taskInfo.accumulables +=
+            acc.toInfo(Some(updates.genericAcc.value), Some(acc.genericAcc.value))
         }
       }
     } catch {

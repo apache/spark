@@ -155,7 +155,7 @@ case class HiveTableScanExec(
     rdd.mapPartitionsInternal { iter =>
       val proj = UnsafeProjection.create(schema)
       iter.map { r =>
-        numOutputRows += 1
+        numOutputRows.acc += 1
         proj(r)
       }
     }

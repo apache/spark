@@ -367,7 +367,7 @@ case class BroadcastNestedLoopJoinExec(
     resultRdd.mapPartitionsInternal { iter =>
       val resultProj = genResultProjection
       iter.map { r =>
-        numOutputRows += 1
+        numOutputRows.acc += 1
         resultProj(r)
       }
     }

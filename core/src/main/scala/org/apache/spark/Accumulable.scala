@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, LegacyAccumulatorWrapper}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorWrapper, LegacyAccumulatorWrapper}
 
 
 /**
@@ -74,7 +74,8 @@ class Accumulable[R, T] private (
   def this(initialValue: R, param: AccumulableParam[R, T]) = this(initialValue, param, None)
 
   val zero = param.zero(initialValue)
-  private[spark] val newAcc = new LegacyAccumulatorWrapper(initialValue, param)
+  private[spark] val newAcc =
+    new AccumulatorWrapper(new LegacyAccumulatorWrapper(initialValue, param))
   newAcc.metadata = AccumulatorMetadata(id, name, countFailedValues)
   // Register the new accumulator in ctor, to follow the previous behaviour.
   AccumulatorContext.register(newAcc)
@@ -83,13 +84,13 @@ class Accumulable[R, T] private (
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def += (term: T) { newAcc.add(term) }
+  def += (term: T) { newAcc.acc.add(term) }
 
   /**
    * Add more data to this accumulator / accumulable
    * @param term the data to add
    */
-  def add(term: T) { newAcc.add(term) }
+  def add(term: T) { newAcc.acc.add(term) }
 
   /**
    * Merge two accumulable objects together
@@ -97,7 +98,7 @@ class Accumulable[R, T] private (
    * Normally, a user will not want to use this version, but will instead call `+=`.
    * @param term the other `R` that will get merged with this
    */
-  def ++= (term: R) { newAcc._value = param.addInPlace(newAcc._value, term) }
+  def ++= (term: R) { newAcc.acc._value = param.addInPlace(newAcc.acc._value, term) }
 
   /**
    * Merge two accumulable objects together
@@ -105,14 +106,14 @@ class Accumulable[R, T] private (
    * Normally, a user will not want to use this version, but will instead call `add`.
    * @param term the other `R` that will get merged with this
    */
-  def merge(term: R) { newAcc._value = param.addInPlace(newAcc._value, term) }
+  def merge(term: R) { newAcc.acc._value = param.addInPlace(newAcc.acc._value, term) }
 
   /**
    * Access the accumulator's current value; only allowed on driver.
    */
   def value: R = {
-    if (newAcc.isAtDriverSide) {
-      newAcc.value
+    if (newAcc.atDriverSide) {
+      newAcc.acc.value
     } else {
       throw new UnsupportedOperationException("Can't read accumulator value in task")
     }
@@ -127,14 +128,14 @@ class Accumulable[R, T] private (
    * The typical use of this method is to directly mutate the local value, eg., to add
    * an element to a Set.
    */
-  def localValue: R = newAcc.value
+  def localValue: R = newAcc.acc.value
 
   /**
    * Set the accumulator's value; only allowed on driver.
    */
   def value_= (newValue: R) {
-    if (newAcc.isAtDriverSide) {
-      newAcc._value = newValue
+    if (newAcc.atDriverSide) {
+      newAcc.acc._value = newValue
     } else {
       throw new UnsupportedOperationException("Can't assign accumulator value in task")
     }
@@ -143,7 +144,7 @@ class Accumulable[R, T] private (
   /**
    * Set the accumulator's value. For internal use only.
    */
-  def setValue(newValue: R): Unit = { newAcc._value = newValue }
+  def setValue(newValue: R): Unit = { newAcc.acc._value = newValue }
 
   /**
    * Set the accumulator's value. For internal use only.
@@ -158,7 +159,8 @@ class Accumulable[R, T] private (
     new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
   }
 
-  override def toString: String = if (newAcc._value == null) "null" else newAcc._value.toString
+  override def toString: String =
+    if (newAcc.acc._value == null) "null" else newAcc.acc._value.toString
 }
 
 

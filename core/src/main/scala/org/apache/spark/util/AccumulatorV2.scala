@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.{lang => jl}
-import java.io.ObjectInputStream
+import java.io.{ObjectInputStream, ObjectOutputStream}
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -26,19 +26,17 @@ import org.apache.spark.{InternalAccumulator, SparkContext, TaskContext}
 import org.apache.spark.scheduler.AccumulableInfo
 
 
-private[spark] case class AccumulatorMetadata(
-    id: Long,
-    name: Option[String],
-    countFailedValues: Boolean) extends Serializable
-
-
-/**
- * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
- * type `OUT`.
- */
-abstract class AccumulatorV2[IN, OUT] extends Serializable {
+final class AccumulatorWrapper[ACC <: AccumulatorV2[_, _]](
+    private[spark] var acc: ACC) extends Serializable {
   private[spark] var metadata: AccumulatorMetadata = _
-  private[this] var atDriverSide = true
+  private[spark] var atDriverSide = true
+
+  /**
+   * Returns the accumulator that is wrapped by this wrapper.
+   */
+  def accumulator: ACC = acc
+
+  private[spark] def genericAcc = acc.asInstanceOf[AccumulatorV2[Any, Any]]
 
   private[spark] def register(
       sc: SparkContext,
@@ -56,10 +54,10 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Returns true if this accumulator has been registered.  Note that all accumulators must be
    * registered before ues, or it will throw exception.
    */
-  final def isRegistered: Boolean =
+  def isRegistered: Boolean =
     metadata != null && AccumulatorContext.get(metadata.id).isDefined
 
-  private def assertMetadataNotNull(): Unit = {
+    private def assertMetadataNotNull(): Unit = {
     if (metadata == null) {
       throw new IllegalAccessError("The metadata of this accumulator has not been assigned yet.")
     }
@@ -68,7 +66,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   /**
    * Returns the id of this accumulator, can only be called after registration.
    */
-  final def id: Long = {
+  def id: Long = {
     assertMetadataNotNull()
     metadata.id
   }
@@ -76,7 +74,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
   /**
    * Returns the name of this accumulator, can only be called after registration.
    */
-  final def name: Option[String] = {
+  def name: Option[String] = {
     assertMetadataNotNull()
     metadata.name
   }
@@ -86,7 +84,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * metrics like serialization time or bytes spilled, and false for things with absolute values
    * like number of input rows.  This should be used for internal metrics only.
    */
-  private[spark] final def countFailedValues: Boolean = {
+  private[spark] def countFailedValues: Boolean = {
     assertMetadataNotNull()
     metadata.countFailedValues
   }
@@ -96,12 +94,62 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * values.
    */
   private[spark] def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    val isInternal = name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX))
-    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues)
+    val isInternal =
+      name.exists(_.startsWith(InternalAccumulator.METRICS_PREFIX)) || acc.metadata.isDefined
+    new AccumulableInfo(id, name, update, value, isInternal, countFailedValues, acc.metadata)
   }
 
-  final private[spark] def isAtDriverSide: Boolean = atDriverSide
+  // Called by Java when serializing an object
+  private def writeObject(out: ObjectOutputStream): Unit = Utils.tryOrIOException {
+    out.writeBoolean(!atDriverSide)
+    out.writeObject(metadata)
+    if (atDriverSide) {
+      if (!isRegistered) {
+        throw new UnsupportedOperationException(
+          "Accumulator must be registered before send to executor")
+      }
+      out.writeObject(acc.copyAndReset())
+    } else {
+      out.writeObject(acc)
+    }
+  }
 
+  // Called by Java when deserializing an object
+  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
+    atDriverSide = in.readBoolean()
+    metadata = in.readObject().asInstanceOf[AccumulatorMetadata]
+    acc = in.readObject().asInstanceOf[ACC]
+    // Automatically register the accumulator when it is deserialized with the task closure.
+    // This is for external accumulators and internal ones that do not represent task level
+    // metrics, e.g. internal SQL metrics, which are per-operator.
+    val taskContext = TaskContext.get()
+    if (taskContext != null) {
+      taskContext.registerAccumulator(this)
+    }
+  }
+
+  override def toString: String = {
+    if (metadata == null) {
+      "Un-registered Accumulator: " + acc.getClass.getSimpleName
+    } else {
+      getClass.getSimpleName + s"(id: $id, name: $name, value: ${acc.value})"
+    }
+  }
+}
+
+
+
+private[spark] case class AccumulatorMetadata(
+    id: Long,
+    name: Option[String],
+    countFailedValues: Boolean) extends Serializable
+
+
+/**
+ * The base class for accumulators, that can accumulate inputs of type `IN`, and produce output of
+ * type `OUT`.
+ */
+abstract class AccumulatorV2[IN, OUT] extends Serializable {
   /**
    * Returns if this accumulator is zero value or not. e.g. for a counter accumulator, 0 is zero
    * value; for a list accumulator, Nil is zero value.
@@ -130,47 +178,10 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    */
   def value: OUT
 
-  // Called by Java when serializing an object
-  final protected def writeReplace(): Any = {
-    if (atDriverSide) {
-      if (!isRegistered) {
-        throw new UnsupportedOperationException(
-          "Accumulator must be registered before send to executor")
-      }
-      val copy = copyAndReset()
-      assert(copy.isZero, "copyAndReset must return a zero value copy")
-      copy.metadata = metadata
-      copy
-    } else {
-      this
-    }
-  }
-
-  // Called by Java when deserializing an object
-  private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
-    in.defaultReadObject()
-    if (atDriverSide) {
-      atDriverSide = false
-
-      // Automatically register the accumulator when it is deserialized with the task closure.
-      // This is for external accumulators and internal ones that do not represent task level
-      // metrics, e.g. internal SQL metrics, which are per-operator.
-      val taskContext = TaskContext.get()
-      if (taskContext != null) {
-        taskContext.registerAccumulator(this)
-      }
-    } else {
-      atDriverSide = true
-    }
-  }
-
-  override def toString: String = {
-    if (metadata == null) {
-      "Un-registered Accumulator: " + getClass.getSimpleName
-    } else {
-      getClass.getSimpleName + s"(id: $id, name: $name, value: $value)"
-    }
-  }
+  /**
+   * Extra information of this accumulator.
+   */
+  private[spark] def metadata: Option[String] = None
 }
 
 
@@ -185,7 +196,8 @@ private[spark] object AccumulatorContext {
    * once the RDDs and user-code that reference them are cleaned up.
    * TODO: Don't use a global map; these should be tied to a SparkContext (SPARK-13051).
    */
-  private val originals = new ConcurrentHashMap[Long, jl.ref.WeakReference[AccumulatorV2[_, _]]]
+  private val originals =
+    new ConcurrentHashMap[Long, jl.ref.WeakReference[AccumulatorWrapper[_]]]
 
   private[this] val nextId = new AtomicLong(0L)
 
@@ -209,8 +221,8 @@ private[spark] object AccumulatorContext {
    * If an [[AccumulatorV2]] with the same ID was already registered, this does nothing instead
    * of overwriting it. We will never register same accumulator twice, this is just a sanity check.
    */
-  def register(a: AccumulatorV2[_, _]): Unit = {
-    originals.putIfAbsent(a.id, new jl.ref.WeakReference[AccumulatorV2[_, _]](a))
+  def register(a: AccumulatorWrapper[_]): Unit = {
+    originals.putIfAbsent(a.id, new jl.ref.WeakReference(a))
   }
 
   /**
@@ -221,9 +233,9 @@ private[spark] object AccumulatorContext {
   }
 
   /**
-   * Returns the [[AccumulatorV2]] registered with the given ID, if any.
+   * Returns the [[AccumulatorWrapper]] registered with the given ID, if any.
    */
-  def get(id: Long): Option[AccumulatorV2[_, _]] = {
+  def get(id: Long): Option[AccumulatorWrapper[_]] = {
     Option(originals.get(id)).map { ref =>
       // Since we are storing weak references, we must check whether the underlying data is valid.
       val acc = ref.get

@@ -113,7 +113,7 @@ private[sql] case class RDDScanExec(
     rdd.mapPartitionsInternal { iter =>
       val proj = UnsafeProjection.create(schema)
       iter.map { r =>
-        numOutputRows += 1
+        numOutputRows.acc += 1
         proj(r)
       }
     }
@@ -168,7 +168,7 @@ private[sql] case class RowDataSourceScanExec(
 
     val numOutputRows = longMetric("numOutputRows")
     unsafeRow.map { r =>
-      numOutputRows += 1
+      numOutputRows.acc += 1
       r
     }
   }

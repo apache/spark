@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution.metric
 import java.text.NumberFormat
 
 import org.apache.spark.SparkContext
-import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.{AccumulatorV2, Utils}
+import org.apache.spark.util.{AccumulatorV2, AccumulatorWrapper, Utils}
 
 
 class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
@@ -48,9 +47,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
-  private[spark] override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, true, true, Some(SQLMetrics.ACCUM_IDENTIFIER))
-  }
+  override private[spark] def metadata: Option[String] = Some(SQLMetrics.ACCUM_IDENTIFIER)
 
   def reset(): Unit = _value = initValue
 }
@@ -64,8 +61,8 @@ private[sql] object SQLMetrics {
   private[sql] val SIZE_METRIC = "size"
   private[sql] val TIMING_METRIC = "timing"
 
-  def createMetric(sc: SparkContext, name: String): SQLMetric = {
-    val acc = new SQLMetric(SUM_METRIC)
+  def createMetric(sc: SparkContext, name: String): AccumulatorWrapper[SQLMetric] = {
+    val acc = new AccumulatorWrapper(new SQLMetric(SUM_METRIC))
     acc.register(sc, name = Some(name), countFailedValues = true)
     acc
   }
@@ -74,20 +71,20 @@ private[sql] object SQLMetrics {
    * Create a metric to report the size information (including total, min, med, max) like data size,
    * spill size, etc.
    */
-  def createSizeMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createSizeMetric(sc: SparkContext, name: String): AccumulatorWrapper[SQLMetric] = {
     // The final result of this metric in physical operator UI may looks like:
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
-    val acc = new SQLMetric(SIZE_METRIC, -1)
+    val acc = new AccumulatorWrapper(new SQLMetric(SUM_METRIC, -1))
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = true)
     acc
   }
 
-  def createTimingMetric(sc: SparkContext, name: String): SQLMetric = {
+  def createTimingMetric(sc: SparkContext, name: String): AccumulatorWrapper[SQLMetric] = {
     // The final result of this metric in physical operator UI may looks like:
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
-    val acc = new SQLMetric(TIMING_METRIC, -1)
+    val acc = new AccumulatorWrapper(new SQLMetric(SUM_METRIC, -1))
     acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = true)
     acc
   }

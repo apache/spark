@@ -52,7 +52,8 @@ trait CodegenSupport extends SparkPlan {
    * @return name of the variable representing the metric
    */
   def metricTerm(ctx: CodegenContext, name: String): String = {
-    ctx.addReferenceObj(name, longMetric(name))
+    val sqlMetric = ctx.addReferenceObj(name, longMetric(name))
+    s"((org.apache.spark.sql.execution.metric.SQLMetric) $sqlMetric.accumulator())"
   }
 
   /**
@@ -355,7 +356,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         new Iterator[InternalRow] {
           override def hasNext: Boolean = {
             val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
+            if (!v) durationMs.acc += buffer.durationMs()
             v
           }
           override def next: InternalRow = buffer.next()
@@ -371,7 +372,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         new Iterator[InternalRow] {
           override def hasNext: Boolean = {
             val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
+            if (!v) durationMs.acc += buffer.durationMs()
             v
           }
           override def next: InternalRow = buffer.next()

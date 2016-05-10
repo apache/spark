@@ -35,7 +35,7 @@ import org.apache.spark.util._
  */
 private[spark] case class Heartbeat(
     executorId: String,
-    accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])], // taskId -> accumulator updates
+    accumUpdates: Array[(Long, Seq[AccumulatorWrapper[_]])], // taskId -> accumulator updates
     blockManagerId: BlockManagerId)
 
 /**

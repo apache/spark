@@ -78,7 +78,7 @@ case class ExpandExec(
             idx = 0
           }
 
-          numOutputRows += 1
+          numOutputRows.acc += 1
           result
         }
       }

@@ -101,9 +101,9 @@ case class SortExec(
 
       val sortedIterator = sorter.sort(iter.asInstanceOf[Iterator[UnsafeRow]])
 
-      sortTime += (System.nanoTime() - beforeSort) / 1000000
-      peakMemory += sorter.getPeakMemoryUsage
-      spillSize += metrics.memoryBytesSpilled - spillSizeBefore
+      sortTime.acc += (System.nanoTime() - beforeSort) / 1000000
+      peakMemory.acc += sorter.getPeakMemoryUsage
+      spillSize.acc += metrics.memoryBytesSpilled - spillSizeBefore
       metrics.incPeakExecutionMemory(sorter.getPeakMemoryUsage)
 
       sortedIterator

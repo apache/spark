@@ -23,7 +23,7 @@ import scala.language.existentials
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{AccumulatorV2, CallSite}
+import org.apache.spark.util.{AccumulatorWrapper, CallSite}
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue
@@ -71,7 +71,7 @@ private[scheduler] case class CompletionEvent(
     task: Task[_],
     reason: TaskEndReason,
     result: Any,
-    accumUpdates: Seq[AccumulatorV2[_, _]],
+    accumUpdates: Seq[AccumulatorWrapper[_]],
     taskInfo: TaskInfo)
   extends DAGSchedulerEvent
 

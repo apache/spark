@@ -21,7 +21,7 @@ import org.scalatest.Assertions
 
 import org.apache.spark._
 import org.apache.spark.storage.{BlockStatus, StorageLevel, TestBlockId}
-import org.apache.spark.util.AccumulatorV2
+import org.apache.spark.util.AccumulatorWrapper
 
 
 class TaskMetricsSuite extends SparkFunSuite {
@@ -201,24 +201,23 @@ class TaskMetricsSuite extends SparkFunSuite {
     tm.registerAccumulator(acc2)
     tm.registerAccumulator(acc3)
     tm.registerAccumulator(acc4)
-    acc1.add(1)
-    acc2.add(2)
+    acc1.acc.add(1)
+    acc2.acc.add(2)
     val newUpdates = tm.accumulators()
-      .map(a => (a.id, a.asInstanceOf[AccumulatorV2[Any, Any]])).toMap
-    assert(newUpdates.contains(acc1.id))
-    assert(newUpdates.contains(acc2.id))
-    assert(newUpdates.contains(acc3.id))
-    assert(newUpdates.contains(acc4.id))
-    assert(newUpdates(acc1.id).name === Some("a"))
-    assert(newUpdates(acc2.id).name === Some("b"))
-    assert(newUpdates(acc3.id).name === Some("c"))
-    assert(newUpdates(acc4.id).name === Some("d"))
-    assert(newUpdates(acc1.id).value === 1)
-    assert(newUpdates(acc2.id).value === 2)
-    assert(newUpdates(acc3.id).value === 0)
-    assert(newUpdates(acc4.id).value === 0)
-    assert(!newUpdates(acc3.id).countFailedValues)
-    assert(newUpdates(acc4.id).countFailedValues)
+    assert(newUpdates.exists(_.id == acc1.id))
+    assert(newUpdates.exists(_.id == acc2.id))
+    assert(newUpdates.exists(_.id == acc3.id))
+    assert(newUpdates.exists(_.id == acc4.id))
+    assert(newUpdates.find(_.id == acc1.id).get.name === Some("a"))
+    assert(newUpdates.find(_.id == acc2.id).get.name === Some("b"))
+    assert(newUpdates.find(_.id == acc3.id).get.name === Some("c"))
+    assert(newUpdates.find(_.id == acc4.id).get.name === Some("d"))
+    assert(newUpdates.find(_.id == acc1.id).get.genericAcc.value === 1)
+    assert(newUpdates.find(_.id == acc2.id).get.genericAcc.value === 2)
+    assert(newUpdates.find(_.id == acc3.id).get.genericAcc.value === 0)
+    assert(newUpdates.find(_.id == acc4.id).get.genericAcc.value === 0)
+    assert(!newUpdates.find(_.id == acc3.id).get.countFailedValues)
+    assert(newUpdates.find(_.id == acc4.id).get.countFailedValues)
     assert(newUpdates.size === tm.internalAccums.size + 4)
   }
 }
@@ -231,14 +230,14 @@ private[spark] object TaskMetricsSuite extends Assertions {
    * Note: this does NOT check accumulator ID equality.
    */
   def assertUpdatesEquals(
-      updates1: Seq[AccumulatorV2[_, _]],
-      updates2: Seq[AccumulatorV2[_, _]]): Unit = {
+      updates1: Seq[AccumulatorWrapper[_]],
+      updates2: Seq[AccumulatorWrapper[_]]): Unit = {
     assert(updates1.size === updates2.size)
     updates1.zip(updates2).foreach { case (acc1, acc2) =>
       // do not assert ID equals here
       assert(acc1.name === acc2.name)
       assert(acc1.countFailedValues === acc2.countFailedValues)
-      assert(acc1.value == acc2.value)
+      assert(acc1.genericAcc.value == acc2.genericAcc.value)
     }
   }
 }

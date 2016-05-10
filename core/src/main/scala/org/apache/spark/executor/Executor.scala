@@ -376,7 +376,7 @@ private[spark] class Executor(
           logError(s"Exception in $taskName (TID $taskId)", t)
 
           // Collect latest accumulator values to report back to the driver
-          val accums: Seq[AccumulatorV2[_, _]] =
+          val accums: Seq[AccumulatorWrapper[_]] =
             if (task != null) {
               task.metrics.setExecutorRunTime(System.currentTimeMillis() - taskStart)
               task.metrics.setJvmGCTime(computeTotalGcTime() - startGCTime)
@@ -385,7 +385,7 @@ private[spark] class Executor(
               Seq.empty
             }
 
-          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.value), None))
+          val accUpdates = accums.map(acc => acc.toInfo(Some(acc.genericAcc.value), None))
 
           val serializedTaskEndReason = {
             try {
@@ -502,7 +502,7 @@ private[spark] class Executor(
   /** Reports heartbeat and metrics for active tasks to the driver. */
   private def reportHeartBeat(): Unit = {
     // list of (task id, accumUpdates) to send back to the driver
-    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorV2[_, _]])]()
+    val accumUpdates = new ArrayBuffer[(Long, Seq[AccumulatorWrapper[_]])]()
     val curGCTime = computeTotalGcTime()
 
     for (taskRunner <- runningTasks.values().asScala) {

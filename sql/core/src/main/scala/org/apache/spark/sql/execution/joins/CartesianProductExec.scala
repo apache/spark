@@ -109,7 +109,7 @@ case class CartesianProductExec(
         iter
       }
       filtered.map { r =>
-        numOutputRows += 1
+        numOutputRows.acc += 1
         joiner.join(r._1, r._2)
       }
     }

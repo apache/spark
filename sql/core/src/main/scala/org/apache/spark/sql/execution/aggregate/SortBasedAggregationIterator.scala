@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.util.AccumulatorWrapper
 
 /**
  * An iterator used to evaluate [[AggregateFunction]]. It assumes the input rows have been
@@ -35,7 +36,7 @@ class SortBasedAggregationIterator(
     initialInputBufferOffset: Int,
     resultExpressions: Seq[NamedExpression],
     newMutableProjection: (Seq[Expression], Seq[Attribute]) => MutableProjection,
-    numOutputRows: SQLMetric)
+    numOutputRows: AccumulatorWrapper[SQLMetric])
   extends AggregationIterator(
     groupingExpressions,
     valueAttributes,
@@ -152,7 +153,7 @@ class SortBasedAggregationIterator(
       val outputRow = generateOutput(currentGroupingKey, sortBasedAggregationBuffer)
       // Initialize buffer values for the next group.
       initializeBuffer(sortBasedAggregationBuffer)
-      numOutputRows += 1
+      numOutputRows.acc += 1
       outputRow
     } else {
       // no more result
