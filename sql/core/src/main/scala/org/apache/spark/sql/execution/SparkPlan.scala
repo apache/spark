@@ -35,6 +35,7 @@ import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.DataType
+import org.apache.spark.util.AccumulatorWrapper
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -77,19 +78,19 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Return all metrics containing metrics of this SparkPlan.
    */
-  private[sql] def metrics: Map[String, SQLMetric] = Map.empty
+  private[sql] def metrics: Map[String, AccumulatorWrapper[SQLMetric]] = Map.empty
 
   /**
    * Reset all the metrics.
    */
   private[sql] def resetMetrics(): Unit = {
-    metrics.valuesIterator.foreach(_.reset())
+    metrics.valuesIterator.foreach(_.acc.reset())
   }
 
   /**
    * Return a LongSQLMetric according to the name.
    */
-  private[sql] def longMetric(name: String): SQLMetric = metrics(name)
+  private[sql] def longMetric(name: String): AccumulatorWrapper[SQLMetric] = metrics(name)
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */

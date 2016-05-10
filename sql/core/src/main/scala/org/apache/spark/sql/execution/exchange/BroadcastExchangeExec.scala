@@ -73,16 +73,16 @@ case class BroadcastExchangeExec(
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val input: Array[InternalRow] = child.executeCollect()
         val beforeBuild = System.nanoTime()
-        longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
-        longMetric("dataSize") += input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+        longMetric("collectTime").acc += (beforeBuild - beforeCollect) / 1000000
+        longMetric("dataSize").acc += input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
 
         // Construct and broadcast the relation.
         val relation = mode.transform(input)
         val beforeBroadcast = System.nanoTime()
-        longMetric("buildTime") += (beforeBroadcast - beforeBuild) / 1000000
+        longMetric("buildTime").acc += (beforeBroadcast - beforeBuild) / 1000000
 
         val broadcasted = sparkContext.broadcast(relation)
-        longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+        longMetric("broadcastTime").acc += (System.nanoTime() - beforeBroadcast) / 1000000
         broadcasted
       }
     }(BroadcastExchangeExec.executionContext)

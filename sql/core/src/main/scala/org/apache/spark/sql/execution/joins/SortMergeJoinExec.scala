@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.execution.{BinaryExecNode, CodegenSupport, RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.util.AccumulatorWrapper
 import org.apache.spark.util.collection.BitSet
 
 /**
@@ -148,7 +149,7 @@ case class SortMergeJoinExec(
                 joinRow(currentLeftRow, currentRightMatches(currentMatchIdx))
                 currentMatchIdx += 1
                 if (boundCondition(joinRow)) {
-                  numOutputRows += 1
+                  numOutputRows.acc += 1
                   return true
                 }
               }
@@ -220,7 +221,7 @@ case class SortMergeJoinExec(
                 while (i < currentRightMatches.length) {
                   joinRow(currentLeftRow, currentRightMatches(i))
                   if (boundCondition(joinRow)) {
-                    numOutputRows += 1
+                    numOutputRows.acc += 1
                     return true
                   }
                   i += 1
@@ -261,7 +262,7 @@ case class SortMergeJoinExec(
                   i += 1
                 }
                 if (!found) {
-                  numOutputRows += 1
+                  numOutputRows.acc += 1
                   return true
                 }
               }
@@ -300,7 +301,7 @@ case class SortMergeJoinExec(
                   }
                 }
                 result.setBoolean(0, found)
-                numOutputRows += 1
+                numOutputRows.acc += 1
                 return true
               }
               false
@@ -774,7 +775,7 @@ private class LeftOuterIterator(
     rightNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
-    numOutputRows: SQLMetric)
+    numOutputRows: AccumulatorWrapper[SQLMetric])
   extends OneSideOuterIterator(
     smjScanner, rightNullRow, boundCondition, resultProj, numOutputRows) {
 
@@ -790,7 +791,7 @@ private class RightOuterIterator(
     leftNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
-    numOutputRows: SQLMetric)
+    numOutputRows: AccumulatorWrapper[SQLMetric])
   extends OneSideOuterIterator(smjScanner, leftNullRow, boundCondition, resultProj, numOutputRows) {
 
   protected override def setStreamSideOutput(row: InternalRow): Unit = joinedRow.withRight(row)
@@ -818,7 +819,7 @@ private abstract class OneSideOuterIterator(
     bufferedSideNullRow: InternalRow,
     boundCondition: InternalRow => Boolean,
     resultProj: InternalRow => InternalRow,
-    numOutputRows: SQLMetric) extends RowIterator {
+    numOutputRows: AccumulatorWrapper[SQLMetric]) extends RowIterator {
 
   // A row to store the joined result, reused many times
   protected[this] val joinedRow: JoinedRow = new JoinedRow()
@@ -873,7 +874,7 @@ private abstract class OneSideOuterIterator(
 
   override def advanceNext(): Boolean = {
     val r = advanceBufferUntilBoundConditionSatisfied() || advanceStream()
-    if (r) numOutputRows += 1
+    if (r) numOutputRows.acc += 1
     r
   }
 
@@ -1056,12 +1057,12 @@ private class SortMergeFullOuterJoinScanner(
 private class FullOuterIterator(
     smjScanner: SortMergeFullOuterJoinScanner,
     resultProj: InternalRow => InternalRow,
-    numRows: SQLMetric) extends RowIterator {
+    numRows: AccumulatorWrapper[SQLMetric]) extends RowIterator {
   private[this] val joinedRow: JoinedRow = smjScanner.getJoinedRow()
 
   override def advanceNext(): Boolean = {
     val r = smjScanner.advanceNext()
-    if (r) numRows += 1
+    if (r) numRows.acc += 1
     r
   }
 

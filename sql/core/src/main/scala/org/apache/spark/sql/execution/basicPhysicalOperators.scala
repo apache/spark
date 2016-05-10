@@ -201,7 +201,7 @@ case class FilterExec(condition: Expression, child: SparkPlan)
       val predicate = newPredicate(condition, child.output)
       iter.filter { row =>
         val r = predicate(row)
-        if (r) numOutputRows += 1
+        if (r) numOutputRows.acc += 1
         r
       }
     }
@@ -451,7 +451,7 @@ case class RangeExec(
               overflow = true
             }
 
-            numOutputRows += 1
+            numOutputRows.acc += 1
             unsafeRow.setLong(0, ret)
             unsafeRow
           }

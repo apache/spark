@@ -1292,7 +1292,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register the given accumulator.  Note that accumulators must be registered before use, or it
    * will throw exception.
    */
-  def register(acc: AccumulatorV2[_, _]): Unit = {
+  def register(acc: AccumulatorWrapper[_]): Unit = {
     acc.register(this)
   }
 
@@ -1300,15 +1300,15 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Register the given accumulator with given name.  Note that accumulators must be registered
    * before use, or it will throw exception.
    */
-  def register(acc: AccumulatorV2[_, _], name: String): Unit = {
+  def register(acc: AccumulatorWrapper[_], name: String): Unit = {
     acc.register(this, name = Some(name))
   }
 
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def longAccumulator: LongAccumulator = {
-    val acc = new LongAccumulator
+  def longAccumulator: AccumulatorWrapper[LongAccumulator] = {
+    val acc = new AccumulatorWrapper(new LongAccumulator)
     register(acc)
     acc
   }
@@ -1316,8 +1316,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def longAccumulator(name: String): LongAccumulator = {
-    val acc = new LongAccumulator
+  def longAccumulator(name: String): AccumulatorWrapper[LongAccumulator] = {
+    val acc = new AccumulatorWrapper(new LongAccumulator)
     register(acc, name)
     acc
   }
@@ -1325,8 +1325,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def doubleAccumulator: DoubleAccumulator = {
-    val acc = new DoubleAccumulator
+  def doubleAccumulator: AccumulatorWrapper[DoubleAccumulator] = {
+    val acc = new AccumulatorWrapper(new DoubleAccumulator)
     register(acc)
     acc
   }
@@ -1334,8 +1334,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
    */
-  def doubleAccumulator(name: String): DoubleAccumulator = {
-    val acc = new DoubleAccumulator
+  def doubleAccumulator(name: String): AccumulatorWrapper[DoubleAccumulator] = {
+    val acc = new AccumulatorWrapper(new DoubleAccumulator)
     register(acc, name)
     acc
   }
@@ -1344,8 +1344,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create and register a list accumulator, which starts with empty list and accumulates inputs
    * by adding them into the inner list.
    */
-  def listAccumulator[T]: ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def listAccumulator[T]: AccumulatorWrapper[ListAccumulator[T]] = {
+    val acc = new AccumulatorWrapper(new ListAccumulator[T])
     register(acc)
     acc
   }
@@ -1354,8 +1354,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create and register a list accumulator, which starts with empty list and accumulates inputs
    * by adding them into the inner list.
    */
-  def listAccumulator[T](name: String): ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def listAccumulator[T](name: String): AccumulatorWrapper[ListAccumulator[T]] = {
+    val acc = new AccumulatorWrapper(new ListAccumulator[T])
     register(acc, name)
     acc
   }

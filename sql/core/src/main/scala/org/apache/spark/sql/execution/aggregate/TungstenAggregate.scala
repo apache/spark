@@ -111,7 +111,7 @@ case class TungstenAggregate(
             peakMemory,
             spillSize)
         if (!hasInput && groupingExpressions.isEmpty) {
-          numOutputRows += 1
+          numOutputRows.acc += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
         } else {
           aggregationIterator

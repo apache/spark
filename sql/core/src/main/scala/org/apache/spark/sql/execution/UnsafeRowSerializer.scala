@@ -28,6 +28,7 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.unsafe.Platform
+import org.apache.spark.util.AccumulatorWrapper
 
 /**
  * Serializer for serializing [[UnsafeRow]]s during shuffle. Since UnsafeRows are already stored as
@@ -42,7 +43,7 @@ import org.apache.spark.unsafe.Platform
  */
 private[sql] class UnsafeRowSerializer(
     numFields: Int,
-    dataSize: SQLMetric = null) extends Serializer with Serializable {
+    dataSize: AccumulatorWrapper[SQLMetric] = null) extends Serializer with Serializable {
   override def newInstance(): SerializerInstance =
     new UnsafeRowSerializerInstance(numFields, dataSize)
   override private[spark] def supportsRelocationOfSerializedObjects: Boolean = true
@@ -50,7 +51,7 @@ private[sql] class UnsafeRowSerializer(
 
 private class UnsafeRowSerializerInstance(
     numFields: Int,
-    dataSize: SQLMetric) extends SerializerInstance {
+    dataSize: AccumulatorWrapper[SQLMetric]) extends SerializerInstance {
   /**
    * Serializes a stream of UnsafeRows. Within the stream, each record consists of a record
    * length (stored as a 4-byte integer, written high byte first), followed by the record's bytes.
@@ -63,7 +64,7 @@ private class UnsafeRowSerializerInstance(
     override def writeValue[T: ClassTag](value: T): SerializationStream = {
       val row = value.asInstanceOf[UnsafeRow]
       if (dataSize != null) {
-        dataSize.add(row.getSizeInBytes)
+        dataSize.acc.add(row.getSizeInBytes)
       }
       dOut.writeInt(row.getSizeInBytes)
       row.writeToStream(dOut, writeBuffer)

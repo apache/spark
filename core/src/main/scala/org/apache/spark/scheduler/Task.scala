@@ -28,7 +28,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.memory.{MemoryMode, TaskMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.serializer.SerializerInstance
-import org.apache.spark.util.{AccumulatorV2, ByteBufferInputStream, ByteBufferOutputStream, Utils}
+import org.apache.spark.util.{AccumulatorWrapper, ByteBufferInputStream, ByteBufferOutputStream, Utils}
 
 /**
  * A unit of execution. We have two kinds of Task's in Spark:
@@ -153,7 +153,7 @@ private[spark] abstract class Task[T](
    * Collect the latest values of accumulators used in this task. If the task failed,
    * filter out the accumulators whose values should not be included on failures.
    */
-  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorV2[_, _]] = {
+  def collectAccumulatorUpdates(taskFailed: Boolean = false): Seq[AccumulatorWrapper[_]] = {
     if (context != null) {
       context.taskMetrics.accumulators().filter { a => !taskFailed || a.countFailedValues }
     } else {

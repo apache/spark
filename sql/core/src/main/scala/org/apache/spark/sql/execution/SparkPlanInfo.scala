@@ -55,7 +55,7 @@ private[sql] object SparkPlanInfo {
       case _ => plan.children ++ plan.subqueries
     }
     val metrics = plan.metrics.toSeq.map { case (key, metric) =>
-      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.metricType)
+      new SQLMetricInfo(metric.name.getOrElse(key), metric.id, metric.acc.metricType)
     }
 
     new SparkPlanInfo(plan.nodeName, plan.simpleString, children.map(fromSparkPlan),

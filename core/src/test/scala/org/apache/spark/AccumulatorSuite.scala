@@ -31,7 +31,7 @@ import org.scalatest.exceptions.TestFailedException
 import org.apache.spark.AccumulatorParam.StringAccumulatorParam
 import org.apache.spark.scheduler._
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorV2, LongAccumulator}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, AccumulatorWrapper, LongAccumulator}
 
 
 class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContext {
@@ -63,22 +63,22 @@ class AccumulatorSuite extends SparkFunSuite with Matchers with LocalSparkContex
   test("accumulator serialization") {
     val ser = new JavaSerializer(new SparkConf).newInstance()
     val acc = createLongAccum("x")
-    acc.add(5)
-    assert(acc.value == 5)
-    assert(acc.isAtDriverSide)
+    acc.acc.add(5)
+    assert(acc.acc.value == 5)
+    assert(acc.atDriverSide)
 
     // serialize and de-serialize it, to simulate sending accumulator to executor.
-    val acc2 = ser.deserialize[LongAccumulator](ser.serialize(acc))
+    val acc2 = ser.deserialize[AccumulatorWrapper[LongAccumulator]](ser.serialize(acc))
     // value is reset on the executors
-    assert(acc2.value == 0)
-    assert(!acc2.isAtDriverSide)
+    assert(acc2.acc.value == 0)
+    assert(!acc2.atDriverSide)
 
-    acc2.add(10)
+    acc2.acc.add(10)
     // serialize and de-serialize it again, to simulate sending accumulator back to driver.
-    val acc3 = ser.deserialize[LongAccumulator](ser.serialize(acc2))
+    val acc3 = ser.deserialize[AccumulatorWrapper[LongAccumulator]](ser.serialize(acc2))
     // value is not reset on the driver
-    assert(acc3.value == 10)
-    assert(acc3.isAtDriverSide)
+    assert(acc3.acc.value == 10)
+    assert(acc3.atDriverSide)
   }
 
   test ("basic accumulation") {
@@ -247,9 +247,9 @@ private[spark] object AccumulatorSuite {
       name: String,
       countFailedValues: Boolean = false,
       initValue: Long = 0,
-      id: Long = AccumulatorContext.newId()): LongAccumulator = {
-    val acc = new LongAccumulator
-    acc.setValue(initValue)
+      id: Long = AccumulatorContext.newId()): AccumulatorWrapper[LongAccumulator] = {
+    val acc = new AccumulatorWrapper(new LongAccumulator)
+    acc.acc.setValue(initValue)
     acc.metadata = AccumulatorMetadata(id, Some(name), countFailedValues)
     AccumulatorContext.register(acc)
     acc
@@ -259,7 +259,7 @@ private[spark] object AccumulatorSuite {
    * Make an [[AccumulableInfo]] out of an [[Accumulable]] with the intent to use the
    * info as an accumulator update.
    */
-  def makeInfo(a: AccumulatorV2[_, _]): AccumulableInfo = a.toInfo(Some(a.value), None)
+  def makeInfo(a: AccumulatorWrapper[_]): AccumulableInfo = a.toInfo(Some(a.genericAcc.value), None)
 
   /**
    * Run one or more Spark jobs and verify that in at least one job the peak execution memory

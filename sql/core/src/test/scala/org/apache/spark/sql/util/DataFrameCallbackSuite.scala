@@ -96,7 +96,7 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
           case w: WholeStageCodegenExec => w.child.longMetric("numOutputRows")
           case other => other.longMetric("numOutputRows")
         }
-        metrics += metric.value
+        metrics += metric.acc.value
       }
     }
     sqlContext.listenerManager.register(listener)
@@ -126,9 +126,9 @@ class DataFrameCallbackSuite extends QueryTest with SharedSQLContext {
       override def onFailure(funcName: String, qe: QueryExecution, exception: Exception): Unit = {}
 
       override def onSuccess(funcName: String, qe: QueryExecution, duration: Long): Unit = {
-        metrics += qe.executedPlan.longMetric("dataSize").value
+        metrics += qe.executedPlan.longMetric("dataSize").acc.value
         val bottomAgg = qe.executedPlan.children(0).children(0)
-        metrics += bottomAgg.longMetric("dataSize").value
+        metrics += bottomAgg.longMetric("dataSize").acc.value
       }
     }
     sqlContext.listenerManager.register(listener)

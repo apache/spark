@@ -94,7 +94,7 @@ case class GenerateExec(
     rows.mapPartitionsInternal { iter =>
       val proj = UnsafeProjection.create(output, output)
       iter.map { r =>
-        numOutputRows += 1
+        numOutputRows.acc += 1
         proj(r)
       }
     }

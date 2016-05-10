@@ -32,7 +32,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, CallSite, LongAccumulator, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorWrapper, CallSite, LongAccumulator, Utils}
 
 class DAGSchedulerEventProcessLoopTester(dagScheduler: DAGScheduler)
   extends DAGSchedulerEventProcessLoop(dagScheduler) {
@@ -112,7 +112,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def stop() = {}
     override def executorHeartbeatReceived(
         execId: String,
-        accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
+        accumUpdates: Array[(Long, Seq[AccumulatorWrapper[_]])],
         blockManagerId: BlockManagerId): Boolean = true
     override def submitTasks(taskSet: TaskSet) = {
       // normally done by TaskSetManager
@@ -487,7 +487,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       override def defaultParallelism(): Int = 2
       override def executorHeartbeatReceived(
           execId: String,
-          accumUpdates: Array[(Long, Seq[AccumulatorV2[_, _]])],
+          accumUpdates: Array[(Long, Seq[AccumulatorWrapper[_]])],
           blockManagerId: BlockManagerId): Boolean = true
       override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
       override def applicationAttemptId(): Option[String] = None
@@ -1623,7 +1623,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     completeWithAccumulator(accum.id, taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
 
-    assert(accum.value === 1)
+    assert(accum.acc.value === 1)
     assertDataStructuresEmpty()
   }
 
@@ -1634,15 +1634,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(AccumulatorContext.get(acc1.id).isDefined)
     assert(AccumulatorContext.get(acc2.id).isDefined)
     assert(AccumulatorContext.get(acc3.id).isDefined)
-    val accUpdate1 = new LongAccumulator
+    val accUpdate1 = AccumulatorSuite.createLongAccum("")
     accUpdate1.metadata = acc1.metadata
-    accUpdate1.setValue(15)
-    val accUpdate2 = new LongAccumulator
+    accUpdate1.acc.setValue(15)
+    val accUpdate2 = AccumulatorSuite.createLongAccum("")
     accUpdate2.metadata = acc2.metadata
-    accUpdate2.setValue(13)
-    val accUpdate3 = new LongAccumulator
+    accUpdate2.acc.setValue(13)
+    val accUpdate3 = AccumulatorSuite.createLongAccum("")
     accUpdate3.metadata = acc3.metadata
-    accUpdate3.setValue(18)
+    accUpdate3.acc.setValue(18)
     val accumUpdates = Seq(accUpdate1, accUpdate2, accUpdate3)
     val accumInfo = accumUpdates.map(AccumulatorSuite.makeInfo)
     val exceptionFailure = new ExceptionFailure(
@@ -1650,9 +1650,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       accumInfo).copy(accums = accumUpdates)
     submit(new MyRDD(sc, 1, Nil), Array(0))
     runEvent(makeCompletionEvent(taskSets.head.tasks.head, exceptionFailure, "result"))
-    assert(AccumulatorContext.get(acc1.id).get.value === 15L)
-    assert(AccumulatorContext.get(acc2.id).get.value === 13L)
-    assert(AccumulatorContext.get(acc3.id).get.value === 18L)
+    assert(AccumulatorContext.get(acc1.id).get.genericAcc.value === 15L)
+    assert(AccumulatorContext.get(acc2.id).get.genericAcc.value === 13L)
+    assert(AccumulatorContext.get(acc3.id).get.genericAcc.value === 18L)
   }
 
   test("reduce tasks should be placed locally with map output") {
@@ -2016,7 +2016,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      extraAccumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty,
+      extraAccumUpdates: Seq[AccumulatorWrapper[_]] = Seq.empty,
       taskInfo: TaskInfo = createFakeTaskInfo()): CompletionEvent = {
     val accumUpdates = reason match {
       case Success => task.metrics.accumulators()

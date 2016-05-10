@@ -28,44 +28,46 @@ import org.apache.spark.util.LongAccumulator
  */
 @DeveloperApi
 class ShuffleReadMetrics private[spark] () extends Serializable {
-  private[executor] val _remoteBlocksFetched = new LongAccumulator
-  private[executor] val _localBlocksFetched = new LongAccumulator
-  private[executor] val _remoteBytesRead = new LongAccumulator
-  private[executor] val _localBytesRead = new LongAccumulator
-  private[executor] val _fetchWaitTime = new LongAccumulator
-  private[executor] val _recordsRead = new LongAccumulator
+  import TaskMetrics.newLongAccum
+
+  private[executor] val _remoteBlocksFetched = newLongAccum
+  private[executor] val _localBlocksFetched = newLongAccum
+  private[executor] val _remoteBytesRead = newLongAccum
+  private[executor] val _localBytesRead = newLongAccum
+  private[executor] val _fetchWaitTime = newLongAccum
+  private[executor] val _recordsRead = newLongAccum
 
   /**
    * Number of remote blocks fetched in this shuffle by this task.
    */
-  def remoteBlocksFetched: Long = _remoteBlocksFetched.sum
+  def remoteBlocksFetched: Long = _remoteBlocksFetched.acc.sum
 
   /**
    * Number of local blocks fetched in this shuffle by this task.
    */
-  def localBlocksFetched: Long = _localBlocksFetched.sum
+  def localBlocksFetched: Long = _localBlocksFetched.acc.sum
 
   /**
    * Total number of remote bytes read from the shuffle by this task.
    */
-  def remoteBytesRead: Long = _remoteBytesRead.sum
+  def remoteBytesRead: Long = _remoteBytesRead.acc.sum
 
   /**
    * Shuffle data that was read from the local disk (as opposed to from a remote executor).
    */
-  def localBytesRead: Long = _localBytesRead.sum
+  def localBytesRead: Long = _localBytesRead.acc.sum
 
   /**
    * Time the task spent waiting for remote shuffle blocks. This only includes the time
    * blocking on shuffle input data. For instance if block B is being fetched while the task is
    * still not finished processing block A, it is not considered to be blocking on block B.
    */
-  def fetchWaitTime: Long = _fetchWaitTime.sum
+  def fetchWaitTime: Long = _fetchWaitTime.acc.sum
 
   /**
    * Total number of records read from the shuffle by this task.
    */
-  def recordsRead: Long = _recordsRead.sum
+  def recordsRead: Long = _recordsRead.acc.sum
 
   /**
    * Total bytes fetched in the shuffle by this task (both remote and local).
@@ -77,38 +79,38 @@ class ShuffleReadMetrics private[spark] () extends Serializable {
    */
   def totalBlocksFetched: Long = remoteBlocksFetched + localBlocksFetched
 
-  private[spark] def incRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched.add(v)
-  private[spark] def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.add(v)
-  private[spark] def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead.add(v)
-  private[spark] def incLocalBytesRead(v: Long): Unit = _localBytesRead.add(v)
-  private[spark] def incFetchWaitTime(v: Long): Unit = _fetchWaitTime.add(v)
-  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.add(v)
+  private[spark] def incRemoteBlocksFetched(v: Long): Unit = _remoteBlocksFetched.acc.add(v)
+  private[spark] def incLocalBlocksFetched(v: Long): Unit = _localBlocksFetched.acc.add(v)
+  private[spark] def incRemoteBytesRead(v: Long): Unit = _remoteBytesRead.acc.add(v)
+  private[spark] def incLocalBytesRead(v: Long): Unit = _localBytesRead.acc.add(v)
+  private[spark] def incFetchWaitTime(v: Long): Unit = _fetchWaitTime.acc.add(v)
+  private[spark] def incRecordsRead(v: Long): Unit = _recordsRead.acc.add(v)
 
-  private[spark] def setRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched.setValue(v)
-  private[spark] def setLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.setValue(v)
-  private[spark] def setRemoteBytesRead(v: Long): Unit = _remoteBytesRead.setValue(v)
-  private[spark] def setLocalBytesRead(v: Long): Unit = _localBytesRead.setValue(v)
-  private[spark] def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.setValue(v)
-  private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.setValue(v)
+  private[spark] def setRemoteBlocksFetched(v: Int): Unit = _remoteBlocksFetched.acc.setValue(v)
+  private[spark] def setLocalBlocksFetched(v: Int): Unit = _localBlocksFetched.acc.setValue(v)
+  private[spark] def setRemoteBytesRead(v: Long): Unit = _remoteBytesRead.acc.setValue(v)
+  private[spark] def setLocalBytesRead(v: Long): Unit = _localBytesRead.acc.setValue(v)
+  private[spark] def setFetchWaitTime(v: Long): Unit = _fetchWaitTime.acc.setValue(v)
+  private[spark] def setRecordsRead(v: Long): Unit = _recordsRead.acc.setValue(v)
 
   /**
    * Resets the value of the current metrics (`this`) and and merges all the independent
    * [[TempShuffleReadMetrics]] into `this`.
    */
   private[spark] def setMergeValues(metrics: Seq[TempShuffleReadMetrics]): Unit = {
-    _remoteBlocksFetched.setValue(0)
-    _localBlocksFetched.setValue(0)
-    _remoteBytesRead.setValue(0)
-    _localBytesRead.setValue(0)
-    _fetchWaitTime.setValue(0)
-    _recordsRead.setValue(0)
+    _remoteBlocksFetched.acc.setValue(0)
+    _localBlocksFetched.acc.setValue(0)
+    _remoteBytesRead.acc.setValue(0)
+    _localBytesRead.acc.setValue(0)
+    _fetchWaitTime.acc.setValue(0)
+    _recordsRead.acc.setValue(0)
     metrics.foreach { metric =>
-      _remoteBlocksFetched.add(metric.remoteBlocksFetched)
-      _localBlocksFetched.add(metric.localBlocksFetched)
-      _remoteBytesRead.add(metric.remoteBytesRead)
-      _localBytesRead.add(metric.localBytesRead)
-      _fetchWaitTime.add(metric.fetchWaitTime)
-      _recordsRead.add(metric.recordsRead)
+      _remoteBlocksFetched.acc.add(metric.remoteBlocksFetched)
+      _localBlocksFetched.acc.add(metric.localBlocksFetched)
+      _remoteBytesRead.acc.add(metric.remoteBytesRead)
+      _localBytesRead.acc.add(metric.localBytesRead)
+      _fetchWaitTime.acc.add(metric.fetchWaitTime)
+      _recordsRead.acc.add(metric.recordsRead)
     }
   }
 }

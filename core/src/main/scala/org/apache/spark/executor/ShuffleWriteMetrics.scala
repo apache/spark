@@ -28,34 +28,33 @@ import org.apache.spark.util.LongAccumulator
  */
 @DeveloperApi
 class ShuffleWriteMetrics private[spark] () extends Serializable {
-  private[executor] val _bytesWritten = new LongAccumulator
-  private[executor] val _recordsWritten = new LongAccumulator
-  private[executor] val _writeTime = new LongAccumulator
+  import TaskMetrics.newLongAccum
+
+  private[executor] val _bytesWritten = newLongAccum
+  private[executor] val _recordsWritten = newLongAccum
+  private[executor] val _writeTime = newLongAccum
 
   /**
    * Number of bytes written for the shuffle by this task.
    */
-  def bytesWritten: Long = _bytesWritten.sum
+  def bytesWritten: Long = _bytesWritten.acc.sum
 
   /**
    * Total number of records written to the shuffle by this task.
    */
-  def recordsWritten: Long = _recordsWritten.sum
+  def recordsWritten: Long = _recordsWritten.acc.sum
 
   /**
    * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds.
    */
-  def writeTime: Long = _writeTime.sum
+  def writeTime: Long = _writeTime.acc.sum
 
-  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.add(v)
-  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.add(v)
-  private[spark] def incWriteTime(v: Long): Unit = _writeTime.add(v)
-  private[spark] def decBytesWritten(v: Long): Unit = {
-    _bytesWritten.setValue(bytesWritten - v)
-  }
-  private[spark] def decRecordsWritten(v: Long): Unit = {
-    _recordsWritten.setValue(recordsWritten - v)
-  }
+  private[spark] def incBytesWritten(v: Long): Unit = _bytesWritten.acc.add(v)
+  private[spark] def incRecordsWritten(v: Long): Unit = _recordsWritten.acc.add(v)
+  private[spark] def incWriteTime(v: Long): Unit = _writeTime.acc.add(v)
+  private[spark] def decBytesWritten(v: Long): Unit = _bytesWritten.acc.setValue(bytesWritten - v)
+  private[spark] def decRecordsWritten(v: Long): Unit =
+    _recordsWritten.acc.setValue(recordsWritten - v)
 
   // Legacy methods for backward compatibility.
   // TODO: remove these once we make this class private.

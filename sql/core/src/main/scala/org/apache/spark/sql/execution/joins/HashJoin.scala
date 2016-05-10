@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.execution.{RowIterator, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.{IntegralType, LongType}
+import org.apache.spark.util.AccumulatorWrapper
 
 trait HashJoin {
   self: SparkPlan =>
@@ -222,7 +223,7 @@ trait HashJoin {
   protected def join(
       streamedIter: Iterator[InternalRow],
       hashed: HashedRelation,
-      numOutputRows: SQLMetric): Iterator[InternalRow] = {
+      numOutputRows: AccumulatorWrapper[SQLMetric]): Iterator[InternalRow] = {
 
     val joinedIter = joinType match {
       case Inner =>
@@ -242,7 +243,7 @@ trait HashJoin {
 
     val resultProj = createResultProjection
     joinedIter.map { r =>
-      numOutputRows += 1
+      numOutputRows.acc += 1
       resultProj(r)
     }
   }

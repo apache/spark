@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.{UnsafeFixedWidthAggregationMap, UnsafeKVE
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.util.AccumulatorWrapper
 
 /**
  * An iterator used to evaluate aggregate functions. It operates on [[UnsafeRow]]s.
@@ -86,9 +87,9 @@ class TungstenAggregationIterator(
     originalInputAttributes: Seq[Attribute],
     inputIter: Iterator[InternalRow],
     testFallbackStartsAt: Option[(Int, Int)],
-    numOutputRows: SQLMetric,
-    peakMemory: SQLMetric,
-    spillSize: SQLMetric)
+    numOutputRows: AccumulatorWrapper[SQLMetric],
+    peakMemory: AccumulatorWrapper[SQLMetric],
+    spillSize: AccumulatorWrapper[SQLMetric])
   extends AggregationIterator(
     groupingExpressions,
     originalInputAttributes,
@@ -417,11 +418,11 @@ class TungstenAggregationIterator(
         val sorterMemory = Option(externalSorter).map(_.getPeakMemoryUsedBytes).getOrElse(0L)
         val maxMemory = Math.max(mapMemory, sorterMemory)
         val metrics = TaskContext.get().taskMetrics()
-        peakMemory += maxMemory
-        spillSize += metrics.memoryBytesSpilled - spillSizeBefore
+        peakMemory.acc += maxMemory
+        spillSize.acc += metrics.memoryBytesSpilled - spillSizeBefore
         metrics.incPeakExecutionMemory(maxMemory)
       }
-      numOutputRows += 1
+      numOutputRows.acc += 1
       res
     } else {
       // no more result

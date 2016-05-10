@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{AccumulatorMetadata, LongAccumulator}
+import org.apache.spark.util.{AccumulatorMetadata, AccumulatorWrapper, LongAccumulator}
 
 
 class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
@@ -76,9 +76,9 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
   private def createTaskMetrics(accumulatorUpdates: Map[Long, Long]): TaskMetrics = {
     val metrics = mock(classOf[TaskMetrics])
     when(metrics.accumulators()).thenReturn(accumulatorUpdates.map { case (id, update) =>
-      val acc = new LongAccumulator
+      val acc = new AccumulatorWrapper(new LongAccumulator)
       acc.metadata = AccumulatorMetadata(id, Some(""), true)
-      acc.setValue(update)
+      acc.acc.setValue(update)
       acc
     }.toSeq)
     metrics
@@ -366,7 +366,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     // The listener should only track the ones that are actually SQL metrics.
     val sqlMetric = SQLMetrics.createMetric(sparkContext, "beach umbrella")
     val nonSqlMetric = sparkContext.accumulator[Int](0, "baseball")
-    val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.value), None)
+    val sqlMetricInfo = sqlMetric.toInfo(Some(sqlMetric.acc.value), None)
     val nonSqlMetricInfo = nonSqlMetric.toInfo(Some(nonSqlMetric.localValue), None)
     val taskInfo = createTaskInfo(0, 0)
     taskInfo.accumulables ++= Seq(sqlMetricInfo, nonSqlMetricInfo)
