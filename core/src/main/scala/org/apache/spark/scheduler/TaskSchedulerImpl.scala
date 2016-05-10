@@ -364,12 +364,14 @@ private[spark] class TaskSchedulerImpl(
                 }
               }
             }
-            if (state == TaskState.FINISHED) {
-              taskSet.removeRunningTask(tid)
-              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
-            } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
-              taskSet.removeRunningTask(tid)
-              taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+            if (taskSet.runningTasksSet.contains(tid)) {
+              if (state == TaskState.FINISHED) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+              }
             }
           case None =>
             logError(
