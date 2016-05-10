@@ -22,14 +22,15 @@ import scala.collection.JavaConverters._
 import com.google.common.base.Objects
 import org.apache.hadoop.hive.common.StatsSetupConst
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.FieldSchema
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Order}
 import org.apache.hadoop.hive.ql.metadata.{Partition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer._
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
@@ -64,6 +65,14 @@ private[hive] case class MetastoreRelation(
     new FieldSchema(c.name, c.dataType, c.comment.orNull)
   }
 
+  private def toHiveOrder(so: CatalogSortOrder): Order = {
+    val order = so.direction match {
+      case Ascending => HIVE_COLUMN_ORDER_ASC
+      case Descending => HIVE_COLUMN_ORDER_DESC
+    }
+    new Order(so.column.name, order)
+  }
+
   // TODO: merge this with HiveClientImpl#toHiveTable
   @transient val hiveQlTable: HiveTable = {
     // We start by constructing an API table as Hive performs several important transformations
@@ -96,8 +105,8 @@ private[hive] case class MetastoreRelation(
       sd.setBucketCols(catalogTable.bucketColumnNames.toList.asJava)
       sd.setNumBuckets(catalogTable.numBuckets)
 
-      if (catalogTable.sortColumnNames.nonEmpty) {
-        sd.setSortCols(catalogTable.sortColumnNames.toList.asJava)
+      if (catalogTable.sortColumns.nonEmpty) {
+        sd.setSortCols(catalogTable.sortColumns.map(toHiveOrder).asJava)
       }
     }
 

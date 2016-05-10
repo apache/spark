@@ -32,6 +32,7 @@ import org.apache.hadoop.hive.metastore.api.{NoSuchObjectException, PrincipalTyp
 import org.apache.hadoop.hive.metastore.api.{ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.parse.BaseSemanticAnalyzer._
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -44,7 +45,7 @@ import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.QueryExecutionException
 import org.apache.spark.util.{CausedBy, CircularBuffer, Utils}
 
@@ -336,8 +337,22 @@ private[hive] class HiveClientImpl(
     Option(client.getTable(dbName, tableName, false)).map { h =>
       // Note: Hive separates partition columns and the schema, but for us the
       // partition columns are part of the schema
+      val cols = h.getCols.asScala.map(fromHiveColumn)
       val partCols = h.getPartCols.asScala.map(fromHiveColumn)
-      val schema = h.getCols.asScala.map(fromHiveColumn) ++ partCols
+      val schema = cols ++ partCols
+
+      val sortColumns = h.getSortCols.asScala.map(o => {
+        val column = cols.find(_.name.equalsIgnoreCase(o.getCol))
+        if (column.isEmpty) {
+          throw new AnalysisException(s"No match found for sort column name = ${column.get} " +
+            s"in dbName = $dbName, tableName = $tableName. " +
+            s"Known table columns are ${cols.mkString("[", ", ", "]")}")
+        }
+
+        val sortOrder = if (o.getOrder == HIVE_COLUMN_ORDER_ASC) Ascending else Descending
+        CatalogSortOrder(column.get, sortOrder)
+      })
+
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -348,7 +363,7 @@ private[hive] class HiveClientImpl(
         },
         schema = schema,
         partitionColumnNames = partCols.map(_.name),
-        sortColumnNames = Seq(), // TODO: populate this
+        sortColumns = sortColumns,
         bucketColumnNames = h.getBucketCols.asScala,
         numBuckets = h.getNumBuckets,
         owner = h.getOwner,
