@@ -10,13 +10,11 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{MapOutputStatistics, SimpleFutureAction, ShuffleDependency}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.{SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.joins._
-import org.apache.spark.sql.types.LongType
 
 /**
  * A physical plan tree is divided into a DAG tree of QueryFragment.
@@ -136,6 +134,7 @@ trait QueryFragment extends SparkPlan {
 
       case agg @ TungstenAggregate(_, _, _, _, _, _, input @ FragmentInput(_))
         if (!input.isOptimized())=> {
+        logInfo("Begin optimize agg, operator =\n" + agg.toString)
         optimizeAggregate(agg, input)
       }
 
@@ -262,6 +261,8 @@ case class RootQueryFragment (
 
   private[this] val stopped = new AtomicBoolean(false)
 
+  override def nodeName: String = s"RootQueryFragment (fragment id: ${id})"
+
   protected[sql] override def stageFailed(exception: Throwable): Unit = {
     isThrowException = true
     this.exception = exception
@@ -279,6 +280,7 @@ case class RootQueryFragment (
           logInfo(s"Query Fragment ${id} finished")
           parent.setChildCompleted(child, shuffleDependency, statistics)
           if (parent.isAvailable) {
+            logInfo(s"Query Fragment ${parent.id} is available")
             eventQueue.add(parent)
           }
         case scala.util.Failure(exception) =>
@@ -327,7 +329,10 @@ case class RootQueryFragment (
       assert(this.exception != null)
       throw exception
     } else {
-      rootPlan.execute()
+      logInfo(s"== Submit Query Fragment ${id} Physical plan ==")
+      val executedPlan = sqlContext.sparkSession.sessionState.codegenForExecution(rootPlan)
+      logInfo(stringOrError(executedPlan.toString))
+      executedPlan.execute()
     }
   }
 
@@ -342,4 +347,7 @@ case class RootQueryFragment (
 case class UnaryQueryFragment (
     children: Seq[QueryFragment],
     id: Long,
-    isRoot: Boolean = false) extends QueryFragment {}
+    isRoot: Boolean = false) extends QueryFragment {
+
+  override def nodeName: String = s"UnaryQueryFragment (fragment id: ${id})"
+}
