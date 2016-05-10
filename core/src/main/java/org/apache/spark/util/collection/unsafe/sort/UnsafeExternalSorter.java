@@ -76,6 +76,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   private long pageCursor = -1;
   private long peakMemoryUsedBytes = 0;
   private long totalSpillBytes = 0L;
+  private long totalSortTimeNanos = 0L;
   private volatile SpillableIterator readingIterator = null;
 
   public static UnsafeExternalSorter createWithExistingInMemorySorter(
@@ -245,6 +246,18 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public long getPeakMemoryUsedBytes() {
     updatePeakMemoryUsed();
     return peakMemoryUsedBytes;
+  }
+
+  /**
+   * @return the total amount of time spent sorting data (in-memory only).
+   */
+  public long getSortTimeNanos() {
+    long totalTime = totalSortTimeNanos;
+    UnsafeInMemorySorter sorter = inMemSorter;
+    if (sorter != null) {
+      totalTime += inMemSorter.getSortTimeNanos();
+    }
+    return totalTime;
   }
 
   /**
@@ -505,6 +518,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
         // in-memory sorter will not be used after spilling
         assert(inMemSorter != null);
         released += inMemSorter.getMemoryUsage();
+        totalSortTimeNanos += inMemSorter.getSortTimeNanos();
         inMemSorter.free();
         inMemSorter = null;
         taskContext.taskMetrics().incMemoryBytesSpilled(released);
