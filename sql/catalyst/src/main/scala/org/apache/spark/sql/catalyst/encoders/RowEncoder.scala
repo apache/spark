@@ -84,10 +84,10 @@ object RowEncoder {
         "fromJavaDate",
         inputObject :: Nil)
 
-    case _: DecimalType =>
+    case d: DecimalType =>
       StaticInvoke(
         Decimal.getClass,
-        DecimalType.SYSTEM_DEFAULT,
+        d,
         "fromDecimal",
         inputObject :: Nil)
 

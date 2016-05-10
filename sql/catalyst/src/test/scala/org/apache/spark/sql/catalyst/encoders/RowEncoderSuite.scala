@@ -164,6 +164,16 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(convertedBack.getDecimal(2).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
   }
 
+  test("RowEncoder should preserve decimal precision and scale") {
+    val schema = new StructType().add("decimal", DecimalType(10, 5), false)
+    val encoder = RowEncoder(schema)
+    val decimal = Decimal("67123.45")
+    val input = Row(decimal)
+    val row = encoder.toRow(input)
+
+    assert(row.toSeq(schema).head == decimal)
+  }
+
   test("RowEncoder should preserve schema nullability") {
     val schema = new StructType().add("int", IntegerType, nullable = false)
     val encoder = RowEncoder(schema)
