@@ -402,7 +402,7 @@ class DataFrameReader(object):
     def orc(self, path):
         """Loads an ORC file, returning the result as a :class:`DataFrame`.
 
-        ::Note: Currently ORC support is only available together with
+        .. note:: Currently ORC support is only available together with
         :class:`HiveContext`.
 
         >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
@@ -415,28 +415,31 @@ class DataFrameReader(object):
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
              predicates=None, properties=None):
         """
-        Construct a :class:`DataFrame` representing the database table accessible
-        via JDBC URL `url` named `table` and connection `properties`.
+        Construct a :class:`DataFrame` representing the database table named ``table``
+        accessible via JDBC URL ``url`` and connection ``properties``.
 
-        The `column` parameter could be used to partition the table, then it will
-        be retrieved in parallel based on the parameters passed to this function.
+        Partitions of the table will be retrieved in parallel if either ``column`` or
+        ``predicates`` is specified.
 
-        The `predicates` parameter gives a list expressions suitable for inclusion
-        in WHERE clauses; each one defines one partition of the :class:`DataFrame`.
+        If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
-        ::Note: Don't create too many partitions in parallel on a large cluster;
+        .. note:: Don't create too many partitions in parallel on a large cluster;
         otherwise Spark might crash your external database systems.
 
-        :param url: a JDBC URL
-        :param table: name of table
-        :param column: the column used to partition
-        :param lowerBound: the lower bound of partition column
-        :param upperBound: the upper bound of the partition column
+        :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
+        :param table: the name of the table
+        :param column: the name of an integer column that will be used for partitioning;
+                       if this parameter is specified, then ``numPartitions``, ``lowerBound``
+                       (inclusive), and ``upperBound`` (exclusive) will form partition strides
+                       for generated WHERE clause expressions used to split the column
+                       ``column`` evenly
+        :param lowerBound: the minimum value of ``column`` used to decide partition stride
+        :param upperBound: the maximum value of ``column`` used to decide partition stride
         :param numPartitions: the number of partitions
-        :param predicates: a list of expressions
-        :param properties: JDBC database connection arguments, a list of arbitrary string
-                           tag/value. Normally at least a "user" and "password" property
-                           should be included.
+        :param predicates: a list of expressions suitable for inclusion in WHERE clauses;
+                           each one defines one partition of the :class:`DataFrame`
+        :param properties: a dictionary of JDBC database connection arguments; normally,
+                           at least a "user" and "password" property should be included
         :return: a DataFrame
         """
         if properties is None:
@@ -808,7 +811,7 @@ class DataFrameWriter(object):
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
-        ::Note: Currently ORC support is only available together with
+        .. note:: Currently ORC support is only available together with
         :class:`HiveContext`.
 
         :param path: the path in any Hadoop supported file system
