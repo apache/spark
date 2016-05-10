@@ -179,6 +179,12 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
 
+        val hdfsPath = new Path(path)
+        val fs = hdfsPath.getFileSystem(sparkSession.sessionState.newHadoopConf())
+        if (!fs.isDirectory(hdfsPath)) {
+          throw new IllegalArgumentException("'path' must be a directory")
+        }
+
         def dataFrameBuilder(files: Array[String]): DataFrame = {
           val newOptions = options.filterKeys(_ != "path") + ("basePath" -> path)
           val newDataSource =
