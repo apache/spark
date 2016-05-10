@@ -4,6 +4,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.{LinkedBlockingDeque, BlockingQueue}
 import java.util.{HashMap => JHashMap, Map => JMap}
 
+import org.apache.spark.sql.catalyst.rules.Rule
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.mutable.ArrayBuffer
 
@@ -11,7 +13,7 @@ import org.apache.spark.{MapOutputStatistics, SimpleFutureAction, ShuffleDepende
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.{CollapseCodegenStages, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.execution.joins._
@@ -78,15 +80,19 @@ trait QueryFragment extends SparkPlan {
     this.rootPlan = root
   }
 
-  protected[sql] def isAvailable: Boolean = nextChildIndex >= children.size
+  protected[sql] def isAvailable: Boolean = synchronized {
+    nextChildIndex >= children.size
+  }
 
+  private[sql] def codegenForExecution(plan: SparkPlan): SparkPlan = {
+    CollapseCodegenStages(sqlContext.conf).apply(plan)
+  }
 
   protected def doExecute(): RDD[InternalRow] = null
 
   protected[sql] def adaptiveExecute(): (ShuffleDependency[Int, InternalRow, InternalRow],
     SimpleFutureAction[MapOutputStatistics]) = synchronized {
-    val executedPlan = sqlContext.sparkSession.sessionState.codegenForExecution(exchange)
-      .asInstanceOf[ShuffleExchange]
+    val executedPlan = codegenForExecution(exchange).asInstanceOf[ShuffleExchange]
     logInfo(s"== Submit Query Fragment ${id} Physical plan ==")
     logInfo(stringOrError(executedPlan.toString))
     val shuffleDependency = executedPlan.prepareShuffleDependency()
@@ -117,15 +123,9 @@ trait QueryFragment extends SparkPlan {
   }
 
   protected[sql] def optimizeOperator(): Unit = synchronized {
-    val executedPlan = if (isRoot) {
-      rootPlan
-    } else {
-      exchange
-    }
-    // Optimize plan
     val optimizedPlan = executedPlan.transformDown {
-      case operator @ SortMergeJoinExec(leftKeys, rightKeys, _, _,
-      left@SortExec(_, _, _, _), right@SortExec(_, _, _, _)) => {
+      case operator @ SortMergeJoinExec(leftKeys, rightKeys, _, _, left@SortExec(_, _, _, _),
+          right@SortExec(_, _, _, _)) => {
         logInfo("Begin optimize join, operator =\n" + operator.toString)
         val newOperator = optimizeJoin(operator, left, right)
         logInfo("After optimize join, operator =\n" + newOperator.toString)
@@ -133,7 +133,7 @@ trait QueryFragment extends SparkPlan {
       }
 
       case agg @ TungstenAggregate(_, _, _, _, _, _, input @ FragmentInput(_))
-        if (!input.isOptimized())=> {
+          if (!input.isOptimized())=> {
         logInfo("Begin optimize agg, operator =\n" + agg.toString)
         optimizeAggregate(agg, input)
       }
@@ -224,20 +224,25 @@ trait QueryFragment extends SparkPlan {
       if (leftSizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
         val keys = Utils.rewriteKeyExpr(joinPlan.leftKeys).map(
           BindReferences.bindReference(_, left.child.output))
-        
         newOperator = BroadcastHashJoinExec(
-          joinPlan.leftKeys, joinPlan.rightKeys, joinPlan.joinType, BuildLeft, joinPlan.condition,
-          BroadcastExchangeExec(HashedRelationBroadcastMode(keys),
-            left.child),
+          joinPlan.leftKeys,
+          joinPlan.rightKeys,
+          joinPlan.joinType,
+          BuildLeft,
+          joinPlan.condition,
+          BroadcastExchangeExec(HashedRelationBroadcastMode(keys), left.child),
           right.child)
       } else if (rightSizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
         val keys = Utils.rewriteKeyExpr(joinPlan.rightKeys).map(
           BindReferences.bindReference(_, right.child.output))
         newOperator = BroadcastHashJoinExec(
-          joinPlan.leftKeys, joinPlan.rightKeys, joinPlan.joinType, BuildRight, joinPlan.condition,
+          joinPlan.leftKeys,
+          joinPlan.rightKeys,
+          joinPlan.joinType,
+          BuildRight,
+          joinPlan.condition,
           left.child,
-          BroadcastExchangeExec(HashedRelationBroadcastMode(keys),
-            right.child))
+          BroadcastExchangeExec(HashedRelationBroadcastMode(keys), right.child))
       } 
     }
     newOperator
@@ -269,9 +274,10 @@ case class RootQueryFragment (
     stopped.set(true)
   }
 
-  private val eventQueue: BlockingQueue[QueryFragment] = new LinkedBlockingDeque[QueryFragment]()
+  private[this] val eventQueue: BlockingQueue[QueryFragment] =
+    new LinkedBlockingDeque[QueryFragment]()
 
-  protected def executeFragment(child: QueryFragment) = {
+  protected[sql] def executeFragment(child: QueryFragment) = {
     val (shuffleDependency, futureAction) = child.adaptiveExecute()
     val parent = child.getParentFragment()
     if (futureAction != null) {
@@ -290,11 +296,11 @@ case class RootQueryFragment (
     } else {
       parent.setChildCompleted(child, shuffleDependency, null)
       if (parent.isAvailable) {
+        logInfo(s"Query Fragment ${parent.id} is available")
         eventQueue.add(parent)
       }
     }
   }
-
 
   protected override def doExecute(): RDD[InternalRow] = {
     assert(isRoot == true)
@@ -319,7 +325,6 @@ case class RootQueryFragment (
           } else {
             executeFragment(fragment)
           }
-
         }
       }
     }
@@ -330,18 +335,11 @@ case class RootQueryFragment (
       throw exception
     } else {
       logInfo(s"== Submit Query Fragment ${id} Physical plan ==")
-      val executedPlan = sqlContext.sparkSession.sessionState.codegenForExecution(rootPlan)
+      val executedPlan = codegenForExecution(rootPlan)
       logInfo(stringOrError(executedPlan.toString))
       executedPlan.execute()
     }
   }
-
-  /** Returns a string representation of the nodes in this tree */
-  override def treeString: String =
-    rootPlan.generateTreeString(0, Nil, new StringBuilder).toString
-
-  override def simpleString: String = "QueryFragment"
-
 }
 
 case class UnaryQueryFragment (

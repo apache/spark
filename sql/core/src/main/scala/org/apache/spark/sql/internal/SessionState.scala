@@ -167,12 +167,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
 
-  def codegenForExecution(plan: SparkPlan): SparkPlan = {
-    val codegenRules: Seq[Rule[SparkPlan]] =
-      Seq(CollapseCodegenStages(sparkSession.sessionState.conf))
-    codegenRules.foldLeft(plan) { case (sp, rule) => rule.apply(sp) }
-  }
-
   def refreshTable(tableName: String): Unit = {
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
   }
