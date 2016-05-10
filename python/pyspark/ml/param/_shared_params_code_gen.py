@@ -53,16 +53,18 @@ def _gen_param_header(name, doc, defaultValueStr, typeConverter):
     """
 
     _$name = Param(Params._dummy(), "$name", "$doc", typeConverter=$typeConverter)
-    $name = property(lambda x: x._$name, doc="Param $name, $docWithDefault")
+    $name = property(lambda x: x._$name, doc="Param $name," + _$name.doc$defaultDoc)
 
     def __init__(self):
         super(Has$Name, self).__init__()'''
 
     docWithDefault = doc
+    defaultDoc = ""
     if defaultValueStr is not None:
         template += '''
         self._setDefault($name=$defaultValueStr)'''
         docWithDefault += '''(Default $defaultValueStr)'''
+        defaultDoc = ''' + "(Default $defaultValueStr)"'''
 
     Name = name[0].upper() + name[1:]
     if typeConverter is None:
@@ -71,6 +73,7 @@ def _gen_param_header(name, doc, defaultValueStr, typeConverter):
         .replace("$name", name) \
         .replace("$Name", Name) \
         .replace("$docWithDefault", docWithDefault) \
+        .replace("$defaultDoc", defaultDoc) \
         .replace("$doc", doc) \
         .replace("$defaultValueStr", str(defaultValueStr)) \
         .replace("$typeConverter", typeConverter)
@@ -189,20 +192,21 @@ if __name__ == "__main__":
     dtParamMethods = ""
     dummyPlaceholders = ""
     paramTemplate = """_$name = Param($owner, "$name", "$doc", typeConverter=$typeConverterStr)
-    $name = property(lambda x: x._$name, doc="Param $name, $docWithDefault")"""
+    $name = property(lambda x: x._$name, doc="Param $name," + _$name.doc$defaultDoc)"""
     for name, doc, defaultValueStr, typeConverterStr in decisionTreeParams:
-        docWithDefault = doc
         dtCode = decisionTreeCode
+        defaultDoc = ""
         if defaultValueStr is not None:
             dtCode += '''\n        self._setDefault($name=$defaultValueStr)'''
             dtCode = dtCode.replace("$name", name).replace("$defaultValueStr", defaultValueStr)
-            docWithDefault += "(Default $defaultValueStr)"
-            docWithDefault = docWithDefault.replace("$docWithDefault", docWithDefault) \
-                                           .replace("$defaultValueStr", defaultValueStr)
+            defaultDoc = ''' + "(Default $defaultValueStr)"'''
         if typeConverterStr is None:
             typeConverterStr = str(None)
-        variable = paramTemplate.replace("$name", name).replace("$doc", doc) \
-            .replace("$typeConverterStr", typeConverterStr)
+        variable = paramTemplate.replace("$name", name) \
+                                .replace("$defaultDoc", defaultDoc) \
+                                .replace("$defaultValueStr", defaultValueStr) \
+                                .replace("$doc", doc) \
+                                .replace("$typeConverterStr", typeConverterStr)
         dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
         dtParamMethods += _gen_param_code(name, doc) + "\n"
     code.append(dtCode.replace("$dummyPlaceHolders", dummyPlaceholders) + "\n" + dtParamMethods)

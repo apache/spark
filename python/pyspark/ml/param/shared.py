@@ -26,7 +26,7 @@ class HasMaxIter(Params):
     """
 
     _maxIter = Param(Params._dummy(), "maxIter", "max number of iterations (>= 0).", typeConverter=TypeConverters.toInt)
-    maxIter = property(lambda x: x._maxIter, doc="Param maxIter, max number of iterations (>= 0).")
+    maxIter = property(lambda x: x._maxIter, doc="Param maxIter," + _maxIter.doc)
 
     def __init__(self):
         super(HasMaxIter, self).__init__()
@@ -50,7 +50,7 @@ class HasRegParam(Params):
     """
 
     _regParam = Param(Params._dummy(), "regParam", "regularization parameter (>= 0).", typeConverter=TypeConverters.toFloat)
-    regParam = property(lambda x: x._regParam, doc="Param regParam, regularization parameter (>= 0).")
+    regParam = property(lambda x: x._regParam, doc="Param regParam," + _regParam.doc)
 
     def __init__(self):
         super(HasRegParam, self).__init__()
@@ -74,7 +74,7 @@ class HasFeaturesCol(Params):
     """
 
     _featuresCol = Param(Params._dummy(), "featuresCol", "features column name.", typeConverter=TypeConverters.toString)
-    featuresCol = property(lambda x: x._featuresCol, doc="Param featuresCol, features column name.(Default 'features')")
+    featuresCol = property(lambda x: x._featuresCol, doc="Param featuresCol," + _featuresCol.doc + "(Default 'features')")
 
     def __init__(self):
         super(HasFeaturesCol, self).__init__()
@@ -99,7 +99,7 @@ class HasLabelCol(Params):
     """
 
     _labelCol = Param(Params._dummy(), "labelCol", "label column name.", typeConverter=TypeConverters.toString)
-    labelCol = property(lambda x: x._labelCol, doc="Param labelCol, label column name.(Default 'label')")
+    labelCol = property(lambda x: x._labelCol, doc="Param labelCol," + _labelCol.doc + "(Default 'label')")
 
     def __init__(self):
         super(HasLabelCol, self).__init__()
@@ -124,7 +124,7 @@ class HasPredictionCol(Params):
     """
 
     _predictionCol = Param(Params._dummy(), "predictionCol", "prediction column name.", typeConverter=TypeConverters.toString)
-    predictionCol = property(lambda x: x._predictionCol, doc="Param predictionCol, prediction column name.(Default 'prediction')")
+    predictionCol = property(lambda x: x._predictionCol, doc="Param predictionCol," + _predictionCol.doc + "(Default 'prediction')")
 
     def __init__(self):
         super(HasPredictionCol, self).__init__()
@@ -149,7 +149,7 @@ class HasProbabilityCol(Params):
     """
 
     _probabilityCol = Param(Params._dummy(), "probabilityCol", "Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.", typeConverter=TypeConverters.toString)
-    probabilityCol = property(lambda x: x._probabilityCol, doc="Param probabilityCol, Column name for predicted class conditional probabilities. Note: Not all models output well-calibrated probability estimates! These probabilities should be treated as confidences, not precise probabilities.(Default 'probability')")
+    probabilityCol = property(lambda x: x._probabilityCol, doc="Param probabilityCol," + _probabilityCol.doc + "(Default 'probability')")
 
     def __init__(self):
         super(HasProbabilityCol, self).__init__()
@@ -174,7 +174,7 @@ class HasRawPredictionCol(Params):
     """
 
     _rawPredictionCol = Param(Params._dummy(), "rawPredictionCol", "raw prediction (a.k.a. confidence) column name.", typeConverter=TypeConverters.toString)
-    rawPredictionCol = property(lambda x: x._rawPredictionCol, doc="Param rawPredictionCol, raw prediction (a.k.a. confidence) column name.(Default 'rawPrediction')")
+    rawPredictionCol = property(lambda x: x._rawPredictionCol, doc="Param rawPredictionCol," + _rawPredictionCol.doc + "(Default 'rawPrediction')")
 
     def __init__(self):
         super(HasRawPredictionCol, self).__init__()
@@ -199,7 +199,7 @@ class HasInputCol(Params):
     """
 
     _inputCol = Param(Params._dummy(), "inputCol", "input column name.", typeConverter=TypeConverters.toString)
-    inputCol = property(lambda x: x._inputCol, doc="Param inputCol, input column name.")
+    inputCol = property(lambda x: x._inputCol, doc="Param inputCol," + _inputCol.doc)
 
     def __init__(self):
         super(HasInputCol, self).__init__()
@@ -223,7 +223,7 @@ class HasInputCols(Params):
     """
 
     _inputCols = Param(Params._dummy(), "inputCols", "input column names.", typeConverter=TypeConverters.toListString)
-    inputCols = property(lambda x: x._inputCols, doc="Param inputCols, input column names.")
+    inputCols = property(lambda x: x._inputCols, doc="Param inputCols," + _inputCols.doc)
 
     def __init__(self):
         super(HasInputCols, self).__init__()
@@ -247,7 +247,7 @@ class HasOutputCol(Params):
     """
 
     _outputCol = Param(Params._dummy(), "outputCol", "output column name.", typeConverter=TypeConverters.toString)
-    outputCol = property(lambda x: x._outputCol, doc="Param outputCol, output column name.(Default self.uid + '__output')")
+    outputCol = property(lambda x: x._outputCol, doc="Param outputCol," + _outputCol.doc + "(Default self.uid + '__output')")
 
     def __init__(self):
         super(HasOutputCol, self).__init__()
@@ -272,7 +272,7 @@ class HasNumFeatures(Params):
     """
 
     _numFeatures = Param(Params._dummy(), "numFeatures", "number of features.", typeConverter=TypeConverters.toInt)
-    numFeatures = property(lambda x: x._numFeatures, doc="Param numFeatures, number of features.")
+    numFeatures = property(lambda x: x._numFeatures, doc="Param numFeatures," + _numFeatures.doc)
 
     def __init__(self):
         super(HasNumFeatures, self).__init__()
@@ -296,7 +296,7 @@ class HasCheckpointInterval(Params):
     """
 
     _checkpointInterval = Param(Params._dummy(), "checkpointInterval", "set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.", typeConverter=TypeConverters.toInt)
-    checkpointInterval = property(lambda x: x._checkpointInterval, doc="Param checkpointInterval, set checkpoint interval (>= 1) or disable checkpoint (-1). E.g. 10 means that the cache will get checkpointed every 10 iterations.")
+    checkpointInterval = property(lambda x: x._checkpointInterval, doc="Param checkpointInterval," + _checkpointInterval.doc)
 
     def __init__(self):
         super(HasCheckpointInterval, self).__init__()
@@ -320,7 +320,7 @@ class HasSeed(Params):
     """
 
     _seed = Param(Params._dummy(), "seed", "random seed.", typeConverter=TypeConverters.toInt)
-    seed = property(lambda x: x._seed, doc="Param seed, random seed.(Default hash(type(self).__name__))")
+    seed = property(lambda x: x._seed, doc="Param seed," + _seed.doc + "(Default hash(type(self).__name__))")
 
     def __init__(self):
         super(HasSeed, self).__init__()
@@ -345,7 +345,7 @@ class HasTol(Params):
     """
 
     _tol = Param(Params._dummy(), "tol", "the convergence tolerance for iterative algorithms.", typeConverter=TypeConverters.toFloat)
-    tol = property(lambda x: x._tol, doc="Param tol, the convergence tolerance for iterative algorithms.")
+    tol = property(lambda x: x._tol, doc="Param tol," + _tol.doc)
 
     def __init__(self):
         super(HasTol, self).__init__()
@@ -369,7 +369,7 @@ class HasStepSize(Params):
     """
 
     _stepSize = Param(Params._dummy(), "stepSize", "Step size to be used for each iteration of optimization.", typeConverter=TypeConverters.toFloat)
-    stepSize = property(lambda x: x._stepSize, doc="Param stepSize, Step size to be used for each iteration of optimization.")
+    stepSize = property(lambda x: x._stepSize, doc="Param stepSize," + _stepSize.doc)
 
     def __init__(self):
         super(HasStepSize, self).__init__()
@@ -393,7 +393,7 @@ class HasHandleInvalid(Params):
     """
 
     _handleInvalid = Param(Params._dummy(), "handleInvalid", "how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.", typeConverter=TypeConverters.toString)
-    handleInvalid = property(lambda x: x._handleInvalid, doc="Param handleInvalid, how to handle invalid entries. Options are skip (which will filter out rows with bad values), or error (which will throw an errror). More options may be added later.")
+    handleInvalid = property(lambda x: x._handleInvalid, doc="Param handleInvalid," + _handleInvalid.doc)
 
     def __init__(self):
         super(HasHandleInvalid, self).__init__()
@@ -417,7 +417,7 @@ class HasElasticNetParam(Params):
     """
 
     _elasticNetParam = Param(Params._dummy(), "elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", typeConverter=TypeConverters.toFloat)
-    elasticNetParam = property(lambda x: x._elasticNetParam, doc="Param elasticNetParam, the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.(Default 0.0)")
+    elasticNetParam = property(lambda x: x._elasticNetParam, doc="Param elasticNetParam," + _elasticNetParam.doc + "(Default 0.0)")
 
     def __init__(self):
         super(HasElasticNetParam, self).__init__()
@@ -442,7 +442,7 @@ class HasFitIntercept(Params):
     """
 
     _fitIntercept = Param(Params._dummy(), "fitIntercept", "whether to fit an intercept term.", typeConverter=TypeConverters.toBoolean)
-    fitIntercept = property(lambda x: x._fitIntercept, doc="Param fitIntercept, whether to fit an intercept term.(Default True)")
+    fitIntercept = property(lambda x: x._fitIntercept, doc="Param fitIntercept," + _fitIntercept.doc + "(Default True)")
 
     def __init__(self):
         super(HasFitIntercept, self).__init__()
@@ -467,7 +467,7 @@ class HasStandardization(Params):
     """
 
     _standardization = Param(Params._dummy(), "standardization", "whether to standardize the training features before fitting the model.", typeConverter=TypeConverters.toBoolean)
-    standardization = property(lambda x: x._standardization, doc="Param standardization, whether to standardize the training features before fitting the model.(Default True)")
+    standardization = property(lambda x: x._standardization, doc="Param standardization," + _standardization.doc + "(Default True)")
 
     def __init__(self):
         super(HasStandardization, self).__init__()
@@ -492,7 +492,7 @@ class HasThresholds(Params):
     """
 
     _thresholds = Param(Params._dummy(), "thresholds", "Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.", typeConverter=TypeConverters.toListFloat)
-    thresholds = property(lambda x: x._thresholds, doc="Param thresholds, Thresholds in multi-class classification to adjust the probability of predicting each class. Array must have length equal to the number of classes, with values >= 0. The class with largest value p/t is predicted, where p is the original probability of that class and t is the class' threshold.")
+    thresholds = property(lambda x: x._thresholds, doc="Param thresholds," + _thresholds.doc)
 
     def __init__(self):
         super(HasThresholds, self).__init__()
@@ -516,7 +516,7 @@ class HasWeightCol(Params):
     """
 
     _weightCol = Param(Params._dummy(), "weightCol", "weight column name. If this is not set or empty, we treat all instance weights as 1.0.", typeConverter=TypeConverters.toString)
-    weightCol = property(lambda x: x._weightCol, doc="Param weightCol, weight column name. If this is not set or empty, we treat all instance weights as 1.0.")
+    weightCol = property(lambda x: x._weightCol, doc="Param weightCol," + _weightCol.doc)
 
     def __init__(self):
         super(HasWeightCol, self).__init__()
@@ -540,7 +540,7 @@ class HasSolver(Params):
     """
 
     _solver = Param(Params._dummy(), "solver", "the solver algorithm for optimization.", typeConverter=TypeConverters.toString)
-    solver = property(lambda x: x._solver, doc="Param solver, the solver algorithm for optimization.(Default 'auto')")
+    solver = property(lambda x: x._solver, doc="Param solver," + _solver.doc + "(Default 'auto')")
 
     def __init__(self):
         super(HasSolver, self).__init__()
@@ -565,7 +565,7 @@ class HasVarianceCol(Params):
     """
 
     _varianceCol = Param(Params._dummy(), "varianceCol", "column name for the biased sample variance of prediction.", typeConverter=TypeConverters.toString)
-    varianceCol = property(lambda x: x._varianceCol, doc="Param varianceCol, column name for the biased sample variance of prediction.")
+    varianceCol = property(lambda x: x._varianceCol, doc="Param varianceCol," + _varianceCol.doc)
 
     def __init__(self):
         super(HasVarianceCol, self).__init__()
@@ -589,17 +589,17 @@ class DecisionTreeParams(Params):
     """
 
     _maxDepth = Param(Params._dummy(), "maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.", typeConverter=TypeConverters.toInt)
-    maxDepth = property(lambda x: x._maxDepth, doc="Param maxDepth, Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; depth 1 means 1 internal node + 2 leaf nodes.WithDefault")
+    maxDepth = property(lambda x: x._maxDepth, doc="Param maxDepth," + _maxDepth.doc + "(Default 5)")
     _maxBins = Param(Params._dummy(), "maxBins", "Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.", typeConverter=TypeConverters.toInt)
-    maxBins = property(lambda x: x._maxBins, doc="Param maxBins, Max number of bins for discretizing continuous features.  Must be >=2 and >= number of categories for any categorical feature.WithDefault")
+    maxBins = property(lambda x: x._maxBins, doc="Param maxBins," + _maxBins.doc + "(Default 32)")
     _minInstancesPerNode = Param(Params._dummy(), "minInstancesPerNode", "Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.", typeConverter=TypeConverters.toInt)
-    minInstancesPerNode = property(lambda x: x._minInstancesPerNode, doc="Param minInstancesPerNode, Minimum number of instances each child must have after split. If a split causes the left or right child to have fewer than minInstancesPerNode, the split will be discarded as invalid. Should be >= 1.WithDefault")
+    minInstancesPerNode = property(lambda x: x._minInstancesPerNode, doc="Param minInstancesPerNode," + _minInstancesPerNode.doc + "(Default 1)")
     _minInfoGain = Param(Params._dummy(), "minInfoGain", "Minimum information gain for a split to be considered at a tree node.", typeConverter=TypeConverters.toFloat)
-    minInfoGain = property(lambda x: x._minInfoGain, doc="Param minInfoGain, Minimum information gain for a split to be considered at a tree node.WithDefault")
+    minInfoGain = property(lambda x: x._minInfoGain, doc="Param minInfoGain," + _minInfoGain.doc + "(Default 0.0)")
     _maxMemoryInMB = Param(Params._dummy(), "maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its aggregates may exceed this size.", typeConverter=TypeConverters.toInt)
-    maxMemoryInMB = property(lambda x: x._maxMemoryInMB, doc="Param maxMemoryInMB, Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be split per iteration, and its aggregates may exceed this size.WithDefault")
+    maxMemoryInMB = property(lambda x: x._maxMemoryInMB, doc="Param maxMemoryInMB," + _maxMemoryInMB.doc + "(Default 256)")
     _cacheNodeIds = Param(Params._dummy(), "cacheNodeIds", "If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.", typeConverter=TypeConverters.toBoolean)
-    cacheNodeIds = property(lambda x: x._cacheNodeIds, doc="Param cacheNodeIds, If false, the algorithm will pass trees to executors to match instances with nodes. If true, the algorithm will cache node IDs for each instance. Caching can speed up training of deeper trees. Users can set how often should the cache be checkpointed or disable it by setting checkpointInterval.WithDefault")
+    cacheNodeIds = property(lambda x: x._cacheNodeIds, doc="Param cacheNodeIds," + _cacheNodeIds.doc + "(Default False)")
     
 
     def __init__(self):
