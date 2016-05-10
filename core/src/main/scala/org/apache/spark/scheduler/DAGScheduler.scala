@@ -183,6 +183,14 @@ class DAGScheduler(
 
   private val messageScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("dag-scheduler-message")
+  private val msgsScheduled = new AtomicInteger(0)
+
+  /**
+   * Visible for testing, to know if the DAGScheduler is still "busy"
+   */
+  private[scheduler] def msgSchedulerEmpty: Boolean = {
+    msgsScheduled.get() == 0
+  }
 
   private[scheduler] val eventProcessLoop = new DAGSchedulerEventProcessLoop(this)
   taskScheduler.setDAGScheduler(this)
@@ -1283,8 +1291,15 @@ class DAGScheduler(
             // TODO: Cancel running tasks in the stage
             logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
               s"$failedStage (${failedStage.name}) due to fetch failure")
+            // We might get lots of fetch failed for this stage, from lots of executors.
+            // Its better if we can resubmit for all the failed executors at one time, so lets
+            // just wait a *bit* before we resubmit.
+            msgsScheduled.incrementAndGet()
             messageScheduler.schedule(new Runnable {
-              override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
+              override def run(): Unit = {
+                eventProcessLoop.post(ResubmitFailedStages)
+                msgsScheduled.decrementAndGet()
+              }
             }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
           }
           failedStages += failedStage
@@ -1411,7 +1426,7 @@ class DAGScheduler(
       stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
-      logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
+      logInfo(s"$stage (${stage.name}) failed in $serviceTime s due to ${errorMessage.get}")
     }
 
     outputCommitCoordinator.stageEnd(stage.id)

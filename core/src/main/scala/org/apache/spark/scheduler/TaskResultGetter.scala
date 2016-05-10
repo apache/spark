@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 import java.util.concurrent.{ExecutorService, RejectedExecutionException}
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.language.existentials
 import scala.util.control.NonFatal
@@ -37,6 +38,11 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
 
   private val THREADS = sparkEnv.conf.getInt("spark.resultGetter.threads", 4)
 
+  private val nTasks = new AtomicInteger(0)
+  def isEmpty: Boolean = {
+    nTasks.get() == 0
+  }
+
   // Exposed for testing.
   protected val getTaskResultExecutor: ExecutorService =
     ThreadUtils.newDaemonFixedThreadPool(THREADS, "task-result-getter")
@@ -52,6 +58,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
       taskSetManager: TaskSetManager,
       tid: Long,
       serializedData: ByteBuffer): Unit = {
+    nTasks.incrementAndGet()
     getTaskResultExecutor.execute(new Runnable {
       override def run(): Unit = Utils.logUncaughtExceptions {
         try {
@@ -111,6 +118,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
           case NonFatal(ex) =>
             logError("Exception while getting task result", ex)
             taskSetManager.abort("Exception while getting task result: %s".format(ex))
+        } finally {
+          nTasks.decrementAndGet()
         }
       }
     })
@@ -119,6 +128,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
     serializedData: ByteBuffer) {
     var reason : TaskEndReason = UnknownReason
+    nTasks.incrementAndGet()
     try {
       getTaskResultExecutor.execute(new Runnable {
         override def run(): Unit = Utils.logUncaughtExceptions {
@@ -142,6 +152,8 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
     } catch {
       case e: RejectedExecutionException if sparkEnv.isStopped =>
         // ignore it
+    } finally {
+      nTasks.decrementAndGet()
     }
   }
 

@@ -2420,6 +2420,14 @@ object SparkContext extends Logging {
         scheduler.initialize(backend)
         (backend, scheduler)
 
+      case MOCK_REGEX(backendClassName) =>
+        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val backendClass = Utils.classForName(backendClassName)
+        val ctor = backendClass.getConstructor(classOf[SparkConf], classOf[TaskSchedulerImpl])
+        val backend = ctor.newInstance(sc.getConf, scheduler).asInstanceOf[SchedulerBackend]
+        scheduler.initialize(backend)
+        (backend, scheduler)
+
       case LOCAL_N_REGEX(threads) =>
         def localCpuCount: Int = Runtime.getRuntime.availableProcessors()
         // local[*] estimates the number of cores on the machine; local[N] uses exactly N threads.
@@ -2520,6 +2528,7 @@ object SparkContext extends Logging {
  * A collection of regexes for extracting information from the master string.
  */
 private object SparkMasterRegex {
+  val MOCK_REGEX = """mock\[(.*)\]""".r
   // Regular expression used for local[N] and local[*] master formats
   val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
   // Regular expression for local[N, maxRetries], used in tests with failing tasks

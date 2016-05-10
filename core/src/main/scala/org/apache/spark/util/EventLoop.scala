@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.util.concurrent.{BlockingQueue, LinkedBlockingDeque}
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.util.control.NonFatal
 
@@ -36,6 +36,7 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
   private val eventQueue: BlockingQueue[E] = new LinkedBlockingDeque[E]()
 
   private val stopped = new AtomicBoolean(false)
+  private val nMsgs = new AtomicInteger(0)
 
   private val eventThread = new Thread(name) {
     setDaemon(true)
@@ -46,6 +47,7 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
           val event = eventQueue.take()
           try {
             onReceive(event)
+            nMsgs.decrementAndGet()
           } catch {
             case NonFatal(e) =>
               try {
@@ -99,6 +101,7 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
    * Put the event into the event queue. The event thread will process it later.
    */
   def post(event: E): Unit = {
+    nMsgs.incrementAndGet()
     eventQueue.put(event)
   }
 
@@ -106,6 +109,10 @@ private[spark] abstract class EventLoop[E](name: String) extends Logging {
    * Return if the event thread has already been started but not yet stopped.
    */
   def isActive: Boolean = eventThread.isAlive
+
+  def isEmpty: Boolean = {
+    nMsgs.get() == 0
+  }
 
   /**
    * Invoked when `start()` is called but before the event thread starts.
