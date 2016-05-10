@@ -27,6 +27,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
@@ -60,8 +61,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
 
   private def requireFunctionExists(db: String, funcName: String): Unit = {
     if (!functionExists(db, funcName)) {
-      throw new AnalysisException(
-        s"Function not found: '$funcName' does not exist in database '$db'")
+      throw new NoSuchFunctionException(db = db, func = funcName)
     }
   }
 
@@ -74,8 +74,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
 
   private def requireTableExists(db: String, table: String): Unit = {
     if (!tableExists(db, table)) {
-      throw new AnalysisException(
-        s"Table or view not found: '$table' does not exist in database '$db'")
+      throw new NoSuchTableException(db = db, table = table)
     }
   }
 
@@ -92,8 +91,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       specs: Seq[TablePartitionSpec]): Unit = {
     specs foreach { s =>
       if (!partitionExists(db, table, s)) {
-        throw new AnalysisException(
-          s"Partition not found: database '$db' table '$table' does not contain: '$s'")
+        throw new NoSuchPartitionException(db = db, table = table, spec = s)
       }
     }
   }
@@ -121,7 +119,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       ignoreIfExists: Boolean): Unit = synchronized {
     if (catalog.contains(dbDefinition.name)) {
       if (!ignoreIfExists) {
-        throw new AnalysisException(s"Database '${dbDefinition.name}' already exists.")
+        throw new AlreadyExistDatabaseException(dbDefinition.name)
       }
     } else {
       try {
@@ -161,7 +159,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       catalog.remove(db)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Database '$db' does not exist")
+        throw new NoSuchDatabaseException(db)
       }
     }
   }
@@ -202,7 +200,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     val table = tableDefinition.identifier.table
     if (tableExists(db, table)) {
       if (!ignoreIfExists) {
-        throw new AnalysisException(s"Table '$table' already exists in database '$db'")
+        throw new AlreadyExistTableException(db = db, table = table)
       }
     } else {
       if (tableDefinition.tableType == CatalogTableType.MANAGED) {
@@ -238,7 +236,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       catalog(db).tables.remove(table)
     } else {
       if (!ignoreIfNotExists) {
-        throw new AnalysisException(s"Table or view '$table' does not exist in database '$db'")
+        throw new NoSuchTableException(db = db, table = table)
       }
     }
   }
@@ -328,9 +326,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     if (!ignoreIfExists) {
       val dupSpecs = parts.collect { case p if existingParts.contains(p.spec) => p.spec }
       if (dupSpecs.nonEmpty) {
-        val dupSpecsStr = dupSpecs.mkString("\n===\n")
-        throw new AnalysisException("The following partitions already exist in database " +
-          s"'$db' table '$table':\n$dupSpecsStr")
+        throw new AlreadyExistPartitionsException(db = db, table = table, specs = dupSpecs)
       }
     }
 
@@ -365,9 +361,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
     if (!ignoreIfNotExists) {
       val missingSpecs = partSpecs.collect { case s if !existingParts.contains(s) => s }
       if (missingSpecs.nonEmpty) {
-        val missingSpecsStr = missingSpecs.mkString("\n===\n")
-        throw new AnalysisException("The following partitions do not exist in database " +
-          s"'$db' table '$table':\n$missingSpecsStr")
+        throw new NoSuchPartitionsException(db = db, table = table, specs = missingSpecs)
       }
     }
 
@@ -467,7 +461,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   override def createFunction(db: String, func: CatalogFunction): Unit = synchronized {
     requireDbExists(db)
     if (functionExists(db, func.identifier.funcName)) {
-      throw new AnalysisException(s"Function '$func' already exists in '$db' database")
+      throw new AlreadyExistFunctionException(db = db, func = func.identifier.funcName)
     } else {
       catalog(db).functions.put(func.identifier.funcName, func)
     }
