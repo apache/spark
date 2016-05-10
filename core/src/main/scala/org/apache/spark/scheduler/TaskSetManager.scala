@@ -787,8 +787,12 @@ private[spark] class TaskSetManager(
           addPendingTask(index)
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
-          sched.dagScheduler.taskEnded(
-            tasks(index), Resubmitted, null, Seq.empty[AccumulableInfo], info)
+          // The reason for not resubmitting ZombieTasks is make DAGScheduler to
+          // know whether the lost partition can re-run on current activeTaskSet or not.
+          if (!isZombie) {
+            sched.dagScheduler.taskEnded(
+              tasks(index), Resubmitted, null, Seq.empty[AccumulableInfo], info)
+          }
         }
       }
     }

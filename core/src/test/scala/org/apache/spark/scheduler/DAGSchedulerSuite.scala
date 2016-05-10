@@ -122,6 +122,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     override def cancelTasks(stageId: Int, interruptThread: Boolean) {
       cancelledStages += stageId
     }
+    override def zombieTasks(stageId: Int): Unit = {}
     override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
     override def executorLost(executorId: String, reason: ExecutorLossReason): Unit = {}
@@ -480,6 +481,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       override def cancelTasks(stageId: Int, interruptThread: Boolean) {
         throw new UnsupportedOperationException
       }
+      override def zombieTasks(stageId: Int): Unit = {}
       override def setDAGScheduler(dagScheduler: DAGScheduler): Unit = {}
       override def defaultParallelism(): Int = 2
       override def executorHeartbeatReceived(
@@ -1272,12 +1274,13 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
       Success,
       makeMapStatus("hostA", reduceRdd.partitions.length)))
 
-    // now that host goes down
-    runEvent(ExecutorLost("exec-hostA"))
-
     // so we resubmit those tasks
+    // note these resubmit events arrived earlier than ExecutorLost
     runEvent(makeCompletionEvent(taskSets(0).tasks(0), Resubmitted, null))
     runEvent(makeCompletionEvent(taskSets(0).tasks(1), Resubmitted, null))
+
+    // now that host goes down
+    runEvent(ExecutorLost("exec-hostA"))
 
     // now complete everything on a different host
     complete(taskSets(0), Seq(
@@ -1302,6 +1305,72 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val stage1TaskSet = taskSets(1)
     assert(stage1TaskSet.stageId == 1)
     assert(stage1TaskSet.stageAttemptId == 0)
+  }
+
+  test("Resubmit stage while lost partition in ZombieTasksets or RemovedTaskSets") {
+    val firstRDD = new MyRDD(sc, 3, Nil)
+    val firstShuffleDep = new ShuffleDependency(firstRDD, new HashPartitioner(3))
+    val firstShuffleId = firstShuffleDep.shuffleId
+    val shuffleMapRdd = new MyRDD(sc, 3, List(firstShuffleDep))
+    val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(3))
+    val reduceRdd = new MyRDD(sc, 1, List(shuffleDep))
+    submit(reduceRdd, Array(0))
+
+    // things start out smoothly, stage 0 completes with no issues
+    complete(taskSets(0), Seq(
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.length)),
+      (Success, makeMapStatus("hostA", shuffleMapRdd.partitions.length))
+    ))
+
+    // then start running stage 1
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(0),
+      Success,
+      makeMapStatus("hostD", shuffleMapRdd.partitions.length)))
+
+    // simulate make stage 1 resubmit, notice for stage1.0
+    // partitionId=1 already finished in hostD, so if we resubmit stage1,
+    // stage 1.1 only resubmit tasks for partitionId = 0,2
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      FetchFailed(null, firstShuffleId, 2, 1, "Fetch failed"), null))
+    scheduler.resubmitFailedStages()
+
+    val stage1Resubmit1 = taskSets(2)
+    assert(stage1Resubmit1.stageId == 1)
+    assert(stage1Resubmit1.tasks.size == 2)
+
+    // now exec-hostD lost, so the output loc of stage1 partitionId=1 will lost.
+    // runEvent(makeCompletionEvent(taskSets(1).tasks(0), Resubmitted, null))
+    runEvent(ExecutorLost("exec-hostD"))
+    scheduler.resubmitFailedStages()
+    sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS)
+
+    assert(taskSets(3).tasks.size == 3) // both stage 1 partition 0/1/2
+
+    // let stage1Resubmit1 complete
+    complete(taskSets(2), Seq(
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.length)),
+      (Success, makeMapStatus("hostB", shuffleMapRdd.partitions.length))
+    ))
+
+    // and let we complete stage1Resubmit0's active running Tasks
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(1),
+      Success,
+      makeMapStatus("hostC", shuffleMapRdd.partitions.length)))
+    runEvent(makeCompletionEvent(
+      taskSets(1).tasks(2),
+      Success,
+      makeMapStatus("hostC", shuffleMapRdd.partitions.length)))
+
+    runEvent(makeCompletionEvent(
+      taskSets(3).tasks(0),
+      Success,
+      makeMapStatus("hostC", shuffleMapRdd.partitions.length)))
+
+    assert(scheduler.runningStages.head.isInstanceOf[ResultStage])
   }
 
   /**
@@ -1467,16 +1536,20 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     // blockManagerMaster.removeExecutor("exec-hostA")
     // pretend we were told hostA went away
     runEvent(ExecutorLost("exec-hostA"))
+
     // DAGScheduler will immediately resubmit the stage after it appears to have no pending tasks
     // rather than marking it is as failed and waiting.
     complete(taskSets(0), Seq(
       (Success, makeMapStatus("hostA", 1)),
       (Success, makeMapStatus("hostB", 1))))
+
+    // In previous due to pendingPartitions -= expiredTask.partitonID,
+    // so will cause Stage resubmit, now we ignored expiredTask partition.
     // have hostC complete the resubmitted task
-    complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
+    complete(taskSets(0), Seq((Success, makeMapStatus("hostC", 1))))
     assert(mapOutputTracker.getMapSizesByExecutorId(shuffleId, 0).map(_._1).toSet ===
       HashSet(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
-    complete(taskSets(2), Seq((Success, 42)))
+    complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
   }
@@ -1927,8 +2000,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     runEvent(makeCompletionEvent(oldTaskSet.tasks(0), Success, makeMapStatus("hostA", 2)))
     assert(results.size === 0)    // Map stage job should not be complete yet
 
+
     // Pretend host A was lost
     val oldEpoch = mapOutputTracker.getEpoch
+    runEvent(makeCompletionEvent(taskSets(0).tasks(0), Resubmitted, null))
     runEvent(ExecutorLost("exec-hostA"))
     val newEpoch = mapOutputTracker.getEpoch
     assert(newEpoch > oldEpoch)
@@ -1941,12 +2016,10 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     runEvent(makeCompletionEvent(oldTaskSet.tasks(2), Success, makeMapStatus("hostB", 2)))
     assert(results.size === 0)    // Map stage job should not be complete yet
 
-    // Now complete tasks in the second task set
-    val newTaskSet = taskSets(1)
-    assert(newTaskSet.tasks.size === 2)     // Both tasks 0 and 1 were on on hostA
-    runEvent(makeCompletionEvent(newTaskSet.tasks(0), Success, makeMapStatus("hostB", 2)))
+    assert(scheduler.runningStages.head.pendingPartitions.size === 2)     // Both tasks 0 and 1
+    runEvent(makeCompletionEvent(oldTaskSet.tasks(0), Success, makeMapStatus("hostB", 2)))
     assert(results.size === 0)    // Map stage job should not be complete yet
-    runEvent(makeCompletionEvent(newTaskSet.tasks(1), Success, makeMapStatus("hostB", 2)))
+    runEvent(makeCompletionEvent(oldTaskSet.tasks(1), Success, makeMapStatus("hostB", 2)))
     assert(results.size === 1)    // Map stage job should now finally be complete
     assertDataStructuresEmpty()
 
@@ -1954,7 +2027,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     val reduceRDD = new MyRDD(sc, 2, List(shuffleDep), tracker = mapOutputTracker)
     results.clear()
     submit(reduceRDD, Array(0, 1))
-    complete(taskSets(2), Seq((Success, 42), (Success, 43)))
+    complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
     results.clear()
     assertDataStructuresEmpty()
