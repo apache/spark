@@ -248,7 +248,7 @@ private[spark] object ReliableCheckpointRDD extends Logging {
           try {
             serializer.deserializeStream(fileInputStream)
           } catch {
-            case ex =>
+            case ex : Throwable =>
               fileInputStream.close()
               throw ex
           }
