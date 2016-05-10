@@ -35,8 +35,8 @@ import org.apache.spark.streaming.flume.sink.{SparkSink, SparkSinkConfig}
  */
 private[flume] class PollingFlumeTestUtils {
 
-  private val batchCount = 3
-  val eventsPerBatch = 10
+  private val batchCount = 5
+  val eventsPerBatch = 100
   private val totalEventsPerChannel = batchCount * eventsPerBatch
   private val channelCapacity = 5000
 
@@ -200,7 +200,7 @@ private[flume] class PollingFlumeTestUtils {
         }
         tx.commit()
         tx.close()
-        Thread.sleep(50) // Allow some time for the events to reach
+        Thread.sleep(500) // Allow some time for the events to reach
       }
       null
     }
