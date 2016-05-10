@@ -143,21 +143,25 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(input.getStruct(0) == convertedBack.getStruct(0))
   }
 
-  test("encode/decode Decimal") {
+  test("encode/decode decimal type") {
     val schema = new StructType()
-      .add("int", IntegerType)
-      .add("string", StringType)
-      .add("double", DoubleType)
-      .add("decimal", DecimalType.SYSTEM_DEFAULT)
+      .add("java_decimal", DecimalType.SYSTEM_DEFAULT)
+      .add("scala_decimal", DecimalType.SYSTEM_DEFAULT)
+      .add("catalyst_decimal", DecimalType.SYSTEM_DEFAULT)
 
     val encoder = RowEncoder(schema)
 
-    val input: Row = Row(100, "test", 0.123, Decimal(1234.5678))
+    val javaDecimal = new java.math.BigDecimal("1234.5678")
+    val scalaDecimal = BigDecimal("1234.5678")
+    val catalystDecimal = Decimal("1234.5678")
+
+    val input = Row(javaDecimal, scalaDecimal, catalystDecimal)
     val row = encoder.toRow(input)
     val convertedBack = encoder.fromRow(row)
-    // Decimal inside external row will be converted back to Java BigDecimal when decoding.
-    assert(input.get(3).asInstanceOf[Decimal].toJavaBigDecimal
-      .compareTo(convertedBack.getDecimal(3)) == 0)
+    // Decimal will be converted back to Java BigDecimal when decoding.
+    assert(convertedBack.getDecimal(0).compareTo(javaDecimal) == 0)
+    assert(convertedBack.getDecimal(1).compareTo(scalaDecimal.bigDecimal) == 0)
+    assert(convertedBack.getDecimal(2).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
   }
 
   test("RowEncoder should preserve schema nullability") {
