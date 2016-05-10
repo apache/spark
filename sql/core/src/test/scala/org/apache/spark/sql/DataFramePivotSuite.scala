@@ -81,11 +81,11 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
   }
 
   test("pivot max values enforced") {
-    sqlContext.conf.setConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES, 1)
+    spark.conf.set(SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key, 1)
     intercept[AnalysisException](
       courseSales.groupBy("year").pivot("course")
     )
-    sqlContext.conf.setConf(SQLConf.DATAFRAME_PIVOT_MAX_VALUES,
+    spark.conf.set(SQLConf.DATAFRAME_PIVOT_MAX_VALUES.key,
       SQLConf.DATAFRAME_PIVOT_MAX_VALUES.defaultValue.get)
   }
 
@@ -104,7 +104,7 @@ class DataFramePivotSuite extends QueryTest with SharedSQLContext{
       // pivot with extra columns to trigger optimization
       .pivot("course", Seq("dotNET", "Java") ++ (1 to 10).map(_.toString))
       .agg(sum($"earnings"))
-    val queryExecution = sqlContext.executePlan(df.queryExecution.logical)
+    val queryExecution = spark.executePlan(df.queryExecution.logical)
     assert(queryExecution.simpleString.contains("pivotfirst"))
   }
 

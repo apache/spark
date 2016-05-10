@@ -24,11 +24,10 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
@@ -37,19 +36,20 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaStopWordsRemoverSuite {
 
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
+  private transient SparkSession spark;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaStopWordsRemoverSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaStopWordsRemoverSuite")
+      .getOrCreate();
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -62,11 +62,11 @@ public class JavaStopWordsRemoverSuite {
       RowFactory.create(Arrays.asList("I", "saw", "the", "red", "baloon")),
       RowFactory.create(Arrays.asList("Mary", "had", "a", "little", "lamb"))
     );
-    StructType schema = new StructType(new StructField[] {
+    StructType schema = new StructType(new StructField[]{
       new StructField("raw", DataTypes.createArrayType(DataTypes.StringType), false,
-                      Metadata.empty())
+        Metadata.empty())
     });
-    Dataset<Row> dataset = jsql.createDataFrame(data, schema);
+    Dataset<Row> dataset = spark.createDataFrame(data, schema);
 
     remover.transform(dataset).collect();
   }

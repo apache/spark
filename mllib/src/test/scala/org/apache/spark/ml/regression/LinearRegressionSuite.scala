@@ -42,7 +42,7 @@ class LinearRegressionSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    datasetWithDenseFeature = sqlContext.createDataFrame(
+    datasetWithDenseFeature = spark.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
@@ -50,7 +50,7 @@ class LinearRegressionSuite
        datasetWithDenseFeatureWithoutIntercept is not needed for correctness testing
        but is useful for illustrating training model without intercept
      */
-    datasetWithDenseFeatureWithoutIntercept = sqlContext.createDataFrame(
+    datasetWithDenseFeatureWithoutIntercept = spark.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 0.0, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
@@ -59,7 +59,7 @@ class LinearRegressionSuite
     // When feature size is larger than 4096, normal optimizer is choosed
     // as the solver of linear regression in the case of "auto" mode.
     val featureSize = 4100
-    datasetWithSparseFeature = sqlContext.createDataFrame(
+    datasetWithSparseFeature = spark.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble()).toArray,
         xMean = Seq.fill(featureSize)(r.nextDouble()).toArray,
@@ -74,7 +74,7 @@ class LinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    datasetWithWeight = sqlContext.createDataFrame(
+    datasetWithWeight = spark.createDataFrame(
       sc.parallelize(Seq(
         Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
         Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
@@ -90,14 +90,14 @@ class LinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df.const.label <- as.data.frame(cbind(A, b.const))
      */
-    datasetWithWeightConstantLabel = sqlContext.createDataFrame(
+    datasetWithWeightConstantLabel = spark.createDataFrame(
       sc.parallelize(Seq(
         Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
         Instance(17.0, 2.0, Vectors.dense(1.0, 7.0)),
         Instance(17.0, 3.0, Vectors.dense(2.0, 11.0)),
         Instance(17.0, 4.0, Vectors.dense(3.0, 13.0))
       ), 2))
-    datasetWithWeightZeroLabel = sqlContext.createDataFrame(
+    datasetWithWeightZeroLabel = spark.createDataFrame(
       sc.parallelize(Seq(
         Instance(0.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
         Instance(0.0, 2.0, Vectors.dense(1.0, 7.0)),
@@ -828,8 +828,8 @@ class LinearRegressionSuite
         }
         val data2 = weightedSignedData ++ weightedNoiseData
 
-        (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
-          sqlContext.createDataFrame(sc.parallelize(data2, 4)))
+        (spark.createDataFrame(sc.parallelize(data1, 4)),
+          spark.createDataFrame(sc.parallelize(data2, 4)))
       }
 
       val trainer1a = (new LinearRegression).setFitIntercept(true)
@@ -1010,7 +1010,7 @@ class LinearRegressionSuite
   test("should support all NumericType labels and not support other types") {
     val lr = new LinearRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
-      lr, isClassification = false, sqlContext) { (expected, actual) =>
+      lr, isClassification = false, spark) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }
