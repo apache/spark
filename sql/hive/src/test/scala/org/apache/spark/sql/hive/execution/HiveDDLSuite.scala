@@ -498,10 +498,21 @@ class HiveDDLSuite
   }
 
   test("drop default database") {
-    val message = intercept[AnalysisException] {
-      sql("DROP DATABASE default")
-    }.getMessage
-    assert(message.contains("Can not drop default database"))
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        var message = intercept[AnalysisException] {
+          sql("DROP DATABASE default")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+
+        // SQLConf.CASE_SENSITIVE does not affect the result
+        // because the Hive metastore is not case sensitive.
+        message = intercept[AnalysisException] {
+          sql("DROP DATABASE DeFault")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+      }
+    }
   }
 
   test("desc table for data source table") {

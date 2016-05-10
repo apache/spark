@@ -644,16 +644,16 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A'"),
-      Row("showdb1A") :: Nil)
+      Row("showdb1a") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE 'showdb1A'"),
-      Row("showdb1A") :: Nil)
+      Row("showdb1a") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A|*db2B'"),
-      Row("showdb1A") ::
-        Row("showdb2B") :: Nil)
+      Row("showdb1a") ::
+        Row("showdb2b") :: Nil)
 
     checkAnswer(
       sql("SHOW DATABASES LIKE 'non-existentdb'"),
@@ -999,5 +999,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Row("Function: ^") ::
         Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
     )
+  }
+
+  test("drop default database") {
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        var message = intercept[AnalysisException] {
+          sql("DROP DATABASE default")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+
+        message = intercept[AnalysisException] {
+          sql("DROP DATABASE DeFault")
+        }.getMessage
+        if (caseSensitive == "true") {
+          assert(message.contains("Database 'DeFault' does not exist"))
+        } else {
+          assert(message.contains("Can not drop default database"))
+        }
+      }
+    }
   }
 }
