@@ -202,7 +202,7 @@ class SQLContext private[sql](
     }
 
   @transient
-  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer
+  protected[sql] lazy val optimizer: Optimizer = DefaultOptimizer(conf)
 
   @transient
   protected[sql] val ddlParser = new DDLParser(sqlParser.parse(_))

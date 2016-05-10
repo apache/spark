@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.CatalystConf
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Expand, LogicalPlan}
@@ -99,7 +100,7 @@ import org.apache.spark.sql.types.IntegerType
  * we could improve this in the current rule by applying more advanced expression cannocalization
  * techniques.
  */
-object DistinctAggregationRewriter extends Rule[LogicalPlan] {
+case class DistinctAggregationRewriter(conf: CatalystConf) extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transformUp  {
     case a: Aggregate => rewrite(a)
@@ -119,7 +120,15 @@ object DistinctAggregationRewriter extends Rule[LogicalPlan] {
       .filter(_.isDistinct)
       .groupBy(_.aggregateFunction.children.toSet)
 
-    if (distinctAggGroups.size > 1) {
+    val shouldRewrite = if (conf.specializeSingleDistinctAggPlanning) {
+      // When the flag is set to specialize single distinct agg planning,
+      // we will rely on our Aggregation strategy to handle queries with a single
+      // distinct column.
+      distinctAggGroups.size > 1
+    } else {
+      distinctAggGroups.size >= 1
+    }
+    if (shouldRewrite) {
       // Create the attributes for the grouping id and the group by clause.
       val gid = new AttributeReference("gid", IntegerType, false)()
       val groupByMap = a.groupingExpressions.collect {
