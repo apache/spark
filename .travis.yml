@@ -13,10 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Travis CI Guide
-# - Environment Setup: https://docs.travis-ci.com/user/trusty-ci-environment
-# - Buidling Java Project: https://docs.travis-ci.com/user/languages/java
-# - Caching: https://docs.travis-ci.com/user/caching
+# Spark provides this Travis CI configuration file to help contributors
+# check Scala/Java style conformance and JDK7/8 compilation easily
+# during their preparing pull requests.
+#   - Scalastyle is executed during `maven install` implicitly.
+#   - Java Checkstyle is executed by `lint-java`.
+# See the related discussion here.
+# https://github.com/apache/spark/pull/12980
 
 # 1. Choose OS (Ubuntu 14.04.3 LTS Server Edition 64bit, ~2 CORE, 7.5GB RAM)
 sudo: required
