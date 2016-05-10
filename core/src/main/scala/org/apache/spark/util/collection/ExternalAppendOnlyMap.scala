@@ -584,7 +584,7 @@ class ExternalAppendOnlyMap[K, V, C](
           s"it will release ${org.apache.spark.util.Utils.bytesToString(getUsed())} memory")
         nextUpstream = spillMemoryIteratorToDisk(upstream)
         hasSpilled = true
-         true
+        true
       }
     }
 

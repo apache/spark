@@ -40,7 +40,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   protected def forceSpill(): Boolean
 
   // Number of elements read from input since last spill
-  @volatile protected def elementsRead: Long = _elementsRead
+  protected def elementsRead: Long = _elementsRead
 
   // Called by subclasses every time a record is read
   // It's used for checking spilling frequency
@@ -61,7 +61,7 @@ private[spark] abstract class Spillable[C](taskMemoryManager: TaskMemoryManager)
   @volatile private[this] var myMemoryThreshold = initialMemoryThreshold
 
   // Number of elements read from input since last spill
-  private[this] var _elementsRead = 0L
+  @volatile private[this] var _elementsRead = 0L
 
   // Number of bytes spilled in total
   @volatile private[this] var _memoryBytesSpilled = 0L
