@@ -118,7 +118,7 @@ private[sql] class DefaultSource
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     if (sparkSession.sessionState.conf.orcFilterPushDown) {
       // Sets pushed predicates
-      OrcFilters.createFilter(filters.toArray).foreach { f =>
+      OrcFilters.createFilter(requiredSchema, filters.toArray).foreach { f =>
         hadoopConf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
         hadoopConf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
       }
@@ -272,14 +272,6 @@ private[orc] case class OrcTableScan(
     val job = Job.getInstance(sparkSession.sessionState.newHadoopConf())
     val conf = job.getConfiguration
 
-    // Tries to push down filters if ORC filter push-down is enabled
-    if (sparkSession.sessionState.conf.orcFilterPushDown) {
-      OrcFilters.createFilter(filters).foreach { f =>
-        conf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
-        conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
-      }
-    }
-
     // Figure out the actual schema from the ORC source (without partition columns) so that we
     // can pick the correct ordinals.  Note that this assumes that all files have the same schema.
     val orcFormat = new DefaultSource
@@ -287,6 +279,15 @@ private[orc] case class OrcTableScan(
       orcFormat
         .inferSchema(sparkSession, Map.empty, inputPaths)
         .getOrElse(sys.error("Failed to read schema from target ORC files."))
+
+    // Tries to push down filters if ORC filter push-down is enabled
+    if (sparkSession.sessionState.conf.orcFilterPushDown) {
+      OrcFilters.createFilter(dataSchema, filters).foreach { f =>
+        conf.set(OrcTableScan.SARG_PUSHDOWN, f.toKryo)
+        conf.setBoolean(ConfVars.HIVEOPTINDEXFILTER.varname, true)
+      }
+    }
+
     // Sets requested columns
     OrcRelation.setRequiredColumns(conf, dataSchema, StructType.fromAttributes(attributes))
 

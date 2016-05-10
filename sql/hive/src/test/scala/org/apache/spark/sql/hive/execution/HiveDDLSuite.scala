@@ -365,7 +365,7 @@ class HiveDDLSuite
     }
   }
 
-  test("desc table") {
+  test("desc table for Hive table") {
     withTable("tab1") {
       val tabName = "tab1"
       sql(s"CREATE TABLE $tabName(c1 int)")
@@ -498,9 +498,37 @@ class HiveDDLSuite
   }
 
   test("drop default database") {
-    val message = intercept[AnalysisException] {
-      sql("DROP DATABASE default")
-    }.getMessage
-    assert(message.contains("Can not drop default database"))
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        var message = intercept[AnalysisException] {
+          sql("DROP DATABASE default")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+
+        // SQLConf.CASE_SENSITIVE does not affect the result
+        // because the Hive metastore is not case sensitive.
+        message = intercept[AnalysisException] {
+          sql("DROP DATABASE DeFault")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+      }
+    }
+  }
+
+  test("desc table for data source table") {
+    withTable("tab1") {
+      val tabName = "tab1"
+      sqlContext.range(1).write.format("json").saveAsTable(tabName)
+
+      assert(sql(s"DESC $tabName").collect().length == 1)
+
+      assert(
+        sql(s"DESC FORMATTED $tabName").collect()
+          .exists(_.getString(0) == "# Storage Information"))
+
+      assert(
+        sql(s"DESC EXTENDED $tabName").collect()
+          .exists(_.getString(0) == "# Detailed Table Information"))
+    }
   }
 }

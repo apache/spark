@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -84,10 +85,13 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       AddParquetFileData(seq.toDS().toDF(), src, tmp)
     }
 
+    /** Write parquet files in a temp dir, and move the individual files to the 'src' dir */
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
-      val file = Utils.tempFileWith(new File(tmp, "parquet"))
-      df.write.parquet(file.getCanonicalPath)
-      file.renameTo(new File(src, file.getName))
+      val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
+      df.write.parquet(tmpDir.getCanonicalPath)
+      tmpDir.listFiles().foreach { f =>
+        f.renameTo(new File(src, s"${f.getName}"))
+      }
     }
   }
 
@@ -210,8 +214,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
-      Seq("a", "b", "c").toDS().as("userColumn").toDF()
-        .write.parquet(new File(src, "1").getCanonicalPath)
+      Seq("a", "b", "c").toDS().as("userColumn").toDF().write
+        .mode(org.apache.spark.sql.SaveMode.Overwrite)
+        .parquet(src.getCanonicalPath)
       val schema = createFileStreamSourceAndGetSchema(
         format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
       assert(schema === new StructType().add("value", StringType))

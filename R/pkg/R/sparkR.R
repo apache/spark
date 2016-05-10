@@ -103,8 +103,7 @@ sparkR.stop <- function() {
 #'                  list(spark.executor.memory="4g"),
 #'                  list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                  c("one.jar", "two.jar", "three.jar"),
-#'                  c("com.databricks:spark-avro_2.10:2.0.1",
-#'                    "com.databricks:spark-csv_2.10:1.3.0"))
+#'                  c("com.databricks:spark-avro_2.10:2.0.1"))
 #'}
 
 sparkR.init <- function(

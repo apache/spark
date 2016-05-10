@@ -28,6 +28,8 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.tree.configuration.Algo;
 import org.apache.spark.mllib.tree.configuration.Strategy;
@@ -94,6 +96,14 @@ public class JavaDecisionTreeSuite implements Serializable {
         maxBins, categoricalFeaturesInfo);
 
     DecisionTreeModel model = DecisionTree$.MODULE$.train(rdd.rdd(), strategy);
+
+    // java compatibility test
+    JavaRDD<Double> predictions = model.predict(rdd.map(new Function<LabeledPoint, Vector>() {
+      @Override
+      public Vector call(LabeledPoint v1) {
+        return v1.features();
+      }
+    }));
 
     int numCorrect = validatePrediction(arr, model);
     Assert.assertTrue(numCorrect == rdd.count());
