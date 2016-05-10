@@ -42,7 +42,7 @@ class FileStreamSource(
     options: Map[String, String]) extends Source with Logging {
 
   private val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
-  private val qualifiedBasePath = fs.makeQualified(new Path(path))
+  private val qualifiedBasePath = fs.makeQualified(new Path(path)) // can contains glob patterns
   private val metadataLog = new HDFSMetadataLog[Seq[String]](sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
@@ -103,14 +103,14 @@ class FileStreamSource(
     val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
     logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
-    val newOptions = options.filterKeys(_ != "path")
+    val newOptions = new CaseInsensitiveMap(options).filterKeys(_ != "path")
     val newDataSource =
       DataSource(
         sparkSession,
         paths = files,
         userSpecifiedSchema = Some(schema),
         className = fileFormatClassName,
-        options = new CaseInsensitiveMap(newOptions))
+        options = newOptions)
     Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
   }
 
