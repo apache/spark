@@ -13,33 +13,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-sudo: required
+# Travis CI Guide
+# - Environment Setup: https://docs.travis-ci.com/user/trusty-ci-environment
+# - Buidling Java Project: https://docs.travis-ci.com/user/languages/java
+# - Caching: https://docs.travis-ci.com/user/caching
 
+# 1. Choose OS (Ubuntu 14.04.3 LTS Server Edition 64bit, ~2 CORE, 7.5GB RAM)
+sudo: required
 dist: trusty
 
+# 2. Choose language and target JDKs for parallel builds.
 language: java
-
 jdk:
   - oraclejdk7
   - oraclejdk8
 
-addons:
-  apt:
-    packages:
-    - python-numpy
-    - python-sphinx
-
+# 3. Setup cache directory for SBT and Maven.
 cache:
   directories:
   - $HOME/.sbt
   - $HOME/.m2
 
+# 4. Turn off notifications.
 notifications:
   email: false
 
+# 5. Run maven install before running lint-java.
 install:
   - export MAVEN_SKIP_RC=1
   - build/mvn -T 4 -q -DskipTests -Pyarn -Phadoop-2.3 -Pkinesis-asl -Phive -Phive-thriftserver install
 
+# 6. Run lint-java.
 script:
   - dev/lint-java
