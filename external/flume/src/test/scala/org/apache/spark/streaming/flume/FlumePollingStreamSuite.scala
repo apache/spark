@@ -42,8 +42,6 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with 
 
   @transient private var _sc: SparkContext = _
 
-  def sc: SparkContext = _sc
-
   val conf = new SparkConf()
     .setMaster("local[2]")
     .setAppName(this.getClass.getSimpleName)
@@ -56,7 +54,10 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with 
   }
 
   override def afterAll(): Unit = {
-    _sc.stop()
+    if (_sc != null) {
+      _sc.stop()
+      _sc = null
+    }
   }
 
   test("flume polling test") {
