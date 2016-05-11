@@ -94,7 +94,7 @@ public class JavaUtils {
     // If that does not work out, fallback to the Java IO way
     if (SystemUtils.IS_OS_UNIX) {
       try {
-        deleteRecursivelyForUnix(file);
+        deleteRecursivelyUsingUnixNative(file);
         return;
       } catch (IOException e) {
         logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
@@ -128,24 +128,24 @@ public class JavaUtils {
     }
   }
 
-  private static void deleteRecursivelyForUnix(File file) throws IOException {
-    Process process = null;
+  private static void deleteRecursivelyUsingUnixNative(File file) throws IOException {
     final ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
+    Process process = null;
+    int exitCode = -1;
 
     try {
       process = builder.start();
-      process.waitFor();
-      if (process.exitValue() == 0 && !file.exists()) {
-        return;
-      }
-
-      throw new IOException("Failed to delete: " + file.getAbsolutePath());
+      exitCode = process.waitFor();
     } catch (Exception e) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
     } finally {
       if (process != null && process.isAlive()) {
         process.destroy();
       }
+    }
+
+    if (exitCode != 0 || file.exists()) {
+      throw new IOException("Failed to delete: " + file.getAbsolutePath());
     }
   }
 
