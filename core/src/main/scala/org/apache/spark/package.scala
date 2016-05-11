@@ -65,7 +65,8 @@ package object spark {
           props.getProperty("date", unknownProp)
         )
       } catch {
-        case e: Exception => logError("Unable to read spark build properties.", e)
+        case e: Exception => logError("Unable to read spark build properties.", e);
+          throw new SparkException("Error load properties from spark-version-info.properties", e)
       }
   }
   val SPARK_VERSION = SparkBuildInfo.spark_version

@@ -442,9 +442,16 @@ object SparkBuild extends PomBuild {
 object All {
   lazy val settings = Seq(resourceGenerators in Compile <+= (version) map { (v) =>
     val file = new File(BuildCommons.sparkHome, "core/src/main/resources/spark-version-info.properties")
+    val apacheLicense = "# Licensed to the Apache Software Foundation (ASF) under one or more\n# contributor license agreements. " +
+      "See the NOTICE file distributed with\n# this work for additional information regarding copyright ownership.\n# The ASF " +
+      "licenses this file to You under the Apache License, Version 2.0\n# (the \"License\"); you may not use this file except in" +
+      " compliance with\n# the License.  You may obtain a copy of the License at\n#\n#    http://www.apache.org/licenses/LICENSE-2.0\n" +
+      "#\n# Unless required by applicable law or agreed to in writing, software\n# distributed under the License is distributed on an " +
+      "\"AS IS\" BASIS,\n# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n# See the License for the specific " +
+      "language governing permissions and\n# limitations under the License."
     val contents = "version=%s".format(v)
     val command = "cd " +BuildCommons.sparkHome + "; echo user=${USER}; echo revision=$(git rev-parse HEAD); echo branch=$(git rev-parse --abbrev-ref HEAD); echo date=$(date -u +%Y-%m-%dT%H:%M:%SZ); echo url=$(git config --get remote.origin.url);"
-    val result = contents + "\n" + Process(Seq("/bin/bash", "-c", command)).!!
+    val result = apacheLicense + "\n" + contents + "\n" + Process(Seq("/bin/bash", "-c", command)).!!
     IO.write(file, result)
     Seq(file)
     }
