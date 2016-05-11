@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
@@ -212,18 +212,22 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create an [[ExplainCommand]] logical plan.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+   * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
-    val options = ctx.explainOption.asScala
-    if (options.exists(_.FORMATTED != null)) {
+    if (ctx.FORMATTED != null) {
       throw operationNotAllowed("EXPLAIN FORMATTED", ctx)
     }
+    if (ctx.LOGICAL != null) {
+      throw operationNotAllowed("EXPLAIN LOGICAL", ctx)
+    }
 
-    // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
-        codegen = options.exists(_.CODEGEN != null))
+      ExplainCommand(statement, extended = ctx.EXTENDED != null, codegen = ctx.CODEGEN != null)
     } else {
       ExplainCommand(OneRowRelation)
     }
@@ -426,7 +430,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       val resourceType = resource.identifier.getText.toLowerCase
       resourceType match {
         case "jar" | "file" | "archive" =>
-          resourceType -> string(resource.STRING)
+          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
         case other =>
           throw operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
       }

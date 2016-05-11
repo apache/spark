@@ -218,7 +218,7 @@ class TaskMetrics private[spark] () extends Serializable {
   /**
    * External accumulators registered with this task.
    */
-  @transient private lazy val externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
+  @transient private[spark] lazy val externalAccums = new ArrayBuffer[AccumulatorV2[_, _]]
 
   private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit = {
     externalAccums += a

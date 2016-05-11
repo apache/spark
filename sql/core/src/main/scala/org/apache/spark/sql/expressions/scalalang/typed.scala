@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.expressions.scala
+package org.apache.spark.sql.expressions.scalalang
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.aggregate._
  * :: Experimental ::
  * Type-safe functions available for [[Dataset]] operations in Scala.
  *
- * Java users should use [[org.apache.spark.sql.expressions.java.typed]].
+ * Java users should use [[org.apache.spark.sql.expressions.javalang.typed]].
  *
  * @since 2.0.0
  */
