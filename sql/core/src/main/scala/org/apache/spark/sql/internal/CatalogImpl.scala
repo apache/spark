@@ -283,16 +283,50 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
+   * Creates a temporary view in the catalog with the given [[DataFrame]].
    *
-   * @param tableName the name of the table to be unregistered.
+   * @param viewName the name of the view to be created
+   * @df the DataFrame used to create the view.
+   *
+   * @throws AnalysisException if the view name already exists
+   * @since 2.0.0
+   */
+  @throws[AnalysisException]
+  override def createTempView(viewName: String, df: DataFrame): Unit = {
+    createTempViewImpl(viewName, df, replaceIfExists = false)
+  }
+
+  /**
+   * Create or replace a temporary view in the catalog with the given [[DataFrame]].
+   * Temporary view exist only during the lifetime of this instance of
+   * [[org.apache.spark.sql.SparkSession]].
+   *
+   * @param viewName the name of the view to be created/replaced
+   * @df the DataFrame used to create the view.
+   *
+   * @since 2.0.0
+   */
+  override def createOrReplaceTempView(viewName: String, df: DataFrame): Unit = {
+    createTempViewImpl(viewName, df, replaceIfExists = true)
+  }
+
+  private def createTempViewImpl(viewName: String, df: DataFrame, replaceIfExists: Boolean) = {
+    sparkSession.sessionState.catalog.createTempView(
+      sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName).table,
+      df.logicalPlan, replaceIfExists)
+  }
+
+  /**
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached/persisted before, it's also unpersisted.
+   *
+   * @param viewName the name of the view to be dropped.
    * @group ddl_ops
    * @since 2.0.0
    */
-  override def dropTempTable(tableName: String): Unit = {
-    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName))
-    sessionCatalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
+  override def dropTempView(viewName: String): Unit = {
+    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
+    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
   }
 
   /**

@@ -67,7 +67,7 @@ object SqlNetworkWordCount {
       val wordsDataFrame = rdd.map(w => Record(w)).toDF()
 
       // Register as table
-      wordsDataFrame.registerTempTable("words")
+      wordsDataFrame.createOrReplaceTempView("words")
 
       // Do word count on table using SQL and print it
       val wordCountsDataFrame =

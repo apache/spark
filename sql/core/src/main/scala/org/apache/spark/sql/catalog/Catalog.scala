@@ -175,13 +175,37 @@ abstract class Catalog {
       options: Map[String, String]): DataFrame
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached before, then it will also be uncached.
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached before, then it will also be uncached.
    *
-   * @param tableName the name of the table to be dropped.
+   * @param viewName the name of the view to be dropped.
    * @since 2.0.0
    */
-  def dropTempTable(tableName: String): Unit
+  def dropTempView(viewName: String): Unit
+
+
+  /**
+   * Creates a temporary view in the catalog with the given [[DataFrame]].
+   *
+   * @param viewName the name of the view to be created
+   * @df the DataFrame used to create the view.
+   *
+   * @throws AnalysisException if the view name already exists
+   * @since 2.0.0
+   */
+  @throws[AnalysisException]
+  def createTempView(viewName: String, df: DataFrame): Unit
+
+  /**
+   * Creates or replace a temporary view in the catalog with the given [[DataFrame]].
+   * Temporary view exist only during the lifetime of this instance of
+   * [[org.apache.spark.sql.SparkSession]].
+   *
+   * @param viewName the name of the view to be created/replaced.
+   * @df the DataFrame used to create the view.
+   * @since 2.0.0
+   */
+  def createOrReplaceTempView(viewName: String, df: DataFrame): Unit
 
   /**
    * Returns true if the table is currently cached in-memory.

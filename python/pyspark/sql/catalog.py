@@ -166,32 +166,57 @@ class Catalog(object):
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)
-    def dropTempTable(self, tableName):
-        """Drops the temporary table with the given table name in the catalog.
-        If the table has been cached before, then it will also be uncached.
+    def dropTempView(self, viewName):
+        """Drops the temporary view with the given view name in the catalog.
+        If the view has been cached before, then it will also be uncached.
 
-        >>> spark.createDataFrame([(1, 1)]).registerTempTable("my_table")
+        >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
         >>> spark.table("my_table").collect()
         [Row(_1=1, _2=1)]
-        >>> spark.catalog.dropTempTable("my_table")
+        >>> spark.catalog.dropTempView("my_table")
         >>> spark.table("my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         AnalysisException: ...
         """
-        self._jcatalog.dropTempTable(tableName)
+        self._jcatalog.dropTempView(viewName)
 
     @since(2.0)
-    def registerTable(self, df, tableName):
-        """Registers the given :class:`DataFrame` as a temporary table in the catalog.
+    def createTempView(self, viewName, df):
+        """Create a temporary view in the catalog with the given :class:`DataFrame`.
+        throws :class:`AnalysisException`, if the view name already exists in the catalog.
 
         >>> df = spark.createDataFrame([(2, 1), (3, 1)])
-        >>> spark.catalog.registerTable(df, "my_cool_table")
-        >>> spark.table("my_cool_table").collect()
+        >>> spark.catalog.createTempView("my_cool_view", df)
+        >>> spark.table("my_cool_view").collect()
         [Row(_1=2, _2=1), Row(_1=3, _2=1)]
+        >>> spark.catalog.createTempView("my_cool_view", df)  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+            ...
+        AnalysisException: ...
+        >>> spark.catalog.dropTempView("my_cool_view")
         """
         if isinstance(df, DataFrame):
-            self._jsparkSession.registerTable(df._jdf, tableName)
+            self._jcatalog.createTempView(viewName, df._jdf)
+        else:
+            raise ValueError("Can only register DataFrame as table")
+
+    @since(2.0)
+    def createOrReplaceTempView(self, viewName, df):
+        """Create or replace a temporary view in the catalog with the given :class:`DataFrame`.
+
+        >>> df = spark.createDataFrame([(2, 1), (3, 1)])
+        >>> df2 = spark.createDataFrame([(4, 1), (5, 1)])
+        >>> spark.catalog.createOrReplaceTempView("my_cool_view", df)
+        >>> spark.table("my_cool_view").collect()
+        [Row(_1=2, _2=1), Row(_1=3, _2=1)]
+        >>> spark.catalog.createOrReplaceTempView("my_cool_view", df2)
+        >>> spark.table("my_cool_view").collect()
+        [Row(_1=4, _2=1), Row(_1=5, _2=1)]
+        >>> spark.catalog.dropTempView("my_cool_view")
+        """
+        if isinstance(df, DataFrame):
+            self._jcatalog.createOrReplaceTempView(viewName, df._jdf)
         else:
             raise ValueError("Can only register DataFrame as table")
 

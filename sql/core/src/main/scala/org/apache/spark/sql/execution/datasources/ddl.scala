@@ -82,7 +82,7 @@ case class CreateTempTableUsing(
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       options = options)
-    sparkSession.sessionState.catalog.createTempTable(
+    sparkSession.sessionState.catalog.createTempView(
       tableIdent.table,
       Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
       overrideIfExists = true)
@@ -113,7 +113,7 @@ case class CreateTempTableUsingAsSelect(
       bucketSpec = None,
       options = options)
     val result = dataSource.write(mode, df)
-    sparkSession.sessionState.catalog.createTempTable(
+    sparkSession.sessionState.catalog.createTempView(
       tableIdent.table,
       Dataset.ofRows(sparkSession, LogicalRelation(result)).logicalPlan,
       overrideIfExists = true)
