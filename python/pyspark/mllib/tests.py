@@ -930,7 +930,8 @@ class ChiSqTestTests(MLlibTestCase):
 
         # 0.0 in expected and observed simultaneously
         zero_observed = Vectors.dense([2.0, 0.0, 1.0])
-        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, zero_observed, zero_expected)
+        self.assertRaises(\
+            IllegalArgumentException, Statistics.chiSqTest, zero_observed, zero_expected)
 
     def test_matrix_independence(self):
         data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
