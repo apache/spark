@@ -46,26 +46,48 @@ private[mllib] object LocalKMeans extends Logging {
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
+    val costArray:Array[Double] = new Array[Double](points.length)
+    for(i <- 0 to points.length-1){
+      costArray(i)=KMeans.fastSquaredDistance(points(i), centers(0))
+    }
+    
     for (i <- 1 until k) {
+
       // Pick the next center with a probability proportional to cost under current centers
-      val curCenters = centers.view.take(i)
-      val sum = points.view.zip(weights).map { case (p, w) =>
-        w * KMeans.pointCost(curCenters, p)
+      //      val curCenters = centers.view.take(i)
+      //      val sum = points.view.zip(weights).map { case (p, w) =>
+      //        w * KMeans.pointCost(curCenters, p)
+      //      }.sum
+      val sum = costArray.view.zip(weights).map{
+        case (c, w) =>
+          w*c
       }.sum
       val r = rand.nextDouble() * sum
       var cumulativeScore = 0.0
       var j = 0
       while (j < points.length && cumulativeScore < r) {
-        cumulativeScore += weights(j) * KMeans.pointCost(curCenters, points(j))
+        cumulativeScore += weights(j) * costArray(j)
         j += 1
       }
       if (j == 0) {
-        logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
-          s" Using duplicate point for center k = $i.")
+        //        logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
+        //          s" Using duplicate point for center k = $i.")
         centers(i) = points(0).toDense
       } else {
         centers(i) = points(j - 1).toDense
       }
+
+      //update costArray
+      for(p <- 0 to points.length-1){
+        costArray(p)=math.min(KMeans.fastSquaredDistance(points(p), centers(i)),costArray(p))
+      }
+
+      if(i%100==0){
+        val end = System.currentTimeMillis()
+        //        Utils.printLog("DEBUG", s"finish K-means++ ${i}th center in ${(end-roundStart)}ms")
+        roundStart = end
+      }
+
     }
 
     // Run up to maxIterations iterations of Lloyd's algorithm
