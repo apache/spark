@@ -404,7 +404,7 @@ class DataFrameReader(object):
 
         .. note:: Currently ORC support is only available together with Hive support.
 
-        >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
@@ -540,7 +540,7 @@ class DataFrameWriter(object):
     def queryName(self, queryName):
         """Specifies the name of the :class:`ContinuousQuery` that can be started with
         :func:`startStream`. This name must be unique among all the currently active queries
-        in the associated spark
+        in the associated SparkSession.
 
         .. note:: Experimental.
 
@@ -824,7 +824,7 @@ class DataFrameWriter(object):
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
                             This will overwrite ``orc.compress``.
 
-        >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -866,29 +866,27 @@ def _test():
     import os
     import tempfile
     from pyspark.context import SparkContext
-    from pyspark.sql import SparkSession, Row, HiveContext
+    from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    spark = SparkSession.withHiveSupport(sc)
 
     globs['tempfile'] = tempfile
     globs['os'] = os
     globs['sc'] = sc
-    globs['spark'] = SparkSession.builder\
-        .enableHiveSupport()\
-        .getOrCreate()
-    globs['hiveContext'] = HiveContext._createForTesting(sc)
-    globs['df'] = globs['spark'].read.parquet('python/test_support/sql/parquet_partitioned')
+    globs['spark'] = spark
+    globs['df'] = spark.read.parquet('python/test_support/sql/parquet_partitioned')
     globs['sdf'] = \
-        globs['spark'].read.format('text').stream('python/test_support/sql/streaming')
+        spark.read.format('text').stream('python/test_support/sql/streaming')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    sc.stop()
     if failure_count:
         exit(-1)
 
