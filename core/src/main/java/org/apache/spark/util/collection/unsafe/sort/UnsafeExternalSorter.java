@@ -254,7 +254,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   public long getSortTimeNanos() {
     UnsafeInMemorySorter sorter = inMemSorter;
     if (sorter != null) {
-      return inMemSorter.getSortTimeNanos();
+      return sorter.getSortTimeNanos();
     }
     return totalSortTimeNanos;
   }
