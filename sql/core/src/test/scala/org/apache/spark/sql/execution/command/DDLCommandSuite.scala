@@ -212,6 +212,24 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
+  test("create table - conflicting row format and file format") {
+    assertUnsupported(
+      sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS parquet LOCATION '/path'",
+      containsThesePhrases = Seq("row format", "not compatible", "stored as parquet"))
+    val query = "CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS textfile"
+    parser.parsePlan(query) match {
+      case ct: CreateTable =>
+        assert(ct.table.storage.serde == Some("anything"))
+        assert(ct.table.storage.inputFormat ==
+          Some("org.apache.hadoop.mapred.TextInputFormat"))
+        assert(ct.table.storage.outputFormat ==
+          Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query")
+    }
+  }
+
   test("create external table - location must be specified") {
     assertUnsupported(
       sql = "CREATE EXTERNAL TABLE my_tab",

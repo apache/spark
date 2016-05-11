@@ -776,6 +776,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         compressed = false,
         serdeProperties = Map())
     }
+    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
       .getOrElse(EmptyStorageFormat)
     val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
@@ -825,11 +826,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create a [[CatalogStorageFormat]] for creating tables.
+   *
+   * Format: STORED AS ...
    */
   override def visitCreateFileFormat(
       ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     (ctx.fileFormat, ctx.storageHandler) match {
-      // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format
+      // Expected format: INPUTFORMAT input_format OUTPUTFORMAT output_format (SERDE serde)
       case (c: TableFileFormatContext, null) =>
         visitTableFileFormat(c)
       // Expected format: SEQUENCEFILE | TEXTFILE | RCFILE | ORC | PARQUET | AVRO
@@ -936,6 +939,49 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           "line.delim" -> value
         }
     EmptyStorageFormat.copy(serdeProperties = entries.toMap)
+  }
+
+  /**
+   * Throw a [[ParseException]] if the user specified incompatible SerDes through ROW FORMAT
+   * and STORED AS.
+   */
+  private def validateRowFormatFileFormat(
+      rowFormatCtx: RowFormatContext,
+      createFileFormatCtx: CreateFileFormatContext,
+      parentCtx: ParserRuleContext): Unit = {
+    val cff = createFileFormatContextString(createFileFormatCtx)
+    (rowFormatCtx, createFileFormatCtx.fileFormat) match {
+      case (rf, null) => // only row format, no conflict
+      case (null, ff) => // only file format, no conflict
+      case (rfSerde: RowFormatSerdeContext, ffTable: TableFileFormatContext) =>
+        if (visitTableFileFormat(ffTable).serde.isDefined) {
+          throw operationNotAllowed(s"ROW FORMAT SERDE is not compatible with $cff", parentCtx)
+        }
+      case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
+        ffGeneric.identifier.getText.toLowerCase match {
+          case ("sequencefile" | "textfile" | "rcfile") => // OK
+          case _ => throw operationNotAllowed(
+            s"ROW FORMAT SERDE is not compatible with $cff", parentCtx)
+        }
+      case (rfDelimited: RowFormatDelimitedContext, ffTable: TableFileFormatContext) =>
+        throw operationNotAllowed(s"ROW FORMAT DELIMITED is not compatible with $cff", parentCtx)
+      case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
+        ffGeneric.identifier.getText.toLowerCase match {
+          case "textfile" => // OK
+          case _ => throw operationNotAllowed(
+            s"ROW FORMAT SERDE is not compatible with $cff", parentCtx)
+        }
+      case (rf, ff) =>
+        // should never happen
+        throw operationNotAllowed(s"Unexpected combination of ROW FORMAT and $cff", parentCtx)
+    }
+  }
+
+  /**
+   * Helper method to convert a [[CreateFileFormatContext]] to a human-readable form.
+   */
+  private def createFileFormatContextString(ctx: CreateFileFormatContext): String = {
+    (0 until ctx.getChildCount).map { i => ctx.getChild(i).getText }.mkString(" ")
   }
 
   /**
