@@ -133,7 +133,7 @@ public class JavaSparkSQL {
     // Register this DataFrame as a table.
     peopleFromJsonFile.registerTempTable("people");
 
-    // SQL statements can be run by using the sql methods provided by sqlContext.
+    // SQL statements can be run by using the sql methods provided by `spark`
     Dataset<Row> teenagers3 = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
     // The results of SQL queries are DataFrame and support all the normal RDD operations.

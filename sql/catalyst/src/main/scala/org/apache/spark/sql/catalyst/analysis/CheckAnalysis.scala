@@ -123,11 +123,16 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-            query match {
+            // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
+            def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
+              case SubqueryAlias(_, child) => cleanQuery(child)
+              case Project(_, child) => cleanQuery(child)
+              case child => child
+            }
+
+            cleanQuery(query) match {
               case a: Aggregate => checkAggregate(a)
               case Filter(_, a: Aggregate) => checkAggregate(a)
-              case Project(_, a: Aggregate) => checkAggregate(a)
-              case Project(_, Filter(_, a: Aggregate)) => checkAggregate(a)
               case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
             }
             s
