@@ -422,7 +422,7 @@ object YarnSparkHadoopUtil {
     if (Utils.isWindows) {
       escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {
-      val = onOOME = javaOpts.find(x => x.contains("-XX:OnOutOfMemoryError"))
+      val onOOME = javaOpts.find(x => x.contains("-XX:OnOutOfMemoryError"))
       if (onOOME == None) {
         "-XX:OnOutOfMemoryError='kill %p'"
       } else {
