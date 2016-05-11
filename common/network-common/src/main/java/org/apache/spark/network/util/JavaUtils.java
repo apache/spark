@@ -91,16 +91,21 @@ public class JavaUtils {
     if (file == null) { return; }
 
     // On Unix systems, use operating system command to run faster
-    // If that does not work out, fallback to the Java native way
+    // If that does not work out, fallback to the Java IO way
     if (SystemUtils.IS_OS_UNIX) {
       try {
         deleteRecursivelyForUnix(file);
         return;
       } catch (IOException e) {
-        // ignore and fall back to the Java native way
+        logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
+                        "Falling back to Java IO way", file.getAbsolutePath(), e);
       }
     }
 
+    deleteRecursivelyUsingJavaIO(file);
+  }
+
+  private static void deleteRecursivelyUsingJavaIO(File file) throws IOException {
     if (file.isDirectory() && !isSymlink(file)) {
       IOException savedIOException = null;
       for (File child : listFilesSafely(file)) {
