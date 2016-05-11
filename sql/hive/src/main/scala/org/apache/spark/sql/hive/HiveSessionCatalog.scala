@@ -60,12 +60,12 @@ private[sql] class HiveSessionCatalog(
   }
 
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
-    val table = formatTableName(name.table)
+    val (database, table) = formatTableName(name, nameCheck = false)
     if (name.database.isDefined || !tempTables.contains(table)) {
-      val database = name.database.map(formatDatabaseName)
-      val newName = name.copy(database = database, table = table)
+      val newName = name.copy(table = table, database = Option(database))
       metastoreCatalog.lookupRelation(newName, alias)
     } else {
+      val table = formatTempTableName(name.table, nameCheck = false)
       val relation = tempTables(table)
       val tableWithQualifiers = SubqueryAlias(table, relation)
       // If an alias was specified by the lookup, wrap the plan in a subquery so that
@@ -90,10 +90,14 @@ private[sql] class HiveSessionCatalog(
   val PreInsertionCasts: Rule[LogicalPlan] = metastoreCatalog.PreInsertionCasts
 
   override def refreshTable(name: TableIdentifier): Unit = {
+    name.database.foreach(validateDatabaseName)
+    validateTableName(name.table)
     metastoreCatalog.refreshTable(name)
   }
 
   override def invalidateTable(name: TableIdentifier): Unit = {
+    name.database.foreach(validateDatabaseName)
+    validateTableName(name.table)
     metastoreCatalog.invalidateTable(name)
   }
 
@@ -102,11 +106,15 @@ private[sql] class HiveSessionCatalog(
   }
 
   def hiveDefaultTableFilePath(name: TableIdentifier): String = {
+    name.database.foreach(validateDatabaseName)
+    validateTableName(name.table)
     metastoreCatalog.hiveDefaultTableFilePath(name)
   }
 
   // For testing only
   private[hive] def getCachedDataSourceTable(table: TableIdentifier): LogicalPlan = {
+    table.database.foreach(validateDatabaseName)
+    validateTableName(table.table)
     val key = metastoreCatalog.getQualifiedTableName(table)
     metastoreCatalog.cachedDataSourceTables.getIfPresent(key)
   }
@@ -182,7 +190,7 @@ private[sql] class HiveSessionCatalog(
     //   // This function is a Hive builtin function.
     //   ...
     // }
-    val database = name.database.map(formatDatabaseName)
+    val database = name.database.map(formatDatabaseName(_, nameCheck = false))
     val funcName = name.copy(database = database)
     Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr

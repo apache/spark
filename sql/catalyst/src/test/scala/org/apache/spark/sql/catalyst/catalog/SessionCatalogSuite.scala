@@ -51,13 +51,14 @@ class SessionCatalogSuite extends SparkFunSuite {
     catalog.createDatabase(newDb("default"), ignoreIfExists = true)
     assert(catalog.databaseExists("default"))
     assert(!catalog.databaseExists("testing"))
-    assert(!catalog.databaseExists("testing2"))
+    assert(!catalog.databaseExists("_testing2"))
     catalog.createDatabase(newDb("testing"), ignoreIfExists = false)
     assert(catalog.databaseExists("testing"))
     assert(catalog.listDatabases().toSet == Set("default", "testing"))
-    catalog.createDatabase(newDb("testing2"), ignoreIfExists = false)
-    assert(catalog.listDatabases().toSet == Set("default", "testing", "testing2"))
-    assert(catalog.databaseExists("testing2"))
+    // Different from Hive, we also support the name starting with underscore.
+    catalog.createDatabase(newDb("_testing2"), ignoreIfExists = false)
+    assert(catalog.listDatabases().toSet == Set("default", "testing", "_testing2"))
+    assert(catalog.databaseExists("_testing2"))
     assert(!catalog.databaseExists("does_not_exist"))
   }
 
@@ -159,6 +160,47 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(catalog.getCurrentDatabase == "deebo")
   }
 
+  test("database-related commands having an illegal database name") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+
+    var e = intercept[AnalysisException] {
+      catalog.createDatabase(newDb(""), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains("Database name '' is not a valid name"))
+
+    val illegalDBName = "db:1"
+    val expectedMsg = s"Database name '$illegalDBName' is not a valid name"
+
+    e = intercept[AnalysisException] {
+      catalog.createDatabase(newDb(illegalDBName), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.dropDatabase(illegalDBName, ignoreIfNotExists = false, cascade = false)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.getDatabaseMetadata(illegalDBName)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.alterDatabase(newDb(illegalDBName))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[NoSuchDatabaseException] {
+      catalog.setCurrentDatabase(illegalDBName)
+    }
+
+    // We do not issue an exception if the database does not exist when the illegal name is used.
+    // Users are allowed to issue queries directly on files. For example,
+    // select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
+    assert(!catalog.databaseExists(illegalDBName))
+  }
+
   // --------------------------------------------------------------------------
   // Tables
   // --------------------------------------------------------------------------
@@ -174,9 +216,64 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
     // Create table without explicitly specifying database
     sessionCatalog.setCurrentDatabase("db1")
-    sessionCatalog.createTable(newTable("tbl4"), ignoreIfExists = false)
-    assert(externalCatalog.listTables("db1").toSet == Set("tbl3", "tbl4"))
+    // Different from Hive, we also support the name starting with underscore.
+    sessionCatalog.createTable(newTable("_tbl4"), ignoreIfExists = false)
+    assert(externalCatalog.listTables("db1").toSet == Set("tbl3", "_tbl4"))
     assert(externalCatalog.listTables("db2").toSet == Set("tbl1", "tbl2", "tbl3"))
+  }
+
+  test("table-related commands having an illegal table name") {
+    val illegalTableName = "tbl:3"
+    val expectedMsg = s"Table name '$illegalTableName' is not a valid name"
+    val catalog = new SessionCatalog(newBasicCatalog())
+
+    var e = intercept[AnalysisException] {
+      catalog.createTable(newTable(illegalTableName), ignoreIfExists = false)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    val tempTable1 = Range(1, 10, 1, 10, Seq())
+    e = intercept[AnalysisException] {
+      catalog.createTempTable(illegalTableName, tempTable1, overrideIfExists = false)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.getTempTable(illegalTableName)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.dropTable(TableIdentifier(illegalTableName), ignoreIfNotExists = false)
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.renameTable(
+        TableIdentifier(illegalTableName, Some("db2")), TableIdentifier("newTab", Some("db2")))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.renameTable(
+        TableIdentifier("oldTab", Some("db2")), TableIdentifier(illegalTableName, Some("db2")))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.alterTable(newTable(illegalTableName, "unknown_db"))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    e = intercept[AnalysisException] {
+      catalog.lookupRelation(TableIdentifier(illegalTableName, Some("db2")))
+    }
+    assert(e.getMessage.contains(expectedMsg))
+
+    // We do not issue an exception if the table does not exist when the illegal name is used.
+    // Users are allowed to issue queries directly on files. For example,
+    // select id from `org.apache.spark.sql.parquet`.`path/to/parquet/files` as p
+    assert(!catalog.tableExists(TableIdentifier(illegalTableName, Some("db2"))))
   }
 
   test("create table when database does not exist") {
@@ -703,8 +800,9 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc"))
     // Create function without explicitly specifying database
     sessionCatalog.setCurrentDatabase("mydb")
-    sessionCatalog.createFunction(newFunc("myfunc2"), ignoreIfExists = false)
-    assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc", "myfunc2"))
+    // Different from Hive, we also support the name starting with underscore.
+    sessionCatalog.createFunction(newFunc("_myfunc2"), ignoreIfExists = false)
+    assert(externalCatalog.listFunctions("mydb", "*").toSet == Set("myfunc", "_myfunc2"))
   }
 
   test("create function when database does not exist") {
