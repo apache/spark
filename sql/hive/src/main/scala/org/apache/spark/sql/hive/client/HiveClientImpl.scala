@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.io.{File, PrintStream}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.conf.Configuration
@@ -417,12 +418,31 @@ private[hive] class HiveClientImpl(
             s"No partition is dropped. One partition spec '$s' does not exist in table '$table' " +
             s"database '$db'")
         }
-        parts
+        parts.map(_.getValues)
       }.distinct
-    matchingParts.foreach { hivePartition =>
+    var droppedParts = ArrayBuffer.empty[java.util.List[String]]
+    matchingParts.foreach { partition =>
       val dropOptions = new PartitionDropOptions
       dropOptions.ifExists = ignoreIfNotExists
-      client.dropPartition(db, table, hivePartition.getValues, dropOptions)
+      try {
+        client.dropPartition(db, table, partition, dropOptions)
+      } catch {
+        case e: Exception =>
+          val remainingParts = matchingParts.toBuffer -- droppedParts
+          logError(
+            s"""
+               |======================
+               |Attempt to drop the partition specs in table '$table' database '$db':
+               |${specs.mkString("\n")}
+               |In this attempt, the following partitions have been dropped successfully:
+               |${droppedParts.mkString("\n")}
+               |The remaining partitions have not been dropped:
+               |${remainingParts.mkString("\n")}
+               |======================
+             """.stripMargin)
+          throw e
+      }
+      droppedParts += partition
     }
   }
 
