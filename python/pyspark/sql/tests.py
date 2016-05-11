@@ -186,7 +186,8 @@ class SQLTests(ReusedPySparkTestCase):
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
         cls.spark = SparkSession(cls.sc)
-        cls.df = cls.spark.createDataFrame([Row(key=i, value=str(i)) for i in range(100)])
+        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
+        cls.df = cls.spark.createDataFrame(cls.testData)
 
     @classmethod
     def tearDownClass(cls):
