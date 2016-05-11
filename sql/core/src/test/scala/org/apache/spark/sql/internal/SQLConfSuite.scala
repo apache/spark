@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{QueryTest, SQLContext}
+import org.apache.spark.sql.{QueryTest, SparkSession, SQLContext}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -33,61 +33,61 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
 
   test("programmatic ways of basic setting and getting") {
     // Set a conf first.
-    sqlContext.setConf(testKey, testVal)
+    spark.conf.set(testKey, testVal)
     // Clear the conf.
-    sqlContext.conf.clear()
+    spark.wrapped.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
-    assert(sqlContext.getAllConfs === TestSQLContext.overrideConfs)
+    assert(spark.conf.getAll === TestSQLContext.overrideConfs)
 
-    sqlContext.setConf(testKey, testVal)
-    assert(sqlContext.getConf(testKey) === testVal)
-    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
-    assert(sqlContext.getAllConfs.contains(testKey))
+    spark.conf.set(testKey, testVal)
+    assert(spark.conf.get(testKey) === testVal)
+    assert(spark.conf.get(testKey, testVal + "_") === testVal)
+    assert(spark.conf.getAll.contains(testKey))
 
     // Tests SQLConf as accessed from a SQLContext is mutable after
     // the latter is initialized, unlike SparkConf inside a SparkContext.
-    assert(sqlContext.getConf(testKey) === testVal)
-    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
-    assert(sqlContext.getAllConfs.contains(testKey))
+    assert(spark.conf.get(testKey) === testVal)
+    assert(spark.conf.get(testKey, testVal + "_") === testVal)
+    assert(spark.conf.getAll.contains(testKey))
 
-    sqlContext.conf.clear()
+    spark.wrapped.conf.clear()
   }
 
   test("parse SQL set commands") {
-    sqlContext.conf.clear()
+    spark.wrapped.conf.clear()
     sql(s"set $testKey=$testVal")
-    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
-    assert(sqlContext.getConf(testKey, testVal + "_") === testVal)
+    assert(spark.conf.get(testKey, testVal + "_") === testVal)
+    assert(spark.conf.get(testKey, testVal + "_") === testVal)
 
     sql("set some.property=20")
-    assert(sqlContext.getConf("some.property", "0") === "20")
+    assert(spark.conf.get("some.property", "0") === "20")
     sql("set some.property = 40")
-    assert(sqlContext.getConf("some.property", "0") === "40")
+    assert(spark.conf.get("some.property", "0") === "40")
 
     val key = "spark.sql.key"
     val vs = "val0,val_1,val2.3,my_table"
     sql(s"set $key=$vs")
-    assert(sqlContext.getConf(key, "0") === vs)
+    assert(spark.conf.get(key, "0") === vs)
 
     sql(s"set $key=")
-    assert(sqlContext.getConf(key, "0") === "")
+    assert(spark.conf.get(key, "0") === "")
 
-    sqlContext.conf.clear()
+    spark.wrapped.conf.clear()
   }
 
   test("deprecated property") {
-    sqlContext.conf.clear()
-    val original = sqlContext.conf.numShufflePartitions
+    spark.wrapped.conf.clear()
+    val original = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
     try{
       sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
-      assert(sqlContext.conf.numShufflePartitions === 10)
+      assert(spark.conf.get(SQLConf.SHUFFLE_PARTITIONS) === 10)
     } finally {
       sql(s"set ${SQLConf.SHUFFLE_PARTITIONS}=$original")
     }
   }
 
   test("invalid conf value") {
-    sqlContext.conf.clear()
+    spark.wrapped.conf.clear()
     val e = intercept[IllegalArgumentException] {
       sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
     }
@@ -95,34 +95,48 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Test SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE's method") {
-    sqlContext.conf.clear()
+    spark.wrapped.conf.clear()
 
-    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "100")
-    assert(sqlContext.conf.targetPostShuffleInputSize === 100)
+    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "100")
+    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 100)
 
-    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1k")
-    assert(sqlContext.conf.targetPostShuffleInputSize === 1024)
+    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1k")
+    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 1024)
 
-    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1M")
-    assert(sqlContext.conf.targetPostShuffleInputSize === 1048576)
+    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1M")
+    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 1048576)
 
-    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1g")
-    assert(sqlContext.conf.targetPostShuffleInputSize === 1073741824)
+    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "1g")
+    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 1073741824)
 
-    sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-1")
-    assert(sqlContext.conf.targetPostShuffleInputSize === -1)
+    spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-1")
+    assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === -1)
 
     // Test overflow exception
     intercept[IllegalArgumentException] {
       // This value exceeds Long.MaxValue
-      sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "90000000000g")
+      spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "90000000000g")
     }
 
     intercept[IllegalArgumentException] {
       // This value less than Long.MinValue
-      sqlContext.setConf(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
+      spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
     }
 
-    sqlContext.conf.clear()
+    spark.wrapped.conf.clear()
   }
+
+  test("SparkSession can access configs set in SparkConf") {
+    try {
+      sparkContext.conf.set("spark.to.be.or.not.to.be", "my love")
+      sparkContext.conf.set("spark.sql.with.or.without.you", "my love")
+      val spark = new SparkSession(sparkContext)
+      assert(spark.conf.get("spark.to.be.or.not.to.be") == "my love")
+      assert(spark.conf.get("spark.sql.with.or.without.you") == "my love")
+    } finally {
+      sparkContext.conf.remove("spark.to.be.or.not.to.be")
+      sparkContext.conf.remove("spark.sql.with.or.without.you")
+    }
+  }
+
 }

@@ -123,25 +123,46 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     )
   }
 
+  test("SPARK-14791: scalar subquery inside broadcast join") {
+    val df = sql("select a, sum(b) as s from l group by a having a > (select avg(a) from l)")
+    val expected = Row(3, 2.0, 3, 3.0) :: Row(6, null, 6, null) :: Nil
+    (1 to 10).foreach { _ =>
+      checkAnswer(r.join(df, $"c" === $"a"), expected)
+    }
+  }
+
   test("EXISTS predicate subquery") {
     checkAnswer(
-      sql("select * from l where exists(select * from r where l.a = r.c)"),
+      sql("select * from l where exists (select * from r where l.a = r.c)"),
       Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
 
     checkAnswer(
-      sql("select * from l where exists(select * from r where l.a = r.c) and l.a <= 2"),
+      sql("select * from l where exists (select * from r where l.a = r.c) and l.a <= 2"),
       Row(2, 1.0) :: Row(2, 1.0) :: Nil)
   }
 
   test("NOT EXISTS predicate subquery") {
     checkAnswer(
-      sql("select * from l where not exists(select * from r where l.a = r.c)"),
+      sql("select * from l where not exists (select * from r where l.a = r.c)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(null, null) :: Row(null, 5.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where not exists(select * from r where l.a = r.c and l.b < r.d)"),
+      sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
       Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+  }
+
+  test("EXISTS predicate subquery within OR") {
+    checkAnswer(
+      sql("select * from l where exists (select * from r where l.a = r.c)" +
+        " or exists (select * from r where l.a = r.c)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
+
+    checkAnswer(
+      sql("select * from l where not exists (select * from r where l.a = r.c and l.b < r.d)" +
+        " or not exists (select * from r where l.a = r.c)"),
+      Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) ::
+        Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
   }
 
   test("IN predicate subquery") {
@@ -160,32 +181,116 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("NOT IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where a not in(select c from r)"),
+      sql("select * from l where a not in (select c from r)"),
       Nil)
 
     checkAnswer(
-      sql("select * from l where a not in(select c from r where c is not null)"),
+      sql("select * from l where a not in (select c from r where c is not null)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Nil)
 
     checkAnswer(
-      sql("select * from l where a not in(select c from t where b < d)"),
+      sql("select * from l where a not in (select c from t where b < d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(3, 3.0) :: Nil)
 
     // Empty sub-query
     checkAnswer(
-      sql("select * from l where a not in(select c from r where c > 10 and b < d)"),
+      sql("select * from l where a not in (select c from r where c > 10 and b < d)"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) ::
       Row(3, 3.0) :: Row(null, null) :: Row(null, 5.0) :: Row(6, null) :: Nil)
 
   }
 
+  test("IN predicate subquery within OR") {
+    checkAnswer(
+      sql("select * from l where l.a in (select c from r)" +
+        " or l.a in (select c from r where l.b < r.d)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Row(6, null) :: Nil)
+
+    intercept[AnalysisException] {
+      sql("select * from l where a not in (select c from r)" +
+        " or a not in (select c from r where c is not null)")
+    }
+  }
+
   test("complex IN predicate subquery") {
     checkAnswer(
-      sql("select * from l where (a, b) not in(select c, d from r)"),
+      sql("select * from l where (a, b) not in (select c, d from r)"),
       Nil)
 
     checkAnswer(
-      sql("select * from l where (a, b) not in(select c, d from t) and (a + b) is not null"),
+      sql("select * from l where (a, b) not in (select c, d from t) and (a + b) is not null"),
       Row(1, 2.0) :: Row(1, 2.0) :: Row(2, 1.0) :: Row(2, 1.0) :: Row(3, 3.0) :: Nil)
+  }
+
+  test("same column in subquery and outer table") {
+    checkAnswer(
+      sql("select a from l l1 where a in (select a from l where a < 3 group by a)"),
+      Row(1) :: Row(1) :: Row(2) :: Row(2) :: Nil
+    )
+  }
+
+  test("having with function in subquery") {
+    checkAnswer(
+      sql("select a from l group by 1 having exists (select 1 from r where d < min(b))"),
+      Row(null) :: Row(1) :: Row(3) :: Nil)
+  }
+
+  test("correlated scalar subquery in where") {
+    checkAnswer(
+      sql("select * from l where b < (select max(d) from r where a = c)"),
+      Row(2, 1.0) :: Row(2, 1.0) :: Nil)
+  }
+
+  test("correlated scalar subquery in select") {
+    checkAnswer(
+      sql("select a, (select sum(b) from l l2 where l2.a = l1.a) sum_b from l l1"),
+      Row(1, 4.0) :: Row(1, 4.0) :: Row(2, 2.0) :: Row(2, 2.0) :: Row(3, 3.0) ::
+      Row(null, null) :: Row(null, null) :: Row(6, null) :: Nil)
+  }
+
+  test("correlated scalar subquery in select (null safe)") {
+    checkAnswer(
+      sql("select a, (select sum(b) from l l2 where l2.a <=> l1.a) sum_b from l l1"),
+      Row(1, 4.0) :: Row(1, 4.0) :: Row(2, 2.0) :: Row(2, 2.0) :: Row(3, 3.0) ::
+        Row(null, 5.0) :: Row(null, 5.0) :: Row(6, null) :: Nil)
+  }
+
+  test("correlated scalar subquery in aggregate") {
+    checkAnswer(
+      sql("select a, (select sum(d) from r where a = c) sum_d from l l1 group by 1, 2"),
+      Row(1, null) :: Row(2, 6.0) :: Row(3, 2.0) :: Row(null, null) :: Row(6, null) :: Nil)
+  }
+
+  test("non-aggregated correlated scalar subquery") {
+    val msg1 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a) sum_b from l l1")
+    }
+    assert(msg1.getMessage.contains("Correlated scalar subqueries must be Aggregated"))
+
+    val msg2 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a = l1.a group by 1) sum_b from l l1")
+    }
+    assert(msg2.getMessage.contains(
+      "The output of a correlated scalar subquery must be aggregated"))
+  }
+
+  test("non-equal correlated scalar subquery") {
+    val msg1 = intercept[AnalysisException] {
+      sql("select a, (select b from l l2 where l2.a < l1.a) sum_b from l l1")
+    }
+    assert(msg1.getMessage.contains(
+      "The correlated scalar subquery can only contain equality predicates"))
+  }
+
+  test("disjunctive correlated scalar subquery") {
+    checkAnswer(
+      sql("""
+        |select a
+        |from   l
+        |where  (select count(*)
+        |        from   r
+        |        where (a = c and d = 2.0) or (a = c and d = 1.0)) > 0
+        """.stripMargin),
+      Row(3) :: Nil)
   }
 }

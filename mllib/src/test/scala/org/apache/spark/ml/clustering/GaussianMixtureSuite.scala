@@ -20,7 +20,7 @@ package org.apache.spark.ml.clustering
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.Dataset
 
 
 class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
@@ -32,7 +32,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
   }
 
   test("default parameters") {
@@ -108,8 +108,8 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext
   test("read/write") {
     def checkModelData(model: GaussianMixtureModel, model2: GaussianMixtureModel): Unit = {
       assert(model.weights === model2.weights)
-      assert(model.gaussians.map(_.mu) === model2.gaussians.map(_.mu))
-      assert(model.gaussians.map(_.sigma) === model2.gaussians.map(_.sigma))
+      assert(model.gaussians.map(_.mean) === model2.gaussians.map(_.mean))
+      assert(model.gaussians.map(_.cov) === model2.gaussians.map(_.cov))
     }
     val gm = new GaussianMixture()
     testEstimatorAndModelReadWrite(gm, dataset,

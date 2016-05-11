@@ -12,19 +12,23 @@ export("print.jobj")
 
 # MLlib integration
 exportMethods("glm",
+              "spark.glm",
               "predict",
               "summary",
-              "kmeans",
+              "spark.kmeans",
               "fitted",
-              "naiveBayes",
-              "survreg")
+              "spark.naiveBayes",
+              "spark.survreg")
 
 # Job group lifecycle management methods
 export("setJobGroup",
        "clearJobGroup",
        "cancelJobGroup")
 
-exportClasses("DataFrame")
+# Export Utility methods
+export("setLogLevel")
+
+exportClasses("SparkDataFrame")
 
 exportMethods("arrange",
               "as.data.frame",
@@ -42,6 +46,7 @@ exportMethods("arrange",
               "covar_samp",
               "covar_pop",
               "crosstab",
+              "dapply",
               "describe",
               "dim",
               "distinct",
@@ -104,7 +109,8 @@ exportMethods("arrange",
               "write.jdbc",
               "write.json",
               "write.parquet",
-              "write.text")
+              "write.text",
+              "write.ml")
 
 exportClasses("Column")
 
@@ -169,6 +175,7 @@ exportMethods("%in%",
               "getItem",
               "greatest",
               "hex",
+              "histogram",
               "hour",
               "hypot",
               "ifelse",
@@ -209,6 +216,7 @@ exportMethods("%in%",
               "next_day",
               "ntile",
               "otherwise",
+              "over",
               "percent_rank",
               "pmod",
               "quarter",
@@ -290,13 +298,15 @@ export("as.DataFrame",
        "read.json",
        "read.parquet",
        "read.text",
+       "spark.lapply",
        "sql",
        "str",
        "tableToDF",
        "tableNames",
        "tables",
        "uncacheTable",
-       "print.summary.GeneralizedLinearRegressionModel")
+       "print.summary.GeneralizedLinearRegressionModel",
+       "read.ml")
 
 export("structField",
        "structField.jobj",
@@ -306,3 +316,12 @@ export("structField",
        "structType.jobj",
        "structType.structField",
        "print.structType")
+
+exportClasses("WindowSpec")
+
+export("partitionBy",
+       "rowsBetween",
+       "rangeBetween")
+
+export("window.partitionBy",
+       "window.orderBy")

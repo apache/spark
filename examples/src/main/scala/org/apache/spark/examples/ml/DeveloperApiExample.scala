@@ -18,13 +18,12 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util.Identifiable
 import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
+import org.apache.spark.sql.{Dataset, Row, SparkSession}
 
 /**
  * A simple example demonstrating how to write your own learning algorithm using Estimator,
@@ -38,13 +37,14 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
 object DeveloperApiExample {
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("DeveloperApiExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession
+      .builder
+      .appName("DeveloperApiExample")
+      .getOrCreate()
+    import spark.implicits._
 
     // Prepare training data.
-    val training = sc.parallelize(Seq(
+    val training = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
       LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
@@ -62,13 +62,13 @@ object DeveloperApiExample {
     val model = lr.fit(training.toDF())
 
     // Prepare test data.
-    val test = sc.parallelize(Seq(
+    val test = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
       LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
       LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5))))
 
     // Make predictions on test data.
-    val sumPredictions: Double = model.transform(test.toDF())
+    val sumPredictions: Double = model.transform(test)
       .select("features", "label", "prediction")
       .collect()
       .map { case Row(features: Vector, label: Double, prediction: Double) =>
@@ -77,7 +77,7 @@ object DeveloperApiExample {
     assert(sumPredictions == 0.0,
       "MyLogisticRegression predicted something other than 0, even though all coefficients are 0!")
 
-    sc.stop()
+    spark.stop()
   }
 }
 

@@ -54,6 +54,6 @@ class DefaultSource extends RelationProvider with DataSourceRegister {
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(url, table, parts, properties)(sqlContext)
+    JDBCRelation(url, table, parts, properties)(sqlContext.sparkSession)
   }
 }

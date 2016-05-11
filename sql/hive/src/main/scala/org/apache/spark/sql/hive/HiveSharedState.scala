@@ -18,23 +18,26 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.internal.SharedState
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 
 
 /**
- * A class that holds all state shared across sessions in a given [[HiveContext]].
+ * A class that holds all state shared across sessions in a given
+ * [[org.apache.spark.sql.SparkSession]] backed by Hive.
  */
 private[hive] class HiveSharedState(override val sparkContext: SparkContext)
-  extends SharedState(sparkContext) {
+  extends SharedState(sparkContext) with Logging {
 
-  // TODO: just share the IsolatedClientLoader instead of the client instances themselves
+  // TODO: just share the IsolatedClientLoader instead of the client instance itself
 
-  /**
-   * A Hive client used for execution.
-   */
-  val executionHive: HiveClientImpl = {
-    HiveContext.newClientForExecution(sparkContext.conf, sparkContext.hadoopConfiguration)
+  {
+    // Set the Hive metastore warehouse path to the one we use
+    val tempConf = new SQLConf
+    sparkContext.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
+    sparkContext.conf.set("hive.metastore.warehouse.dir", tempConf.warehousePath)
+    logInfo(s"Setting Hive metastore warehouse path to '${tempConf.warehousePath}'")
   }
 
   /**
@@ -42,7 +45,7 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
    */
   // This needs to be a lazy val at here because TestHiveSharedState is overriding it.
   lazy val metadataHive: HiveClient = {
-    HiveContext.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
+    HiveUtils.newClientForMetadata(sparkContext.conf, sparkContext.hadoopConfiguration)
   }
 
   /**

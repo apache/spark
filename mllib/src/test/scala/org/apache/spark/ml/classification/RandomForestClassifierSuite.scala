@@ -154,9 +154,16 @@ class RandomForestClassifierSuite
     }
   }
 
+  test("Fitting without numClasses in metadata") {
+    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val rf = new RandomForestClassifier().setMaxDepth(1).setNumTrees(1)
+    rf.fit(df)
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // Tests of feature importance
   /////////////////////////////////////////////////////////////////////////////
+
   test("Feature importance with toy data") {
     val numClasses = 2
     val rf = new RandomForestClassifier()
@@ -182,7 +189,7 @@ class RandomForestClassifierSuite
   test("should support all NumericType labels and not support other types") {
     val rf = new RandomForestClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[RandomForestClassificationModel, RandomForestClassifier](
-      rf, isClassification = true, sqlContext) { (expected, actual) =>
+      rf, isClassification = true, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }

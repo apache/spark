@@ -88,7 +88,7 @@ private[ann] trait LayerModel extends Serializable {
    * LayerModel implementation and the stack (batch) size
    * Developer is responsible for checking the size of output
    * when writing to it
- *
+   *
    * @param data data
    * @param output output (modified in place)
    */
@@ -100,8 +100,8 @@ private[ann] trait LayerModel extends Serializable {
    * LayerModel implementation and the stack (batch) size
    * Developer is responsible for checking the size of
    * prevDelta when writing to it
-    *
-    * @param delta delta of this layer
+   *
+   * @param delta delta of this layer
    * @param output output of this layer
    * @param prevDelta the previous delta (modified in place)
    */
@@ -185,7 +185,7 @@ private[ann] object AffineLayerModel {
 
   /**
    * Creates a model of Affine layer
- *
+   *
    * @param layer layer properties
    * @param weights vector for weights initialization
    * @param random random number generator
@@ -202,8 +202,8 @@ private[ann] object AffineLayerModel {
    * where a is chosen in a such way that the weight variance corresponds
    * to the points to the maximal curvature of the activation function
    * (which is approximately 2.38 for a standard sigmoid)
-    *
-    * @param numIn number of inputs
+   *
+   * @param numIn number of inputs
    * @param numOut number of outputs
    * @param weights vector for weights initialization
    * @param random random number generator
@@ -354,7 +354,7 @@ private[ann] trait TopologyModel extends Serializable {
   val layerModels: Array[LayerModel]
   /**
    * Forward propagation
- *
+   *
    * @param data input data
    * @return array of outputs for each of the layers
    */
@@ -362,7 +362,7 @@ private[ann] trait TopologyModel extends Serializable {
 
   /**
    * Prediction of the model
- *
+   *
    * @param data input data
    * @return prediction
    */
@@ -370,7 +370,7 @@ private[ann] trait TopologyModel extends Serializable {
 
   /**
    * Computes gradient for the network
- *
+   *
    * @param data input data
    * @param target target output
    * @param cumGradient cumulative gradient
@@ -384,7 +384,7 @@ private[ann] trait TopologyModel extends Serializable {
 /**
  * Feed forward ANN
  *
- * @param layers
+ * @param layers Array of layers
  */
 private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends Topology {
   override def model(weights: Vector): TopologyModel = FeedForwardModel(this, weights)
@@ -398,7 +398,7 @@ private[ann] class FeedForwardTopology private(val layers: Array[Layer]) extends
 private[ml] object FeedForwardTopology {
   /**
    * Creates a feed forward topology from the array of layers
- *
+   *
    * @param layers array of layers
    * @return feed forward topology
    */
@@ -408,7 +408,7 @@ private[ml] object FeedForwardTopology {
 
   /**
    * Creates a multi-layer perceptron
- *
+   *
    * @param layerSizes sizes of layers including input and output size
    * @param softmaxOnTop wether to use SoftMax or Sigmoid function for an output layer.
    *                Softmax is default
@@ -534,7 +534,7 @@ private[ann] object FeedForwardModel {
 
   /**
    * Creates a model from a topology and weights
- *
+   *
    * @param topology topology
    * @param weights weights
    * @return model
@@ -546,7 +546,7 @@ private[ann] object FeedForwardModel {
 
   /**
    * Creates a model given a topology and seed
- *
+   *
    * @param topology topology
    * @param seed seed for generating the weights
    * @return model
@@ -577,13 +577,6 @@ private[ann] object FeedForwardModel {
  * @param dataStacker data stacker
  */
 private[ann] class ANNGradient(topology: Topology, dataStacker: DataStacker) extends Gradient {
-
-  override def compute(data: Vector, label: Double, weights: Vector): (Vector, Double) = {
-    val gradient = Vectors.zeros(weights.size)
-    val loss = compute(data, label, weights, gradient)
-    (gradient, loss)
-  }
-
   override def compute(
     data: Vector,
     label: Double,
@@ -610,7 +603,7 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
 
   /**
    * Stacks the data
- *
+   *
    * @param data RDD of vector pairs
    * @return RDD of double (always zero) and vector that contains the stacked vectors
    */
@@ -643,7 +636,7 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
 
   /**
    * Unstack the stacked vectors into matrices for batch operations
- *
+   *
    * @param data stacked vector
    * @return pair of matrices holding input and output data and the real stack size
    */
@@ -714,7 +707,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets weights
- *
+   *
    * @param value weights
    * @return trainer
    */
@@ -725,7 +718,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the stack size
- *
+   *
    * @param value stack size
    * @return trainer
    */
@@ -737,7 +730,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the SGD optimizer
- *
+   *
    * @return SGD optimizer
    */
   def SGDOptimizer: GradientDescent = {
@@ -748,7 +741,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the LBFGS optimizer
- *
+   *
    * @return LBGS optimizer
    */
   def LBFGSOptimizer: LBFGS = {
@@ -759,7 +752,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the updater
- *
+   *
    * @param value updater
    * @return trainer
    */
@@ -771,7 +764,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Sets the gradient
- *
+   *
    * @param value gradient
    * @return trainer
    */
@@ -801,7 +794,7 @@ private[ml] class FeedForwardTrainer(
 
   /**
    * Trains the ANN
- *
+   *
    * @param data RDD of input and output vector pairs
    * @return model
    */

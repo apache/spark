@@ -33,20 +33,20 @@ import org.apache.spark.util.Utils
 class TextSuite extends QueryTest with SharedSQLContext {
 
   test("reading text file") {
-    verifyFrame(sqlContext.read.format("text").load(testFile))
+    verifyFrame(spark.read.format("text").load(testFile))
   }
 
   test("SQLContext.read.text() API") {
-    verifyFrame(sqlContext.read.text(testFile).toDF())
+    verifyFrame(spark.read.text(testFile).toDF())
   }
 
   test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
-    val df = sqlContext.read.text(testFile).withColumnRenamed("value", "adwrasdf")
+    val df = spark.read.text(testFile).withColumnRenamed("value", "adwrasdf")
 
     val tempFile = Utils.createTempDir()
     tempFile.delete()
     df.write.text(tempFile.getCanonicalPath)
-    verifyFrame(sqlContext.read.text(tempFile.getCanonicalPath).toDF())
+    verifyFrame(spark.read.text(tempFile.getCanonicalPath).toDF())
 
     Utils.deleteRecursively(tempFile)
   }
@@ -55,18 +55,18 @@ class TextSuite extends QueryTest with SharedSQLContext {
     val tempFile = Utils.createTempDir()
     tempFile.delete()
 
-    val df = sqlContext.range(2)
+    val df = spark.range(2)
     intercept[AnalysisException] {
       df.write.text(tempFile.getCanonicalPath)
     }
 
     intercept[AnalysisException] {
-      sqlContext.range(2).select(df("id"), df("id") + 1).write.text(tempFile.getCanonicalPath)
+      spark.range(2).select(df("id"), df("id") + 1).write.text(tempFile.getCanonicalPath)
     }
   }
 
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
-    val testDf = sqlContext.read.text(testFile)
+    val testDf = spark.read.text(testFile)
     val extensionNameMap = Map("bzip2" -> ".bz2", "deflate" -> ".deflate", "gzip" -> ".gz")
     extensionNameMap.foreach {
       case (codecName, extension) =>
@@ -75,7 +75,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
         testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
         assert(compressedFiles.exists(_.getName.endsWith(s".txt$extension")))
-        verifyFrame(sqlContext.read.text(tempDirPath).toDF())
+        verifyFrame(spark.read.text(tempDirPath).toDF())
     }
 
     val errMsg = intercept[IllegalArgumentException] {
@@ -87,28 +87,22 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-13543 Write the output as uncompressed via option()") {
-    val clonedConf = new Configuration(hadoopConfiguration)
-    hadoopConfiguration.set("mapreduce.output.fileoutputformat.compress", "true")
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.type", CompressionType.BLOCK.toString)
-    hadoopConfiguration
-      .set("mapreduce.output.fileoutputformat.compress.codec", classOf[GzipCodec].getName)
-    hadoopConfiguration.set("mapreduce.map.output.compress", "true")
-    hadoopConfiguration.set("mapreduce.map.output.compress.codec", classOf[GzipCodec].getName)
+    val extraOptions = Map[String, String](
+      "mapreduce.output.fileoutputformat.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.type" -> CompressionType.BLOCK.toString,
+      "mapreduce.map.output.compress" -> "true",
+      "mapreduce.output.fileoutputformat.compress.codec" -> classOf[GzipCodec].getName,
+      "mapreduce.map.output.compress.codec" -> classOf[GzipCodec].getName
+    )
     withTempDir { dir =>
-      try {
-        val testDf = sqlContext.read.text(testFile)
-        val tempDir = Utils.createTempDir()
-        val tempDirPath = tempDir.getAbsolutePath
-        testDf.write.option("compression", "none").mode(SaveMode.Overwrite).text(tempDirPath)
-        val compressedFiles = new File(tempDirPath).listFiles()
-        assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
-        verifyFrame(sqlContext.read.text(tempDirPath).toDF())
-      } finally {
-        // Hadoop 1 doesn't have `Configuration.unset`
-        hadoopConfiguration.clear()
-        clonedConf.asScala.foreach(entry => hadoopConfiguration.set(entry.getKey, entry.getValue))
-      }
+      val testDf = spark.read.text(testFile)
+      val tempDir = Utils.createTempDir()
+      val tempDirPath = tempDir.getAbsolutePath
+      testDf.write.option("compression", "none")
+        .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
+      val compressedFiles = new File(tempDirPath).listFiles()
+      assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
+      verifyFrame(spark.read.options(extraOptions).text(tempDirPath).toDF())
     }
   }
 

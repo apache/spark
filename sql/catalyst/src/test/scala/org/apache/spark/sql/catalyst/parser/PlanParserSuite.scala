@@ -17,11 +17,13 @@
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedGenerator
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.types.{BooleanType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
+
 
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
@@ -46,19 +48,28 @@ class PlanParserSuite extends PlanTest {
     assertEqual("SELECT * FROM a", plan)
   }
 
+  test("explain") {
+    intercept("EXPLAIN logical SELECT 1", "Unsupported SQL statement")
+    intercept("EXPLAIN formatted SELECT 1", "Unsupported SQL statement")
+  }
+
   test("show functions") {
     assertEqual("show functions", ShowFunctions(None, None))
     assertEqual("show functions foo", ShowFunctions(None, Some("foo")))
     assertEqual("show functions foo.bar", ShowFunctions(Some("foo"), Some("bar")))
     assertEqual("show functions 'foo\\\\.*'", ShowFunctions(None, Some("foo\\.*")))
-    intercept("show functions foo.bar.baz", "SHOW FUNCTIONS unsupported name")
+    intercept("show functions foo.bar.baz", "Unsupported function name")
   }
 
   test("describe function") {
-    assertEqual("describe function bar", DescribeFunction("bar", isExtended = false))
-    assertEqual("describe function extended bar", DescribeFunction("bar", isExtended = true))
-    assertEqual("describe function foo.bar", DescribeFunction("foo.bar", isExtended = false))
-    assertEqual("describe function extended f.bar", DescribeFunction("f.bar", isExtended = true))
+    assertEqual("describe function bar",
+      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = false))
+    assertEqual("describe function extended bar",
+      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = true))
+    assertEqual("describe function foo.bar",
+      DescribeFunction(FunctionIdentifier("bar", database = Option("foo")), isExtended = false))
+    assertEqual("describe function extended f.bar",
+      DescribeFunction(FunctionIdentifier("bar", database = Option("f")), isExtended = true))
   }
 
   test("set operations") {
@@ -261,11 +272,14 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("lateral view") {
+    val explode = UnresolvedGenerator(FunctionIdentifier("explode"), Seq('x))
+    val jsonTuple = UnresolvedGenerator(FunctionIdentifier("json_tuple"), Seq('x, 'y))
+
     // Single lateral view
     assertEqual(
       "select * from t lateral view explode(x) expl as x",
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+        .generate(explode, join = true, outer = false, Some("expl"), Seq("x"))
         .select(star()))
 
     // Multiple lateral views
@@ -275,12 +289,12 @@ class PlanParserSuite extends PlanTest {
         |lateral view explode(x) expl
         |lateral view outer json_tuple(x, y) jtup q, z""".stripMargin,
       table("t")
-        .generate(Explode('x), join = true, outer = false, Some("expl"), Seq.empty)
-        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = true, Some("jtup"), Seq("q", "z"))
+        .generate(explode, join = true, outer = false, Some("expl"), Seq.empty)
+        .generate(jsonTuple, join = true, outer = true, Some("jtup"), Seq("q", "z"))
         .select(star()))
 
     // Multi-Insert lateral views.
-    val from = table("t1").generate(Explode('x), join = true, outer = false, Some("expl"), Seq("x"))
+    val from = table("t1").generate(explode, join = true, outer = false, Some("expl"), Seq("x"))
     assertEqual(
       """from t1
         |lateral view explode(x) expl as x
@@ -292,7 +306,7 @@ class PlanParserSuite extends PlanTest {
         |where s < 10
       """.stripMargin,
       Union(from
-        .generate(JsonTuple(Seq('x, 'y)), join = true, outer = false, Some("jtup"), Seq("q", "z"))
+        .generate(jsonTuple, join = true, outer = false, Some("jtup"), Seq("q", "z"))
         .select(star())
         .insertInto("t2"),
         from.where('s < 10).select(star()).insertInto("t3")))
@@ -300,7 +314,7 @@ class PlanParserSuite extends PlanTest {
     // Unresolved generator.
     val expected = table("t")
       .generate(
-        UnresolvedGenerator("posexplode", Seq('x)),
+        UnresolvedGenerator(FunctionIdentifier("posexplode"), Seq('x)),
         join = true,
         outer = false,
         Some("posexpl"),
@@ -367,9 +381,13 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
       Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
     intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
-      "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
+      "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported")
     intercept(s"$sql tablesample(bucket 11 out of 10) as x",
       s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(300M) s",
+      "TABLESAMPLE(byteLengthLiteral) is not supported")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(BUCKET 3 OUT OF 32 ON rand()) s",
+      "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported")
   }
 
   test("sub-query") {
@@ -427,5 +445,14 @@ class PlanParserSuite extends PlanTest {
     intercept("values (1, 'a'), (2, 'b') as tbl(a, b, c)",
       "Number of aliases must match the number of fields in an inline table.")
     intercept[ArrayIndexOutOfBoundsException](parsePlan("values (1, 'a'), (2, 'b', 5Y)"))
+  }
+
+  test("simple select query with !> and !<") {
+    // !< is equivalent to >=
+    assertEqual("select a, b from db.c where x !< 1",
+      table("db", "c").where('x >= 1).select('a, 'b))
+    // !> is equivalent to <=
+    assertEqual("select a, b from db.c where x !> 1",
+      table("db", "c").where('x <= 1).select('a, 'b))
   }
 }

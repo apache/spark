@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.Filter
+import org.apache.spark.sql.execution.FilterExec
 import org.apache.spark.util.Utils
 
 /**
@@ -50,23 +50,23 @@ private[sql] trait SQLTestUtils
   with BeforeAndAfterAll
   with SQLTestData { self =>
 
-  protected def sparkContext = sqlContext.sparkContext
+  protected def sparkContext = spark.sparkContext
 
   // Whether to materialize all test data before the first test is run
   private var loadTestDataBeforeTests = false
 
   // Shorthand for running a query using our SQLContext
-  protected lazy val sql = sqlContext.sql _
+  protected lazy val sql = spark.sql _
 
   /**
    * A helper object for importing SQL implicits.
    *
-   * Note that the alternative of importing `sqlContext.implicits._` is not possible here.
+   * Note that the alternative of importing `spark.implicits._` is not possible here.
    * This is because we create the [[SQLContext]] immediately before the first test is run,
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.sqlContext
+    protected override def _sqlContext: SQLContext = self.spark.wrapped
   }
 
   /**
@@ -85,13 +85,6 @@ private[sql] trait SQLTestUtils
   }
 
   /**
-   * The Hadoop configuration used by the active [[SQLContext]].
-   */
-  protected def hadoopConfiguration: Configuration = {
-    sparkContext.hadoopConfiguration
-  }
-
-  /**
    * Sets all SQL configurations specified in `pairs`, calls `f`, and then restore all SQL
    * configurations.
    *
@@ -99,12 +92,12 @@ private[sql] trait SQLTestUtils
    */
   protected def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {
     val (keys, values) = pairs.unzip
-    val currentValues = keys.map(key => Try(sqlContext.conf.getConfString(key)).toOption)
-    (keys, values).zipped.foreach(sqlContext.conf.setConfString)
+    val currentValues = keys.map(key => Try(spark.conf.get(key)).toOption)
+    (keys, values).zipped.foreach(spark.conf.set)
     try f finally {
       keys.zip(currentValues).foreach {
-        case (key, Some(value)) => sqlContext.conf.setConfString(key, value)
-        case (key, None) => sqlContext.conf.unsetConf(key)
+        case (key, Some(value)) => spark.conf.set(key, value)
+        case (key, None) => spark.conf.unset(key)
       }
     }
   }
@@ -143,11 +136,11 @@ private[sql] trait SQLTestUtils
     } finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
-      try functions.foreach { case (functionName, isTemporary) =>
+      functions.foreach { case (functionName, isTemporary) =>
         val withTemporary = if (isTemporary) "TEMPORARY" else ""
-        sqlContext.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
+        spark.sql(s"DROP $withTemporary FUNCTION IF EXISTS $functionName")
         assert(
-          !sqlContext.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
+          !spark.sessionState.catalog.functionExists(FunctionIdentifier(functionName)),
           s"Function $functionName should have been dropped. But, it still exists.")
       }
     }
@@ -160,7 +153,7 @@ private[sql] trait SQLTestUtils
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
-      try tableNames.foreach(sqlContext.dropTempTable) catch {
+      try tableNames.foreach(spark.catalog.dropTempTable) catch {
         case _: NoSuchTableException =>
       }
     }
@@ -172,7 +165,7 @@ private[sql] trait SQLTestUtils
   protected def withTable(tableNames: String*)(f: => Unit): Unit = {
     try f finally {
       tableNames.foreach { name =>
-        sqlContext.sql(s"DROP TABLE IF EXISTS $name")
+        spark.sql(s"DROP TABLE IF EXISTS $name")
       }
     }
   }
@@ -183,7 +176,7 @@ private[sql] trait SQLTestUtils
   protected def withView(viewNames: String*)(f: => Unit): Unit = {
     try f finally {
       viewNames.foreach { name =>
-        sqlContext.sql(s"DROP VIEW IF EXISTS $name")
+        spark.sql(s"DROP VIEW IF EXISTS $name")
       }
     }
   }
@@ -198,12 +191,12 @@ private[sql] trait SQLTestUtils
     val dbName = s"db_${UUID.randomUUID().toString.replace('-', '_')}"
 
     try {
-      sqlContext.sql(s"CREATE DATABASE $dbName")
+      spark.sql(s"CREATE DATABASE $dbName")
     } catch { case cause: Throwable =>
       fail("Failed to create temporary database", cause)
     }
 
-    try f(dbName) finally sqlContext.sql(s"DROP DATABASE $dbName CASCADE")
+    try f(dbName) finally spark.sql(s"DROP DATABASE $dbName CASCADE")
   }
 
   /**
@@ -211,8 +204,8 @@ private[sql] trait SQLTestUtils
    * `f` returns.
    */
   protected def activateDatabase(db: String)(f: => Unit): Unit = {
-    sqlContext.sessionState.catalog.setCurrentDatabase(db)
-    try f finally sqlContext.sessionState.catalog.setCurrentDatabase("default")
+    spark.sessionState.catalog.setCurrentDatabase(db)
+    try f finally spark.sessionState.catalog.setCurrentDatabase("default")
   }
 
   /**
@@ -220,15 +213,15 @@ private[sql] trait SQLTestUtils
    */
   protected def stripSparkFilter(df: DataFrame): DataFrame = {
     val schema = df.schema
-    val withoutFilters = df.queryExecution.sparkPlan transform {
-      case Filter(_, child) => child
+    val withoutFilters = df.queryExecution.sparkPlan.transform {
+      case FilterExec(_, child) => child
     }
 
     val childRDD = withoutFilters
       .execute()
       .map(row => Row.fromSeq(row.copy().toSeq(schema)))
 
-    sqlContext.createDataFrame(childRDD, schema)
+    spark.createDataFrame(childRDD, schema)
   }
 
   /**
@@ -236,7 +229,7 @@ private[sql] trait SQLTestUtils
    * way to construct [[DataFrame]] directly out of local data without relying on implicits.
    */
   protected implicit def logicalPlanToSparkQuery(plan: LogicalPlan): DataFrame = {
-    Dataset.ofRows(sqlContext, plan)
+    Dataset.ofRows(spark, plan)
   }
 
   /**

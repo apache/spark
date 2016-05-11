@@ -32,7 +32,7 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Matrix, Vector, Vectors, VectorUDT}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.functions.{col, monotonicallyIncreasingId, udf}
 import org.apache.spark.sql.types.StructType
 
@@ -355,15 +355,15 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
  * :: Experimental ::
  * Model fitted by [[LDA]].
  *
- * @param vocabSize  Vocabulary size (number of terms or terms in the vocabulary)
- * @param sqlContext  Used to construct local DataFrames for returning query results
+ * @param vocabSize  Vocabulary size (number of terms or words in the vocabulary)
+ * @param sparkSession  Used to construct local DataFrames for returning query results
  */
 @Since("1.6.0")
 @Experimental
 sealed abstract class LDAModel private[ml] (
     @Since("1.6.0") override val uid: String,
     @Since("1.6.0") val vocabSize: Int,
-    @Since("1.6.0") @transient protected val sqlContext: SQLContext)
+    @Since("1.6.0") @transient private[ml] val sparkSession: SparkSession)
   extends Model[LDAModel] with LDAParams with Logging with MLWritable {
 
   // NOTE to developers:
@@ -405,7 +405,7 @@ sealed abstract class LDAModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
-      val t = udf(oldLocalModel.getTopicDistributionMethod(sqlContext.sparkContext))
+      val t = udf(oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext))
       dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +
@@ -495,7 +495,7 @@ sealed abstract class LDAModel private[ml] (
       case ((termIndices, termWeights), topic) =>
         (topic, termIndices.toSeq, termWeights.toSeq)
     }
-    sqlContext.createDataFrame(topics).toDF("topic", "termIndices", "termWeights")
+    sparkSession.createDataFrame(topics).toDF("topic", "termIndices", "termWeights")
   }
 
   @Since("1.6.0")
@@ -516,12 +516,12 @@ class LocalLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
     @Since("1.6.0") override protected val oldLocalModel: OldLocalLDAModel,
-    sqlContext: SQLContext)
-  extends LDAModel(uid, vocabSize, sqlContext) {
+    sparkSession: SparkSession)
+  extends LDAModel(uid, vocabSize, sparkSession) {
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): LocalLDAModel = {
-    val copied = new LocalLDAModel(uid, vocabSize, oldLocalModel, sqlContext)
+    val copied = new LocalLDAModel(uid, vocabSize, oldLocalModel, sparkSession)
     copyValues(copied, extra).setParent(parent).asInstanceOf[LocalLDAModel]
   }
 
@@ -554,7 +554,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
         oldModel.topicConcentration, oldModel.gammaShape)
       val dataPath = new Path(path, "data").toString
-      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+      sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
   }
 
@@ -565,7 +565,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     override def load(path: String): LocalLDAModel = {
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
       val dataPath = new Path(path, "data").toString
-      val data = sqlContext.read.parquet(dataPath)
+      val data = sparkSession.read.parquet(dataPath)
         .select("vocabSize", "topicsMatrix", "docConcentration", "topicConcentration",
           "gammaShape")
         .head()
@@ -576,7 +576,7 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val gammaShape = data.getAs[Double](4)
       val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
         gammaShape)
-      val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sqlContext)
+      val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
@@ -608,9 +608,9 @@ class DistributedLDAModel private[ml] (
     uid: String,
     vocabSize: Int,
     private val oldDistributedModel: OldDistributedLDAModel,
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     private var oldLocalModelOption: Option[OldLocalLDAModel])
-  extends LDAModel(uid, vocabSize, sqlContext) {
+  extends LDAModel(uid, vocabSize, sparkSession) {
 
   override protected def oldLocalModel: OldLocalLDAModel = {
     if (oldLocalModelOption.isEmpty) {
@@ -628,12 +628,12 @@ class DistributedLDAModel private[ml] (
    * WARNING: This involves collecting a large [[topicsMatrix]] to the driver.
    */
   @Since("1.6.0")
-  def toLocal: LocalLDAModel = new LocalLDAModel(uid, vocabSize, oldLocalModel, sqlContext)
+  def toLocal: LocalLDAModel = new LocalLDAModel(uid, vocabSize, oldLocalModel, sparkSession)
 
   @Since("1.6.0")
   override def copy(extra: ParamMap): DistributedLDAModel = {
-    val copied =
-      new DistributedLDAModel(uid, vocabSize, oldDistributedModel, sqlContext, oldLocalModelOption)
+    val copied = new DistributedLDAModel(
+      uid, vocabSize, oldDistributedModel, sparkSession, oldLocalModelOption)
     copyValues(copied, extra).setParent(parent)
     copied
   }
@@ -688,7 +688,7 @@ class DistributedLDAModel private[ml] (
   @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
-    val fs = FileSystem.get(sqlContext.sparkContext.hadoopConfiguration)
+    val fs = FileSystem.get(sparkSession.sparkContext.hadoopConfiguration)
     _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, fs))
     _checkpointFiles = Array.empty[String]
   }
@@ -720,7 +720,7 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
       val modelPath = new Path(path, "oldModel").toString
       val oldModel = OldDistributedLDAModel.load(sc, modelPath)
       val model = new DistributedLDAModel(
-        metadata.uid, oldModel.vocabSize, oldModel, sqlContext, None)
+        metadata.uid, oldModel.vocabSize, oldModel, sparkSession, None)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
@@ -745,9 +745,8 @@ object DistributedLDAModel extends MLReadable[DistributedLDAModel] {
  *  - "topic": multinomial distribution over terms representing some concept
  *  - "document": one piece of text, corresponding to one row in the input data
  *
- * References:
- *  - Original LDA paper (journal version):
- *    Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
+ * Original LDA paper (journal version):
+ *  Blei, Ng, and Jordan.  "Latent Dirichlet Allocation."  JMLR, 2003.
  *
  * Input data (featuresCol):
  *  LDA is given a collection of documents as input data, via the featuresCol parameter.
@@ -856,9 +855,9 @@ class LDA @Since("1.6.0") (
     val oldModel = oldLDA.run(oldData)
     val newModel = oldModel match {
       case m: OldLocalLDAModel =>
-        new LocalLDAModel(uid, m.vocabSize, m, dataset.sqlContext)
+        new LocalLDAModel(uid, m.vocabSize, m, dataset.sparkSession)
       case m: OldDistributedLDAModel =>
-        new DistributedLDAModel(uid, m.vocabSize, m, dataset.sqlContext, None)
+        new DistributedLDAModel(uid, m.vocabSize, m, dataset.sparkSession, None)
     }
     copyValues(newModel).setParent(this)
   }

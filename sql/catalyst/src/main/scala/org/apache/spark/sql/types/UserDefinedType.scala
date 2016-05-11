@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.util.Objects
+
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
@@ -83,18 +85,23 @@ abstract class UserDefinedType[UserType >: Null] extends DataType with Serializa
 
   override def sql: String = sqlType.sql
 
+  override def hashCode(): Int = getClass.hashCode()
+
   override def equals(other: Any): Boolean = other match {
     case that: UserDefinedType[_] => this.acceptsType(that)
     case _ => false
   }
+
+  override def catalogString: String = sqlType.simpleString
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * The user defined type in Python.
  *
  * Note: This can only be accessed via Python UDF, or accessed as serialized object.
  */
+@DeveloperApi
 private[sql] class PythonUserDefinedType(
     val sqlType: DataType,
     override val pyUDT: String,
@@ -115,7 +122,9 @@ private[sql] class PythonUserDefinedType(
   }
 
   override def equals(other: Any): Boolean = other match {
-    case that: PythonUserDefinedType => this.pyUDT.equals(that.pyUDT)
+    case that: PythonUserDefinedType => pyUDT == that.pyUDT
     case _ => false
   }
+
+  override def hashCode(): Int = Objects.hashCode(pyUDT)
 }

@@ -127,7 +127,7 @@ Assume that we have the following DataFrame with columns `id` and `texts`:
  1  | Array("a", "b", "b", "c", "a")
 ~~~~
 
-each row in`texts` is a document of type Array[String].
+each row in `texts` is a document of type Array[String].
 Invoking fit of `CountVectorizer` produces a `CountVectorizerModel` with vocabulary (a, b, c),
 then the output column "vector" after transformation contains:
 
@@ -185,7 +185,7 @@ for more details on the API.
 <div data-lang="scala" markdown="1">
 
 Refer to the [Tokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
-and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
+and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/TokenizerExample.scala %}
@@ -775,7 +775,7 @@ The rescaled value for a feature E is calculated as,
 \end{equation}`
 For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
 
-Note that since zero values will probably be transformed to non-zero values, output of the transformer will be DenseVector even for sparse input.
+Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
@@ -801,6 +801,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [MinMaxScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScaler)
+and the [MinMaxScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScalerModel)
 for more details on the API.
 
 {% include_example python/ml/min_max_scaler_example.py %}
@@ -841,6 +842,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [MaxAbsScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScaler)
+and the [MaxAbsScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScalerModel)
 for more details on the API.
 
 {% include_example python/ml/max_abs_scaler_example.py %}
@@ -1118,6 +1120,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [QuantileDiscretizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example python/ml/quantile_discretizer_example.py %}
+</div>
+
 </div>
 
 # Feature Selectors
@@ -1190,6 +1201,14 @@ Refer to the [VectorSlicer Java docs](api/java/org/apache/spark/ml/feature/Vecto
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorSlicer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer)
+for more details on the API.
+
+{% include_example python/ml/vector_slicer_example.py %}
 </div>
 </div>
 

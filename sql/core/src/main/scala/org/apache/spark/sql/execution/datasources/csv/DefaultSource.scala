@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -44,17 +44,19 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def toString: String = "CSV"
 
+  override def hashCode(): Int = getClass.hashCode()
+
   override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val csvOptions = new CSVOptions(options)
 
     // TODO: Move filtering.
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
-    val rdd = baseRdd(sqlContext, csvOptions, paths)
+    val rdd = baseRdd(sparkSession, csvOptions, paths)
     val firstLine = findFirstLine(csvOptions, rdd)
     val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
 
@@ -64,9 +66,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
     }
 
-    val parsedRdd = tokenRdd(sqlContext, csvOptions, header, paths)
+    val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
     val schema = if (csvOptions.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, csvOptions.nullValue)
+      CSVInferSchema.infer(parsedRdd, header, csvOptions)
     } else {
       // By default fields are assumed to be StringType
       val schemaFields = header.map { fieldName =>
@@ -78,7 +80,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -92,21 +94,22 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     val csvOptions = new CSVOptions(options)
     val headers = requiredSchema.fields.map(_.name)
 
-    val conf = new Configuration(sqlContext.sparkContext.hadoopConfiguration)
-    val broadcastedConf = sqlContext.sparkContext.broadcast(new SerializableConfiguration(conf))
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
       val lineIterator = {
-        val conf = broadcastedConf.value.value
+        val conf = broadcastedHadoopConf.value.value
         new HadoopFileLinesReader(file, conf).map { line =>
           new String(line.getBytes, 0, line.getLength, csvOptions.charset)
         }
@@ -114,36 +117,25 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
       CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
-      val unsafeRowIterator = {
-        val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
-        val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
-        tokenizedIterator.flatMap(parser(_).toSeq)
-      }
-
-      // Appends partition values
-      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-      val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
-
-      unsafeRowIterator.map { dataRow =>
-        appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
-      }
+      val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
+      val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
+      tokenizedIterator.flatMap(parser(_).toSeq)
     }
   }
 
   private def baseRdd(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: CSVOptions,
       inputPaths: Seq[String]): RDD[String] = {
-    readText(sqlContext, options, inputPaths.mkString(","))
+    readText(sparkSession, options, inputPaths.mkString(","))
   }
 
   private def tokenRdd(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: CSVOptions,
       header: Array[String],
       inputPaths: Seq[String]): RDD[Array[String]] = {
-    val rdd = baseRdd(sqlContext, options, inputPaths)
+    val rdd = baseRdd(sparkSession, options, inputPaths)
     // Make sure firstLine is materialized before sending to executors
     val firstLine = if (options.headerFlag) findFirstLine(options, rdd) else null
     CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
@@ -166,14 +158,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   private def readText(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: CSVOptions,
       location: String): RDD[String] = {
     if (Charset.forName(options.charset) == StandardCharsets.UTF_8) {
-      sqlContext.sparkContext.textFile(location)
+      sparkSession.sparkContext.textFile(location)
     } else {
       val charset = options.charset
-      sqlContext.sparkContext
+      sparkSession.sparkContext
         .hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
     }

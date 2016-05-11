@@ -52,7 +52,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
     (true :: false :: Nil).foreach { vectorized =>
       if (!vectorized || testVectorized) {
         withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
-          f(sqlContext.read.parquet(path.toString))
+          f(spark.read.parquet(path.toString))
         }
       }
     }
@@ -66,7 +66,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T])
       (f: String => Unit): Unit = {
     withTempPath { file =>
-      sqlContext.createDataFrame(data).write.parquet(file.getCanonicalPath)
+      spark.createDataFrame(data).write.parquet(file.getCanonicalPath)
       f(file.getCanonicalPath)
     }
   }
@@ -90,14 +90,14 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T], tableName: String, testVectorized: Boolean = true)
       (f: => Unit): Unit = {
     withParquetDataFrame(data, testVectorized) { df =>
-      sqlContext.registerDataFrameAsTable(df, tableName)
+      spark.wrapped.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
       data: Seq[T], path: File): Unit = {
-    sqlContext.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
+    spark.createDataFrame(data).write.mode(SaveMode.Overwrite).parquet(path.getCanonicalPath)
   }
 
   protected def makeParquetFile[T <: Product: ClassTag: TypeTag](
@@ -173,6 +173,6 @@ private[sql] trait ParquetTest extends SQLTestUtils {
 
   protected def readResourceParquetFile(name: String): DataFrame = {
     val url = Thread.currentThread().getContextClassLoader.getResource(name)
-    sqlContext.read.parquet(url.toString)
+    spark.read.parquet(url.toString)
   }
 }

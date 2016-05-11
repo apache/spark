@@ -25,7 +25,7 @@ import org.json4s.NoTypeHints
 import org.json4s.jackson.Serialization
 import org.json4s.jackson.Serialization.{read, write}
 
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -54,6 +54,19 @@ case class SinkFileStatus(
   }
 }
 
+object SinkFileStatus {
+  def apply(f: FileStatus): SinkFileStatus = {
+    SinkFileStatus(
+      path = f.getPath.toUri.toString,
+      size = f.getLen,
+      isDir = f.isDirectory,
+      modificationTime = f.getModificationTime,
+      blockReplication = f.getReplication,
+      blockSize = f.getBlockSize,
+      action = FileStreamSinkLog.ADD_ACTION)
+  }
+}
+
 /**
  * A special log for [[FileStreamSink]]. It will write one log file for each batch. The first line
  * of the log file is the version number, and there are multiple JSON lines following. Each JSON
@@ -66,8 +79,8 @@ case class SinkFileStatus(
  * When the reader uses `allFiles` to list all files, this method only returns the visible files
  * (drops the deleted files).
  */
-class FileStreamSinkLog(sqlContext: SQLContext, path: String)
-  extends HDFSMetadataLog[Seq[SinkFileStatus]](sqlContext, path) {
+class FileStreamSinkLog(sparkSession: SparkSession, path: String)
+  extends HDFSMetadataLog[Seq[SinkFileStatus]](sparkSession, path) {
 
   import FileStreamSinkLog._
 
@@ -80,11 +93,11 @@ class FileStreamSinkLog(sqlContext: SQLContext, path: String)
    * a live lock may happen if the compaction happens too frequently: one processing keeps deleting
    * old files while another one keeps retrying. Setting a reasonable cleanup delay could avoid it.
    */
-  private val fileCleanupDelayMs = sqlContext.getConf(SQLConf.FILE_SINK_LOG_CLEANUP_DELAY)
+  private val fileCleanupDelayMs = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_CLEANUP_DELAY)
 
-  private val isDeletingExpiredLog = sqlContext.getConf(SQLConf.FILE_SINK_LOG_DELETION)
+  private val isDeletingExpiredLog = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_DELETION)
 
-  private val compactInterval = sqlContext.getConf(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL)
+  private val compactInterval = sparkSession.conf.get(SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL)
   require(compactInterval > 0,
     s"Please set ${SQLConf.FILE_SINK_LOG_COMPACT_INTERVAL.key} (was $compactInterval) " +
       "to a positive value.")

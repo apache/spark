@@ -41,7 +41,15 @@ import org.apache.spark.util.Utils
 class FileStressSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
-  test("fault tolerance stress test") {
+  testQuietly("fault tolerance stress test - unpartitioned output") {
+    stressTest(partitionWrites = false)
+  }
+
+  testQuietly("fault tolerance stress test - partitioned output") {
+    stressTest(partitionWrites = true)
+  }
+
+  def stressTest(partitionWrites: Boolean): Unit = {
     val numRecords = 10000
     val inputDir = Utils.createTempDir(namePrefix = "stream.input").getCanonicalPath
     val stagingDir = Utils.createTempDir(namePrefix = "stream.staging").getCanonicalPath
@@ -92,19 +100,37 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
     }
     writer.start()
 
-    val input = sqlContext.read.format("text").stream(inputDir)
-    def startStream(): ContinuousQuery = input
+    val input = spark.read.format("text").stream(inputDir)
+
+    def startStream(): ContinuousQuery = {
+      val output = input
         .repartition(5)
         .as[String]
         .mapPartitions { iter =>
           val rand = Random.nextInt(100)
-          if (rand < 5) { sys.error("failure") }
+          if (rand < 10) {
+            sys.error("failure")
+          }
           iter.map(_.toLong)
         }
-        .write
-        .format("parquet")
-        .option("checkpointLocation", checkpoint)
-        .startStream(outputDir)
+        .map(x => (x % 400, x.toString))
+        .toDF("id", "data")
+
+      if (partitionWrites) {
+        output
+          .write
+          .partitionBy("id")
+          .format("parquet")
+          .option("checkpointLocation", checkpoint)
+          .startStream(outputDir)
+      } else {
+        output
+          .write
+          .format("parquet")
+          .option("checkpointLocation", checkpoint)
+          .startStream(outputDir)
+      }
+    }
 
     var failures = 0
     val streamThread = new Thread("stream runner") {
@@ -124,6 +150,6 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
     streamThread.join()
 
     logError(s"Stream restarted $failures times.")
-    assert(sqlContext.read.parquet(outputDir).distinct().count() == numRecords)
+    assert(spark.read.parquet(outputDir).distinct().count() == numRecords)
   }
 }

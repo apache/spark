@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.{Inner, RightOuter, UsingJoin}
+import org.apache.spark.sql.catalyst.plans.UsingJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types._
 
@@ -52,7 +52,7 @@ trait CheckAnalysis extends PredicateHelper {
       case p if p.analyzed => // Skip already analyzed sub-plans
 
       case u: UnresolvedRelation =>
-        u.failAnalysis(s"Table or View not found: ${u.tableIdentifier}")
+        u.failAnalysis(s"Table or view not found: ${u.tableIdentifier}")
 
       case operator: LogicalPlan =>
         operator transformExpressionsUp {
@@ -102,6 +102,40 @@ trait CheckAnalysis extends PredicateHelper {
               case None => w
             }
 
+          case s @ ScalarSubquery(query, conditions, _) if conditions.nonEmpty =>
+            // Make sure we are using equi-joins.
+            conditions.foreach {
+              case _: EqualTo | _: EqualNullSafe => // ok
+              case e => failAnalysis(
+                s"The correlated scalar subquery can only contain equality predicates: $e")
+            }
+
+            // Make sure correlated scalar subqueries contain one row for every outer row by
+            // enforcing that they are aggregates which contain exactly one aggregate expressions.
+            // The analyzer has already checked that subquery contained only one output column, and
+            // added all the grouping expressions to the aggregate.
+            def checkAggregate(a: Aggregate): Unit = {
+              val aggregates = a.expressions.flatMap(_.collect {
+                case a: AggregateExpression => a
+              })
+              if (aggregates.isEmpty) {
+                failAnalysis("The output of a correlated scalar subquery must be aggregated")
+              }
+            }
+
+            // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
+            def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
+              case SubqueryAlias(_, child) => cleanQuery(child)
+              case Project(_, child) => cleanQuery(child)
+              case child => child
+            }
+
+            cleanQuery(query) match {
+              case a: Aggregate => checkAggregate(a)
+              case Filter(_, a: Aggregate) => checkAggregate(a)
+              case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
+            }
+            s
         }
 
         operator match {
@@ -111,35 +145,11 @@ trait CheckAnalysis extends PredicateHelper {
                 s"of type ${f.condition.dataType.simpleString} is not a boolean.")
 
           case f @ Filter(condition, child) =>
-            // Make sure that no correlated reference is below Aggregates, Outer Joins and on the
-            // right hand side of Unions.
-            lazy val attributes = child.outputSet
-            def failOnCorrelatedReference(
-                p: LogicalPlan,
-                message: String): Unit = p.transformAllExpressions {
-              case e: NamedExpression if attributes.contains(e) =>
-                failAnalysis(s"Accessing outer query column is not allowed in $message: $e")
-            }
-            def checkForCorrelatedReferences(p: PredicateSubquery): Unit = p.query.foreach {
-              case a @ Aggregate(_, _, source) =>
-                failOnCorrelatedReference(source, "an AGGREATE")
-              case j @ Join(left, _, RightOuter, _) =>
-                failOnCorrelatedReference(left, "a RIGHT OUTER JOIN")
-              case j @ Join(_, right, jt, _) if jt != Inner =>
-                failOnCorrelatedReference(right, "a LEFT (OUTER) JOIN")
-              case Union(_ :: xs) =>
-                xs.foreach(failOnCorrelatedReference(_, "a UNION"))
-              case s: SetOperation =>
-                failOnCorrelatedReference(s.right, "an INTERSECT/EXCEPT")
-              case _ =>
-            }
             splitConjunctivePredicates(condition).foreach {
-              case p: PredicateSubquery =>
-                checkForCorrelatedReferences(p)
-              case Not(p: PredicateSubquery) =>
-                checkForCorrelatedReferences(p)
-              case e if PredicateSubquery.hasPredicateSubquery(e) =>
-                failAnalysis(s"Predicate sub-queries cannot be used in nested conditions: $e")
+              case _: PredicateSubquery | Not(_: PredicateSubquery) =>
+              case e if PredicateSubquery.hasNullAwarePredicateWithinNot(e) =>
+                failAnalysis(s"Null-aware predicate sub-queries cannot be used in nested" +
+                  s" conditions: $e")
               case e =>
             }
 
@@ -231,16 +241,22 @@ trait CheckAnalysis extends PredicateHelper {
           case s @ SetOperation(left, right) if left.output.length != right.output.length =>
             failAnalysis(
               s"${s.nodeName} can only be performed on tables with the same number of columns, " +
-               s"but the left table has ${left.output.length} columns and the right has " +
-               s"${right.output.length}")
+                s"but the left table has ${left.output.length} columns and the right has " +
+                s"${right.output.length}")
 
           case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
             val firstError = s.children.find(_.output.length != s.children.head.output.length).get
             failAnalysis(
-              s"""
-                |Unions can only be performed on tables with the same number of columns,
-                | but one table has '${firstError.output.length}' columns and another table has
-                | '${s.children.head.output.length}' columns""".stripMargin)
+              s"Unions can only be performed on tables with the same number of columns, " +
+                s"but one table has '${firstError.output.length}' columns and another table has " +
+                s"'${s.children.head.output.length}' columns")
+
+          case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
+            p match {
+              case _: Filter | _: Aggregate | _: Project => // Ok
+              case other => failAnalysis(
+                s"Correlated scalar sub-queries can only be used in a Filter/Aggregate/Project: $p")
+            }
 
           case p if p.expressions.exists(PredicateSubquery.hasPredicateSubquery) =>
             failAnalysis(s"Predicate sub-queries can only be used in a Filter: $p")
@@ -278,7 +294,16 @@ trait CheckAnalysis extends PredicateHelper {
                  |Failure when resolving conflicting references in Intersect:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
-                 |""".stripMargin)
+               """.stripMargin)
+
+          case e: Except if !e.duplicateResolved =>
+            val conflictingAttributes = e.left.outputSet.intersect(e.right.outputSet)
+            failAnalysis(
+              s"""
+                 |Failure when resolving conflicting references in Except:
+                 |$plan
+                 |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(

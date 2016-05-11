@@ -337,9 +337,15 @@ class DecisionTreeClassifierSuite
   test("should support all NumericType labels and not support other types") {
     val dt = new DecisionTreeClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[DecisionTreeClassificationModel, DecisionTreeClassifier](
-      dt, isClassification = true, sqlContext) { (expected, actual) =>
+      dt, isClassification = true, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
+  }
+
+  test("Fitting without numClasses in metadata") {
+    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
+    val dt = new DecisionTreeClassifier().setMaxDepth(1)
+    dt.fit(df)
   }
 
   /////////////////////////////////////////////////////////////////////////////

@@ -19,11 +19,13 @@ package org.apache.spark.sql.execution.streaming
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, DataSource, ListingFileCatalog, LogicalRelation}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.collection.OpenHashSet
 
 /**
@@ -32,38 +34,21 @@ import org.apache.spark.util.collection.OpenHashSet
  * TODO Clean up the metadata files periodically
  */
 class FileStreamSource(
-    sqlContext: SQLContext,
-    metadataPath: String,
+    sparkSession: SparkSession,
     path: String,
-    dataSchema: Option[StructType],
-    providerName: String,
-    dataFrameBuilder: Array[String] => DataFrame) extends Source with Logging {
+    fileFormatClassName: String,
+    override val schema: StructType,
+    metadataPath: String,
+    options: Map[String, String]) extends Source with Logging {
 
-  private val fs = new Path(path).getFileSystem(sqlContext.sparkContext.hadoopConfiguration)
-  private val metadataLog = new HDFSMetadataLog[Seq[String]](sqlContext, metadataPath)
+  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
+  private val qualifiedBasePath = fs.makeQualified(new Path(path)) // can contains glob patterns
+  private val metadataLog = new HDFSMetadataLog[Seq[String]](sparkSession, metadataPath)
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   private val seenFiles = new OpenHashSet[String]
   metadataLog.get(None, Some(maxBatchId)).foreach { case (batchId, files) =>
     files.foreach(seenFiles.add)
-  }
-
-  /** Returns the schema of the data from this source */
-  override lazy val schema: StructType = {
-    dataSchema.getOrElse {
-      val filesPresent = fetchAllFiles()
-      if (filesPresent.isEmpty) {
-        if (providerName == "text") {
-          // Add a default schema for "text"
-          new StructType().add("value", StringType)
-        } else {
-          throw new IllegalArgumentException("No schema specified")
-        }
-      } else {
-        // There are some existing files. Use them to infer the schema.
-        dataFrameBuilder(filesPresent.toArray).schema
-      }
-    }
   }
 
   /**
@@ -88,6 +73,7 @@ class FileStreamSource(
     if (newFiles.nonEmpty) {
       maxBatchId += 1
       metadataLog.add(maxBatchId, newFiles)
+      logInfo(s"Max batch id increased to $maxBatchId with ${newFiles.size} new files")
     }
 
     new LongOffset(maxBatchId)
@@ -107,31 +93,39 @@ class FileStreamSource(
   }
 
   /**
-   * Returns the next batch of data that is available after `start`, if any is available.
+   * Returns the data that is between the offsets (`start`, `end`].
    */
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
     val startId = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L)
     val endId = end.asInstanceOf[LongOffset].offset
 
     assert(startId <= endId)
-    val files = metadataLog.get(Some(startId + 1), Some(endId)).map(_._2).flatten
+    val files = metadataLog.get(Some(startId + 1), Some(endId)).flatMap(_._2)
     logInfo(s"Processing ${files.length} files from ${startId + 1}:$endId")
-    logDebug(s"Streaming ${files.mkString(", ")}")
-    dataFrameBuilder(files)
-
+    logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
+    val newOptions = new CaseInsensitiveMap(options).filterKeys(_ != "path")
+    val newDataSource =
+      DataSource(
+        sparkSession,
+        paths = files,
+        userSpecifiedSchema = Some(schema),
+        className = fileFormatClassName,
+        options = newOptions)
+    Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
   }
 
   private def fetchAllFiles(): Seq[String] = {
-    val startTime = System.nanoTime()
-    val files = fs.listStatus(new Path(path))
-      .filterNot(_.getPath.getName.startsWith("_"))
-      .map(_.getPath.toUri.toString)
-    val endTime = System.nanoTime()
-    logDebug(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
+    val startTime = System.nanoTime
+    val globbedPaths = SparkHadoopUtil.get.globPathIfNecessary(qualifiedBasePath)
+    val catalog = new ListingFileCatalog(sparkSession, globbedPaths, options, Some(new StructType))
+    val files = catalog.allFiles().map(_.getPath.toUri.toString)
+    val endTime = System.nanoTime
+    logInfo(s"Listed ${files.size} in ${(endTime.toDouble - startTime) / 1000000}ms")
+    logTrace(s"Files are:\n\t" + files.mkString("\n\t"))
     files
   }
 
   override def getOffset: Option[Offset] = Some(fetchMaxOffset()).filterNot(_.offset == -1)
 
-  override def toString: String = s"FileSource[$path]"
+  override def toString: String = s"FileStreamSource[$qualifiedBasePath]"
 }

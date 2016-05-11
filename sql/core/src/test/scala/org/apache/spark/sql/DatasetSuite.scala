@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
-import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -46,12 +46,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("range") {
-    assert(sqlContext.range(10).map(_ + 1).reduce(_ + _) == 55)
-    assert(sqlContext.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
   }
 
   test("SPARK-12404: Datatype Helper Serializability") {
@@ -456,8 +456,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     implicit val kryoEncoder = Encoders.javaSerialization[JavaData]
     val ds = Seq(JavaData(1), JavaData(2)).toDS()
 
-    assert(ds.groupByKey(p => p).count().collect().toSeq ==
-      Seq((JavaData(1), 1L), (JavaData(2), 1L)))
+    assert(ds.groupByKey(p => p).count().collect().toSet ==
+      Set((JavaData(1), 1L), (JavaData(2), 1L)))
   }
 
   test("Java encoder self join") {
@@ -472,7 +472,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14696: implicit encoders for boxed types") {
-    assert(sqlContext.range(1).map { i => i : java.lang.Long }.head == 0L)
+    assert(spark.range(1).map { i => i : java.lang.Long }.head == 0L)
   }
 
   test("SPARK-11894: Incorrect results are returned when using null") {
@@ -510,8 +510,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ))
 
     def buildDataset(rows: Row*): Dataset[NestedStruct] = {
-      val rowRDD = sqlContext.sparkContext.parallelize(rows)
-      sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct]
+      val rowRDD = spark.sparkContext.parallelize(rows)
+      spark.createDataFrame(rowRDD, schema).as[NestedStruct]
     }
 
     checkDataset(
@@ -626,9 +626,53 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
-    val wideDF = sqlContext.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
     // Make sure the generated code for this plan can compile and execute.
     checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
+  }
+
+  test("SPARK-14838: estimating sizeInBytes in operators with ObjectProducer shouldn't fail") {
+    val dataset = Seq(
+      (0, 3, 54f),
+      (0, 4, 44f),
+      (0, 5, 42f),
+      (1, 3, 39f),
+      (1, 5, 33f),
+      (1, 4, 26f),
+      (2, 3, 51f),
+      (2, 5, 45f),
+      (2, 4, 30f)
+    ).toDF("user", "item", "rating")
+
+    val actual = dataset
+      .select("user", "item")
+      .as[(Int, Int)]
+      .groupByKey(_._1)
+      .mapGroups { case (src, ids) => (src, ids.map(_._2).toArray) }
+      .toDF("id", "actual")
+
+    dataset.join(actual, dataset("user") === actual("id")).collect()
+  }
+
+  test("SPARK-15097: implicits on dataset's spark can be imported") {
+    val dataset = Seq(1, 2, 3).toDS()
+    checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
+  }
+
+  test("runtime null check for RowEncoder") {
+    val schema = new StructType().add("i", IntegerType, nullable = false)
+    val df = sqlContext.range(10).map(l => {
+      if (l % 5 == 0) {
+        Row(null)
+      } else {
+        Row(l)
+      }
+    })(RowEncoder(schema))
+
+    val message = intercept[Exception] {
+      df.collect()
+    }.getMessage
+    assert(message.contains("The 0th field of input row cannot be null"))
   }
 }
 
@@ -689,4 +733,12 @@ class JavaData(val a: Int) extends Serializable {
 
 object JavaData {
   def apply(a: Int): JavaData = new JavaData(a)
+}
+
+/** Used to test importing dataset.spark.implicits._ */
+object DatasetTransform {
+  def addOne(ds: Dataset[Int]): Dataset[Int] = {
+    import ds.sparkSession.implicits._
+    ds.map(_ + 1)
+  }
 }

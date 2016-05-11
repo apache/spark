@@ -42,7 +42,7 @@ class LogisticRegressionSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = sqlContext.createDataFrame(generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42))
+    dataset = spark.createDataFrame(generateLogisticInput(1.0, 1.0, nPoints = 100, seed = 42))
 
     binaryDataset = {
       val nPoints = 10000
@@ -54,7 +54,7 @@ class LogisticRegressionSuite
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
           addIntercept = true, nPoints, 42)
 
-      sqlContext.createDataFrame(sc.parallelize(testData, 4))
+      spark.createDataFrame(sc.parallelize(testData, 4))
     }
   }
 
@@ -81,7 +81,7 @@ class LogisticRegressionSuite
     assert(lr.getPredictionCol === "prediction")
     assert(lr.getRawPredictionCol === "rawPrediction")
     assert(lr.getProbabilityCol === "probability")
-    assert(lr.getWeightCol === "")
+    assert(!lr.isDefined(lr.weightCol))
     assert(lr.getFitIntercept)
     assert(lr.getStandardization)
     val model = lr.fit(dataset)
@@ -202,7 +202,7 @@ class LogisticRegressionSuite
   }
 
   test("logistic regression: Predictor, Classifier methods") {
-    val sqlContext = this.sqlContext
+    val spark = this.spark
     val lr = new LogisticRegression
 
     val model = lr.fit(dataset)
@@ -864,8 +864,8 @@ class LogisticRegressionSuite
         }
       }
 
-      (sqlContext.createDataFrame(sc.parallelize(data1, 4)),
-        sqlContext.createDataFrame(sc.parallelize(data2, 4)))
+      (spark.createDataFrame(sc.parallelize(data1, 4)),
+        spark.createDataFrame(sc.parallelize(data2, 4)))
     }
 
     val trainer1a = (new LogisticRegression).setFitIntercept(true)
@@ -938,7 +938,7 @@ class LogisticRegressionSuite
   test("should support all NumericType labels and not support other types") {
     val lr = new LogisticRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LogisticRegressionModel, LogisticRegression](
-      lr, isClassification = true, sqlContext) { (expected, actual) =>
+      lr, isClassification = true, spark) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }

@@ -26,7 +26,7 @@ import org.apache.spark.ml.tree._
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 private[ml] object TreeTests extends SparkFunSuite {
 
@@ -42,8 +42,12 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
-    val sqlContext = SQLContext.getOrCreate(data.sparkContext)
-    import sqlContext.implicits._
+    val spark = SparkSession.builder
+      .master("local[2]")
+      .appName("TreeTests")
+      .getOrCreate()
+    import spark.implicits._
+
     val df = data.toDF()
     val numFeatures = data.first().features.size
     val featuresAttributes = Range(0, numFeatures).map { feature =>
@@ -79,16 +83,21 @@ private[ml] object TreeTests extends SparkFunSuite {
    *              This must be non-empty.
    * @param numClasses  Number of classes label can take. If 0, mark as continuous.
    * @param labelColName  Name of the label column on which to set the metadata.
+   * @param featuresColName  Name of the features column
    * @return DataFrame with metadata
    */
-  def setMetadata(data: DataFrame, numClasses: Int, labelColName: String): DataFrame = {
+  def setMetadata(
+      data: DataFrame,
+      numClasses: Int,
+      labelColName: String,
+      featuresColName: String): DataFrame = {
     val labelAttribute = if (numClasses == 0) {
       NumericAttribute.defaultAttr.withName(labelColName)
     } else {
       NominalAttribute.defaultAttr.withName(labelColName).withNumValues(numClasses)
     }
     val labelMetadata = labelAttribute.toMetadata()
-    data.select(data("features"), data(labelColName).as(labelColName, labelMetadata))
+    data.select(data(featuresColName), data(labelColName).as(labelColName, labelMetadata))
   }
 
   /**

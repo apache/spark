@@ -34,21 +34,27 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 
 public class JavaRandomForestClassifierSuite implements Serializable {
 
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaRandomForestClassifierSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaRandomForestClassifierSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -57,7 +63,7 @@ public class JavaRandomForestClassifierSuite implements Serializable {
     double A = 2.0;
     double B = -1.5;
 
-    JavaRDD<LabeledPoint> data = sc.parallelize(
+    JavaRDD<LabeledPoint> data = jsc.parallelize(
       LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
     Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
@@ -75,22 +81,22 @@ public class JavaRandomForestClassifierSuite implements Serializable {
       .setSeed(1234)
       .setNumTrees(3)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (String impurity: RandomForestClassifier.supportedImpurities()) {
+    for (String impurity : RandomForestClassifier.supportedImpurities()) {
       rf.setImpurity(impurity);
     }
-    for (String featureSubsetStrategy: RandomForestClassifier.supportedFeatureSubsetStrategies()) {
+    for (String featureSubsetStrategy : RandomForestClassifier.supportedFeatureSubsetStrategies()) {
       rf.setFeatureSubsetStrategy(featureSubsetStrategy);
     }
-    String realStrategies[] = {".1", ".10", "0.10", "0.1", "0.9", "1.0"};
-    for (String strategy: realStrategies) {
+    String[] realStrategies = {".1", ".10", "0.10", "0.1", "0.9", "1.0"};
+    for (String strategy : realStrategies) {
       rf.setFeatureSubsetStrategy(strategy);
     }
-    String integerStrategies[] = {"1", "10", "100", "1000", "10000"};
-    for (String strategy: integerStrategies) {
+    String[] integerStrategies = {"1", "10", "100", "1000", "10000"};
+    for (String strategy : integerStrategies) {
       rf.setFeatureSubsetStrategy(strategy);
     }
-    String invalidStrategies[] = {"-.1", "-.10", "-0.10", ".0", "0.0", "1.1", "0"};
-    for (String strategy: invalidStrategies) {
+    String[] invalidStrategies = {"-.1", "-.10", "-0.10", ".0", "0.0", "1.1", "0"};
+    for (String strategy : invalidStrategies) {
       try {
         rf.setFeatureSubsetStrategy(strategy);
         Assert.fail("Expected exception to be thrown for invalid strategies");
