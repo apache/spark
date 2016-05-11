@@ -20,7 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 
@@ -100,7 +100,7 @@ case class UserDefinedGenerator(
 @ExpressionDescription(
   usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of a map into multiple rows and columns.")
 // scalastyle:on line.size.limit
-case class Explode(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
+case class Explode(child: Expression) extends UnaryExpression with Generator {
 
   override def children: Seq[Expression] = child :: Nil
 
@@ -147,5 +147,9 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
           rows
         }
     }
+  }
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    sys.error("Just don't")
   }
 }

@@ -20,7 +20,9 @@ package org.apache.spark.sql.execution
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType}
 
 /**
  * For lazy computing, be sure the generator.terminate() called in the very last
@@ -53,7 +55,7 @@ case class GenerateExec(
     outer: Boolean,
     output: Seq[Attribute],
     child: SparkPlan)
-  extends UnaryExecNode {
+  extends UnaryExecNode with CodegenSupport {
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
@@ -99,5 +101,80 @@ case class GenerateExec(
       }
     }
   }
-}
 
+  override def inputRDDs(): Seq[RDD[InternalRow]] = {
+    child.asInstanceOf[CodegenSupport].inputRDDs()
+  }
+
+  protected override def doProduce(ctx: CodegenContext): String = {
+    // We need to add some code here for terminating generators.
+    child.asInstanceOf[CodegenSupport].produce(ctx, this)
+  }
+
+  override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
+    generator match {
+      case e: Explode => codegenExplode(e, ctx, input, row)
+    }
+  }
+
+  private def codegenExplode(
+      e: Explode,
+      ctx: CodegenContext,
+      input: Seq[ExprCode],
+      row: ExprCode): String = {
+    ctx.currentVars = input
+    ctx.copyResult = true
+
+    // Generate the driving expression.
+    val data = e.child.genCode(ctx)
+
+    // Generate looping variables.
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    val index = ctx.freshName("index")
+    val numElements = ctx.freshName("numElements")
+
+    // Generate accessor for MapData/Array element(s).
+    def accessor(src: String, field: String, dt: DataType, nullable: Boolean): ExprCode = {
+      val data = src + field
+      val value = ctx.freshName("value")
+      val javaType = ctx.javaType(dt)
+      val getter = ctx.getValue(data, dt, index)
+      if (outer || nullable) {
+        val isNull = ctx.freshName("isNull")
+        val code =
+          s"""
+             |boolean $isNull = $src == null || $data.isNullAt($index);
+             |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
+           """.stripMargin
+        ExprCode(code, isNull, value)
+      } else {
+        ExprCode(s"$javaType $value = $getter;", "false", value)
+      }
+    }
+    val values = e.dataType match {
+      case ArrayType(dataType, nullable) =>
+        Seq(accessor(data.value, "", dataType, nullable))
+      case MapType(keyType, valueType, valueContainsNull) =>
+        Seq(accessor(data.value, ".keyArray()", keyType, nullable = false),
+          accessor(data.value, ".valueArray()", valueType, valueContainsNull))
+    }
+
+    // Determine result vars.
+    val output = if (join) {
+      input ++ values
+    } else {
+      values
+    }
+
+    s"""
+       |${data.code}
+       |int $index = 0;
+       |int $numElements = ${data.isNull} ? ${if (outer) 1 else 0} : ${data.value}.numElements();
+       |while ($index < $numElements) {
+       |  ${consume(ctx, output)}
+       |  $numOutput.add(1);
+       |  $index++;
+       |}
+     """.stripMargin
+  }
+}
