@@ -62,10 +62,10 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
     val header = if (csvOptions.headerFlag) {
       firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == "" || value == null) s"C$index" else value
+        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
       }
     } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
+      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
     }
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
