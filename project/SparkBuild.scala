@@ -340,7 +340,7 @@ object SparkBuild extends PomBuild {
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
       spark, hive, hiveThriftServer, hiveCompatibility, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, testTags, sketch, mllibLocal, streamingKafka
+      unsafe, testTags, sketch, mllibLocal
     ).contains(x)
   }
 
