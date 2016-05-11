@@ -293,7 +293,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormat = defaultSource,
           options = options)
 
-        val created = LogicalRelation(relation)
+        val created = LogicalRelation(
+          relation,
+          metastoreTableIdentifier =
+            Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -317,7 +320,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               userSpecifiedSchema = Some(metastoreRelation.schema),
               bucketSpec = bucketSpec,
               options = options,
-              className = fileType).resolveRelation())
+              className = fileType).resolveRelation(),
+              metastoreTableIdentifier =
+                Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+
 
         cachedDataSourceTables.put(tableIdentifier, created)
         created
