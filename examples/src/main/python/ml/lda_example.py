@@ -51,7 +51,7 @@ if __name__ == "__main__":
     print("The lower bound on the log likelihood of the entire corpus: " + str(ll))
     print("The upper bound bound on perplexity: " + str(lp))
 
-    # describeTopics
+    # Describe topics.
     topics = model.describeTopics(3)
     print("The topics described by their top-weighted terms:")
     topics.show(truncate=False)
