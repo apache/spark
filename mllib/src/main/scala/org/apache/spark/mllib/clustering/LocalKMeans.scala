@@ -76,12 +76,6 @@ private[mllib] object LocalKMeans extends Logging {
         costArray(p)=math.min(KMeans.fastSquaredDistance(points(p), centers(i)),costArray(p))
       }
 
-      if(i%100==0){
-        val end = System.currentTimeMillis()
-        //        Utils.printLog("DEBUG", s"finish K-means++ ${i}th center in ${(end-roundStart)}ms")
-        roundStart = end
-      }
-
     }
 
     // Run up to maxIterations iterations of Lloyd's algorithm
