@@ -141,7 +141,7 @@ class DataFrameReader(object):
     def stream(self, path=None, format=None, schema=None, **options):
         """Loads a data stream from a data source and returns it as a :class`DataFrame`.
 
-        ::Note: Experimental.
+        .. note:: Experimental.
 
         :param path: optional string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
@@ -540,7 +540,7 @@ class DataFrameWriter(object):
         :func:`startStream`. This name must be unique among all the currently active queries
         in the associated SQLContext
 
-        ::Note: Experimental.
+        .. note:: Experimental.
 
         :param queryName: unique name for the query
 
@@ -557,7 +557,7 @@ class DataFrameWriter(object):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
 
-        ::Note: Experimental.
+        .. note:: Experimental.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
 
@@ -616,7 +616,7 @@ class DataFrameWriter(object):
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
 
-        ::Note: Experimental.
+        .. note:: Experimental.
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
