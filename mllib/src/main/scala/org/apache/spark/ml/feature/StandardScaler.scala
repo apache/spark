@@ -150,7 +150,11 @@ class StandardScalerModel private[ml] (
     transformSchema(dataset.schema, logging = true)
     val scaler = new feature.StandardScalerModel(OldVectors.fromML(std), OldVectors.fromML(mean),
       $(withStd), $(withMean))
-    val scale = udf { scaler.transform _ }
+
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    def transformer: Vector => Vector = v => scaler.transform(OldVectors.fromML(v)).asML
+
+    val scale = udf(transformer)
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
 

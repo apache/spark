@@ -408,7 +408,11 @@ sealed abstract class LDAModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     if ($(topicDistributionCol).nonEmpty) {
-      val t = udf(oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext))
+
+      // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+      val transformer = oldLocalModel.getTopicDistributionMethod(sparkSession.sparkContext)
+
+      val t = udf { (v: Vector) => transformer(OldVectors.fromML(v)).asML }
       dataset.withColumn($(topicDistributionCol), t(col($(featuresCol)))).toDF
     } else {
       logWarning("LDAModel.transform was called without any output columns. Set an output column" +

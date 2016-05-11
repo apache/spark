@@ -48,7 +48,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
 
     val mat = new RowMatrix(dataRDD.map(OldVectors.fromML))
     val pc = mat.computePrincipalComponents(3)
-    val expected = mat.multiply(pc).rows
+    val expected = mat.multiply(pc).rows.map(_.asML)
 
     val df = sqlContext.createDataFrame(dataRDD.zip(expected)).toDF("features", "expected")
 

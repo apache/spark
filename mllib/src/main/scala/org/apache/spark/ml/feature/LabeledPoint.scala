@@ -28,7 +28,7 @@ import org.apache.spark.ml.linalg.Vector
  * @param features List of features for this data point.
  */
 @BeanInfo
-private[spark] case class LabeledPoint(label: Double, features: Vector) {
+case class LabeledPoint(label: Double, features: Vector) {
   override def toString: String = {
     s"($label,$features)"
   }

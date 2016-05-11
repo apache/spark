@@ -27,6 +27,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -132,7 +133,11 @@ final class ChiSqSelectorModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val newField = transformedSchema.last
-    val selector = udf { chiSqSelector.transform _ }
+
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    def transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
+
+    val selector = udf(transformer)
     dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
   }
 

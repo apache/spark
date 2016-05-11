@@ -136,7 +136,11 @@ class PCAModel private[ml] (
     val pcaModel = new feature.PCAModel($(k),
       OldMatrices.fromML(pc).asInstanceOf[OldDenseMatrix],
       OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
-    val pcaOp = udf { pcaModel.transform _ }
+
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    def transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
+
+    val pcaOp = udf(transformer)
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))
   }
 

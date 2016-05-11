@@ -88,7 +88,6 @@ public class JavaPCASuite implements Serializable {
     RowMatrix mat = new RowMatrix(dataRDD.map(
       new Function<Vector, org.apache.spark.mllib.linalg.Vector>() {
         public org.apache.spark.mllib.linalg.Vector call(Vector vector) {
-          // org.apache.spark.mllib.linalg.Vectors.fromML is not accessible in Java
           return new org.apache.spark.mllib.linalg.DenseVector(vector.toArray());
         }
       }
