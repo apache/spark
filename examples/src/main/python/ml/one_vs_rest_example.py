@@ -24,8 +24,8 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.sql import SparkSession
 
 """
-An example runner for Multiclass to Binary Reduction with One Vs Rest.
-The example uses Logistic Regression as the base classifier.
+An example of Multiclass to Binary Reduction with One Vs Rest,
+using Logistic Regression as the base classifier.
 Run with:
   bin/spark-submit examples/src/main/python/ml/one_vs_rest_example.py
 """

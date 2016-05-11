@@ -26,8 +26,8 @@ import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.SparkSession
 
 /**
- * An example runner for Multiclass to Binary Reduction with One Vs Rest.
- * The example uses Logistic Regression as the base classifier.
+ * An example of Multiclass to Binary Reduction with One Vs Rest,
+ * using Logistic Regression as the base classifier.
  * Run with
  * {{{
  * ./bin/run-example ml.OneVsRestExample

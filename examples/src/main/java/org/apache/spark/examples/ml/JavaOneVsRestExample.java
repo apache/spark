@@ -22,7 +22,6 @@ import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.OneVsRest;
 import org.apache.spark.ml.classification.OneVsRestModel;
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator;
-import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$
@@ -30,8 +29,8 @@ import org.apache.spark.sql.SparkSession;
 
 
 /**
- * An example runner for Multiclass to Binary Reduction with One Vs Rest.
- * The example uses Logistic Regression as the base classifier.
+ * An example of Multiclass to Binary Reduction with One Vs Rest,
+ * using Logistic Regression as the base classifier.
  * Run with
  * <pre>
  * bin/run-example ml.JavaOneVsRestExample
