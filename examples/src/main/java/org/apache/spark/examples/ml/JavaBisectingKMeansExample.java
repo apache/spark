@@ -52,14 +52,13 @@ public class JavaBisectingKMeansExample {
 
     // Evaluate clustering.
     double cost = model.computeCost(dataset);
-    System.out.println("Compute Cost: " + cost);
+    System.out.println("Within Set Sum of Squared Errors = " + cost);
 
     // Shows the result.
-    System.out.println("Final Centers: ");
+    System.out.println("Cluster Centers: ");
     Vector[] clusterCenters = model.clusterCenters();
-    for (int i = 0; i < clusterCenters.length; i++) {
-      Vector clusterCenter = clusterCenters[i];
-      System.out.println("Cluster Center " + i + ": " + clusterCenter);
+    for (Vector clusterCenter : clusterCenters) {
+      System.out.println(clusterCenter);
     }
     // $example off$
 

@@ -44,7 +44,7 @@ if __name__ == "__main__":
 
     # Evaluate clustering.
     cost = model.computeCost(dataset)
-    print("Compute Cost = " + str(cost))
+    print("Within Set Sum of Squared Errors = " + str(cost))
 
     # Shows the result.
     print("Cluster Centers: ")

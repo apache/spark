@@ -50,14 +50,12 @@ object BisectingKMeansExample {
 
     // Evaluate clustering.
     val cost = model.computeCost(dataset)
-    println(s"Compute Cost: $cost")
+    println(s"Within Set Sum of Squared Errors = $cost")
 
     // Shows the result.
-    println("Final Centers: ")
-    model.clusterCenters.zipWithIndex.foreach {
-      case (clusterCenter, i) =>
-        println(s"Cluster Center $i: $clusterCenter")
-    }
+    println("Cluster Centers: ")
+    val centers = model.clusterCenters
+    centers.foreach(println)
     // $example off$
 
     spark.stop()
