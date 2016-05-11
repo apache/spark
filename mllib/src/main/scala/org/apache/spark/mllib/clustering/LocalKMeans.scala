@@ -46,9 +46,8 @@ private[mllib] object LocalKMeans extends Logging {
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
-    val costArray:Array[Double] = new Array[Double](points.length)
-    for(i <- 0 to points.length-1){
-      costArray(i)=KMeans.fastSquaredDistance(points(i), centers(0))
+    val costArray = points.map { point =>
+      KMeans.fastSquaredDistance(point, centers(0))
     }
     
     for (i <- 1 until k) {
