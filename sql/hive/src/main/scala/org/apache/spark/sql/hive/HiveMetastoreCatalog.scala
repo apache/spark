@@ -271,8 +271,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         Some(partitionSpec))
 
       val hadoopFsRelation = cached.getOrElse {
-        val basePath = new Path(metastoreRelation.catalogTable.storage.locationUri.get)
-        val fileCatalog = new MetaStoreFileCatalog(sparkSession, basePath, partitionSpec)
+        val fileCatalog = new MetaStorePartitionedTableFileCatalog(
+          sparkSession,
+          new Path(metastoreRelation.catalogTable.storage.locationUri.get),
+          partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
           val inferredSchema =
@@ -534,25 +536,27 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
  * @param tableBasePath The default base path of the Hive metastore table
  * @param partitionSpec The partition specifications from Hive metastore
  */
-private[hive] class MetaStoreFileCatalog(
+private[hive] class MetaStorePartitionedTableFileCatalog(
     sparkSession: SparkSession,
     tableBasePath: Path,
     override val partitionSpec: PartitionSpec)
   extends ListingFileCatalog(
     sparkSession,
-    MetaStoreFileCatalog.getPaths(tableBasePath, partitionSpec),
+    MetaStorePartitionedTableFileCatalog.getPaths(tableBasePath, partitionSpec),
     Map.empty,
     Some(partitionSpec.partitionColumns)) {
 }
 
-private[hive] object MetaStoreFileCatalog {
-  /** Get the list of non-overalapping paths to list files in the for a metastore table */
+private[hive] object MetaStorePartitionedTableFileCatalog {
+  /** Get the list of paths to list files in the for a metastore table */
   def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
-    val basePathStr = tableBasePath.toUri.toString
-    val partitionsOutsideBasePath = partitionSpec
-      .partitions
-      .filterNot(_.path.toUri.toString.startsWith(basePathStr)) // not contained in the base path
-    Seq(tableBasePath) ++ partitionsOutsideBasePath.map(_.path)
+    // If there are no partitions currently specified then use base path,
+    // otherwise use the paths corresponding to the partitions.
+    if (partitionSpec.partitions.isEmpty) {
+      Seq(tableBasePath)
+    } else {
+      partitionSpec.partitions.map(_.path)
+    }
   }
 }
 
