@@ -288,7 +288,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
   test("Drops temporary table") {
     testData.select('key).registerTempTable("t1")
     spark.table("t1")
-    spark.catalog.dropTempTable("t1")
+    spark.catalog.dropTempView("t1")
     intercept[AnalysisException](spark.table("t1"))
   }
 
@@ -300,7 +300,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(spark.catalog.isCached("t1"))
     assert(spark.catalog.isCached("t2"))
 
-    spark.catalog.dropTempTable("t1")
+    spark.catalog.dropTempView("t1")
     intercept[AnalysisException](spark.table("t1"))
     assert(!spark.catalog.isCached("t2"))
   }
@@ -382,7 +382,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       sql("SELECT key, count(*) FROM orderedTable GROUP BY key ORDER BY key"),
       sql("SELECT key, count(*) FROM testData3x GROUP BY key ORDER BY key").collect())
     spark.catalog.uncacheTable("orderedTable")
-    spark.catalog.dropTempTable("orderedTable")
+    spark.catalog.dropTempView("orderedTable")
 
     // Set up two tables distributed in the same way. Try this with the data distributed into
     // different number of partitions.

@@ -188,7 +188,7 @@ abstract class Catalog {
    * Creates a temporary view in the catalog with the given [[DataFrame]].
    *
    * @param viewName the name of the view to be created
-   * @df the DataFrame used to create the view.
+   * @param df the DataFrame used to create the view.
    *
    * @throws AnalysisException if the view name already exists
    * @since 2.0.0
@@ -202,7 +202,7 @@ abstract class Catalog {
    * [[org.apache.spark.sql.SparkSession]].
    *
    * @param viewName the name of the view to be created/replaced.
-   * @df the DataFrame used to create the view.
+   * @param the DataFrame used to create the view.
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String, df: DataFrame): Unit

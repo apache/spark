@@ -333,7 +333,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         "SELECT  sum('a'), avg('a'), count(null) FROM testData",
         Row(null, null, 0) :: Nil)
     } finally {
-      spark.catalog.dropTempTable("testData3x")
+      spark.catalog.dropTempView("testData3x")
     }
   }
 
@@ -1453,12 +1453,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     spark.read.json(sparkContext.makeRDD("""{"a": {"b": [{"c": 1}]}}""" :: Nil))
       .registerTempTable("data")
     checkAnswer(sql("SELECT a.b[0].c FROM data GROUP BY a.b[0].c"), Row(1))
-    spark.catalog.dropTempTable("data")
+    spark.catalog.dropTempView("data")
 
     spark.read.json(
       sparkContext.makeRDD("""{"a": {"b": 1}}""" :: Nil)).registerTempTable("data")
     checkAnswer(sql("SELECT a.b + 1 FROM data GROUP BY a.b + 1"), Row(2))
-    spark.catalog.dropTempTable("data")
+    spark.catalog.dropTempView("data")
   }
 
   test("SPARK-4432 Fix attribute reference resolution error when using ORDER BY") {
