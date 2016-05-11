@@ -79,6 +79,11 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/KMeans.html
 {% include_example java/org/apache/spark/examples/ml/JavaKMeansExample.java %}
 </div>
 
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.KMeans) for more details.
+
+{% include_example python/ml/kmeans_example.py %}
+</div>
 </div>
 
 
