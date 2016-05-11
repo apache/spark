@@ -105,3 +105,38 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/LDA.html) f
 </div>
 
 </div>
+
+## Bisecting k-means
+
+
+Bisecting k-means is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a
+divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one
+moves down the hierarchy.
+
+Bisecting K-means can often be much faster than regular K-means, but it will generally produce a different clustering.
+
+`BisectingKMeans` is implemented as an `Estimator` and generates a `BisectingKMeansModel` as the base model.
+
+### Example
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.BisectingKMeans) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/BisectingKMeansExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/BisectingKMeans.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaBisectingKMeansExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.BisectingKMeans) for more details.
+
+{% include_example python/ml/bisecting_k_means_example.py %}
+</div>
+
+</div>
