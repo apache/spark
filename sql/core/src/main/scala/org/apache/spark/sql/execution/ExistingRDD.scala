@@ -131,10 +131,8 @@ private[sql] trait DataSourceScanExec extends LeafExecNode {
   val relation: BaseRelation
   val metastoreTableIdentifier: Option[TableIdentifier]
 
-  override val nodeName: String = if (metastoreTableIdentifier.isEmpty) {
-    "Scan " + relation.toString
-  } else {
-    "Scan " + relation.toString + " " + metastoreTableIdentifier.get.unquotedString
+  override val nodeName: String = {
+    s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
   }
 
   // Ignore rdd when checking results
