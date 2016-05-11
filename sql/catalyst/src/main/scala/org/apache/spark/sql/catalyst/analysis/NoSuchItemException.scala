@@ -37,5 +37,10 @@ class NoSuchPartitionException(
   extends AnalysisException(
     s"Partition not found in table '$table' database '$db':\n" + spec.mkString("\n"))
 
-class NoSuchFunctionException(db: String, func: String)
+class NoSuchPermanentFunctionException(db: String, func: String)
   extends AnalysisException(s"Function '$func' not found in database '$db'")
+
+class NoSuchFunctionException(db: String, func: String)
+  extends AnalysisException(
+    s"Undefined function: '$func'. This function is neither a registered temporary function nor " +
+    s"a permanent function registered in the database '$db'.")
