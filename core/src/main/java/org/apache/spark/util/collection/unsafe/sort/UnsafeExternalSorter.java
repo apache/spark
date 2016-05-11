@@ -252,12 +252,11 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * @return the total amount of time spent sorting data (in-memory only).
    */
   public long getSortTimeNanos() {
-    long totalTime = totalSortTimeNanos;
     UnsafeInMemorySorter sorter = inMemSorter;
     if (sorter != null) {
-      totalTime += inMemSorter.getSortTimeNanos();
+      return inMemSorter.getSortTimeNanos();
     }
-    return totalTime;
+    return totalSortTimeNanos;
   }
 
   /**
