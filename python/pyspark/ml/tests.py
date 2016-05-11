@@ -57,12 +57,22 @@ from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.common import _java2py
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
-from pyspark.sql import DataFrame, SQLContext, Row
+from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
+class SparkSessionTestCase(PySparkTestCase):
+    @classmethod
+    def setUpClass(cls):
+        PySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        PySparkTestCase.tearDownClass()
+        cls.spark.stop()
 
 class MockDataset(DataFrame):
 
@@ -350,7 +360,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(model.getWindowSize(), 6)
 
 
-class FeatureTests(PySparkTestCase):
+class FeatureTests(SparkSessionTestCase):
 
     def test_binarizer(self):
         b0 = Binarizer()
@@ -416,7 +426,7 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(transformedDF.head().output, ["a"])
         # with language selection
         stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
-        dataset = sqlContext.createDataFrame([Row(input=["acaba", "ama", "biri"])])
+        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
         stopWordRemover.setStopWords(stopwords)
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
@@ -471,7 +481,7 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         return model
 
 
-class CrossValidatorTests(PySparkTestCase):
+class CrossValidatorTests(SparkSessionTestCase):
 
     def test_copy(self):
         dataset = self.spark.createDataFrame([
@@ -568,7 +578,7 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
-class TrainValidationSplitTests(PySparkTestCase):
+class TrainValidationSplitTests(SparkSessionTestCase):
 
     def test_fit_minimize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -641,7 +651,7 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
-class PersistenceTest(PySparkTestCase):
+class PersistenceTest(SparkSessionTestCase):
 
     def test_linear_regression(self):
         lr = LinearRegression(maxIter=1)
@@ -803,7 +813,7 @@ class PersistenceTest(PySparkTestCase):
             pass
 
 
-class LDATest(PySparkTestCase):
+class LDATest(SparkSessionTestCase):
 
     def _compare(self, m1, m2):
         """
@@ -857,7 +867,7 @@ class LDATest(PySparkTestCase):
             pass
 
 
-class TrainingSummaryTest(PySparkTestCase):
+class TrainingSummaryTest(SparkSessionTestCase):
 
     def test_linear_regression_summary(self):
         from pyspark.mllib.linalg import Vectors
@@ -926,7 +936,7 @@ class TrainingSummaryTest(PySparkTestCase):
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
 
-class OneVsRestTests(PySparkTestCase):
+class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
         df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
@@ -975,7 +985,7 @@ class OneVsRestTests(PySparkTestCase):
             self.assertEqual(m.uid, n.uid)
 
 
-class HashingTFTest(PySparkTestCase):
+class HashingTFTest(SparkSessionTestCase):
 
     def test_apply_binary_term_freqs(self):
 
@@ -991,7 +1001,7 @@ class HashingTFTest(PySparkTestCase):
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
 
-class ALSTest(PySparkTestCase):
+class ALSTest(SparkSessionTestCase):
 
     def test_storage_levels(self):
         df = self.spark.createDataFrame(
