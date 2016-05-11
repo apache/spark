@@ -34,13 +34,11 @@ import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
- * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
+ * Interface used to load a [[Dataset]] from external storage systems (e.g. file systems,
  * key-value stores, etc) or data streams. Use [[SparkSession.read]] to access this.
  *
  * @since 1.4.0
  */
-@Experimental
 class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
@@ -164,11 +162,13 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
    * (e.g. external key-value stores).
    *
    * @since 2.0.0
    */
+  @Experimental
   def stream(): DataFrame = {
     val dataSource =
       DataSource(
@@ -180,10 +180,12 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
+   * :: Experimental ::
    * Loads input in as a [[DataFrame]], for data streams that read from some path.
    *
    * @since 2.0.0
    */
+  @Experimental
   def stream(path: String): DataFrame = {
     option("path", path).stream()
   }

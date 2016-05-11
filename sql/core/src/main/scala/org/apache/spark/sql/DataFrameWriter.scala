@@ -34,13 +34,11 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
- * Interface used to write a [[DataFrame]] to external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[DataFrame.write]] to access this.
+ * Interface used to write a [[Dataset]] to external storage systems (e.g. file systems,
+ * key-value stores, etc) or data streams. Use [[Dataset.write]] to access this.
  *
  * @since 1.4.0
  */
-@Experimental
 final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
@@ -255,11 +253,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * :: Experimental ::
    * Specifies the name of the [[ContinuousQuery]] that can be started with `startStream()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
    */
+  @Experimental
   def queryName(queryName: String): DataFrameWriter = {
     assertStreaming("queryName() can only be called on continuous queries")
     this.extraOptions += ("queryName" -> queryName)
@@ -267,25 +267,29 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * :: Experimental ::
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
    */
+  @Experimental
   def startStream(path: String): ContinuousQuery = {
     option("path", path).startStream()
   }
 
   /**
+   * :: Experimental ::
    * Starts the execution of the streaming query, which will continually output results to the given
    * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
    */
+  @Experimental
   def startStream(): ContinuousQuery = {
-    assertNotBucketed
+    assertNotBucketed()
     assertStreaming("startStream() can only be called on continuous queries")
 
     if (source == "memory") {
