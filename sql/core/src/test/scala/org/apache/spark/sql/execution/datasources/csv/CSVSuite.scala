@@ -72,14 +72,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       if (withHeader) {
         assert(df.schema.fieldNames === Array("year", "make", "model", "comment", "blank"))
       } else {
-        assert(df.schema.fieldNames === Array("C0", "C1", "C2", "C3", "C4"))
+        assert(df.schema.fieldNames === Array("_c0", "_c1", "_c2", "_c3", "_c4"))
       }
     }
 
     if (checkValues) {
       val yearValues = List("2012", "1997", "2015")
       val actualYears = if (!withHeader) "year" :: yearValues else yearValues
-      val years = if (withHeader) df.select("year").collect() else df.select("C0").collect()
+      val years = if (withHeader) df.select("year").collect() else df.select("_c0").collect()
 
       years.zipWithIndex.foreach { case (year, index) =>
         if (checkTypes) {
@@ -232,8 +232,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsBlankColName))
 
     assert(cars.select("customer").collect().size == 2)
-    assert(cars.select("C0").collect().size == 2)
-    assert(cars.select("C1").collect().size == 2)
+    assert(cars.select("_c0").collect().size == 2)
+    assert(cars.select("_c1").collect().size == 2)
   }
 
   test("test for FAILFAST parsing mode") {
