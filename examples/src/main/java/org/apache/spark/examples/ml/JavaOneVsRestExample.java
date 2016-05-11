@@ -63,7 +63,7 @@ public class JavaOneVsRestExample {
     OneVsRest ovr = new OneVsRest().setClassifier(classifier);
 
     // train the multiclass model.
-    OneVsRestModel ovrModel = ovr.fit(train.cache());
+    OneVsRestModel ovrModel = ovr.fit(train);
 
     // score the model on test data.
     Dataset<Row> predictions = ovrModel.transform(test)
