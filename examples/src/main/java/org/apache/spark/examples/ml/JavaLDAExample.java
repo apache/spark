@@ -25,7 +25,7 @@ import org.apache.spark.sql.SparkSession;
 // $example off$
 
 /**
- * An example demonstrating LDA
+ * An example demonstrating LDA.
  * Run with
  * <pre>
  * bin/run-example ml.JavaLDAExample

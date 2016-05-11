@@ -547,7 +547,7 @@ The implementation matches the result from R's survival function
 </div>
 
 <div data-lang="python" markdown="1">
-{% include_example python/ml/aft_survival_regression.py %}
+{% include_example python/ml/aft_survival_regression_example.py %}
 </div>
 
 </div>

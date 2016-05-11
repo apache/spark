@@ -17,11 +17,17 @@
 
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.regression import AFTSurvivalRegression
 from pyspark.mllib.linalg import Vectors
 # $example off$
+from pyspark.sql import SparkSession
+
+"""
+A simple example demonstrating aft survival regression.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/aft_survival_regression_example.py
+"""
 
 if __name__ == "__main__":
     spark = SparkSession \

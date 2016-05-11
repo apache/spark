@@ -18,15 +18,16 @@
 
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
-
 # $example on$
 from pyspark.ml.clustering import LDA
 # $example off$
+from pyspark.sql import SparkSession
 
 
 """
 A simple example demonstrating LDA.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/lda_example.py
 """
 
 
