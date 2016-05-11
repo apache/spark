@@ -38,6 +38,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsAltFile = "cars-alternative.csv"
   private val carsUnbalancedQuotesFile = "cars-unbalanced-quotes.csv"
   private val carsNullFile = "cars-null.csv"
+  private val carsBlankColName = "cars-blank-column-name.csv"
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
@@ -222,6 +223,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     assert(cars.select("year").collect().size === 2)
+  }
+
+  test("test for blank column names on read and select normal column") {
+    val cars = spark.read
+      .format("csv")
+      .options(Map("header" -> "true", "inferSchema" -> "true"))
+      .load(testFile(carsBlankColName))
+
+    assert(cars.select("customer").collect().size == 2)
+    assert(cars.select("C0").collect().size == 2)
+    assert(cars.select("C1").collect().size == 2)
   }
 
   test("test for FAILFAST parsing mode") {
