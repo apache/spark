@@ -131,8 +131,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     sql(s"DROP TABLE ${table.quotedString}")
 
     withTable(table.table) {
-      val newDDL = shownDDL.replaceFirst(table.table, table.table)
-      sql(newDDL)
+      sql(shownDDL)
       val actual = spark.externalCatalog.getTable(db, table.table)
       checkCatalogTables(expected, actual)
     }
