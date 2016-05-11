@@ -63,8 +63,6 @@ class DataFrame(object):
         people.filter(people.age > 30).join(department, people.deptId == department.id)\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
-    .. note:: Experimental
-
     .. versionadded:: 1.3
     """
 
@@ -206,6 +204,8 @@ class DataFrame(object):
         :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
+
+        .. note:: Experimental
         """
         return self._jdf.isStreaming()
 
