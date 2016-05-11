@@ -52,12 +52,6 @@ private[mllib] object LocalKMeans extends Logging {
     }
     
     for (i <- 1 until k) {
-
-      // Pick the next center with a probability proportional to cost under current centers
-      //      val curCenters = centers.view.take(i)
-      //      val sum = points.view.zip(weights).map { case (p, w) =>
-      //        w * KMeans.pointCost(curCenters, p)
-      //      }.sum
       val sum = costArray.view.zip(weights).map{
         case (c, w) =>
           w*c
@@ -70,8 +64,8 @@ private[mllib] object LocalKMeans extends Logging {
         j += 1
       }
       if (j == 0) {
-        //        logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
-        //          s" Using duplicate point for center k = $i.")
+        logWarning("kMeansPlusPlus initialization ran out of distinct points for centers." +
+                   s" Using duplicate point for center k = $i.")
         centers(i) = points(0).toDense
       } else {
         centers(i) = points(j - 1).toDense
