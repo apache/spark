@@ -28,7 +28,11 @@ import org.apache.spark.sql.SparkSession;
 
 
 /**
- * An example demonstrating a bisecting k-means clustering.
+ * An example demonstrating bisecting k-means clustering.
+ * Run with
+ * <pre>
+ * bin/run-example ml.JavaBisectingKMeansExample
+ * </pre>
  */
 public class JavaBisectingKMeansExample {
 

@@ -25,7 +25,7 @@ import org.apache.spark.ml.clustering.BisectingKMeans
 import org.apache.spark.sql.SparkSession
 
 /**
- * An example demonstrating a bisecting k-means clustering.
+ * An example demonstrating bisecting k-means clustering.
  * Run with
  * {{{
  * bin/run-example ml.BisectingKMeansExample

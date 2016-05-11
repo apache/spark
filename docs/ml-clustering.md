@@ -117,15 +117,6 @@ Bisecting K-means can often be much faster than regular K-means, but it will gen
 
 `BisectingKMeans` is implemented as an `Estimator` and generates a `BisectingKMeansModel` as the base model.
 
-The implementation in ML has the following parameters:
-
-* *k*: the desired number of leaf clusters (default: 4). The actual number could be smaller if there are no divisible leaf clusters.
-* *maxIter*: the max number of k-means iterations to split clusters (default: 20)
-* *minDivisibleClusterSize*: the minimum number of points (if >= 1.0) or the minimum proportion of points (if < 1.0) of a divisible cluster (default: 1)
-* *seed*: a random seed (default: hash value of the class name)
-* *featuresCol*: the features column name (default: "features")
-* *predictionCol*: the prediction column name (default: "prediction")
-
 ### Example
 
 <div class="codetabs">

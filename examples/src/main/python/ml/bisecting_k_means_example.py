@@ -18,12 +18,14 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.clustering import BisectingKMeans, BisectingKMeansModel
+from pyspark.ml.clustering import BisectingKMeans
 # $example off$
 from pyspark.sql import SparkSession
 
 """
-A simple example demonstrating a bisecting k-means clustering.
+An example demonstrating bisecting k-means clustering.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/bisecting_k_means_example.py
 """
 
 if __name__ == "__main__":
