@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.Unpooled;
+import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,13 +80,26 @@ public class JavaUtils {
     return Unpooled.wrappedBuffer(b).toString(StandardCharsets.UTF_8);
   }
 
-  /*
+  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
-   * Throws an exception if deletion is unsuccessful.
+   *
+   * @param file Input file / dir to be deleted
+   * @throws IOException if deletion is unsuccessful
    */
   public static void deleteRecursively(File file) throws IOException {
     if (file == null) { return; }
+
+    // On Unix systems, use operating system command to run faster
+    // If that does not work out, fallback to the Java native way
+    if (SystemUtils.IS_OS_UNIX) {
+      try {
+        deleteRecursivelyForUnix(file);
+        return;
+      } catch (IOException e) {
+        // ignore and fall back to the Java native way
+      }
+    }
 
     if (file.isDirectory() && !isSymlink(file)) {
       IOException savedIOException = null;
@@ -106,6 +120,27 @@ public class JavaUtils {
     // Delete can also fail if the file simply did not exist.
     if (!deleted && file.exists()) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath());
+    }
+  }
+
+  private static void deleteRecursivelyForUnix(File file) throws IOException {
+    Process process = null;
+    final ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
+
+    try {
+      process = builder.start();
+      process.waitFor();
+      if (process.exitValue() == 0 && !file.exists()) {
+        return;
+      }
+
+      throw new IOException("Failed to delete: " + file.getAbsolutePath());
+    } catch (Exception e) {
+      throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
+    } finally {
+      if (process != null && process.isAlive()) {
+        process.destroy();
+      }
     }
   }
 
