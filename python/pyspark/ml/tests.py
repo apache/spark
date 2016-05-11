@@ -63,6 +63,7 @@ from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
 
+
 class SparkSessionTestCase(PySparkTestCase):
     @classmethod
     def setUpClass(cls):
@@ -73,6 +74,7 @@ class SparkSessionTestCase(PySparkTestCase):
     def tearDownClass(cls):
         PySparkTestCase.tearDownClass()
         cls.spark.stop()
+
 
 class MockDataset(DataFrame):
 
