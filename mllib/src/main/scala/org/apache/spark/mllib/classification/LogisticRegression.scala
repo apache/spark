@@ -439,7 +439,7 @@ class LogisticRegressionWithLBFGS
         // Convert our input into a DataFrame
         val sqlContext = new SQLContext(input.context)
         import sqlContext.implicits._
-        val df = input.toDF()
+        val df = input.map(_.asML).toDF()
         // Determine if we should cache the DF
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model
