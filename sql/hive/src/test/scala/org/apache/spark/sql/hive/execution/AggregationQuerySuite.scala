@@ -959,22 +959,6 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     }
   }
 
-  test("SPARK-15206: two distinct aggregation with having clause of one distinct aggregation") {
-    checkAnswer(
-      sql(
-        """
-          |select key, count(distinct value1), count(distinct value2)
-          |from agg2 group by key
-          |having count(distinct value1) > 0
-        """.stripMargin),
-      Seq(
-        Row(null, 3, 3),
-        Row(1, 2, 3),
-        Row(2, 2, 1)
-      )
-    )
-  }
-
   test("SPARK-15206: single distinct aggregate in having clause") {
     checkAnswer(
       sql(
