@@ -24,7 +24,7 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.sql import SparkSession
 
 """
-A simple example demonstrating aft survival regression.
+An example demonstrating aft survival regression.
 Run with:
   bin/spark-submit examples/src/main/python/ml/aft_survival_regression.py
 """
