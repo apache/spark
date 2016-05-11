@@ -107,7 +107,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
 
   test("data source table using Dataset API") {
     withTable("ddl_test5") {
-      sqlContext
+      spark
         .range(3)
         .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd, 'id as 'e)
         .write
@@ -126,14 +126,14 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
 
   private def checkCreateTable(table: TableIdentifier): Unit = {
     val db = table.database.getOrElse("default")
-    val expected = sqlContext.externalCatalog.getTable(db, table.table)
+    val expected = spark.externalCatalog.getTable(db, table.table)
     val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
     sql(s"DROP TABLE ${table.quotedString}")
 
     withTable(table.table) {
       val newDDL = shownDDL.replaceFirst(table.table, table.table)
       sql(newDDL)
-      val actual = sqlContext.externalCatalog.getTable(db, table.table)
+      val actual = spark.externalCatalog.getTable(db, table.table)
       checkCatalogTables(expected, actual)
     }
   }
