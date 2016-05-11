@@ -94,7 +94,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
             .startStream(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
-            val outputDf = sqlContext.read.parquet(outputDir.getAbsolutePath).as[Long]
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
@@ -103,7 +103,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       }
     }
 
-    val df = sqlContext.read.format(classOf[FakeDefaultSource].getName).stream()
+    val df = spark.read.format(classOf[FakeDefaultSource].getName).stream()
     assertDF(df)
     assertDF(df)
   }
@@ -162,13 +162,13 @@ class FakeDefaultSource extends StreamSourceProvider {
   private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
 
   override def sourceSchema(
-      sqlContext: SQLContext,
+      spark: SQLContext,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = ("fakeSource", fakeSchema)
 
   override def createSource(
-      sqlContext: SQLContext,
+      spark: SQLContext,
       metadataPath: String,
       schema: Option[StructType],
       providerName: String,
@@ -190,7 +190,7 @@ class FakeDefaultSource extends StreamSourceProvider {
 
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         val startOffset = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L) + 1
-        sqlContext.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
+        spark.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
       }
     }
   }

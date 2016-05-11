@@ -20,7 +20,6 @@ package org.apache.spark.ml.classification;
 import java.io.Serializable;
 import java.util.List;
 
-import org.apache.spark.sql.Row;
 import scala.collection.JavaConverters;
 
 import org.junit.After;
@@ -30,56 +29,61 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
+import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 
 public class JavaOneVsRestSuite implements Serializable {
 
-    private transient JavaSparkContext jsc;
-    private transient SQLContext jsql;
-    private transient Dataset<Row> dataset;
-    private transient JavaRDD<LabeledPoint> datasetRDD;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
+  private transient Dataset<Row> dataset;
+  private transient JavaRDD<LabeledPoint> datasetRDD;
 
-    @Before
-    public void setUp() {
-        jsc = new JavaSparkContext("local", "JavaLOneVsRestSuite");
-        jsql = new SQLContext(jsc);
-        int nPoints = 3;
+  @Before
+  public void setUp() {
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaLOneVsRestSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
 
-        // The following coefficients and xMean/xVariance are computed from iris dataset with
-        // lambda=0.2.
-        // As a result, we are drawing samples from probability distribution of an actual model.
-        double[] coefficients = {
-                -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,
-                -0.16624, -0.84355, -0.048509, -0.301789, 4.170682 };
+    int nPoints = 3;
 
-        double[] xMean = {5.843, 3.057, 3.758, 1.199};
-        double[] xVariance = {0.6856, 0.1899, 3.116, 0.581};
-        List<LabeledPoint> points = JavaConverters.seqAsJavaListConverter(
-            generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
-        ).asJava();
-        datasetRDD = jsc.parallelize(points, 2);
-        dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
-    }
+    // The following coefficients and xMean/xVariance are computed from iris dataset with
+    // lambda=0.2.
+    // As a result, we are drawing samples from probability distribution of an actual model.
+    double[] coefficients = {
+      -0.57997, 0.912083, -0.371077, -0.819866, 2.688191,
+      -0.16624, -0.84355, -0.048509, -0.301789, 4.170682};
 
-    @After
-    public void tearDown() {
-        jsc.stop();
-        jsc = null;
-    }
+    double[] xMean = {5.843, 3.057, 3.758, 1.199};
+    double[] xVariance = {0.6856, 0.1899, 3.116, 0.581};
+    List<LabeledPoint> points = JavaConverters.seqAsJavaListConverter(
+      generateMultinomialLogisticInput(coefficients, xMean, xVariance, true, nPoints, 42)
+    ).asJava();
+    datasetRDD = jsc.parallelize(points, 2);
+    dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
+  }
 
-    @Test
-    public void oneVsRestDefaultParams() {
-        OneVsRest ova = new OneVsRest();
-        ova.setClassifier(new LogisticRegression());
-        Assert.assertEquals(ova.getLabelCol() , "label");
-        Assert.assertEquals(ova.getPredictionCol() , "prediction");
-        OneVsRestModel ovaModel = ova.fit(dataset);
-        Dataset<Row> predictions = ovaModel.transform(dataset).select("label", "prediction");
-        predictions.collectAsList();
-        Assert.assertEquals(ovaModel.getLabelCol(), "label");
-        Assert.assertEquals(ovaModel.getPredictionCol() , "prediction");
-    }
+  @After
+  public void tearDown() {
+    spark.stop();
+    spark = null;
+  }
+
+  @Test
+  public void oneVsRestDefaultParams() {
+    OneVsRest ova = new OneVsRest();
+    ova.setClassifier(new LogisticRegression());
+    Assert.assertEquals(ova.getLabelCol(), "label");
+    Assert.assertEquals(ova.getPredictionCol(), "prediction");
+    OneVsRestModel ovaModel = ova.fit(dataset);
+    Dataset<Row> predictions = ovaModel.transform(dataset).select("label", "prediction");
+    predictions.collectAsList();
+    Assert.assertEquals(ovaModel.getLabelCol(), "label");
+    Assert.assertEquals(ovaModel.getPredictionCol(), "prediction");
+  }
 }
