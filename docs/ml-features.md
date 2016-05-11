@@ -39,7 +39,7 @@ dividing by zero for terms outside the corpus. The TF-IDF measure is simply the 
 TFIDF(t, d, D) = TF(t, d) \cdot IDF(t, D).
 \]`
 There are several variants on the definition of term frequency and document frequency.
-In `spark.mllib`, we separate TF and IDF to make them flexible.
+In MLlib, we separate TF and IDF to make them flexible.
 
 **TF**: Both `HashingTF` and `CountVectorizer` can be used to generate the term frequency vectors. 
 
@@ -51,7 +51,7 @@ are calculated based on the mapped indices. This approach avoids the need to com
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e., the number of buckets 
-of the hash table. The default feature dimension is `$2^{20} = 1,048,576$`.
+of the hash table. The default feature dimension is `$2^{18} = 262,144$`.
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
