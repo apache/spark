@@ -193,6 +193,9 @@ class Catalog(object):
         [Row(_1=2, _2=1), Row(_1=3, _2=1)]
         >>> spark.catalog.createTempView("my_cool_view", df)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
+        ...
+        Py4JJavaError: ...
+        : org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException...
         >>> spark.catalog.dropTempView("my_cool_view")
         """
         if isinstance(df, DataFrame):
