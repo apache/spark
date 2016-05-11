@@ -25,7 +25,11 @@ import org.apache.spark.ml.regression.AFTSurvivalRegression
 import org.apache.spark.sql.SparkSession
 
 /**
- * An example for AFTSurvivalRegression.
+ * An example demonstrating AFTSurvivalRegression.
+ * Run with
+ * {{{
+ * bin/run-example ml.AFTSurvivalRegressionExample
+ * }}}
  */
 object AFTSurvivalRegressionExample {
 

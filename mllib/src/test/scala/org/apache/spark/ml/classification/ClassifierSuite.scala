@@ -32,7 +32,7 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("extractLabeledPoints") {
     def getTestData(labels: Seq[Double]): DataFrame = {
       val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      sqlContext.createDataFrame(data)
+      spark.createDataFrame(data)
     }
 
     val c = new MockClassifier
@@ -72,7 +72,7 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("getNumClasses") {
     def getTestData(labels: Seq[Double]): DataFrame = {
       val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      sqlContext.createDataFrame(data)
+      spark.createDataFrame(data)
     }
 
     val c = new MockClassifier

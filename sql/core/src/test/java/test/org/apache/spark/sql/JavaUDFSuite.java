@@ -24,33 +24,30 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.SparkContext;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.api.java.UDF1;
 import org.apache.spark.sql.api.java.UDF2;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.types.DataTypes;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaUDFSuite implements Serializable {
-  private transient JavaSparkContext sc;
-  private transient SQLContext sqlContext;
+  private transient SparkSession spark;
 
   @Before
   public void setUp() {
-    SparkContext _sc = new SparkContext("local[*]", "testing");
-    sqlContext = new SQLContext(_sc);
-    sc = new JavaSparkContext(_sc);
+    spark = SparkSession.builder()
+      .master("local[*]")
+      .appName("testing")
+      .getOrCreate();
   }
 
   @After
   public void tearDown() {
-    sqlContext.sparkContext().stop();
-    sqlContext = null;
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @SuppressWarnings("unchecked")
@@ -60,14 +57,14 @@ public class JavaUDFSuite implements Serializable {
     // sqlContext.registerFunction(
     //   "stringLengthTest", (String str) -> str.length(), DataType.IntegerType);
 
-    sqlContext.udf().register("stringLengthTest", new UDF1<String, Integer>() {
+    spark.udf().register("stringLengthTest", new UDF1<String, Integer>() {
       @Override
       public Integer call(String str) {
         return str.length();
       }
     }, DataTypes.IntegerType);
 
-    Row result = sqlContext.sql("SELECT stringLengthTest('test')").head();
+    Row result = spark.sql("SELECT stringLengthTest('test')").head();
     Assert.assertEquals(4, result.getInt(0));
   }
 
@@ -80,14 +77,14 @@ public class JavaUDFSuite implements Serializable {
     //   (String str1, String str2) -> str1.length() + str2.length,
     //   DataType.IntegerType);
 
-    sqlContext.udf().register("stringLengthTest", new UDF2<String, String, Integer>() {
+    spark.udf().register("stringLengthTest", new UDF2<String, String, Integer>() {
       @Override
       public Integer call(String str1, String str2) {
         return str1.length() + str2.length();
       }
     }, DataTypes.IntegerType);
 
-    Row result = sqlContext.sql("SELECT stringLengthTest('test', 'test2')").head();
+    Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
     Assert.assertEquals(9, result.getInt(0));
   }
 }

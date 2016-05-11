@@ -52,19 +52,19 @@ class GeneralizedLinearRegressionSuite
 
     import GeneralizedLinearRegressionSuite._
 
-    datasetGaussianIdentity = sqlContext.createDataFrame(
+    datasetGaussianIdentity = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gaussian", link = "identity"), 2))
 
-    datasetGaussianLog = sqlContext.createDataFrame(
+    datasetGaussianLog = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gaussian", link = "log"), 2))
 
-    datasetGaussianInverse = sqlContext.createDataFrame(
+    datasetGaussianInverse = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
@@ -80,40 +80,40 @@ class GeneralizedLinearRegressionSuite
         generateMultinomialLogisticInput(coefficients, xMean, xVariance,
           addIntercept = true, nPoints, seed)
 
-      sqlContext.createDataFrame(sc.parallelize(testData, 2))
+      spark.createDataFrame(sc.parallelize(testData, 2))
     }
 
-    datasetPoissonLog = sqlContext.createDataFrame(
+    datasetPoissonLog = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "poisson", link = "log"), 2))
 
-    datasetPoissonIdentity = sqlContext.createDataFrame(
+    datasetPoissonIdentity = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "poisson", link = "identity"), 2))
 
-    datasetPoissonSqrt = sqlContext.createDataFrame(
+    datasetPoissonSqrt = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "poisson", link = "sqrt"), 2))
 
-    datasetGammaInverse = sqlContext.createDataFrame(
+    datasetGammaInverse = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gamma", link = "inverse"), 2))
 
-    datasetGammaIdentity = sqlContext.createDataFrame(
+    datasetGammaIdentity = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 2.5, coefficients = Array(2.2, 0.6), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
         family = "gamma", link = "identity"), 2))
 
-    datasetGammaLog = sqlContext.createDataFrame(
+    datasetGammaLog = spark.createDataFrame(
       sc.parallelize(generateGeneralizedLinearRegressionInput(
         intercept = 0.25, coefficients = Array(0.22, 0.06), xMean = Array(2.9, 10.5),
         xVariance = Array(0.7, 1.2), nPoints = 10000, seed, noiseLevel = 0.01,
@@ -540,7 +540,7 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+    val datasetWithWeight = spark.createDataFrame(sc.parallelize(Seq(
       Instance(17.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(19.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(23.0, 3.0, Vectors.dense(2.0, 11.0)),
@@ -668,7 +668,7 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+    val datasetWithWeight = spark.createDataFrame(sc.parallelize(Seq(
       Instance(1.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(0.0, 2.0, Vectors.dense(1.0, 2.0)),
       Instance(1.0, 3.0, Vectors.dense(2.0, 1.0)),
@@ -782,7 +782,7 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+    val datasetWithWeight = spark.createDataFrame(sc.parallelize(Seq(
       Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
@@ -899,7 +899,7 @@ class GeneralizedLinearRegressionSuite
        w <- c(1, 2, 3, 4)
        df <- as.data.frame(cbind(A, b))
      */
-    val datasetWithWeight = sqlContext.createDataFrame(sc.parallelize(Seq(
+    val datasetWithWeight = spark.createDataFrame(sc.parallelize(Seq(
       Instance(2.0, 1.0, Vectors.dense(0.0, 5.0).toSparse),
       Instance(8.0, 2.0, Vectors.dense(1.0, 7.0)),
       Instance(3.0, 3.0, Vectors.dense(2.0, 11.0)),
@@ -1021,14 +1021,14 @@ class GeneralizedLinearRegressionSuite
     val glr = new GeneralizedLinearRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
         GeneralizedLinearRegressionModel, GeneralizedLinearRegression](
-      glr, isClassification = false, sqlContext) { (expected, actual) =>
+      glr, isClassification = false, spark) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }
   }
 
   test("glm accepts Dataset[LabeledPoint]") {
-    val context = sqlContext
+    val context = spark
     import context.implicits._
     new GeneralizedLinearRegression()
       .setFamily("gaussian")

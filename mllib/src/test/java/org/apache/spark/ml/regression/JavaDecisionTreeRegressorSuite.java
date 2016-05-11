@@ -27,27 +27,32 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.Function;
+import org.apache.spark.ml.classification.LogisticRegressionSuite;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.tree.impl.TreeTests;
-import org.apache.spark.mllib.classification.LogisticRegressionSuite;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 
 public class JavaDecisionTreeRegressorSuite implements Serializable {
 
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeRegressorSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaDecisionTreeRegressorSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -56,14 +61,8 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
     double A = 2.0;
     double B = -1.5;
 
-    JavaRDD<LabeledPoint> data = sc.parallelize(
-      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).map(
-        new Function<org.apache.spark.mllib.regression.LabeledPoint, LabeledPoint>() {
-          public LabeledPoint call(org.apache.spark.mllib.regression.LabeledPoint point) {
-            return point.asML();
-          }
-        }
-    ).cache();
+    JavaRDD<LabeledPoint> data = jsc.parallelize(
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
     Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 0);
 
@@ -77,7 +76,7 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
       .setCacheNodeIds(false)
       .setCheckpointInterval(10)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (String impurity: DecisionTreeRegressor.supportedImpurities()) {
+    for (String impurity : DecisionTreeRegressor.supportedImpurities()) {
       dt.setImpurity(impurity);
     }
     DecisionTreeRegressionModel model = dt.fit(dataFrame);

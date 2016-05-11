@@ -61,7 +61,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     })
     val expected = scaleDataWithIDF(data, idf)
 
-    val df = sqlContext.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(expected)).toDF("features", "expected")
 
     val idfModel = new IDF()
       .setInputCol("features")
@@ -87,7 +87,7 @@ class IDFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     })
     val expected = scaleDataWithIDF(data, idf)
 
-    val df = sqlContext.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(expected)).toDF("features", "expected")
 
     val idfModel = new IDF()
       .setInputCol("features")

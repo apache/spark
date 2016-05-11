@@ -50,7 +50,7 @@ class PCASuite extends SparkFunSuite with MLlibTestSparkContext with DefaultRead
     val pc = mat.computePrincipalComponents(3)
     val expected = mat.multiply(pc).rows.map(_.asML)
 
-    val df = sqlContext.createDataFrame(dataRDD.zip(expected)).toDF("features", "expected")
+    val df = spark.createDataFrame(dataRDD.zip(expected)).toDF("features", "expected")
 
     val pca = new PCA()
       .setInputCol("features")

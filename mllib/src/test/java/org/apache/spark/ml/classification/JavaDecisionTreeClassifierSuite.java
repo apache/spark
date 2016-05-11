@@ -19,36 +19,39 @@ package org.apache.spark.ml.classification;
 
 import java.io.Serializable;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
-import org.apache.spark.api.java.function.Function;
-import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.Row;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.ml.classification.LogisticRegressionSuite;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.tree.impl.TreeTests;
-import org.apache.spark.mllib.classification.LogisticRegressionSuite;
-
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaDecisionTreeClassifierSuite implements Serializable {
 
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeClassifierSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaDecisionTreeClassifierSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -57,13 +60,8 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     double A = 2.0;
     double B = -1.5;
 
-    JavaRDD<LabeledPoint> data = sc.parallelize(
-      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42)).map(
-        new Function<org.apache.spark.mllib.regression.LabeledPoint, LabeledPoint>() {
-          public LabeledPoint call(org.apache.spark.mllib.regression.LabeledPoint point) {
-            return point.asML();
-          }
-        }).cache();
+    JavaRDD<LabeledPoint> data = jsc.parallelize(
+      LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
     Map<Integer, Integer> categoricalFeatures = new HashMap<>();
     Dataset<Row> dataFrame = TreeTests.setMetadata(data, categoricalFeatures, 2);
 
@@ -77,7 +75,7 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
       .setCacheNodeIds(false)
       .setCheckpointInterval(10)
       .setMaxDepth(2); // duplicate setMaxDepth to check builder pattern
-    for (String impurity: DecisionTreeClassifier.supportedImpurities()) {
+    for (String impurity : DecisionTreeClassifier.supportedImpurities()) {
       dt.setImpurity(impurity);
     }
     DecisionTreeClassificationModel model = dt.fit(dataFrame);

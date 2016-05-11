@@ -37,13 +37,13 @@ class AFTSurvivalRegressionSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    datasetUnivariate = sqlContext.createDataFrame(
+    datasetUnivariate = spark.createDataFrame(
       sc.parallelize(generateAFTInput(
         1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0, 2.0)))
-    datasetMultivariate = sqlContext.createDataFrame(
+    datasetMultivariate = spark.createDataFrame(
       sc.parallelize(generateAFTInput(
         2, Array(0.9, -1.3), Array(0.7, 1.2), 1000, 42, 1.5, 2.5, 2.0)))
-    datasetUnivariateScaled = sqlContext.createDataFrame(
+    datasetUnivariateScaled = spark.createDataFrame(
       sc.parallelize(generateAFTInput(
         1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0, 2.0)).map { x =>
           AFTPoint(Vectors.dense(x.features(0) * 1.0E3), x.label, x.censor)
@@ -356,7 +356,7 @@ class AFTSurvivalRegressionSuite
   test("should support all NumericType labels") {
     val aft = new AFTSurvivalRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[AFTSurvivalRegressionModel, AFTSurvivalRegression](
-      aft, isClassification = false, sqlContext) { (expected, actual) =>
+      aft, isClassification = false, spark) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }

@@ -34,7 +34,7 @@ class CommitFailureTestRelationSuite extends SQLTestUtils with TestHiveSingleton
       // Here we coalesce partition number to 1 to ensure that only a single task is issued.  This
       // prevents race condition happened when FileOutputCommitter tries to remove the `_temporary`
       // directory while committing/aborting the job.  See SPARK-8513 for more details.
-      val df = sqlContext.range(0, 10).coalesce(1)
+      val df = spark.range(0, 10).coalesce(1)
       intercept[SparkException] {
         df.write.format(dataSourceName).save(file.getCanonicalPath)
       }
@@ -49,7 +49,7 @@ class CommitFailureTestRelationSuite extends SQLTestUtils with TestHiveSingleton
     withTempPath { file =>
       // fail the job in the middle of writing
       val divideByZero = udf((x: Int) => { x / (x - 1)})
-      val df = sqlContext.range(0, 10).coalesce(1).select(divideByZero(col("id")))
+      val df = spark.range(0, 10).coalesce(1).select(divideByZero(col("id")))
 
       SimpleTextRelation.callbackCalled = false
       intercept[SparkException] {
@@ -66,7 +66,7 @@ class CommitFailureTestRelationSuite extends SQLTestUtils with TestHiveSingleton
     SimpleTextRelation.failCommitter = false
     withTempPath { file =>
       // fail the job in the middle of writing
-      val df = sqlContext.range(0, 10).coalesce(1).select(col("id").mod(2).as("key"), col("id"))
+      val df = spark.range(0, 10).coalesce(1).select(col("id").mod(2).as("key"), col("id"))
 
       SimpleTextRelation.callbackCalled = false
       SimpleTextRelation.failWriter = true
