@@ -41,6 +41,7 @@ import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
 import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
+import org.apache.spark.{SPARK_BRANCH, SPARK_BUILD_DATE, SPARK_BUILD_USER, SPARK_REPO_URL}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
@@ -106,6 +107,9 @@ object SparkSubmit {
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
                         """.format(SPARK_VERSION))
+    printStream.println("Branch %s".format(SPARK_BRANCH))
+    printStream.println("Compiled by user %s on %s".format(SPARK_BUILD_USER, SPARK_BUILD_DATE))
+    printStream.println("Url %s".format(SPARK_REPO_URL))
     printStream.println("Type --help for more information.")
     exitFn(0)
   }

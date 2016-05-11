@@ -348,6 +348,8 @@ object SparkBuild extends PomBuild {
     enable(MimaBuild.mimaSettings(sparkHome, x))(x)
   }
 
+  enable(All.settings)(spark)
+
   /* Unsafe settings */
   enable(Unsafe.settings)(unsafe)
 
@@ -435,7 +437,18 @@ object SparkBuild extends PomBuild {
       else x.settings(Seq[Setting[_]](): _*)
     } ++ Seq[Project](OldDeps.project)
   }
+}
 
+object All {
+  lazy val settings = Seq(resourceGenerators in Compile <+= (version) map { (v) =>
+    val file = new File(BuildCommons.sparkHome, "core/src/main/resources/spark-version-info.properties")
+    val contents = "version=%s".format(v)
+    val command = "cd " +BuildCommons.sparkHome + "; echo user=${USER}; echo revision=$(git rev-parse HEAD); echo branch=$(git rev-parse --abbrev-ref HEAD); echo date=$(date -u +%Y-%m-%dT%H:%M:%SZ); echo url=$(git config --get remote.origin.url);"
+    val result = contents + "\n" + Process(Seq("/bin/bash", "-c", command)).!!
+    IO.write(file, result)
+    Seq(file)
+    }
+  )
 }
 
 object Unsafe {

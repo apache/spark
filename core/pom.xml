@@ -335,6 +335,16 @@
   <build>
     <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
+    <resources>
+      <resource>
+        <!-- Include the properties file to provide the build information. -->
+        <directory>${basedir}/src/main/resources</directory>
+        <includes>
+          <include>spark-version-info.properties</include>
+        </includes>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

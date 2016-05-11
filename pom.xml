@@ -180,6 +180,7 @@
     <libthrift.version>0.9.2</libthrift.version>
     <antlr4.version>4.5.2-1</antlr4.version>
     <jpam.version>1.1</jpam.version>
+    <maven-antrun.version>1.8</maven-antrun.version>
 
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
@@ -2078,7 +2079,30 @@
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
           <artifactId>maven-antrun-plugin</artifactId>
-          <version>1.8</version>
+          <version>${maven-antrun.version}</version>
+          <executions>
+            <execution>
+              <phase>generate-resources</phase>
+              <configuration>
+                <exportAntProperties>true</exportAntProperties>
+                <tasks>
+                  <touch file="${basedir}/core/src/main/resources/spark-version-info.properties"/>
+                  <exec executable="/bin/bash" output="${basedir}/core/src/main/resources/spark-version-info.properties">
+                    <arg value="-c"/>
+                    <arg value="echo version=${pom.version} ;
+                              echo user=${user.name};
+                              echo revision=$(git rev-parse HEAD);
+                              echo branch=$(git rev-parse --abbrev-ref HEAD);
+                              echo date=$(date -u +%Y-%m-%dT%H:%M:%SZ);
+                              echo url=$(git config --get remote.origin.url)"/>
+                  </exec>
+                </tasks>
+              </configuration>
+              <goals>
+                <goal>run</goal>
+              </goals>
+            </execution>
+          </executions>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
