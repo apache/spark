@@ -193,10 +193,8 @@ case class CreateDataSourceTableAsSelectCommand(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
               existingSchema = Some(l.schema)
-            case s: SimpleCatalogRelation
-                if s.metadata.properties.contains("spark.sql.sources.provider") =>
-              val tbl = CreateDataSourceTableUtils.readDataSourceTable(sparkSession, s.metadata)
-              existingSchema = Some(tbl.schema)
+            case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
+              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -264,51 +262,19 @@ object CreateDataSourceTableUtils extends Logging {
   }
 
   def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
-    def schemaStringFromParts: Option[String] = {
-      table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
-        val parts = (0 until numParts.toInt).map { index =>
-          val part = table.properties.get(s"spark.sql.sources.schema.part.$index").orNull
-          if (part == null) {
-            throw new AnalysisException(
-              "Could not read schema from the metastore because it is corrupted " +
-                s"(missing part $index of the schema, $numParts parts are expected).")
-          }
-
-          part
-        }
-        // Stick all parts back to a single schema string.
-        parts.mkString
-      }
-    }
-
-    def getColumnNames(colType: String): Seq[String] = {
-      table.properties.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").map {
-        numCols => (0 until numCols.toInt).map { index =>
-          table.properties.getOrElse(s"spark.sql.sources.schema.${colType}Col.$index",
-            throw new AnalysisException(
-              s"Could not read $colType columns from the metastore because it is corrupted " +
-                s"(missing part $index of it, $numCols parts are expected)."))
-        }
-      }.getOrElse(Nil)
-    }
-
     // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
     // After SPARK-6024, we removed this flag.
     // Although we are not using spark.sql.sources.schema any more, we need to still support.
-    val schemaString =
-      table.properties.get("spark.sql.sources.schema").orElse(schemaStringFromParts)
-
-    val userSpecifiedSchema =
-      schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
+    val userSpecifiedSchema = table.properties.get("spark.sql.sources.schema")
+      .map(s => DataType.fromJson(s).asInstanceOf[StructType])
+      .orElse(DDLUtils.getSchemaFromTableProperties(table))
 
     // We only need names at here since userSpecifiedSchema we loaded from the metastore
     // contains partition columns. We can always get datatypes of partitioning columns
     // from userSpecifiedSchema.
-    val partitionColumns = getColumnNames("part")
+    val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(table)
 
-    val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
-      BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
-    }
+    val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
 
     val options = table.storage.serdeProperties
     val dataSource =

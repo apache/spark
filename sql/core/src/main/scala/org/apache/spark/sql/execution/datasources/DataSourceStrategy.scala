@@ -30,11 +30,11 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.DataSourceScanExec.{INPUT_PATHS, PUSHED_FILTERS}
-import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, ExecutedCommandExec}
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -85,10 +85,11 @@ private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
  */
 private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
+    case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
+        if DDLUtils.isDatasourceTable(s.metadata) =>
       i.copy(table = CreateDataSourceTableUtils.readDataSourceTable(sparkSession, s.metadata))
 
-    case s: SimpleCatalogRelation if s.metadata.properties.contains("spark.sql.sources.provider") =>
+    case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
       CreateDataSourceTableUtils.readDataSourceTable(sparkSession, s.metadata)
   }
 }
