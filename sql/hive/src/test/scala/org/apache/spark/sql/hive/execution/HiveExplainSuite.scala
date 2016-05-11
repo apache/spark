@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -86,7 +87,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
            |CREATE TABLE t1
            |AS
            |SELECT * FROM jt
-      """.stripMargin).collect().map(_.mkString).mkString
+         """.stripMargin).collect().map(_.mkString).mkString
 
       val shouldContain =
         "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
@@ -115,19 +116,8 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Physical Plan =="
     )
 
-    checkKeywordsExist(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"),
-      "WholeStageCodegen",
-      "Generated code:",
-      "/* 001 */ public Object generate(Object[] references) {",
-      "/* 002 */   return new GeneratedIterator(references);",
-      "/* 003 */ }"
-    )
-
-    checkKeywordsNotExist(sql("EXPLAIN EXTENDED CODEGEN SELECT 1"),
-      "== Parsed Logical Plan ==",
-      "== Analyzed Logical Plan ==",
-      "== Optimized Logical Plan ==",
-      "== Physical Plan =="
-    )
+    intercept[ParseException] {
+      sql("EXPLAIN EXTENDED CODEGEN SELECT 1")
+    }
   }
 }

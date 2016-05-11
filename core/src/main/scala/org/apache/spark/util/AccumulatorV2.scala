@@ -256,7 +256,7 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
    * @since 2.0.0
    */
-  override def isZero: Boolean = _count == 0L
+  override def isZero: Boolean = _sum == 0L && _count == 0
 
   override def copyAndReset(): LongAccumulator = new LongAccumulator
 
@@ -321,7 +321,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
   private[this] var _sum = 0.0
   private[this] var _count = 0L
 
-  override def isZero: Boolean = _count == 0L
+  override def isZero: Boolean = _sum == 0.0 && _count == 0
 
   override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
 

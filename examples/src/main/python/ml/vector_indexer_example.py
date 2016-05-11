@@ -23,7 +23,10 @@ from pyspark.ml.feature import VectorIndexer
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("VectorIndexerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("VectorIndexerExample")\
+        .getOrCreate()
 
     # $example on$
     data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

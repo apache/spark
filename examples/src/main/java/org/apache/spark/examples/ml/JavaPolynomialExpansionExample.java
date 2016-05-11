@@ -36,7 +36,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaPolynomialExpansionExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaPolynomialExpansionExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaPolynomialExpansionExample")
+      .getOrCreate();
 
     // $example on$
     PolynomialExpansion polyExpansion = new PolynomialExpansion()

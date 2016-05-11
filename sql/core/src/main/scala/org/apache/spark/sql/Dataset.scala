@@ -245,6 +245,8 @@ class Dataset[T] private[sql](
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map {
       case r: Row => r
       case tuple: Product => Row.fromTuple(tuple)
+      case definedByCtor: DefinedByConstructorParams =>
+        Row.fromSeq(ScalaReflection.getConstructorParameterValues(definedByCtor))
       case o => Row(o)
     }.map { row =>
       row.toSeq.map { cell =>
@@ -2178,8 +2180,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] partitioned by the given partitioning expressions preserving
-   * the existing number of partitions. The resulting Datasetis hash partitioned.
+   * Returns a new [[Dataset]] partitioned by the given partitioning expressions, using
+   * `spark.sql.shuffle.partitions` as number of partitions.
+   * The resulting Dataset is hash partitioned.
    *
    * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
    *

@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object Word2VecExample {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("Word2Vec example").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("Word2Vec example")
+      .getOrCreate()
 
     // $example on$
     // Input data: Each row is a bag of words from a sentence or document.

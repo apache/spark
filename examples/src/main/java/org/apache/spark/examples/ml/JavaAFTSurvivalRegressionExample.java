@@ -33,7 +33,10 @@ import org.apache.spark.sql.types.*;
 
 public class JavaAFTSurvivalRegressionExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaAFTSurvivalRegressionExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaAFTSurvivalRegressionExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

@@ -53,7 +53,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     val xVariance = Array(0.6856, 0.1899, 3.116, 0.581)
     rdd = sc.parallelize(generateMultinomialLogisticInput(
       coefficients, xMean, xVariance, true, nPoints, 42), 2)
-    dataset = sqlContext.createDataFrame(rdd)
+    dataset = spark.createDataFrame(rdd)
   }
 
   test("params") {
@@ -228,7 +228,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("should support all NumericType labels and not support other types") {
     val ovr = new OneVsRest().setClassifier(new LogisticRegression().setMaxIter(1))
     MLTestingUtils.checkNumericTypes[OneVsRestModel, OneVsRest](
-      ovr, isClassification = true, sqlContext) { (expected, actual) =>
+      ovr, isClassification = true, spark) { (expected, actual) =>
         val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
         val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
         assert(expectedModels.length === actualModels.length)

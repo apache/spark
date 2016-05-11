@@ -23,7 +23,10 @@ from pyspark.ml.feature import CountVectorizer
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("CountVectorizerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("CountVectorizerExample")\
+        .getOrCreate()
 
     # $example on$
     # Input data: Each row is a bag of words with a ID.

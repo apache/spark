@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object SQLTransformerExample {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("SQLTransformerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("SQLTransformerExample")
+      .getOrCreate()
 
     // $example on$
     val df = spark.createDataFrame(

@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object IndexToStringExample {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("IndexToStringExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("IndexToStringExample")
+      .getOrCreate()
 
     // $example on$
     val df = spark.createDataFrame(Seq(

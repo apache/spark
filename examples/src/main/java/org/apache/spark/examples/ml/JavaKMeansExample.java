@@ -70,7 +70,10 @@ public class JavaKMeansExample {
     int k = Integer.parseInt(args[1]);
 
     // Parses the arguments
-    SparkSession spark = SparkSession.builder().appName("JavaKMeansExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaKMeansExample")
+      .getOrCreate();
 
     // $example on$
     // Loads data

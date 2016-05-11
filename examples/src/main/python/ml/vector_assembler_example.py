@@ -24,7 +24,10 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("VectorAssemblerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("VectorAssemblerExample")\
+        .getOrCreate()
 
     # $example on$
     dataset = spark.createDataFrame(

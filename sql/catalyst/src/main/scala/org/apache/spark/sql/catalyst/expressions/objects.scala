@@ -688,3 +688,45 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
     ev.copy(code = code, isNull = "false", value = childGen.value)
   }
 }
+
+/**
+ * Returns the value of field at index `index` from the external row `child`.
+ * This class can be viewed as [[GetStructField]] for [[Row]]s instead of [[InternalRow]]s.
+ *
+ * Note that the input row and the field we try to get are both guaranteed to be not null, if they
+ * are null, a runtime exception will be thrown.
+ */
+case class GetExternalRowField(
+    child: Expression,
+    index: Int,
+    dataType: DataType) extends UnaryExpression with NonSQLExpression {
+
+  override def nullable: Boolean = false
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val row = child.genCode(ctx)
+
+    val getField = dataType match {
+      case ObjectType(x) if x == classOf[Row] => s"""${row.value}.getStruct($index)"""
+      case _ => s"""(${ctx.boxedType(dataType)}) ${row.value}.get($index)"""
+    }
+
+    val code = s"""
+      ${row.code}
+
+      if (${row.isNull}) {
+        throw new RuntimeException("The input external row cannot be null.");
+      }
+
+      if (${row.value}.isNullAt($index)) {
+        throw new RuntimeException("The ${index}th field of input row cannot be null.");
+      }
+
+      final ${ctx.javaType(dataType)} ${ev.value} = $getField;
+     """
+    ev.copy(code = code, isNull = "false")
+  }
+}
