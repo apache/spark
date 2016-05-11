@@ -49,7 +49,7 @@ public class JavaDecisionTreeRegressionExample {
       .setMaxCategories(4)
       .fit(data);
 
-    // Split the data into training and test sets (30% held out for testing)
+    // Split the data into training and test sets (30% held out for testing).
     Dataset<Row>[] splits = data.randomSplit(new double[]{0.7, 0.3});
     Dataset<Row> trainingData = splits[0];
     Dataset<Row> testData = splits[1];
@@ -58,11 +58,11 @@ public class JavaDecisionTreeRegressionExample {
     DecisionTreeRegressor dt = new DecisionTreeRegressor()
       .setFeaturesCol("indexedFeatures");
 
-    // Chain indexer and tree in a Pipeline
+    // Chain indexer and tree in a Pipeline.
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[]{featureIndexer, dt});
 
-    // Train model.  This also runs the indexer.
+    // Train model. This also runs the indexer.
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
@@ -71,7 +71,7 @@ public class JavaDecisionTreeRegressionExample {
     // Select example rows to display.
     predictions.select("label", "features").show(5);
 
-    // Select (prediction, true label) and compute test error
+    // Select (prediction, true label) and compute test error.
     RegressionEvaluator evaluator = new RegressionEvaluator()
       .setLabelCol("label")
       .setPredictionCol("prediction")

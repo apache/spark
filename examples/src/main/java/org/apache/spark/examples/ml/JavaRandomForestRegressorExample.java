@@ -64,7 +64,7 @@ public class JavaRandomForestRegressorExample {
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[] {featureIndexer, rf});
 
-    // Train model.  This also runs the indexer.
+    // Train model. This also runs the indexer.
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.

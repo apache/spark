@@ -36,7 +36,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
  * {{{
  * ./bin/run-example ml.RandomForestExample [options]
  * }}}
- * Decision Trees and ensembles can take a large amount of memory.  If the run-example command
+ * Decision Trees and ensembles can take a large amount of memory. If the run-example command
  * above fails, try running via spark-submit and specifying the amount of memory as at least 1g.
  * For local mode, run
  * {{{
@@ -93,7 +93,7 @@ object RandomForestExample {
         s" default: ${defaultParams.numTrees}")
         .action((x, c) => c.copy(featureSubsetStrategy = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text(s"fraction of data to hold out for testing. If given option testInput, " +
         s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[Boolean]("cacheNodeIds")
@@ -114,7 +114,7 @@ object RandomForestExample {
         s"default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text(s"input path to test dataset. If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -155,7 +155,7 @@ object RandomForestExample {
     val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(params.input,
       params.dataFormat, params.testInput, algo, params.fracTest)
 
-    // Set up Pipeline
+    // Set up Pipeline.
     val stages = new mutable.ArrayBuffer[PipelineStage]()
     // (1) For classification, re-index classes.
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
@@ -172,7 +172,7 @@ object RandomForestExample {
       .setOutputCol("indexedFeatures")
       .setMaxCategories(10)
     stages += featuresIndexer
-    // (3) Learn Random Forest
+    // (3) Learn Random Forest.
     val dt = algo match {
       case "classification" =>
         new RandomForestClassifier()
@@ -203,13 +203,13 @@ object RandomForestExample {
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
 
-    // Fit the Pipeline
+    // Fit the Pipeline.
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    // Get the trained Random Forest from the fitted PipelineModel
+    // Get the trained Random Forest from the fitted PipelineModel.
     algo match {
       case "classification" =>
         val rfModel = pipelineModel.stages.last.asInstanceOf[RandomForestClassificationModel]
@@ -228,7 +228,7 @@ object RandomForestExample {
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    // Evaluate model on training, test data
+    // Evaluate model on training, test data.
     algo match {
       case "classification" =>
         println("Training data results:")

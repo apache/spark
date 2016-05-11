@@ -36,7 +36,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
  * {{{
  * ./bin/run-example ml.GBTExample [options]
  * }}}
- * Decision Trees and ensembles can take a large amount of memory.  If the run-example command
+ * Decision Trees and ensembles can take a large amount of memory. If the run-example command
  * above fails, try running via spark-submit and specifying the amount of memory as at least 1g.
  * For local mode, run
  * {{{
@@ -87,7 +87,7 @@ object GBTExample {
         .text(s"number of trees in ensemble, default: ${defaultParams.maxIter}")
         .action((x, c) => c.copy(maxIter = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text(s"fraction of data to hold out for testing. If given option testInput, " +
         s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[Boolean]("cacheNodeIds")
@@ -108,7 +108,7 @@ object GBTExample {
         s"default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text(s"input path to test dataset. If given, option fracTest is ignored." +
         s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -166,7 +166,7 @@ object GBTExample {
       .setOutputCol("indexedFeatures")
       .setMaxCategories(10)
     stages += featuresIndexer
-    // (3) Learn GBT
+    // (3) Learn GBT.
     val dt = algo match {
       case "classification" =>
         new GBTClassifier()
@@ -195,13 +195,13 @@ object GBTExample {
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
 
-    // Fit the Pipeline
+    // Fit the Pipeline.
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    // Get the trained GBT from the fitted PipelineModel
+    // Get the trained GBT from the fitted PipelineModel.
     algo match {
       case "classification" =>
         val rfModel = pipelineModel.stages.last.asInstanceOf[GBTClassificationModel]
@@ -220,7 +220,7 @@ object GBTExample {
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    // Evaluate model on training, test data
+    // Evaluate model on training, test data.
     algo match {
       case "classification" =>
         println("Training data results:")

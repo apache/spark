@@ -212,7 +212,7 @@ object DecisionTreeExample {
     val (training: DataFrame, test: DataFrame) =
       loadDatasets(params.input, params.dataFormat, params.testInput, algo, params.fracTest)
 
-    // Set up Pipeline
+    // Set up Pipeline.
     val stages = new mutable.ArrayBuffer[PipelineStage]()
     // (1) For classification, re-index classes.
     val labelColName = if (algo == "classification") "indexedLabel" else "label"
@@ -229,7 +229,7 @@ object DecisionTreeExample {
       .setOutputCol("indexedFeatures")
       .setMaxCategories(10)
     stages += featuresIndexer
-    // (3) Learn Decision Tree
+    // (3) Learn Decision Tree.
     val dt = algo match {
       case "classification" =>
         new DecisionTreeClassifier()
@@ -256,13 +256,13 @@ object DecisionTreeExample {
     stages += dt
     val pipeline = new Pipeline().setStages(stages.toArray)
 
-    // Fit the Pipeline
+    // Fit the Pipeline.
     val startTime = System.nanoTime()
     val pipelineModel = pipeline.fit(training)
     val elapsedTime = (System.nanoTime() - startTime) / 1e9
     println(s"Training time: $elapsedTime seconds")
 
-    // Get the trained Decision Tree from the fitted PipelineModel
+    // Get the trained Decision Tree from the fitted PipelineModel.
     algo match {
       case "classification" =>
         val treeModel = pipelineModel.stages.last.asInstanceOf[DecisionTreeClassificationModel]
@@ -281,7 +281,7 @@ object DecisionTreeExample {
       case _ => throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    // Evaluate model on training, test data
+    // Evaluate model on training, test data.
     algo match {
       case "classification" =>
         println("Training data results:")
@@ -315,7 +315,7 @@ object DecisionTreeExample {
     val fullPredictions = model.transform(data).cache()
     val predictions = fullPredictions.select("prediction").rdd.map(_.getDouble(0))
     val labels = fullPredictions.select(labelColName).rdd.map(_.getDouble(0))
-    // Print number of classes for reference
+    // Print number of classes for reference.
     val numClasses = MetadataUtils.getNumClasses(fullPredictions.schema(labelColName)) match {
       case Some(n) => n
       case None => throw new RuntimeException(
