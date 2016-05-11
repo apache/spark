@@ -26,7 +26,7 @@ from pyspark.sql import SparkSession
 """
 A simple example demonstrating aft survival regression.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/aft_survival_regression_example.py
+  bin/spark-submit examples/src/main/python/ml/aft_survival_regression.py
 """
 
 if __name__ == "__main__":
