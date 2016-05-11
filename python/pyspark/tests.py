@@ -34,8 +34,6 @@ import random
 import threading
 import hashlib
 
-from pyspark.sql import SparkSession
-
 from py4j.protocol import Py4JJavaError
 try:
     import xmlrunner
@@ -332,14 +330,10 @@ class PySparkTestCase(unittest.TestCase):
     def setUp(self):
         self._old_sys_path = list(sys.path)
         class_name = self.__class__.__name__
-        self.spark = SparkSession.builder\
-            .master('local[4]')\
-            .appName(class_name)\
-            .getOrCreate()
-        self.sc = self.spark.sparkContext
+        self.sc = SparkContext('local[4]', class_name)
 
     def tearDown(self):
-        self.spark.stop()
+        self.sc.stop()
         sys.path = self._old_sys_path
 
 
@@ -348,11 +342,10 @@ class ReusedPySparkTestCase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.sc = SparkContext('local[4]', cls.__name__)
-        cls.spark = SparkSession(cls.sc)
 
     @classmethod
     def tearDownClass(cls):
-        cls.spark.stop()
+        cls.sc.stop()
 
 
 class CheckpointTests(ReusedPySparkTestCase):

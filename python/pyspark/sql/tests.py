@@ -178,16 +178,6 @@ class DataTypeTests(unittest.TestCase):
         self.assertEqual(dt.fromInternal(0), datetime.date(1970, 1, 1))
 
 
-class SQLContextTests(ReusedPySparkTestCase):
-
-    def test_new_session(self):
-        self.spark.conf.set("test_key", "a")
-        spark2 = self.spark.newSession()
-        spark2.conf.set("test_key", "b")
-        self.assertEqual(self.spark.conf.get("test_key", ""), "a")
-        self.assertEqual(spark2.conf.get("test_key", ""), "b")
-
-
 class SQLTests(ReusedPySparkTestCase):
 
     @classmethod
@@ -195,14 +185,13 @@ class SQLTests(ReusedPySparkTestCase):
         ReusedPySparkTestCase.setUpClass()
         cls.tempdir = tempfile.NamedTemporaryFile(delete=False)
         os.unlink(cls.tempdir.name)
-        cls.sqlCtx = cls.spark._wrapped
-        cls.testData = [Row(key=i, value=str(i)) for i in range(100)]
-        rdd = cls.sc.parallelize(cls.testData, 2)
-        cls.df = rdd.toDF()
+        cls.spark = SparkSession(cls.sc)
+        cls.df = cls.spark.createDataFrame([Row(key=i, value=str(i)) for i in range(100)])
 
     @classmethod
     def tearDownClass(cls):
         ReusedPySparkTestCase.tearDownClass()
+        cls.spark.stop()
         shutil.rmtree(cls.tempdir.name, ignore_errors=True)
 
     def test_row_should_be_read_only(self):
