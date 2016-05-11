@@ -145,6 +145,9 @@ class RowEncoderSuite extends SparkFunSuite {
 
   test("encode/decode decimal type") {
     val schema = new StructType()
+      .add("int", IntegerType)
+      .add("string", StringType)
+      .add("double", DoubleType)
       .add("java_decimal", DecimalType.SYSTEM_DEFAULT)
       .add("scala_decimal", DecimalType.SYSTEM_DEFAULT)
       .add("catalyst_decimal", DecimalType.SYSTEM_DEFAULT)
@@ -155,13 +158,13 @@ class RowEncoderSuite extends SparkFunSuite {
     val scalaDecimal = BigDecimal("1234.5678")
     val catalystDecimal = Decimal("1234.5678")
 
-    val input = Row(javaDecimal, scalaDecimal, catalystDecimal)
+    val input = Row(100, "test", 0.123, javaDecimal, scalaDecimal, catalystDecimal)
     val row = encoder.toRow(input)
     val convertedBack = encoder.fromRow(row)
     // Decimal will be converted back to Java BigDecimal when decoding.
-    assert(convertedBack.getDecimal(0).compareTo(javaDecimal) == 0)
-    assert(convertedBack.getDecimal(1).compareTo(scalaDecimal.bigDecimal) == 0)
-    assert(convertedBack.getDecimal(2).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
+    assert(convertedBack.getDecimal(3).compareTo(javaDecimal) == 0)
+    assert(convertedBack.getDecimal(4).compareTo(scalaDecimal.bigDecimal) == 0)
+    assert(convertedBack.getDecimal(5).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
   }
 
   test("RowEncoder should preserve decimal precision and scale") {
