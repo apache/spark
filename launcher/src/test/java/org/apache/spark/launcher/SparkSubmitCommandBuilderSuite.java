@@ -72,7 +72,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
       parser.CONF,
       "spark.randomOption=foo",
       parser.CONF,
-      SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH + "=/driverLibPath");
+      SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH + "=/driverLibPath",
+      SparkLauncher.NO_RESOURCE);
     Map<String, String> env = new HashMap<>();
     List<String> cmd = buildCommand(sparkSubmitArgs, env);
 
@@ -109,7 +110,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.CLASS + "=org.my.Class",
       parser.MASTER + "=foo",
-      parser.DEPLOY_MODE + "=bar");
+      parser.DEPLOY_MODE + "=bar",
+      SparkLauncher.NO_RESOURCE);
 
     List<String> cmd = newCommandBuilder(sparkSubmitArgs).buildSparkSubmitArgs();
     assertEquals("org.my.Class", findArgValue(cmd, parser.CLASS));
@@ -166,6 +168,11 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
     assertEquals(SparkSubmitCommandBuilder.EXAMPLE_CLASS_PREFIX + "SparkPi",
       findArgValue(cmd, parser.CLASS));
     assertEquals("42", cmd.get(cmd.size() - 1));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testMissingAppResource() {
+    new SparkSubmitCommandBuilder().buildSparkSubmitArgs();
   }
 
   private void testCmdBuilder(boolean isDriver, boolean useDefaultPropertyFile) throws Exception {

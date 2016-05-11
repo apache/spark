@@ -366,9 +366,10 @@ class LogisticRegression @Since("1.2.0") (
           Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size != numFeatures) {
-          val vec = optInitialModel.get.coefficients
+          val vecSize = optInitialModel.get.coefficients.size
           logWarning(
-            s"Initial coefficients provided $vec did not match the expected size $numFeatures")
+            s"Initial coefficients will be ignored!! As its size $vecSize did not match the " +
+            s"expected size $numFeatures")
         }
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
