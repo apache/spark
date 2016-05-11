@@ -101,7 +101,6 @@
     <module>sql/core</module>
     <module>sql/hive</module>
     <module>sql/hivecontext-compatibility</module>
-    <module>external/docker-integration-tests</module>
     <module>assembly</module>
     <module>external/flume</module>
     <module>external/flume-sink</module>
@@ -109,8 +108,8 @@
     <module>examples</module>
     <module>repl</module>
     <module>launcher</module>
-    <module>external/kafka</module>
-    <module>external/kafka-assembly</module>
+    <module>external/kafka-0-8</module>
+    <module>external/kafka-0-8-assembly</module>
   </modules>
 
   <properties>
@@ -2467,6 +2466,13 @@
           </plugin>
         </plugins>
       </build>
+    </profile>
+
+    <profile>
+      <id>docker-integration-tests</id>
+      <modules>
+        <module>external/docker-integration-tests</module>
+      </modules>
     </profile>
 
     <!-- A series of build profiles where customizations for particular Hadoop releases can be made -->
