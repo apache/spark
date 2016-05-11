@@ -83,12 +83,16 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   final def getOptimizer: String = $(solver)
 
   /**
-   * Model weights. Can be returned either after training or after explicit setting
+   * Model weight vector. If set before training, this represents the weight vector used to
+   * initialize training. If set on a trained model, this explicitly sets the model weights
+   * (overriding any existing weights)
    *
    * @group expertParam
    */
   final val weights: Param[Vector] = new Param[Vector](this, "weights",
-    "Weights (either initial if before training or actual on model)")
+    "Model weight vector. If set before training, this represents the weight vector used to " +
+      "initialize training. If set on a trained model, this explicitly sets the model weights " +
+      "(overriding any existing weights)")
 
   /** @group getParam */
   final def getWeights: Vector = $(weights)
@@ -181,7 +185,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * Sets the initial weights used for the optimizer.
+   * Sets the weight vector used to initialize training.
    *
    * @group expertParam
    */

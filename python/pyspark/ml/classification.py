@@ -1073,8 +1073,10 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     solver = Param(Params._dummy(), "solver", "Allows setting the solver: minibatch gradient " +
                    "descent (gd) or l-bfgs. (Default l-bfgs)",
                    typeConverter=TypeConverters.toString)
-    weights = Param(Params._dummy(), "weights", "Weights (either initial if before training or " +
-                    "actual on model)", typeConverter=TypeConverters.toVector)
+    weights = Param(Params._dummy(), "weights", "Model weight vector. If set before training, " +
+                    "this represents the weight vector used to initialize training. If set on a " +
+                    "trained model, this explicitly sets the model weights (overriding any " +
+                    "existing weights)", typeConverter=TypeConverters.toVector)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
