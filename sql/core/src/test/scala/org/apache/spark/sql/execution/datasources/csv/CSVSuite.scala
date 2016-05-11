@@ -225,7 +225,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(cars.select("year").collect().size === 2)
   }
 
-  test("test for blank column names on read and select normal column") {
+  test("test for blank column names on read and select columns") {
     val cars = spark.read
       .format("csv")
       .options(Map("header" -> "true", "inferSchema" -> "true"))
