@@ -698,7 +698,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_approxQuantile(self):
         df = self.sc.parallelize([Row(a=i) for i in range(10)]).toDF()
-        aq = df.stat.approxQuantile("a", [0.1, 0.5, 0.9], 0.1)
+        aq = df.stat.approxQuantile(u"a", [0.1, 0.5, 0.9], 0.1)
         self.assertTrue(isinstance(aq, list))
         self.assertEqual(len(aq), 3)
         self.assertTrue(all(isinstance(q, float) for q in aq))
@@ -706,17 +706,17 @@ class SQLTests(ReusedPySparkTestCase):
     def test_corr(self):
         import math
         df = self.sc.parallelize([Row(a=i, b=math.sqrt(i)) for i in range(10)]).toDF()
-        corr = df.stat.corr("a", "b")
+        corr = df.stat.corr(u"a", "b")
         self.assertTrue(abs(corr - 0.95734012) < 1e-6)
 
     def test_cov(self):
         df = self.sc.parallelize([Row(a=i, b=2 * i) for i in range(10)]).toDF()
-        cov = df.stat.cov("a", "b")
+        cov = df.stat.cov(u"a", "b")
         self.assertTrue(abs(cov - 55.0 / 3) < 1e-6)
 
     def test_crosstab(self):
         df = self.sc.parallelize([Row(a=i % 3, b=i % 2) for i in range(1, 7)]).toDF()
-        ct = df.stat.crosstab("a", "b").collect()
+        ct = df.stat.crosstab(u"a", "b").collect()
         ct = sorted(ct, key=lambda x: x[0])
         for i, row in enumerate(ct):
             self.assertEqual(row[0], str(i))
@@ -815,6 +815,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         struct1 = StructType().add("f1", StringType(), True).add("f2", StringType(), True, None)
         self.assertIs(struct1["f1"], struct1.fields[0])
+        self.assertIs(struct1[u"f1"], struct1.fields[0])
         self.assertIs(struct1[0], struct1.fields[0])
         self.assertEqual(struct1[0:1], StructType(struct1.fields[0:1]))
         with self.assertRaises(KeyError):

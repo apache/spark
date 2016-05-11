@@ -27,7 +27,7 @@ from array import array
 
 if sys.version >= "3":
     long = int
-    unicode = str
+    basestring = unicode = str
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -495,7 +495,10 @@ class StructType(DataType):
         True
         >>> struct1 = StructType().add("f1", "string", True)
         >>> struct2 = StructType([StructField("f1", StringType(), True)])
+        >>> struct3 = StructType().add(u"f1", u"string", True)
         >>> struct1 == struct2
+        True
+        >>> struct1 == struct3
         True
 
         :param field: Either the name of the field or a StructField object
@@ -508,10 +511,10 @@ class StructType(DataType):
             self.fields.append(field)
             self.names.append(field.name)
         else:
-            if isinstance(field, str) and data_type is None:
+            if isinstance(field, basestring) and data_type is None:
                 raise ValueError("Must specify DataType if passing name of struct_field to create.")
 
-            if isinstance(data_type, str):
+            if isinstance(data_type, basestring):
                 data_type_f = _parse_datatype_json_value(data_type)
             else:
                 data_type_f = data_type
@@ -530,7 +533,7 @@ class StructType(DataType):
 
     def __getitem__(self, key):
         """Access fields by name or slice."""
-        if isinstance(key, str):
+        if isinstance(key, basestring):
             for field in self:
                 if field.name == key:
                     return field
