@@ -134,7 +134,8 @@ class DataFrame(object):
 
         The lifetime of this temporary table is tied to the :class:`SparkSession`
         that was used to create this :class:`DataFrame`.
-        throws :class:`AnalysisException`, if the view name already exists in the catalog.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
 
         >>> df.createTempView("people")
         >>> df2 = spark.sql("select * from people")
@@ -142,8 +143,6 @@ class DataFrame(object):
         True
         >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-            ...
-        AnalysisException: ...
         >>> spark.catalog.dropTempView("people")
 
         """

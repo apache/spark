@@ -184,7 +184,8 @@ class Catalog(object):
     @since(2.0)
     def createTempView(self, viewName, df):
         """Create a temporary view in the catalog with the given :class:`DataFrame`.
-        throws :class:`AnalysisException`, if the view name already exists in the catalog.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists
+        in the catalog.
 
         >>> df = spark.createDataFrame([(2, 1), (3, 1)])
         >>> spark.catalog.createTempView("my_cool_view", df)
@@ -192,8 +193,6 @@ class Catalog(object):
         [Row(_1=2, _2=1), Row(_1=3, _2=1)]
         >>> spark.catalog.createTempView("my_cool_view", df)  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
-            ...
-        AnalysisException: ...
         >>> spark.catalog.dropTempView("my_cool_view")
         """
         if isinstance(df, DataFrame):
