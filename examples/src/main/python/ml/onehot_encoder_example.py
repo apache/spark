@@ -17,18 +17,19 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import OneHotEncoder, StringIndexer
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="OneHotEncoderExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("OneHotEncoderExample")\
+        .getOrCreate()
 
     # $example on$
-    df = sqlContext.createDataFrame([
+    df = spark.createDataFrame([
         (0, "a"),
         (1, "b"),
         (2, "c"),
@@ -45,4 +46,4 @@ if __name__ == "__main__":
     encoded.select("id", "categoryVec").show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

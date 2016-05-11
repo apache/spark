@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -509,6 +508,13 @@ object ScalaReflection extends ScalaReflection {
                 serializerFor(unwrapped, optType, newPath))
           }
 
+        // Since List[_] also belongs to localTypeOf[Product], we put this case before
+        // "case t if definedByConstructorParams(t)" to make sure it will match to the
+        // case "localTypeOf[Seq[_]]"
+        case t if t <:< localTypeOf[Seq[_]] =>
+          val TypeRef(_, _, Seq(elementType)) = t
+          toCatalystArray(inputObject, elementType)
+
         case t if definedByConstructorParams(t) =>
           val params = getConstructorParameters(t)
           val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
@@ -521,10 +527,6 @@ object ScalaReflection extends ScalaReflection {
           expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
 
         case t if t <:< localTypeOf[Array[_]] =>
-          val TypeRef(_, _, Seq(elementType)) = t
-          toCatalystArray(inputObject, elementType)
-
-        case t if t <:< localTypeOf[Seq[_]] =>
           val TypeRef(_, _, Seq(elementType)) = t
           toCatalystArray(inputObject, elementType)
 
@@ -654,6 +656,15 @@ object ScalaReflection extends ScalaReflection {
     val classSymbol = m.staticClass(cls.getName)
     val t = classSymbol.selfType
     constructParams(t).map(_.name.toString)
+  }
+
+  /**
+   * Returns the parameter values for the primary constructor of this class.
+   */
+  def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
+    getConstructorParameterNames(obj.getClass).map { name =>
+      obj.getClass.getMethod(name).invoke(obj)
+    }
   }
 
   /*

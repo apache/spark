@@ -352,4 +352,8 @@ private[mesos] trait MesosSchedulerUtils extends Logging {
     sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForUnmetConstraints", "120s")
   }
 
+  protected def getRejectOfferDurationForReachedMaxCores(sc: SparkContext): Long = {
+    sc.conf.getTimeAsSeconds("spark.mesos.rejectOfferDurationForReachedMaxCores", "120s")
+  }
+
 }

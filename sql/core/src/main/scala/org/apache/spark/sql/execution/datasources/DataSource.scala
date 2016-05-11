@@ -136,7 +136,7 @@ case class DataSource(
         val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
         SparkHadoopUtil.get.globPathIfNecessary(qualified)
       }.toArray
-      val fileCatalog: FileCatalog = new HDFSFileCatalog(sparkSession, options, globbedPaths, None)
+      val fileCatalog = new ListingFileCatalog(sparkSession, globbedPaths, options, None)
       format.inferSchema(
         sparkSession,
         caseInsensitiveOptions,
@@ -174,25 +174,11 @@ case class DataSource(
         s.createSource(sparkSession.wrapped, metadataPath, userSpecifiedSchema, className, options)
 
       case format: FileFormat =>
-        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = new CaseInsensitiveMap(options).getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-
-        def dataFrameBuilder(files: Array[String]): DataFrame = {
-          val newOptions = options.filterKeys(_ != "path") + ("basePath" -> path)
-          val newDataSource =
-            DataSource(
-              sparkSession,
-              paths = files,
-              userSpecifiedSchema = Some(sourceInfo.schema),
-              className = className,
-              options = new CaseInsensitiveMap(newOptions))
-          Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
-        }
-
         new FileStreamSource(
-          sparkSession, metadataPath, path, sourceInfo.schema, dataFrameBuilder)
+          sparkSession, path, className, sourceInfo.schema, metadataPath, options)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")
@@ -203,13 +189,14 @@ case class DataSource(
   def createSink(): Sink = {
     providingClass.newInstance() match {
       case s: StreamSinkProvider => s.createSink(sparkSession.wrapped, options, partitionColumns)
-      case format: FileFormat =>
+
+      case parquet: parquet.DefaultSource =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+        new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
 
-        new FileStreamSink(sparkSession, path, format)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed writing")
@@ -238,8 +225,15 @@ case class DataSource(
     }
   }
 
-  /** Create a resolved [[BaseRelation]] that can be used to read data from this [[DataSource]] */
-  def resolveRelation(): BaseRelation = {
+  /**
+   * Create a resolved [[BaseRelation]] that can be used to read data from or write data into this
+   * [[DataSource]]
+   *
+   * @param checkPathExist A flag to indicate whether to check the existence of path or not.
+   *                       This flag will be set to false when we create an empty table (the
+   *                       path of the table does not exist).
+   */
+  def resolveRelation(checkPathExist: Boolean = true): BaseRelation = {
     val caseInsensitiveOptions = new CaseInsensitiveMap(options)
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
@@ -257,7 +251,7 @@ case class DataSource(
       case (format: FileFormat, _)
           if hasMetadata(caseInsensitiveOptions.get("path").toSeq ++ paths) =>
         val basePath = new Path((caseInsensitiveOptions.get("path").toSeq ++ paths).head)
-        val fileCatalog = new StreamFileCatalog(sparkSession, basePath)
+        val fileCatalog = new MetadataLogFileCatalog(sparkSession, basePath)
         val dataSchema = userSpecifiedSchema.orElse {
           format.inferSchema(
             sparkSession,
@@ -287,11 +281,11 @@ case class DataSource(
           val qualified = hdfsPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
           val globPath = SparkHadoopUtil.get.globPathIfNecessary(qualified)
 
-          if (globPath.isEmpty) {
+          if (checkPathExist && globPath.isEmpty) {
             throw new AnalysisException(s"Path does not exist: $qualified")
           }
           // Sufficient to check head of the globPath seq for non-glob scenario
-          if (!fs.exists(globPath.head)) {
+          if (checkPathExist && !fs.exists(globPath.head)) {
             throw new AnalysisException(s"Path does not exist: ${globPath.head}")
           }
           globPath
@@ -309,8 +303,8 @@ case class DataSource(
             })
         }
 
-        val fileCatalog: FileCatalog =
-          new HDFSFileCatalog(sparkSession, options, globbedPaths, partitionSchema)
+        val fileCatalog =
+          new ListingFileCatalog(sparkSession, globbedPaths, options, partitionSchema)
 
         val dataSchema = userSpecifiedSchema.map { schema =>
           val equality =

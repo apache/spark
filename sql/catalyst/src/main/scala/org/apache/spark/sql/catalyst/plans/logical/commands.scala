@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types.StringType
 
@@ -29,11 +30,12 @@ trait Command
 
 /**
  * Returned for the "DESCRIBE FUNCTION [EXTENDED] functionName" command.
+ *
  * @param functionName The function to be described.
  * @param isExtended True if "DESCRIBE FUNCTION EXTENDED" is used. Otherwise, false.
  */
 private[sql] case class DescribeFunction(
-    functionName: String,
+    functionName: FunctionIdentifier,
     isExtended: Boolean) extends LogicalPlan with Command {
 
   override def children: Seq[LogicalPlan] = Seq.empty

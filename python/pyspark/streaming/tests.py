@@ -1357,7 +1357,7 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
 
             dstream.foreachRDD(get_output)
             ssc.start()
-            self._utils.sendDatAndEnsureAllDataHasBeenReceived()
+            self._utils.sendDataAndEnsureAllDataHasBeenReceived()
 
             self.wait_for(outputBuffer, self._utils.getTotalEvents())
             outputHeaders = [event[0] for event in outputBuffer]

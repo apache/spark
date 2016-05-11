@@ -60,15 +60,15 @@ public class LogDivertAppender extends WriterAppender {
     /* Patterns that are excluded in verbose logging level.
      * Filter out messages coming from log processing classes, or we'll run an infinite loop.
      */
-    private static final Pattern verboseExcludeNamePattern = Pattern.compile(Joiner.on("|").
-      join(new String[] {LOG.getName(), OperationLog.class.getName(),
+    private static final Pattern verboseExcludeNamePattern = Pattern.compile(Joiner.on("|")
+      .join(new String[] {LOG.getName(), OperationLog.class.getName(),
       OperationManager.class.getName()}));
 
     /* Patterns that are included in execution logging level.
      * In execution mode, show only select logger messages.
      */
-    private static final Pattern executionIncludeNamePattern = Pattern.compile(Joiner.on("|").
-      join(new String[] {"org.apache.hadoop.mapreduce.JobSubmitter",
+    private static final Pattern executionIncludeNamePattern = Pattern.compile(Joiner.on("|")
+      .join(new String[] {"org.apache.hadoop.mapreduce.JobSubmitter",
       "org.apache.hadoop.mapreduce.Job", "SessionState", Task.class.getName(),
       "org.apache.hadoop.hive.ql.exec.spark.status.SparkJobMonitor"}));
 
@@ -88,7 +88,7 @@ public class LogDivertAppender extends WriterAppender {
       }
     }
 
-    public NameFilter(
+    NameFilter(
       OperationLog.LoggingLevel loggingMode, OperationManager op) {
       this.operationManager = op;
       this.loggingMode = loggingMode;
@@ -131,7 +131,7 @@ public class LogDivertAppender extends WriterAppender {
   /** This is where the log message will go to */
   private final CharArrayWriter writer = new CharArrayWriter();
 
-  private void setLayout (boolean isVerbose, Layout lo) {
+  private void setLayout(boolean isVerbose, Layout lo) {
     if (isVerbose) {
       if (lo == null) {
         lo = CLIServiceUtils.verboseLayout;
