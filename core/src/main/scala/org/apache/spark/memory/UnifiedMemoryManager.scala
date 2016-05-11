@@ -103,9 +103,10 @@ private[spark] class UnifiedMemoryManager private[memory] (
               math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
             if (memoryReclaimableFromStorage > 0) {
               // Only reclaim as much space as is necessary and available:
-              val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
+              val spaceToReclaim = storageMemoryPool.freeSpaceToShrinkPool(
                 math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
-              onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+              storageMemoryPool.decrementPoolSize(spaceToReclaim)
+              onHeapExecutionMemoryPool.incrementPoolSize(spaceToReclaim)
             }
           }
         }
