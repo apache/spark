@@ -128,12 +128,12 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     val db = table.database.getOrElse("default")
     val expected = sqlContext.externalCatalog.getTable(db, table.table)
     val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
-    val newTableName = s"${table.table}_new"
+    sql(s"DROP TABLE ${table.quotedString}")
 
-    withTable(newTableName) {
-      val newDDL = shownDDL.replaceFirst(table.table, newTableName)
+    withTable(table.table) {
+      val newDDL = shownDDL.replaceFirst(table.table, table.table)
       sql(newDDL)
-      val actual = sqlContext.externalCatalog.getTable(db, newTableName)
+      val actual = sqlContext.externalCatalog.getTable(db, table.table)
       checkCatalogTables(expected, actual)
     }
   }
@@ -159,44 +159,13 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
         "minFileSize"
       )
 
-      def replaceTableName(str: String): String = {
-        str.replaceAll(table.identifier.table, expected.identifier.table)
-      }
-
-      val normalizedProps = table
-        .properties
-        .get("path")
-        .map(replaceTableName)
-        .map(table.properties.updated("path", _))
-        .getOrElse(table.properties)
-        .filterKeys(!nondeterministicProps.contains(_))
-
-      val normalizedLocationUri = table.storage.locationUri.map(replaceTableName)
-
-      val normalizedSerdeProps = {
-        val props = table.storage.serdeProperties
-        props
-          .get("path")
-          .map(replaceTableName)
-          .map(props.updated("path", _))
-          .getOrElse(props)
-      }
-
-      table
-        .copy(
-          identifier = expected.identifier,
-          createTime = 0L,
-          lastAccessTime = 0L,
-          properties = normalizedProps
-        )
-        .withNewStorage(
-          locationUri = normalizedLocationUri,
-          serdeProperties = normalizedSerdeProps
-        )
+      table.copy(
+        identifier = expected.identifier,
+        createTime = 0L,
+        lastAccessTime = 0L,
+        properties = table.properties.filterKeys(!nondeterministicProps.contains(_)))
     }
 
-    val normalize1 = normalize(expected)
-    val normalize2 = normalize(actual)
-    assert(normalize1 == normalize2)
+    assert(normalize(expected) == normalize(actual))
   }
 }
