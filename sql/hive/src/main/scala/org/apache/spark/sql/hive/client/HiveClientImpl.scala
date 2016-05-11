@@ -26,9 +26,12 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
-import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema, Function => HiveFunction, FunctionType, PrincipalType, ResourceType, ResourceUri}
+import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType}
+import org.apache.hadoop.hive.metastore.api.{NoSuchObjectException, PrincipalType}
+import org.apache.hadoop.hive.metastore.api.{ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
-import org.apache.hadoop.hive.ql.metadata.{Hive, HiveException, Partition => HivePartition, Table => HiveTable}
+import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
@@ -43,7 +46,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.util.{CircularBuffer, Utils}
+import org.apache.spark.util.{CausedBy, CircularBuffer, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -348,6 +351,7 @@ private[hive] class HiveClientImpl(
         sortColumnNames = Seq(), // TODO: populate this
         bucketColumnNames = h.getBucketCols.asScala,
         numBuckets = h.getNumBuckets,
+        owner = h.getOwner,
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
@@ -355,6 +359,7 @@ private[hive] class HiveClientImpl(
           inputFormat = Option(h.getInputFormatClass).map(_.getName),
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
+          compressed = h.getTTable.getSd.isCompressed,
           serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
         ),
         properties = h.getParameters.asScala.toMap,
@@ -616,7 +621,8 @@ private[hive] class HiveClientImpl(
     try {
       Option(client.getFunction(db, name)).map(fromHiveFunction)
     } catch {
-      case he: HiveException => None
+      case CausedBy(ex: NoSuchObjectException) if ex.getMessage.contains(name) =>
+        None
     }
   }
 
@@ -671,8 +677,9 @@ private[hive] class HiveClientImpl(
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
-    val resourceUris = f.resources.map { case (resourceType, resourcePath) =>
-      new ResourceUri(ResourceType.valueOf(resourceType.toUpperCase), resourcePath)
+    val resourceUris = f.resources.map { resource =>
+      new ResourceUri(
+        ResourceType.valueOf(resource.resourceType.resourceType.toUpperCase()), resource.uri)
     }
     new HiveFunction(
       f.identifier.funcName,
@@ -694,7 +701,7 @@ private[hive] class HiveClientImpl(
         case ResourceType.JAR => "jar"
         case r => throw new AnalysisException(s"Unknown resource type: $r")
       }
-      (resourceType, uri.getUri())
+      FunctionResource(FunctionResourceType.fromString(resourceType), uri.getUri())
     }
     new CatalogFunction(name, hf.getClassName, resources)
   }
@@ -784,7 +791,7 @@ private[hive] class HiveClientImpl(
         inputFormat = Option(apiPartition.getSd.getInputFormat),
         outputFormat = Option(apiPartition.getSd.getOutputFormat),
         serde = Option(apiPartition.getSd.getSerdeInfo.getSerializationLib),
+        compressed = apiPartition.getSd.isCompressed,
         serdeProperties = apiPartition.getSd.getSerdeInfo.getParameters.asScala.toMap))
   }
-
 }

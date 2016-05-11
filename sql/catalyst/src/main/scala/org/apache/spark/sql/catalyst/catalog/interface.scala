@@ -33,11 +33,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  * @param resources resource types and Uris used by the function
  */
-// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
 case class CatalogFunction(
     identifier: FunctionIdentifier,
     className: String,
-    resources: Seq[(String, String)])
+    resources: Seq[FunctionResource])
 
 
 /**
@@ -48,6 +47,7 @@ case class CatalogStorageFormat(
     inputFormat: Option[String],
     outputFormat: Option[String],
     serde: Option[String],
+    compressed: Boolean,
     serdeProperties: Map[String, String])
 
 
@@ -89,6 +89,7 @@ case class CatalogTable(
     sortColumnNames: Seq[String] = Seq.empty,
     bucketColumnNames: Seq[String] = Seq.empty,
     numBuckets: Int = -1,
+    owner: String = "",
     createTime: Long = System.currentTimeMillis,
     lastAccessTime: Long = -1,
     properties: Map[String, String] = Map.empty,
@@ -123,10 +124,11 @@ case class CatalogTable(
       locationUri: Option[String] = storage.locationUri,
       inputFormat: Option[String] = storage.inputFormat,
       outputFormat: Option[String] = storage.outputFormat,
+      compressed: Boolean = false,
       serde: Option[String] = storage.serde,
       serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
-      locationUri, inputFormat, outputFormat, serde, serdeProperties))
+      locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
   }
 
 }

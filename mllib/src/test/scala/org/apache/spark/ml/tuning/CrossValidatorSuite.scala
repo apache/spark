@@ -39,7 +39,7 @@ class CrossValidatorSuite
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = sqlContext.createDataFrame(
+    dataset = spark.createDataFrame(
       sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
   }
 
@@ -67,7 +67,7 @@ class CrossValidatorSuite
   }
 
   test("cross validation with linear regression") {
-    val dataset = sqlContext.createDataFrame(
+    val dataset = spark.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
 
@@ -136,6 +136,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
@@ -186,6 +187,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     assert(cv.getEvaluator.uid === cv2.getEvaluator.uid)
@@ -259,6 +261,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]

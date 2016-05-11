@@ -130,7 +130,7 @@ public final class FileSegmentManagedBuffer extends ManagedBuffer {
   @Override
   public Object convertToNetty() throws IOException {
     if (conf.lazyFileDescriptor()) {
-      return new LazyFileRegion(file, offset, length);
+      return new DefaultFileRegion(file, offset, length);
     } else {
       FileChannel fileChannel = new FileInputStream(file).getChannel();
       return new DefaultFileRegion(fileChannel, offset, length);

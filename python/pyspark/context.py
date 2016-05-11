@@ -952,6 +952,11 @@ class SparkContext(object):
         """
         self.profiler_collector.dump_profiles(path)
 
+    def getConf(self):
+        conf = SparkConf()
+        conf.setAll(self._conf.getAll())
+        return conf
+
 
 def _test():
     import atexit

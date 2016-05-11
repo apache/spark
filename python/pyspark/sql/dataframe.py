@@ -364,15 +364,6 @@ class DataFrame(object):
         return DataFrame(self._jdf.coalesce(numPartitions), self.sql_ctx)
 
     @since(1.3)
-    def repartition(self, numPartitions):
-        """Returns a new :class:`DataFrame` that has exactly ``numPartitions`` partitions.
-
-        >>> df.repartition(10).rdd.getNumPartitions()
-        10
-        """
-        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
-
-    @since(1.3)
     def repartition(self, numPartitions, *cols):
         """
         Returns a new :class:`DataFrame` partitioned by the given partitioning expressions. The

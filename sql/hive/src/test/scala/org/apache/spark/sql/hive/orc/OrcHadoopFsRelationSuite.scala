@@ -19,9 +19,6 @@ package org.apache.spark.sql.hive.orc
 
 import java.io.File
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.io.orc.{CompressionKind, OrcFile}
 import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
@@ -80,11 +77,11 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.orc(path)
 
         checkAnswer(
-          sqlContext.read.orc(path).where("not (a = 2) or not(b in ('1'))"),
+          spark.read.orc(path).where("not (a = 2) or not(b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
 
         checkAnswer(
-          sqlContext.read.orc(path).where("not (a = 2 and b in ('1'))"),
+          spark.read.orc(path).where("not (a = 2 and b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
       }
     }
@@ -98,8 +95,8 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .option("compression", "none")
         .orc(path)
 
-      // Check if this is not compressed. Default is ZLIB.
-      val conf = sqlContext.sessionState.newHadoopConf()
+      // Check if this is compressed as ZLIB.
+      val conf = spark.sessionState.newHadoopConf()
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".orc"))
       assert(maybeOrcFile.isDefined)
@@ -107,7 +104,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
       assert(orcReader.getCompression == CompressionKind.NONE)
 
-      val copyDf = sqlContext
+      val copyDf = spark
         .read
         .orc(path)
       checkAnswer(df, copyDf)
@@ -123,7 +120,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as ZLIB. Default is ZLIB
-      val conf = sqlContext.sessionState.newHadoopConf()
+      val conf = spark.sessionState.newHadoopConf()
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".zlib.orc"))
       assert(maybeOrcFile.isDefined)
@@ -131,7 +128,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
       assert(orcReader.getCompression == CompressionKind.ZLIB)
 
-      val copyDf = sqlContext.read.orc(path)
+      val copyDf = spark.read.orc(path)
       checkAnswer(df, copyDf)
     }
   }
@@ -147,7 +144,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
         .orc(path)
 
       // Check if this is compressed as SNAPPY.
-      val conf = sqlContext.sessionState.newHadoopConf()
+      val conf = spark.sessionState.newHadoopConf()
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".snappy.orc"))
       assert(maybeOrcFile.isDefined)
@@ -155,7 +152,7 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
       assert(orcReader.getCompression == CompressionKind.SNAPPY)
 
-      val copyDf = sqlContext.read.orc(path)
+      val copyDf = spark.read.orc(path)
       checkAnswer(df, copyDf)
     }
   }

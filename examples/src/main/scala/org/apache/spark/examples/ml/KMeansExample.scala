@@ -19,11 +19,10 @@ package org.apache.spark.examples.ml
 
 // scalastyle:off println
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.clustering.KMeans
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 // $example off$
 
 /**
@@ -37,13 +36,14 @@ object KMeansExample {
 
   def main(args: Array[String]): Unit = {
     // Creates a Spark context and a SQL context
-    val conf = new SparkConf().setAppName(s"${this.getClass.getSimpleName}")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName(s"${this.getClass.getSimpleName}")
+      .getOrCreate()
 
     // $example on$
     // Crates a DataFrame
-    val dataset: DataFrame = sqlContext.createDataFrame(Seq(
+    val dataset: DataFrame = spark.createDataFrame(Seq(
       (1, Vectors.dense(0.0, 0.0, 0.0)),
       (2, Vectors.dense(0.1, 0.1, 0.1)),
       (3, Vectors.dense(0.2, 0.2, 0.2)),
@@ -64,7 +64,7 @@ object KMeansExample {
     model.clusterCenters.foreach(println)
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

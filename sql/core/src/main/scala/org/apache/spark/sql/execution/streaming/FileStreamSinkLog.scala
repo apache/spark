@@ -54,6 +54,19 @@ case class SinkFileStatus(
   }
 }
 
+object SinkFileStatus {
+  def apply(f: FileStatus): SinkFileStatus = {
+    SinkFileStatus(
+      path = f.getPath.toUri.toString,
+      size = f.getLen,
+      isDir = f.isDirectory,
+      modificationTime = f.getModificationTime,
+      blockReplication = f.getReplication,
+      blockSize = f.getBlockSize,
+      action = FileStreamSinkLog.ADD_ACTION)
+  }
+}
+
 /**
  * A special log for [[FileStreamSink]]. It will write one log file for each batch. The first line
  * of the log file is the version number, and there are multiple JSON lines following. Each JSON

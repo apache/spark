@@ -19,10 +19,10 @@ package org.apache.spark.sql.streaming
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.util.ManualClock
 
 class StreamSuite extends StreamTest with SharedSQLContext {
 
@@ -34,11 +34,11 @@ class StreamSuite extends StreamTest with SharedSQLContext {
 
     testStream(mapped)(
       AddData(inputData, 1, 2, 3),
-      StartStream,
+      StartStream(),
       CheckAnswer(2, 3, 4),
       StopStream,
       AddData(inputData, 4, 5, 6),
-      StartStream,
+      StartStream(),
       CheckAnswer(2, 3, 4, 5, 6, 7))
   }
 
@@ -70,7 +70,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       CheckAnswer(1, 2, 3, 4, 5, 6),
       StopStream,
       AddData(inputData1, 7),
-      StartStream,
+      StartStream(),
       AddData(inputData2, 8),
       CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8))
   }
@@ -94,7 +94,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
             .startStream(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
-            val outputDf = sqlContext.read.parquet(outputDir.getAbsolutePath).as[Long]
+            val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
             checkDataset[Long](outputDf, (0L to 10L).toArray: _*)
           } finally {
             query.stop()
@@ -103,7 +103,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       }
     }
 
-    val df = sqlContext.read.format(classOf[FakeDefaultSource].getName).stream()
+    val df = spark.read.format(classOf[FakeDefaultSource].getName).stream()
     assertDF(df)
     assertDF(df)
   }
@@ -136,6 +136,22 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       testStream(ds)()
     }
   }
+
+  // This would fail for now -- error is "Timed out waiting for stream"
+  // Root cause is that data generated in batch 0 may not get processed in batch 1
+  // Let's enable this after SPARK-14942: Reduce delay between batch construction and execution
+  ignore("minimize delay between batch construction and execution") {
+    val inputData = MemoryStream[Int]
+    testStream(inputData.toDS())(
+      StartStream(ProcessingTime("10 seconds"), new ManualClock),
+      /* -- batch 0 ----------------------- */
+      AddData(inputData, 1),
+      AddData(inputData, 2),
+      AddData(inputData, 3),
+      AdvanceManualClock(10 * 1000), // 10 seconds
+      /* -- batch 1 ----------------------- */
+      CheckAnswer(1, 2, 3))
+  }
 }
 
 /**
@@ -146,13 +162,13 @@ class FakeDefaultSource extends StreamSourceProvider {
   private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
 
   override def sourceSchema(
-      sqlContext: SQLContext,
+      spark: SQLContext,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = ("fakeSource", fakeSchema)
 
   override def createSource(
-      sqlContext: SQLContext,
+      spark: SQLContext,
       metadataPath: String,
       schema: Option[StructType],
       providerName: String,
@@ -174,7 +190,7 @@ class FakeDefaultSource extends StreamSourceProvider {
 
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
         val startOffset = start.map(_.asInstanceOf[LongOffset].offset).getOrElse(-1L) + 1
-        sqlContext.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
+        spark.range(startOffset, end.asInstanceOf[LongOffset].offset + 1).toDF("a")
       }
     }
   }
