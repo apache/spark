@@ -88,8 +88,8 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         Sets params for Pipeline.
         """
         kwargs = self.setParams._input_kwargs
-        if stages is None:
-            kwargs['stages'] = []
+        if Pipeline.stages.name in kwargs and kwargs[Pipeline.stages.name] is None:
+            kwargs[Pipeline.stages.name] = []
         return self._set(**kwargs)
 
     def _fit(self, dataset):
