@@ -32,7 +32,7 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -137,7 +137,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Map[String, String] = {
     def computeNumFeatures(): Int = {
-      val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
+      val dataFiles = files.filterNot(_.getPath.getName.startsWith("_"))
       val path = if (dataFiles.length == 1) {
         dataFiles.head.getPath.toUri.toString
       } else if (dataFiles.isEmpty) {
@@ -184,10 +184,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     verifySchema(dataSchema)
-    val numFeatures = options("numFeatures").toInt
-    assert(numFeatures > 0)
 
-    val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
+    val libsvmOptions = new LibSVMOptions(options)
 
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
@@ -199,7 +197,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
           .filterNot(line => line.isEmpty || line.startsWith("#"))
           .map { line =>
             val (label, indices, values) = MLUtils.parseLibSVMRecord(line)
-            LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
+            LabeledPoint(label, Vectors.sparse(libsvmOptions.numFeatures, indices, values))
           }
 
       val converter = RowEncoder(dataSchema)
@@ -213,7 +211,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
       points.map { pt =>
-        val features = if (sparse) pt.features.toSparse else pt.features.toDense
+        val features = if (libsvmOptions.sparse) pt.features.toSparse else pt.features.toDense
         requiredColumns(converter.toRow(Row(pt.label, features)))
       }
     }
