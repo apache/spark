@@ -418,11 +418,16 @@ object YarnSparkHadoopUtil {
    *
    * @return The correct OOM Error handler JVM option, platform dependent.
    */
-  def getOutOfMemoryErrorArgument: String = {
+  def getOutOfMemoryErrorArgument(sparkConf: SparkConf, javaOpts: ListBuffer[String]): String = {
     if (Utils.isWindows) {
       escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {
-      "-XX:OnOutOfMemoryError='kill %p'"
+      val = onOOME = javaOpts.find(x => x.contains("-XX:OnOutOfMemoryError"))
+      if (onOOME == None) {
+        "-XX:OnOutOfMemoryError='kill %p'"
+      } else {
+        ""
+      }
     }
   }
 
