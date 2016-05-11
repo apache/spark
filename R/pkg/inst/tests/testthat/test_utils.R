@@ -164,3 +164,7 @@ test_that("convertToJSaveMode", {
   expect_error(convertToJSaveMode("foo"),
     'mode should be one of "append", "overwrite", "error", "ignore"') #nolint
 })
+
+test_that("hashCode", {
+  expect_error(hashCode("bc53d3605e8a5b7de1e8e271c2317645"), NA)
+})

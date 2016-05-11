@@ -63,6 +63,11 @@ object JavaTypeInference {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
         (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
 
+      case c: Class[_] if UDTRegistration.exists(c.getName) =>
+        val udt = UDTRegistration.getUDTFor(c.getName).get.newInstance()
+          .asInstanceOf[UserDefinedType[_ >: Null]]
+        (udt, true)
+
       case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
       case c: Class[_] if c == classOf[Array[Byte]] => (BinaryType, true)
 

@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
@@ -657,6 +656,15 @@ object ScalaReflection extends ScalaReflection {
     val classSymbol = m.staticClass(cls.getName)
     val t = classSymbol.selfType
     constructParams(t).map(_.name.toString)
+  }
+
+  /**
+   * Returns the parameter values for the primary constructor of this class.
+   */
+  def getConstructorParameterValues(obj: DefinedByConstructorParams): Seq[AnyRef] = {
+    getConstructorParameterNames(obj.getClass).map { name =>
+      obj.getClass.getMethod(name).invoke(obj)
+    }
   }
 
   /*

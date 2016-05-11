@@ -17,9 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.util.Benchmark
@@ -36,9 +36,10 @@ object TPCDSBenchmark {
   conf.set("spark.driver.memory", "3g")
   conf.set("spark.executor.memory", "3g")
   conf.set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
+  conf.setMaster("local[1]")
+  conf.setAppName("test-sql-context")
 
-  val sc = new SparkContext("local[1]", "test-sql-context", conf)
-  val sqlContext = new SQLContext(sc)
+  val spark = SparkSession.builder.config(conf).getOrCreate()
 
   // These queries a subset of the TPCDS benchmark queries and are taken from
   // https://github.com/databricks/spark-sql-perf/blob/master/src/main/scala/com/databricks/spark/
@@ -1186,8 +1187,8 @@ object TPCDSBenchmark {
 
   def setupTables(dataLocation: String): Map[String, Long] = {
     tables.map { tableName =>
-      sqlContext.read.parquet(s"$dataLocation/$tableName").registerTempTable(tableName)
-      tableName -> sqlContext.table(tableName).count()
+      spark.read.parquet(s"$dataLocation/$tableName").registerTempTable(tableName)
+      tableName -> spark.table(tableName).count()
     }.toMap
   }
 
@@ -1195,18 +1196,18 @@ object TPCDSBenchmark {
     require(dataLocation.nonEmpty,
       "please modify the value of dataLocation to point to your local TPCDS data")
     val tableSizes = setupTables(dataLocation)
-    sqlContext.conf.setConfString(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-    sqlContext.conf.setConfString(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+    spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+    spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
     tpcds.filter(q => q._1 != "").foreach {
       case (name: String, query: String) =>
-        val numRows = sqlContext.sql(query).queryExecution.logical.map {
+        val numRows = spark.sql(query).queryExecution.logical.map {
           case ur@UnresolvedRelation(t: TableIdentifier, _) =>
             tableSizes.getOrElse(t.table, throw new RuntimeException(s"${t.table} not found."))
           case _ => 0L
         }.sum
         val benchmark = new Benchmark("TPCDS Snappy (scale = 5)", numRows, 5)
         benchmark.addCase(name) { i =>
-          sqlContext.sql(query).collect()
+          spark.sql(query).collect()
         }
         benchmark.run()
     }

@@ -362,10 +362,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
           Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
           Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
-        case (b1: java.math.BigDecimal, b2: java.math.BigDecimal) =>
-          // "java.math.BigDecimal.equals" requires both value and scala must be same (thus 2.0 is
-          // not equal to 2.00 when using "equals"). Hence using "compareTo" instead.
-          b1.compareTo(b2) == 0
+        case (left: Comparable[Any], right: Comparable[Any]) => left.compareTo(right) == 0
         case _ => input == convertedBack
       }
 
