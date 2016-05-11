@@ -28,7 +28,7 @@ import org.apache.spark.sql.SparkSession;
 
 
 /**
- * An example demonstrating a k-means clustering.
+ * An example demonstrating k-means clustering.
  * Run with
  * <pre>
  * bin/run-example ml.JavaKMeansExample

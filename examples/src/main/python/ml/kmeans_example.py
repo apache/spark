@@ -24,9 +24,11 @@ from pyspark.ml.clustering import KMeans, KMeansModel
 from pyspark.sql import SparkSession
 
 """
-A simple example demonstrating a k-means clustering.
+An example demonstrating k-means clustering.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/kmeans_example.py
+  bin/spark-submit examples/src/main/python/ml/kmeans_example.py <input> <k>
+
+This example requires NumPy (http://www.numpy.org/).
 """
 
 
