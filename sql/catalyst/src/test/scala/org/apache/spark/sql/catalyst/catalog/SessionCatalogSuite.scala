@@ -601,8 +601,8 @@ class SessionCatalogSuite extends SparkFunSuite {
         ignoreIfNotExists = false)
     }
     assert(e.getMessage.contains(
-      "Partition spec is invalid. The spec (a, b, c) must match the partition spec " +
-        "(a, b) defined in table '`db2`.`tbl2`'"))
+      "Partition spec is invalid. The spec (a, b, c) must be contained within " +
+        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
     e = intercept[AnalysisException] {
       catalog.dropPartitions(
         TableIdentifier("tbl2", Some("db2")),
@@ -610,17 +610,8 @@ class SessionCatalogSuite extends SparkFunSuite {
         ignoreIfNotExists = false)
     }
     assert(e.getMessage.contains(
-      "Partition spec is invalid. The spec (a, unknown) must match the partition spec " +
-        "(a, b) defined in table '`db2`.`tbl2`'"))
-    e = intercept[AnalysisException] {
-      catalog.dropPartitions(
-        TableIdentifier("tbl2", Some("db2")),
-        Seq(partWithLessColumns.spec),
-        ignoreIfNotExists = false)
-    }
-    assert(e.getMessage.contains(
-      "Partition spec is invalid. The spec (a) must match the partition spec " +
-        "(a, b) defined in table '`db2`.`tbl2`'"))
+      "Partition spec is invalid. The spec (a, unknown) must be contained within " +
+        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
   }
 
   test("get partition") {

@@ -401,10 +401,6 @@ case class AlterTableDropPartition(
       throw new AnalysisException(
         "ALTER TABLE DROP PARTITIONS is not allowed for tables defined using the datasource API")
     }
-    if (specs.size > 1) {
-      throw new AnalysisException(
-        s"Alter Table Drop Partition is not allowed to drop more than one partitions.")
-    }
     catalog.dropPartitions(tableName, specs, ignoreIfNotExists = ifExists)
     Seq.empty[Row]
   }
