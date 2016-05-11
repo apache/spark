@@ -930,6 +930,22 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
         Row(11) :: Nil)
     }
   }
+
+  test("SPARK-14495: distinct aggregate in having clause") {
+    checkAnswer(
+      sqlContext.sql(
+        """
+          |select key, count(distinct value1), count(distinct value2)
+          |from agg2 group by key
+          |having count(distinct value1) > 0
+        """.stripMargin),
+      Seq(
+        Row(null, 3, 3),
+        Row(1, 2, 3),
+        Row(2, 2, 1)
+      )
+    )
+  }
 }
 
 
