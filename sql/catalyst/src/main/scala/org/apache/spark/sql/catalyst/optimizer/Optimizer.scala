@@ -172,10 +172,7 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
     } else {
       projectList.map(_.asInstanceOf[Alias]).zip(childOutput).forall { case (a, o) =>
         a.child match {
-          case attr: Attribute
-              if a.name == attr.name && attr.name == o.name && attr.dataType == o.dataType
-                && attr.exprId == o.exprId =>
-            true
+          case attr: Attribute if a.name == attr.name && attr.semanticEquals(o) => true
           case _ => false
         }
       }
