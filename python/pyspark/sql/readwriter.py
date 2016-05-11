@@ -50,8 +50,6 @@ class DataFrameReader(object):
     (e.g. file systems, key-value stores, etc). Use :func:`SQLContext.read`
     to access this.
 
-    ::Note: Experimental
-
     .. versionadded:: 1.4
     """
 
@@ -142,6 +140,8 @@ class DataFrameReader(object):
     @since(2.0)
     def stream(self, path=None, format=None, schema=None, **options):
         """Loads a data stream from a data source and returns it as a :class`DataFrame`.
+
+        .. note:: Experimental.
 
         :param path: optional string for file-system backed data sources.
         :param format: optional string for format of the data source. Default to 'parquet'.
@@ -462,8 +462,6 @@ class DataFrameWriter(object):
     (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
     to access this.
 
-    ::Note: Experimental
-
     .. versionadded:: 1.4
     """
     def __init__(self, df):
@@ -540,7 +538,9 @@ class DataFrameWriter(object):
     def queryName(self, queryName):
         """Specifies the name of the :class:`ContinuousQuery` that can be started with
         :func:`startStream`. This name must be unique among all the currently active queries
-        in the associated SQLContext.
+        in the associated SQLContext
+
+        .. note:: Experimental.
 
         :param queryName: unique name for the query
 
@@ -556,6 +556,8 @@ class DataFrameWriter(object):
     def trigger(self, processingTime=None):
         """Set the trigger for the stream query. If this is not set it will run the query as fast
         as possible, which is equivalent to setting the trigger to ``processingTime='0 seconds'``.
+
+        .. note:: Experimental.
 
         :param processingTime: a processing time interval as a string, e.g. '5 seconds', '1 minute'.
 
@@ -613,6 +615,8 @@ class DataFrameWriter(object):
         The data source is specified by the ``format`` and a set of ``options``.
         If ``format`` is not specified, the default data source configured by
         ``spark.sql.sources.default`` will be used.
+
+        .. note:: Experimental.
 
         :param path: the path in a Hadoop supported file system
         :param format: the format used to save
