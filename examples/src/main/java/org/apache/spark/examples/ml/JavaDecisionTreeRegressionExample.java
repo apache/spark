@@ -33,7 +33,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaDecisionTreeRegressionExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaDecisionTreeRegressionExample").getOrCreate();
+      .builder()
+      .appName("JavaDecisionTreeRegressionExample")
+      .getOrCreate();
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
     Dataset<Row> data = spark.read().format("libsvm")

@@ -30,7 +30,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaLinearRegressionWithElasticNetExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaLinearRegressionWithElasticNetExample").getOrCreate();
+      .builder()
+      .appName("JavaLinearRegressionWithElasticNetExample")
+      .getOrCreate();
 
     // $example on$
     // Load training data

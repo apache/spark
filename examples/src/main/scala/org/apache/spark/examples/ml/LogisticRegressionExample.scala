@@ -23,12 +23,11 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
 import org.apache.spark.ml.feature.StringIndexer
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
  * An example runner for logistic regression with elastic-net (mixing L1/L2) regularization.
@@ -112,13 +111,15 @@ object LogisticRegressionExample {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"LogisticRegressionExample with $params")
-    val sc = new SparkContext(conf)
+    val spark = SparkSession
+      .builder
+      .appName(s"LogisticRegressionExample with $params")
+      .getOrCreate()
 
     println(s"LogisticRegressionExample with parameters:\n$params")
 
     // Load training and test data and cache it.
-    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
+    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(params.input,
       params.dataFormat, params.testInput, "classification", params.fracTest)
 
     // Set up Pipeline
@@ -156,7 +157,7 @@ object LogisticRegressionExample {
     println("Test data results:")
     DecisionTreeExample.evaluateClassificationModel(pipelineModel, test, "indexedLabel")
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

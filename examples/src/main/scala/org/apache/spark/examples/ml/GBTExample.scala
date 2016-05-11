@@ -23,13 +23,12 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage}
 import org.apache.spark.ml.classification.{GBTClassificationModel, GBTClassifier}
 import org.apache.spark.ml.feature.{StringIndexer, VectorIndexer}
 import org.apache.spark.ml.regression.{GBTRegressionModel, GBTRegressor}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 
 /**
@@ -136,15 +135,18 @@ object GBTExample {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"GBTExample with $params")
-    val sc = new SparkContext(conf)
-    params.checkpointDir.foreach(sc.setCheckpointDir)
+    val spark = SparkSession
+      .builder
+      .appName(s"GBTExample with $params")
+      .getOrCreate()
+
+    params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
     println(s"GBTExample with parameters:\n$params")
 
     // Load training and test data and cache it.
-    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
+    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(params.input,
       params.dataFormat, params.testInput, algo, params.fracTest)
 
     // Set up Pipeline
@@ -234,7 +236,7 @@ object GBTExample {
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

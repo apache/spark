@@ -34,7 +34,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaRandomForestRegressorExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaRandomForestRegressorExample").getOrCreate();
+      .builder()
+      .appName("JavaRandomForestRegressorExample")
+      .getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.

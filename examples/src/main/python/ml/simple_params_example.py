@@ -18,36 +18,30 @@
 from __future__ import print_function
 
 import pprint
-import sys
 
-from pyspark import SparkContext
 from pyspark.ml.classification import LogisticRegression
 from pyspark.mllib.linalg import DenseVector
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 
 """
-A simple example demonstrating ways to specify parameters for Estimators and Transformers.
+An example demonstrating ways to specify parameters for Estimators and Transformers.
 Run with:
   bin/spark-submit examples/src/main/python/ml/simple_params_example.py
 """
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        print("Usage: simple_params_example", file=sys.stderr)
-        exit(1)
-    sc = SparkContext(appName="PythonSimpleParamsExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession \
+        .builder \
+        .appName("PythonSimpleParamsExample") \
+        .getOrCreate()
 
     # prepare training data.
-    # We create an RDD of LabeledPoints and convert them into a DataFrame.
-    # A LabeledPoint is an Object with two fields named label and features
-    # and Spark SQL identifies these fields and creates the schema appropriately.
-    training = sc.parallelize([
-        LabeledPoint(1.0, DenseVector([0.0, 1.1, 0.1])),
-        LabeledPoint(0.0, DenseVector([2.0, 1.0, -1.0])),
-        LabeledPoint(0.0, DenseVector([2.0, 1.3, 1.0])),
-        LabeledPoint(1.0, DenseVector([0.0, 1.2, -0.5]))]).toDF()
+    # We create an DataFrame with two fields named label and features.
+    training = spark.createDataFrame([
+        (1.0, DenseVector([0.0, 1.1, 0.1])),
+        (0.0, DenseVector([2.0, 1.0, -1.0])),
+        (0.0, DenseVector([2.0, 1.3, 1.0])),
+        (1.0, DenseVector([0.0, 1.2, -0.5]))], ["label", "features"])
 
     # Create a LogisticRegression instance with maxIter = 10.
     # This instance is an Estimator.
@@ -78,10 +72,11 @@ if __name__ == "__main__":
     pprint.pprint(model2.extractParamMap())
 
     # prepare test data.
-    test = sc.parallelize([
-        LabeledPoint(1.0, DenseVector([-1.0, 1.5, 1.3])),
-        LabeledPoint(0.0, DenseVector([3.0, 2.0, -0.1])),
-        LabeledPoint(0.0, DenseVector([0.0, 2.2, -1.5]))]).toDF()
+    test = spark.createDataFrame([
+        (1.0, DenseVector([-1.0, 1.5, 1.3])),
+        (0.0, DenseVector([3.0, 2.0, -0.1])),
+        (0.0, DenseVector([2.0, 1.3, 1.0])),
+        (0.0, DenseVector([0.0, 2.2, -1.5]))], ["label", "features"])
 
     # Make predictions on test data using the Transformer.transform() method.
     # LogisticRegressionModel.transform will only use the 'features' column.
@@ -95,4 +90,4 @@ if __name__ == "__main__":
         print("features=%s,label=%s -> prob=%s, prediction=%s"
               % (row.features, row.label, row.myProbability, row.prediction))
 
-    sc.stop()
+    spark.stop()

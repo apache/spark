@@ -34,7 +34,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaGradientBoostedTreeRegressorExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaGradientBoostedTreeRegressorExample").getOrCreate();
+      .builder()
+      .appName("JavaGradientBoostedTreeRegressorExample")
+      .getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.

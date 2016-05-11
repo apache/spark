@@ -22,10 +22,9 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.regression.LinearRegression
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, SparkSession}
 
 /**
  * An example runner for linear regression with elastic-net (mixing L1/L2) regularization.
@@ -105,13 +104,15 @@ object LinearRegressionExample {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"LinearRegressionExample with $params")
-    val sc = new SparkContext(conf)
+    val spark = SparkSession
+      .builder
+      .appName(s"LinearRegressionExample with $params")
+      .getOrCreate()
 
     println(s"LinearRegressionExample with parameters:\n$params")
 
     // Load training and test data and cache it.
-    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(sc, params.input,
+    val (training: DataFrame, test: DataFrame) = DecisionTreeExample.loadDatasets(params.input,
       params.dataFormat, params.testInput, "regression", params.fracTest)
 
     val lir = new LinearRegression()
@@ -136,7 +137,7 @@ object LinearRegressionExample {
     println("Test data results:")
     DecisionTreeExample.evaluateRegressionModel(lirModel, test, "label")
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

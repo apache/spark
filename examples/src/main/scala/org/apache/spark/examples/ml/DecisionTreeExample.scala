@@ -23,7 +23,6 @@ import scala.language.reflectiveCalls
 
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.ml.{Pipeline, PipelineStage, Transformer}
 import org.apache.spark.ml.classification.{DecisionTreeClassificationModel, DecisionTreeClassifier}
@@ -40,7 +39,7 @@ import org.apache.spark.sql.{DataFrame, SparkSession}
  * {{{
  * ./bin/run-example ml.DecisionTreeExample [options]
  * }}}
- * Note that Decision Trees can take a large amount of memory.  If the run-example command above
+ * Note that Decision Trees can take a large amount of memory. If the run-example command above
  * fails, try running via spark-submit and specifying the amount of memory as at least 1g.
  * For local mode, run
  * {{{
@@ -87,7 +86,7 @@ object DecisionTreeExample {
         .text(s"min info gain required to create a split, default: ${defaultParams.minInfoGain}")
         .action((x, c) => c.copy(minInfoGain = x))
       opt[Double]("fracTest")
-        .text(s"fraction of data to hold out for testing.  If given option testInput, " +
+        .text(s"fraction of data to hold out for testing. If given option testInput, " +
           s"this option is ignored. default: ${defaultParams.fracTest}")
         .action((x, c) => c.copy(fracTest = x))
       opt[Boolean]("cacheNodeIds")
@@ -106,7 +105,7 @@ object DecisionTreeExample {
          s"default: ${defaultParams.checkpointInterval}")
         .action((x, c) => c.copy(checkpointInterval = x))
       opt[String]("testInput")
-        .text(s"input path to test dataset.  If given, option fracTest is ignored." +
+        .text(s"input path to test dataset. If given, option fracTest is ignored." +
           s" default: ${defaultParams.testInput}")
         .action((x, c) => c.copy(testInput = x))
       opt[String]("dataFormat")
@@ -157,11 +156,10 @@ object DecisionTreeExample {
    * @param dataFormat  "libsvm" or "dense"
    * @param testInput  Path to test dataset.
    * @param algo  Classification or Regression
-   * @param fracTest  Fraction of input data to hold out for testing.  Ignored if testInput given.
+   * @param fracTest  Fraction of input data to hold out for testing. Ignored if testInput given.
    * @return  (training dataset, test dataset)
    */
   private[ml] def loadDatasets(
-      sc: SparkContext,
       input: String,
       dataFormat: String,
       testInput: String,
@@ -200,16 +198,19 @@ object DecisionTreeExample {
   }
 
   def run(params: Params) {
-    val conf = new SparkConf().setAppName(s"DecisionTreeExample with $params")
-    val sc = new SparkContext(conf)
-    params.checkpointDir.foreach(sc.setCheckpointDir)
+    val spark = SparkSession
+      .builder
+      .appName(s"DecisionTreeExample with $params")
+      .getOrCreate()
+
+    params.checkpointDir.foreach(spark.sparkContext.setCheckpointDir)
     val algo = params.algo.toLowerCase
 
     println(s"DecisionTreeExample with parameters:\n$params")
 
     // Load training and test data and cache it.
     val (training: DataFrame, test: DataFrame) =
-      loadDatasets(sc, params.input, params.dataFormat, params.testInput, algo, params.fracTest)
+      loadDatasets(params.input, params.dataFormat, params.testInput, algo, params.fracTest)
 
     // Set up Pipeline
     val stages = new mutable.ArrayBuffer[PipelineStage]()
@@ -296,11 +297,11 @@ object DecisionTreeExample {
         throw new IllegalArgumentException("Algo ${params.algo} not supported.")
     }
 
-    sc.stop()
+    spark.stop()
   }
 
   /**
-   * Evaluate the given ClassificationModel on data.  Print the results.
+   * Evaluate the given ClassificationModel on data. Print the results.
    * @param model  Must fit ClassificationModel abstraction
    * @param data  DataFrame with "prediction" and labelColName columns
    * @param labelColName  Name of the labelCol parameter for the model
@@ -325,7 +326,7 @@ object DecisionTreeExample {
   }
 
   /**
-   * Evaluate the given RegressionModel on data.  Print the results.
+   * Evaluate the given RegressionModel on data. Print the results.
    * @param model  Must fit RegressionModel abstraction
    * @param data  DataFrame with "prediction" and labelColName columns
    * @param labelColName  Name of the labelCol parameter for the model

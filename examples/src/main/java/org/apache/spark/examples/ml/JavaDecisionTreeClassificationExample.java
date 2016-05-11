@@ -32,7 +32,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaDecisionTreeClassificationExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaDecisionTreeClassificationExample").getOrCreate();
+      .builder()
+      .appName("JavaDecisionTreeClassificationExample")
+      .getOrCreate();
 
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
