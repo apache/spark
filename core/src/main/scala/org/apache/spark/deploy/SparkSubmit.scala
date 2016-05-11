@@ -356,15 +356,18 @@ object SparkSubmit {
         args.childArgs = ArrayBuffer(args.primaryResource, args.pyFiles) ++ args.childArgs
         if (clusterManager != YARN) {
           // The YARN backend distributes the primary file differently, so don't merge it.
-          args.files = mergeFileLists(args.files, args.primaryResource)
+          args.files = mergeFileLists(args.files, args.primaryResource, args.pyRequirements)
         }
       }
       if (clusterManager != YARN) {
         // The YARN backend handles python files differently, so don't merge the lists.
-        args.files = mergeFileLists(args.files, args.pyFiles)
+        args.files = mergeFileLists(args.files, args.pyFiles, args.pyRequirements)
       }
       if (args.pyFiles != null) {
         sysProps("spark.submit.pyFiles") = args.pyFiles
+      }
+      if (args.pyRequirements != null) {
+        sysProps("spark.submit.pyRequirements") = args.pyRequirements
       }
     }
 
@@ -542,6 +545,10 @@ object SparkSubmit {
       if (args.pyFiles != null) {
         sysProps("spark.submit.pyFiles") = args.pyFiles
       }
+
+      if (args.pyRequirements != null) {
+        sysProps("spark.submit.pyRequirements") = args.pyRequirements
+      }
     }
 
     // assure a keytab is available from any place in a JVM
@@ -592,6 +599,9 @@ object SparkSubmit {
         childArgs += (args.primaryResource, "")
         if (args.pyFiles != null) {
           sysProps("spark.submit.pyFiles") = args.pyFiles
+        }
+        if (args.pyRequirements != null) {
+          sysProps("spark.submit.pyRequirements") = args.pyRequirements
         }
       } else {
         childArgs += (args.primaryResource, args.mainClass)

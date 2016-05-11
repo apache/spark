@@ -55,6 +55,7 @@ class SparkSubmitOptionParser {
   protected final String PROPERTIES_FILE = "--properties-file";
   protected final String PROXY_USER = "--proxy-user";
   protected final String PY_FILES = "--py-files";
+  protected final String PY_REQUIREMENTS = "--py-requirements";
   protected final String REPOSITORIES = "--repositories";
   protected final String STATUS = "--status";
   protected final String TOTAL_EXECUTOR_CORES = "--total-executor-cores";
