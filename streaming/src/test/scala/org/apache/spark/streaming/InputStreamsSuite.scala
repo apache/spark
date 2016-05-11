@@ -202,7 +202,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     var testDir: File = null
     try {
       val batchDuration = Seconds(2)
-      val testDir = Utils.createTempDir()
+      testDir = Utils.createTempDir()
       val testSubDir1 = Utils.createDirectory(testDir.toString, "tmp1")
       val testSubDir2 = Utils.createDirectory(testDir.toString, "tmp2")
 
@@ -245,11 +245,11 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
         }
         // Over time, create files in the temp directory 1
         val input1 = Seq(1, 2, 3, 4, 5)
-        input1.foreach(i => createFileAndAdvenceTime(i, testSubDir1 ))
+        input1.foreach(i => createFileAndAdvenceTime(i, testSubDir1))
 
         // Over time, create files in the temp directory 1
         val input2 = Seq(6, 7, 8, 9, 10)
-        input2.foreach(i => createFileAndAdvenceTime(i, testSubDir2 ))
+        input2.foreach(i => createFileAndAdvenceTime(i, testSubDir2))
 
         // Verify that all the files have been read
         val expectedOutput = (input1 ++ input2).map(_.toString).toSet
