@@ -635,11 +635,6 @@ class SessionCatalog(
             s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
             s"in table '${table.identifier}'")
       }
-      if (s.keys.toSeq.distinct.length != s.keys.toSeq.length) {
-        throw new AnalysisException(
-          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) contains duplicate" +
-           "columns")
-      }
     }
   }
 
