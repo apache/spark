@@ -1431,10 +1431,13 @@ class Row(tuple):
         else:
             return dict(zip(self.__fields__, self))
 
-    # let object acts like class
+	# let object acts like class
     def __call__(self, *args):
-        """create new Row object"""
-        return _create_row(self, args)
+        if args:
+            """create new Row object"""
+            return create_row(self.fields_, args)
+        else:
+            raise ValueError("No args")	
 
     def __getitem__(self, item):
         if isinstance(item, (int, slice)):
