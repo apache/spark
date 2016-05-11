@@ -677,8 +677,9 @@ private[hive] class HiveClientImpl(
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
 
   private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
-    val resourceUris = f.resources.map { case (resourceType, resourcePath) =>
-      new ResourceUri(ResourceType.valueOf(resourceType.toUpperCase), resourcePath)
+    val resourceUris = f.resources.map { resource =>
+      new ResourceUri(
+        ResourceType.valueOf(resource.resourceType.resourceType.toUpperCase()), resource.uri)
     }
     new HiveFunction(
       f.identifier.funcName,
@@ -700,7 +701,7 @@ private[hive] class HiveClientImpl(
         case ResourceType.JAR => "jar"
         case r => throw new AnalysisException(s"Unknown resource type: $r")
       }
-      (resourceType, uri.getUri())
+      FunctionResource(FunctionResourceType.fromString(resourceType), uri.getUri())
     }
     new CatalogFunction(name, hf.getClassName, resources)
   }

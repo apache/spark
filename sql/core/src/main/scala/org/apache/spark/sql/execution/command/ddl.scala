@@ -19,14 +19,12 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.types._
 
 
@@ -457,7 +455,6 @@ case class AlterTableSetLocation(
     }
     Seq.empty[Row]
   }
-
 }
 
 
@@ -489,9 +486,83 @@ private[sql] object DDLUtils {
       case _ =>
     })
   }
+
   def isTablePartitioned(table: CatalogTable): Boolean = {
-    table.partitionColumns.size > 0 ||
+    table.partitionColumns.nonEmpty ||
       table.properties.contains("spark.sql.sources.schema.numPartCols")
   }
-}
 
+  def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
+    getSchemaFromTableProperties(metadata.properties)
+  }
+
+  // A persisted data source table may not store its schema in the catalog. In this case, its schema
+  // will be inferred at runtime when the table is referenced.
+  def getSchemaFromTableProperties(props: Map[String, String]): Option[StructType] = {
+    require(isDatasourceTable(props))
+
+    val schemaParts = for {
+      numParts <- props.get("spark.sql.sources.schema.numParts").toSeq
+      index <- 0 until numParts.toInt
+    } yield props.getOrElse(
+      s"spark.sql.sources.schema.part.$index",
+      throw new AnalysisException(
+        s"Corrupted schema in catalog: $numParts parts expected, but part $index is missing."
+      )
+    )
+
+    if (schemaParts.isEmpty) {
+      None
+    } else {
+      Some(DataType.fromJson(schemaParts.mkString).asInstanceOf[StructType])
+    }
+  }
+
+  private def getColumnNamesByTypeFromTableProperties(
+      props: Map[String, String], colType: String, typeName: String): Seq[String] = {
+    require(isDatasourceTable(props))
+
+    for {
+      numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
+      index <- 0 until numCols.toInt
+    } yield props.getOrElse(
+      s"spark.sql.sources.schema.${colType}Col.$index",
+      throw new AnalysisException(
+        s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
+      )
+    )
+  }
+
+  def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
+    getPartitionColumnsFromTableProperties(metadata.properties)
+  }
+
+  def getPartitionColumnsFromTableProperties(props: Map[String, String]): Seq[String] = {
+    getColumnNamesByTypeFromTableProperties(props, "part", "partitioning columns")
+  }
+
+  def getNumBucketFromTableProperties(metadata: CatalogTable): Option[Int] = {
+    getNumBucketFromTableProperties(metadata.properties)
+  }
+
+  def getNumBucketFromTableProperties(props: Map[String, String]): Option[Int] = {
+    require(isDatasourceTable(props))
+    props.get("spark.sql.sources.schema.numBuckets").map(_.toInt)
+  }
+
+  def getBucketingColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
+    getBucketingColumnsFromTableProperties(metadata.properties)
+  }
+
+  def getBucketingColumnsFromTableProperties(props: Map[String, String]): Seq[String] = {
+    getColumnNamesByTypeFromTableProperties(props, "bucket", "bucketing columns")
+  }
+
+  def getSortingColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
+    getSortingColumnsFromTableProperties(metadata.properties)
+  }
+
+  def getSortingColumnsFromTableProperties(props: Map[String, String]): Seq[String] = {
+    getColumnNamesByTypeFromTableProperties(props, "sort", "sorting columns")
+  }
+}

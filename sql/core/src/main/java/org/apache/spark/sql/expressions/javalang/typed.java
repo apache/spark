@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.expressions.java;
+package org.apache.spark.sql.expressions.javalang;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.api.java.function.MapFunction;
@@ -29,7 +29,7 @@ import org.apache.spark.sql.execution.aggregate.TypedSumLong;
  * :: Experimental ::
  * Type-safe functions available for {@link org.apache.spark.sql.Dataset} operations in Java.
  *
- * Scala users should use {@link org.apache.spark.sql.expressions.scala.typed}.
+ * Scala users should use {@link org.apache.spark.sql.expressions.scalalang.typed}.
  *
  * @since 2.0.0
  */
