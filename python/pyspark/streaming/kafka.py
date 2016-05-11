@@ -208,13 +208,13 @@ ________________________________________________________________________________
   1. Include the Kafka library and its dependencies with in the
      spark-submit command as
 
-     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka:%s ...
+     $ bin/spark-submit --packages org.apache.spark:spark-streaming-kafka-0-8:%s ...
 
   2. Download the JAR of the artifact from Maven Central http://search.maven.org/,
-     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-assembly, Version = %s.
+     Group Id = org.apache.spark, Artifact Id = spark-streaming-kafka-0-8-assembly, Version = %s.
      Then, include the jar in the spark-submit command as
 
-     $ bin/spark-submit --jars <spark-streaming-kafka-assembly.jar> ...
+     $ bin/spark-submit --jars <spark-streaming-kafka-0-8-assembly.jar> ...
 
 ________________________________________________________________________________________________
 
