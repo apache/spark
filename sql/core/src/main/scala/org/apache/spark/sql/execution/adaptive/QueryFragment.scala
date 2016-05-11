@@ -17,19 +17,18 @@
 
 package org.apache.spark.sql.execution.adaptive
 
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.{LinkedBlockingDeque, BlockingQueue}
 import java.util.{HashMap => JHashMap, Map => JMap}
+import java.util.concurrent.{BlockingQueue, LinkedBlockingDeque}
+import java.util.concurrent.atomic.AtomicBoolean
 
-import org.apache.spark.sql.catalyst.rules.Rule
-
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.ExecutionContext.Implicits.global
 
-import org.apache.spark.{MapOutputStatistics, SimpleFutureAction, ShuffleDependency}
+import org.apache.spark.{MapOutputStatistics, ShuffleDependency, SimpleFutureAction}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.execution.{CollapseCodegenStages, SortExec, SparkPlan}
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchange}
@@ -150,7 +149,7 @@ trait QueryFragment extends SparkPlan {
       }
 
       case agg @ TungstenAggregate(_, _, _, _, _, _, input @ FragmentInput(_))
-          if (!input.isOptimized())=> {
+          if (!input.isOptimized()) => {
         logInfo("Begin optimize agg, operator =\n" + agg.toString)
         optimizeAggregate(agg, input)
       }
@@ -188,7 +187,7 @@ trait QueryFragment extends SparkPlan {
         Utils.estimatePartitionStartIndices(aggStatistics.toArray, minNumPostShufflePartitions,
           advisoryTargetPostShuffleInputSize)
       }
-    val shuffledRowRdd= childFragments(0).getExchange().preparePostShuffleRDD(
+    val shuffledRowRdd = childFragments(0).getExchange().preparePostShuffleRDD(
       shuffleDependencies(fragmentsIndex.get(childFragments(0))), partitionStartIndices)
     childFragments(0).getFragmentInput().setShuffleRdd(shuffledRowRdd)
     childFragments(0).getFragmentInput().setOptimized()
@@ -223,7 +222,7 @@ trait QueryFragment extends SparkPlan {
 
     val leftFragment = childFragments(0)
     val rightFragment = childFragments(1)
-    val leftShuffledRowRdd= leftFragment.getExchange().preparePostShuffleRDD(
+    val leftShuffledRowRdd = leftFragment.getExchange().preparePostShuffleRDD(
       shuffleDependencies(fragmentsIndex.get(leftFragment)), partitionStartIndices)
     val rightShuffledRowRdd = rightFragment.getExchange().preparePostShuffleRDD(
       shuffleDependencies(fragmentsIndex.get(rightFragment)), partitionStartIndices)
@@ -238,7 +237,17 @@ trait QueryFragment extends SparkPlan {
     if (sqlContext.conf.autoBroadcastJoinThreshold > 0) {
       val leftSizeInBytes = childSizeInBytes(0)
       val rightSizeInBytes = childSizeInBytes(1)
-      if (leftSizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+      val joinType = joinPlan.joinType
+      def canBuildLeft(joinType: JoinType): Boolean = joinType match {
+        case Inner | RightOuter => true
+        case _ => false
+      }
+      def canBuildRight(joinType: JoinType): Boolean = joinType match {
+        case Inner | LeftOuter | LeftSemi | LeftAnti => true
+        case j: ExistenceJoin => true
+        case _ => false
+      }
+      if (leftSizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold && canBuildLeft(joinType)) {
         val keys = Utils.rewriteKeyExpr(joinPlan.leftKeys).map(
           BindReferences.bindReference(_, left.child.output))
         newOperator = BroadcastHashJoinExec(
@@ -249,7 +258,8 @@ trait QueryFragment extends SparkPlan {
           joinPlan.condition,
           BroadcastExchangeExec(HashedRelationBroadcastMode(keys), left.child),
           right.child)
-      } else if (rightSizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold) {
+      } else if (rightSizeInBytes <= sqlContext.conf.autoBroadcastJoinThreshold
+        && canBuildRight(joinType)) {
         val keys = Utils.rewriteKeyExpr(joinPlan.rightKeys).map(
           BindReferences.bindReference(_, right.child.output))
         newOperator = BroadcastHashJoinExec(
@@ -260,13 +270,13 @@ trait QueryFragment extends SparkPlan {
           joinPlan.condition,
           left.child,
           BroadcastExchangeExec(HashedRelationBroadcastMode(keys), right.child))
-      } 
+      }
     }
     newOperator
   }
 
   /** Returns a string representation of the nodes in this tree */
-  override def treeString: String = 
+  override def treeString: String =
     executedPlan.generateTreeString(0, Nil, new StringBuilder).toString
 
   override def simpleString: String = "QueryFragment"

@@ -17,13 +17,13 @@
 
 package org.apache.spark.sql.execution.adaptive
 
+import scala.collection.mutable.{ArrayBuffer, Queue}
+
+import org.apache.spark.MapOutputStatistics
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{IntegerType, LongType, IntegralType}
-import org.apache.spark.MapOutputStatistics
 import org.apache.spark.sql.execution.SparkPlan
-
-import scala.collection.mutable.{Queue, ArrayBuffer}
+import org.apache.spark.sql.types.{IntegralType, LongType}
 
 /**
  * Utility functions used by the query fragment.
@@ -49,7 +49,9 @@ private[sql] object Utils extends Logging {
   private[sql] def findLeafFragment(root: QueryFragment): Seq[QueryFragment] = {
     val result = new ArrayBuffer[QueryFragment]
     val queue = new Queue[QueryFragment]
-    queue.enqueue(root)
+    if (!root.children.isEmpty) {
+      root.children.foreach(c => queue.enqueue(c))
+    }
     while (queue.nonEmpty) {
       val current = queue.dequeue()
       if (current.children.isEmpty) {
