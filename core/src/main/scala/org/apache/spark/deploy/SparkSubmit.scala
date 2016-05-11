@@ -17,10 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.{File, PrintStream}
+import java.io.{File, IOException, PrintStream}
 import java.lang.reflect.{InvocationTargetException, Modifier, UndeclaredThrowableException}
 import java.net.URL
 import java.security.PrivilegedExceptionAction
+import java.text.ParseException
 
 import scala.annotation.tailrec
 import scala.collection.mutable.{ArrayBuffer, HashMap, Map}
@@ -286,8 +287,12 @@ object SparkSubmit {
       } else {
         Nil
       }
+
+    val ivySettings = Option(args.ivySettingsFile).map(SparkSubmitUtils.loadIvySettings).getOrElse(
+      SparkSubmitUtils.buildIvySettings(Option(args.repositories), Option(args.ivyRepoPath)))
+
     val resolvedMavenCoordinates = SparkSubmitUtils.resolveMavenCoordinates(args.packages,
-      Option(args.repositories), Option(args.ivyRepoPath), exclusions = exclusions)
+      ivySettings, exclusions = exclusions)
     if (!StringUtils.isBlank(resolvedMavenCoordinates)) {
       args.jars = mergeFileLists(args.jars, resolvedMavenCoordinates)
       if (args.isPython) {
@@ -440,6 +445,8 @@ object SparkSubmit {
         sysProp = "spark.submit.deployMode"),
       OptionAssigner(args.name, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES, sysProp = "spark.app.name"),
       OptionAssigner(args.ivyRepoPath, ALL_CLUSTER_MGRS, CLIENT, sysProp = "spark.jars.ivy"),
+      OptionAssigner(args.ivySettingsFile, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
+        sysProp = "spark.ivy.settings"),
       OptionAssigner(args.driverMemory, ALL_CLUSTER_MGRS, CLIENT,
         sysProp = "spark.driver.memory"),
       OptionAssigner(args.driverExtraClassPath, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
@@ -967,6 +974,56 @@ private[spark] object SparkSubmitUtils {
     }
   }
 
+  /**
+   * Build Ivy Settings using options with default resolvers
+   * @param remoteRepos Comma-delimited string of remote repositories other than maven central
+   * @param ivyPath The path to the local ivy repository
+   * @return An IvySettings object
+   */
+  def buildIvySettings(
+      remoteRepos: Option[String],
+      ivyPath: Option[String]): IvySettings = {
+    val ivySettings: IvySettings = new IvySettings
+
+    // set ivy settings for location of cache
+    val alternateIvyCache = ivyPath.getOrElse("")
+    val packagesDirectory: File =
+      if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
+        new File(ivySettings.getDefaultIvyUserDir, "jars")
+      } else {
+        ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
+        ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
+        new File(alternateIvyCache, "jars")
+      }
+
+    // create a pattern matcher
+    ivySettings.addMatcher(new GlobPatternMatcher)
+    // create the dependency resolvers
+    val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
+    ivySettings.addResolver(repoResolver)
+    ivySettings.setDefaultResolver(repoResolver.getName)
+    ivySettings
+  }
+
+  /**
+   * Load Ivy settings from a given filename, using supplied resolvers
+   * @param settingsFile Path to Ivy settings file
+   * @return An IvySettings object
+   */
+  def loadIvySettings(settingsFile: String): IvySettings = {
+    val file = new File(settingsFile)
+    require(file.exists(), s"Ivy settings file $file does not exist")
+    require(file.isFile, s"Ivy settings file $file is not a normal file")
+    val ivySettings: IvySettings = new IvySettings
+    try {
+      ivySettings.load(file)
+    } catch {
+      case e @ (_: IOException | _: ParseException) =>
+        throw new SparkException(s"Failed when loading Ivy settings from $settingsFile", e)
+    }
+    ivySettings
+  }
+
   /** A nice function to use in tests as well. Values are dummy strings. */
   def getModuleDescriptor: DefaultModuleDescriptor = DefaultModuleDescriptor.newDefaultInstance(
     ModuleRevisionId.newInstance("org.apache.spark", "spark-submit-parent", "1.0"))
@@ -974,16 +1031,14 @@ private[spark] object SparkSubmitUtils {
   /**
    * Resolves any dependencies that were supplied through maven coordinates
    * @param coordinates Comma-delimited string of maven coordinates
-   * @param remoteRepos Comma-delimited string of remote repositories other than maven central
-   * @param ivyPath The path to the local ivy repository
+   * @param ivySettings An IvySettings containing resolvers to use
    * @param exclusions Exclusions to apply when resolving transitive dependencies
    * @return The comma-delimited path to the jars of the given maven artifacts including their
    *         transitive dependencies
    */
   def resolveMavenCoordinates(
       coordinates: String,
-      remoteRepos: Option[String],
-      ivyPath: Option[String],
+      ivySettings: IvySettings,
       exclusions: Seq[String] = Nil,
       isTest: Boolean = false): String = {
     if (coordinates == null || coordinates.trim.isEmpty) {
@@ -994,32 +1049,14 @@ private[spark] object SparkSubmitUtils {
         // To prevent ivy from logging to system out
         System.setOut(printStream)
         val artifacts = extractMavenCoordinates(coordinates)
-        // Default configuration name for ivy
-        val ivyConfName = "default"
-        // set ivy settings for location of cache
-        val ivySettings: IvySettings = new IvySettings
         // Directories for caching downloads through ivy and storing the jars when maven coordinates
         // are supplied to spark-submit
-        val alternateIvyCache = ivyPath.getOrElse("")
-        val packagesDirectory: File =
-          if (alternateIvyCache == null || alternateIvyCache.trim.isEmpty) {
-            new File(ivySettings.getDefaultIvyUserDir, "jars")
-          } else {
-            ivySettings.setDefaultIvyUserDir(new File(alternateIvyCache))
-            ivySettings.setDefaultCache(new File(alternateIvyCache, "cache"))
-            new File(alternateIvyCache, "jars")
-          }
+        val packagesDirectory: File = new File(ivySettings.getDefaultIvyUserDir, "jars")
         // scalastyle:off println
         printStream.println(
           s"Ivy Default Cache set to: ${ivySettings.getDefaultCache.getAbsolutePath}")
         printStream.println(s"The jars for the packages stored in: $packagesDirectory")
         // scalastyle:on println
-        // create a pattern matcher
-        ivySettings.addMatcher(new GlobPatternMatcher)
-        // create the dependency resolvers
-        val repoResolver = createRepoResolvers(remoteRepos, ivySettings)
-        ivySettings.addResolver(repoResolver)
-        ivySettings.setDefaultResolver(repoResolver.getName)
 
         val ivy = Ivy.newInstance(ivySettings)
         // Set resolve options to download transitive dependencies as well
@@ -1034,6 +1071,9 @@ private[spark] object SparkSubmitUtils {
         } else {
           resolveOptions.setDownload(true)
         }
+
+        // Default configuration name for ivy
+        val ivyConfName = "default"
 
         // A Module descriptor must be specified. Entries are dummy strings
         val md = getModuleDescriptor
