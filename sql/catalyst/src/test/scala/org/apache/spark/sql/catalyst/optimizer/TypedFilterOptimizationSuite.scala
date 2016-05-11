@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, ObjectProject}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.BooleanType
 
@@ -47,9 +47,10 @@ class TypedFilterOptimizationSuite extends PlanTest {
     val query = input.filter(f1).filter(f2).analyze
 
     val optimized = Optimize.execute(query)
-    val deserialized = input.deserialize[(Int, Int)]
-    val expected = ObjectProject(deserialized.output.head, deserialized
-      .where(callFunction(f1, BooleanType, 'obj)))
+
+    val expected = input.deserialize[(Int, Int)]
+      .where(callFunction(f1, BooleanType, 'obj))
+      .select('obj.as("obj"))
       .where(callFunction(f2, BooleanType, 'obj))
       .serialize[(Int, Int)].analyze
 

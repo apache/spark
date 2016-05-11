@@ -103,7 +103,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       SimplifyCaseConversionExpressions,
       RewriteCorrelatedScalarSubquery,
       EliminateSerialization,
-      RemoveExtraProjectForSerialization) ::
+      RemoveAliasOnlyProject) ::
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
@@ -157,21 +157,52 @@ object SamplePushDown extends Rule[LogicalPlan] {
 }
 
 /**
- * Removes extra Project added in EliminateSerialization rule.
+ * Removes the Project only conducting Alias of its child node.
+ * It is created mainly for removing extra Project added in EliminateSerialization rule,
+ * but can also benefit other operators.
  */
-object RemoveExtraProjectForSerialization extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = {
-    val objectProject = plan.find(_.isInstanceOf[ObjectProject]).map { case o: ObjectProject =>
-      val replaceFrom = o.outputObjAttr
-      val replaceTo = o.child.output.head
-      plan.transformAllExpressions {
-        case a: Attribute if a.equals(replaceFrom) => replaceTo
-      }.transform {
-        case op: ObjectProject if o == op => op.child
+object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
+  // Check if projectList in the Project node has the same attribute names and ordering
+  // as its child node.
+  private def checkAliasOnly(
+      projectList: Seq[NamedExpression],
+      childOutput: Seq[Attribute]): Boolean = {
+    if (!projectList.forall(_.isInstanceOf[Alias]) || projectList.length != childOutput.length) {
+      return false
+    } else {
+      projectList.map(_.asInstanceOf[Alias]).zip(childOutput).forall { case (a, o) =>
+        a.child match {
+          case attr: Attribute
+              if a.name == attr.name && attr.name == o.name && attr.dataType == o.dataType
+                && attr.exprId == o.exprId =>
+            true
+          case _ => false
+        }
       }
     }
-    if (objectProject.isDefined) {
-      objectProject.get
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val processedPlan = plan.find { p =>
+      p match {
+        case Project(pList, child) if checkAliasOnly(pList, child.output) => true
+        case _ => false
+      }
+    }.map { case p: Project =>
+      val attrMap = p.projectList.map { a =>
+        val alias = a.asInstanceOf[Alias]
+        val replaceFrom = alias.toAttribute
+        val replaceTo = alias.child.asInstanceOf[Attribute]
+        (replaceFrom, replaceTo)
+      }.toMap
+      plan.transformAllExpressions {
+        case a: Attribute if attrMap.contains(a) => attrMap(a)
+      }.transform {
+        case op: Project if op == p => op.child
+      }
+    }
+    if (processedPlan.isDefined) {
+      processedPlan.get
     } else {
       plan
     }
@@ -186,9 +217,10 @@ object EliminateSerialization extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
-      // Adds an extra ObjectProject here, to preserve the output expr id of `DeserializeToObject`.
-      // We will remove it later.
-      ObjectProject(d.output.head, s.child)
+      // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
+      // We will remove it later in RemoveAliasOnlyProject rule.
+      val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
+      Project(objAttr :: Nil, s.child)
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)

@@ -81,15 +81,6 @@ trait ObjectConsumer extends UnaryNode {
 }
 
 /**
- * Takes the object from child and projects it as new attribute.
- * This logical plan is just used to preserve expr id temporarily and will be removed before
- * the end of optimization phase.
- */
-case class ObjectProject(
-    outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectProducer
-
-/**
  * Takes the input row from child and turns it into object using the given deserializer expression.
  */
 case class DeserializeToObject(

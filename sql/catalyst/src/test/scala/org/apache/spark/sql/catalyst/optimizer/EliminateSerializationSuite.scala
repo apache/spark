@@ -42,7 +42,7 @@ class EliminateSerializationSuite extends PlanTest {
     val input = LocalRelation('obj.obj(classOf[(Int, Int)]))
     val plan = input.serialize[(Int, Int)].deserialize[(Int, Int)].analyze
     val optimized = Optimize.execute(plan)
-    val expected = ObjectProject(input.output.head.withNullability(false), input)
+    val expected = input.select('obj.as("obj")).analyze
     comparePlans(optimized, expected)
   }
 
