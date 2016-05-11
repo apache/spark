@@ -66,7 +66,8 @@ from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
 from pyspark.streaming import StreamingContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
+from pyspark.sql.utils import IllegalArgumentException
 from pyspark.streaming import StreamingContext
 
 _have_scipy = False
@@ -83,9 +84,10 @@ ser = PickleSerializer()
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
         self.sc = SparkContext('local[4]', "MLlib tests")
+        self.spark = SparkSession(self.sc)
 
     def tearDown(self):
-        self.sc.stop()
+        self.spark.stop()
 
 
 class MLLibStreamingTestCase(unittest.TestCase):
@@ -698,7 +700,6 @@ class VectorUDTTests(MLlibTestCase):
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
         df = rdd.toDF()
         schema = df.schema
@@ -731,7 +732,6 @@ class MatrixUDTTests(MLlibTestCase):
             self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
         df = rdd.toDF()
         schema = df.schema
@@ -919,7 +919,7 @@ class ChiSqTestTests(MLlibTestCase):
 
         # Negative counts in observed
         neg_obs = Vectors.dense([1.0, 2.0, 3.0, -4.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, neg_obs, expected1)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, neg_obs, expected1)
 
         # Count = 0.0 in expected but not observed
         zero_expected = Vectors.dense([1.0, 0.0, 3.0])
@@ -930,7 +930,8 @@ class ChiSqTestTests(MLlibTestCase):
 
         # 0.0 in expected and observed simultaneously
         zero_observed = Vectors.dense([2.0, 0.0, 1.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, zero_observed, zero_expected)
+        self.assertRaises(
+            IllegalArgumentException, Statistics.chiSqTest, zero_observed, zero_expected)
 
     def test_matrix_independence(self):
         data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
@@ -944,15 +945,15 @@ class ChiSqTestTests(MLlibTestCase):
 
         # Negative counts
         neg_counts = Matrices.dense(2, 2, [4.0, 5.0, 3.0, -3.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, neg_counts)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, neg_counts)
 
         # Row sum = 0.0
         row_zero = Matrices.dense(2, 2, [0.0, 1.0, 0.0, 2.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, row_zero)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, row_zero)
 
         # Column sum = 0.0
         col_zero = Matrices.dense(2, 2, [0.0, 0.0, 2.0, 2.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, col_zero)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, col_zero)
 
     def test_chi_sq_pearson(self):
         data = [

@@ -374,7 +374,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val expectedPath =
         sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier("ctasJsonTable"))
       val filesystemPath = new Path(expectedPath)
-      val fs = filesystemPath.getFileSystem(sqlContext.sessionState.newHadoopConf())
+      val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
       if (fs.exists(filesystemPath)) fs.delete(filesystemPath, true)
 
       // It is a managed table when we do not specify the location.
@@ -701,7 +701,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
           // Manually create a metastore data source table.
           CreateDataSourceTableUtils.createDataSourceTable(
-            sparkSession = sqlContext.sparkSession,
+            sparkSession = spark,
             tableIdent = TableIdentifier("wide_schema"),
             userSpecifiedSchema = Some(schema),
             partitionColumns = Array.empty[String],
@@ -891,18 +891,18 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("SPARK-8156:create table to specific database by 'use dbname' ") {
 
     val df = (1 to 3).map(i => (i, s"val_$i", i * 2)).toDF("a", "b", "c")
-    sqlContext.sql("""create database if not exists testdb8156""")
-    sqlContext.sql("""use testdb8156""")
+    spark.sql("""create database if not exists testdb8156""")
+    spark.sql("""use testdb8156""")
     df.write
       .format("parquet")
       .mode(SaveMode.Overwrite)
       .saveAsTable("ttt3")
 
     checkAnswer(
-      sqlContext.sql("show TABLES in testdb8156").filter("tableName = 'ttt3'"),
+      spark.sql("show TABLES in testdb8156").filter("tableName = 'ttt3'"),
       Row("ttt3", false))
-    sqlContext.sql("""use default""")
-    sqlContext.sql("""drop database if exists testdb8156 CASCADE""")
+    spark.sql("""use default""")
+    spark.sql("""drop database if exists testdb8156 CASCADE""")
   }
 
 
@@ -911,7 +911,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
       CreateDataSourceTableUtils.createDataSourceTable(
-        sparkSession = sqlContext.sparkSession,
+        sparkSession = spark,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
@@ -926,7 +926,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .forall(column => CatalystSqlParser.parseDataType(column.dataType) == StringType))
 
       CreateDataSourceTableUtils.createDataSourceTable(
-        sparkSession = sqlContext.sparkSession,
+        sparkSession = spark,
         tableIdent = TableIdentifier("skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
         partitionColumns = Array.empty[String],
@@ -1035,6 +1035,49 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         checkAnswer(table("t"), Row(2, 3, 1))
       }
+    }
+  }
+
+  test("saveAsTable[append]: the column order doesn't matter") {
+    withTable("saveAsTable_column_order") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_column_order")
+      Seq((3, 4)).toDF("j", "i").write.mode("append").saveAsTable("saveAsTable_column_order")
+      checkAnswer(
+        table("saveAsTable_column_order"),
+        Seq((1, 2), (4, 3)).toDF("i", "j"))
+    }
+  }
+
+  test("saveAsTable[append]: mismatch column names") {
+    withTable("saveAsTable_mismatch_column_names") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_mismatch_column_names")
+      val e = intercept[AnalysisException] {
+        Seq((3, 4)).toDF("i", "k")
+          .write.mode("append").saveAsTable("saveAsTable_mismatch_column_names")
+      }
+      assert(e.getMessage.contains("cannot resolve"))
+    }
+  }
+
+  test("saveAsTable[append]: too many columns") {
+    withTable("saveAsTable_too_many_columns") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_too_many_columns")
+      val e = intercept[AnalysisException] {
+        Seq((3, 4, 5)).toDF("i", "j", "k")
+          .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
+      }
+      assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
+  test("saveAsTable[append]: less columns") {
+    withTable("saveAsTable_less_columns") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_less_columns")
+      val e = intercept[AnalysisException] {
+        Seq((4)).toDF("j")
+          .write.mode("append").saveAsTable("saveAsTable_less_columns")
+      }
+      assert(e.getMessage.contains("doesn't match"))
     }
   }
 
