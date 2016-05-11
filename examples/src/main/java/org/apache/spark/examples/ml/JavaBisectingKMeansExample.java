@@ -56,9 +56,9 @@ public class JavaBisectingKMeansExample {
 
     // Shows the result.
     System.out.println("Cluster Centers: ");
-    Vector[] clusterCenters = model.clusterCenters();
-    for (Vector clusterCenter : clusterCenters) {
-      System.out.println(clusterCenter);
+    Vector[] centers = model.clusterCenters();
+    for (Vector center : centers) {
+      System.out.println(center);
     }
     // $example off$
 
