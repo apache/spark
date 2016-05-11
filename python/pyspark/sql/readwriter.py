@@ -241,8 +241,8 @@ class DataFrameReader(object):
         if columnNameOfCorruptRecord is not None:
             self.option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         if isinstance(path, basestring):
-            return self._df(self._jreader.json(path))
-        elif type(path) == list:
+            path = [path]
+        if type(path) == list:
             return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
