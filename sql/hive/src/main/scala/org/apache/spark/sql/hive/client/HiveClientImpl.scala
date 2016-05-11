@@ -418,7 +418,7 @@ private[hive] class HiveClientImpl(
             s"database '$db'")
         }
         parts
-      }
+      }.distinct
     matchingParts.foreach { hivePartition =>
       val dropOptions = new PartitionDropOptions
       dropOptions.ifExists = ignoreIfNotExists

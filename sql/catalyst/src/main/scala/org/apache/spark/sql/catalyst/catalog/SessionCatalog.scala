@@ -627,13 +627,18 @@ class SessionCatalog(
   private def requirePartialMatchedPartitionSpec(
       specs: Seq[TablePartitionSpec],
       table: CatalogTable): Unit = {
-    val defined = table.partitionColumnNames.sorted
+    val defined = table.partitionColumnNames
     specs.foreach { s =>
-      if (!defined.startsWith(s.keys.toSeq.sorted)) {
+      if (!s.keys.forall(defined.contains)) {
         throw new AnalysisException(
           s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
             s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
             s"in table '${table.identifier}'")
+      }
+      if (s.keys.toSeq.distinct.length != s.keys.toSeq.length) {
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) contains duplicate" +
+           "columns")
       }
     }
   }
