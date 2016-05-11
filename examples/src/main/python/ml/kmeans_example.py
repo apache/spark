@@ -18,7 +18,7 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.clustering import KMeans, KMeansModel
+from pyspark.ml.clustering import KMeans
 # $example off$
 
 from pyspark.sql import SparkSession
@@ -26,7 +26,7 @@ from pyspark.sql import SparkSession
 """
 An example demonstrating k-means clustering.
 Run with:
-  bin/spark-submit examples/src/main/python/ml/kmeans_example.py <input> <k>
+  bin/spark-submit examples/src/main/python/ml/kmeans_example.py
 
 This example requires NumPy (http://www.numpy.org/).
 """
