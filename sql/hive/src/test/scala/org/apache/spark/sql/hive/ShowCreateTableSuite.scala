@@ -159,7 +159,6 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
       )
 
       table.copy(
-        identifier = expected.identifier,
         createTime = 0L,
         lastAccessTime = 0L,
         properties = table.properties.filterKeys(!nondeterministicProps.contains(_)))
