@@ -865,6 +865,7 @@ def _test():
     import doctest
     import os
     import tempfile
+    import py4j
     from pyspark.context import SparkContext
     from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
@@ -873,7 +874,10 @@ def _test():
 
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
-    spark = SparkSession.withHiveSupport(sc)
+    try:
+        spark = SparkSession.withHiveSupport(sc)
+    except py4j.protocol.Py4JError:
+        spark = SparkSession(sc)
 
     globs['tempfile'] = tempfile
     globs['os'] = os
