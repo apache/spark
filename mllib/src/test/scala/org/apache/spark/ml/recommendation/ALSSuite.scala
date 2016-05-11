@@ -39,10 +39,9 @@ import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerStageCompleted}
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
+import org.apache.spark.sql.types.{FloatType, IntegerType}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
-
-import org.apache.spark.sql.types.{FloatType, IntegerType, StringType}
 
 class ALSSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest with Logging {
@@ -486,13 +485,13 @@ class ALSSuite
   }
 
   test("input type validation") {
-    val sqlContext = this.sqlContext
-    import sqlContext.implicits._
+    val spark = this.spark
+    import spark.implicits._
 
     val als = new ALS().setMaxIter(1).setRank(1)
     Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
       case (colName, sqlType) =>
-        MLTestingUtils.checkNumericTypesALS[ALSModel, ALS](als, sqlContext, colName, sqlType) {
+        MLTestingUtils.checkNumericTypesALS[ALSModel, ALS](als, spark, colName, sqlType) {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
         } { (ex, act, _) =>

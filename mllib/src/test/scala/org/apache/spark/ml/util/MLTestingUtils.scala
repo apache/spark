@@ -60,12 +60,12 @@ object MLTestingUtils extends SparkFunSuite {
 
   def checkNumericTypesALS[M <: Model[M], T <: Estimator[M]](
       estimator: T,
-      sqlContext: SQLContext,
+      spark: SparkSession,
       column: String,
       baseType: NumericType)
       (check: (M, M) => Unit)
       (check2: (M, M, DataFrame) => Unit): Unit = {
-    val dfs = genRatingsDFWithNumericCols(sqlContext, column)
+    val dfs = genRatingsDFWithNumericCols(spark, column)
     val expected = estimator.fit(dfs(baseType))
     val actuals = dfs.keys.filter(_ != baseType).map(t => (t, estimator.fit(dfs(t))))
     actuals.foreach { case (_, actual) => check(expected, actual) }
@@ -141,9 +141,9 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   def genRatingsDFWithNumericCols(
-      sqlContext: SQLContext,
+      spark: SparkSession,
       column: String): Map[NumericType, DataFrame] = {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 10, 1.0),
       (1, 20, 2.0),
       (2, 30, 3.0),
