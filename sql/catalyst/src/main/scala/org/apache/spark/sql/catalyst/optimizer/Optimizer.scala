@@ -191,12 +191,12 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
     }.map { case p: Project =>
       val attrMap = p.projectList.map { a =>
         val alias = a.asInstanceOf[Alias]
-        val replaceFrom = alias.toAttribute
+        val replaceFrom = alias.toAttribute.exprId
         val replaceTo = alias.child.asInstanceOf[Attribute]
         (replaceFrom, replaceTo)
       }.toMap
       plan.transformAllExpressions {
-        case a: Attribute if attrMap.contains(a) => attrMap(a)
+        case a: Attribute if attrMap.contains(a.exprId) => attrMap(a.exprId)
       }.transform {
         case op: Project if op == p => op.child
       }
