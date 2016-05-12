@@ -227,7 +227,7 @@ class BlockManagerMaster(
     }
   }
 
-  def getRackInfo(host: String): String = {
+  def getTopologyInfo(host: String): String = {
     driverEndpoint.askWithRetry[String](GetTopologyInfo(host))
   }
 

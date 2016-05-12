@@ -56,7 +56,7 @@ class BlockManagerMasterEndpoint(
   private implicit val askExecutionContext = ExecutionContext.fromExecutorService(askThreadPool)
 
   private val topologyMapperClassName =
-    conf.get("spark.replication.rackawareness.topologyMapper", "")
+    conf.get("spark.replication.topologyawareness.topologyMapper", "")
 
   private val topologyMapper = if (!topologyMapperClassName.isEmpty) {
     val ret = Utils.classForName(topologyMapperClassName).asInstanceOf[TopologyMapper]
@@ -144,7 +144,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def getTopologyInfoForHost(host: String): String = {
-    topologyMapper.getRackForHost(host)
+    topologyMapper.getTopologyForHost(host)
   }
 
   private def removeRdd(rddId: Int): Future[Seq[Int]] = {

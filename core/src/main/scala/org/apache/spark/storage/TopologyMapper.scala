@@ -28,14 +28,12 @@ trait TopologyMapper {
    *         to make this rack information nested.
    *         For example : ‘/myrack/myhost’, where ‘/’ is the topology delimiter,
    *         ‘myrack’ is the rack identifier, and ‘myhost’ is the individual host.
-   *         Note that this would only help if the RackAwarePrioritization implementation
-   *         being provided is smart enough to make use of all this information.
    */
-  def getRackForHost(hostname: String): String
+  def getTopologyForHost(hostname: String): String
 }
 
 class DefaultTopologyMapper extends TopologyMapper with Logging {
-  override def getRackForHost(hostname: String): String = {
+  override def getTopologyForHost(hostname: String): String = {
     logDebug(s"Got a request for $hostname")
     "DefaultRack"
   }
