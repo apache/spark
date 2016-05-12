@@ -264,9 +264,9 @@ class SparkSession(object):
         @replaceIfExists: if set, replaces the existing view of the same name
         """
         if isinstance(dataFrame, DataFrame):
-          self._jsparkSession.createTempView(viewName, dataFrame._jdf, replaceIfExists)
+            self._jsparkSession.createTempView(viewName, dataFrame._jdf, replaceIfExists)
         else:
-          raise ValueError("Can only use DataFrame to create temporary view")
+            raise ValueError("Can only use DataFrame to create temporary view")
 
     def _inferSchemaFromList(self, data):
         """
