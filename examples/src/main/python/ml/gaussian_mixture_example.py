@@ -34,12 +34,11 @@ if __name__ == "__main__":
         .appName("PythonGuassianMixtureExample")\
         .getOrCreate()
 
-    k = 2
     # $example on$
     # load data
     dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    gmm = GaussianMixture().setK(k).setSeed(10).setFeaturesCol("features")
+    gmm = GaussianMixture().setK(2).setSeed(10).setFeaturesCol("features")
     model = gmm.fit(dataset)
 
     print("Gaussians: ")
