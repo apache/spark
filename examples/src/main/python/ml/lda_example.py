@@ -15,47 +15,50 @@
 # limitations under the License.
 #
 
+
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.clustering import KMeans
+from pyspark.ml.clustering import LDA
 # $example off$
-
 from pyspark.sql import SparkSession
 
-"""
-An example demonstrating k-means clustering.
-Run with:
-  bin/spark-submit examples/src/main/python/ml/kmeans_example.py
 
-This example requires NumPy (http://www.numpy.org/).
+"""
+An example demonstrating LDA.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/lda_example.py
 """
 
 
 if __name__ == "__main__":
-
-    spark = SparkSession\
-        .builder\
-        .appName("PythonKMeansExample")\
+    # Creates a SparkSession
+    spark = SparkSession \
+        .builder \
+        .appName("PythonKMeansExample") \
         .getOrCreate()
 
     # $example on$
     # Loads data.
-    dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
+    dataset = spark.read.format("libsvm").load("data/mllib/sample_lda_libsvm_data.txt")
 
-    # Trains a k-means model.
-    kmeans = KMeans().setK(2).setSeed(1)
-    model = kmeans.fit(dataset)
+    # Trains a LDA model.
+    lda = LDA(k=10, maxIter=10)
+    model = lda.fit(dataset)
 
-    # Evaluate clustering by computing Within Set Sum of Squared Errors.
-    wssse = model.computeCost(dataset)
-    print("Within Set Sum of Squared Errors = " + str(wssse))
+    ll = model.logLikelihood(dataset)
+    lp = model.logPerplexity(dataset)
+    print("The lower bound on the log likelihood of the entire corpus: " + str(ll))
+    print("The upper bound bound on perplexity: " + str(lp))
 
-    # Shows the result.
-    centers = model.clusterCenters()
-    print("Cluster Centers: ")
-    for center in centers:
-        print(center)
+    # Describe topics.
+    topics = model.describeTopics(3)
+    print("The topics described by their top-weighted terms:")
+    topics.show(truncate=False)
+
+    # Shows the result
+    transformed = model.transform(dataset)
+    transformed.show(truncate=False)
     # $example off$
 
     spark.stop()

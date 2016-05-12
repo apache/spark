@@ -18,51 +18,48 @@
 package org.apache.spark.examples.ml
 
 // scalastyle:off println
+
 // $example on$
-import org.apache.spark.ml.clustering.LDA
+import org.apache.spark.ml.clustering.BisectingKMeans
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 /**
- * An example demonstrating LDA.
+ * An example demonstrating bisecting k-means clustering.
  * Run with
  * {{{
- * bin/run-example ml.LDAExample
+ * bin/run-example ml.BisectingKMeansExample
  * }}}
  */
-object LDAExample {
+object BisectingKMeansExample {
+
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession
     val spark = SparkSession
       .builder
-      .appName(s"${this.getClass.getSimpleName}")
+      .appName("BisectingKMeansExample")
       .getOrCreate()
 
     // $example on$
     // Loads data.
-    val dataset = spark.read.format("libsvm")
-      .load("data/mllib/sample_lda_libsvm_data.txt")
+    val dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    // Trains a LDA model.
-    val lda = new LDA().setK(10).setMaxIter(10)
-    val model = lda.fit(dataset)
+    // Trains a bisecting k-means model.
+    val bkm = new BisectingKMeans().setK(2).setSeed(1)
+    val model = bkm.fit(dataset)
 
-    val ll = model.logLikelihood(dataset)
-    val lp = model.logPerplexity(dataset)
-    println(s"The lower bound on the log likelihood of the entire corpus: $ll")
-    println(s"The upper bound bound on perplexity: $lp")
-
-    // Describe topics.
-    val topics = model.describeTopics(3)
-    println("The topics described by their top-weighted terms:")
-    topics.show(false)
+    // Evaluate clustering.
+    val cost = model.computeCost(dataset)
+    println(s"Within Set Sum of Squared Errors = $cost")
 
     // Shows the result.
-    val transformed = model.transform(dataset)
-    transformed.show(false)
+    println("Cluster Centers: ")
+    val centers = model.clusterCenters
+    centers.foreach(println)
     // $example off$
 
     spark.stop()
   }
 }
 // scalastyle:on println
+

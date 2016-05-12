@@ -210,11 +210,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         pairs += (PUSHED_FILTERS -> pushedFilters.mkString("[", ", ", "]"))
       }
 
-      relation.relation match {
-        case r: HadoopFsRelation => pairs += INPUT_PATHS -> r.location.paths.mkString(", ")
-        case _ =>
-      }
-
       pairs.toMap
     }
 
@@ -235,7 +230,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val scan = execution.DataSourceScanExec.create(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata)
+        relation.relation, metadata, relation.metastoreTableIdentifier)
       filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
       // Don't request columns that are only referenced by pushed filters.
@@ -245,7 +240,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       val scan = execution.DataSourceScanExec.create(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata)
+        relation.relation, metadata, relation.metastoreTableIdentifier)
       execution.ProjectExec(
         projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }
