@@ -944,7 +944,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   }
 
   /**
-   * Get the default residuals(deviance residuals) of the fitted model.
+   * Get the default residuals (deviance residuals) of the fitted model.
    */
   @Since("2.0.0")
   def residuals(): DataFrame = devianceResiduals

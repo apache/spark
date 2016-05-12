@@ -1284,7 +1284,7 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     family = Param(Params._dummy(), "family", "The name of family which is a description of " +
                    "the error distribution to be used in the model. Supported options: " +
-                   "gaussian(default), binomial, poisson and gamma.",
+                   "gaussian (default), binomial, poisson and gamma.",
                    typeConverter=TypeConverters.toString)
     link = Param(Params._dummy(), "link", "The name of link function which provides the " +
                  "relationship between the linear predictor and the mean of the distribution " +
@@ -1386,8 +1386,8 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable
         training set. An exception is thrown if
         `trainingSummary is None`.
         """
-        java_lrt_summary = self._call_java("summary")
-        return GeneralizedLinearRegressionTrainingSummary(java_lrt_summary)
+        java_glrt_summary = self._call_java("summary")
+        return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
 
     @property
     @since("2.0.0")
@@ -1477,7 +1477,7 @@ class GeneralizedLinearRegressionSummary(JavaWrapper):
         Get the residuals of the fitted model by type.
 
         :param residualsType: The type of residuals which should be returned.
-                              Supported options: deviance, pearson, working, and response.
+                              Supported options: deviance (default), pearson, working, and response.
         """
         return self._call_java("residuals", residualsType)
 
