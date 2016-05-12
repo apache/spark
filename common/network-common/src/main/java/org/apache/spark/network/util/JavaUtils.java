@@ -17,6 +17,7 @@
 
 package org.apache.spark.network.util;
 
+import java.io.BufferedInputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
@@ -134,7 +135,20 @@ public class JavaUtils {
     int exitCode = -1;
 
     try {
+      // Merge error stream of the process with its stdout
+      // Later stdout to be consumed using {@link Process#getInputStream()}
+      builder.redirectErrorStream(true);
+
       process = builder.start();
+
+      // In order to avoid deadlocks, consume the stdout (and stderr) of the process
+      final BufferedInputStream in = new BufferedInputStream(process.getInputStream());
+      final byte[] buffer = new byte[4096];
+      int len = in.read(buffer);
+      while (len != -1) {
+        len = in.read(buffer);
+      }
+
       exitCode = process.waitFor();
     } catch (Exception e) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
@@ -338,5 +352,4 @@ public class JavaUtils {
       return bytes;
     }
   }
-
 }
