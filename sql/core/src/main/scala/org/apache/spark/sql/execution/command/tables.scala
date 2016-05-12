@@ -626,25 +626,139 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     val stmt = if (DDLUtils.isDatasourceTable(tableMetadata)) {
       showCreateDataSourceTable(tableMetadata)
     } else {
-      throw new UnsupportedOperationException(
-        "SHOW CREATE TABLE only supports Spark SQL data source tables.")
+      showCreateHiveTable(tableMetadata)
     }
 
     Seq(Row(stmt))
+  }
+
+  private def showCreateHiveTable(metadata: CatalogTable): String = {
+    def reportUnsupportedError(): Unit = {
+      throw new UnsupportedOperationException(
+        s"Failed to execute SHOW CREATE TABLE against table ${metadata.identifier.quotedString}, " +
+          "because it contains table structure(s) (e.g. skewed columns) that Spark SQL doesn't " +
+          "support yet."
+      )
+    }
+
+    if (!metadata.fullyMapped) {
+      reportUnsupportedError()
+    }
+
+    val builder = StringBuilder.newBuilder
+
+    val tableTypeString = metadata.tableType match {
+      case EXTERNAL => " EXTERNAL TABLE"
+      case VIEW => " VIEW"
+      case MANAGED => " TABLE"
+      case INDEX => reportUnsupportedError()
+    }
+
+    builder ++= s"CREATE$tableTypeString ${table.quotedString}"
+
+    if (metadata.tableType == VIEW) {
+      if (metadata.schema.nonEmpty) {
+        builder ++= metadata.schema.map(_.name).mkString("(", ", ", ")")
+      }
+      builder ++= metadata.viewOriginalText.mkString(" AS\n", "", "\n")
+    } else {
+      showHiveTableDataColumns(metadata, builder)
+      showHiveTableNonDataColumns(metadata, builder)
+      showHiveTableStorageInfo(metadata, builder)
+      showHiveTableProperties(metadata, builder)
+    }
+
+    builder.toString()
+  }
+
+  private def showHiveTableDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val columns = metadata.schema.filterNot { column =>
+      metadata.partitionColumnNames.contains(column.name)
+    }.map(columnToDDLFragment)
+
+    if (columns.nonEmpty) {
+      builder ++= columns.mkString("(", ", ", ")\n")
+    }
+  }
+
+  private def columnToDDLFragment(column: CatalogColumn): String = {
+    val comment = column.comment.map(escapeSingleQuotedString).map(" COMMENT '" + _ + "'")
+    s"${quoteIdentifier(column.name)} ${column.dataType}${comment.getOrElse("")}"
+  }
+
+  private def showHiveTableNonDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (metadata.partitionColumns.nonEmpty) {
+      val partCols = metadata.partitionColumns.map(columnToDDLFragment)
+      builder ++= partCols.mkString("PARTITIONED BY (", ", ", ")\n")
+    }
+
+    if (metadata.bucketColumnNames.nonEmpty) {
+      builder ++= metadata.bucketColumnNames.mkString("CLUSTERED BY (", ", ", ")\n")
+
+      if (metadata.sortColumnNames.nonEmpty) {
+        builder ++= metadata.bucketColumnNames.mkString("SORTED BY (", ", ", ")\n")
+      }
+
+      builder ++= s"INTO ${metadata.numBuckets} BUCKETS\n"
+    }
+  }
+
+  private def showHiveTableStorageInfo(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    val storage = metadata.storage
+
+    storage.serde.foreach { serde =>
+      builder ++= s"ROW FORMAT SERDE '$serde'\n"
+
+      val serdeProps = metadata.storage.serdeProperties.map {
+        case (key, value) =>
+          s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      }
+
+      builder ++= serdeProps.mkString("WITH SERDEPROPERTIES (", ",\n  ", "\n)\n")
+    }
+
+    if (storage.inputFormat.isDefined || storage.outputFormat.isDefined) {
+      builder ++= "STORED AS\n"
+
+      storage.inputFormat.foreach { format =>
+        builder ++= s"  INPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
+      }
+
+      storage.outputFormat.foreach { format =>
+        builder ++= s"  OUTPUTFORMAT '${escapeSingleQuotedString(format)}'\n"
+      }
+    }
+
+    if (metadata.tableType == EXTERNAL) {
+      storage.locationUri.foreach { uri =>
+        builder ++= s"LOCATION '$uri'\n"
+      }
+    }
+  }
+
+  private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
+    if (metadata.properties.nonEmpty) {
+      val props = metadata.properties.map { case (key, value) =>
+        s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
+      }
+
+      builder ++= props.mkString("TBLPROPERTIES (", ",\n  ", ")\n")
+    }
   }
 
   private def showCreateDataSourceTable(metadata: CatalogTable): String = {
     val builder = StringBuilder.newBuilder
 
     builder ++= s"CREATE TABLE ${table.quotedString} "
-    showDataSourceTableDataCols(metadata, builder)
+    showDataSourceTableDataColumns(metadata, builder)
     showDataSourceTableOptions(metadata, builder)
     showDataSourceTableNonDataColumns(metadata, builder)
 
     builder.toString()
   }
 
-  private def showDataSourceTableDataCols(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showDataSourceTableDataColumns(
+      metadata: CatalogTable, builder: StringBuilder): Unit = {
     val props = metadata.properties
     val schemaParts = for {
       numParts <- props.get("spark.sql.sources.schema.numParts").toSeq
