@@ -431,6 +431,32 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Row(null, null, null, null, null))
   }
 
+  test("collect functions") {
+    val df = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
+    checkAnswer(
+      df.select(collect_list($"a"), collect_list($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), collect_set($"b")),
+      Seq(Row(Seq(1, 2, 3), Seq(2, 4)))
+    )
+  }
+
+  test("collect functions structs") {
+    val df = Seq((1, 2, 2), (2, 2, 2), (3, 4, 1))
+      .toDF("a", "x", "y")
+      .select($"a", struct($"x", $"y").as("b"))
+    checkAnswer(
+      df.select(collect_list($"a"), sort_array(collect_list($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(2, 2), Row(4, 1))))
+    )
+    checkAnswer(
+      df.select(collect_set($"a"), sort_array(collect_set($"b"))),
+      Seq(Row(Seq(1, 2, 3), Seq(Row(2, 2), Row(4, 1))))
+    )
+  }
+
   test("SPARK-14664: Decimal sum/avg over window should work.") {
     checkAnswer(
       spark.sql("select sum(a) over () from values 1.0, 2.0, 3.0 T(a)"),

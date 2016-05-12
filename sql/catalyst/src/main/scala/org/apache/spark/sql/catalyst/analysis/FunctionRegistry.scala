@@ -252,6 +252,8 @@ object FunctionRegistry {
     expression[VarianceSamp]("variance"),
     expression[VariancePop]("var_pop"),
     expression[VarianceSamp]("var_samp"),
+    expression[CollectList]("collect_list"),
+    expression[CollectSet]("collect_set"),
 
     // string functions
     expression[Ascii]("ascii"),
