@@ -52,15 +52,30 @@ case class CatalogStorageFormat(
     serdeProperties: Map[String, String]) {
 
   override def toString: String = {
-    val compressedToString = if (compressed) "Yes" else "No"
-    val serdePropertiesToString =
-      serdeProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-    s"Storage Information(Location:${locationUri.orNull}, " +
-      s"InputFormat:${inputFormat.orNull}, " +
-      s"OutputFormat:${outputFormat.orNull}, " +
-      s"Compressed:$compressedToString, " +
-      s"Storage Desc Library:${serde.orNull}, " +
-      s"Storage Desc Parameter:$serdePropertiesToString)"
+    if (locationUri.isEmpty && inputFormat.isEmpty && outputFormat.isEmpty && serde.isEmpty &&
+        serdeProperties.isEmpty) {
+      return ""
+    }
+
+    val serdePropsToString =
+      if (serdeProperties.nonEmpty) {
+        Option(s"Properties:" + serdeProperties.map(p => p._1 + "=" + p._2)
+          .mkString("[", ", ", "]"))
+      } else {
+        None
+      }
+    val output: Seq[Option[String]] =
+      Seq(locationUri.map(si => s"Location:$si"),
+        inputFormat.map(si => s"InputFormat:$si"),
+        outputFormat.map(si => s"OutputFormat:$si"),
+        Option(s"Compressed:${if (compressed) "Yes" else "No"}"),
+        serde.map(si => s"Serde:$si"),
+        serdePropsToString)
+
+    output.filter(_.nonEmpty).map {
+      case Some(o) => o
+      case o => o
+    }.mkString("Storage(", ", ", ")")
   }
 }
 
@@ -77,9 +92,9 @@ case class CatalogColumn(
     comment: Option[String] = None) {
 
   override def toString: String = {
-    val nullableToString = if (nullable) "Yes" else "No"
-    s"Column(name:$name, dataType:${dataType.toLowerCase}, nullable:$nullableToString, " +
-      s"comment:${comment.orNull})"
+    val nullableToString = if (nullable) " NULL" else " NOT NULL"
+    val commentToString = if (comment.isDefined) s" (${comment.get})" else ""
+    s"`$name` ${dataType.toLowerCase}$nullableToString$commentToString"
   }
 
 }
@@ -154,28 +169,31 @@ case class CatalogTable(
 
   override def toString: String = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-    val tableSchema = schema.mkString("[", ", ", "]")
-    val partitionColumns = partitionColumnNames.mkString("[", ", ", "]")
-    val sortColumns = sortColumnNames.mkString("[", ", ", "]")
-    val bucketColumns = bucketColumnNames.mkString("[", ", ", "]")
+    val partitionColumns = partitionColumnNames.map(o => s"`$o`").mkString("[", ", ", "]")
+    val sortColumns = sortColumnNames.map(o => s"`$o`").mkString("[", ", ", "]")
+    val bucketColumns = bucketColumnNames.map(o => s"`$o`").mkString("[", ", ", "]")
 
-    s"CatalogTable(Table:${identifier.table}, " +
-      s"Database:${identifier.database.orNull}, " +
-      s"Owner:$owner, " +
-      s"Create Time:${new Date(createTime).toString}, " +
-      s"Last Access Time:${new Date(lastAccessTime).toString}, " +
-      s"Location:${storage.locationUri.orNull}, " +
-      s"Table Type:${tableType.name}, " +
-      s"Schema:$tableSchema, " +
-      s"Partition Columns:$partitionColumns, " +
-      s"Num Buckets:$numBuckets, " +
-      s"Bucket Columns:$bucketColumns, " +
-      s"Sort Columns:$sortColumns, " +
-      s"View Original Text:${viewOriginalText.orNull}, " +
-      s"View Text:${viewText.orNull}, " +
-      s"Comment:${comment.orNull}, " +
-      s"Table Parameters:$tableProperties, " +
-      s"$storage)"
+    val output: Seq[Option[String]] =
+      Seq(Option(s"Table:${identifier.quotedString}"),
+        if (owner.isEmpty) None else Option(s"Owner:$owner"),
+        Option(s"Created:${new Date(createTime).toString}"),
+        Option(s"Last Access:${new Date(lastAccessTime).toString}"),
+        Option(s"Type:${tableType.name}"),
+        if (schema.isEmpty) None else Option(s"Schema:${schema.mkString("[", ", ", "]")}"),
+        if (partitionColumnNames.isEmpty) None else Option(s"Partition Columns:$partitionColumns"),
+        if (numBuckets == -1) None else Option(s"Num Buckets:$numBuckets"),
+        if (bucketColumnNames.isEmpty) None else Option(s"Bucket Columns:$bucketColumns"),
+        if (sortColumnNames.isEmpty) None else Option(s"Sort Columns:$sortColumns"),
+        viewOriginalText.map(si => s"Original View:$si"),
+        viewText.map(si => s"View:$si"),
+        comment.map(si => s"Comment:$si"),
+        if (properties.isEmpty) None else Option(s"Properties:$tableProperties"),
+        Option(s"$storage"))
+
+    output.filter(_.nonEmpty).map {
+      case Some(o) => o
+      case o => o
+    }.mkString("CatalogTable(", ", ", ")")
   }
 
 }
