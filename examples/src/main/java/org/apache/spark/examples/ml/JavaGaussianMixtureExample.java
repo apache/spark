@@ -37,8 +37,6 @@ public class JavaGaussianMixtureExample {
 
   public static void main(String[] args) {
 
-    int k = 2;
-
     // Parses the arguments
     SparkSession spark = SparkSession
             .builder()
@@ -51,7 +49,7 @@ public class JavaGaussianMixtureExample {
 
     // Trains a GaussianMixture model
     GaussianMixture gmm = new GaussianMixture()
-      .setK(k);
+      .setK(2);
     GaussianMixtureModel model = gmm.fit(dataset);
 
     // Output the parameters of the mixture model
