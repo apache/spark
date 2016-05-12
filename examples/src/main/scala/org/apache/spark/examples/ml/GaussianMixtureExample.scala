@@ -41,7 +41,7 @@ object GaussianMixtureExample {
     val input = "data/mllib/gmm_data.txt"
 
     // $example on$
-    // Crates a DataFrame
+    // Creates a DataFrame
     val rowRDD = spark.read.text(input).rdd.filter(_.nonEmpty)
       .map(_.trim.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
     val schema = StructType(Array(StructField("features", new VectorUDT, false)))
