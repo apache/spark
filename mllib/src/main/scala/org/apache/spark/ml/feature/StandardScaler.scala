@@ -27,6 +27,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -100,8 +101,7 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
     }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
-    copyValues(new StandardScalerModel(uid, scalerModel.std.asML,
-      scalerModel.mean.asML).setParent(this))
+    copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
@@ -149,8 +149,7 @@ class StandardScalerModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val scaler = new feature.StandardScalerModel(OldVectors.fromML(std), OldVectors.fromML(mean),
-      $(withStd), $(withMean))
+    val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
 
     // TODO: Make the transformer natively in ml framework to avoid extra conversion.
     val transformer: Vector => Vector = v => scaler.transform(OldVectors.fromML(v)).asML

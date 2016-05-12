@@ -460,5 +460,5 @@ class VectorsSuite extends SparkFunSuite with Logging {
 
     assert(mlDenseVectorToArray(dv) === mlDenseVectorToArray(newDV))
     assert(mlSparseVectorToArray(sv) === mlSparseVectorToArray(newSV))
- }
+  }
 }

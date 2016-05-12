@@ -26,6 +26,7 @@ import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.Statistics
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
@@ -112,7 +113,7 @@ class MinMaxScaler(override val uid: String)
       case Row(v: Vector) => OldVectors.fromML(v)
     }
     val summary = Statistics.colStats(input)
-    copyValues(new MinMaxScalerModel(uid, summary.min.asML, summary.max.asML).setParent(this))
+    copyValues(new MinMaxScalerModel(uid, summary.min, summary.max).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {

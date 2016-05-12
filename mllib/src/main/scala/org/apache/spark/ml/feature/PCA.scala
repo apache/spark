@@ -28,6 +28,8 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, DenseVector => OldDenseVector,
   Matrices => OldMatrices, Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.MatrixImplicits._
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
@@ -79,8 +81,7 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
     }
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
-    copyValues(new PCAModel(uid, pcaModel.pc.asML,
-      pcaModel.explainedVariance.asML).setParent(this))
+    copyValues(new PCAModel(uid, pcaModel.pc, pcaModel.explainedVariance).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {

@@ -33,6 +33,7 @@ import org.apache.spark.mllib.clustering.{DistributedLDAModel => OldDistributedL
 import org.apache.spark.mllib.impl.PeriodicCheckpointer
 import org.apache.spark.mllib.linalg.{Matrices => OldMatrices, Vector => OldVector,
   Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.MatrixImplicits._
 import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
@@ -558,8 +559,8 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
     override protected def saveImpl(path: String): Unit = {
       DefaultParamsWriter.saveMetadata(instance, path, sc)
       val oldModel = instance.oldLocalModel
-      val data = Data(instance.vocabSize, oldModel.topicsMatrix.asML,
-        oldModel.docConcentration.asML, oldModel.topicConcentration, oldModel.gammaShape)
+      val data = Data(instance.vocabSize, oldModel.topicsMatrix, oldModel.docConcentration,
+        oldModel.topicConcentration, oldModel.gammaShape)
       val dataPath = new Path(path, "data").toString
       sparkSession.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
     }
@@ -581,8 +582,8 @@ object LocalLDAModel extends MLReadable[LocalLDAModel] {
       val docConcentration = data.getAs[Vector](2)
       val topicConcentration = data.getAs[Double](3)
       val gammaShape = data.getAs[Double](4)
-      val oldModel = new OldLocalLDAModel(OldMatrices.fromML(topicsMatrix),
-        docConcentration, topicConcentration, gammaShape)
+      val oldModel = new OldLocalLDAModel(topicsMatrix, docConcentration, topicConcentration,
+        gammaShape)
       val model = new LocalLDAModel(metadata.uid, vocabSize, oldModel, sparkSession)
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
