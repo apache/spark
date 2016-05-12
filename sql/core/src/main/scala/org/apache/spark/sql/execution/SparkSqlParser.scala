@@ -745,11 +745,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.bucketSpec != null) {
       throw operationNotAllowed("CREATE TABLE ... CLUSTERED BY", ctx)
     }
-    val tableType = if (external) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
     val comment = Option(ctx.STRING).map(string)
     val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
     val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns)
@@ -791,6 +786,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
       compressed = false,
       serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
+    // If location is defined, we'll assume this is an external table.
+    // Otherwise, we may accidentally delete existing data.
+    val tableType = if (external || location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
 
     // TODO support the sql text - have a proper location for this!
     val tableDesc = CatalogTable(
