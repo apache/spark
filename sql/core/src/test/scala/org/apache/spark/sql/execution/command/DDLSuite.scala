@@ -32,8 +32,6 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
-import scala.collection.mutable
-
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private val escapedIdentifier = "`(.+)`".r
 

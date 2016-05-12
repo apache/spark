@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
