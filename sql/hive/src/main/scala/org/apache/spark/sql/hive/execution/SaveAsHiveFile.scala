@@ -28,13 +28,13 @@ import org.apache.spark.util.SerializableJobConf
 // Base trait from which all hive insert statement physical execution extends.
 private[hive] trait SaveAsHiveFile extends UnaryExecNode {
 
-  protected def saveAsHiveFile(
-                              rdd: RDD[InternalRow],
-                              valueClass: Class[_],
-                              fileSinkConf: ShimFileSinkDesc,
-                              conf: SerializableJobConf,
-                              writerContainer: SparkHiveWriterContainer,
-                              isCompressed: Boolean): Unit = {
+protected def saveAsHiveFile(
+  rdd: RDD[InternalRow],
+  valueClass: Class[_],
+  fileSinkConf: ShimFileSinkDesc,
+  conf: SerializableJobConf,
+  writerContainer: SparkHiveWriterContainer,
+  isCompressed: Boolean): Unit = {
     assert(valueClass != null, "Output value class not set")
 
     if (isCompressed) {
@@ -73,5 +73,5 @@ private[hive] trait SaveAsHiveFile extends UnaryExecNode {
     writerContainer.driverSideSetup()
     sqlContext.sparkContext.runJob(rdd, writerContainer.writeToFile _)
     writerContainer.commitJob()
-  }
+    }
 }

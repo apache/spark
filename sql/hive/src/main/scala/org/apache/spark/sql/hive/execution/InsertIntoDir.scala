@@ -30,9 +30,10 @@ import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
 import org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
+import org.apache.hadoop.hive.serde2.SerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.io.Text
-import org.apache.hadoop.mapred.{FileOutputFormat, JobConf, SequenceFileOutputFormat, TextInputFormat}
+import org.apache.hadoop.mapred._
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.catalog.CatalogStorageFormat
@@ -58,19 +59,19 @@ case class InsertIntoDir(
 
     val properties = new Properties()
 
-    val Array(cols, types) = child.output.foldLeft(Array("", ""))((r, a) => {
+    val Array(cols, types) = child.output.foldLeft(Array("", "")) { case (r, a) =>
       r(0) = r(0) + a.name + ","
       r(1) = r(1) + a.dataType.typeName + ":"
       r
-    })
+    }
 
     properties.put("columns", cols.dropRight(1))
     properties.put("columns.types", types.dropRight(1))
 
-    val fileFormatMap = Map(
+    val fileFormatMap = Map[String, (Class[_ <: OutputFormat[_, _]], Class[_ <: SerDe])](
       "orc" -> (classOf[OrcOutputFormat], classOf[OrcSerde]),
       "parquet" -> (classOf[MapredParquetOutputFormat], classOf[ParquetHiveSerDe]),
-//      "rcfile" -> (classOf[RCFileOutputFormat], classOf[LazySimpleSerDe]),
+      "rcfile" -> (classOf[RCFileOutputFormat], classOf[LazySimpleSerDe]),
       "textfile" -> (classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]], classOf[LazySimpleSerDe]),
       "sequencefile" -> (classOf[SequenceFileOutputFormat[Any, Any]], classOf[LazySimpleSerDe])
     )
@@ -110,7 +111,7 @@ case class InsertIntoDir(
         child.output)
 
     if( !isLocal ) {
-        FileSystem.get(jobConf).delete(targetPath, true)
+      FileSystem.get(jobConf).delete(targetPath, true)
     }
 
     @transient val outputClass = writerContainer.newSerializer(tableDesc).getSerializedClass
