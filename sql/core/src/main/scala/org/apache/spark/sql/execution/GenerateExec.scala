@@ -134,16 +134,16 @@ case class GenerateExec(
     val numElements = ctx.freshName("numElements")
 
     // Generate accessor for MapData/Array element(s).
-    def accessor(src: String, field: String, dt: DataType, nullable: Boolean): ExprCode = {
-      val data = src + field
-      val value = ctx.freshName("value")
+    def accessor(field: String, name: String, dt: DataType, nullable: Boolean): ExprCode = {
+      val source = data.value + field
+      val value = ctx.freshName(name)
       val javaType = ctx.javaType(dt)
-      val getter = ctx.getValue(data, dt, index)
+      val getter = ctx.getValue(source, dt, index)
       if (outer || nullable) {
         val isNull = ctx.freshName("isNull")
         val code =
           s"""
-             |boolean $isNull = $src == null || $data.isNullAt($index);
+             |boolean $isNull = ${data.isNull} || $source.isNullAt($index);
              |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
            """.stripMargin
         ExprCode(code, isNull, value)
@@ -153,10 +153,10 @@ case class GenerateExec(
     }
     val values = e.child.dataType match {
       case ArrayType(dataType, nullable) =>
-        Seq(accessor(data.value, "", dataType, nullable))
+        Seq(accessor("", "col", dataType, nullable))
       case MapType(keyType, valueType, valueContainsNull) =>
-        Seq(accessor(data.value, ".keyArray()", keyType, nullable = false),
-          accessor(data.value, ".valueArray()", valueType, valueContainsNull))
+        Seq(accessor(".keyArray()", "key", keyType, nullable = false),
+          accessor(".valueArray()", "value", valueType, valueContainsNull))
     }
 
     // Determine result vars.
@@ -168,12 +168,10 @@ case class GenerateExec(
 
     s"""
        |${data.code}
-       |int $index = 0;
        |int $numElements = ${data.isNull} ? ${if (outer) 1 else 0} : ${data.value}.numElements();
-       |while ($index < $numElements) {
-       |  ${consume(ctx, output)}
+       |for (int $index = 0; $index < $numElements; $index++) {
        |  $numOutput.add(1);
-       |  $index++;
+       |  ${consume(ctx, output)}
        |}
      """.stripMargin
   }
