@@ -219,7 +219,7 @@ private[yarn] class ExecutorRunnable(
       // an inconsistent state.
       // TODO: If the OOM is not recoverable by rescheduling it on different node, then do
       // 'something' to fail job ... akin to blacklisting trackers in mapred ?
-      YarnSparkHadoopUtil.getOutOfMemoryErrorArgument(sparkConf, javaOpts)) ++
+      YarnSparkHadoopUtil.getOutOfMemoryErrorArgument(javaOpts)) ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", masterAddress.toString,
