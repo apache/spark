@@ -166,12 +166,14 @@ case class GenerateExec(
       values
     }
 
-    // Evaluate at least once in case of outer.
-    val cmp = if (outer) "<=" else "<"
+    // In case of outer we need to make sure the loop is executed at-least once when the array/map
+    // contains no input. We do this by setting the looping index to -1 if there is no input,
+    // evaluation of the array is prevented by a check in the accessor code.
+    val init = if (outer) s"$numElements == 0 ? -1 : 0" else "0"
     s"""
        |${data.code}
        |int $numElements = ${data.isNull} ? 0 : ${data.value}.numElements();
-       |for (int $index = 0; $index $cmp $numElements; $index++) {
+       |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
        |  ${consume(ctx, output)}
        |}
