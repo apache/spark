@@ -110,6 +110,12 @@ private[sql] object SQLUtils {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
         new java.lang.Float(d)
+      case a: Array[Boolean] if dataType.isInstanceOf[ArrayType] => a.toSeq
+      case a: Array[Int] if dataType.isInstanceOf[ArrayType] => a.toSeq
+      case a: Array[Double] if dataType.isInstanceOf[ArrayType] => a.toSeq
+      case a if a.getClass.isArray && dataType.isInstanceOf[ArrayType] =>
+        a.asInstanceOf[Array[Object]].toSeq
+          .map(doConversion(_, dataType.asInstanceOf[ArrayType].elementType))
       case _ => data
     }
   }
@@ -120,14 +126,14 @@ private[sql] object SQLUtils {
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
       doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
-    }.toSeq)
+    })
   }
 
   private[sql] def rowToRBytes(row: Row): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val dos = new DataOutputStream(bos)
 
-    val cols = (0 until row.length).map(row(_).asInstanceOf[Object]).toArray
+    val cols = row.toSeq.toArray
     SerDe.writeObject(dos, cols)
     bos.toByteArray()
   }
@@ -198,7 +204,7 @@ private[sql] object SQLUtils {
     dataType match {
       case 's' =>
         // Read StructType for DataFrame
-        val fields = SerDe.readList(dis).asInstanceOf[Array[Object]]
+        val fields = SerDe.readList(dis)
         Row.fromSeq(fields)
       case _ => null
     }
