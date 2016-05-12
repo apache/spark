@@ -228,4 +228,17 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
       }
     }
   }
+
+  test("No NullPointerException even if the values of options are null") {
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/table1"
+      val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
+      df.write
+        .option("compression", null)
+        .parquet(path)
+
+      val copyDf = spark.read.parquet(path)
+      checkAnswer(df, copyDf)
+    }
+  }
 }

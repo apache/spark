@@ -25,59 +25,24 @@ import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes
 
 private[sql] class CSVOptions(@transient private val parameters: Map[String, String])
   extends Logging with Serializable {
-
-  private def getChar(paramName: String, default: Char): Char = {
-    val paramValue = parameters.get(paramName)
-    paramValue match {
-      case None => default
-      case Some(null) => default
-      case Some(value) if value.length == 0 => '\u0000'
-      case Some(value) if value.length == 1 => value.charAt(0)
-      case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
-    }
-  }
-
-  private def getInt(paramName: String, default: Int): Int = {
-    val paramValue = parameters.get(paramName)
-    paramValue match {
-      case None => default
-      case Some(null) => default
-      case Some(value) => try {
-        value.toInt
-      } catch {
-        case e: NumberFormatException =>
-          throw new RuntimeException(s"$paramName should be an integer. Found $value")
-      }
-    }
-  }
-
-  private def getBool(paramName: String, default: Boolean = false): Boolean = {
-    val param = parameters.getOrElse(paramName, default.toString)
-    if (param == null) {
-      default
-    } else if (param.toLowerCase == "true") {
-      true
-    } else if (param.toLowerCase == "false") {
-      false
-    } else {
-      throw new Exception(s"$paramName flag can be true or false")
-    }
-  }
+  import org.apache.spark.sql.execution.datasources.ParameterUtils._
 
   val delimiter = CSVTypeCast.toChar(
-    parameters.getOrElse("sep", parameters.getOrElse("delimiter", ",")))
-  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
-  val charset = parameters.getOrElse("encoding",
-    parameters.getOrElse("charset", StandardCharsets.UTF_8.name()))
+    getNullSafeString(parameters, "sep", getNullSafeString(parameters, "delimiter", ",")))
+  private val parseMode = getNullSafeString(parameters, "mode", "PERMISSIVE")
+  val charset = getNullSafeString(parameters, "encoding",
+    getNullSafeString(parameters, "charset", StandardCharsets.UTF_8.name()))
 
-  val quote = getChar("quote", '\"')
-  val escape = getChar("escape", '\\')
-  val comment = getChar("comment", '\u0000')
+  val quote = getNullSafeChar(parameters, "quote", '\"')
+  val escape = getNullSafeChar(parameters, "escape", '\\')
+  val comment = getNullSafeChar(parameters, "comment", '\u0000')
 
-  val headerFlag = getBool("header")
-  val inferSchemaFlag = getBool("inferSchema")
-  val ignoreLeadingWhiteSpaceFlag = getBool("ignoreLeadingWhiteSpace")
-  val ignoreTrailingWhiteSpaceFlag = getBool("ignoreTrailingWhiteSpace")
+  val headerFlag = getNullSafeBool(parameters, "header", default = false)
+  val inferSchemaFlag = getNullSafeBool(parameters, "inferSchema", default = false)
+  val ignoreLeadingWhiteSpaceFlag =
+    getNullSafeBool(parameters, "ignoreLeadingWhiteSpace", default = false)
+  val ignoreTrailingWhiteSpaceFlag =
+    getNullSafeBool(parameters, "ignoreTrailingWhiteSpace", default = false)
 
   // Parse mode flags
   if (!ParseModes.isValidMode(parseMode)) {
@@ -103,13 +68,17 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   // Share date format object as it is expensive to parse date pattern.
   val dateFormat: SimpleDateFormat = {
-    val dateFormat = parameters.get("dateFormat")
-    dateFormat.map(new SimpleDateFormat(_)).orNull
+    val dateFormat = parameters.getOrElse("dateFormat", null)
+    if (dateFormat != null) {
+      new SimpleDateFormat(dateFormat)
+    } else {
+      null
+    }
   }
 
-  val maxColumns = getInt("maxColumns", 20480)
+  val maxColumns = getNullSafeInt(parameters, "maxColumns", 20480)
 
-  val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
+  val maxCharsPerColumn = getNullSafeInt(parameters, "maxCharsPerColumn", 1000000)
 
   val inputBufferSize = 128
 

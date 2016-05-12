@@ -19,7 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -28,16 +27,18 @@ import org.apache.spark.sql.internal.SQLConf
 class ParquetOptions(
     @transient private val parameters: Map[String, String],
     @transient private val sqlConf: SQLConf)
-  extends Logging with Serializable {
+  extends Serializable {
 
   import ParquetOptions._
+  import org.apache.spark.sql.execution.datasources.ParameterUtils._
 
   /**
    * Compression codec to use. By default use the value specified in SQLConf.
    * Acceptable values are defined in [[shortParquetCompressionCodecNames]].
    */
   val compressionCodec: String = {
-    val codecName = parameters.getOrElse("compression", sqlConf.parquetCompressionCodec).toLowerCase
+    val codecName =
+      getNullSafeString(parameters, "compression", sqlConf.parquetCompressionCodec).toLowerCase
     if (!shortParquetCompressionCodecNames.contains(codecName)) {
       val availableCodecs = shortParquetCompressionCodecNames.keys.map(_.toLowerCase)
       throw new IllegalArgumentException(s"Codec [$codecName] " +
@@ -46,7 +47,6 @@ class ParquetOptions(
     shortParquetCompressionCodecNames(codecName).name()
   }
 }
-
 
 object ParquetOptions {
   // The parquet compression short names

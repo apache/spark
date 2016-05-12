@@ -567,4 +567,32 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     assert(numbers.count() == 8)
   }
+
+  test("No NullPointerException even if the values of options are null") {
+    val cars = spark.read
+      .format("csv")
+      .option("header", null)
+      .option("sep", null)
+      .option("encoding", null)
+      .option("quote", null)
+      .option("escape", null)
+      .option("comment", null)
+      .option("header", null)
+      .option("inferSchema", null)
+      .option("ignoreLeadingWhiteSpace", null)
+      .option("ignoreTrailingWhiteSpace", null)
+      .option("mode", null)
+      .option("nullValue", null)
+      .option("compression", null)
+      .option("maxColumns", null)
+      .option("maxCharsPerColumn", null)
+      .option("nullValue", null)
+      .option("nanValue", null)
+      .option("positiveInf", null)
+      .option("negativeInf", null)
+      .option("dateFormat", null)
+      .load(testFile(carsFile))
+
+    verifyCars(cars, withHeader = false, checkTypes = false)
+  }
 }

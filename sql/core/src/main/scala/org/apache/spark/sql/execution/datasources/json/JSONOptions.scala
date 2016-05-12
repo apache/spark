@@ -30,27 +30,24 @@ import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes
 private[sql] class JSONOptions(
     @transient private val parameters: Map[String, String])
   extends Logging with Serializable  {
+  import org.apache.spark.sql.execution.datasources.ParameterUtils._
 
-  val samplingRatio =
-    parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
-  val primitivesAsString =
-    parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
-  val prefersDecimal =
-    parameters.get("prefersDecimal").map(_.toBoolean).getOrElse(false)
-  val allowComments =
-    parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
+  val samplingRatio = getNullSafeDouble(parameters, "samplingRatio", 1.0)
+  val primitivesAsString = getNullSafeBool(parameters, "primitivesAsString", default = false)
+  val prefersDecimal = getNullSafeBool(parameters, "prefersDecimal", default = false)
+  val allowComments = getNullSafeBool(parameters, "allowComments", default = false)
   val allowUnquotedFieldNames =
-    parameters.get("allowUnquotedFieldNames").map(_.toBoolean).getOrElse(false)
+    getNullSafeBool(parameters, "allowUnquotedFieldNames", default = false)
   val allowSingleQuotes =
-    parameters.get("allowSingleQuotes").map(_.toBoolean).getOrElse(true)
+    getNullSafeBool(parameters, "allowSingleQuotes", default = true)
   val allowNumericLeadingZeros =
-    parameters.get("allowNumericLeadingZeros").map(_.toBoolean).getOrElse(false)
+    getNullSafeBool(parameters, "allowNumericLeadingZeros", default = false)
   val allowNonNumericNumbers =
-    parameters.get("allowNonNumericNumbers").map(_.toBoolean).getOrElse(true)
+    getNullSafeBool(parameters, "allowNonNumericNumbers", default = true)
   val allowBackslashEscapingAnyCharacter =
-    parameters.get("allowBackslashEscapingAnyCharacter").map(_.toBoolean).getOrElse(false)
+    getNullSafeBool(parameters, "allowBackslashEscapingAnyCharacter", default = false)
   val compressionCodec = parameters.get("compression").map(CompressionCodecs.getCodecClassName)
-  private val parseMode = parameters.getOrElse("mode", "PERMISSIVE")
+  private val parseMode = getNullSafeString(parameters, "mode", "PERMISSIVE")
   val columnNameOfCorruptRecord = parameters.get("columnNameOfCorruptRecord")
 
   // Parse mode flags
