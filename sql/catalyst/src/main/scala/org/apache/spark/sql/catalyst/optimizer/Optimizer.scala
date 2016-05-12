@@ -164,7 +164,7 @@ object SamplePushDown extends Rule[LogicalPlan] {
 object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
   // Check if projectList in the Project node has the same attribute names and ordering
   // as its child node.
-  private def checkAliasOnly(
+  private def isAliasOnly(
       projectList: Seq[NamedExpression],
       childOutput: Seq[Attribute]): Boolean = {
     if (!projectList.forall(_.isInstanceOf[Alias]) || projectList.length != childOutput.length) {
@@ -180,29 +180,22 @@ object RemoveAliasOnlyProject extends Rule[LogicalPlan] {
   }
 
   def apply(plan: LogicalPlan): LogicalPlan = {
-    val processedPlan = plan.find { p =>
+    val aliasOnlyProject = plan.find { p =>
       p match {
-        case Project(pList, child) if checkAliasOnly(pList, child.output) => true
+        case Project(pList, child) if isAliasOnly(pList, child.output) => true
         case _ => false
       }
-    }.map { case p: Project =>
-      val attrMap = p.projectList.map { a =>
-        val alias = a.asInstanceOf[Alias]
-        val replaceFrom = alias.toAttribute.exprId
-        val replaceTo = alias.child.asInstanceOf[Attribute]
-        (replaceFrom, replaceTo)
-      }.toMap
+    }
+
+    aliasOnlyProject.map { case p: Project =>
+      val aliases = p.projectList.map(_.asInstanceOf[Alias])
+      val attrMap = AttributeMap(aliases.map(a => (a.toAttribute, a.child)))
       plan.transformAllExpressions {
-        case a: Attribute if attrMap.contains(a.exprId) => attrMap(a.exprId)
+        case a: Attribute if attrMap.contains(a) => attrMap(a)
       }.transform {
-        case op: Project if op == p => op.child
+        case op: Project if op.eq(p) => op.child
       }
-    }
-    if (processedPlan.isDefined) {
-      processedPlan.get
-    } else {
-      plan
-    }
+    }.getOrElse(plan)
   }
 }
 
