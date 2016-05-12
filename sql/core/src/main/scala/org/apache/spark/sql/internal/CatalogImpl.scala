@@ -225,7 +225,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         userSpecifiedSchema = None,
         source,
         temporary = false,
-        options,
+        options = options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
     sparkSession.executePlan(cmd).toRdd
@@ -272,6 +274,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         source,
         temporary = false,
         options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
     sparkSession.executePlan(cmd).toRdd
