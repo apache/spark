@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogRelation, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, UnaryNode}
@@ -288,45 +288,62 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val result = new ArrayBuffer[Row]
-    sparkSession.sessionState.catalog.lookupRelation(table) match {
-      case catalogRelation: CatalogRelation =>
-        if (isExtended) {
-          describeExtended(catalogRelation, result)
-        } else if (isFormatted) {
-          describeFormatted(catalogRelation, result)
-        } else {
-          describe(catalogRelation, result)
-        }
+    val catalog = sparkSession.sessionState.catalog
 
-      case relation =>
-        describeSchema(relation.schema, result)
+    if (catalog.isTemporaryTable(table)) {
+      describeSchema(catalog.lookupRelation(table).schema, result)
+    } else {
+      val metadata = catalog.getTableMetadata(table)
+
+      if (isExtended) {
+        describeExtended(metadata, result)
+      } else if (isFormatted) {
+        describeFormatted(metadata, result)
+      } else {
+        describe(metadata, result)
+      }
     }
 
     result
   }
 
   // Shows data columns and partitioned columns (if any)
-  private def describe(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
-    describeSchema(relation.catalogTable.schema, buffer)
+  private def describe(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(table)) {
+      val schema = DDLUtils.getSchemaFromTableProperties(table)
 
-    if (relation.catalogTable.partitionColumns.nonEmpty) {
-      append(buffer, "# Partition Information", "", "")
-      append(buffer, s"# ${output(0).name}", output(1).name, output(2).name)
-      describeSchema(relation.catalogTable.partitionColumns, buffer)
+      if (schema.isEmpty) {
+        append(buffer, "# Schema of this table is inferred at runtime", "", "")
+      } else {
+        schema.foreach(describeSchema(_, buffer))
+      }
+
+      val partCols = DDLUtils.getPartitionColumnsFromTableProperties(table)
+      if (partCols.nonEmpty) {
+        append(buffer, "# Partition Information", "", "")
+        append(buffer, s"# ${output.head.name}", "", "")
+        partCols.foreach(col => append(buffer, col, "", ""))
+      }
+    } else {
+      describeSchema(table.schema, buffer)
+
+      if (table.partitionColumns.nonEmpty) {
+        append(buffer, "# Partition Information", "", "")
+        append(buffer, s"# ${output.head.name}", output(1).name, output(2).name)
+        describeSchema(table.partitionColumns, buffer)
+      }
     }
   }
 
-  private def describeExtended(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
-    describe(relation, buffer)
+  private def describeExtended(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    describe(table, buffer)
 
     append(buffer, "", "", "")
-    append(buffer, "# Detailed Table Information", relation.catalogTable.toString, "")
+    append(buffer, "# Detailed Table Information", table.toString, "")
   }
 
-  private def describeFormatted(relation: CatalogRelation, buffer: ArrayBuffer[Row]): Unit = {
-    describe(relation, buffer)
-
-    val table = relation.catalogTable
+  private def describeFormatted(table: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    describe(table, buffer)
 
     append(buffer, "", "", "")
     append(buffer, "# Detailed Table Information", "", "")
@@ -338,23 +355,50 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     append(buffer, "Table Type:", table.tableType.name, "")
 
     append(buffer, "Table Parameters:", "", "")
-    table.properties.foreach { case (key, value) =>
+    table.properties.filterNot {
+      // Hides schema properties that hold user-defined schema, partition columns, and bucketing
+      // information since they are already extracted and shown in other parts.
+      case (key, _) => key.startsWith("spark.sql.sources.schema")
+    }.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
 
+    describeStorageInfo(table, buffer)
+  }
+
+  private def describeStorageInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
     append(buffer, "", "", "")
     append(buffer, "# Storage Information", "", "")
-    table.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
-    table.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
-    table.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
-    append(buffer, "Compressed:", if (table.storage.compressed) "Yes" else "No", "")
-    append(buffer, "Num Buckets:", table.numBuckets.toString, "")
-    append(buffer, "Bucket Columns:", table.bucketColumnNames.mkString("[", ", ", "]"), "")
-    append(buffer, "Sort Columns:", table.sortColumnNames.mkString("[", ", ", "]"), "")
+    metadata.storage.serde.foreach(serdeLib => append(buffer, "SerDe Library:", serdeLib, ""))
+    metadata.storage.inputFormat.foreach(format => append(buffer, "InputFormat:", format, ""))
+    metadata.storage.outputFormat.foreach(format => append(buffer, "OutputFormat:", format, ""))
+    append(buffer, "Compressed:", if (metadata.storage.compressed) "Yes" else "No", "")
+    describeBucketingInfo(metadata, buffer)
 
     append(buffer, "Storage Desc Parameters:", "", "")
-    table.storage.serdeProperties.foreach { case (key, value) =>
+    metadata.storage.serdeProperties.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
+    }
+  }
+
+  private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
+    if (DDLUtils.isDatasourceTable(metadata)) {
+      val numBuckets = DDLUtils.getNumBucketFromTableProperties(metadata)
+      val bucketCols = DDLUtils.getBucketingColumnsFromTableProperties(metadata)
+      val sortCols = DDLUtils.getSortingColumnsFromTableProperties(metadata)
+      append(buffer, "Num Buckets:", numBuckets.map(_.toString).getOrElse(""), "")
+      append(buffer, "Bucket Columns:", bucketCols.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", sortCols.mkString("[", ", ", "]"), "")
+    } else {
+      append(buffer, "Num Buckets:", metadata.numBuckets.toString, "")
+      append(buffer, "Bucket Columns:", metadata.bucketColumnNames.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", metadata.sortColumnNames.mkString("[", ", ", "]"), "")
+    }
+  }
+
+  private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
+    schema.foreach { column =>
+      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
     }
   }
 
@@ -363,12 +407,6 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
       val comment =
         if (column.metadata.contains("comment")) column.metadata.getString("comment") else ""
       append(buffer, column.name, column.dataType.simpleString, comment)
-    }
-  }
-
-  private def describeSchema(schema: Seq[CatalogColumn], buffer: ArrayBuffer[Row]): Unit = {
-    schema.foreach { column =>
-      append(buffer, column.name, column.dataType.toLowerCase, column.comment.orNull)
     }
   }
 

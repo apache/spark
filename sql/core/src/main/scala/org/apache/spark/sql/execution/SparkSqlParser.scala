@@ -25,7 +25,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
@@ -212,18 +212,22 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create an [[ExplainCommand]] logical plan.
+   * The syntax of using this command in SQL is:
+   * {{{
+   *   EXPLAIN (EXTENDED | CODEGEN) SELECT * FROM ...
+   * }}}
    */
   override def visitExplain(ctx: ExplainContext): LogicalPlan = withOrigin(ctx) {
-    val options = ctx.explainOption.asScala
-    if (options.exists(_.FORMATTED != null)) {
+    if (ctx.FORMATTED != null) {
       throw operationNotAllowed("EXPLAIN FORMATTED", ctx)
     }
+    if (ctx.LOGICAL != null) {
+      throw operationNotAllowed("EXPLAIN LOGICAL", ctx)
+    }
 
-    // Create the explain comment.
     val statement = plan(ctx.statement)
     if (isExplainableStatement(statement)) {
-      ExplainCommand(statement, extended = options.exists(_.EXTENDED != null),
-        codegen = options.exists(_.CODEGEN != null))
+      ExplainCommand(statement, extended = ctx.EXTENDED != null, codegen = ctx.CODEGEN != null)
     } else {
       ExplainCommand(OneRowRelation)
     }
@@ -307,7 +311,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
-      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = false)
+      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = true)
     }
   }
 
@@ -426,7 +430,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       val resourceType = resource.identifier.getText.toLowerCase
       resourceType match {
         case "jar" | "file" | "archive" =>
-          resourceType -> string(resource.STRING)
+          FunctionResource(FunctionResourceType.fromString(resourceType), string(resource.STRING))
         case other =>
           throw operationNotAllowed(s"CREATE FUNCTION with resource type '$resourceType'", ctx)
       }
@@ -741,11 +745,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.bucketSpec != null) {
       throw operationNotAllowed("CREATE TABLE ... CLUSTERED BY", ctx)
     }
-    val tableType = if (external) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
     val comment = Option(ctx.STRING).map(string)
     val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
     val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns)
@@ -776,6 +775,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       .getOrElse(EmptyStorageFormat)
     val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    // If we are creating an EXTERNAL table, then the LOCATION field is required
+    if (external && location.isEmpty) {
+      throw operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
+    }
     val storage = CatalogStorageFormat(
       locationUri = location,
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
@@ -783,6 +786,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
       compressed = false,
       serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
+    // If location is defined, we'll assume this is an external table.
+    // Otherwise, we may accidentally delete existing data.
+    val tableType = if (external || location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
 
     // TODO support the sql text - have a proper location for this!
     val tableDesc = CatalogTable(

@@ -73,19 +73,6 @@ class SparkSession private(
    |  Session-related state  |
    * ----------------------- */
 
-  {
-    val defaultWarehousePath =
-      SQLConf.WAREHOUSE_PATH
-        .defaultValueString
-        .replace("${system:user.dir}", System.getProperty("user.dir"))
-    val warehousePath = sparkContext.conf.get(
-      SQLConf.WAREHOUSE_PATH.key,
-      defaultWarehousePath)
-    sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
-    sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
-    logInfo(s"Setting warehouse location to $warehousePath")
-  }
-
   /**
    * State shared across sessions, including the [[SparkContext]], cached data, listener,
    * and a catalog that interacts with external systems.

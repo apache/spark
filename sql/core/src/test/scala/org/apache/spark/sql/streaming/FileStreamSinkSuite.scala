@@ -40,11 +40,11 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
-    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val fileFormat = new parquet.DefaultSource()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = sqlContext
+      val df = spark
         .range(start, end, 1, numPartitions)
         .select($"id", lit(100).as("data"))
       val writer = new FileStreamSinkWriter(
@@ -56,7 +56,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val files1 = writeRange(0, 10, 2)
     assert(files1.size === 2, s"unexpected number of files: $files1")
     checkFilesExist(path, files1, "file not written")
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), (0 until 10).map(Row(_, 100)))
+    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 10).map(Row(_, 100)))
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(10, 20, 3)
@@ -64,7 +64,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     assert(files2.intersect(files1).isEmpty, "old files returned")
     checkFilesExist(path, files2, s"New file not written")
     checkFilesExist(path, files1, s"Old file not found")
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
+    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
   }
 
   test("FileStreamSinkWriter - partitioned data") {
@@ -72,11 +72,11 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
-    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val fileFormat = new parquet.DefaultSource()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = sqlContext
+      val df = spark
         .range(start, end, 1, numPartitions)
         .flatMap(x => Iterator(x, x, x)).toDF("id")
         .select($"id", lit(100).as("data1"), lit(1000).as("data2"))
@@ -103,7 +103,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     checkOneFileWrittenPerKey(0 until 10, files1)
 
     val answer1 = (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), answer1)
+    checkAnswer(spark.read.load(path.getCanonicalPath), answer1)
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(0, 20, 3)
@@ -114,7 +114,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     checkOneFileWrittenPerKey(0 until 20, files2)
 
     val answer2 = (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), answer1 ++ answer2)
+    checkAnswer(spark.read.load(path.getCanonicalPath), answer1 ++ answer2)
   }
 
   test("FileStreamSink - unpartitioned writing and batch reading") {
@@ -139,7 +139,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         query.processAllAvailable()
       }
 
-      val outputDf = sqlContext.read.parquet(outputDir).as[Int]
+      val outputDf = spark.read.parquet(outputDir).as[Int]
       checkDataset(outputDf, 1, 2, 3)
 
     } finally {
