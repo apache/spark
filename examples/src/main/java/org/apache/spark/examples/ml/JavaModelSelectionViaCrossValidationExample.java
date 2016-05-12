@@ -43,7 +43,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaModelSelectionViaCrossValidationExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaModelSelectionViaCrossValidationExample").getOrCreate();
+      .builder()
+      .appName("JavaModelSelectionViaCrossValidationExample")
+      .getOrCreate();
 
     // $example on$
     // Prepare training documents, which are labeled.
