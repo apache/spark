@@ -169,7 +169,6 @@ object RowEncoder {
 
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
-    case CalendarIntervalType => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -178,7 +177,6 @@ object RowEncoder {
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
-    case _: NullType => ObjectType(classOf[java.lang.Object])
   }
 
   private def deserializerFor(schema: StructType): Expression = {
