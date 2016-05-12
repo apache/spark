@@ -502,41 +502,53 @@ private[spark] class MesosClusterScheduler(
       } else {
         val offer = offerOption.get
         val taskId = TaskID.newBuilder().setValue(submission.submissionId).build()
-        val (remainingResources, cpuResourcesToUse) =
-          partitionResources(offer.resources, "cpus", driverCpu)
-        val (finalResources, memResourcesToUse) =
-          partitionResources(remainingResources.asJava, "mem", driverMem)
-        val commandInfo = buildDriverCommand(submission)
-        val appName = submission.schedulerProperties("spark.app.name")
-        val taskInfo = TaskInfo.newBuilder()
-          .setTaskId(taskId)
-          .setName(s"Driver for $appName")
-          .setSlaveId(offer.slaveId)
-          .setCommand(commandInfo)
-          .addAllResources(cpuResourcesToUse.asJava)
-          .addAllResources(memResourcesToUse.asJava)
-        offer.resources = finalResources.asJava
-        submission.schedulerProperties.get("spark.mesos.executor.docker.image").foreach { image =>
-          val container = taskInfo.getContainerBuilder()
-          val volumes = submission.schedulerProperties
-            .get("spark.mesos.executor.docker.volumes")
-            .map(MesosSchedulerBackendUtil.parseVolumesSpec)
-          val portmaps = submission.schedulerProperties
-            .get("spark.mesos.executor.docker.portmaps")
-            .map(MesosSchedulerBackendUtil.parsePortMappingsSpec)
-          MesosSchedulerBackendUtil.addDockerInfo(
-            container, image, volumes = volumes, portmaps = portmaps)
-          taskInfo.setContainer(container.build())
+        var commandInfo: CommandInfo = null
+        try {
+          commandInfo = buildDriverCommand(submission)
+        } catch {
+          case e: SparkException =>
+            afterLaunchCallback(submission.submissionId)
+            finishedDrivers += new MesosClusterSubmissionState(submission, taskId,
+              SlaveID.newBuilder().setValue("").build(), None, null, None)
+            logError(s"Failed to launch the driver with id: ${submission.submissionId}, " +
+              s"cpu: $driverCpu, mem: $driverMem, reason: ${e.getMessage}")
         }
-        val queuedTasks = tasks.getOrElseUpdate(offer.offerId, new ArrayBuffer[TaskInfo])
-        queuedTasks += taskInfo.build()
-        logTrace(s"Using offer ${offer.offerId.getValue} to launch driver " +
-          submission.submissionId)
-        val newState = new MesosClusterSubmissionState(submission, taskId, offer.slaveId,
-          None, new Date(), None)
-        launchedDrivers(submission.submissionId) = newState
-        launchedDriversState.persist(submission.submissionId, newState)
-        afterLaunchCallback(submission.submissionId)
+        if (commandInfo != null) {
+          val (remainingResources, cpuResourcesToUse) =
+            partitionResources(offer.resources, "cpus", driverCpu)
+          val (finalResources, memResourcesToUse) =
+            partitionResources(remainingResources.asJava, "mem", driverMem)
+          val appName = submission.schedulerProperties("spark.app.name")
+          val taskInfo = TaskInfo.newBuilder()
+            .setTaskId(taskId)
+            .setName(s"Driver for $appName")
+            .setSlaveId(offer.slaveId)
+            .setCommand(commandInfo)
+            .addAllResources(cpuResourcesToUse.asJava)
+            .addAllResources(memResourcesToUse.asJava)
+          offer.resources = finalResources.asJava
+          submission.schedulerProperties.get("spark.mesos.executor.docker.image").foreach { image =>
+            val container = taskInfo.getContainerBuilder()
+            val volumes = submission.schedulerProperties
+              .get("spark.mesos.executor.docker.volumes")
+              .map(MesosSchedulerBackendUtil.parseVolumesSpec)
+            val portmaps = submission.schedulerProperties
+              .get("spark.mesos.executor.docker.portmaps")
+              .map(MesosSchedulerBackendUtil.parsePortMappingsSpec)
+            MesosSchedulerBackendUtil.addDockerInfo(
+              container, image, volumes = volumes, portmaps = portmaps)
+            taskInfo.setContainer(container.build())
+          }
+          val queuedTasks = tasks.getOrElseUpdate(offer.offerId, new ArrayBuffer[TaskInfo])
+          queuedTasks += taskInfo.build()
+          logTrace(s"Using offer ${offer.offerId.getValue} to launch driver " +
+            submission.submissionId)
+          val newState = new MesosClusterSubmissionState(submission, taskId, offer.slaveId,
+            None, new Date(), None)
+          launchedDrivers(submission.submissionId) = newState
+          launchedDriversState.persist(submission.submissionId, newState)
+          afterLaunchCallback(submission.submissionId)
+        }
       }
     }
   }
