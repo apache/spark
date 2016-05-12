@@ -349,6 +349,9 @@ object MimaExcludes {
         // [SPARK-13686][MLLIB][STREAMING] Add a constructor parameter `reqParam` to (Streaming)LinearRegressionWithSGD
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.regression.LinearRegressionWithSGD.this")
       ) ++ Seq(
+        // SPARK-15250 Remove deprecated json API in DataFrameReader
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.DataFrameReader.json")
+      ) ++ Seq(
         // SPARK-13920: MIMA checks should apply to @Experimental and @DeveloperAPI APIs
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.Aggregator.combineCombinersByKey"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.Aggregator.combineValuesByKey"),

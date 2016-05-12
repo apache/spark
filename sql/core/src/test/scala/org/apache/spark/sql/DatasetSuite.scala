@@ -22,6 +22,8 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
+import org.scalatest.words.MatcherWords.be
+
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -673,6 +675,22 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       df.collect()
     }.getMessage
     assert(message.contains("The 0th field of input row cannot be null"))
+  }
+
+  test("createTempView") {
+    val dataset = Seq(1, 2, 3).toDS()
+    dataset.createOrReplaceTempView("tempView")
+
+    // Overrrides the existing temporary view with same name
+    // No exception should be thrown here.
+    dataset.createOrReplaceTempView("tempView")
+
+    // Throws AnalysisException if temp view with same name already exists
+    val e = intercept[AnalysisException](
+      dataset.createTempView("tempView"))
+    intercept[AnalysisException](dataset.createTempView("tempView"))
+    assert(e.message.contains("already exists"))
+    dataset.sparkSession.catalog.dropTempView("tempView")
   }
 }
 

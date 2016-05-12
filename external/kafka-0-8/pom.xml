@@ -26,12 +26,12 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-kafka_2.11</artifactId>
+  <artifactId>spark-streaming-kafka-0-8_2.11</artifactId>
   <properties>
-    <sbt.project.name>streaming-kafka</sbt.project.name>
+    <sbt.project.name>streaming-kafka-0-8</sbt.project.name>
   </properties>
   <packaging>jar</packaging>
-  <name>Spark Project External Kafka</name>
+  <name>Spark Integration for Kafka 0.8</name>
   <url>http://spark.apache.org/</url>
 
   <dependencies>
