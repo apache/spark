@@ -244,9 +244,7 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns the explained variance regression score.
         explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-
-        .. seealso:: `Wikipedia explain variation \
-        <http://en.wikipedia.org/wiki/Explained_variation>`_
+        Reference: http://en.wikipedia.org/wiki/Explained_variation
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -300,9 +298,7 @@ class LinearRegressionSummary(JavaWrapper):
     def r2(self):
         """
         Returns R^2^, the coefficient of determination.
-
-        .. seealso:: `Wikipedia coefficient of determination \
-        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
+        Reference: http://en.wikipedia.org/wiki/Coefficient_of_determination
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
