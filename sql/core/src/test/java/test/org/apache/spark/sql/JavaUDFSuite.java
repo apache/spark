@@ -87,4 +87,20 @@ public class JavaUDFSuite implements Serializable {
     Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
     Assert.assertEquals(9, result.getInt(0));
   }
+
+  public static class StringLengthTest implements UDF2<String, String, Integer> {
+    @Override
+    public Integer call(String str1, String str2) throws Exception {
+      return new Integer(str1.length() + str2.length());
+    }
+  }
+
+  @SuppressWarnings("unchecked")
+  @Test
+  public void udf3Test() {
+    spark.udf().registerJava("stringLengthTest", StringLengthTest.class.getName(),
+            DataTypes.IntegerType);
+    Row result = spark.sql("SELECT stringLengthTest('test', 'test2')").head();
+    Assert.assertEquals(9, result.getInt(0));
+  }
 }

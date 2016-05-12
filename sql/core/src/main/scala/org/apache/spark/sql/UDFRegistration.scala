@@ -28,6 +28,7 @@ import org.apache.spark.annotation.InterfaceStability
 import org.apache.spark.internal.Logging
 import sun.reflect.generics.reflectiveObjects.ParameterizedTypeImpl
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.api.java._
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.ScalaReflection

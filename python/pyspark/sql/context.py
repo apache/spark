@@ -206,7 +206,6 @@ class SQLContext(object):
         jdt = self._ssql_ctx.parseDataType(returnType.json())
         self._ssql_ctx.udf().registerJava(name, javaClassName, jdt)
 
-
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):
         """
