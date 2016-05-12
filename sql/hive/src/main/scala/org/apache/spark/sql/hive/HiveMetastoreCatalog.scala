@@ -71,6 +71,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         logDebug(s"Creating new cached data source for $in")
         val table = client.getTable(in.database, in.name)
 
+        // TODO: the following code is duplicated with FindDataSourceTable.readDataSourceTable
+
         def schemaStringFromParts: Option[String] = {
           table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
             val parts = (0 until numParts.toInt).map { index =>

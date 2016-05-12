@@ -385,17 +385,22 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
   }
 
   private def describeBucketingInfo(metadata: CatalogTable, buffer: ArrayBuffer[Row]): Unit = {
-    if (DDLUtils.isDatasourceTable(metadata)) {
-      val numBuckets = DDLUtils.getNumBucketFromTableProperties(metadata)
-      val bucketCols = DDLUtils.getBucketingColumnsFromTableProperties(metadata)
-      val sortCols = DDLUtils.getSortingColumnsFromTableProperties(metadata)
-      append(buffer, "Num Buckets:", numBuckets.map(_.toString).getOrElse(""), "")
-      append(buffer, "Bucket Columns:", bucketCols.mkString("[", ", ", "]"), "")
-      append(buffer, "Sort Columns:", sortCols.mkString("[", ", ", "]"), "")
-    } else {
-      append(buffer, "Num Buckets:", metadata.numBuckets.toString, "")
-      append(buffer, "Bucket Columns:", metadata.bucketColumnNames.mkString("[", ", ", "]"), "")
-      append(buffer, "Sort Columns:", metadata.sortColumnNames.mkString("[", ", ", "]"), "")
+    def appendBucketInfo(numBuckets: Int, bucketColumns: Seq[String], sortColumns: Seq[String]) = {
+      append(buffer, "Num Buckets:", numBuckets.toString, "")
+      append(buffer, "Bucket Columns:", bucketColumns.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", sortColumns.mkString("[", ", ", "]"), "")
+    }
+
+    DDLUtils.getBucketSpecFromTableProperties(metadata).map { bucketSpec =>
+      appendBucketInfo(
+        bucketSpec.numBuckets,
+        bucketSpec.bucketColumnNames,
+        bucketSpec.sortColumnNames)
+    }.getOrElse {
+      appendBucketInfo(
+        metadata.numBuckets,
+        metadata.bucketColumnNames,
+        metadata.sortColumnNames)
     }
   }
 
