@@ -45,7 +45,7 @@ setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 #' @export
 setClass("KMeansModel", representation(jobj = "jobj"))
 
-#' Fits a generalized linear model
+#' Fit a generalized linear model
 #'
 #' Fits a generalized linear model against a Spark DataFrame.
 #'
@@ -92,7 +92,7 @@ setMethod("spark.glm", signature(data = "SparkDataFrame", formula = "formula"),
             return(new("GeneralizedLinearRegressionModel", jobj = jobj))
           })
 
-#' Fits a generalized linear model (R-compliant)
+#' Fit a generalized linear model (R-compliant)
 #'
 #' Fits a generalized linear model, similarly to R's glm().
 #'
@@ -123,6 +123,8 @@ setMethod("glm", signature(formula = "formula", family = "ANY", data = "SparkDat
             spark.glm(data, formula, family, epsilon, maxit)
           })
 
+#' Get the summary of a generalized linear model
+#'
 #' Returns the summary of a model produced by glm() or spark.glm(), similarly to R's summary().
 #'
 #' @param object A fitted generalized linear model
@@ -169,7 +171,7 @@ setMethod("summary", signature(object = "GeneralizedLinearRegressionModel"),
             return(ans)
           })
 
-#' Prints the summary of GeneralizedLinearRegressionModel
+#' Print the summary of GeneralizedLinearRegressionModel
 #'
 #' @rdname print.summary.GeneralizedLinearRegressionModel
 #' @name print.summary.GeneralizedLinearRegressionModel
@@ -200,7 +202,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
 }
 
-#' Makes predictions from a fitted MLlib model
+#' Make predictions from a fitted MLlib model
 #'
 #' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #' similarly to R's predict().
@@ -222,7 +224,7 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Fits an accelerated failure time (AFT) survival regression model
+#' Fit an accelerated failure time (AFT) survival regression model
 #'
 #' Fits an accelerated failure time (AFT) survival regression model on a Spark DataFrame.
 #'
@@ -292,7 +294,7 @@ setMethod("predict", signature(object = "AFTSurvivalRegressionModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Fits a Bernoulli naive Bayes model
+#' Fit a Bernoulli naive Bayes model
 #'
 #' Fits a Bernoulli naive Bayes model on a Spark DataFrame (only categorical data is supported).
 #'
@@ -367,7 +369,7 @@ setMethod("predict", signature(object = "NaiveBayesModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Fits a k-means model
+#' Fit a k-means model
 #'
 #' Fits a k-means model, similarly to R's kmeans().
 #'
@@ -395,7 +397,7 @@ setMethod("spark.kmeans", signature(data = "SparkDataFrame", formula = "formula"
             return(new("KMeansModel", jobj = jobj))
          })
 
-#' Gets fitted result from a k-means model
+#' Get fitted result from a k-means model
 #'
 #' Gets fitted result from a k-means model, similarly to R's fitted().
 #' Note: A saved-loaded model does not support this method.
@@ -476,7 +478,7 @@ setMethod("predict", signature(object = "KMeansModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Saves a fitted MLlib model to the input path
+#' Save a fitted MLlib model to the input path
 #'
 #' Saves the Bernoulli naive Bayes model to the input path.
 #'
@@ -579,7 +581,7 @@ setMethod("write.ml", signature(object = "KMeansModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
-#' Loads a fitted MLlib model from the input path
+#' Load a fitted MLlib model from the input path
 #'
 #' @param path Path of the model to read.
 #' @return a fitted MLlib model
