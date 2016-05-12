@@ -28,6 +28,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
 import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
@@ -126,8 +127,7 @@ class KMeansModel private[ml] (
     validateAndTransformSchema(schema)
   }
 
-  private[clustering] def predict(features: Vector): Int =
-    parentModel.predict(OldVectors.fromML(features))
+  private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("1.5.0")
   def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
