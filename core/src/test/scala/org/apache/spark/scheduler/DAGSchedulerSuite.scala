@@ -338,7 +338,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
    *
    * Note: [] means an RDD, () means a shuffle dependency.
    */
-  test("[SPARK-13902] not to create duplicate stage.") {
+  test("[SPARK-13902] Ensure no duplicate stages are created") {
     val rddA = new MyRDD(sc, 1, Nil)
     val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
     val s_A = shuffleDepA.shuffleId
