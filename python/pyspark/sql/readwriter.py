@@ -875,7 +875,7 @@ def _test():
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     try:
-        spark = SparkSession.withHiveSupport(sc)
+        spark = SparkSession.builder.enableHiveSupport().getOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
