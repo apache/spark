@@ -148,7 +148,7 @@ private[spark] class BlockManager(
   private val peerFetchLock = new Object
   private var lastPeerFetchTime = 0L
 
-  private var rackAwarePrioritizer: RackAwarePriotization = _
+  private var rackAwarePrioritizer: BlockReplicationPriotization = _
 
   /**
    * Initializes the BlockManager with the given appId. This is not performed in the constructor as
@@ -174,12 +174,12 @@ private[spark] class BlockManager(
 
     val priorityClass = conf.get("spark.replication.rackawareness.prioritizer", "")
     rackAwarePrioritizer = if (!priorityClass.isEmpty) {
-      val ret = Utils.classForName(priorityClass).asInstanceOf[RackAwarePriotization]
+      val ret = Utils.classForName(priorityClass).asInstanceOf[BlockReplicationPriotization]
       logInfo(s"Using $priorityClass for prioritizing peers")
       ret
     } else {
       logInfo("Using DefaultRackAwarePrioritization for prioritizing peers")
-      new DefaultRackAwarePrioritization(blockTransferService.hostName)
+      new DefaultBlockReplicationPrioritization(blockTransferService.hostName)
     }
 
     blockManagerId = BlockManagerId(

@@ -139,11 +139,11 @@ class BlockManagerMasterEndpoint(
         case None => context.reply(false)
       }
 
-    case GetRackInfo(host) => context.reply(getRackInfoForHost(host))
+    case GetTopologyInfo(host) => context.reply(getTopologyInfoForHost(host))
 
   }
 
-  private def getRackInfoForHost(host: String): String = {
+  private def getTopologyInfoForHost(host: String): String = {
     topologyMapper.getRackForHost(host)
   }
 

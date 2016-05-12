@@ -38,7 +38,7 @@ class BlockManagerId private (
     private var executorId_ : String,
     private var host_ : String,
     private var port_ : Int,
-    private var rackInfo_ : Option[String])
+    private var topologyInfo_ : Option[String])
   extends Externalizable {
 
   private def this() = this(null, null, 0, None)  // For deserialization only
@@ -61,7 +61,7 @@ class BlockManagerId private (
 
   def port: Int = port_
 
-  def rack: Option[String] = rackInfo_
+  def topologyInfo: Option[String] = topologyInfo_
 
   def isDriver: Boolean = {
     executorId == SparkContext.DRIVER_IDENTIFIER ||
@@ -72,17 +72,17 @@ class BlockManagerId private (
     out.writeUTF(executorId_)
     out.writeUTF(host_)
     out.writeInt(port_)
-    out.writeBoolean(rackInfo_.isDefined)
-    // if we don't keep rack information, we just write an empty string.
-    out.writeUTF(rackInfo_.getOrElse(""))
+    out.writeBoolean(topologyInfo_.isDefined)
+    // if we don't keep topology information, we just write an empty string.
+    out.writeUTF(topologyInfo_.getOrElse(""))
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
     executorId_ = in.readUTF()
     host_ = in.readUTF()
     port_ = in.readInt()
-    val isRackInfoAvailable = in.readBoolean()
-    rackInfo_ = if (isRackInfoAvailable) {
+    val isTopologyInfoAvailable = in.readBoolean()
+    topologyInfo_ = if (isTopologyInfoAvailable) {
       Some(in.readUTF())
     } else {
       // we would read an empty string in this case
@@ -94,14 +94,17 @@ class BlockManagerId private (
   @throws(classOf[IOException])
   private def readResolve(): Object = BlockManagerId.getCachedBlockManagerId(this)
 
-  override def toString: String = s"BlockManagerId($executorId, $host, $port, $rack)"
+  override def toString: String = s"BlockManagerId($executorId, $host, $port, $topologyInfo)"
 
   override def hashCode: Int =
-    ((executorId.hashCode * 41 + host.hashCode) * 41 + port) * 41 + rack.hashCode
+    ((executorId.hashCode * 41 + host.hashCode) * 41 + port) * 41 + topologyInfo.hashCode
 
   override def equals(that: Any): Boolean = that match {
     case id: BlockManagerId =>
-      executorId == id.executorId && port == id.port && host == id.host && rack == id.rack
+      executorId == id.executorId &&
+        port == id.port &&
+        host == id.host &&
+        topologyInfo == id.topologyInfo
     case _ =>
       false
   }
@@ -118,8 +121,11 @@ private[spark] object BlockManagerId {
    * @param port Port of the block manager.
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
-  def apply(execId: String, host: String, port: Int, rack: Option[String] = None): BlockManagerId =
-    getCachedBlockManagerId(new BlockManagerId(execId, host, port, rack))
+  def apply(execId: String,
+            host: String,
+            port: Int,
+            topologyInfo: Option[String] = None): BlockManagerId =
+    getCachedBlockManagerId(new BlockManagerId(execId, host, port, topologyInfo))
 
   def apply(in: ObjectInput): BlockManagerId = {
     val obj = new BlockManagerId()

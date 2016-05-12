@@ -112,5 +112,5 @@ private[spark] object BlockManagerMessages {
 
   case class HasCachedBlocks(executorId: String) extends ToBlockManagerMaster
 
-  case class GetRackInfo(host: String) extends ToBlockManagerMaster
+  case class GetTopologyInfo(host: String) extends ToBlockManagerMaster
 }
