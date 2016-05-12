@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.util.Date
 import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
@@ -48,7 +49,20 @@ case class CatalogStorageFormat(
     outputFormat: Option[String],
     serde: Option[String],
     compressed: Boolean,
-    serdeProperties: Map[String, String])
+    serdeProperties: Map[String, String]) {
+
+  override def toString: String = {
+    val compressedToString = if (compressed) "Yes" else "No"
+    val serdePropertiesToString =
+      serdeProperties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    s"Storage Information(Location:${locationUri.orNull}, " +
+      s"InputFormat:${inputFormat.orNull}, " +
+      s"OutputFormat:${outputFormat.orNull}, " +
+      s"Compressed:$compressedToString, " +
+      s"Storage Desc Library:${serde.orNull}, " +
+      s"Storage Desc Parameter:$serdePropertiesToString)"
+  }
+}
 
 
 /**
@@ -60,8 +74,15 @@ case class CatalogColumn(
     // as a string due to issues in converting Hive varchars to and from SparkSQL strings.
     @Nullable dataType: String,
     nullable: Boolean = true,
-    comment: Option[String] = None)
+    comment: Option[String] = None) {
 
+  override def toString: String = {
+    val nullableToString = if (nullable) "Yes" else "No"
+    s"Column(name:$name, dataType:${dataType.toLowerCase}, nullable:$nullableToString, " +
+      s"comment:${comment.orNull})"
+  }
+
+}
 
 /**
  * A partition (Hive style) defined in the catalog.
@@ -129,6 +150,32 @@ case class CatalogTable(
       serdeProperties: Map[String, String] = storage.serdeProperties): CatalogTable = {
     copy(storage = CatalogStorageFormat(
       locationUri, inputFormat, outputFormat, serde, compressed, serdeProperties))
+  }
+
+  override def toString: String = {
+    val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
+    val tableSchema = schema.mkString("[", ", ", "]")
+    val partitionColumns = partitionColumnNames.mkString("[", ", ", "]")
+    val sortColumns = sortColumnNames.mkString("[", ", ", "]")
+    val bucketColumns = bucketColumnNames.mkString("[", ", ", "]")
+
+    s"CatalogTable(Table:${identifier.table}, " +
+      s"Database:${identifier.database.orNull}, " +
+      s"Owner:$owner, " +
+      s"Create Time:${new Date(createTime).toString}, " +
+      s"Last Access Time:${new Date(lastAccessTime).toString}, " +
+      s"Location:${storage.locationUri.orNull}, " +
+      s"Table Type:${tableType.name}, " +
+      s"Schema:$tableSchema, " +
+      s"Partition Columns:$partitionColumns, " +
+      s"Num Buckets:$numBuckets, " +
+      s"Bucket Columns:$bucketColumns, " +
+      s"Sort Columns:$sortColumns, " +
+      s"View Original Text:${viewOriginalText.orNull}, " +
+      s"View Text:${viewText.orNull}, " +
+      s"Comment:${comment.orNull}, " +
+      s"Table Parameters:$tableProperties, " +
+      s"$storage)"
   }
 
 }
