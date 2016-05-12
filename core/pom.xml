@@ -130,8 +130,6 @@
       <artifactId>jetty-servlets</artifactId>
       <scope>compile</scope>
     </dependency>
-    <!-- Because we mark jetty as provided and shade it, its dependency
-         orbit is ignored, so we explicitly list it here (see SPARK-5557).-->
     <dependency>
       <groupId>javax.servlet</groupId>
       <artifactId>javax.servlet-api</artifactId>
