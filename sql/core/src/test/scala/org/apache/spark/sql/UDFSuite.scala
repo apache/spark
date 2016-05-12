@@ -55,7 +55,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     val df = Seq((1, "Tearing down the walls that divide us")).toDF("id", "saying")
     df.registerTempTable("tmp_table")
     checkAnswer(sql("select spark_partition_id() from tmp_table").toDF(), Row(0))
-    spark.catalog.dropTempTable("tmp_table")
+    spark.catalog.dropTempView("tmp_table")
   }
 
   test("SPARK-8005 input_file_name") {
@@ -66,7 +66,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
       val answer = sql("select input_file_name() from test_table").head().getString(0)
       assert(answer.contains(dir.getCanonicalPath))
       assert(sql("select input_file_name() from test_table").distinct().collect().length >= 2)
-      spark.catalog.dropTempTable("test_table")
+      spark.catalog.dropTempView("test_table")
     }
   }
 
