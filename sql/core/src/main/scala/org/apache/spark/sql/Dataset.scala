@@ -2308,7 +2308,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  @deprecated("Use createOrReplaceTempView(tableName) instead.", "2.0.0")
+  @deprecated("Use createOrReplaceTempView(viewName) instead.", "2.0.0")
   def registerTempTable(tableName: String): Unit = {
     createOrReplaceTempView(tableName)
   }
