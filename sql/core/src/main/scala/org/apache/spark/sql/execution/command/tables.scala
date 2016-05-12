@@ -759,21 +759,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val props = metadata.properties
-    val schemaParts = for {
-      numParts <- props.get("spark.sql.sources.schema.numParts").toSeq
-      index <- 0 until numParts.toInt
-    } yield props.getOrElse(
-      s"spark.sql.sources.schema.part.$index",
-      throw new AnalysisException(
-        s"Corrupted schema in catalog: $numParts parts expected, but part $index is missing."
-      )
-    )
-
-    if (schemaParts.nonEmpty) {
-      val fields = DataType.fromJson(schemaParts.mkString).asInstanceOf[StructType].fields
-      val colTypeList = fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
-      builder ++= colTypeList.mkString("(", ", ", ")")
+    DDLUtils.getSchemaFromTableProperties(metadata).foreach { schema =>
+      val columns = schema.fields.map(f => s"${quoteIdentifier(f.name)} ${f.dataType.sql}")
+      builder ++= columns.mkString("(", ", ", ")")
     }
 
     builder ++= "\n"
@@ -802,40 +790,21 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showDataSourceTableNonDataColumns(
       metadata: CatalogTable, builder: StringBuilder): Unit = {
-    val props = metadata.properties
-
-    def getColumnNamesByType(colType: String, typeName: String): Seq[String] = {
-      (for {
-        numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
-        index <- 0 until numCols.toInt
-      } yield props.getOrElse(
-        s"spark.sql.sources.schema.${colType}Col.$index",
-        throw new AnalysisException(
-          s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
-        )
-      )).map(quoteIdentifier)
-    }
-
-    val partCols = getColumnNamesByType("part", "partitioning columns")
+    val partCols = DDLUtils.getPartitionColumnsFromTableProperties(metadata)
     if (partCols.nonEmpty) {
       builder ++= s"PARTITIONED BY ${partCols.mkString("(", ", ", ")")}\n"
     }
 
-    val bucketCols = getColumnNamesByType("bucket", "bucketing columns")
-    if (bucketCols.nonEmpty) {
-      builder ++= s"CLUSTERED BY ${bucketCols.mkString("(", ", ", ")")}\n"
+    DDLUtils.getBucketSpecFromTableProperties(metadata).foreach { spec =>
+      if (spec.bucketColumnNames.nonEmpty) {
+        builder ++= s"CLUSTERED BY ${spec.bucketColumnNames.mkString("(", ", ", ")")}\n"
 
-      val sortCols = getColumnNamesByType("sort", "sorting columns")
-      if (sortCols.nonEmpty) {
-        builder ++= s"SORTED BY ${sortCols.mkString("(", ", ", ")")}\n"
+        if (spec.sortColumnNames.nonEmpty) {
+          builder ++= s"SORTED BY ${spec.sortColumnNames.mkString("(", ", ", ")")}\n"
+        }
+
+        builder ++= s"INTO ${spec.numBuckets} BUCKETS\n"
       }
-
-      val numBuckets = props.getOrElse(
-        "spark.sql.sources.schema.numBuckets",
-        throw new AnalysisException("Corrupted bucket spec in catalog: missing bucket number")
-      )
-
-      builder ++= s"INTO $numBuckets BUCKETS\n"
     }
   }
 
