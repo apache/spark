@@ -951,12 +951,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       rowFormatCtx: RowFormatContext,
       createFileFormatCtx: CreateFileFormatContext,
       parentCtx: ParserRuleContext): Unit = {
+    if (rowFormatCtx == null || createFileFormatCtx == null) {
+      return
+    }
     val cff = (0 until createFileFormatCtx.getChildCount)
       .map { i => createFileFormatCtx.getChild(i).getText }
       .mkString(" ")
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
-      case (rf, null) => // only row format, no conflict
-      case (null, ff) => // only file format, no conflict
       case (_, ffTable: TableFileFormatContext) =>
         if (visitTableFileFormat(ffTable).serde.isDefined) {
           throw operationNotAllowed(s"ROW FORMAT is not compatible with $cff", parentCtx)
