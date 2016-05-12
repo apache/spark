@@ -140,7 +140,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    */
   @Since("1.1.0")
   @deprecated("Use accuracy.", "2.0.0")
-  lazy val precision: Double = tpByClass.values.sum.toDouble / labelCount
+  lazy val precision: Double = accuracy
 
   /**
    * Returns recall
@@ -150,7 +150,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    */
   @Since("1.1.0")
   @deprecated("Use accuracy.", "2.0.0")
-  lazy val recall: Double = precision
+  lazy val recall: Double = accuracy
 
   /**
    * Returns f-measure
@@ -158,7 +158,7 @@ class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Doubl
    */
   @Since("1.1.0")
   @deprecated("Use accuracy.", "2.0.0")
-  lazy val fMeasure: Double = precision
+  lazy val fMeasure: Double = accuracy
 
   /**
    * Returns accuracy
