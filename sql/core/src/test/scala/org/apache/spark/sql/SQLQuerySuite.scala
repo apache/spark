@@ -2484,14 +2484,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("data source table created in InMemoryCatalog should be able to read/write") {
     withTable("tbl") {
       sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
-      checkAnswer(sql("SELECT * FROM tbl"), Nil)
+      checkAnswer(sql("SELECT i, j FROM tbl"), Nil)
 
       Seq(1 -> "a", 2 -> "b").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
-      checkAnswer(sql("SELECT * FROM tbl"), Row(1, "a") :: Row(2, "b") :: Nil)
+      checkAnswer(sql("SELECT i, j FROM tbl"), Row(1, "a") :: Row(2, "b") :: Nil)
 
       Seq(3 -> "c", 4 -> "d").toDF("i", "j").write.mode("append").saveAsTable("tbl")
       checkAnswer(
-        sql("SELECT * FROM tbl"),
+        sql("SELECT i, j FROM tbl"),
         Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Row(4, "d") :: Nil)
     }
   }

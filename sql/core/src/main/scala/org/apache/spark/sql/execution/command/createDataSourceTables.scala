@@ -266,36 +266,6 @@ object CreateDataSourceTableUtils extends Logging {
     matcher.matches()
   }
 
-  def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
-    // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
-    // After SPARK-6024, we removed this flag.
-    // Although we are not using spark.sql.sources.schema any more, we need to still support.
-    val userSpecifiedSchema = table.properties.get("spark.sql.sources.schema")
-      .map(s => DataType.fromJson(s).asInstanceOf[StructType])
-      .orElse(DDLUtils.getSchemaFromTableProperties(table))
-
-    // We only need names at here since userSpecifiedSchema we loaded from the metastore
-    // contains partition columns. We can always get datatypes of partitioning columns
-    // from userSpecifiedSchema.
-    val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(table)
-
-    val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
-
-    val options = table.storage.serdeProperties
-    val dataSource =
-      DataSource(
-        sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        partitionColumns = partitionColumns,
-        bucketSpec = bucketSpec,
-        className = table.properties("spark.sql.sources.provider"),
-        options = options)
-
-    LogicalRelation(
-      dataSource.resolveRelation(),
-      metastoreTableIdentifier = Some(table.identifier))
-  }
-
   def createDataSourceTable(
       sparkSession: SparkSession,
       tableIdent: TableIdentifier,
