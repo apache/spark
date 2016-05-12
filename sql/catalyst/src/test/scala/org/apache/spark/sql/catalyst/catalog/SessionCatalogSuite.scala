@@ -482,8 +482,10 @@ class SessionCatalogSuite extends SparkFunSuite {
     assert(catalogPartitionsEqual(externalCatalog, "mydb", "tbl", Seq(part1, part2)))
     // Create partitions without explicitly specifying database
     sessionCatalog.setCurrentDatabase("mydb")
-    sessionCatalog.createPartitions(TableIdentifier("tbl"), Seq(part3), ignoreIfExists = false)
-    assert(catalogPartitionsEqual(externalCatalog, "mydb", "tbl", Seq(part1, part2, part3)))
+    sessionCatalog.createPartitions(
+      TableIdentifier("tbl"), Seq(partWithMixedOrder), ignoreIfExists = false)
+    assert(catalogPartitionsEqual(
+      externalCatalog, "mydb", "tbl", Seq(part1, part2, partWithMixedOrder)))
   }
 
   test("create partitions when database/table does not exist") {
@@ -506,6 +508,31 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
     catalog.createPartitions(
       TableIdentifier("tbl2", Some("db2")), Seq(part1), ignoreIfExists = true)
+  }
+
+  test("create partitions with invalid part spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    var e = intercept[AnalysisException] {
+      catalog.createPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(part1, partWithLessColumns), ignoreIfExists = false)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.createPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(part1, partWithMoreColumns), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.createPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(partWithUnknownColumns, part1), ignoreIfExists = true)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
   }
 
   test("drop partitions") {
@@ -565,6 +592,28 @@ class SessionCatalogSuite extends SparkFunSuite {
       ignoreIfNotExists = true)
   }
 
+  test("drop partitions with invalid partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    var e = intercept[AnalysisException] {
+      catalog.dropPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(partWithMoreColumns.spec),
+        ignoreIfNotExists = false)
+    }
+    assert(e.getMessage.contains(
+      "Partition spec is invalid. The spec (a, b, c) must be contained within " +
+        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+    e = intercept[AnalysisException] {
+      catalog.dropPartitions(
+        TableIdentifier("tbl2", Some("db2")),
+        Seq(partWithUnknownColumns.spec),
+        ignoreIfNotExists = false)
+    }
+    assert(e.getMessage.contains(
+      "Partition spec is invalid. The spec (a, unknown) must be contained within " +
+        "the partition spec (a, b) defined in table '`db2`.`tbl2`'"))
+  }
+
   test("get partition") {
     val catalog = new SessionCatalog(newBasicCatalog())
     assert(catalog.getPartition(
@@ -589,6 +638,25 @@ class SessionCatalogSuite extends SparkFunSuite {
     intercept[NoSuchTableException] {
       catalog.getPartition(TableIdentifier("does_not_exist", Some("db2")), part1.spec)
     }
+  }
+
+  test("get partition with invalid partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    var e = intercept[AnalysisException] {
+      catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithLessColumns.spec)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithMoreColumns.spec)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.getPartition(TableIdentifier("tbl1", Some("db2")), partWithUnknownColumns.spec)
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
   }
 
   test("rename partitions") {
@@ -633,6 +701,31 @@ class SessionCatalogSuite extends SparkFunSuite {
     }
   }
 
+  test("rename partition with invalid partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    var e = intercept[AnalysisException] {
+      catalog.renamePartitions(
+        TableIdentifier("tbl1", Some("db2")),
+        Seq(part1.spec), Seq(partWithLessColumns.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.renamePartitions(
+        TableIdentifier("tbl1", Some("db2")),
+        Seq(part1.spec), Seq(partWithMoreColumns.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.renamePartitions(
+        TableIdentifier("tbl1", Some("db2")),
+        Seq(part1.spec), Seq(partWithUnknownColumns.spec))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+  }
+
   test("alter partitions") {
     val catalog = new SessionCatalog(newBasicCatalog())
     val newLocation = newUriForDatabase()
@@ -671,6 +764,25 @@ class SessionCatalogSuite extends SparkFunSuite {
     intercept[NoSuchTableException] {
       catalog.alterPartitions(TableIdentifier("does_not_exist", Some("db2")), Seq(part1))
     }
+  }
+
+  test("alter partition with invalid partition spec") {
+    val catalog = new SessionCatalog(newBasicCatalog())
+    var e = intercept[AnalysisException] {
+      catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithLessColumns))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithMoreColumns))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, b, c) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
+    e = intercept[AnalysisException] {
+      catalog.alterPartitions(TableIdentifier("tbl1", Some("db2")), Seq(partWithUnknownColumns))
+    }
+    assert(e.getMessage.contains("Partition spec is invalid. The spec (a, unknown) must match " +
+      "the partition spec (a, b) defined in table '`db2`.`tbl1`'"))
   }
 
   test("list partitions") {
