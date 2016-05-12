@@ -752,7 +752,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
    */
   def getAllDefinedConfs: Seq[(String, String, String)] = sqlConfEntries.synchronized {
     sqlConfEntries.values.asScala.filter(_.isPublic).map { entry =>
-      (entry.key, entry.defaultValueString, entry.doc)
+      (entry.key, getConfString(entry.key, entry.defaultValueString), entry.doc)
     }.toSeq
   }
 

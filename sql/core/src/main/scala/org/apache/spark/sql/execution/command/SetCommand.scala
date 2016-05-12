@@ -88,7 +88,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
-          StructField("default", StringType, nullable = false) ::
+          StructField("value", StringType, nullable = false) ::
           StructField("meaning", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 

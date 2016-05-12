@@ -32,6 +32,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 
+import scala.collection.mutable
+
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private val escapedIdentifier = "`(.+)`".r
 
@@ -1000,6 +1002,26 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Row("Function: ^") ::
         Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
     )
+  }
+
+  test("set command") {
+    checkAnswer(
+      sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Nil)
+
+    checkAnswer(
+      sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Row("spark.sql.groupByOrdinal", "true"))
+
+    sql("SET spark.sql.groupByOrdinal=false")
+
+    checkAnswer(
+      sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Row("spark.sql.groupByOrdinal", "false"))
+
+    checkAnswer(
+      sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Row("spark.sql.groupByOrdinal", "false"))
   }
 
   test("drop default database") {
