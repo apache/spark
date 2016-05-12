@@ -662,11 +662,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("dataset.rdd with generic case class") {
     val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS
     val ds2 = ds.map(g => Generic(g.id, g.value))
-    ds.rdd.map(r => r.id).count
-    ds2.rdd.map(r => r.id).count
+    assert(ds.rdd.map(r => r.id).count === 2)
+    assert(ds2.rdd.map(r => r.id).count === 2)
 
     val ds3 = ds.map(g => new java.lang.Long(g.id))
-    ds3.rdd.map(r => r).count
+    assert(ds3.rdd.map(r => r).count === 2)
   }
 
   test("runtime null check for RowEncoder") {

@@ -209,7 +209,8 @@ object EliminateSerialization extends Rule[LogicalPlan] {
         if d.outputObjectType == s.inputObjectType =>
       // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
       // We will remove it later in RemoveAliasOnlyProject rule.
-      val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
+      val objAttr =
+        Alias(s.child.output.head, s.child.output.head.name)(exprId = d.output.head.exprId)
       Project(objAttr :: Nil, s.child)
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
