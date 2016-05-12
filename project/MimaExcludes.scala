@@ -719,7 +719,7 @@ object MimaExcludes {
       ) ++ Seq(
         // [SPARK-15290] Move annotations, like @Since / @DeveloperApi, into spark-tags
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package$"),
-        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package")
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Private"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.AlphaComponent"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Experimental"),
