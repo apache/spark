@@ -68,6 +68,7 @@ class MultilayerPerceptronClassifierSuite
       .setBlockSize(1)
       .setSeed(123L)
       .setMaxIter(100)
+      .setSolver("l-bfgs")
     val model = trainer.fit(dataset)
     val result = model.transform(dataset)
     val predictionAndLabels = result.select("prediction", "label").collect()

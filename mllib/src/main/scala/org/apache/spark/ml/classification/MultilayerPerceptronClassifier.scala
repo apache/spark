@@ -32,20 +32,18 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.Dataset
 
 /** Params for Multilayer Perceptron. */
-private[ml] trait MultilayerPerceptronParams extends PredictorParams
+private[classification] trait MultilayerPerceptronParams extends PredictorParams
   with HasSeed with HasMaxIter with HasTol with HasStepSize {
   /**
    * Layer sizes including input size and output size.
-   * Default: Array(1, 1)
    *
    * @group param
    */
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
-    "Sizes of layers from input layer to output layer" +
-      " E.g., Array(780, 100, 10) means 780 inputs, " +
+    "Sizes of layers from input layer to output layer. " +
+      "E.g., Array(780, 100, 10) means 780 inputs, " +
       "one hidden layer with 100 neurons and output layer of 10 neurons.",
-    (t: Array[Int]) => t.forall(ParamValidators.gt(0)) && t.length > 1
-  )
+    (t: Array[Int]) => t.forall(ParamValidators.gt(0)) && t.length > 1)
 
   /** @group getParam */
   final def getLayers: Array[Int] = $(layers)
@@ -65,22 +63,23 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
       "it is adjusted to the size of this data. Recommended size is between 10 and 1000",
     ParamValidators.gt(0))
 
-  /** @group getParam */
+  /** @group expertGetParam */
   final def getBlockSize: Int = $(blockSize)
 
   /**
-   * Allows setting the solver: minibatch gradient descent (gd) or l-bfgs.
-   * l-bfgs is the default one.
+   * The solver algorithm for optimization.
+   * Supported options: "gd" (minibatch gradient descent) or "l-bfgs".
+   * Default: "l-bfgs"
    *
    * @group expertParam
    */
   final val solver: Param[String] = new Param[String](this, "solver",
-    " Allows setting the solver: minibatch gradient descent (gd) or l-bfgs. " +
-      " l-bfgs is the default one.",
-    ParamValidators.inArray[String](Array("gd", "l-bfgs")))
+    "The solver algorithm for optimization. Supported options: " +
+      s"${MultilayerPerceptronClassifier.supportedSolvers.mkString(", ")}. (Default l-bfgs)",
+    ParamValidators.inArray[String](MultilayerPerceptronClassifier.supportedSolvers))
 
-  /** @group getParam */
-  final def getOptimizer: String = $(solver)
+  /** @group expertGetParam */
+  final def getSolver: String = $(solver)
 
   /**
    * Model weights. Can be returned either after training or after explicit setting
@@ -90,11 +89,11 @@ private[ml] trait MultilayerPerceptronParams extends PredictorParams
   final val weights: Param[Vector] = new Param[Vector](this, "weights",
     " Sets the weights of the model ")
 
-  /** @group getParam */
+  /** @group expertGetParam */
   final def getWeights: Vector = $(weights)
 
-
-  setDefault(maxIter -> 100, tol -> 1e-4, blockSize -> 128, solver -> "l-bfgs", stepSize -> 0.03)
+  setDefault(maxIter -> 100, tol -> 1e-4, blockSize -> 128,
+    solver -> MultilayerPerceptronClassifier.LBFGS, stepSize -> 0.03)
 }
 
 /** Label to vector converter. */
@@ -145,13 +144,31 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   @Since("1.5.0")
   def this() = this(Identifiable.randomUID("mlpc"))
 
-  /** @group setParam */
+  /**
+   * Sets the value of param [[layers]].
+   *
+   * @group setParam
+   */
   @Since("1.5.0")
   def setLayers(value: Array[Int]): this.type = set(layers, value)
 
-  /** @group setParam */
+  /**
+   * Sets the value of param [[blockSize]].
+   * Default is 128.
+   *
+   * @group expertSetParam
+   */
   @Since("1.5.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
+
+  /**
+   * Sets the value of param [[solver]].
+   * Default is "l-bfgs".
+   *
+   * @group expertSetParam
+   */
+  @Since("2.0.0")
+  def setSolver(value: String): this.type = set(solver, value)
 
   /**
    * Set the maximum number of iterations.
@@ -181,12 +198,21 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * Sets the model weights.
+   * Sets the value of param [[weights]].
    *
-   * @group expertParam
+   * @group expertSetParam
    */
   @Since("2.0.0")
   def setWeights(value: Vector): this.type = set(weights, value)
+
+  /**
+   * Sets the value of param [[stepSize]].
+   * Default is 0.03.
+   *
+   * @group setParam
+   */
+  @Since("2.0.0")
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MultilayerPerceptronClassifier = defaultCopy(extra)
@@ -204,16 +230,26 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     val labels = myLayers.last
     val lpData = extractLabeledPoints(dataset)
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
-    val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, true)
+    val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, softmaxOnTop = true)
     val trainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
     if (isDefined(weights)) {
       trainer.setWeights($(weights))
     } else {
       trainer.setSeed($(seed))
     }
-    trainer.LBFGSOptimizer
-      .setConvergenceTol($(tol))
-      .setNumIterations($(maxIter))
+    if ($(solver) == MultilayerPerceptronClassifier.LBFGS) {
+      trainer.LBFGSOptimizer
+        .setConvergenceTol($(tol))
+        .setNumIterations($(maxIter))
+    } else if ($(solver) == MultilayerPerceptronClassifier.GD) {
+      trainer.SGDOptimizer
+        .setNumIterations($(maxIter))
+        .setConvergenceTol($(tol))
+        .setStepSize($(stepSize))
+    } else {
+      throw new UnsupportedOperationException(
+        s"The solver $solver is not supported by MultilayerPerceptronClassifier.")
+    }
     trainer.setStackSize($(blockSize))
     val mlpModel = trainer.train(data)
     new MultilayerPerceptronClassificationModel(uid, myLayers, mlpModel.weights)
@@ -223,6 +259,15 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
 @Since("2.0.0")
 object MultilayerPerceptronClassifier
   extends DefaultParamsReadable[MultilayerPerceptronClassifier] {
+
+  /** String name for "l-bfgs" solver. */
+  private[classification] val LBFGS = "l-bfgs"
+
+  /** String name for "gd" (minibatch gradient descent) solver. */
+  private[classification] val GD = "gd"
+
+  /** Set of solvers that MultilayerPerceptronClassifier supports. */
+  private[classification] val supportedSolvers = Array(LBFGS, GD)
 
   @Since("2.0.0")
   override def load(path: String): MultilayerPerceptronClassifier = super.load(path)
@@ -250,7 +295,9 @@ class MultilayerPerceptronClassificationModel private[ml] (
   @Since("1.6.0")
   override val numFeatures: Int = layers.head
 
-  private val mlpModel = FeedForwardTopology.multiLayerPerceptron(layers, true).model(weights)
+  private val mlpModel = FeedForwardTopology
+    .multiLayerPerceptron(layers, softmaxOnTop = true)
+    .model(weights)
 
   /**
    * Returns layers in a Java List.
