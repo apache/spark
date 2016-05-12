@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.ParamMap
+import org.apache.spark.ml.recommendation.{ALS, ALSModel}
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.{DataFrame, SparkSession}
@@ -58,13 +59,13 @@ object MLTestingUtils extends SparkFunSuite {
       "Column label must be of type NumericType but was actually of type StringType"))
   }
 
-  def checkNumericTypesALS[M <: Model[M], T <: Estimator[M]](
-      estimator: T,
+  def checkNumericTypesALS(
+      estimator: ALS,
       spark: SparkSession,
       column: String,
       baseType: NumericType)
-      (check: (M, M) => Unit)
-      (check2: (M, M, DataFrame) => Unit): Unit = {
+      (check: (ALSModel, ALSModel) => Unit)
+      (check2: (ALSModel, ALSModel, DataFrame) => Unit): Unit = {
     val dfs = genRatingsDFWithNumericCols(spark, column)
     val expected = estimator.fit(dfs(baseType))
     val actuals = dfs.keys.filter(_ != baseType).map(t => (t, estimator.fit(dfs(t))))

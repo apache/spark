@@ -488,10 +488,12 @@ class ALSSuite
     val spark = this.spark
     import spark.implicits._
 
+    // check that ALS can handle all numeric types for rating column
+    // and user/item columns (when the user/item ids are within Int range)
     val als = new ALS().setMaxIter(1).setRank(1)
     Seq(("user", IntegerType), ("item", IntegerType), ("rating", FloatType)).foreach {
       case (colName, sqlType) =>
-        MLTestingUtils.checkNumericTypesALS[ALSModel, ALS](als, spark, colName, sqlType) {
+        MLTestingUtils.checkNumericTypesALS(als, spark, colName, sqlType) {
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
         } { (ex, act, _) =>
@@ -499,6 +501,7 @@ class ALSSuite
             act.transform(_: DataFrame).select("prediction").first.getDouble(0) absTol 1e-6
         }
     }
+    // check user/item ids falling outside of Int range
     val big = Int.MaxValue.toLong + 1
     val small = Int.MinValue.toDouble - 1
     val df = Seq(
