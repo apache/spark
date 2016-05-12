@@ -347,7 +347,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTFExplode")
     }
 
-    spark.catalog.dropTempTable("testUDF")
+    spark.catalog.dropTempView("testUDF")
   }
 
   test("Hive UDF in group by") {

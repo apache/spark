@@ -348,7 +348,7 @@ class HiveDDLCommandSuite extends PlanTest {
   test("create table - temporary") {
     val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
     val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("registerTempTable"))
+    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
   }
 
   test("create table - external") {

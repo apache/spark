@@ -315,7 +315,7 @@ class SessionCatalog(
   /**
    * Create a temporary table.
    */
-  def createTempTable(
+  def createTempView(
       name: String,
       tableDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = synchronized {
