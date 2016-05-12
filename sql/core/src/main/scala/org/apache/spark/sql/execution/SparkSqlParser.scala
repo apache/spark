@@ -953,9 +953,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (rf, null) => // only row format, no conflict
       case (null, ff) => // only file format, no conflict
-      case (rfSerde: RowFormatSerdeContext, ffTable: TableFileFormatContext) =>
+      case (_, ffTable: TableFileFormatContext) =>
         if (visitTableFileFormat(ffTable).serde.isDefined) {
-          throw operationNotAllowed(s"ROW FORMAT SERDE is not compatible with $cff", parentCtx)
+          throw operationNotAllowed(s"ROW FORMAT is not compatible with $cff", parentCtx)
         }
       case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
         ffGeneric.identifier.getText.toLowerCase match {
@@ -963,8 +963,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           case _ => throw operationNotAllowed(
             s"ROW FORMAT SERDE is not compatible with $cff", parentCtx)
         }
-      case (rfDelimited: RowFormatDelimitedContext, ffTable: TableFileFormatContext) =>
-        throw operationNotAllowed(s"ROW FORMAT DELIMITED is not compatible with $cff", parentCtx)
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
         ffGeneric.identifier.getText.toLowerCase match {
           case "textfile" => // OK

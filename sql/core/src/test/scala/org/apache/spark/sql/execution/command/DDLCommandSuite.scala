@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{HiveSerDe, SQLConf}
 
 
 // TODO: merge this with DDLSuite (SPARK-14441)
@@ -212,21 +212,84 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
-  test("create table - conflicting row format and file format") {
-    assertUnsupported(
-      sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS parquet LOCATION '/path'",
-      containsThesePhrases = Seq("row format", "not compatible", "stored as parquet"))
-    val query = "CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS textfile"
-    parser.parsePlan(query) match {
+  test("create table - row format and table file format") {
+    val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
+    val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
+    val fileFormatWithSerde = fileFormat + " SERDE 'myserde'"
+    val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
+    val query2 = s"$createTableStart SERDE 'anything' $fileFormatWithSerde"
+    val query3 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
+    val query4 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormatWithSerde"
+
+    parser.parsePlan(query1) match {
       case ct: CreateTable =>
         assert(ct.table.storage.serde == Some("anything"))
-        assert(ct.table.storage.inputFormat ==
-          Some("org.apache.hadoop.mapred.TextInputFormat"))
-        assert(ct.table.storage.outputFormat ==
-          Some("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"))
+        assert(ct.table.storage.inputFormat == Some("inputfmt"))
+        assert(ct.table.storage.outputFormat == Some("outputfmt"))
       case other =>
         fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $query")
+          s"got ${other.getClass.getName}: $query1")
+    }
+
+    parser.parsePlan(query3) match {
+      case ct: CreateTable =>
+        assert(ct.table.storage.serde.isEmpty)
+        assert(ct.table.storage.inputFormat == Some("inputfmt"))
+        assert(ct.table.storage.outputFormat == Some("outputfmt"))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query1")
+    }
+
+    assertUnsupported(query2, Seq("row format", "not compatible", "stored as", "myserde"))
+    assertUnsupported(query4, Seq("row format", "not compatible", "stored as", "myserde"))
+  }
+
+  test("create table - row format serde and generic file format") {
+    val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
+    val supportedSources = Set("sequencefile", "rcfile", "textfile")
+
+    allSources.foreach { s =>
+      val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
+      if (supportedSources.contains(s)) {
+        parser.parsePlan(query) match {
+          case ct: CreateTable =>
+            val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+            assert(hiveSerde.isDefined)
+            assert(ct.table.storage.serde == Some("anything"))
+            assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
+            assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+          case other =>
+            fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+              s"got ${other.getClass.getName}: $query")
+        }
+      } else {
+        assertUnsupported(query, Seq("row format", "not compatible", s"stored as $s"))
+      }
+    }
+  }
+
+  test("create table - row format delimited and generic file format") {
+    val allSources = Seq("parquet", "orc", "avro", "sequencefile", "rcfile", "textfile")
+    val supportedSources = Set("textfile")
+
+    allSources.foreach { s =>
+      val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
+      if (supportedSources.contains(s)) {
+        parser.parsePlan(query) match {
+          case ct: CreateTable =>
+            val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+            assert(hiveSerde.isDefined)
+            assert(ct.table.storage.serde == hiveSerde.get.serde)
+            assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
+            assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+          case other =>
+            fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+              s"got ${other.getClass.getName}: $query")
+        }
+      } else {
+        assertUnsupported(query, Seq("row format", "not compatible", s"stored as $s"))
+      }
     }
   }
 
