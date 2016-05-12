@@ -336,7 +336,7 @@ class CommandBuilderUtils {
   /**
    * Gets the OutOfMemoryError option for Spark if the user hasn't set it.
    */
-  static String getOutOfMemoryErrorArgument(List<String> cmd) {
+  public static String getOutOfMemoryErrorArgument(List<String> cmd) {
     for (String arg : cmd) {
       if (arg.contains("-XX:OnOutOfMemoryError=")) {
         return "";
