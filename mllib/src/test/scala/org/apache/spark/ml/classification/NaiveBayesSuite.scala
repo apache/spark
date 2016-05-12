@@ -201,7 +201,6 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
 
 object NaiveBayesSuite {
 
-
   /**
    * Mapping from all Params to valid settings which differ from the defaults.
    * This is useful for tests which need to exercise all Params, such as save/load.

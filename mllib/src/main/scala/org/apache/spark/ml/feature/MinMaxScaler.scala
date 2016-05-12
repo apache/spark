@@ -25,8 +25,9 @@ import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamMap, Params}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
 import org.apache.spark.mllib.stat.Statistics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -107,8 +108,8 @@ class MinMaxScaler(override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): MinMaxScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) =>
-      OldVectors.fromML(v)
+    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+      case Row(v: Vector) => OldVectors.fromML(v)
     }
     val summary = Statistics.colStats(input)
     copyValues(new MinMaxScalerModel(uid, summary.min.asML, summary.max.asML).setParent(this))

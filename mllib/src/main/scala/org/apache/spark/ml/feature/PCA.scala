@@ -27,7 +27,8 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{DenseMatrix => OldDenseMatrix, DenseVector => OldDenseVector,
-  Matrices => OldMatrices, Vectors => OldVectors}
+  Matrices => OldMatrices, Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -73,8 +74,8 @@ class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): PCAModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) =>
-      OldVectors.fromML(v)
+    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+      case Row(v: Vector) => OldVectors.fromML(v)
     }
     val pca = new feature.PCA(k = $(k))
     val pcaModel = pca.fit(input)
@@ -138,7 +139,7 @@ class PCAModel private[ml] (
       OldVectors.fromML(explainedVariance).asInstanceOf[OldDenseVector])
 
     // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    def transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = v => pcaModel.transform(OldVectors.fromML(v)).asML
 
     val pcaOp = udf(transformer)
     dataset.withColumn($(outputCol), pcaOp(col($(inputCol))))

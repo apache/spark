@@ -26,7 +26,8 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.StructType
@@ -80,8 +81,8 @@ final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBa
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): IDFModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) =>
-      OldVectors.fromML(v)
+    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+      case Row(v: Vector) => OldVectors.fromML(v)
     }
     val idf = new feature.IDF($(minDocFreq)).fit(input)
     copyValues(new IDFModel(uid, idf).setParent(this))
@@ -122,6 +123,7 @@ class IDFModel private[ml] (
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
+    // TODO: Make the idfModel.transform natively in ml framework to avoid extra conversion.
     val idf = udf { vec: Vector => idfModel.transform(OldVectors.fromML(vec)).asML }
     dataset.withColumn($(outputCol), idf(col($(inputCol))))
   }

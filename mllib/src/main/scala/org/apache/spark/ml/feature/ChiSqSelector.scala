@@ -29,6 +29,7 @@ import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -81,9 +82,9 @@ final class ChiSqSelector(override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(labelCol), $(featuresCol)).rdd.map {
+    val input: RDD[OldLabeledPoint] = dataset.select($(labelCol), $(featuresCol)).rdd.map {
       case Row(label: Double, features: Vector) =>
-        OldLabeledPoint.fromML(LabeledPoint(label, features))
+        OldLabeledPoint(label, OldVectors.fromML(features))
     }
     val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
     copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
@@ -135,7 +136,7 @@ final class ChiSqSelectorModel private[ml] (
     val newField = transformedSchema.last
 
     // TODO: Make the transformer natively in ml framework to avoid extra conversion.
-    def transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
+    val transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
 
     val selector = udf(transformer)
     dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
