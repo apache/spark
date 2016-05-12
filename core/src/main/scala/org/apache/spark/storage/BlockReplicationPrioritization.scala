@@ -52,9 +52,7 @@ class DefaultBlockReplicationPrioritization(host: String)
     val random = new Random(blockId.hashCode)
 
     logDebug(s"Input peers : ${peers.mkString(", ")}")
-    val peersOnOtherHosts = peers.filter(p => !p.host.equals(host))
-    val peersOnHost = peers.filter(p => p.host.equals(host))
-    val ret = random.shuffle(peersOnOtherHosts) ++ random.shuffle(peersOnHost)
+    val ret = random.shuffle(peers)
     logDebug(s"Prioritized peers : ${ret.mkString(", ")}")
     ret
   }
