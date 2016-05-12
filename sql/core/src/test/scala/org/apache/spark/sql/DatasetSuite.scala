@@ -22,7 +22,7 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
-import org.scalatest.words.MatcherWords.{be, noException}
+import org.scalatest.words.MatcherWords.be
 
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.execution.streaming.MemoryStream
@@ -681,10 +681,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val dataset = Seq(1, 2, 3).toDS()
     dataset.createOrReplaceTempView("tempView")
 
-    noException should be thrownBy {
-      // Overrrides the existing temporary view with same name
-      dataset.createOrReplaceTempView("tempView")
-    }
+    // Overrrides the existing temporary view with same name
+    // No exception should be thrown here.
+    dataset.createOrReplaceTempView("tempView")
 
     // Throws AnalysisException if temp view with same name already exists
     val e = intercept[AnalysisException](
