@@ -452,7 +452,7 @@ setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 
 #' @rdname gapply
 #' @export
-setGeneric("gapply", function(x, func, schema, col) { standardGeneric("gapply") })
+setGeneric("gapply", function(x, ...) { standardGeneric("gapply") })
 
 #' @rdname summary
 #' @export

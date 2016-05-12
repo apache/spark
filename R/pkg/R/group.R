@@ -142,3 +142,54 @@ createMethods <- function() {
 }
 
 createMethods()
+
+#' gapply
+#'
+#' Applies a R function to each group in the input GroupedData
+#'
+#' @param x a GroupedData
+#' @return a SparkDataFrame
+#' @rdname gapply
+#' @name gapply
+#' @family agg_funcs
+#' @examples
+#' \dontrun{
+#' Computes the arithmetic mean of the second column by grouping
+#' on the first and third columns. Output the grouping values and the average.
+#'
+#' df <- createDataFrame (
+#' sqlContext,
+#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
+#'   c("a", "b", "c", "d"))
+#'
+#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
+#'   structField("avg", "double"))
+#' df1 <- gapply(
+#'   df,
+#'   list("a", "c"),
+#'   function(x) {
+#'     y <- data.frame(x$a[1], x$c[1], mean(x$b), stringsAsFactors = FALSE)
+#'   },
+#' schema)
+#' collect(df1)
+#'
+#' Result
+#' ------
+#' a c avg
+#' 3 3 3.0
+#' 1 1 1.5
+#' }
+setMethod("gapply",
+          signature(x = "GroupedData"),
+          function(x, func, schema) {
+            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                                         connection = NULL)
+            broadcastArr <- lapply(ls(.broadcastNames),
+                                   function(name) { get(name, .broadcastNames) })
+            sdf <- callJMethod(x@sgd, "flatMapGroupsInR",
+                               serialize(cleanClosure(func), connection = NULL),
+                               packageNamesArr,
+                               broadcastArr,
+                               schema$jobj)
+            dataFrame(sdf)
+          })

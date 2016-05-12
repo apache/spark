@@ -256,20 +256,20 @@ case class MapGroups(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends UnaryNode with ObjectProducer
 
-/** Factory for constructing new `MapGroupsInR` nodes. */
-object MapGroupsInR {
+/** Factory for constructing new `FlatMapGroupsInR` nodes. */
+object FlatMapGroupsInR {
   def apply(
-       func: Array[Byte],
-       packageNames: Array[Byte],
-       broadcastVars: Array[Broadcast[Object]],
-       schema: StructType,
-       encoder: Expression,
-       keyEncoder: Expression,
-       rowEncoder: ExpressionEncoder[Row],
-       groupingAttributes: Seq[Attribute],
-       dataAttributes: Seq[Attribute],
-       child: LogicalPlan): LogicalPlan = {
-     val mapped = MapGroupsInR(
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      schema: StructType,
+      encoder: Expression,
+      keyEncoder: Expression,
+      rowEncoder: ExpressionEncoder[Row],
+      groupingAttributes: Seq[Attribute],
+      dataAttributes: Seq[Attribute],
+      child: LogicalPlan): LogicalPlan = {
+     val mapped = FlatMapGroupsInR(
        func,
        packageNames,
        broadcastVars,
@@ -285,7 +285,7 @@ object MapGroupsInR {
   }
 }
 
-case class MapGroupsInR(
+case class FlatMapGroupsInR(
     func: Array[Byte],
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],

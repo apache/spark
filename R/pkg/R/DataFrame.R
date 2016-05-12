@@ -1216,10 +1216,8 @@ setMethod("dapply",
 
 #' gapply
 #'
-#' Apply a function to each group of a DataFrame. The group is defined by an input
+#' Apply a R function to each group of a DataFrame. The group is defined by an input
 #' grouping column.
-#' Currently only one grouping column is allowed. Support for multiple columns will
-#' be added later.
 #'
 #' @param x A SparkDataFrame
 #' @param func A function to be applied to each group partition specified by grouping
@@ -1234,29 +1232,30 @@ setMethod("dapply",
 #' @examples
 #' 
 #' \dontrun{
-#'
 #' Computes the arithmetic mean of the second column by grouping
-#' on the first column. Output the grouping value and the average.
+#' on the first and third columns. Output the grouping values and the average.
 #'
 #' df <- createDataFrame (
 #' sqlContext,
-#' list(list(1L, 1, "1", 0.1), list(1L, 2, "2", 0.2), list(3L, 3, "3", 0.3)),
+#' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
 #'   c("a", "b", "c", "d"))
 #'
-#' schema <-  structType(structField("a", "integer"), structField("avg", "double"))
+#' schema <-  structType(structField("a", "integer"), structField("c", "string"),
+#'   structField("avg", "double"))
 #' df1 <- gapply(
 #'   df,
+#'   list("a", "c"),
 #'   function(x) {
-#'     y <- (data.frame(x$a[1], mean(x$b)))
+#'     y <- data.frame(x$a[1], x$c[1], mean(x$b), stringsAsFactors = FALSE)
 #'   },
-#' schema, df$"a")
+#' schema)
 #' collect(df1)
 #'
 #' Result
 #' ------
-#' a avg
-#' 1 1.5
-#' 3 3.0
+#' a c avg
+#' 3 3 3.0
+#' 1 1 1.5
 #'
 #' Fits linear models on iris dataset by grouping on the 'Species' column and
 #' using 'Sepal_Length' as a target variable, 'Sepal_Width', 'Petal_Length'
@@ -1268,11 +1267,12 @@ setMethod("dapply",
 #'   structField("Petal_Width", "double"))
 #' df1 <- gapply(
 #'   df,
+#'   list(df$"Species"),
 #'   function(x) {
 #'     m <- suppressWarnings(lm(Sepal_Length ~
 #'     Sepal_Width + Petal_Length + Petal_Width, x))
 #'     data.frame(t(coef(m)))
-#'   }, schema, "Species")
+#'   }, schema)
 #' collect(df1)
 #'
 #'Result
@@ -1284,25 +1284,12 @@ setMethod("dapply",
 #'
 #'}
 setMethod("gapply",
-          signature(x = "SparkDataFrame", func = "function", schema = "structType",
-                    col = "characterOrColumn"),
-          function(x, func, schema, col) {
-            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
-                                         connection = NULL)
-            broadcastArr <- lapply(ls(.broadcastNames),
-                                   function(name) { get(name, .broadcastNames) })
-            if (class(col) == "Column") {
-              colStr <- callJMethod(col@jc, "toString")
-            } else {
-              colStr <- col
-            }
-            sdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "gapply", x@sdf,
-                     serialize(cleanClosure(func), connection = NULL),
-                     packageNamesArr,
-                     broadcastArr,
-                     schema$jobj, colStr)
-            dataFrame(sdf)
+          signature(x = "SparkDataFrame"),
+          function(x, col, func, schema) {
+            grouped <- do.call("groupBy", c(x, col))
+            gapply(grouped, func, schema)
           })
+
 ############################## RDD Map Functions ##################################
 # All of the following functions mirror the existing RDD map functions,           #
 # but allow for use with DataFrames by first converting to an RRDD before calling #

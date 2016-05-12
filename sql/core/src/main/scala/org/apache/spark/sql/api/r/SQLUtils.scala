@@ -25,7 +25,7 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.{Column, DataFrame, Row, SaveMode, SQLContext}
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
 import org.apache.spark.sql.Encoder
@@ -148,45 +148,6 @@ private[sql] object SQLUtils {
     val bv = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
     val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
     df.mapPartitionsInR(func, packageNames, bv, realSchema)
-  }
-
-  /**
-   * The helper function for gapply() on R side.
-   */
-  def gapply(
-      df: DataFrame,
-      func: Array[Byte],
-      packageNames: Array[Byte],
-      broadcastVars: Array[Object],
-      schema: StructType,
-      col: String): DataFrame = {
-    val realSchema = if (schema == null) SERIALIZED_R_DATA_SCHEMA else schema
-    val dfSchema = df.select(df(col)).schema
-    if (dfSchema.length == 0) throw new IllegalArgumentException(s"Invaid column name $col")
-    val dataType = dfSchema(0).dataType
-    val sqlContext = df.sqlContext
-
-    import sqlContext.implicits._
-
-    dataType match {
-      case ByteType => df.mapGroupInR((r: Row) => r.getAs[Byte](col),
-                         func, packageNames, broadcastVars, realSchema)
-      case IntegerType => df.mapGroupInR((r: Row) => r.getAs[Int](col),
-                            func, packageNames, broadcastVars, realSchema)
-      case FloatType => df.mapGroupInR((r: Row) => r.getAs[Float](col),
-                          func, packageNames, broadcastVars, realSchema)
-      case DoubleType => df.mapGroupInR((r: Row) => r.getAs[Double](col),
-                           func, packageNames, broadcastVars, realSchema)
-      case StringType => df.mapGroupInR((r: Row) => r.getAs[String](col),
-                           func, packageNames, broadcastVars, realSchema)
-      case BinaryType => df.mapGroupInR((r: Row) => r.getAs[Array[Byte]](col),
-                           func, packageNames, broadcastVars, realSchema)
-      case BooleanType => df.mapGroupInR((r: Row) => r.getAs[Boolean](col),
-                            func, packageNames, broadcastVars, realSchema)
-      case TimestampType => df.mapGroupInR((r: Row) => r.getAs[Long](col),
-                              func, packageNames, broadcastVars, realSchema)
-      case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
-    }
   }
 
   def dfToCols(df: DataFrame): Array[Array[Any]] = {

@@ -2000,27 +2000,21 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new [[DataFrame]] which contains the aggregated result of applying
-   * [[func]] R function to each group
+   * a serialized R function `func` to each group
    *
    * @group func
    * @since 2.0.0
    */
-  private[sql] def mapGroupInR[K: Encoder](
-      gfunc: T => K,
+  private[sql] def flatMapGroupsInR(
       func: Array[Byte],
       packageNames: Array[Byte],
       broadcastVars: Array[Object],
-      outputSchema: StructType): DataFrame = {
-    val inputPlan = logicalPlan
-    val withGroupingKey = AppendColumns(gfunc, inputPlan)
-    val executed = sqlContext.executePlan(withGroupingKey)
-    val keyValueGroupedData = new KeyValueGroupedDataset(
-      encoderFor[K],
-      encoderFor[T],
-      executed,
-      inputPlan.output,
-      withGroupingKey.newColumns)
-    keyValueGroupedData.flatMapRGroups(func, packageNames, broadcastVars, outputSchema)
+      outputSchema: StructType,
+      cols: Column*): DataFrame = {
+    val relationalGroupedDataSet = RelationalGroupedDataset(toDF(), cols.map(_.named),
+      RelationalGroupedDataset.GroupByType)
+    relationalGroupedDataSet.flatMapGroupsInR(func, packageNames, broadcastVars,
+       outputSchema)
   }
 
   /**
