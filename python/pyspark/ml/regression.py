@@ -750,9 +750,7 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 @inherit_doc
 class DecisionTreeModel(JavaModel, HasFeaturesCol, HasLabelCol, HasPredictionCol):
     """
-    
     .. note:: Experimental
-    
     Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
