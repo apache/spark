@@ -143,7 +143,7 @@ case class GenerateExec(
         val isNull = ctx.freshName("isNull")
         val code =
           s"""
-             |boolean $isNull = ${data.isNull} || $source.isNullAt($index);
+             |boolean $isNull = $numElements == 0 || $source.isNullAt($index);
              |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
            """.stripMargin
         ExprCode(code, isNull, value)
@@ -166,10 +166,12 @@ case class GenerateExec(
       values
     }
 
+    // Evaluate at least once in case of outer.
+    val cmp = if (outer) "<=" else "<"
     s"""
        |${data.code}
-       |int $numElements = ${data.isNull} ? ${if (outer) 1 else 0} : ${data.value}.numElements();
-       |for (int $index = 0; $index < $numElements; $index++) {
+       |int $numElements = ${data.isNull} ? 0 : ${data.value}.numElements();
+       |for (int $index = 0; $index $cmp $numElements; $index++) {
        |  $numOutput.add(1);
        |  ${consume(ctx, output)}
        |}
