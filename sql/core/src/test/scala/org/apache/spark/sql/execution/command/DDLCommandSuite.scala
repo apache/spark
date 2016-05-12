@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.command
 
+import scala.reflect.{classTag, ClassTag}
+
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResource}
 import org.apache.spark.sql.catalyst.catalog.FunctionResourceType
@@ -37,6 +39,15 @@ class DDLCommandSuite extends PlanTest {
     }
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
     containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p.toLowerCase)) }
+  }
+
+  private def parseAs[T: ClassTag](query: String): T = {
+    parser.parsePlan(query) match {
+      case t: T => t
+      case other =>
+        fail(s"Expected to parse ${classTag[T].runtimeClass} from query," +
+          s"got ${other.getClass.getName}: $query")
+    }
   }
 
   test("create database") {
@@ -221,26 +232,17 @@ class DDLCommandSuite extends PlanTest {
     val query3 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
     val query4 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormatWithSerde"
 
-    parser.parsePlan(query1) match {
-      case ct: CreateTable =>
-        assert(ct.table.storage.serde == Some("anything"))
-        assert(ct.table.storage.inputFormat == Some("inputfmt"))
-        assert(ct.table.storage.outputFormat == Some("outputfmt"))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $query1")
-    }
+    // No conflicting serdes here, OK
+    val parsed1 = parseAs[CreateTable](query1)
+    assert(parsed1.table.storage.serde == Some("anything"))
+    assert(parsed1.table.storage.inputFormat == Some("inputfmt"))
+    assert(parsed1.table.storage.outputFormat == Some("outputfmt"))
+    val parsed3 = parseAs[CreateTable](query3)
+    assert(parsed3.table.storage.serde.isEmpty)
+    assert(parsed3.table.storage.inputFormat == Some("inputfmt"))
+    assert(parsed3.table.storage.outputFormat == Some("outputfmt"))
 
-    parser.parsePlan(query3) match {
-      case ct: CreateTable =>
-        assert(ct.table.storage.serde.isEmpty)
-        assert(ct.table.storage.inputFormat == Some("inputfmt"))
-        assert(ct.table.storage.outputFormat == Some("outputfmt"))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $query1")
-    }
-
+    // File format specified a SerDe, not OK
     assertUnsupported(query2, Seq("row format", "not compatible", "stored as", "myserde"))
     assertUnsupported(query4, Seq("row format", "not compatible", "stored as", "myserde"))
   }
@@ -252,17 +254,12 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT SERDE 'anything' STORED AS $s"
       if (supportedSources.contains(s)) {
-        parser.parsePlan(query) match {
-          case ct: CreateTable =>
-            val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
-            assert(hiveSerde.isDefined)
-            assert(ct.table.storage.serde == Some("anything"))
-            assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-            assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
-          case other =>
-            fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
-              s"got ${other.getClass.getName}: $query")
-        }
+        val ct = parseAs[CreateTable](query)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        assert(hiveSerde.isDefined)
+        assert(ct.table.storage.serde == Some("anything"))
+        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
+        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format", "not compatible", s"stored as $s"))
       }
@@ -276,17 +273,12 @@ class DDLCommandSuite extends PlanTest {
     allSources.foreach { s =>
       val query = s"CREATE TABLE my_tab ROW FORMAT DELIMITED FIELDS TERMINATED BY ' ' STORED AS $s"
       if (supportedSources.contains(s)) {
-        parser.parsePlan(query) match {
-          case ct: CreateTable =>
-            val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
-            assert(hiveSerde.isDefined)
-            assert(ct.table.storage.serde == hiveSerde.get.serde)
-            assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
-            assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
-          case other =>
-            fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
-              s"got ${other.getClass.getName}: $query")
-        }
+        val ct = parseAs[CreateTable](query)
+        val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+        assert(hiveSerde.isDefined)
+        assert(ct.table.storage.serde == hiveSerde.get.serde)
+        assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
+        assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
         assertUnsupported(query, Seq("row format", "not compatible", s"stored as $s"))
       }
@@ -298,14 +290,9 @@ class DDLCommandSuite extends PlanTest {
       sql = "CREATE EXTERNAL TABLE my_tab",
       containsThesePhrases = Seq("create external table", "location"))
     val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
-    parser.parsePlan(query) match {
-      case ct: CreateTable =>
-        assert(ct.table.tableType == CatalogTableType.EXTERNAL)
-        assert(ct.table.storage.locationUri == Some("/something/anything"))
-      case other =>
-        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
-          s"got ${other.getClass.getName}: $query")
-    }
+    val ct = parseAs[CreateTable](query)
+    assert(ct.table.tableType == CatalogTableType.EXTERNAL)
+    assert(ct.table.storage.locationUri == Some("/something/anything"))
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;
