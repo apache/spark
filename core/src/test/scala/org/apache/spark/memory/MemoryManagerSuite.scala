@@ -77,6 +77,21 @@ private[memory] trait MemoryManagerSuite extends SparkFunSuite with BeforeAndAft
   }
 
   /**
+   * Make a mocked [[MemoryStore]] whose [[MemoryStore.evictBlocksToFreeSpace]] method is
+   * stubbed to always throw [[RuntimeException]].
+   */
+  protected def makeBadMemoryStore(mm: MemoryManager): MemoryStore = {
+    val ms = mock(classOf[MemoryStore], RETURNS_SMART_NULLS)
+    when(ms.evictBlocksToFreeSpace(any(), anyLong(), any())).thenAnswer(new Answer[Long] {
+      override def answer(invocation: InvocationOnMock): Long = {
+        throw new RuntimeException("bad memory store!")
+      }
+    })
+    mm.setMemoryStore(ms)
+    ms
+  }
+
+  /**
     * Simulate the part of [[MemoryStore.evictBlocksToFreeSpace]] that releases storage memory.
     *
     * This is a significant simplification of the real method, which actually drops existing

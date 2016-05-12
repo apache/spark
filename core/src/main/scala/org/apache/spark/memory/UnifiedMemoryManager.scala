@@ -57,8 +57,12 @@ private[spark] class UnifiedMemoryManager private[memory] (
     storageRegionSize,
     maxMemory - storageRegionSize) {
 
+  assertInvariant()
+
   // We always maintain this invariant:
-  assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+  private def assertInvariant(): Unit = {
+    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+  }
 
   override def maxStorageMemory: Long = synchronized {
     maxMemory - onHeapExecutionMemoryPool.memoryUsed
@@ -77,7 +81,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       numBytes: Long,
       taskAttemptId: Long,
       memoryMode: MemoryMode): Long = synchronized {
-    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+    assertInvariant()
     assert(numBytes >= 0)
     memoryMode match {
       case MemoryMode.ON_HEAP =>
@@ -99,9 +103,10 @@ private[spark] class UnifiedMemoryManager private[memory] (
               math.max(storageMemoryPool.memoryFree, storageMemoryPool.poolSize - storageRegionSize)
             if (memoryReclaimableFromStorage > 0) {
               // Only reclaim as much space as is necessary and available:
-              val spaceReclaimed = storageMemoryPool.shrinkPoolToFreeSpace(
+              val spaceToReclaim = storageMemoryPool.freeSpaceToShrinkPool(
                 math.min(extraMemoryNeeded, memoryReclaimableFromStorage))
-              onHeapExecutionMemoryPool.incrementPoolSize(spaceReclaimed)
+              storageMemoryPool.decrementPoolSize(spaceToReclaim)
+              onHeapExecutionMemoryPool.incrementPoolSize(spaceToReclaim)
             }
           }
         }
@@ -137,7 +142,7 @@ private[spark] class UnifiedMemoryManager private[memory] (
       blockId: BlockId,
       numBytes: Long,
       evictedBlocks: mutable.Buffer[(BlockId, BlockStatus)]): Boolean = synchronized {
-    assert(onHeapExecutionMemoryPool.poolSize + storageMemoryPool.poolSize == maxMemory)
+    assertInvariant()
     assert(numBytes >= 0)
     if (numBytes > maxStorageMemory) {
       // Fail fast if the block simply won't fit
