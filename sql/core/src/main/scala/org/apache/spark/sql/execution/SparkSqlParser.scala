@@ -951,7 +951,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       rowFormatCtx: RowFormatContext,
       createFileFormatCtx: CreateFileFormatContext,
       parentCtx: ParserRuleContext): Unit = {
-    val cff = createFileFormatContextString(createFileFormatCtx)
+    val cff = (0 until createFileFormatCtx.getChildCount)
+      .map { i => createFileFormatCtx.getChild(i).getText }
+      .mkString(" ")
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (rf, null) => // only row format, no conflict
       case (null, ff) => // only file format, no conflict
@@ -975,13 +977,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         // should never happen
         throw operationNotAllowed(s"Unexpected combination of ROW FORMAT and $cff", parentCtx)
     }
-  }
-
-  /**
-   * Helper method to convert a [[CreateFileFormatContext]] to a human-readable form.
-   */
-  private def createFileFormatContextString(ctx: CreateFileFormatContext): String = {
-    (0 until ctx.getChildCount).map { i => ctx.getChild(i).getText }.mkString(" ")
   }
 
   /**
