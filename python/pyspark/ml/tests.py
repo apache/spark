@@ -273,9 +273,9 @@ class ParamTests(PySparkTestCase):
         testParams = TestParams()
         # Copying an instantiated param should fail
         with self.assertRaises(ValueError):
-            testParams.maxIter._copy_new_parent(testParams)
+            testParams._maxIter._copy_new_parent(testParams)
         # Copying a dummy param should succeed
-        TestParams.maxIter._copy_new_parent(testParams)
+        TestParams._maxIter._copy_new_parent(testParams)
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")

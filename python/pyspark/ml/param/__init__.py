@@ -24,6 +24,7 @@ if sys.version > '3':
 from abc import ABCMeta
 import copy
 import numpy as np
+import re
 import warnings
 
 from py4j.java_gateway import JavaObject
@@ -259,9 +260,10 @@ class Params(Identifiable):
         :py:class:`Param`.
         """
         if self._params is None:
-            self._params = list(filter(lambda attr: isinstance(attr, Param),
-                                       [getattr(self, x) for x in dir(self) if x != "params" and
-                                        not isinstance(getattr(type(self), x, None), property)]))
+            param_attrs = list(filter(lambda attr: isinstance(attr, Param),
+                                      [getattr(self, x) for x in dir(self) if x != "params" and
+                                       not isinstance(getattr(type(self), x, None), property)]))
+            self._params = sorted(param_attrs, key=lambda x: x.name)
         return self._params
 
     @since("1.4.0")
@@ -280,7 +282,9 @@ class Params(Identifiable):
         else:
             values.append("undefined")
         valueStr = "(" + ", ".join(values) + ")"
-        return "%s: %s %s" % (param.name, param.doc, valueStr)
+        # Remove the default value from the doc string
+        docStr = re.sub(r'\(Default .+?\)\Z', '', param.doc)
+        return "%s: %s %s" % (param.name, docStr, valueStr)
 
     @since("1.4.0")
     def explainParams(self):

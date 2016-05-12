@@ -44,20 +44,27 @@ def _gen_param_header(name, doc, defaultValueStr, typeConverter):
 
     :param name: param name
     :param doc: param doc
+    :param defaultValueStr: string of the default value (or None for no default)
+    :param typeConverter: param type converter.
     """
     template = '''class Has$Name(Params):
     """
-    Mixin for param $name: $doc
+    Mixin for param $name: $docWithDefault
     """
 
-    $name = Param(Params._dummy(), "$name", "$doc", typeConverter=$typeConverter)
+    _$name = Param(Params._dummy(), "$name", "$doc", typeConverter=$typeConverter)
+    $name = property(lambda x: x._$name, doc="Param $name," + _$name.doc$defaultDoc)
 
     def __init__(self):
         super(Has$Name, self).__init__()'''
 
+    docWithDefault = doc
+    defaultDoc = ""
     if defaultValueStr is not None:
         template += '''
         self._setDefault($name=$defaultValueStr)'''
+        docWithDefault += '''(Default $defaultValueStr)'''
+        defaultDoc = ''' + "(Default $defaultValueStr)"'''
 
     Name = name[0].upper() + name[1:]
     if typeConverter is None:
@@ -65,18 +72,19 @@ def _gen_param_header(name, doc, defaultValueStr, typeConverter):
     return template \
         .replace("$name", name) \
         .replace("$Name", Name) \
+        .replace("$docWithDefault", docWithDefault) \
+        .replace("$defaultDoc", defaultDoc) \
         .replace("$doc", doc) \
         .replace("$defaultValueStr", str(defaultValueStr)) \
         .replace("$typeConverter", typeConverter)
 
 
-def _gen_param_code(name, doc, defaultValueStr):
+def _gen_param_code(name, doc):
     """
     Generates Python code for a shared param class.
 
     :param name: param name
     :param doc: param doc
-    :param defaultValueStr: string representation of the default value
     :return: code string
     """
     # TODO: How to correctly inherit instance attributes?
@@ -98,7 +106,6 @@ def _gen_param_code(name, doc, defaultValueStr):
         .replace("$name", name) \
         .replace("$Name", Name) \
         .replace("$doc", doc) \
-        .replace("$defaultValueStr", str(defaultValueStr))
 
 if __name__ == "__main__":
     print(header)
@@ -144,34 +151,33 @@ if __name__ == "__main__":
          "TypeConverters.toListFloat"),
         ("weightCol", "weight column name. If this is not set or empty, we treat " +
          "all instance weights as 1.0.", None, "TypeConverters.toString"),
-        ("solver", "the solver algorithm for optimization. If this is not set or empty, " +
-         "default value is 'auto'.", "'auto'", "TypeConverters.toString"),
+        ("solver", "the solver algorithm for optimization.", "'auto'", "TypeConverters.toString"),
         ("varianceCol", "column name for the biased sample variance of prediction.",
          None, "TypeConverters.toString")]
 
     code = []
     for name, doc, defaultValueStr, typeConverter in shared:
         param_code = _gen_param_header(name, doc, defaultValueStr, typeConverter)
-        code.append(param_code + "\n" + _gen_param_code(name, doc, defaultValueStr))
+        code.append(param_code + "\n" + _gen_param_code(name, doc))
 
     decisionTreeParams = [
         ("maxDepth", "Maximum depth of the tree. (>= 0) E.g., depth 0 means 1 leaf node; " +
-         "depth 1 means 1 internal node + 2 leaf nodes.", "TypeConverters.toInt"),
+         "depth 1 means 1 internal node + 2 leaf nodes.", "5", "TypeConverters.toInt"),
         ("maxBins", "Max number of bins for" +
          " discretizing continuous features.  Must be >=2 and >= number of categories for any" +
-         " categorical feature.", "TypeConverters.toInt"),
+         " categorical feature.", "32", "TypeConverters.toInt"),
         ("minInstancesPerNode", "Minimum number of instances each child must have after split. " +
          "If a split causes the left or right child to have fewer than minInstancesPerNode, the " +
-         "split will be discarded as invalid. Should be >= 1.", "TypeConverters.toInt"),
+         "split will be discarded as invalid. Should be >= 1.", "1", "TypeConverters.toInt"),
         ("minInfoGain", "Minimum information gain for a split to be considered at a tree node.",
-         "TypeConverters.toFloat"),
+         "0.0", "TypeConverters.toFloat"),
         ("maxMemoryInMB", "Maximum memory in MB allocated to histogram aggregation. If too small," +
          " then 1 node will be split per iteration, and its aggregates may exceed this size.",
-         "TypeConverters.toInt"),
+         "256", "TypeConverters.toInt"),
         ("cacheNodeIds", "If false, the algorithm will pass trees to executors to match " +
          "instances with nodes. If true, the algorithm will cache node IDs for each instance. " +
          "Caching can speed up training of deeper trees. Users can set how often should the " +
-         "cache be checkpointed or disable it by setting checkpointInterval.",
+         "cache be checkpointed or disable it by setting checkpointInterval.", "False",
          "TypeConverters.toBoolean")]
 
     decisionTreeCode = '''class DecisionTreeParams(Params):
@@ -185,14 +191,23 @@ if __name__ == "__main__":
         super(DecisionTreeParams, self).__init__()'''
     dtParamMethods = ""
     dummyPlaceholders = ""
-    paramTemplate = """$name = Param($owner, "$name", "$doc", typeConverter=$typeConverterStr)"""
-    for name, doc, typeConverterStr in decisionTreeParams:
+    paramTemplate = """_$name = Param($owner, "$name", "$doc", typeConverter=$typeConverterStr)
+    $name = property(lambda x: x._$name, doc="Param $name," + _$name.doc$defaultDoc)"""
+    for name, doc, defaultValueStr, typeConverterStr in decisionTreeParams:
+        dtCode = decisionTreeCode
+        defaultDoc = ""
+        if defaultValueStr is not None:
+            dtCode += '''\n        self._setDefault($name=$defaultValueStr)'''
+            dtCode = dtCode.replace("$name", name).replace("$defaultValueStr", defaultValueStr)
+            defaultDoc = ''' + "(Default $defaultValueStr)"'''
         if typeConverterStr is None:
             typeConverterStr = str(None)
-        variable = paramTemplate.replace("$name", name).replace("$doc", doc) \
-            .replace("$typeConverterStr", typeConverterStr)
+        variable = paramTemplate.replace("$name", name) \
+                                .replace("$defaultDoc", defaultDoc) \
+                                .replace("$defaultValueStr", defaultValueStr) \
+                                .replace("$doc", doc) \
+                                .replace("$typeConverterStr", typeConverterStr)
         dummyPlaceholders += variable.replace("$owner", "Params._dummy()") + "\n    "
-        dtParamMethods += _gen_param_code(name, doc, None) + "\n"
-    code.append(decisionTreeCode.replace("$dummyPlaceHolders", dummyPlaceholders) + "\n" +
-                dtParamMethods)
+        dtParamMethods += _gen_param_code(name, doc) + "\n"
+    code.append(dtCode.replace("$dummyPlaceHolders", dummyPlaceholders) + "\n" + dtParamMethods)
     print("\n\n\n".join(code))
