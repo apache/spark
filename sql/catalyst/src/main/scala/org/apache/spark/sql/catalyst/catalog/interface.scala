@@ -21,7 +21,7 @@ import javax.annotation.Nullable
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, SortDirection}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
 
@@ -64,6 +64,13 @@ case class CatalogColumn(
 
 
 /**
+ * Sort ordering of a table.
+ */
+case class CatalogSortOrder(
+    column: CatalogColumn,
+    direction: SortDirection)
+
+/**
  * A partition (Hive style) defined in the catalog.
  *
  * @param spec partition spec values indexed by column name
@@ -86,7 +93,7 @@ case class CatalogTable(
     storage: CatalogStorageFormat,
     schema: Seq[CatalogColumn],
     partitionColumnNames: Seq[String] = Seq.empty,
-    sortColumnNames: Seq[String] = Seq.empty,
+    sortColumns: Seq[CatalogSortOrder] = Seq.empty,
     bucketColumnNames: Seq[String] = Seq.empty,
     numBuckets: Int = -1,
     owner: String = "",
@@ -104,7 +111,7 @@ case class CatalogTable(
       s"must be a subset of schema (${colNames.mkString(", ")}) in table '$identifier'")
   }
   requireSubsetOfSchema(partitionColumnNames, "partition")
-  requireSubsetOfSchema(sortColumnNames, "sort")
+  requireSubsetOfSchema(sortColumns.map(_.column.name), "sort")
   requireSubsetOfSchema(bucketColumnNames, "bucket")
 
   /** Columns this table is partitioned by. */

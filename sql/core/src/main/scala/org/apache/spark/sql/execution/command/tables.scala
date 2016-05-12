@@ -395,7 +395,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     } else {
       append(buffer, "Num Buckets:", metadata.numBuckets.toString, "")
       append(buffer, "Bucket Columns:", metadata.bucketColumnNames.mkString("[", ", ", "]"), "")
-      append(buffer, "Sort Columns:", metadata.sortColumnNames.mkString("[", ", ", "]"), "")
+      append(buffer, "Sort Columns:", metadata.sortColumns.mkString("[", ", ", "]"), "")
     }
   }
 
