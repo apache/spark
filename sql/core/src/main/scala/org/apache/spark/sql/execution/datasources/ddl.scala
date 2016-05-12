@@ -38,6 +38,8 @@ case class CreateTableUsing(
     provider: String,
     temporary: Boolean,
     options: Map[String, String],
+    partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     allowExisting: Boolean,
     managedIfNoPath: Boolean) extends LogicalPlan with logical.Command {
 

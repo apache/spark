@@ -455,7 +455,7 @@ class HiveContext(SQLContext):
 
     def __init__(self, sparkContext, jhiveContext=None):
         if jhiveContext is None:
-            sparkSession = SparkSession.withHiveSupport(sparkContext)
+            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

@@ -182,16 +182,6 @@ class SparkSession(object):
         if SparkSession._instantiatedContext is None:
             SparkSession._instantiatedContext = self
 
-    @classmethod
-    @since(2.0)
-    def withHiveSupport(cls, sparkContext):
-        """Returns a new SparkSession with a catalog backed by Hive.
-
-        :param sparkContext: The underlying :class:`SparkContext`.
-        """
-        jsparkSession = sparkContext._jvm.SparkSession.withHiveSupport(sparkContext._jsc.sc())
-        return cls(sparkContext, jsparkSession)
-
     @since(2.0)
     def newSession(self):
         """

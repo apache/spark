@@ -33,7 +33,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaRandomForestClassifierExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaRandomForestClassifierExample").getOrCreate();
+      .builder()
+      .appName("JavaRandomForestClassifierExample")
+      .getOrCreate();
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
