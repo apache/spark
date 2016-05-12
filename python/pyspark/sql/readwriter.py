@@ -358,7 +358,7 @@ class DataFrameReader(object):
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
-        [('C0', 'string'), ('C1', 'string')]
+        [('_c0', 'string'), ('_c1', 'string')]
         """
         if schema is not None:
             self.schema(schema)
