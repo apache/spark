@@ -255,19 +255,6 @@ class SparkSession(object):
 
         return DataFrame(jdf, self._wrapped)
 
-    def _createTempView(self, viewName, dataFrame, replaceIfExists):
-        """
-        Create a temporary view with a DataFrame
-
-        @param viewName: the name of the temporary view to be created
-        @param dataFrame: DataFrame
-        @replaceIfExists: if set, replaces the existing view of the same name
-        """
-        if isinstance(dataFrame, DataFrame):
-            self._jsparkSession.createTempView(viewName, dataFrame._jdf, replaceIfExists)
-        else:
-            raise ValueError("Can only use DataFrame to create temporary view")
-
     def _inferSchemaFromList(self, data):
         """
         Infer schema from list of Row or tuple.

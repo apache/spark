@@ -302,7 +302,7 @@ class SQLContext(object):
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
-        self.sparkSession._createTempView(tableName, df, replaceIfExists=True)
+        df.createOrReplaceTempView(tableName)
 
     @since(1.6)
     def dropTempTable(self, tableName):
