@@ -1013,7 +1013,7 @@ private[spark] object SparkSubmitUtils {
   def loadIvySettings(settingsFile: String): IvySettings = {
     val file = new File(settingsFile)
     require(file.exists(), s"Ivy settings file $file does not exist")
-    require(file.isFile, s"Ivy settings file $file is not a normal file")
+    require(file.isFile(), s"Ivy settings file $file is not a normal file")
     val ivySettings: IvySettings = new IvySettings
     try {
       ivySettings.load(file)
