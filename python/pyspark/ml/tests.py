@@ -912,8 +912,7 @@ class TrainingSummaryTest(SparkSessionTestCase):
 
     def test_glr_summary(self):
         from pyspark.mllib.linalg import Vectors
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
                                          (0.0, 2.0, Vectors.sparse(1, [], []))],
                                         ["label", "weight", "features"])
         glr = GeneralizedLinearRegression(family="gaussian", link="identity", weightCol="weight",
