@@ -40,6 +40,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
                        HasStandardization, HasSolver, HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Linear regression.
 
     The learning objective is to minimize the squared error, with regularization.
@@ -796,6 +798,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
                             JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
@@ -878,6 +882,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by RandomForestRegressor.
 
     .. versionadded:: 1.4.0
@@ -1226,6 +1232,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
                                   HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
                                   HasSolver, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Generalized Linear Regression.
 
     Fit a Generalized Linear Model specified by giving a symbolic description of the linear
@@ -1342,6 +1350,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
 class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by GeneralizedLinearRegression.
 
     .. versionadded:: 2.0.0
