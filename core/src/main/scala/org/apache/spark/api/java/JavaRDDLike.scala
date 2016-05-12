@@ -435,7 +435,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * The confidence is the probability that the error bounds of the result will
    * contain the true value. That is, if countApprox were called repeatedly
    * with confidence 0.9, we would expect 90% of the results to contain the
-   * true count.
+   * true count. The confidence must be in the range [0,1] or an exception will
+   * be thrown.
    *
    * @param timeout maximum time to wait for the job, in milliseconds
    * @param confidence the desired statistical confidence in the result
@@ -466,7 +467,8 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * The confidence is the probability that the error bounds of the result will
    * contain the true value. That is, if countApprox were called repeatedly
    * with confidence 0.9, we would expect 90% of the results to contain the
-   * true count.
+   * true count. The confidence must be in the range [0,1] or an exception will
+   * be thrown.
    *
    * @param timeout maximum time to wait for the job, in milliseconds
    * @param confidence the desired statistical confidence in the result
