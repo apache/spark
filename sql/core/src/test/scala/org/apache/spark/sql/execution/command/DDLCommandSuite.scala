@@ -295,6 +295,13 @@ class DDLCommandSuite extends PlanTest {
     assert(ct.table.storage.locationUri == Some("/something/anything"))
   }
 
+  test("create table - location implies external") {
+    val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
+    val ct = parseAs[CreateTable](query)
+    assert(ct.table.tableType == CatalogTableType.EXTERNAL)
+    assert(ct.table.storage.locationUri == Some("/something/anything"))
+  }
+
   // ALTER TABLE table_name RENAME TO new_table_name;
   // ALTER VIEW view_name RENAME TO new_view_name;
   test("alter table/view: rename table/view") {
