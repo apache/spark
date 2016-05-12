@@ -51,7 +51,6 @@ object GaussianMixtureExample {
       .setSeed(10)
     val model = gmm.fit(dataset)
 
-
     // output parameters of max-likelihood model
     for (i <- 0 until model.getK) {
       println("weight=%f\nmu=%s\nsigma=\n%s\n" format
