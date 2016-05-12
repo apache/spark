@@ -25,7 +25,7 @@ import java.util.Map;
 /**
  * Helper methods for command builders.
  */
-class CommandBuilderUtils {
+public class CommandBuilderUtils {
 
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
