@@ -386,6 +386,7 @@ object Decimal {
   def fromDecimal(value: Any): Decimal = {
     value match {
       case j: java.math.BigDecimal => apply(j)
+      case d: BigDecimal => apply(d)
       case d: Decimal => d
     }
   }

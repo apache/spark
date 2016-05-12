@@ -46,7 +46,7 @@ public class JavaSimpleParamsExample {
       .getOrCreate();
 
     // Prepare training data.
-    // We use LabeledPoint, which is a JavaBean.  Spark SQL can convert RDDs of JavaBeans
+    // We use LabeledPoint, which is a JavaBean. Spark SQL can convert RDDs of JavaBeans
     // into DataFrames, where it uses the bean metadata to infer the schema.
     List<LabeledPoint> localTraining = Lists.newArrayList(
       new LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
@@ -56,7 +56,7 @@ public class JavaSimpleParamsExample {
     Dataset<Row> training =
       spark.createDataFrame(localTraining, LabeledPoint.class);
 
-    // Create a LogisticRegression instance.  This instance is an Estimator.
+    // Create a LogisticRegression instance. This instance is an Estimator.
     LogisticRegression lr = new LogisticRegression();
     // Print out the parameters, documentation, and any default values.
     System.out.println("LogisticRegression parameters:\n" + lr.explainParams() + "\n");
@@ -65,7 +65,7 @@ public class JavaSimpleParamsExample {
     lr.setMaxIter(10)
       .setRegParam(0.01);
 
-    // Learn a LogisticRegression model.  This uses the parameters stored in lr.
+    // Learn a LogisticRegression model. This uses the parameters stored in lr.
     LogisticRegressionModel model1 = lr.fit(training);
     // Since model1 is a Model (i.e., a Transformer produced by an Estimator),
     // we can view the parameters it used during fit().
@@ -82,7 +82,7 @@ public class JavaSimpleParamsExample {
 
     // One can also combine ParamMaps.
     ParamMap paramMap2 = new ParamMap();
-    paramMap2.put(lr.probabilityCol().w("myProbability")); // Change output column name
+    paramMap2.put(lr.probabilityCol().w("myProbability")); // Change output column name.
     ParamMap paramMapCombined = paramMap.$plus$plus(paramMap2);
 
     // Now learn a new model using the paramMapCombined parameters.
