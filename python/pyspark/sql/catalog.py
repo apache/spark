@@ -181,47 +181,6 @@ class Catalog(object):
         """
         self._jcatalog.dropTempView(viewName)
 
-    @since(2.0)
-    def createTempView(self, viewName, df):
-        """Create a temporary view in the catalog with the given :class:`DataFrame`.
-        throws :class:`TempTableAlreadyExistsException`, if the view name already exists
-        in the catalog.
-
-        >>> df = spark.createDataFrame([(2, 1), (3, 1)])
-        >>> spark.catalog.createTempView("my_cool_view", df)
-        >>> spark.table("my_cool_view").collect()
-        [Row(_1=2, _2=1), Row(_1=3, _2=1)]
-        >>> spark.catalog.createTempView("my_cool_view", df)  # doctest: +IGNORE_EXCEPTION_DETAIL
-        Traceback (most recent call last):
-        ...
-        Py4JJavaError: ...
-        : org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException...
-        >>> spark.catalog.dropTempView("my_cool_view")
-        """
-        if isinstance(df, DataFrame):
-            self._jcatalog.createTempView(viewName, df._jdf)
-        else:
-            raise ValueError("Can only register DataFrame as table")
-
-    @since(2.0)
-    def createOrReplaceTempView(self, viewName, df):
-        """Create or replace a temporary view in the catalog with the given :class:`DataFrame`.
-
-        >>> df = spark.createDataFrame([(2, 1), (3, 1)])
-        >>> df2 = spark.createDataFrame([(4, 1), (5, 1)])
-        >>> spark.catalog.createOrReplaceTempView("my_cool_view", df)
-        >>> spark.table("my_cool_view").collect()
-        [Row(_1=2, _2=1), Row(_1=3, _2=1)]
-        >>> spark.catalog.createOrReplaceTempView("my_cool_view", df2)
-        >>> spark.table("my_cool_view").collect()
-        [Row(_1=4, _2=1), Row(_1=5, _2=1)]
-        >>> spark.catalog.dropTempView("my_cool_view")
-        """
-        if isinstance(df, DataFrame):
-            self._jcatalog.createOrReplaceTempView(viewName, df._jdf)
-        else:
-            raise ValueError("Can only register DataFrame as table")
-
     @ignore_unicode_prefix
     @since(2.0)
     def registerFunction(self, name, f, returnType=StringType()):

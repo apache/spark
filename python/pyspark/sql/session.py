@@ -255,6 +255,19 @@ class SparkSession(object):
 
         return DataFrame(jdf, self._wrapped)
 
+    def _createTempView(self, viewName, dataFrame, replaceIfExists):
+        """
+        Create a temporary view with this dataFrame
+
+        @param viewName: the name of the temporary view to be created
+        @param dataFrame: DataFrame
+        @replaceIfExists: if set, replaces the existing view of the same name
+        """
+        if isinstance(dataFrame, DataFrame):
+          self._jsparkSession.createTempView(viewName, dataFrame._jdf, replaceIfExists)
+        else:
+          raise ValueError("Can only use DataFrame to create temporary view")
+
     def _inferSchemaFromList(self, data):
         """
         Infer schema from list of Row or tuple.
@@ -484,7 +497,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.createOrReplaceTempView("table1", df)
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
@@ -497,7 +510,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.createOrReplaceTempView("table1", df)
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True

@@ -2324,7 +2324,7 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = {
-    sparkSession.catalog.createTempView(viewName, toDF())
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = false)
   }
 
   /**
@@ -2335,7 +2335,7 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = {
-    sparkSession.catalog.createOrReplaceTempView(viewName, toDF())
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = true)
   }
 
   /**
