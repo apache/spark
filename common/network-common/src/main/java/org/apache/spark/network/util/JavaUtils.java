@@ -130,24 +130,16 @@ public class JavaUtils {
   }
 
   private static void deleteRecursivelyUsingUnixNative(File file) throws IOException {
-    final ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
+    ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
     Process process = null;
     int exitCode = -1;
 
     try {
-      // Merge error stream of the process with its stdout
-      // Later stdout to be consumed using {@link Process#getInputStream()}
+      // In order to avoid deadlocks, consume the stdout (and stderr) of the process
       builder.redirectErrorStream(true);
+      builder.redirectOutput(new File("/dev/null"));
 
       process = builder.start();
-
-      // In order to avoid deadlocks, consume the stdout (and stderr) of the process
-      final BufferedInputStream in = new BufferedInputStream(process.getInputStream());
-      final byte[] buffer = new byte[4096];
-      int len = in.read(buffer);
-      while (len != -1) {
-        len = in.read(buffer);
-      }
 
       exitCode = process.waitFor();
     } catch (Exception e) {
