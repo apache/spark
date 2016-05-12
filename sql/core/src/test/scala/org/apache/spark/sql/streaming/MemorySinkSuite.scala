@@ -44,13 +44,13 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext {
     query.processAllAvailable()
 
     checkDataset(
-      sqlContext.table("memStream").as[Int],
+      spark.table("memStream").as[Int],
       1, 2, 3)
 
     input.addData(4, 5, 6)
     query.processAllAvailable()
     checkDataset(
-      sqlContext.table("memStream").as[Int],
+      spark.table("memStream").as[Int],
       1, 2, 3, 4, 5, 6)
 
     query.stop()

@@ -156,8 +156,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`k`.
         """
-        self._set(k=value)
-        return self
+        return self._set(k=value)
 
     @since("2.0.0")
     def getK(self):
@@ -272,8 +271,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`k`.
         """
-        self._set(k=value)
-        return self
+        return self._set(k=value)
 
     @since("1.5.0")
     def getK(self):
@@ -287,8 +285,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`initMode`.
         """
-        self._set(initMode=value)
-        return self
+        return self._set(initMode=value)
 
     @since("1.5.0")
     def getInitMode(self):
@@ -302,8 +299,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
         """
         Sets the value of :py:attr:`initSteps`.
         """
-        self._set(initSteps=value)
-        return self
+        return self._set(initSteps=value)
 
     @since("1.5.0")
     def getInitSteps(self):
@@ -422,8 +418,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`k`.
         """
-        self._set(k=value)
-        return self
+        return self._set(k=value)
 
     @since("2.0.0")
     def getK(self):
@@ -437,8 +432,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
         """
         Sets the value of :py:attr:`minDivisibleClusterSize`.
         """
-        self._set(minDivisibleClusterSize=value)
-        return self
+        return self._set(minDivisibleClusterSize=value)
 
     @since("2.0.0")
     def getMinDivisibleClusterSize(self):

@@ -33,7 +33,9 @@ object SparkSqlExample {
       case None => new SparkConf().setAppName("Simple Sql App")
     }
     val sc = new SparkContext(conf)
-    val sparkSession = SparkSession.withHiveSupport(sc)
+    val sparkSession = SparkSession.builder
+      .enableHiveSupport()
+      .getOrCreate()
 
     import sparkSession._
     sql("DROP TABLE IF EXISTS src")
@@ -41,14 +43,14 @@ object SparkSqlExample {
     sql("LOAD DATA LOCAL INPATH 'data.txt' INTO TABLE src")
     val results = sql("FROM src SELECT key, value WHERE key >= 0 AND KEY < 5").collect()
     results.foreach(println)
-    
+
     def test(f: => Boolean, failureMsg: String) = {
       if (!f) {
         println(failureMsg)
         System.exit(-1)
       }
     }
-    
+
     test(results.size == 5, "Unexpected number of selected elements: " + results)
     println("Test succeeded")
     sc.stop()

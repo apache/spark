@@ -48,6 +48,11 @@ class PlanParserSuite extends PlanTest {
     assertEqual("SELECT * FROM a", plan)
   }
 
+  test("explain") {
+    intercept("EXPLAIN logical SELECT 1", "Unsupported SQL statement")
+    intercept("EXPLAIN formatted SELECT 1", "Unsupported SQL statement")
+  }
+
   test("show functions") {
     assertEqual("show functions", ShowFunctions(None, None))
     assertEqual("show functions foo", ShowFunctions(None, Some("foo")))
@@ -57,10 +62,14 @@ class PlanParserSuite extends PlanTest {
   }
 
   test("describe function") {
-    assertEqual("describe function bar", DescribeFunction("bar", isExtended = false))
-    assertEqual("describe function extended bar", DescribeFunction("bar", isExtended = true))
-    assertEqual("describe function foo.bar", DescribeFunction("foo.bar", isExtended = false))
-    assertEqual("describe function extended f.bar", DescribeFunction("f.bar", isExtended = true))
+    assertEqual("describe function bar",
+      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = false))
+    assertEqual("describe function extended bar",
+      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = true))
+    assertEqual("describe function foo.bar",
+      DescribeFunction(FunctionIdentifier("bar", database = Option("foo")), isExtended = false))
+    assertEqual("describe function extended f.bar",
+      DescribeFunction(FunctionIdentifier("bar", database = Option("f")), isExtended = true))
   }
 
   test("set operations") {
@@ -372,9 +381,13 @@ class PlanParserSuite extends PlanTest {
     assertEqual(s"$sql tablesample(bucket 4 out of 10) as x",
       Sample(0, .4d, withReplacement = false, 10L, table("t").as("x"))(true).select(star()))
     intercept(s"$sql tablesample(bucket 4 out of 10 on x) as x",
-      "TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported")
+      "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported")
     intercept(s"$sql tablesample(bucket 11 out of 10) as x",
       s"Sampling fraction (${11.0/10.0}) must be on interval [0, 1]")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(300M) s",
+      "TABLESAMPLE(byteLengthLiteral) is not supported")
+    intercept("SELECT * FROM parquet_t0 TABLESAMPLE(BUCKET 3 OUT OF 32 ON rand()) s",
+      "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported")
   }
 
   test("sub-query") {

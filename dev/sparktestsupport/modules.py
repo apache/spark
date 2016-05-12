@@ -223,14 +223,14 @@ streaming_kinesis_asl = Module(
 
 
 streaming_kafka = Module(
-    name="streaming-kafka",
+    name="streaming-kafka-0-8",
     dependencies=[streaming],
     source_file_regexes=[
-        "external/kafka",
-        "external/kafka-assembly",
+        "external/kafka-0-8",
+        "external/kafka-0-8-assembly",
     ],
     sbt_test_goals=[
-        "streaming-kafka/test",
+        "streaming-kafka-0-8/test",
     ]
 )
 

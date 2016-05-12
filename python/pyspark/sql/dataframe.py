@@ -63,8 +63,6 @@ class DataFrame(object):
         people.filter(people.age > 30).join(department, people.deptId == department.id)\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
 
-    .. note:: Experimental
-
     .. versionadded:: 1.3
     """
 
@@ -206,6 +204,8 @@ class DataFrame(object):
         :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
+
+        .. note:: Experimental
         """
         return self._jdf.isStreaming()
 
@@ -362,15 +362,6 @@ class DataFrame(object):
         1
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sql_ctx)
-
-    @since(1.3)
-    def repartition(self, numPartitions):
-        """Returns a new :class:`DataFrame` that has exactly ``numPartitions`` partitions.
-
-        >>> df.repartition(10).rdd.getNumPartitions()
-        10
-        """
-        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     @since(1.3)
     def repartition(self, numPartitions, *cols):

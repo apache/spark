@@ -39,7 +39,7 @@ class HiveDDLCommandSuite extends PlanTest {
     parser.parsePlan(sql).collect {
       case CreateTable(desc, allowExisting) => (desc, allowExisting)
       case CreateTableAsSelectLogicalPlan(desc, _, allowExisting) => (desc, allowExisting)
-      case CreateViewCommand(desc, _, allowExisting, _, _) => (desc, allowExisting)
+      case CreateViewCommand(desc, _, allowExisting, _, _, _) => (desc, allowExisting)
     }.head
   }
 
@@ -352,9 +352,10 @@ class HiveDDLCommandSuite extends PlanTest {
   }
 
   test("create table - external") {
-    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string)"
+    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
     val (desc, _) = extractTableDesc(query)
     assert(desc.tableType == CatalogTableType.EXTERNAL)
+    assert(desc.storage.locationUri == Some("/path/to/nowhere"))
   }
 
   test("create table - if not exists") {
@@ -452,12 +453,6 @@ class HiveDDLCommandSuite extends PlanTest {
     val e2 = intercept[ParseException] { parser.parsePlan(query2) }
     assert(e1.getMessage.contains("Operation not allowed"))
     assert(e2.getMessage.contains("Operation not allowed"))
-  }
-
-  test("create table - location") {
-    val query = "CREATE TABLE my_table (id int, name string) LOCATION '/path/to/mars'"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.storage.locationUri == Some("/path/to/mars"))
   }
 
   test("create table - properties") {
@@ -579,7 +574,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(source2.table == "table2")
   }
 
-  test("load data")  {
+  test("load data") {
     val v1 = "LOAD DATA INPATH 'path' INTO TABLE table1"
     val (table, path, isLocal, isOverwrite, partition) = parser.parsePlan(v1).collect {
       case LoadData(t, path, l, o, partition) => (t, path, l, o, partition)

@@ -17,6 +17,7 @@
 
 from __future__ import print_function
 import sys
+import warnings
 
 if sys.version >= '3':
     basestring = unicode = str
@@ -434,7 +435,6 @@ class SQLContext(object):
         return ContinuousQueryManager(self._ssql_ctx.streams())
 
 
-# TODO(andrew): deprecate this
 class HiveContext(SQLContext):
     """A variant of Spark SQL that integrates with data stored in Hive.
 
@@ -444,11 +444,18 @@ class HiveContext(SQLContext):
     :param sparkContext: The SparkContext to wrap.
     :param jhiveContext: An optional JVM Scala HiveContext. If set, we do not instantiate a new
         :class:`HiveContext` in the JVM, instead we make all calls to this object.
+
+    .. note:: Deprecated in 2.0.0. Use SparkSession.builder.enableHiveSupport().getOrCreate().
     """
+
+    warnings.warn(
+        "HiveContext is deprecated in Spark 2.0.0. Please use " +
+        "SparkSession.builder.enableHiveSupport().getOrCreate() instead.",
+        DeprecationWarning)
 
     def __init__(self, sparkContext, jhiveContext=None):
         if jhiveContext is None:
-            sparkSession = SparkSession.withHiveSupport(sparkContext)
+            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

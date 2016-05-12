@@ -34,7 +34,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   override def copyAndReset(): SQLMetric = new SQLMetric(metricType, initValue)
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
-    case o: SQLMetric => _value += o.localValue
+    case o: SQLMetric => _value += o.value
     case _ => throw new UnsupportedOperationException(
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
@@ -45,7 +45,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   def +=(v: Long): Unit = _value += v
 
-  override def localValue: Long = _value
+  override def value: Long = _value
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   private[spark] override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
@@ -66,7 +66,7 @@ private[sql] object SQLMetrics {
 
   def createMetric(sc: SparkContext, name: String): SQLMetric = {
     val acc = new SQLMetric(SUM_METRIC)
-    acc.register(sc, name = Some(name), countFailedValues = true)
+    acc.register(sc, name = Some(name), countFailedValues = false)
     acc
   }
 
@@ -79,7 +79,7 @@ private[sql] object SQLMetrics {
     // data size total (min, med, max):
     // 100GB (100MB, 1GB, 10GB)
     val acc = new SQLMetric(SIZE_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = true)
+    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
 
@@ -88,7 +88,7 @@ private[sql] object SQLMetrics {
     // duration(min, med, max):
     // 5s (800ms, 1s, 2s)
     val acc = new SQLMetric(TIMING_METRIC, -1)
-    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = true)
+    acc.register(sc, name = Some(s"$name total (min, med, max)"), countFailedValues = false)
     acc
   }
 

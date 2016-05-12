@@ -18,12 +18,13 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class FileStreamSourceTest extends StreamTest with SharedSQLContext {
@@ -57,7 +58,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
         addData(source)
         source.currentOffset + 1
       }
-      logInfo(s"Added data to $source at offset $newOffset")
+      logInfo(s"Added file to $source at offset $newOffset")
       (source, newOffset)
     }
 
@@ -68,8 +69,11 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
     extends AddFileData {
 
     override def addData(source: FileStreamSource): Unit = {
-      val file = Utils.tempFileWith(new File(tmp, "text"))
-      stringToFile(file, content).renameTo(new File(src, file.getName))
+      val tempFile = Utils.tempFileWith(new File(tmp, "text"))
+      val finalFile = new File(src, tempFile.getName)
+      src.mkdirs()
+      require(stringToFile(tempFile, content).renameTo(finalFile))
+      logInfo(s"Written text '$content' to file $finalFile")
     }
   }
 
@@ -84,10 +88,14 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       AddParquetFileData(seq.toDS().toDF(), src, tmp)
     }
 
+    /** Write parquet files in a temp dir, and move the individual files to the 'src' dir */
     def writeToFile(df: DataFrame, src: File, tmp: File): Unit = {
-      val file = Utils.tempFileWith(new File(tmp, "parquet"))
-      df.write.parquet(file.getCanonicalPath)
-      file.renameTo(new File(src, file.getName))
+      val tmpDir = Utils.tempFileWith(new File(tmp, "parquet"))
+      df.write.parquet(tmpDir.getCanonicalPath)
+      src.mkdirs()
+      tmpDir.listFiles().foreach { f =>
+        f.renameTo(new File(src, s"${f.getName}"))
+      }
     }
   }
 
@@ -96,12 +104,11 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
       format: String,
       path: String,
       schema: Option[StructType] = None): DataFrame = {
-
     val reader =
       if (schema.isDefined) {
-        sqlContext.read.format(format).schema(schema.get)
+        spark.read.format(format).schema(schema.get)
       } else {
-        sqlContext.read.format(format)
+        spark.read.format(format)
       }
     reader.stream(path)
   }
@@ -145,7 +152,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       format: Option[String],
       path: Option[String],
       schema: Option[StructType] = None): StructType = {
-    val reader = sqlContext.read
+    val reader = spark.read
     format.foreach(reader.format)
     schema.foreach(reader.schema)
     val df =
@@ -210,8 +217,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: parquet, existing files, no schema") {
     withTempDir { src =>
-      Seq("a", "b", "c").toDS().as("userColumn").toDF()
-        .write.parquet(new File(src, "1").getCanonicalPath)
+      Seq("a", "b", "c").toDS().as("userColumn").toDF().write
+        .mode(org.apache.spark.sql.SaveMode.Overwrite)
+        .parquet(src.getCanonicalPath)
       val schema = createFileStreamSourceAndGetSchema(
         format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
       assert(schema === new StructType().add("value", StringType))
@@ -268,7 +276,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
@@ -292,7 +300,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
           "{'value': 'drop4'}\n{'value': 'keep5'}\n{'value': 'keep6'}",
           src,
           tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData(
           "{'value': 'drop7'}\n{'value': 'keep8'}\n{'value': 'keep9'}",
@@ -322,7 +330,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-
   test("reading from json files inside partitioned directory") {
     withTempDirs { case (baseSrc, tmp) =>
       val src = new File(baseSrc, "type=X")
@@ -342,7 +349,6 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
-
 
   test("reading from json files with changing schema") {
     withTempDirs { case (src, tmp) =>
@@ -385,7 +391,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddParquetFileData(Seq("drop4", "keep5", "keep6"), src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddParquetFileData(Seq("drop7", "keep8", "keep9"), src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")
@@ -439,6 +445,79 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
+  test("read new files in nested directories with globbing") {
+    withTempDirs { case (dir, tmp) =>
+
+      // src/*/* should consider all the files and directories that matches that glob.
+      // So any files that matches the glob as well as any files in directories that matches
+      // this glob should be read.
+      val fileStream = createFileStream("text", s"${dir.getCanonicalPath}/*/*")
+      val filtered = fileStream.filter($"value" contains "keep")
+      val subDir = new File(dir, "subdir")
+      val subSubDir = new File(subDir, "subsubdir")
+      val subSubSubDir = new File(subSubDir, "subsubsubdir")
+
+      require(!subDir.exists())
+      require(!subSubDir.exists())
+
+      testStream(filtered)(
+        // Create new dir/subdir and write to it, should read
+        AddTextFileData("drop1\nkeep2", subDir, tmp),
+        CheckAnswer("keep2"),
+
+        // Add files to dir/subdir, should read
+        AddTextFileData("keep3", subDir, tmp),
+        CheckAnswer("keep2", "keep3"),
+
+        // Create new dir/subdir/subsubdir and write to it, should read
+        AddTextFileData("keep4", subSubDir, tmp),
+        CheckAnswer("keep2", "keep3", "keep4"),
+
+        // Add files to dir/subdir/subsubdir, should read
+        AddTextFileData("keep5", subSubDir, tmp),
+        CheckAnswer("keep2", "keep3", "keep4", "keep5"),
+
+        // 1. Add file to src dir, should not read as globbing src/*/* does not capture files in
+        //    dir, only captures files in dir/subdir/
+        // 2. Add files to dir/subDir/subsubdir/subsubsubdir, should not read as src/*/* should
+        //    not capture those files
+        AddTextFileData("keep6", dir, tmp),
+        AddTextFileData("keep7", subSubSubDir, tmp),
+        AddTextFileData("keep8", subDir, tmp), // needed to make query detect new data
+        CheckAnswer("keep2", "keep3", "keep4", "keep5", "keep8")
+      )
+    }
+  }
+
+  test("read new files in partitioned table with globbing, should not read partition data") {
+    withTempDirs { case (dir, tmp) =>
+      val partitionFooSubDir = new File(dir, "partition=foo")
+      val partitionBarSubDir = new File(dir, "partition=bar")
+
+      val schema = new StructType().add("value", StringType).add("partition", StringType)
+      val fileStream = createFileStream("json", s"${dir.getCanonicalPath}/*/*", Some(schema))
+      val filtered = fileStream.filter($"value" contains "keep")
+      val nullStr = null.asInstanceOf[String]
+      testStream(filtered)(
+        // Create new partition=foo sub dir and write to it, should read only value, not partition
+        AddTextFileData("{'value': 'drop1'}\n{'value': 'keep2'}", partitionFooSubDir, tmp),
+        CheckAnswer(("keep2", nullStr)),
+
+        // Append to same partition=1 sub dir, should read only value, not partition
+        AddTextFileData("{'value': 'keep3'}", partitionFooSubDir, tmp),
+        CheckAnswer(("keep2", nullStr), ("keep3", nullStr)),
+
+        // Create new partition sub dir and write to it, should read only value, not partition
+        AddTextFileData("{'value': 'keep4'}", partitionBarSubDir, tmp),
+        CheckAnswer(("keep2", nullStr), ("keep3", nullStr), ("keep4", nullStr)),
+
+        // Append to same partition=2 sub dir, should read only value, not partition
+        AddTextFileData("{'value': 'keep5'}", partitionBarSubDir, tmp),
+        CheckAnswer(("keep2", nullStr), ("keep3", nullStr), ("keep4", nullStr), ("keep5", nullStr))
+      )
+    }
+  }
+
   test("fault tolerance") {
     withTempDirs { case (src, tmp) =>
       val fileStream = createFileStream("text", src.getCanonicalPath)
@@ -449,7 +528,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
         CheckAnswer("keep2", "keep3"),
         StopStream,
         AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
-        StartStream,
+        StartStream(),
         CheckAnswer("keep2", "keep3", "keep5", "keep6"),
         AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
         CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9")

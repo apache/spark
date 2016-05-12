@@ -271,8 +271,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         Some(partitionSpec))
 
       val hadoopFsRelation = cached.getOrElse {
-        val paths = new Path(metastoreRelation.catalogTable.storage.locationUri.get) :: Nil
-        val fileCatalog = new MetaStoreFileCatalog(sparkSession, paths, partitionSpec)
+        val fileCatalog = new MetaStorePartitionedTableFileCatalog(
+          sparkSession,
+          new Path(metastoreRelation.catalogTable.storage.locationUri.get),
+          partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
           val inferredSchema =
@@ -293,7 +295,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormat = defaultSource,
           options = options)
 
-        val created = LogicalRelation(relation)
+        val created = LogicalRelation(
+          relation,
+          metastoreTableIdentifier =
+            Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -317,7 +322,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               userSpecifiedSchema = Some(metastoreRelation.schema),
               bucketSpec = bucketSpec,
               options = options,
-              className = fileType).resolveRelation())
+              className = fileType).resolveRelation(),
+              metastoreTableIdentifier =
+                Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+
 
         cachedDataSourceTables.put(tableIdentifier, created)
         created
@@ -531,23 +539,31 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 /**
  * An override of the standard HDFS listing based catalog, that overrides the partition spec with
  * the information from the metastore.
+ * @param tableBasePath The default base path of the Hive metastore table
+ * @param partitionSpec The partition specifications from Hive metastore
  */
-private[hive] class MetaStoreFileCatalog(
+private[hive] class MetaStorePartitionedTableFileCatalog(
     sparkSession: SparkSession,
-    paths: Seq[Path],
-    partitionSpecFromHive: PartitionSpec)
-  extends HDFSFileCatalog(
+    tableBasePath: Path,
+    override val partitionSpec: PartitionSpec)
+  extends ListingFileCatalog(
     sparkSession,
+    MetaStorePartitionedTableFileCatalog.getPaths(tableBasePath, partitionSpec),
     Map.empty,
-    paths,
-    Some(partitionSpecFromHive.partitionColumns)) {
+    Some(partitionSpec.partitionColumns)) {
+}
 
-  override def getStatus(path: Path): Array[FileStatus] = {
-    val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-    fs.listStatus(path)
+private[hive] object MetaStorePartitionedTableFileCatalog {
+  /** Get the list of paths to list files in the for a metastore table */
+  def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
+    // If there are no partitions currently specified then use base path,
+    // otherwise use the paths corresponding to the partitions.
+    if (partitionSpec.partitions.isEmpty) {
+      Seq(tableBasePath)
+    } else {
+      partitionSpec.partitions.map(_.path)
+    }
   }
-
-  override def partitionSpec(): PartitionSpec = partitionSpecFromHive
 }
 
 /**

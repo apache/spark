@@ -19,8 +19,6 @@ package org.apache.spark.sql.util
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
-import scala.util.control.NonFatal
-
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
 import org.scalatest.concurrent.AsyncAssertions.Waiter
@@ -38,11 +36,11 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
   import testImplicits._
 
   after {
-    sqlContext.streams.active.foreach(_.stop())
-    assert(sqlContext.streams.active.isEmpty)
+    spark.streams.active.foreach(_.stop())
+    assert(spark.streams.active.isEmpty)
     assert(addedListeners.isEmpty)
     // Make sure we don't leak any events to the next test
-    sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
   }
 
   test("single listener") {
@@ -50,7 +48,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     val input = MemoryStream[Int]
     withListenerAdded(listener) {
       testStream(input.toDS)(
-        StartStream,
+        StartStream(),
         Assert("Incorrect query status in onQueryStarted") {
           val status = listener.startStatus
           assert(status != null)
@@ -104,7 +102,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     def isListenerActive(listener: QueryStatusCollector): Boolean = {
       listener.reset()
       testStream(MemoryStream[Int].toDS)(
-        StartStream,
+        StartStream(),
         StopStream
       )
       listener.startStatus != null
@@ -114,17 +112,17 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
       val listener1 = new QueryStatusCollector
       val listener2 = new QueryStatusCollector
 
-      sqlContext.streams.addListener(listener1)
+      spark.streams.addListener(listener1)
       assert(isListenerActive(listener1) === true)
       assert(isListenerActive(listener2) === false)
-      sqlContext.streams.addListener(listener2)
+      spark.streams.addListener(listener2)
       assert(isListenerActive(listener1) === true)
       assert(isListenerActive(listener2) === true)
-      sqlContext.streams.removeListener(listener1)
+      spark.streams.removeListener(listener1)
       assert(isListenerActive(listener1) === false)
       assert(isListenerActive(listener2) === true)
     } finally {
-      addedListeners.foreach(sqlContext.streams.removeListener)
+      addedListeners.foreach(spark.streams.removeListener)
     }
   }
 
@@ -135,7 +133,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
         listener.reset()
         require(listener.startStatus === null)
         testStream(MemoryStream[Int].toDS)(
-          StartStream,
+          StartStream(),
           Assert(listener.startStatus !== null, "onQueryStarted not called before query returned"),
           StopStream,
           Assert { listener.checkAsyncErrors() }
@@ -148,24 +146,24 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
   private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
     try {
       failAfter(1 minute) {
-        sqlContext.streams.addListener(listener)
+        spark.streams.addListener(listener)
         body
       }
     } finally {
-      sqlContext.streams.removeListener(listener)
+      spark.streams.removeListener(listener)
     }
   }
 
   private def addedListeners(): Array[ContinuousQueryListener] = {
     val listenerBusMethod =
       PrivateMethod[ContinuousQueryListenerBus]('listenerBus)
-    val listenerBus = sqlContext.streams invokePrivate listenerBusMethod()
+    val listenerBus = spark.streams invokePrivate listenerBusMethod()
     listenerBus.listeners.toArray.map(_.asInstanceOf[ContinuousQueryListener])
   }
 
   class QueryStatusCollector extends ContinuousQueryListener {
-
-    private val asyncTestWaiter = new Waiter  // to catch errors in the async listener events
+    // to catch errors in the async listener events
+    @volatile private var asyncTestWaiter = new Waiter
 
     @volatile var startStatus: QueryStatus = null
     @volatile var terminationStatus: QueryStatus = null
@@ -175,11 +173,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
       startStatus = null
       terminationStatus = null
       progressStatuses.clear()
-
-      // To reset the waiter
-      try asyncTestWaiter.await(timeout(1 milliseconds)) catch {
-        case NonFatal(e) =>
-      }
+      asyncTestWaiter = new Waiter
     }
 
     def checkAsyncErrors(): Unit = {
