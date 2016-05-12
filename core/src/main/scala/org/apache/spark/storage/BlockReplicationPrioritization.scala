@@ -22,10 +22,11 @@ import scala.util.Random
 import org.apache.spark.internal.Logging
 
 /* Trait that should be implemented by any class implementing rack aware prioritization */
-trait RackAwarePriotization {
+trait BlockReplicationPriotization {
 
   /**
    * Method to prioritize a bunch of candidate peers of a block
+ *
    * @param peers A list of peers of a BlockManager
    * @param blockId BlockId of the block being replicated. This can be used as a source of
    *                randomness if needed.
@@ -34,7 +35,9 @@ trait RackAwarePriotization {
   def prioritize(peers: Seq[BlockManagerId], blockId: BlockId): Seq[BlockManagerId]
 }
 
-class DefaultRackAwarePrioritization(host: String) extends RackAwarePriotization with Logging {
+class DefaultBlockReplicationPrioritization(host: String)
+  extends BlockReplicationPriotization
+  with Logging {
 
   /**
    * Method to prioritize a bunch of candidate peers of a block. This is a basic implementation,

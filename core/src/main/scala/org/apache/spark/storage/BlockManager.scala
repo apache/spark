@@ -164,7 +164,7 @@ private[spark] class BlockManager(
   def initialize(appId: String): Unit = {
     blockTransferService.init(this)
     shuffleClient.init(appId)
-    
+
     blockReplicationPolicy = {
       val priorityClass = conf.get(
         "spark.storage.replication.policy", classOf[RandomBlockReplicationPolicy].getName)
