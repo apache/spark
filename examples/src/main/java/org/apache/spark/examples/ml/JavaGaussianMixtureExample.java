@@ -17,24 +17,13 @@
 
 package org.apache.spark.examples.ml;
 
-import java.util.regex.Pattern;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 // $example on$
 import org.apache.spark.ml.clustering.GaussianMixture;
 import org.apache.spark.ml.clustering.GaussianMixtureModel;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 // $example off$
+import org.apache.spark.sql.SparkSession;
 
 
 /**
@@ -46,24 +35,8 @@ import org.apache.spark.sql.types.StructType;
  */
 public class JavaGaussianMixtureExample {
 
-  private static class ParsePoint implements Function<String, Row> {
-    private static final Pattern separator = Pattern.compile(" ");
-
-    @Override
-    public Row call(String line) {
-      String[] tok = separator.split(line.trim());
-      double[] point = new double[tok.length];
-      for (int i = 0; i < tok.length; ++i) {
-        point[i] = Double.parseDouble(tok[i]);
-      }
-      Vector[] points = {Vectors.dense(point)};
-      return new GenericRow(points);
-    }
-  }
-
   public static void main(String[] args) {
 
-    String inputFile = "data/mllib/gmm_data.txt";
     int k = 2;
 
     // Parses the arguments
@@ -73,11 +46,8 @@ public class JavaGaussianMixtureExample {
             .getOrCreate();
 
     // $example on$
-    // Loads data
-    JavaRDD<Row> points = spark.read().text(inputFile).javaRDD().map(new ParsePoint());
-    StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
-    StructType schema = new StructType(fields);
-    Dataset<Row> dataset = spark.createDataFrame(points, schema);
+    // Load data
+    Dataset<Row> dataset = spark.read().format("libsvm").load("data/mllib/sample_kmeans_data.txt");
 
     // Trains a GaussianMixture model
     GaussianMixture gmm = new GaussianMixture()

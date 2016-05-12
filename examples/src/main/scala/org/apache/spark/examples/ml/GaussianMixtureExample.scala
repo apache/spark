@@ -22,9 +22,7 @@ package org.apache.spark.examples.ml
 import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.clustering.{GaussianMixture, GaussianMixtureModel}
-import org.apache.spark.mllib.linalg.{Vectors, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Row, SparkSession}
-import org.apache.spark.sql.types.{StructField, StructType}
+import org.apache.spark.sql.SparkSession
 // $example off$
 
 /**
@@ -38,14 +36,10 @@ object GaussianMixtureExample {
   def main(args: Array[String]): Unit = {
     // Creates a SparkSession
     val spark = SparkSession.builder.appName(s"${this.getClass.getSimpleName}").getOrCreate()
-    val input = "data/mllib/gmm_data.txt"
 
     // $example on$
-    // Creates a DataFrame
-    val rowRDD = spark.read.text(input).rdd.filter(_.nonEmpty)
-      .map(_.trim.split(" ").map(_.toDouble)).map(Vectors.dense).map(Row(_))
-    val schema = StructType(Array(StructField("features", new VectorUDT, false)))
-    val dataset: DataFrame = spark.createDataFrame(rowRDD, schema)
+    // Load data
+    val dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
     // Trains Gaussian Mixture Model
     val gmm = new GaussianMixture()

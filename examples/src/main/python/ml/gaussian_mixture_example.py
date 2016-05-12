@@ -17,16 +17,10 @@
 
 from __future__ import print_function
 
-import sys
-
-import numpy as np
 # $example on$
-from pyspark import SparkContext
 from pyspark.ml.clustering import GaussianMixture, GaussianMixtureModel
-from pyspark.mllib.linalg import VectorUDT, _convert_to_vector
-from pyspark.sql import SQLContext
-from pyspark.sql.types import Row, StructField, StructType
 # $example off$
+from pyspark.sql import SparkSession
 
 """
 A simple example demonstrating a Gaussian Mixture Model (GMM).
@@ -34,37 +28,24 @@ Run with:
   bin/spark-submit examples/src/main/python/ml/gaussian_mixture_example.py
 """
 
-
-def parseVector(line):
-    line_strip = line.strip()
-    array = np.array([float(x) for x in line_strip.split(' ')])
-    return _convert_to_vector(array)
-
-
 if __name__ == "__main__":
+    spark = SparkSession\
+        .builder\
+        .appName("PythonGuassianMixtureExample")\
+        .getOrCreate()
 
-    FEATURES_COL = "features"
-
-    path = "data/mllib/gmm_data.txt"
     k = 2
-
-    sc = SparkContext(appName="PythonGuassianMixtureExample")
-    sqlContext = SQLContext(sc)
-
     # $example on$
-    lines = sc.textFile(path)
-    data = lines.map(parseVector)
-    row_rdd = data.map(lambda x: Row(x))
-    schema = StructType([StructField("features", VectorUDT(), False)])
-    df = sqlContext.createDataFrame(row_rdd, schema)
+    # load data
+    dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
     gmm = GaussianMixture().setK(k).setSeed(10).setFeaturesCol("features")
-    model = gmm.fit(df)
+    model = gmm.fit(dataset)
 
     print("Gaussians: ")
     model.gaussiansDF.show()
 
-    transformed = model.transform(df).select("prediction")
+    transformed = model.transform(dataset).select("prediction")
     rows = transformed.collect()
 
     print("Prediction: ")
@@ -72,4 +53,4 @@ if __name__ == "__main__":
         print(row)
     # $example off$
 
-    sc.stop()
+    spark.stop()
