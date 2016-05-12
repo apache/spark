@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
@@ -200,6 +200,8 @@ case class CreateDataSourceTableAsSelectCommand(
                     s"doesn't match the data schema[${query.schema}]'s")
               }
               existingSchema = Some(l.schema)
+            case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
+              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }

@@ -185,6 +185,8 @@ case class SimpleCatalogRelation(
 
   override def catalogTable: CatalogTable = metadata
 
+  override lazy val resolved: Boolean = false
+
   override val output: Seq[Attribute] = {
     val cols = catalogTable.schema
       .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
