@@ -334,6 +334,18 @@ class CommandBuilderUtils {
   }
 
   /**
+   * Gets the OutOfMemoryError option for Spark if the user hasn't set it.
+   */
+  static String getOutOfMemoryErrorArgument(List<String> cmd) {
+    for (String arg : cmd) {
+      if (arg.contains("-XX:OnOutOfMemoryError=")) {
+        return "";
+      }
+    }
+    return "-XX:OnOutOfMemoryError='kill %p'";
+  }
+
+  /**
    * Get the major version of the java version string supplied. This method
    * accepts any JEP-223-compliant strings (9-ea, 9+100), as well as legacy
    * version strings such as 1.7.0_79
