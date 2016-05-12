@@ -257,7 +257,7 @@ class SparkSession(object):
 
     def _createTempView(self, viewName, dataFrame, replaceIfExists):
         """
-        Create a temporary view with this dataFrame
+        Create a temporary view with a DataFrame
 
         @param viewName: the name of the temporary view to be created
         @param dataFrame: DataFrame
