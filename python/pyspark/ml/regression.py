@@ -631,6 +631,8 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
                             HasSeed, JavaMLWritable, JavaMLReadable, HasVarianceCol):
     """
+    .. note:: Experimental
+
     `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
@@ -713,7 +715,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 @inherit_doc
 class DecisionTreeModel(JavaModel):
-    """Abstraction for Decision Tree models.
+    """
+    .. note:: Experimental
+
+    Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
     """
@@ -736,7 +741,10 @@ class DecisionTreeModel(JavaModel):
 
 @inherit_doc
 class TreeEnsembleModels(JavaModel):
-    """Represents a tree ensemble model.
+    """
+    .. note:: Experimental
+
+    Represents a tree ensemble model.
 
     .. versionadded:: 1.5.0
     """
@@ -754,6 +762,8 @@ class TreeEnsembleModels(JavaModel):
 @inherit_doc
 class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by DecisionTreeRegressor.
 
     .. versionadded:: 1.4.0
@@ -892,8 +902,10 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
-                   JavaMLReadable):
+                   JavaMLReadable, TreeRegressorParams):
     """
+    .. note:: Experimental
+
     `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
@@ -940,19 +952,21 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
+                 impurity="variance"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
+                 impurity="variance")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         seed=None)
+                         seed=None, impurity="variance")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -961,12 +975,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
+                  impuriy="variance"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
+                  impurity="variance")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -990,8 +1006,10 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
         return self.getOrDefault(self.lossType)
 
 
-class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
+class GBTRegressionModel(GBTParams, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by GBTRegressor.
 
     .. versionadded:: 1.4.0
@@ -1017,6 +1035,8 @@ class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             HasFitIntercept, HasMaxIter, HasTol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Accelerated Failure Time (AFT) Model Survival Regression
 
     Fit a parametric AFT survival regression model based on the Weibull distribution
@@ -1157,6 +1177,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by AFTSurvivalRegression.
 
     .. versionadded:: 1.6.0
