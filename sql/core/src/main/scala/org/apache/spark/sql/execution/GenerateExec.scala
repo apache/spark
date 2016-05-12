@@ -112,7 +112,7 @@ case class GenerateExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    generator match {
+    boundGenerator match {
       case e: Explode => codegenExplode(e, ctx, input, row)
     }
   }
@@ -151,7 +151,7 @@ case class GenerateExec(
         ExprCode(s"$javaType $value = $getter;", "false", value)
       }
     }
-    val values = e.dataType match {
+    val values = e.child.dataType match {
       case ArrayType(dataType, nullable) =>
         Seq(accessor(data.value, "", dataType, nullable))
       case MapType(keyType, valueType, valueContainsNull) =>
