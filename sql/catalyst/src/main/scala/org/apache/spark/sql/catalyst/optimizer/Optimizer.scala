@@ -160,18 +160,29 @@ object SamplePushDown extends Rule[LogicalPlan] {
  * representation of data item.  For example back to back map operations.
  */
 object EliminateSerialization extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  private def eliminateSerialization(p: LogicalPlan, isTop: Boolean): LogicalPlan = p transform {
     case d @ DeserializeToObject(_, _, s: SerializeFromObject)
         if d.outputObjectType == s.inputObjectType =>
       // A workaround for SPARK-14803. Remove this after it is fixed.
       if (d.outputObjectType.isInstanceOf[ObjectType] &&
           d.outputObjectType.asInstanceOf[ObjectType].cls == classOf[org.apache.spark.sql.Row]) {
         s.child
+      } else if (isTop) {
+        // If DeserializeToObject is at the top of logical plan, we don't need to preserve output
+        // expr id.
+        s.child
       } else {
         // Adds an extra Project here, to preserve the output expr id of `DeserializeToObject`.
         val objAttr = Alias(s.child.output.head, "obj")(exprId = d.output.head.exprId)
         Project(objAttr :: Nil, s.child)
       }
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case p if p.children.exists(_.isInstanceOf[DeserializeToObject]) =>
+      p.withNewChildren(p.children.map(eliminateSerialization(_, false)))
+    case d: DeserializeToObject =>
+      eliminateSerialization(d, true)
     case a @ AppendColumns(_, _, _, s: SerializeFromObject)
         if a.deserializer.dataType == s.inputObjectType =>
       AppendColumnsWithObject(a.func, s.serializer, a.serializer, s.child)
