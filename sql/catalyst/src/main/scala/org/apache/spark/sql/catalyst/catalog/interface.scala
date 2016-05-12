@@ -80,10 +80,11 @@ case class CatalogTablePartition(
  * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the
  * future once we have a better understanding of how we want to handle skewed columns.
  *
- * Field `fullyMapped` is used to indicate that whether this [[CatalogTable]] is a fully mapped
- * from table metadata retrieved from concrete underlying external catalog (e.g., Hive metastore).
- * For example, if the underlying Hive table has skewed columns, this information can't be mapped
- * to [[CatalogTable]], and in this case `fullyMapped` is false.
+ * Field `fullyMapped` is used to indicate whether all table metadata entries retrieved from the
+ * concrete underlying external catalog (e.g. Hive metastore) are mapped to fields of this
+ * [[CatalogTable]]. For example, if the underlying Hive table has skewed columns, this information
+ * can't be mapped to [[CatalogTable]] since Spark SQL doesn't handle skewed columns for now. In
+ * this case `fullyMapped` is set to false.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
