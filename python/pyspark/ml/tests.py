@@ -52,7 +52,8 @@ from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.recommendation import ALS
-from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
+from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
+    GeneralizedLinearRegression
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.common import _java2py
@@ -908,6 +909,42 @@ class TrainingSummaryTest(SparkSessionTestCase):
         # one check is enough to verify a summary is returned, Scala version runs full test
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
+
+    def test_glr_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        glr = GeneralizedLinearRegression(family="gaussian", link="identity", weightCol="weight",
+                                          fitIntercept=False)
+        model = glr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertEqual(s.numIterations, 1)  # this should default to a single iteration of WLS
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertTrue(isinstance(s.residuals(), DataFrame))
+        self.assertTrue(isinstance(s.residuals("pearson"), DataFrame))
+        coefStdErr = s.coefficientStandardErrors
+        self.assertTrue(isinstance(coefStdErr, list) and isinstance(coefStdErr[0], float))
+        tValues = s.tValues
+        self.assertTrue(isinstance(tValues, list) and isinstance(tValues[0], float))
+        pValues = s.pValues
+        self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
+        self.assertEqual(s.degreesOfFreedom, 1)
+        self.assertEqual(s.residualDegreeOfFreedom, 1)
+        self.assertEqual(s.residualDegreeOfFreedomNull, 2)
+        self.assertEqual(s.rank, 1)
+        self.assertTrue(isinstance(s.solver, basestring))
+        self.assertTrue(isinstance(s.aic, float))
+        self.assertTrue(isinstance(s.deviance, float))
+        self.assertTrue(isinstance(s.nullDeviance, float))
+        self.assertTrue(isinstance(s.dispersion, float))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.deviance, s.deviance)
 
     def test_logistic_regression_summary(self):
         from pyspark.mllib.linalg import Vectors
