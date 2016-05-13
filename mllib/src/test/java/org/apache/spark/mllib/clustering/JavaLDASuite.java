@@ -24,32 +24,19 @@ import java.util.Arrays;
 import scala.Tuple2;
 import scala.Tuple3;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.SparkSession;
 
-public class JavaLDASuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaLDASuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-
+public class JavaLDASuite extends SharedSparkSession implements Serializable {
+  public void customSetUp() {
     ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();
     for (int i = 0; i < LDASuite.tinyCorpus().length; i++) {
       tinyCorpus.add(new Tuple2<>((Long) LDASuite.tinyCorpus()[i]._1(),
@@ -57,12 +44,6 @@ public class JavaLDASuite implements Serializable {
     }
     JavaRDD<Tuple2<Long, Vector>> tmpCorpus = jsc.parallelize(tinyCorpus, 2);
     corpus = JavaPairRDD.fromJavaRDD(tmpCorpus);
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
   }
 
   @Test
