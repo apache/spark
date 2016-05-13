@@ -52,7 +52,7 @@ import org.apache.spark.util.Utils
  * To create a SparkSession, use the following builder pattern:
  *
  * {{{
- *   SparkSession.builder()
+ *   SparkSession.builder
  *     .master("local")
  *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value").
