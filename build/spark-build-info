@@ -18,13 +18,13 @@
 #
 
 # This script generates the build info for spark and places it into the spark-version-info.properties file.
+# Arguments:
+#   build_tgt_directory - The target directory where properties file would be created. [./core/target/extra-resources]
+#   spark_version - The current version of spark
 
 RESOURCE_DIR=$1
-#RESOURCE_DIR=core/target/extra-resources
 mkdir -p $RESOURCE_DIR
 SPARK_BUILD_INFO=${RESOURCE_DIR}/spark-version-info.properties
-
-echo $SPARK_BUILD_INFO
 
 (echo version=$2; echo user=$USER; echo revision=$(git rev-parse HEAD); echo branch=$(git rev-parse --abbrev-ref HEAD);
 echo date=$(date -u +%Y-%m-%dT%H:%M:%SZ);echo url=$(git config --get remote.origin.url)) > $SPARK_BUILD_INFO

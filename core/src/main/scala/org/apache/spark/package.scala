@@ -65,14 +65,16 @@ package object spark {
           props.getProperty("date", unknownProp)
         )
       } catch {
-        case e: Exception => logError("Unable to read spark build properties.", e);
+        case e: Exception =>
+          logError("Unable to read spark build properties.", e);
           throw new SparkException("Error load properties from spark-version-info.properties", e)
       } finally {
         if (resourceStream != null) {
           try {
             resourceStream.close()
           } catch {
-            case e: Exception => logError("Unable to close spark build info resource stream", e);
+            case e: Exception =>
+              logError("Unable to close spark build info resource stream", e);
               throw new SparkException("Error closing spark build info resource stream", e)
           }
         }
