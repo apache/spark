@@ -133,7 +133,7 @@ object RowEncoder {
           GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType)),
           f.dataType
         )
-        if (f.nullable) {
+        val convertedField = if (f.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
             Literal.create(null, f.dataType),
@@ -142,6 +142,7 @@ object RowEncoder {
         } else {
           fieldValue
         }
+        Alias(convertedField, f.name)()
       }
 
       if (inputObject.nullable) {
