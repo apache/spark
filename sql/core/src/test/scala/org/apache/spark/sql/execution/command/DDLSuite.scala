@@ -22,6 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.DatabaseAlreadyExistsException
@@ -1000,6 +1001,56 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Row("Function: ^") ::
         Row("Usage: a ^ b - Bitwise exclusive OR.") :: Nil
     )
+  }
+
+  test("select/insert into the managed table") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    val tabName = "tbl"
+    withTable(tabName) {
+      val expectedMsg =
+        s"Please enable Hive support when operating non-temporary tables: `$tabName`"
+      sql(s"CREATE TABLE $tabName(i INT, j STRING)")
+      val catalogTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+      assert(catalogTable.tableType == CatalogTableType.MANAGED)
+
+      var message = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
+      }.getMessage
+      assert(message.contains(expectedMsg))
+      message = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $tabName")
+      }.getMessage
+      assert(message.contains(expectedMsg))
+    }
+  }
+
+  test("select/insert into the data source table") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    val tabName = "tbl"
+    withTable(tabName) {
+      val expectedMsg =
+        s"Please enable Hive support when operating non-temporary tables: `$tabName`"
+      sql(
+        s"""
+           |CREATE TABLE $tabName
+           |USING json
+           |PARTITIONED BY (b)
+           |AS SELECT 1 AS a, "foo" AS b
+        """.stripMargin)
+      val catalogTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+      assert(catalogTable.tableType == CatalogTableType.MANAGED)
+
+      var message = intercept[AnalysisException] {
+        sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
+      }.getMessage
+      assert(message.contains(expectedMsg))
+      message = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $tabName")
+      }.getMessage
+      assert(message.contains(expectedMsg))
+    }
   }
 
   test("drop default database") {
