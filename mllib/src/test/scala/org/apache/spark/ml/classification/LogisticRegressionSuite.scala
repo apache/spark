@@ -938,7 +938,7 @@ class LogisticRegressionSuite
   test("should support all NumericType labels and not support other types") {
     val lr = new LogisticRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LogisticRegressionModel, LogisticRegression](
-      lr, isClassification = true, spark) { (expected, actual) =>
+      lr, spark) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients.toArray === actual.coefficients.toArray)
       }

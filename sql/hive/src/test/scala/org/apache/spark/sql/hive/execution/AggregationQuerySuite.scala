@@ -193,7 +193,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       spark.sql("DROP TABLE IF EXISTS agg1")
       spark.sql("DROP TABLE IF EXISTS agg2")
       spark.sql("DROP TABLE IF EXISTS agg3")
-      spark.catalog.dropTempTable("emptyTable")
+      spark.catalog.dropTempView("emptyTable")
     } finally {
       super.afterAll()
     }

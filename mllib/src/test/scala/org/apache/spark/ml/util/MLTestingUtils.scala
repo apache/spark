@@ -37,8 +37,8 @@ object MLTestingUtils extends SparkFunSuite {
 
   def checkNumericTypes[M <: Model[M], T <: Estimator[M]](
       estimator: T,
-      isClassification: Boolean,
-      spark: SparkSession)(check: (M, M) => Unit): Unit = {
+      spark: SparkSession,
+      isClassification: Boolean = true)(check: (M, M) => Unit): Unit = {
     val dfs = if (isClassification) {
       genClassifDFWithNumericLabelCol(spark)
     } else {

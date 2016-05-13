@@ -174,25 +174,11 @@ case class DataSource(
         s.createSource(sparkSession.wrapped, metadataPath, userSpecifiedSchema, className, options)
 
       case format: FileFormat =>
-        val caseInsensitiveOptions = new CaseInsensitiveMap(options)
-        val path = caseInsensitiveOptions.getOrElse("path", {
+        val path = new CaseInsensitiveMap(options).getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-
-        def dataFrameBuilder(files: Array[String]): DataFrame = {
-          val newOptions = options.filterKeys(_ != "path") + ("basePath" -> path)
-          val newDataSource =
-            DataSource(
-              sparkSession,
-              paths = files,
-              userSpecifiedSchema = Some(sourceInfo.schema),
-              className = className,
-              options = new CaseInsensitiveMap(newOptions))
-          Dataset.ofRows(sparkSession, LogicalRelation(newDataSource.resolveRelation()))
-        }
-
         new FileStreamSource(
-          sparkSession, metadataPath, path, sourceInfo.schema, dataFrameBuilder)
+          sparkSession, path, className, sourceInfo.schema, metadataPath, options)
       case _ =>
         throw new UnsupportedOperationException(
           s"Data source $className does not support streamed reading")

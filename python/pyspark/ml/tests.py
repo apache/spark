@@ -52,16 +52,29 @@ from pyspark.ml.feature import *
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.recommendation import ALS
-from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor
+from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
+    GeneralizedLinearRegression
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.common import _java2py
 from pyspark.mllib.linalg import Vectors, DenseVector, SparseVector
-from pyspark.sql import DataFrame, SQLContext, Row
+from pyspark.sql import DataFrame, Row, SparkSession
 from pyspark.sql.functions import rand
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
+
+
+class SparkSessionTestCase(PySparkTestCase):
+    @classmethod
+    def setUpClass(cls):
+        PySparkTestCase.setUpClass()
+        cls.spark = SparkSession(cls.sc)
+
+    @classmethod
+    def tearDownClass(cls):
+        PySparkTestCase.tearDownClass()
+        cls.spark.stop()
 
 
 class MockDataset(DataFrame):
@@ -350,7 +363,7 @@ class ParamTests(PySparkTestCase):
         self.assertEqual(model.getWindowSize(), 6)
 
 
-class FeatureTests(PySparkTestCase):
+class FeatureTests(SparkSessionTestCase):
 
     def test_binarizer(self):
         b0 = Binarizer()
@@ -376,8 +389,7 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(b1.getOutputCol(), "output")
 
     def test_idf(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (DenseVector([1.0, 2.0]),),
             (DenseVector([0.0, 1.0]),),
             (DenseVector([3.0, 0.2]),)], ["tf"])
@@ -390,8 +402,7 @@ class FeatureTests(PySparkTestCase):
         self.assertIsNotNone(output.head().idf)
 
     def test_ngram(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             Row(input=["a", "b", "c", "d", "e"])])
         ngram0 = NGram(n=4, inputCol="input", outputCol="output")
         self.assertEqual(ngram0.getN(), 4)
@@ -401,8 +412,7 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(transformedDF.head().output, ["a b c d", "b c d e"])
 
     def test_stopwordsremover(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([Row(input=["a", "panda"])])
+        dataset = self.spark.createDataFrame([Row(input=["a", "panda"])])
         stopWordRemover = StopWordsRemover(inputCol="input", outputCol="output")
         # Default
         self.assertEqual(stopWordRemover.getInputCol(), "input")
@@ -419,15 +429,14 @@ class FeatureTests(PySparkTestCase):
         self.assertEqual(transformedDF.head().output, ["a"])
         # with language selection
         stopwords = StopWordsRemover.loadDefaultStopWords("turkish")
-        dataset = sqlContext.createDataFrame([Row(input=["acaba", "ama", "biri"])])
+        dataset = self.spark.createDataFrame([Row(input=["acaba", "ama", "biri"])])
         stopWordRemover.setStopWords(stopwords)
         self.assertEqual(stopWordRemover.getStopWords(), stopwords)
         transformedDF = stopWordRemover.transform(dataset)
         self.assertEqual(transformedDF.head().output, [])
 
     def test_count_vectorizer_with_binary(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (0, "a a a b b c".split(' '), SparseVector(3, {0: 1.0, 1: 1.0, 2: 1.0}),),
             (1, "a a".split(' '), SparseVector(3, {0: 1.0}),),
             (2, "a b".split(' '), SparseVector(3, {0: 1.0, 1: 1.0}),),
@@ -475,11 +484,10 @@ class InducedErrorEstimator(Estimator, HasInducedError):
         return model
 
 
-class CrossValidatorTests(PySparkTestCase):
+class CrossValidatorTests(SparkSessionTestCase):
 
     def test_copy(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (10, 10.0),
             (50, 50.0),
             (100, 100.0),
@@ -503,8 +511,7 @@ class CrossValidatorTests(PySparkTestCase):
                             < 0.0001)
 
     def test_fit_minimize_metric(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (10, 10.0),
             (50, 50.0),
             (100, 100.0),
@@ -527,8 +534,7 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
 
     def test_fit_maximize_metric(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (10, 10.0),
             (50, 50.0),
             (100, 100.0),
@@ -554,8 +560,7 @@ class CrossValidatorTests(PySparkTestCase):
         # This tests saving and loading the trained model only.
         # Save/load for CrossValidator will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame(
+        dataset = self.spark.createDataFrame(
             [(Vectors.dense([0.0]), 0.0),
              (Vectors.dense([0.4]), 1.0),
              (Vectors.dense([0.5]), 0.0),
@@ -576,11 +581,10 @@ class CrossValidatorTests(PySparkTestCase):
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
-class TrainValidationSplitTests(PySparkTestCase):
+class TrainValidationSplitTests(SparkSessionTestCase):
 
     def test_fit_minimize_metric(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (10, 10.0),
             (50, 50.0),
             (100, 100.0),
@@ -603,8 +607,7 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
 
     def test_fit_maximize_metric(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (10, 10.0),
             (50, 50.0),
             (100, 100.0),
@@ -630,8 +633,7 @@ class TrainValidationSplitTests(PySparkTestCase):
         # This tests saving and loading the trained model only.
         # Save/load for TrainValidationSplit will be added later: SPARK-13786
         temp_path = tempfile.mkdtemp()
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame(
+        dataset = self.spark.createDataFrame(
             [(Vectors.dense([0.0]), 0.0),
              (Vectors.dense([0.4]), 1.0),
              (Vectors.dense([0.5]), 0.0),
@@ -652,7 +654,7 @@ class TrainValidationSplitTests(PySparkTestCase):
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
 
-class PersistenceTest(PySparkTestCase):
+class PersistenceTest(SparkSessionTestCase):
 
     def test_linear_regression(self):
         lr = LinearRegression(maxIter=1)
@@ -724,11 +726,10 @@ class PersistenceTest(PySparkTestCase):
         """
         Pipeline[HashingTF, PCA]
         """
-        sqlContext = SQLContext(self.sc)
         temp_path = tempfile.mkdtemp()
 
         try:
-            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+            df = self.spark.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
             tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
             pca = PCA(k=2, inputCol="features", outputCol="pca_features")
             pl = Pipeline(stages=[tf, pca])
@@ -753,11 +754,10 @@ class PersistenceTest(PySparkTestCase):
         """
         Pipeline[HashingTF, Pipeline[PCA]]
         """
-        sqlContext = SQLContext(self.sc)
         temp_path = tempfile.mkdtemp()
 
         try:
-            df = sqlContext.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
+            df = self.spark.createDataFrame([(["a", "b", "c"],), (["c", "d", "e"],)], ["words"])
             tf = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
             pca = PCA(k=2, inputCol="features", outputCol="pca_features")
             p0 = Pipeline(stages=[pca])
@@ -816,7 +816,7 @@ class PersistenceTest(PySparkTestCase):
             pass
 
 
-class LDATest(PySparkTestCase):
+class LDATest(SparkSessionTestCase):
 
     def _compare(self, m1, m2):
         """
@@ -836,8 +836,7 @@ class LDATest(PySparkTestCase):
 
     def test_persistence(self):
         # Test save/load for LDA, LocalLDAModel, DistributedLDAModel.
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([
+        df = self.spark.createDataFrame([
             [1, Vectors.dense([0.0, 1.0])],
             [2, Vectors.sparse(2, {0: 1.0})],
         ], ["id", "features"])
@@ -871,12 +870,11 @@ class LDATest(PySparkTestCase):
             pass
 
 
-class TrainingSummaryTest(PySparkTestCase):
+class TrainingSummaryTest(SparkSessionTestCase):
 
     def test_linear_regression_summary(self):
         from pyspark.mllib.linalg import Vectors
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
                                          (0.0, 2.0, Vectors.sparse(1, [], []))],
                                         ["label", "weight", "features"])
         lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight",
@@ -912,10 +910,45 @@ class TrainingSummaryTest(PySparkTestCase):
         sameSummary = model.evaluate(df)
         self.assertAlmostEqual(sameSummary.explainedVariance, s.explainedVariance)
 
+    def test_glr_summary(self):
+        from pyspark.mllib.linalg import Vectors
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+                                         (0.0, 2.0, Vectors.sparse(1, [], []))],
+                                        ["label", "weight", "features"])
+        glr = GeneralizedLinearRegression(family="gaussian", link="identity", weightCol="weight",
+                                          fitIntercept=False)
+        model = glr.fit(df)
+        self.assertTrue(model.hasSummary)
+        s = model.summary
+        # test that api is callable and returns expected types
+        self.assertEqual(s.numIterations, 1)  # this should default to a single iteration of WLS
+        self.assertTrue(isinstance(s.predictions, DataFrame))
+        self.assertEqual(s.predictionCol, "prediction")
+        self.assertTrue(isinstance(s.residuals(), DataFrame))
+        self.assertTrue(isinstance(s.residuals("pearson"), DataFrame))
+        coefStdErr = s.coefficientStandardErrors
+        self.assertTrue(isinstance(coefStdErr, list) and isinstance(coefStdErr[0], float))
+        tValues = s.tValues
+        self.assertTrue(isinstance(tValues, list) and isinstance(tValues[0], float))
+        pValues = s.pValues
+        self.assertTrue(isinstance(pValues, list) and isinstance(pValues[0], float))
+        self.assertEqual(s.degreesOfFreedom, 1)
+        self.assertEqual(s.residualDegreeOfFreedom, 1)
+        self.assertEqual(s.residualDegreeOfFreedomNull, 2)
+        self.assertEqual(s.rank, 1)
+        self.assertTrue(isinstance(s.solver, basestring))
+        self.assertTrue(isinstance(s.aic, float))
+        self.assertTrue(isinstance(s.deviance, float))
+        self.assertTrue(isinstance(s.nullDeviance, float))
+        self.assertTrue(isinstance(s.dispersion, float))
+        # test evaluation (with training dataset) produces a summary with same values
+        # one check is enough to verify a summary is returned, Scala version runs full test
+        sameSummary = model.evaluate(df)
+        self.assertAlmostEqual(sameSummary.deviance, s.deviance)
+
     def test_logistic_regression_summary(self):
         from pyspark.mllib.linalg import Vectors
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
+        df = self.spark.createDataFrame([(1.0, 2.0, Vectors.dense(1.0)),
                                          (0.0, 2.0, Vectors.sparse(1, [], []))],
                                         ["label", "weight", "features"])
         lr = LogisticRegression(maxIter=5, regParam=0.01, weightCol="weight", fitIntercept=False)
@@ -942,11 +975,10 @@ class TrainingSummaryTest(PySparkTestCase):
         self.assertAlmostEqual(sameSummary.areaUnderROC, s.areaUnderROC)
 
 
-class OneVsRestTests(PySparkTestCase):
+class OneVsRestTests(SparkSessionTestCase):
 
     def test_copy(self):
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
@@ -960,8 +992,7 @@ class OneVsRestTests(PySparkTestCase):
         self.assertEqual(model1.getPredictionCol(), "indexed")
 
     def test_output_columns(self):
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
@@ -973,8 +1004,7 @@ class OneVsRestTests(PySparkTestCase):
 
     def test_save_load(self):
         temp_path = tempfile.mkdtemp()
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))],
                                         ["label", "features"])
@@ -994,12 +1024,11 @@ class OneVsRestTests(PySparkTestCase):
             self.assertEqual(m.uid, n.uid)
 
 
-class HashingTFTest(PySparkTestCase):
+class HashingTFTest(SparkSessionTestCase):
 
     def test_apply_binary_term_freqs(self):
-        sqlContext = SQLContext(self.sc)
 
-        df = sqlContext.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
+        df = self.spark.createDataFrame([(0, ["a", "a", "b", "c", "c", "c"])], ["id", "words"])
         n = 10
         hashingTF = HashingTF()
         hashingTF.setInputCol("words").setOutputCol("features").setNumFeatures(n).setBinary(True)
@@ -1011,11 +1040,10 @@ class HashingTFTest(PySparkTestCase):
                                    ": expected " + str(expected[i]) + ", got " + str(features[i]))
 
 
-class ALSTest(PySparkTestCase):
+class ALSTest(SparkSessionTestCase):
 
     def test_storage_levels(self):
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame(
+        df = self.spark.createDataFrame(
             [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
             ["user", "item", "rating"])
         als = ALS().setMaxIter(1).setRank(1)

@@ -24,7 +24,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.io.orc._
-import org.apache.hadoop.hive.ql.io.orc.OrcFile.OrcTableProperties
 import org.apache.hadoop.hive.serde2.objectinspector.{SettableStructObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.typeinfo.{StructTypeInfo, TypeInfoUtils}
 import org.apache.hadoop.io.{NullWritable, Writable}
@@ -37,7 +36,6 @@ import org.apache.spark.rdd.{HadoopRDD, RDD}
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
 import org.apache.spark.sql.sources.{Filter, _}
@@ -66,28 +64,12 @@ private[sql] class DefaultSource
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    val compressionCodec: Option[String] = options
-        .get("compression")
-        .map { codecName =>
-          // Validate if given compression codec is supported or not.
-          val shortOrcCompressionCodecNames = OrcRelation.shortOrcCompressionCodecNames
-          if (!shortOrcCompressionCodecNames.contains(codecName.toLowerCase)) {
-            val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
-            throw new IllegalArgumentException(s"Codec [$codecName] " +
-                s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
-          }
-          codecName.toLowerCase
-        }
+    val orcOptions = new OrcOptions(options)
 
-    compressionCodec.foreach { codecName =>
-      job.getConfiguration.set(
-        OrcTableProperties.COMPRESSION.getPropName,
-        OrcRelation
-          .shortOrcCompressionCodecNames
-          .getOrElse(codecName, CompressionKind.NONE).name())
-    }
+    val configuration = job.getConfiguration
 
-    job.getConfiguration match {
+    configuration.set(OrcRelation.ORC_COMPRESSION, orcOptions.compressionCodec)
+    configuration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
       case conf =>
@@ -205,7 +187,7 @@ private[orc] class OrcOutputWriter(
     val partition = taskAttemptId.getTaskID.getId
     val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
     val compressionExtension = {
-      val name = conf.get(OrcTableProperties.COMPRESSION.getPropName)
+      val name = conf.get(OrcRelation.ORC_COMPRESSION)
       OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
     }
     // It has the `.orc` extension at the end because (de)compression tools
@@ -329,21 +311,15 @@ private[orc] object OrcTableScan {
 }
 
 private[orc] object OrcRelation extends HiveInspectors {
-  // The ORC compression short names
-  val shortOrcCompressionCodecNames = Map(
-    "none" -> CompressionKind.NONE,
-    "uncompressed" -> CompressionKind.NONE,
-    "snappy" -> CompressionKind.SNAPPY,
-    "zlib" -> CompressionKind.ZLIB,
-    "lzo" -> CompressionKind.LZO)
+  // The references of Hive's classes will be minimized.
+  val ORC_COMPRESSION = "orc.compress"
 
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
-    CompressionKind.NONE.name -> "",
-    CompressionKind.SNAPPY.name -> ".snappy",
-    CompressionKind.ZLIB.name -> ".zlib",
-    CompressionKind.LZO.name -> ".lzo"
-  )
+    "NONE" -> "",
+    "SNAPPY" -> ".snappy",
+    "ZLIB" -> ".zlib",
+    "LZO" -> ".lzo")
 
   def unwrapOrcStructs(
       conf: Configuration,

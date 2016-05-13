@@ -102,7 +102,6 @@ class ExpressionToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     checkSqlGeneration("SELECT map(1, 'a', 2, 'b')")
     checkSqlGeneration("SELECT named_struct('c1',1,'c2',2,'c3',3)")
     checkSqlGeneration("SELECT nanvl(a, 5), nanvl(b, 10), nanvl(d, c) from t2")
-    checkSqlGeneration("SELECT nvl(null, 1, 2)")
     checkSqlGeneration("SELECT rand(1)")
     checkSqlGeneration("SELECT randn(3)")
     checkSqlGeneration("SELECT struct(1,2,3)")

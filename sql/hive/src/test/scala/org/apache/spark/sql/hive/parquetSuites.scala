@@ -529,6 +529,40 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
     dropTables("test_insert_parquet", "test_parquet_partitioned_cache_test")
   }
+
+  test("SPARK-15248: explicitly added partitions should be readable") {
+    withTable("test_added_partitions", "test_temp") {
+      withTempDir { src =>
+        val partitionDir = new File(src, "partition").getCanonicalPath
+        sql(
+          """
+            |CREATE TABLE test_added_partitions (a STRING)
+            |PARTITIONED BY (b INT)
+            |STORED AS PARQUET
+          """.stripMargin)
+
+        // Temp table to insert data into partitioned table
+        Seq("foo", "bar").toDF("a").registerTempTable("test_temp")
+        sql("INSERT INTO test_added_partitions PARTITION(b='0') SELECT a FROM test_temp")
+
+        checkAnswer(
+          sql("SELECT * FROM test_added_partitions"),
+          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+
+        // Create partition without data files and check whether it can be read
+        sql(s"ALTER TABLE test_added_partitions ADD PARTITION (b='1') LOCATION '$partitionDir'")
+        checkAnswer(
+          sql("SELECT * FROM test_added_partitions"),
+          Seq(("foo", 0), ("bar", 0)).toDF("a", "b"))
+
+        // Add data files to partition directory and check whether they can be read
+        Seq("baz").toDF("a").write.mode(SaveMode.Overwrite).parquet(partitionDir)
+        checkAnswer(
+          sql("SELECT * FROM test_added_partitions"),
+          Seq(("foo", 0), ("bar", 0), ("baz", 1)).toDF("a", "b"))
+      }
+    }
+  }
 }
 
 /**

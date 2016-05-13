@@ -72,7 +72,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("hive struct udf") {
     sql(
       """
-      |CREATE EXTERNAL TABLE hiveUDFTestTable (
+      |CREATE TABLE hiveUDFTestTable (
       |   pair STRUCT<id: INT, value: INT>
       |)
       |PARTITIONED BY (partition STRING)
@@ -347,7 +347,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTFExplode")
     }
 
-    spark.catalog.dropTempTable("testUDF")
+    spark.catalog.dropTempView("testUDF")
   }
 
   test("Hive UDF in group by") {

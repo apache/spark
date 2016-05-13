@@ -994,17 +994,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       // pass case: parquet table (HadoopFsRelation)
       df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
       val pdf = spark.read.parquet(tempParquetFile.getCanonicalPath)
-      pdf.registerTempTable("parquet_base")
+      pdf.createOrReplaceTempView("parquet_base")
+
       insertion.write.insertInto("parquet_base")
 
       // pass case: json table (InsertableRelation)
       df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
       val jdf = spark.read.json(tempJsonFile.getCanonicalPath)
-      jdf.registerTempTable("json_base")
+      jdf.createOrReplaceTempView("json_base")
       insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
 
       // error cases: insert into an RDD
-      df.registerTempTable("rdd_base")
+      df.createOrReplaceTempView("rdd_base")
       val e1 = intercept[AnalysisException] {
         insertion.write.insertInto("rdd_base")
       }
@@ -1012,14 +1013,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
       // error case: insert into a logical plan that is not a LeafNode
       val indirectDS = pdf.select("_1").filter($"_1" > 5)
-      indirectDS.registerTempTable("indirect_ds")
+      indirectDS.createOrReplaceTempView("indirect_ds")
       val e2 = intercept[AnalysisException] {
         insertion.write.insertInto("indirect_ds")
       }
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.ofRows(spark, OneRowRelation).registerTempTable("one_row")
+      Dataset.ofRows(spark, OneRowRelation).createOrReplaceTempView("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1443,13 +1444,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
     // invalid table name test as below
-    intercept[AnalysisException](df.registerTempTable("t~"))
+    intercept[AnalysisException](df.createOrReplaceTempView("t~"))
     // valid table name test as below
-    df.registerTempTable("table1")
+    df.createOrReplaceTempView("table1")
     // another invalid table name test as below
-    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    intercept[AnalysisException](df.createOrReplaceTempView("#$@sum"))
     // another invalid table name test as below
-    intercept[AnalysisException](df.registerTempTable("table!#"))
+    intercept[AnalysisException](df.createOrReplaceTempView("table!#"))
   }
 
   test("assertAnalyzed shouldn't replace original stack trace") {

@@ -83,7 +83,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
         checkAnswer(
           spark.wrapped.tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),
           Row("tables", true))
-        spark.catalog.dropTempTable("tables")
+        spark.catalog.dropTempView("tables")
     }
   }
 }
