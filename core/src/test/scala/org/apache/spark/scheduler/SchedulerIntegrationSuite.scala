@@ -304,37 +304,6 @@ private[spark] class SingleCoreMockBackend(
   }
 }
 
-class MultiExecutorBackend(
-  conf: SparkConf,
-  taskScheduler: TaskSchedulerImpl) extends MockBackend(conf, taskScheduler) {
-
-  val nHosts = 10
-  val nExecutorsPerHost = 4
-  val nCoresPerExecutor = 2
-
-  val executorIdToExecutor: Map[String, ExecutorTaskStatus] = (0 until nHosts).flatMap{ hostIdx =>
-    val hostName = s"host-$hostIdx"
-    (0 until nExecutorsPerHost).map { execIdx =>
-      val executorId = (hostIdx * nExecutorsPerHost + execIdx).toString
-      executorId -> new ExecutorTaskStatus(hostName, executorId, nCoresPerExecutor)
-    }
-  }.toMap
-
-  val totalCores = nHosts * nExecutorsPerHost * nCoresPerExecutor
-  freeCores = totalCores
-
-  override def generateOffers(): Seq[WorkerOffer] = {
-    // always offer all cores available on all executors
-    executorIdToExecutor.values.filter { exec =>
-      exec.freeCores > taskScheduler.CPUS_PER_TASK
-    }.map { exec =>
-      new WorkerOffer(exec.executorId, exec.host, exec.freeCores)
-    }.toSeq
-  }
-
-  override def defaultParallelism(): Int = conf.getInt("spark.default.parallelism", totalCores)
-}
-
 class ExecutorTaskStatus(val host: String, val executorId: String, var freeCores: Int)
 
 class MockRDD(
