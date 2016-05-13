@@ -28,7 +28,7 @@ object ALSExample {
 
   // $example on$
   case class Rating(userId: Int, movieId: Int, rating: Float, timestamp: Long)
-  object Rating {
+  object RatingUtil {
     def parseRating(str: String): Rating = {
       val fields = str.split("::")
       assert(fields.size == 4)
@@ -46,7 +46,7 @@ object ALSExample {
 
     // $example on$
     val ratings = spark.read.text("data/mllib/als/sample_movielens_ratings.txt")
-      .map(Rating.parseRating)
+      .map(RatingUtil.parseRating)
       .toDF()
     val Array(training, test) = ratings.randomSplit(Array(0.8, 0.2))
 
