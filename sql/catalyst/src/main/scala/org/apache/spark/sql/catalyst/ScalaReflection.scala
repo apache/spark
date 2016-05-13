@@ -596,12 +596,14 @@ object ScalaReflection extends ScalaReflection {
             DecimalType.SYSTEM_DEFAULT,
             "apply",
             inputObject :: Nil)
+
         case t if t <:< localTypeOf[java.math.BigInteger] =>
           StaticInvoke(
             Decimal.getClass,
             DecimalType.BIGINT_DEFAULT,
             "apply",
             inputObject :: Nil)
+
         case t if t <:< localTypeOf[scala.math.BigInt] =>
           StaticInvoke(
             Decimal.getClass,

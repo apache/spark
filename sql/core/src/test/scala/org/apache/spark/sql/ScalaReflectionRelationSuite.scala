@@ -38,10 +38,6 @@ case class ReflectData(
     javaBigInt: java.math.BigInteger,
     scalaBigInt: scala.math.BigInt)
 
-case class ReflectData3(
-                         scalaBigInt: scala.math.BigInt
-                         )
-
 case class NullReflectData(
     intField: java.lang.Integer,
     longField: java.lang.Long,
