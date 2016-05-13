@@ -43,6 +43,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
   private val boolFile = "bool.csv"
+  private val decimalFile = "decimal.csv"
   private val simpleSparseFile = "simple_sparse.csv"
   private val numbersFile = "numbers.csv"
   private val datesFile = "dates.csv"
@@ -130,6 +131,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     val expectedSchema = StructType(List(
       StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
+  }
+
+  test("test inferring decimals") {
+    val result = sqlContext.read
+      .format("csv")
+      .option("comment", "~")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(decimalFile))
+    val expectedSchema = StructType(List(
+      StructField("decimal", DecimalType(20, 0), nullable = true),
+      StructField("long", LongType, nullable = true),
+      StructField("double", DoubleType, nullable = true)))
     assert(result.schema === expectedSchema)
   }
 
