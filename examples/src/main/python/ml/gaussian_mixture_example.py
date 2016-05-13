@@ -18,12 +18,12 @@
 from __future__ import print_function
 
 # $example on$
-from pyspark.ml.clustering import GaussianMixture, GaussianMixtureModel
+from pyspark.ml.clustering import GaussianMixture
 # $example off$
 from pyspark.sql import SparkSession
 
 """
-A simple example demonstrating a Gaussian Mixture Model (GMM).
+A simple example demonstrating Gaussian Mixture Model (GMM).
 Run with:
   bin/spark-submit examples/src/main/python/ml/gaussian_mixture_example.py
 """
@@ -35,21 +35,14 @@ if __name__ == "__main__":
         .getOrCreate()
 
     # $example on$
-    # load data
+    # loads data
     dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
-    gmm = GaussianMixture().setK(2).setSeed(10).setFeaturesCol("features")
+    gmm = GaussianMixture().setK(2).setSeed(10)
     model = gmm.fit(dataset)
 
     print("Gaussians: ")
     model.gaussiansDF.show()
-
-    transformed = model.transform(dataset).select("prediction")
-    rows = transformed.collect()
-
-    print("Prediction: ")
-    for row in rows:
-        print(row)
     # $example off$
 
     spark.stop()

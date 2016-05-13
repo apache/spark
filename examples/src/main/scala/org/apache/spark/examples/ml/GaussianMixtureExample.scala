@@ -19,9 +19,8 @@ package org.apache.spark.examples.ml
 
 // scalastyle:off println
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
-import org.apache.spark.ml.clustering.{GaussianMixture, GaussianMixtureModel}
+import org.apache.spark.ml.clustering.GaussianMixture
 import org.apache.spark.sql.SparkSession
 // $example off$
 
@@ -38,20 +37,15 @@ object GaussianMixtureExample {
     val spark = SparkSession.builder.appName(s"${this.getClass.getSimpleName}").getOrCreate()
 
     // $example on$
-    // Load data
+    // Loads data
     val dataset = spark.read.format("libsvm").load("data/mllib/sample_kmeans_data.txt")
 
     // Trains Gaussian Mixture Model
     val gmm = new GaussianMixture()
       .setK(2)
-      .setFeaturesCol("features")
-      .setPredictionCol("prediction")
-      .setTol(0.0001)
-      .setMaxIter(10)
-      .setSeed(10)
     val model = gmm.fit(dataset)
 
-    // output parameters of max-likelihood model
+    // output parameters of mixture model model
     for (i <- 0 until model.getK) {
       println("weight=%f\nmu=%s\nsigma=\n%s\n" format
         (model.weights(i), model.gaussians(i).mean, model.gaussians(i).cov))

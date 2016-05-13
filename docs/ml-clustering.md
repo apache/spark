@@ -226,7 +226,7 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/GaussianMix
 </div>
 
 <div data-lang="python" markdown="1">
-Refer to the [Python docs](api/python/pyspark.ml.html#pyspark.ml.clustering.GaussianMixture) for more details.
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.GaussianMixture) for more details.
 
 {% include_example python/ml/gaussian_mixture_example.py %}
 </div>

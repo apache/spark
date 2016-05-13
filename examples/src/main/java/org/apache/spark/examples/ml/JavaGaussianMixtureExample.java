@@ -27,7 +27,7 @@ import org.apache.spark.sql.SparkSession;
 
 
 /**
- * An example demonstrating a Gaussian Mixture Model.
+ * An example demonstrating Gaussian Mixture Model.
  * Run with
  * <pre>
  * bin/run-example ml.JavaGaussianMixtureExample
@@ -37,14 +37,14 @@ public class JavaGaussianMixtureExample {
 
   public static void main(String[] args) {
 
-    // Parses the arguments
+    // Creates a SparkSession 
     SparkSession spark = SparkSession
             .builder()
             .appName("JavaGaussianMixtureExample")
             .getOrCreate();
 
     // $example on$
-    // Load data
+    // Loads data
     Dataset<Row> dataset = spark.read().format("libsvm").load("data/mllib/sample_kmeans_data.txt");
 
     // Trains a GaussianMixture model
@@ -53,9 +53,9 @@ public class JavaGaussianMixtureExample {
     GaussianMixtureModel model = gmm.fit(dataset);
 
     // Output the parameters of the mixture model
-    for (int j = 0; j < model.getK(); j++) {
+    for (int i = 0; i < model.getK(); i++) {
       System.out.printf("weight=%f\nmu=%s\nsigma=\n%s\n",
-              model.weights()[j], model.gaussians()[j].mean(), model.gaussians()[j].cov());
+              model.weights()[i], model.gaussians()[i].mean(), model.gaussians()[i].cov());
     }
     // $example off$
 
