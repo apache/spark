@@ -17,14 +17,12 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 // $example on$
 import java.util.Arrays;
+import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.Bucketizer;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
@@ -37,23 +35,24 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaBucketizerExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaBucketizerExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaBucketizerExample")
+      .getOrCreate();
 
     // $example on$
     double[] splits = {Double.NEGATIVE_INFINITY, -0.5, 0.0, 0.5, Double.POSITIVE_INFINITY};
 
-    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
+    List<Row> data = Arrays.asList(
       RowFactory.create(-0.5),
       RowFactory.create(-0.3),
       RowFactory.create(0.0),
       RowFactory.create(0.2)
-    ));
+    );
     StructType schema = new StructType(new StructField[]{
       new StructField("features", DataTypes.DoubleType, false, Metadata.empty())
     });
-    Dataset<Row> dataFrame = jsql.createDataFrame(data, schema);
+    Dataset<Row> dataFrame = spark.createDataFrame(data, schema);
 
     Bucketizer bucketizer = new Bucketizer()
       .setInputCol("features")
@@ -64,7 +63,7 @@ public class JavaBucketizerExample {
     Dataset<Row> bucketedData = bucketizer.transform(dataFrame);
     bucketedData.show();
     // $example off$
-    jsc.stop();
+    spark.stop();
   }
 }
 

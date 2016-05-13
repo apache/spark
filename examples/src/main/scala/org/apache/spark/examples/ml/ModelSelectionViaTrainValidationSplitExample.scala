@@ -17,24 +17,32 @@
 
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.tuning.{ParamGridBuilder, TrainValidationSplit}
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
+/**
+ * A simple example demonstrating model selection using TrainValidationSplit.
+ *
+ * Run with
+ * {{{
+ * bin/run-example ml.ModelSelectionViaTrainValidationSplitExample
+ * }}}
+ */
 object ModelSelectionViaTrainValidationSplitExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("ModelSelectionViaTrainValidationSplitExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("ModelSelectionViaTrainValidationSplitExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training and test data.
-    val data = sqlContext.read.format("libsvm").load("data/mllib/sample_linear_regression_data.txt")
+    val data = spark.read.format("libsvm").load("data/mllib/sample_linear_regression_data.txt")
     val Array(training, test) = data.randomSplit(Array(0.9, 0.1), seed = 12345)
 
     val lr = new LinearRegression()
@@ -67,6 +75,6 @@ object ModelSelectionViaTrainValidationSplitExample {
       .show()
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }

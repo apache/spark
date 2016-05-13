@@ -21,7 +21,6 @@ import java.util.concurrent.{ExecutorService, TimeUnit}
 
 import scala.collection.Map
 import scala.collection.mutable
-import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -36,7 +35,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{ManualClock, ThreadUtils}
 
 /**
  * A test suite for the heartbeating behavior between the driver and the executors.
@@ -174,9 +173,9 @@ class HeartbeatReceiverSuite
     val dummyExecutorEndpoint2 = new FakeExecutorEndpoint(rpcEnv)
     val dummyExecutorEndpointRef1 = rpcEnv.setupEndpoint("fake-executor-1", dummyExecutorEndpoint1)
     val dummyExecutorEndpointRef2 = rpcEnv.setupEndpoint("fake-executor-2", dummyExecutorEndpoint2)
-    fakeSchedulerBackend.driverEndpoint.askWithRetry[RegisterExecutorResponse](
+    fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
       RegisterExecutor(executorId1, dummyExecutorEndpointRef1, 0, Map.empty))
-    fakeSchedulerBackend.driverEndpoint.askWithRetry[RegisterExecutorResponse](
+    fakeSchedulerBackend.driverEndpoint.askWithRetry[Boolean](
       RegisterExecutor(executorId2, dummyExecutorEndpointRef2, 0, Map.empty))
     heartbeatReceiverRef.askWithRetry[Boolean](TaskSchedulerIsSet)
     addExecutorAndVerify(executorId1)
@@ -212,10 +211,10 @@ class HeartbeatReceiverSuite
   private def triggerHeartbeat(
       executorId: String,
       executorShouldReregister: Boolean): Unit = {
-    val metrics = new TaskMetrics
+    val metrics = TaskMetrics.empty
     val blockManagerId = BlockManagerId(executorId, "localhost", 12345)
     val response = heartbeatReceiverRef.askWithRetry[HeartbeatResponse](
-      Heartbeat(executorId, Array(1L -> metrics.accumulatorUpdates()), blockManagerId))
+      Heartbeat(executorId, Array(1L -> metrics.accumulators()), blockManagerId))
     if (executorShouldReregister) {
       assert(response.reregisterBlockManager)
     } else {
@@ -223,7 +222,7 @@ class HeartbeatReceiverSuite
       // Additionally verify that the scheduler callback is called with the correct parameters
       verify(scheduler).executorHeartbeatReceived(
         Matchers.eq(executorId),
-        Matchers.eq(Array(1L -> metrics.accumulatorUpdates())),
+        Matchers.eq(Array(1L -> metrics.accumulators())),
         Matchers.eq(blockManagerId))
     }
   }
@@ -231,14 +230,14 @@ class HeartbeatReceiverSuite
   private def addExecutorAndVerify(executorId: String): Unit = {
     assert(
       heartbeatReceiver.addExecutor(executorId).map { f =>
-        Await.result(f, 10.seconds)
+        ThreadUtils.awaitResult(f, 10.seconds)
       } === Some(true))
   }
 
   private def removeExecutorAndVerify(executorId: String): Unit = {
     assert(
       heartbeatReceiver.removeExecutor(executorId).map { f =>
-        Await.result(f, 10.seconds)
+        ThreadUtils.awaitResult(f, 10.seconds)
       } === Some(true))
   }
 
@@ -255,7 +254,12 @@ class HeartbeatReceiverSuite
 /**
  * Dummy RPC endpoint to simulate executors.
  */
-private class FakeExecutorEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpoint
+private class FakeExecutorEndpoint(override val rpcEnv: RpcEnv) extends RpcEndpoint {
+
+  override def receive: PartialFunction[Any, Unit] = {
+    case _ =>
+  }
+}
 
 /**
  * Dummy scheduler backend to simulate executor allocation requests to the cluster manager.

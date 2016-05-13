@@ -31,7 +31,8 @@ import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.execution.vectorized.ColumnVectorUtils;
 import org.apache.spark.sql.execution.vectorized.ColumnarBatch;
-import org.apache.spark.sql.types.*;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.types.StructType;
 
 /**
  * A specialized RecordReader that reads into InternalRows or ColumnarBatches directly using the
@@ -98,20 +99,6 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
    * The default config on whether columnarBatch should be offheap.
    */
   private static final MemoryMode DEFAULT_MEMORY_MODE = MemoryMode.ON_HEAP;
-
-  /**
-   * Tries to initialize the reader for this split. Returns true if this reader supports reading
-   * this split and false otherwise.
-   */
-  public boolean tryInitialize(InputSplit inputSplit, TaskAttemptContext taskAttemptContext)
-      throws IOException, InterruptedException {
-    try {
-      initialize(inputSplit, taskAttemptContext);
-      return true;
-    } catch (UnsupportedOperationException e) {
-      return false;
-    }
-  }
 
   /**
    * Implementation of RecordReader API.
@@ -191,7 +178,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
       }
     }
 
-    columnarBatch = ColumnarBatch.allocate(batchSchema);
+    columnarBatch = ColumnarBatch.allocate(batchSchema, memMode);
     if (partitionColumns != null) {
       int partitionIdx = sparkSchema.fields().length;
       for (int i = 0; i < partitionColumns.fields().length; i++) {
@@ -222,7 +209,7 @@ public class VectorizedParquetRecordReader extends SpecificParquetRecordReaderBa
     return columnarBatch;
   }
 
-  /**
+  /*
    * Can be called before any rows are returned to enable returning columnar batches directly.
    */
   public void enableReturningBatches() {

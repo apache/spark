@@ -188,7 +188,7 @@ public class Java8APISuite implements Serializable {
   public void flatMap() {
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello World!",
       "The quick brown fox jumps over the lazy dog."));
-    JavaRDD<String> words = rdd.flatMap(x -> Arrays.asList(x.split(" ")));
+    JavaRDD<String> words = rdd.flatMap(x -> Arrays.asList(x.split(" ")).iterator());
 
     Assert.assertEquals("Hello", words.first());
     Assert.assertEquals(11, words.count());
@@ -198,7 +198,7 @@ public class Java8APISuite implements Serializable {
       for (String word : s.split(" ")) {
         pairs2.add(new Tuple2<>(word, word));
       }
-      return pairs2;
+      return pairs2.iterator();
     });
 
     Assert.assertEquals(new Tuple2<>("Hello", "Hello"), pairs.first());
@@ -209,7 +209,7 @@ public class Java8APISuite implements Serializable {
       for (String word : s.split(" ")) {
         lengths.add((double) word.length());
       }
-      return lengths;
+      return lengths.iterator();
     });
 
     Assert.assertEquals(5.0, doubles.first(), 0.01);
@@ -227,7 +227,7 @@ public class Java8APISuite implements Serializable {
 
     // Regression test for SPARK-668:
     JavaPairRDD<String, Integer> swapped =
-      pairRDD.flatMapToPair(x -> Collections.singletonList(x.swap()));
+      pairRDD.flatMapToPair(x -> Collections.singletonList(x.swap()).iterator());
     swapped.collect();
 
     // There was never a bug here, but it's worth testing:
@@ -242,7 +242,7 @@ public class Java8APISuite implements Serializable {
       while (iter.hasNext()) {
         sum += iter.next();
       }
-      return Collections.singletonList(sum);
+      return Collections.singletonList(sum).iterator();
     });
 
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());

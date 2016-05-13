@@ -994,7 +994,7 @@ setMethod("rint",
 
 #' round
 #'
-#' Returns the value of the column `e` rounded to 0 decimal places.
+#' Returns the value of the column `e` rounded to 0 decimal places using HALF_UP rounding mode.
 #'
 #' @rdname round
 #' @name round
@@ -1007,6 +1007,26 @@ setMethod("round",
             jc <- callJStatic("org.apache.spark.sql.functions", "round", x@jc)
             column(jc)
           })
+
+#' bround
+#'
+#' Returns the value of the column `e` rounded to `scale` decimal places using HALF_EVEN rounding
+#' mode if `scale` >= 0 or at integral part when `scale` < 0.
+#' Also known as Gaussian rounding or bankers' rounding that rounds to the nearest even number.
+#' bround(2.5, 0) = 2, bround(3.5, 0) = 4.
+#'
+#' @rdname bround
+#' @name bround
+#' @family math_funcs
+#' @export
+#' @examples \dontrun{bround(df$c, 0)}
+setMethod("bround",
+          signature(x = "Column"),
+          function(x, scale = 0) {
+            jc <- callJStatic("org.apache.spark.sql.functions", "bround", x@jc, as.integer(scale))
+            column(jc)
+          })
+
 
 #' rtrim
 #'
@@ -2077,7 +2097,7 @@ setMethod("conv", signature(x = "Column", fromBase = "numeric", toBase = "numeri
 #' expr
 #'
 #' Parses the expression string into the column that it represents, similar to
-#' DataFrame.selectExpr
+#' SparkDataFrame.selectExpr
 #'
 #' @family normal_funcs
 #' @rdname expr
@@ -2128,6 +2148,69 @@ setMethod("from_unixtime", signature(x = "Column"),
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "from_unixtime",
                               x@jc, format)
+            column(jc)
+          })
+
+#' window
+#'
+#' Bucketize rows into one or more time windows given a timestamp specifying column. Window
+#' starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+#' [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+#' the order of months are not supported.
+#'
+#' The time column must be of TimestampType.
+#'
+#' Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
+#' interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+#' If the `slideDuration` is not provided, the windows will be tumbling windows.
+#'
+#' The startTime is the offset with respect to 1970-01-01 00:00:00 UTC with which to start
+#' window intervals. For example, in order to have hourly tumbling windows that start 15 minutes
+#' past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
+#'
+#' The output column will be a struct called 'window' by default with the nested columns 'start'
+#' and 'end'.
+#'
+#' @family datetime_funcs
+#' @rdname window
+#' @name window
+#' @export
+#' @examples
+#'\dontrun{
+#'   # One minute windows every 15 seconds 10 seconds after the minute, e.g. 09:00:10-09:01:10,
+#'   # 09:00:25-09:01:25, 09:00:40-09:01:40, ...
+#'   window(df$time, "1 minute", "15 seconds", "10 seconds")
+#'
+#'   # One minute tumbling windows 15 seconds after the minute, e.g. 09:00:15-09:01:15,
+#'    # 09:01:15-09:02:15...
+#'   window(df$time, "1 minute", startTime = "15 seconds")
+#'
+#'   # Thirty second windows every 10 seconds, e.g. 09:00:00-09:00:30, 09:00:10-09:00:40, ...
+#'   window(df$time, "30 seconds", "10 seconds")
+#'}
+setMethod("window", signature(x = "Column"),
+          function(x, windowDuration, slideDuration = NULL, startTime = NULL) {
+            stopifnot(is.character(windowDuration))
+            if (!is.null(slideDuration) && !is.null(startTime)) {
+              stopifnot(is.character(slideDuration) && is.character(startTime))
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration, slideDuration, startTime)
+            } else if (!is.null(slideDuration)) {
+              stopifnot(is.character(slideDuration))
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration, slideDuration)
+            } else if (!is.null(startTime)) {
+              stopifnot(is.character(startTime))
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration, windowDuration, startTime)
+            } else {
+              jc <- callJStatic("org.apache.spark.sql.functions",
+                                "window",
+                                x@jc, windowDuration)
+            }
             column(jc)
           })
 

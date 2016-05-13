@@ -95,7 +95,8 @@ object HiveTypeCoercion {
       Some(t1)
 
     // Promote numeric types to the highest of the two
-    case (t1, t2) if Seq(t1, t2).forall(numericPrecedence.contains) =>
+    case (t1: NumericType, t2: NumericType)
+        if !t1.isInstanceOf[DecimalType] && !t2.isInstanceOf[DecimalType] =>
       val index = numericPrecedence.lastIndexWhere(t => t == t1 || t == t2)
       Some(numericPrecedence(index))
 
@@ -584,10 +585,10 @@ object HiveTypeCoercion {
           val newRight = if (right.dataType == widestType) right else Cast(right, widestType)
           If(pred, newLeft, newRight)
         }.getOrElse(i)  // If there is no applicable conversion, leave expression unchanged.
-      // Convert If(null literal, _, _) into boolean type.
-      // In the optimizer, we should short-circuit this directly into false value.
-      case If(pred, left, right) if pred.dataType == NullType =>
+      case If(Literal(null, NullType), left, right) =>
         If(Literal.create(null, BooleanType), left, right)
+      case If(pred, left, right) if pred.dataType == NullType =>
+        If(Cast(pred, BooleanType), left, right)
     }
   }
 

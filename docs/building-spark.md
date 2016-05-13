@@ -123,6 +123,21 @@ To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` prop
     ./dev/change-scala-version.sh 2.10
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
 
+# PySpark Tests with Maven
+
+If you are building PySpark and wish to run the PySpark tests you will need to build Spark with hive support.
+
+{% highlight bash %}
+build/mvn -DskipTests clean package -Phive
+./python/run-tests
+{% endhighlight %}
+
+The run-tests script also can be limited to a specific Python version or a specific module
+
+    ./python/run-tests --python-executables=python --modules=pyspark-sql
+
+**Note:** You can also run Python tests with an sbt build, provided you build Spark with hive support.
+
 # Spark Tests in Maven
 
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).
@@ -180,26 +195,31 @@ For help in setting up IntelliJ IDEA or Eclipse for Spark development, and troub
 
 Running only Java 8 tests and nothing else.
 
-    mvn install -DskipTests -Pjava8-tests
+    mvn install -DskipTests
+    mvn -pl :java8-tests_2.11 test
 
 or
 
-    sbt -Pjava8-tests java8-tests/test
+    sbt java8-tests/test
 
-Java 8 tests are run when `-Pjava8-tests` profile is enabled, they will run in spite of `-DskipTests`.
-For these tests to run your system must have a JDK 8 installation.
+Java 8 tests are automatically enabled when a Java 8 JDK is detected.
 If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.
 
-# Building for PySpark on YARN
+# Running Docker based Integration Test Suites
 
-PySpark on YARN is only supported if the jar is built with Maven. Further, there is a known problem
-with building this assembly jar on Red Hat based operating systems (see [SPARK-1753](https://issues.apache.org/jira/browse/SPARK-1753)). If you wish to
-run PySpark on a YARN cluster with Red Hat installed, we recommend that you build the jar elsewhere,
-then ship it over to the cluster. We are investigating the exact cause for this.
+Running only docker based integration tests and nothing else.
+
+    mvn install -DskipTests
+    mvn -Pdocker-integration-tests -pl :spark-docker-integration-tests_2.11
+
+or
+
+    sbt docker-integration-tests/test
+
 
 # Packaging without Hadoop Dependencies for YARN
 
-The assembly jar produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with `yarn.application.classpath`.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself.
+The assembly directory produced by `mvn package` will, by default, include all of Spark's dependencies, including Hadoop and some of its ecosystem projects. On YARN deployments, this causes multiple versions of these to appear on executor classpaths: the version packaged in the Spark assembly and the version on each node, included with `yarn.application.classpath`.  The `hadoop-provided` profile builds the assembly without including Hadoop-ecosystem projects, like ZooKeeper and Hadoop itself.
 
 # Building with SBT
 
@@ -210,7 +230,7 @@ compilation. More advanced developers may wish to use SBT.
 The SBT build is derived from the Maven POM files, and so the same Maven profiles and variables
 can be set to control the SBT build. For example:
 
-    build/sbt -Pyarn -Phadoop-2.3 assembly
+    build/sbt -Pyarn -Phadoop-2.3 package
 
 To avoid the overhead of launching sbt each time you need to re-compile, you can launch sbt
 in interactive mode by running `build/sbt`, and then run all build commands at the command
@@ -219,9 +239,9 @@ prompt. For more recommendations on reducing build time, refer to the
 
 # Testing with SBT
 
-Some of the tests require Spark to be packaged first, so always run `build/sbt assembly` the first time.  The following is an example of a correct (build, test) sequence:
+Some of the tests require Spark to be packaged first, so always run `build/sbt package` the first time.  The following is an example of a correct (build, test) sequence:
 
-    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver assembly
+    build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver package
     build/sbt -Pyarn -Phadoop-2.3 -Phive -Phive-thriftserver test
 
 To run only a specific test suite as follows:

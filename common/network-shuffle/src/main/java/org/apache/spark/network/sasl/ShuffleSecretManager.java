@@ -37,7 +37,7 @@ public class ShuffleSecretManager implements SecretKeyHolder {
   private static final String SPARK_SASL_USER = "sparkSaslUser";
 
   public ShuffleSecretManager() {
-    shuffleSecretMap = new ConcurrentHashMap<String, String>();
+    shuffleSecretMap = new ConcurrentHashMap<>();
   }
 
   /**

@@ -26,10 +26,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml.classification.DecisionTreeClassificationModel
 import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impl.{BaggedPoint, DecisionTreeMetadata, DTStatsAggregator,
-  TimeTracker}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
@@ -82,6 +81,7 @@ private[spark] object RandomForest extends Logging {
 
   /**
    * Train a random forest.
+   *
    * @param input Training data: RDD of [[org.apache.spark.mllib.regression.LabeledPoint]]
    * @return an unweighted set of trees
    */
@@ -91,6 +91,7 @@ private[spark] object RandomForest extends Logging {
       numTrees: Int,
       featureSubsetStrategy: String,
       seed: Long,
+      instr: Option[Instrumentation[_]],
       parentUID: Option[String] = None): Array[DecisionTreeModel] = {
 
     val timer = new TimeTracker()
@@ -102,13 +103,14 @@ private[spark] object RandomForest extends Logging {
     val retaggedInput = input.retag(classOf[LabeledPoint])
     val metadata =
       DecisionTreeMetadata.buildMetadata(retaggedInput, strategy, numTrees, featureSubsetStrategy)
-    logDebug("algo = " + strategy.algo)
-    logDebug("numTrees = " + numTrees)
-    logDebug("seed = " + seed)
-    logDebug("maxBins = " + metadata.maxBins)
-    logDebug("featureSubsetStrategy = " + featureSubsetStrategy)
-    logDebug("numFeaturesPerNode = " + metadata.numFeaturesPerNode)
-    logDebug("subsamplingRate = " + strategy.subsamplingRate)
+    instr match {
+      case Some(instrumentation) =>
+        instrumentation.logNumFeatures(metadata.numFeatures)
+        instrumentation.logNumClasses(metadata.numClasses)
+      case None =>
+        logInfo("numFeatures: " + metadata.numFeatures)
+        logInfo("numClasses: " + metadata.numClasses)
+    }
 
     // Find the splits and the corresponding bins (interval between the splits) using a sample
     // of the input data.
@@ -330,7 +332,7 @@ private[spark] object RandomForest extends Logging {
   /**
    * Given a group of nodes, this finds the best split for each node.
    *
-   * @param input Training data: RDD of [[org.apache.spark.mllib.tree.impl.TreePoint]]
+   * @param input Training data: RDD of [[org.apache.spark.ml.tree.impl.TreePoint]]
    * @param metadata Learning and dataset metadata
    * @param topNodes Root node for each tree.  Used for matching instances with nodes.
    * @param nodesForGroup Mapping: treeIndex --> nodes to be split in tree
@@ -612,7 +614,9 @@ private[spark] object RandomForest extends Logging {
   }
 
   /**
-   * Calculate the impurity statistics for a give (feature, split) based upon left/right aggregates.
+   * Calculate the impurity statistics for a given (feature, split) based upon left/right
+   * aggregates.
+   *
    * @param stats the recycle impurity statistics for this feature's all splits,
    *              only 'impurity' and 'impurityCalculator' are valid between each iteration
    * @param leftImpurityCalculator left node aggregates for this (feature, split)
@@ -670,6 +674,7 @@ private[spark] object RandomForest extends Logging {
 
   /**
    * Find the best split for a node.
+   *
    * @param binAggregates Bin statistics.
    * @return tuple for best split: (Split, information gain, prediction at node)
    */
@@ -942,6 +947,7 @@ private[spark] object RandomForest extends Logging {
    * NOTE: Returned number of splits is set based on `featureSamples` and
    *       could be different from the specified `numSplits`.
    *       The `numSplits` attribute in the `DecisionTreeMetadata` class will be set accordingly.
+   *
    * @param featureSamples feature values of each sample
    * @param metadata decision tree metadata
    *                 NOTE: `metadata.numbins` will be changed accordingly
@@ -1085,6 +1091,7 @@ private[spark] object RandomForest extends Logging {
 
   /**
    * Get the number of values to be stored for this node in the bin aggregates.
+   *
    * @param featureSubset  Indices of features which may be split at this node.
    *                       If None, then use all features.
    */

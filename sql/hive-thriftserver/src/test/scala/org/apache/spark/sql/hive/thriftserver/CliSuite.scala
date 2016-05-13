@@ -23,7 +23,7 @@ import java.sql.Timestamp
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, Promise}
+import scala.concurrent.Promise
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
@@ -32,7 +32,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A test suite for the `spark-sql` CLI tool.  Note that all test cases share the same temporary
@@ -132,7 +132,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
     try {
-      Await.result(foundAllExpectedAnswers.future, timeout)
+      ThreadUtils.awaitResult(foundAllExpectedAnswers.future, timeout)
     } catch { case cause: Throwable =>
       val message =
         s"""
@@ -162,22 +162,22 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
     runCliWithin(3.minute)(
       "CREATE TABLE hive_test(key INT, val STRING);"
-        -> "OK",
+        -> "",
       "SHOW TABLES;"
         -> "hive_test",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE hive_test;"
-        -> "OK",
+        -> "",
       "CACHE TABLE hive_test;"
         -> "",
       "SELECT COUNT(*) FROM hive_test;"
         -> "5",
       "DROP TABLE hive_test;"
-        -> "OK"
+        -> ""
     )
   }
 
   test("Single command with -e") {
-    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "OK")
+    runCliWithin(2.minute, Seq("-e", "SHOW DATABASES;"))("" -> "")
   }
 
   test("Single command with --database") {
@@ -187,7 +187,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "USE hive_test_db;"
         -> "",
       "CREATE TABLE hive_test(key INT, val STRING);"
-        -> "OK",
+        -> "",
       "SHOW TABLES;"
         -> "hive_test"
     )
@@ -210,19 +210,19 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       """CREATE TABLE t1(key string, val string)
         |ROW FORMAT SERDE 'org.apache.hive.hcatalog.data.JsonSerDe';
       """.stripMargin
-        -> "OK",
+        -> "",
       "CREATE TABLE sourceTable (key INT, val STRING);"
-        -> "OK",
+        -> "",
       s"LOAD DATA LOCAL INPATH '$dataFilePath' OVERWRITE INTO TABLE sourceTable;"
-        -> "OK",
+        -> "",
       "INSERT INTO TABLE t1 SELECT key, val FROM sourceTable;"
         -> "",
       "SELECT count(key) FROM t1;"
         -> "5",
       "DROP TABLE t1;"
-        -> "OK",
+        -> "",
       "DROP TABLE sourceTable;"
-        -> "OK"
+        -> ""
     )
   }
 
@@ -230,7 +230,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(timeout = 2.minute,
       errorResponses = Seq("AnalysisException"))(
       "select * from nonexistent_table;"
-        -> "Error in query: Table not found: nonexistent_table;"
+        -> "Error in query: Table or view not found: nonexistent_table;"
     )
   }
 

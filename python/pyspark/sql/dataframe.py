@@ -60,10 +60,8 @@ class DataFrame(object):
         people = sqlContext.read.parquet("...")
         department = sqlContext.read.parquet("...")
 
-        people.filter(people.age > 30).join(department, people.deptId == department.id)) \
+        people.filter(people.age > 30).join(department, people.deptId == department.id)\
           .groupBy(department.name, "gender").agg({"salary": "avg", "age": "max"})
-
-    .. note:: Experimental
 
     .. versionadded:: 1.3
     """
@@ -121,11 +119,55 @@ class DataFrame(object):
         that was used to create this :class:`DataFrame`.
 
         >>> df.registerTempTable("people")
-        >>> df2 = sqlContext.sql("select * from people")
+        >>> df2 = spark.sql("select * from people")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
+        >>> spark.catalog.dropTempView("people")
+
+        .. note:: Deprecated in 2.0, use createOrReplaceTempView instead.
         """
-        self._jdf.registerTempTable(name)
+        self._jdf.createOrReplaceTempView(name)
+
+    @since(2.0)
+    def createTempView(self, name):
+        """Creates a temporary view with this DataFrame.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+        throws :class:`TempTableAlreadyExistsException`, if the view name already exists in the
+        catalog.
+
+        >>> df.createTempView("people")
+        >>> df2 = spark.sql("select * from people")
+        >>> sorted(df.collect()) == sorted(df2.collect())
+        True
+        >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+        ...
+        Py4JJavaError: ...
+        : org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException...
+        >>> spark.catalog.dropTempView("people")
+
+        """
+        self._jdf.createTempView(name)
+
+    @since(2.0)
+    def createOrReplaceTempView(self, name):
+        """Creates or replaces a temporary view with this DataFrame.
+
+        The lifetime of this temporary table is tied to the :class:`SparkSession`
+        that was used to create this :class:`DataFrame`.
+
+        >>> df.createOrReplaceTempView("people")
+        >>> df2 = df.filter(df.age > 3)
+        >>> df2.createOrReplaceTempView("people")
+        >>> df3 = spark.sql("select * from people")
+        >>> sorted(df3.collect()) == sorted(df2.collect())
+        True
+        >>> spark.catalog.dropTempView("people")
+
+        """
+        self._jdf.createOrReplaceTempView(name)
 
     @property
     @since(1.4)
@@ -197,6 +239,20 @@ class DataFrame(object):
         """
         return self._jdf.isLocal()
 
+    @property
+    @since(2.0)
+    def isStreaming(self):
+        """Returns true if this :class:`Dataset` contains one or more sources that continuously
+        return data as it arrives. A :class:`Dataset` that reads data from a streaming source
+        must be executed as a :class:`ContinuousQuery` using the :func:`startStream` method in
+        :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
+        :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
+        source present.
+
+        .. note:: Experimental
+        """
+        return self._jdf.isStreaming()
+
     @since(1.3)
     def show(self, n=20, truncate=True):
         """Prints the first ``n`` rows to the console.
@@ -239,6 +295,20 @@ class DataFrame(object):
         with SCCallSiteSync(self._sc) as css:
             port = self._jdf.collectToPython()
         return list(_load_from_socket(port, BatchedSerializer(PickleSerializer())))
+
+    @ignore_unicode_prefix
+    @since(2.0)
+    def toLocalIterator(self):
+        """
+        Returns an iterator that contains all of the rows in this :class:`DataFrame`.
+        The iterator will consume as much memory as the largest partition in this DataFrame.
+
+        >>> list(df.toLocalIterator())
+        [Row(age=2, name=u'Alice'), Row(age=5, name=u'Bob')]
+        """
+        with SCCallSiteSync(self._sc) as css:
+            port = self._jdf.toPythonIterator()
+        return _load_from_socket(port, BatchedSerializer(PickleSerializer()))
 
     @ignore_unicode_prefix
     @since(1.3)
@@ -312,9 +382,11 @@ class DataFrame(object):
         return self
 
     @since(1.3)
-    def unpersist(self, blocking=True):
+    def unpersist(self, blocking=False):
         """Marks the :class:`DataFrame` as non-persistent, and remove all blocks for it from
         memory and disk.
+
+        .. note:: `blocking` default has changed to False to match Scala in 2.0.
         """
         self.is_cached = False
         self._jdf.unpersist(blocking)
@@ -334,15 +406,6 @@ class DataFrame(object):
         1
         """
         return DataFrame(self._jdf.coalesce(numPartitions), self.sql_ctx)
-
-    @since(1.3)
-    def repartition(self, numPartitions):
-        """Returns a new :class:`DataFrame` that has exactly ``numPartitions`` partitions.
-
-        >>> df.repartition(10).rdd.getNumPartitions()
-        10
-        """
-        return DataFrame(self._jdf.repartition(numPartitions), self.sql_ctx)
 
     @since(1.3)
     def repartition(self, numPartitions, *cols):
@@ -1460,12 +1523,13 @@ class DataFrameStatFunctions(object):
 def _test():
     import doctest
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SQLContext, SparkSession
     import pyspark.sql.dataframe
     globs = pyspark.sql.dataframe.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     globs['sc'] = sc
     globs['sqlContext'] = SQLContext(sc)
+    globs['spark'] = SparkSession(sc)
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')])\
         .toDF(StructType([StructField('age', IntegerType()),
                           StructField('name', StringType())]))

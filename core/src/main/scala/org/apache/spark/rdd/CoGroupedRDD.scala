@@ -29,10 +29,12 @@ import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
 
-/** The references to rdd and splitIndex are transient because redundant information is stored
-  * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
-  * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
-  * task closure. */
+/**
+ * The references to rdd and splitIndex are transient because redundant information is stored
+ * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
+ * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
+ * task closure.
+ */
 private[spark] case class NarrowCoGroupSplitDep(
     @transient rdd: RDD[_],
     @transient splitIndex: Int,
@@ -56,10 +58,10 @@ private[spark] case class NarrowCoGroupSplitDep(
  *                   narrowDeps should always be equal to the number of parents.
  */
 private[spark] class CoGroupPartition(
-    idx: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
+    override val index: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
   extends Partition with Serializable {
-  override val index: Int = idx
-  override def hashCode(): Int = idx
+  override def hashCode(): Int = index
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**

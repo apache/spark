@@ -49,6 +49,7 @@ import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
@@ -64,12 +65,7 @@ public class UnsafeExternalSorterSuite {
     new JavaSerializer(new SparkConf()),
     new SparkConf().set("spark.shuffle.spill.compress", "false"));
   // Use integer comparison for comparing prefixes (which are partition ids, in this case)
-  final PrefixComparator prefixComparator = new PrefixComparator() {
-    @Override
-    public int compare(long prefix1, long prefix2) {
-      return (int) prefix1 - (int) prefix2;
-    }
-  };
+  final PrefixComparator prefixComparator = PrefixComparators.LONG;
   // Since the key fits within the 8-byte prefix, we don't need to do any record comparison, so
   // use a dummy comparator
   final RecordComparator recordComparator = new RecordComparator() {
@@ -88,6 +84,7 @@ public class UnsafeExternalSorterSuite {
   @Mock(answer = RETURNS_SMART_NULLS) DiskBlockManager diskBlockManager;
   @Mock(answer = RETURNS_SMART_NULLS) TaskContext taskContext;
 
+  protected boolean shouldUseRadixSort() { return false; }
 
   private final long pageSizeBytes = new SparkConf().getSizeAsBytes("spark.buffer.pageSize", "4m");
 
@@ -178,7 +175,8 @@ public class UnsafeExternalSorterSuite {
       recordComparator,
       prefixComparator,
       /* initialSize */ 1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      shouldUseRadixSort());
   }
 
   @Test
@@ -226,6 +224,25 @@ public class UnsafeExternalSorterSuite {
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testSortTimeMetric() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long prevSortTime = sorter.getSortTimeNanos();
+    assertEquals(prevSortTime, 0);
+
+    sorter.insertRecord(null, 0, 0, 0);
+    sorter.spill();
+    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    prevSortTime = sorter.getSortTimeNanos();
+
+    sorter.spill();  // no sort needed
+    assertEquals(sorter.getSortTimeNanos(), prevSortTime);
+
+    sorter.insertRecord(null, 0, 0, 0);
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
   }
 
   @Test
@@ -381,7 +398,8 @@ public class UnsafeExternalSorterSuite {
       null,
       null,
       /* initialSize */ 1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      shouldUseRadixSort());
     long[] record = new long[100];
     int recordSize = record.length * 8;
     int n = (int) pageSizeBytes / recordSize * 3;
@@ -416,7 +434,8 @@ public class UnsafeExternalSorterSuite {
       recordComparator,
       prefixComparator,
       1024,
-      pageSizeBytes);
+      pageSizeBytes,
+      shouldUseRadixSort());
 
     // Peak memory should be monotonically increasing. More specifically, every time
     // we allocate a new page it should increase by exactly the size of the page.

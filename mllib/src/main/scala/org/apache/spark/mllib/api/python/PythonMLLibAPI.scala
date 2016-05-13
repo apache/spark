@@ -357,7 +357,6 @@ private[python] class PythonMLLibAPI extends Serializable {
     val kMeansAlg = new KMeans()
       .setK(k)
       .setMaxIterations(maxIterations)
-      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .setInitializationSteps(initializationSteps)
       .setEpsilon(epsilon)
@@ -671,6 +670,7 @@ private[python] class PythonMLLibAPI extends Serializable {
    * @param numPartitions number of partitions
    * @param numIterations number of iterations
    * @param seed initial seed for random generator
+   * @param windowSize size of window
    * @return A handle to java Word2VecModelWrapper instance at python side
    */
   def trainWord2VecModel(
@@ -680,7 +680,8 @@ private[python] class PythonMLLibAPI extends Serializable {
       numPartitions: Int,
       numIterations: Int,
       seed: Long,
-      minCount: Int): Word2VecModelWrapper = {
+      minCount: Int,
+      windowSize: Int): Word2VecModelWrapper = {
     val word2vec = new Word2Vec()
       .setVectorSize(vectorSize)
       .setLearningRate(learningRate)
@@ -688,6 +689,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       .setNumIterations(numIterations)
       .setSeed(seed)
       .setMinCount(minCount)
+      .setWindowSize(windowSize)
     try {
       val model = word2vec.fit(dataJRDD.rdd.persist(StorageLevel.MEMORY_AND_DISK_SER))
       new Word2VecModelWrapper(model)

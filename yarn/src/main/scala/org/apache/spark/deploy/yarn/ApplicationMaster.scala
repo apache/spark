@@ -19,15 +19,17 @@ package org.apache.spark.deploy.yarn
 
 import java.io.{File, IOException}
 import java.lang.reflect.InvocationTargetException
-import java.net.{Socket, URL}
+import java.net.{Socket, URI, URL}
 import java.util.concurrent.atomic.AtomicReference
 
+import scala.collection.mutable.HashMap
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
+import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
@@ -119,6 +121,61 @@ private[spark] class ApplicationMaster(
   private val sparkContextRef = new AtomicReference[SparkContext](null)
 
   private var delegationTokenRenewerOption: Option[AMDelegationTokenRenewer] = None
+
+  // Load the list of localized files set by the client. This is used when launching executors,
+  // and is loaded here so that these configs don't pollute the Web UI's environment page in
+  // cluster mode.
+  private val localResources = {
+    logInfo("Preparing Local resources")
+    val resources = HashMap[String, LocalResource]()
+
+    def setupDistributedCache(
+        file: String,
+        rtype: LocalResourceType,
+        timestamp: String,
+        size: String,
+        vis: String): Unit = {
+      val uri = new URI(file)
+      val amJarRsrc = Records.newRecord(classOf[LocalResource])
+      amJarRsrc.setType(rtype)
+      amJarRsrc.setVisibility(LocalResourceVisibility.valueOf(vis))
+      amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
+      amJarRsrc.setTimestamp(timestamp.toLong)
+      amJarRsrc.setSize(size.toLong)
+
+      val fileName = Option(uri.getFragment()).getOrElse(new Path(uri).getName())
+      resources(fileName) = amJarRsrc
+    }
+
+    val distFiles = sparkConf.get(CACHED_FILES)
+    val fileSizes = sparkConf.get(CACHED_FILES_SIZES)
+    val timeStamps = sparkConf.get(CACHED_FILES_TIMESTAMPS)
+    val visibilities = sparkConf.get(CACHED_FILES_VISIBILITIES)
+    val resTypes = sparkConf.get(CACHED_FILES_TYPES)
+
+    for (i <- 0 to distFiles.size - 1) {
+      val resType = LocalResourceType.valueOf(resTypes(i))
+      setupDistributedCache(distFiles(i), resType, timeStamps(i).toString, fileSizes(i).toString,
+      visibilities(i))
+    }
+
+    // Distribute the conf archive to executors.
+    sparkConf.get(CACHED_CONF_ARCHIVE).foreach { uri =>
+      val fs = FileSystem.get(new URI(uri), yarnConf)
+      val status = fs.getFileStatus(new Path(uri))
+      setupDistributedCache(uri, LocalResourceType.ARCHIVE, status.getModificationTime().toString,
+        status.getLen.toString, LocalResourceVisibility.PRIVATE.name())
+    }
+
+    // Clean up the configuration so it doesn't show up in the Web UI (since it's really noisy).
+    CACHE_CONFIGS.foreach { e =>
+      sparkConf.remove(e)
+      sys.props.remove(e.key)
+    }
+
+    logInfo("Prepared Local resources " + resources)
+    resources.toMap
+  }
 
   def getAttemptId(): ApplicationAttemptId = {
     client.getAttemptId()
@@ -292,7 +349,8 @@ private[spark] class ApplicationMaster(
       _sparkConf,
       uiAddress,
       historyAddress,
-      securityMgr)
+      securityMgr,
+      localResources)
 
     allocator.allocateResources()
     reporterThread = launchReporterThread()
@@ -374,7 +432,7 @@ private[spark] class ApplicationMaster(
             failureCount = 0
           } catch {
             case i: InterruptedException =>
-            case e: Throwable => {
+            case e: Throwable =>
               failureCount += 1
               // this exception was introduced in hadoop 2.4 and this code would not compile
               // with earlier versions if we refer it directly.
@@ -390,7 +448,6 @@ private[spark] class ApplicationMaster(
               } else {
                 logWarning(s"Reporter thread fails $failureCount time(s) in a row.", e)
               }
-            }
           }
           try {
             val numPendingAllocate = allocator.getPendingAllocate.size
@@ -659,10 +716,10 @@ object ApplicationMaster extends Logging {
   private var master: ApplicationMaster = _
 
   def main(args: Array[String]): Unit = {
-    SignalLogger.register(log)
+    SignalUtils.registerLogger(log)
     val amArgs = new ApplicationMasterArguments(args)
     SparkHadoopUtil.get.runAsSparkUser { () =>
-      master = new ApplicationMaster(amArgs, new YarnRMClient(amArgs))
+      master = new ApplicationMaster(amArgs, new YarnRMClient)
       System.exit(master.run())
     }
   }

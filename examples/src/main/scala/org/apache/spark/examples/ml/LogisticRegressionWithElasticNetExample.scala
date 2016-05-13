@@ -18,22 +18,22 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.classification.LogisticRegression
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 object LogisticRegressionWithElasticNetExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("LogisticRegressionWithElasticNetExample")
-    val sc = new SparkContext(conf)
-    val sqlCtx = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("LogisticRegressionWithElasticNetExample")
+      .getOrCreate()
 
     // $example on$
     // Load training data
-    val training = sqlCtx.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val training = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     val lr = new LogisticRegression()
       .setMaxIter(10)
@@ -47,7 +47,7 @@ object LogisticRegressionWithElasticNetExample {
     println(s"Coefficients: ${lrModel.coefficients} Intercept: ${lrModel.intercept}")
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

@@ -29,17 +29,17 @@ import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types.{StructField, StructType}
 
 class CrossValidatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = sqlContext.createDataFrame(
+    dataset = spark.createDataFrame(
       sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
   }
 
@@ -67,7 +67,7 @@ class CrossValidatorSuite
   }
 
   test("cross validation with linear regression") {
-    val dataset = sqlContext.createDataFrame(
+    val dataset = spark.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
 
@@ -136,6 +136,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
@@ -186,6 +187,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     assert(cv.getEvaluator.uid === cv2.getEvaluator.uid)
@@ -259,6 +261,7 @@ class CrossValidatorSuite
 
     assert(cv.uid === cv2.uid)
     assert(cv.getNumFolds === cv2.getNumFolds)
+    assert(cv.getSeed === cv2.getSeed)
 
     assert(cv2.getEvaluator.isInstanceOf[BinaryClassificationEvaluator])
     val evaluator2 = cv2.getEvaluator.asInstanceOf[BinaryClassificationEvaluator]
@@ -311,7 +314,7 @@ object CrossValidatorSuite extends SparkFunSuite {
 
   class MyEstimator(override val uid: String) extends Estimator[MyModel] with HasInputCol {
 
-    override def fit(dataset: DataFrame): MyModel = {
+    override def fit(dataset: Dataset[_]): MyModel = {
       throw new UnsupportedOperationException
     }
 
@@ -325,7 +328,7 @@ object CrossValidatorSuite extends SparkFunSuite {
 
   class MyEvaluator extends Evaluator {
 
-    override def evaluate(dataset: DataFrame): Double = {
+    override def evaluate(dataset: Dataset[_]): Double = {
       throw new UnsupportedOperationException
     }
 

@@ -382,11 +382,10 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
                 fs.rename(tempHadoopFile, hadoopFile)
             done = true
           } catch {
-            case ioe: IOException => {
+            case ioe: IOException =>
                   fs = testDir.getFileSystem(new Configuration())
                   logWarning("Attempt " + tries + " at generating file " + hadoopFile + " failed.",
                     ioe)
-            }
           }
         }
         if (!done) {

@@ -21,29 +21,35 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-
-import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaGaussianMixtureSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaGaussianMixture");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaGaussianMixture")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -54,7 +60,7 @@ public class JavaGaussianMixtureSuite implements Serializable {
       Vectors.dense(1.0, 4.0, 6.0)
     );
 
-    JavaRDD<Vector> data = sc.parallelize(points, 2);
+    JavaRDD<Vector> data = jsc.parallelize(points, 2);
     GaussianMixtureModel model = new GaussianMixture().setK(2).setMaxIterations(1).setSeed(1234)
       .run(data);
     assertEquals(model.gaussians().length, 2);

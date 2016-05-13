@@ -467,14 +467,27 @@ def randn(seed=None):
 @since(1.5)
 def round(col, scale=0):
     """
-    Round the value of `e` to `scale` decimal places if `scale` >= 0
+    Round the given value to `scale` decimal places using HALF_UP rounding mode if `scale` >= 0
     or at integral part when `scale` < 0.
 
-    >>> sqlContext.createDataFrame([(2.546,)], ['a']).select(round('a', 1).alias('r')).collect()
-    [Row(r=2.5)]
+    >>> sqlContext.createDataFrame([(2.5,)], ['a']).select(round('a', 0).alias('r')).collect()
+    [Row(r=3.0)]
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.round(_to_java_column(col), scale))
+
+
+@since(2.0)
+def bround(col, scale=0):
+    """
+    Round the given value to `scale` decimal places using HALF_EVEN rounding mode if `scale` >= 0
+    or at integral part when `scale` < 0.
+
+    >>> sqlContext.createDataFrame([(2.5,)], ['a']).select(bround('a', 0).alias('r')).collect()
+    [Row(r=2.0)]
+    """
+    sc = SparkContext._active_spark_context
+    return Column(sc._jvm.functions.bround(_to_java_column(col), scale))
 
 
 @since(1.5)
@@ -1051,6 +1064,55 @@ def to_utc_timestamp(timestamp, tz):
     """
     sc = SparkContext._active_spark_context
     return Column(sc._jvm.functions.to_utc_timestamp(_to_java_column(timestamp), tz))
+
+
+@since(2.0)
+@ignore_unicode_prefix
+def window(timeColumn, windowDuration, slideDuration=None, startTime=None):
+    """Bucketize rows into one or more time windows given a timestamp specifying column. Window
+    starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
+    [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
+    the order of months are not supported.
+
+    The time column must be of TimestampType.
+
+    Durations are provided as strings, e.g. '1 second', '1 day 12 hours', '2 minutes'. Valid
+    interval strings are 'week', 'day', 'hour', 'minute', 'second', 'millisecond', 'microsecond'.
+    If the `slideDuration` is not provided, the windows will be tumbling windows.
+
+    The startTime is the offset with respect to 1970-01-01 00:00:00 UTC with which to start
+    window intervals. For example, in order to have hourly tumbling windows that start 15 minutes
+    past the hour, e.g. 12:15-13:15, 13:15-14:15... provide `startTime` as `15 minutes`.
+
+    The output column will be a struct called 'window' by default with the nested columns 'start'
+    and 'end', where 'start' and 'end' will be of `TimestampType`.
+
+    >>> df = sqlContext.createDataFrame([("2016-03-11 09:00:07", 1)]).toDF("date", "val")
+    >>> w = df.groupBy(window("date", "5 seconds")).agg(sum("val").alias("sum"))
+    >>> w.select(w.window.start.cast("string").alias("start"),
+    ...          w.window.end.cast("string").alias("end"), "sum").collect()
+    [Row(start=u'2016-03-11 09:00:05', end=u'2016-03-11 09:00:10', sum=1)]
+    """
+    def check_string_field(field, fieldName):
+        if not field or type(field) is not str:
+            raise TypeError("%s should be provided as a string" % fieldName)
+
+    sc = SparkContext._active_spark_context
+    time_col = _to_java_column(timeColumn)
+    check_string_field(windowDuration, "windowDuration")
+    if slideDuration and startTime:
+        check_string_field(slideDuration, "slideDuration")
+        check_string_field(startTime, "startTime")
+        res = sc._jvm.functions.window(time_col, windowDuration, slideDuration, startTime)
+    elif slideDuration:
+        check_string_field(slideDuration, "slideDuration")
+        res = sc._jvm.functions.window(time_col, windowDuration, slideDuration)
+    elif startTime:
+        check_string_field(startTime, "startTime")
+        res = sc._jvm.functions.window(time_col, windowDuration, windowDuration, startTime)
+    else:
+        res = sc._jvm.functions.window(time_col, windowDuration)
+    return Column(res)
 
 
 # ---------------------------- misc functions ----------------------------------
@@ -1649,8 +1711,7 @@ def sort_array(col, asc=True):
 # ---------------------------- User Defined Function ----------------------------------
 
 def _wrap_function(sc, func, returnType):
-    ser = AutoBatchedSerializer(PickleSerializer())
-    command = (func, returnType, ser)
+    command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)

@@ -64,9 +64,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
   public TransportResponseHandler(Channel channel) {
     this.channel = channel;
-    this.outstandingFetches = new ConcurrentHashMap<StreamChunkId, ChunkReceivedCallback>();
-    this.outstandingRpcs = new ConcurrentHashMap<Long, RpcResponseCallback>();
-    this.streamCallbacks = new ConcurrentLinkedQueue<StreamCallback>();
+    this.outstandingFetches = new ConcurrentHashMap<>();
+    this.outstandingRpcs = new ConcurrentHashMap<>();
+    this.streamCallbacks = new ConcurrentLinkedQueue<>();
     this.timeOfLastRequestNs = new AtomicLong(0);
   }
 

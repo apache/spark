@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SparkSession
 
 /**
  * Entry point in test application for SPARK-8489.
@@ -28,19 +27,23 @@ import org.apache.spark.sql.hive.HiveContext
  *
  * This is used in org.apache.spark.sql.hive.HiveSparkSubmitSuite.
  */
+// TODO: actually rebuild this jar with the new changes.
 object Main {
   def main(args: Array[String]) {
     // scalastyle:off println
     println("Running regression test for SPARK-8489.")
-    val sc = new SparkContext("local", "testing")
-    val hc = new HiveContext(sc)
+    val spark = SparkSession.builder
+      .master("local")
+      .appName("testing")
+      .enableHiveSupport()
+      .getOrCreate()
     // This line should not throw scala.reflect.internal.MissingRequirementError.
     // See SPARK-8470 for more detail.
-    val df = hc.createDataFrame(Seq(MyCoolClass("1", "2", "3")))
+    val df = spark.createDataFrame(Seq(MyCoolClass("1", "2", "3")))
     df.collect()
     println("Regression test for SPARK-8489 success!")
     // scalastyle:on println
-    sc.stop()
+    spark.stop()
   }
 }
 

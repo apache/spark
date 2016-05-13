@@ -41,19 +41,16 @@ import org.apache.spark.sql.types._
  */
 trait Generator extends Expression {
 
-  // TODO ideally we should return the type of ArrayType(StructType),
-  // however, we don't keep the output field names in the Generator.
-  override def dataType: DataType = throw new UnsupportedOperationException
+  override def dataType: DataType = ArrayType(elementSchema)
 
   override def foldable: Boolean = false
 
   override def nullable: Boolean = false
 
   /**
-   * The output element data types in structure of Seq[(DataType, Nullable)]
-   * TODO we probably need to add more information like metadata etc.
+   * The output element schema.
    */
-  def elementTypes: Seq[(DataType, Boolean, String)]
+  def elementSchema: StructType
 
   /** Should be implemented by child classes to perform specific Generators. */
   override def eval(input: InternalRow): TraversableOnce[InternalRow]
@@ -69,7 +66,7 @@ trait Generator extends Expression {
  * A generator that produces its output using the provided lambda function.
  */
 case class UserDefinedGenerator(
-    elementTypes: Seq[(DataType, Boolean, String)],
+    elementSchema: StructType,
     function: Row => TraversableOnce[InternalRow],
     children: Seq[Expression])
   extends Generator with CodegenFallback {
@@ -99,6 +96,10 @@ case class UserDefinedGenerator(
 /**
  * Given an input array produces a sequence of rows for each value in the array.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(a) - Separates the elements of array a into multiple rows, or the elements of a map into multiple rows and columns.")
+// scalastyle:on line.size.limit
 case class Explode(child: Expression) extends UnaryExpression with Generator with CodegenFallback {
 
   override def children: Seq[Expression] = child :: Nil
@@ -113,10 +114,10 @@ case class Explode(child: Expression) extends UnaryExpression with Generator wit
   }
 
   // hive-compatible default alias for explode function ("col" for array, "key", "value" for map)
-  override def elementTypes: Seq[(DataType, Boolean, String)] = child.dataType match {
-    case ArrayType(et, containsNull) => (et, containsNull, "col") :: Nil
+  override def elementSchema: StructType = child.dataType match {
+    case ArrayType(et, containsNull) => new StructType().add("col", et, containsNull)
     case MapType(kt, vt, valueContainsNull) =>
-      (kt, false, "key") :: (vt, valueContainsNull, "value") :: Nil
+      new StructType().add("key", kt, false).add("value", vt, valueContainsNull)
   }
 
   override def eval(input: InternalRow): TraversableOnce[InternalRow] = {

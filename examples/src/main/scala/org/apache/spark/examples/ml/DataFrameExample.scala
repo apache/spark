@@ -23,11 +23,10 @@ import java.io.File
 import com.google.common.io.Files
 import scopt.OptionParser
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.examples.mllib.AbstractParams
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
-import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
 /**
  * An example of how to use [[org.apache.spark.sql.DataFrame]] for ML. Run with
@@ -62,14 +61,14 @@ object DataFrameExample {
   }
 
   def run(params: Params) {
-
-    val conf = new SparkConf().setAppName(s"DataFrameExample with $params")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName(s"DataFrameExample with $params")
+      .getOrCreate()
 
     // Load input data
     println(s"Loading LIBSVM file with UDT from ${params.input}.")
-    val df: DataFrame = sqlContext.read.format("libsvm").load(params.input).cache()
+    val df: DataFrame = spark.read.format("libsvm").load(params.input).cache()
     println("Schema from LIBSVM:")
     df.printSchema()
     println(s"Loaded training data as a DataFrame with ${df.count()} records.")
@@ -94,11 +93,11 @@ object DataFrameExample {
 
     // Load the records back.
     println(s"Loading Parquet file with UDT from $outputDir.")
-    val newDF = sqlContext.read.parquet(outputDir)
+    val newDF = spark.read.parquet(outputDir)
     println(s"Schema from Parquet:")
     newDF.printSchema()
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

@@ -21,6 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.internal.SessionState
 import org.apache.spark.sql.types.StructType
 
 package object state {
@@ -28,37 +29,36 @@ package object state {
   implicit class StateStoreOps[T: ClassTag](dataRDD: RDD[T]) {
 
     /** Map each partition of a RDD along with data in a [[StateStore]]. */
-    def mapPartitionWithStateStore[U: ClassTag](
-        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
+    def mapPartitionsWithStateStore[U: ClassTag](
+        sqlContext: SQLContext,
         checkpointLocation: String,
         operatorId: Long,
         storeVersion: Long,
         keySchema: StructType,
-        valueSchema: StructType
-      )(implicit sqlContext: SQLContext): StateStoreRDD[T, U] = {
+        valueSchema: StructType)(
+        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
 
-      mapPartitionWithStateStore(
-        storeUpdateFunction,
+      mapPartitionsWithStateStore(
         checkpointLocation,
         operatorId,
         storeVersion,
         keySchema,
         valueSchema,
-        new StateStoreConf(sqlContext.conf),
-        Some(sqlContext.streams.stateStoreCoordinator))
+        sqlContext.sessionState,
+        Some(sqlContext.streams.stateStoreCoordinator))(
+        storeUpdateFunction)
     }
 
     /** Map each partition of a RDD along with data in a [[StateStore]]. */
-    private[state] def mapPartitionWithStateStore[U: ClassTag](
-        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U],
+    private[streaming] def mapPartitionsWithStateStore[U: ClassTag](
         checkpointLocation: String,
         operatorId: Long,
         storeVersion: Long,
         keySchema: StructType,
         valueSchema: StructType,
-        storeConf: StateStoreConf,
-        storeCoordinator: Option[StateStoreCoordinatorRef]
-      ): StateStoreRDD[T, U] = {
+        sessionState: SessionState,
+        storeCoordinator: Option[StateStoreCoordinatorRef])(
+        storeUpdateFunction: (StateStore, Iterator[T]) => Iterator[U]): StateStoreRDD[T, U] = {
       val cleanedF = dataRDD.sparkContext.clean(storeUpdateFunction)
       new StateStoreRDD(
         dataRDD,
@@ -68,7 +68,7 @@ package object state {
         storeVersion,
         keySchema,
         valueSchema,
-        storeConf,
+        sessionState,
         storeCoordinator)
     }
   }

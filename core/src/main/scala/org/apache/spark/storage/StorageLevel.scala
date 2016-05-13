@@ -60,10 +60,7 @@ class StorageLevel private(
   assert(replication < 40, "Replication restricted to be less than 40 for calculating hash codes")
 
   if (useOffHeap) {
-    require(!useDisk, "Off-heap storage level does not support using disk")
-    require(!useMemory, "Off-heap storage level does not support using heap memory")
     require(!deserialized, "Off-heap storage level does not support deserialized storage")
-    require(replication == 1, "Off-heap storage level does not support multiple replication")
   }
 
   private[spark] def memoryMode: MemoryMode = {
@@ -86,7 +83,7 @@ class StorageLevel private(
       false
   }
 
-  def isValid: Boolean = (useMemory || useDisk || useOffHeap) && (replication > 0)
+  def isValid: Boolean = (useMemory || useDisk) && (replication > 0)
 
   def toInt: Int = {
     var ret = 0
@@ -123,7 +120,8 @@ class StorageLevel private(
   private def readResolve(): Object = StorageLevel.getCachedStorageLevel(this)
 
   override def toString: String = {
-    s"StorageLevel($useDisk, $useMemory, $useOffHeap, $deserialized, $replication)"
+    s"StorageLevel(disk=$useDisk, memory=$useMemory, offheap=$useOffHeap, " +
+      s"deserialized=$deserialized, replication=$replication)"
   }
 
   override def hashCode(): Int = toInt * 41 + replication
@@ -131,8 +129,9 @@ class StorageLevel private(
   def description: String = {
     var result = ""
     result += (if (useDisk) "Disk " else "")
-    result += (if (useMemory) "Memory " else "")
-    result += (if (useOffHeap) "ExternalBlockStore " else "")
+    if (useMemory) {
+      result += (if (useOffHeap) "Memory (off heap) " else "Memory ")
+    }
     result += (if (deserialized) "Deserialized " else "Serialized ")
     result += s"${replication}x Replicated"
     result
@@ -156,9 +155,7 @@ object StorageLevel {
   val MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2)
   val MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false)
   val MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2)
-
-  // Redirect to MEMORY_ONLY_SER for now.
-  val OFF_HEAP = MEMORY_ONLY_SER
+  val OFF_HEAP = new StorageLevel(true, true, true, false, 1)
 
   /**
    * :: DeveloperApi ::
@@ -183,7 +180,7 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Create a new StorageLevel object without setting useOffHeap.
+   * Create a new StorageLevel object.
    */
   @DeveloperApi
   def apply(
@@ -198,7 +195,7 @@ object StorageLevel {
 
   /**
    * :: DeveloperApi ::
-   * Create a new StorageLevel object.
+   * Create a new StorageLevel object without setting useOffHeap.
    */
   @DeveloperApi
   def apply(
