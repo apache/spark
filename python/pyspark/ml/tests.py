@@ -168,8 +168,8 @@ class ParamTypeConversionTests(PySparkTestCase):
 
     def test_list(self):
         l = [0, 1]
-        for lst_like in [l, np.array(l), OldDenseVector(l), OldSparseVector(len(l), range(len(l)), l),
-                         pyarray.array('l', l), xrange(2), tuple(l)]:
+        for lst_like in [l, np.array(l), OldDenseVector(l), OldSparseVector(len(l),
+                         range(len(l)), l), pyarray.array('l', l), xrange(2), tuple(l)]:
             converted = TypeConverters.toList(lst_like)
             self.assertEqual(type(converted), list)
             self.assertListEqual(converted, l)
@@ -1400,7 +1400,8 @@ class VectorUDTTests(MLlibTestCase):
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
 
     def test_infer_schema(self):
-        rdd = self.sc.parallelize([LabeledPoint(1.0, self.old_dv1), LabeledPoint(0.0, self.old_sv1)])
+        rdd = self.sc.parallelize([LabeledPoint(1.0, self.old_dv1),
+                                   LabeledPoint(0.0, self.old_sv1)])
         df = rdd.toDF()
         schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
