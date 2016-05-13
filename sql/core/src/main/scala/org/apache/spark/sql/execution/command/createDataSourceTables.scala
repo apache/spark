@@ -348,13 +348,16 @@ object CreateDataSourceTableUtils extends Logging {
         className = provider,
         options = options)
 
-    def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
+    def newSparkSQLSpecificMetastoreTable(relation: HadoopFsRelation): CatalogTable = {
       CatalogTable(
         identifier = tableIdent,
         tableType = tableType,
         schema = Nil,
         storage = CatalogStorageFormat(
-          locationUri = None,
+          // We don't want Hive metastore to implicitly create a table directory,
+          // which may be not the one Data Source table is referring to,
+          // yet which will be left behind when the table is dropped for an external table
+          locationUri = Some(relation.location.paths.map(_.toUri.toString).head),
           inputFormat = None,
           outputFormat = None,
           serde = None,
@@ -458,13 +461,15 @@ object CreateDataSourceTableUtils extends Logging {
               s"Could not persist $qualifiedTableName in a Hive compatible way. Persisting " +
                 s"it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, e)
-            val table = newSparkSQLSpecificMetastoreTable()
+            val table =
+              newSparkSQLSpecificMetastoreTable(resolvedRelation.asInstanceOf[HadoopFsRelation])
             sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
         }
 
       case (None, message) =>
         logWarning(message)
-        val table = newSparkSQLSpecificMetastoreTable()
+        val table =
+          newSparkSQLSpecificMetastoreTable(resolvedRelation.asInstanceOf[HadoopFsRelation])
         sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
     }
   }
