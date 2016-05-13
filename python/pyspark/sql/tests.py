@@ -287,8 +287,8 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_udf2(self):
         self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
-        self.spark.createDataFrame(self.sc.parallelize([Row(a="test")]))
-          .createOrReplaceTempView("test")
+        self.spark.createDataFrame(self.sc.parallelize([Row(a="test")]))\
+            .createOrReplaceTempView("test")
         [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
