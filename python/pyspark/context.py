@@ -834,7 +834,7 @@ class SparkContext(object):
 
         import pyspark
         import foolib
-        
+
         sc = pyspark.SparkContext()
         sc.addPyPackage(foolib)
         # foolib now in workers PYTHONPATH

@@ -1955,8 +1955,8 @@ class ContextTests(unittest.TestCase):
                 temp.write("triple = lambda x: 3*x")
             pkg = __import__(name)
             with SparkContext() as sc:
-                #trips = sc.parallelize([0, 1, 2, 3]).map(pkg.triple)
-                #sc.addPyPackage(pkg)
+                # trips = sc.parallelize([0, 1, 2, 3]).map(pkg.triple)
+                # sc.addPyPackage(pkg)
                 trips = sc.parallelize([0, 1, 2, 3]).map(lambda x: pkg.triple(x))
                 self.assertSequenceEqual([0, 3, 6, 9], trips.collect())
         finally:
