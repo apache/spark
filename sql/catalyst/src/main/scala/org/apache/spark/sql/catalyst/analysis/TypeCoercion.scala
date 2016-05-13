@@ -24,7 +24,6 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
-import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.types._
@@ -33,9 +32,6 @@ import org.apache.spark.sql.types._
 /**
  * A collection of [[Rule]] that can be used to coerce differing types that participate in
  * operations into compatible ones.
- *
- * Most of these rules are based on Hive semantics, but they do not introduce any dependencies on
- * the hive codebase.
  *
  * Notes about type widening / tightest common types: Broadly, there are two cases when we need
  * to widen data types (e.g. union, binary comparison). In case 1, we are looking for a common
@@ -46,7 +42,7 @@ import org.apache.spark.sql.types._
  * double's range is larger than decimal, and yet decimal is more precise than double, but in
  * union we would cast the decimal into double).
  */
-object HiveTypeCoercion {
+object TypeCoercion {
 
   val typeCoercionRules =
     PropagateTypes ::
