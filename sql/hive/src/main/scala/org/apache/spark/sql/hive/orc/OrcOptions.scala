@@ -17,39 +17,27 @@
 
 package org.apache.spark.sql.hive.orc
 
-import org.apache.hadoop.conf.Configuration
-
 /**
  * Options for the ORC data source.
  */
 private[orc] class OrcOptions(
-    @transient private val parameters: Map[String, String],
-    @transient private val conf: Configuration)
+    @transient private val parameters: Map[String, String])
   extends Serializable {
 
   import OrcOptions._
 
   /**
-   * Compression codec to use. By default use the value specified in Hadoop configuration.
+   * Compression codec to use. By default snappy compression.
    * Acceptable values are defined in [[shortOrcCompressionCodecNames]].
    */
   val compressionCodec: String = {
-    val default = conf.get(ORC_COMPRESSION, "SNAPPY")
-
-    // Because the ORC configuration value in `default` is not guaranteed to be the same
-    // with keys in `shortOrcCompressionCodecNames` in Spark, this value should not be
-    // used as the key for `shortOrcCompressionCodecNames` but just a return value.
-    parameters.get("compression") match {
-      case None => default
-      case Some(name) =>
-        val lowerCaseName = name.toLowerCase
-        if (!shortOrcCompressionCodecNames.contains(lowerCaseName)) {
-          val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
-          throw new IllegalArgumentException(s"Codec [$lowerCaseName] " +
-            s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
-        }
-        shortOrcCompressionCodecNames(lowerCaseName)
+    val codecName = parameters.getOrElse("compression", "snappy").toLowerCase
+    if (!shortOrcCompressionCodecNames.contains(codecName)) {
+      val availableCodecs = shortOrcCompressionCodecNames.keys.map(_.toLowerCase)
+      throw new IllegalArgumentException(s"Codec [$codecName] " +
+        s"is not available. Available codecs are ${availableCodecs.mkString(", ")}.")
     }
+    shortOrcCompressionCodecNames(codecName)
   }
 }
 

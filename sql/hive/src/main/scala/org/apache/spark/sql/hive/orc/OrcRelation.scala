@@ -64,8 +64,9 @@ private[sql] class DefaultSource
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    val orcOptions = new OrcOptions(options)
+
     val configuration = job.getConfiguration
-    val orcOptions = new OrcOptions(options, configuration)
 
     configuration.set(OrcOptions.ORC_COMPRESSION, orcOptions.compressionCodec)
     configuration match {
@@ -315,8 +316,7 @@ private[orc] object OrcRelation extends HiveInspectors {
     "NONE" -> "",
     "SNAPPY" -> ".snappy",
     "ZLIB" -> ".zlib",
-    "LZO" -> ".lzo"
-  )
+    "LZO" -> ".lzo")
 
   def unwrapOrcStructs(
       conf: Configuration,
