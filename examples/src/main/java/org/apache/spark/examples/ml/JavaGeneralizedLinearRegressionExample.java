@@ -25,8 +25,16 @@ import org.apache.spark.ml.regression.GeneralizedLinearRegressionModel;
 import org.apache.spark.ml.regression.GeneralizedLinearRegressionTrainingSummary;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
 // $example off$
+import org.apache.spark.sql.SparkSession;
+
+/**
+ * An example demonstrating generalized linear regression.
+ * Run with
+ * <pre>
+ * bin/run-example ml.JavaGeneralizedLinearRegressionExample
+ * </pre>
+ */
 
 public class JavaGeneralizedLinearRegressionExample {
 

@@ -22,6 +22,12 @@ from pyspark.sql import SparkSession
 from pyspark.ml.regression import GeneralizedLinearRegression
 # $example off$
 
+"""
+An example demonstrating generalized linear regression.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/generalized_linear_regression_example.py
+"""
+
 if __name__ == "__main__":
     spark = SparkSession\
         .builder\
@@ -41,6 +47,20 @@ if __name__ == "__main__":
     # Print the coefficients and intercept for generalized linear regression model
     print("Coefficients: " + str(model.coefficients))
     print("Intercept: " + str(model.intercept))
+
+    # Summarize the model over the training set and print out some metrics
+    summary = model.summary
+    print("Coefficient Standard Errors: " + str(summary.coefficientStandardErrors))
+    print("T Values: " + str(summary.tValues))
+    print("P Values: " + str(summary.pValues))
+    print("Dispersion: " + str(summary.dispersion))
+    print("Null Deviance: " + str(summary.nullDeviance))
+    print("Residual Degree Of Freedom Null: " + str(summary.residualDegreeOfFreedomNull))
+    print("Deviance: " + str(summary.deviance))
+    print("Residual Degree Of Freedom: " + str(summary.residualDegreeOfFreedom))
+    print("AIC: " + str(summary.aic))
+    print("DevianceResiduals: ")
+    summary.residuals().show()
     # $example off$
 
     spark.stop()

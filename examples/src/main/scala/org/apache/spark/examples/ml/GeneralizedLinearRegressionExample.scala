@@ -23,6 +23,14 @@ import org.apache.spark.ml.regression.GeneralizedLinearRegression
 // $example off$
 import org.apache.spark.sql.SparkSession
 
+/**
+ * An example demonstrating generalized linear regression.
+ * Run with
+ * {{{
+ * bin/run-example ml.GeneralizedLinearRegressionExample
+ * }}}
+ */
+
 object GeneralizedLinearRegressionExample {
 
   def main(args: Array[String]): Unit = {
