@@ -24,19 +24,14 @@ import java.util.List;
 
 import scala.Tuple3;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.SparkSession;
 
-public class JavaIsotonicRegressionSuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
+public class JavaIsotonicRegressionSuite extends SharedSparkSession implements Serializable {
 
   private static List<Tuple3<Double, Double, Double>> generateIsotonicInput(double[] labels) {
     List<Tuple3<Double, Double, Double>> input = new ArrayList<>(labels.length);
@@ -53,21 +48,6 @@ public class JavaIsotonicRegressionSuite implements Serializable {
       jsc.parallelize(generateIsotonicInput(labels), 2).cache();
 
     return new IsotonicRegression().run(trainRDD);
-  }
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaLinearRegressionSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
   }
 
   @Test
