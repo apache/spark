@@ -1010,7 +1010,7 @@ class LinearRegressionSuite
   test("should support all NumericType labels and not support other types") {
     val lr = new LinearRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[LinearRegressionModel, LinearRegression](
-      lr, isClassification = false, spark) { (expected, actual) =>
+      lr, spark, isClassification = false) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }

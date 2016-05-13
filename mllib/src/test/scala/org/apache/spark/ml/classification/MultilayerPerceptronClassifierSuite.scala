@@ -169,7 +169,7 @@ class MultilayerPerceptronClassifierSuite
     val mpc = new MultilayerPerceptronClassifier().setLayers(layers).setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
         MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier](
-      mpc, isClassification = true, spark) { (expected, actual) =>
+      mpc, spark) { (expected, actual) =>
         assert(expected.layers === actual.layers)
         assert(expected.weights === actual.weights)
       }

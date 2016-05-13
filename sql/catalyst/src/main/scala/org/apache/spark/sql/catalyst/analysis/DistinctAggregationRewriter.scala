@@ -35,7 +35,7 @@ import org.apache.spark.sql.types.IntegerType
  *     ("a", "ca1", "cb2", 5),
  *     ("b", "ca1", "cb1", 13))
  *     .toDF("key", "cat1", "cat2", "value")
- *   data.registerTempTable("data")
+ *   data.createOrReplaceTempView("data")
  *
  *   val agg = data.groupBy($"key")
  *     .agg(
