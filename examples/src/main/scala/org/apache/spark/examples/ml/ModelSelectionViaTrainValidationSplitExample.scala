@@ -36,7 +36,9 @@ object ModelSelectionViaTrainValidationSplitExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder.appName("ModelSelectionViaTrainValidationSplitExample").getOrCreate()
+      .builder
+      .appName("ModelSelectionViaTrainValidationSplitExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training and test data.

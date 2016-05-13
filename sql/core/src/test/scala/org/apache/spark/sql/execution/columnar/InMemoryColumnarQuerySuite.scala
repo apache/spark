@@ -191,7 +191,7 @@ class InMemoryColumnarQuerySuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       sql(s"SELECT DISTINCT ${allColumns} FROM InMemoryCache_different_data_types"),
       spark.table("InMemoryCache_different_data_types").collect())
-    spark.catalog.dropTempTable("InMemoryCache_different_data_types")
+    spark.catalog.dropTempView("InMemoryCache_different_data_types")
   }
 
   test("SPARK-10422: String column in InMemoryColumnarCache needs to override clone method") {

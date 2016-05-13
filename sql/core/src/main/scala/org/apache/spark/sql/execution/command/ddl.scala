@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 
@@ -492,33 +493,28 @@ private[sql] object DDLUtils {
       table.properties.contains("spark.sql.sources.schema.numPartCols")
   }
 
-  def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
-    getSchemaFromTableProperties(metadata.properties)
-  }
-
   // A persisted data source table may not store its schema in the catalog. In this case, its schema
   // will be inferred at runtime when the table is referenced.
-  def getSchemaFromTableProperties(props: Map[String, String]): Option[StructType] = {
-    require(isDatasourceTable(props))
+  def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
+    require(isDatasourceTable(metadata))
 
-    val schemaParts = for {
-      numParts <- props.get("spark.sql.sources.schema.numParts").toSeq
-      index <- 0 until numParts.toInt
-    } yield props.getOrElse(
-      s"spark.sql.sources.schema.part.$index",
-      throw new AnalysisException(
-        s"Corrupted schema in catalog: $numParts parts expected, but part $index is missing."
-      )
-    )
+    metadata.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+      val parts = (0 until numParts.toInt).map { index =>
+        val part = metadata.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+        if (part == null) {
+          throw new AnalysisException(
+            "Could not read schema from the metastore because it is corrupted " +
+              s"(missing part $index of the schema, $numParts parts are expected).")
+        }
 
-    if (schemaParts.isEmpty) {
-      None
-    } else {
-      Some(DataType.fromJson(schemaParts.mkString).asInstanceOf[StructType])
+        part
+      }
+      // Stick all parts back to a single schema string.
+      DataType.fromJson(parts.mkString).asInstanceOf[StructType]
     }
   }
 
-  private def getColumnNamesByTypeFromTableProperties(
+  private def getColumnNamesByType(
       props: Map[String, String], colType: String, typeName: String): Seq[String] = {
     require(isDatasourceTable(props))
 
@@ -534,35 +530,19 @@ private[sql] object DDLUtils {
   }
 
   def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
-    getPartitionColumnsFromTableProperties(metadata.properties)
+    getColumnNamesByType(metadata.properties, "part", "partitioning columns")
   }
 
-  def getPartitionColumnsFromTableProperties(props: Map[String, String]): Seq[String] = {
-    getColumnNamesByTypeFromTableProperties(props, "part", "partitioning columns")
-  }
-
-  def getNumBucketFromTableProperties(metadata: CatalogTable): Option[Int] = {
-    getNumBucketFromTableProperties(metadata.properties)
-  }
-
-  def getNumBucketFromTableProperties(props: Map[String, String]): Option[Int] = {
-    require(isDatasourceTable(props))
-    props.get("spark.sql.sources.schema.numBuckets").map(_.toInt)
-  }
-
-  def getBucketingColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
-    getBucketingColumnsFromTableProperties(metadata.properties)
-  }
-
-  def getBucketingColumnsFromTableProperties(props: Map[String, String]): Seq[String] = {
-    getColumnNamesByTypeFromTableProperties(props, "bucket", "bucketing columns")
-  }
-
-  def getSortingColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
-    getSortingColumnsFromTableProperties(metadata.properties)
-  }
-
-  def getSortingColumnsFromTableProperties(props: Map[String, String]): Seq[String] = {
-    getColumnNamesByTypeFromTableProperties(props, "sort", "sorting columns")
+  def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
+    if (isDatasourceTable(metadata)) {
+      metadata.properties.get("spark.sql.sources.schema.numBuckets").map { numBuckets =>
+        BucketSpec(
+          numBuckets.toInt,
+          getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
+          getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
+      }
+    } else {
+      None
+    }
   }
 }

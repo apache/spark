@@ -222,20 +222,4 @@ private[sql] class HiveSessionCatalog(
         }
     }
   }
-
-  // Pre-load a few commonly used Hive built-in functions.
-  HiveSessionCatalog.preloadedHiveBuiltinFunctions.foreach {
-    case (functionName, clazz) =>
-      val builder = makeFunctionBuilder(functionName, clazz)
-      val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
-      createTempFunction(functionName, info, builder, ignoreIfExists = false)
-  }
-}
-
-private[sql] object HiveSessionCatalog {
-  // This is the list of Hive's built-in functions that are commonly used and we want to
-  // pre-load when we create the FunctionRegistry.
-  val preloadedHiveBuiltinFunctions =
-    ("collect_set", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectSet]) ::
-    ("collect_list", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectList]) :: Nil
 }

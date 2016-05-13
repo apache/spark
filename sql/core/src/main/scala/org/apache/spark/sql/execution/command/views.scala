@@ -136,7 +136,7 @@ case class CreateViewCommand(
       }
     }
 
-    catalog.createTempTable(table.table, logicalPlan, replace)
+    catalog.createTempView(table.table, logicalPlan, replace)
   }
 
   /**
