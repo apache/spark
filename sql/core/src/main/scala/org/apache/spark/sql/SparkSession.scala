@@ -52,7 +52,7 @@ import org.apache.spark.util.Utils
  * To create a SparkSession, use the following builder pattern:
  *
  * {{{
- *   SparkSession.builder
+ *   SparkSession.builder()
  *     .master("local")
  *     .appName("Word Count")
  *     .config("spark.some.config.option", "some-value").
@@ -755,7 +755,7 @@ object SparkSession {
    * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
    * @since 2.0.0
    */
-  def builder: Builder = new Builder
+  def builder(): Builder = new Builder
 
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
