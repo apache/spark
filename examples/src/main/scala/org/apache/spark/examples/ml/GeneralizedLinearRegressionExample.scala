@@ -54,7 +54,8 @@ object GeneralizedLinearRegressionExample {
     val model = glr.fit(dataset)
 
     // Print the coefficients and intercept for generalized linear regression model
-    println(s"Coefficients: ${model.coefficients} Intercept: ${model.intercept}")
+    println(s"Coefficients: ${model.coefficients}")
+    println(s"Intercept: ${model.intercept}")
 
     // Summarize the model over the training set and print out some metrics
     val summary = model.summary

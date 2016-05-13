@@ -57,8 +57,8 @@ public class JavaGeneralizedLinearRegressionExample {
     GeneralizedLinearRegressionModel model = glr.fit(dataset);
 
     // Print the coefficients and intercept for generalized linear regression model
-    System.out.println("Coefficients: "
-      + model.coefficients() + " Intercept: " + model.intercept());
+    System.out.println("Coefficients: " + model.coefficients());
+    System.out.println("Intercept: " + model.intercept());
 
     // Summarize the model over the training set and print out some metrics
     GeneralizedLinearRegressionTrainingSummary summary = model.summary();
