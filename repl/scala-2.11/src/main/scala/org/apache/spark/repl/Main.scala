@@ -88,7 +88,7 @@ object Main extends Logging {
     }
 
     val builder = SparkSession.builder.config(conf)
-    if (conf.getBoolean("spark.user.hive.catalog", true)
+    if (conf.getBoolean("spark.use.hive.catalog", true)
       && SparkSession.hiveClassesArePresent) {
       sparkSession = builder.enableHiveSupport().getOrCreate()
       logInfo("Created Spark session with Hive support")
