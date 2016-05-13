@@ -63,9 +63,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     verifySchema(dataSchema)
 
-    val textOptions = new TextOptions(options)
     val conf = job.getConfiguration
-    textOptions.compressionCodec.foreach { codec =>
+    val compressionCodec = options.get("compression").map(CompressionCodecs.getCodecClassName)
+    compressionCodec.foreach { codec =>
       CompressionCodecs.setCodecConfiguration(conf, codec)
     }
 
