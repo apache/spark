@@ -2043,7 +2043,7 @@ test_that("Histogram", {
   expect_equal(histogram(df, "x")$counts, c(4, 0, 0, 0, 0, 0, 0, 0, 0, 1))
 })
 
-test_that("dapply() on a DataFrame", {
+test_that("dapply() and dapplyCollect() on a DataFrame", {
   df <- createDataFrame (
           sqlContext,
           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
@@ -2053,6 +2053,8 @@ test_that("dapply() on a DataFrame", {
   result <- collect(df1)
   expect_identical(ldf, result)
 
+  result <- dapplyCollect(df, function(x) { x })
+  expect_identical(ldf, result)
 
   # Filter and add a column
   schema <- structType(structField("a", "integer"), structField("b", "double"),
@@ -2070,6 +2072,16 @@ test_that("dapply() on a DataFrame", {
   rownames(expected) <- NULL
   expect_identical(expected, result)
 
+  result <- dapplyCollect(
+              df,
+              function(x) {
+                y <- x[x$a > 1, ]
+                y <- cbind(y, y$a + 1L)
+              })
+  expected1 <- expected
+  names(expected1) <- names(result)
+  expect_identical(expected1, result)
+
   # Remove the added column
   df2 <- dapply(
            df1,
@@ -2079,6 +2091,13 @@ test_that("dapply() on a DataFrame", {
            schema(df))
   result <- collect(df2)
   expected <- expected[, c("a", "b", "c")]
+  expect_identical(expected, result)
+
+  result <- dapplyCollect(
+              df1,
+              function(x) {
+               x[, c("a", "b", "c")]
+              })
   expect_identical(expected, result)
 })
 
@@ -2116,6 +2135,42 @@ test_that("repartition by columns on DataFrame", {
 
   # Number of partitions is equal to 2
   expect_equal(nrow(df1), 2)
+})
+
+test_that("Window functions on a DataFrame", {
+  ssc <- callJMethod(sc, "sc")
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+  },
+  error = function(err) {
+    skip("Hive is not build with SparkSQL, skipped")
+  })
+
+  df <- createDataFrame(hiveCtx,
+                        list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
+                        schema = c("key", "value"))
+  ws <- orderBy(window.partitionBy("key"), "value")
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expected <- data.frame(key = c(1L, NA, 2L, NA),
+                       value = c("1", NA, "2", NA),
+                       stringsAsFactors = FALSE)
+  expect_equal(result, expected)
+
+  ws <- orderBy(window.partitionBy(df$key), df$value)
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy("value"), "key")
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
+
+  ws <- partitionBy(window.orderBy(df$value), df$key)
+  result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
+  names(result) <- c("key", "value")
+  expect_equal(result, expected)
 })
 
 unlink(parquetPath)

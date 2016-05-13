@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.command
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
 
@@ -457,7 +456,6 @@ case class AlterTableSetLocation(
     }
     Seq.empty[Row]
   }
-
 }
 
 
@@ -489,9 +487,62 @@ private[sql] object DDLUtils {
       case _ =>
     })
   }
+
   def isTablePartitioned(table: CatalogTable): Boolean = {
-    table.partitionColumns.size > 0 ||
+    table.partitionColumns.nonEmpty ||
       table.properties.contains("spark.sql.sources.schema.numPartCols")
   }
-}
 
+  // A persisted data source table may not store its schema in the catalog. In this case, its schema
+  // will be inferred at runtime when the table is referenced.
+  def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
+    require(isDatasourceTable(metadata))
+
+    metadata.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+      val parts = (0 until numParts.toInt).map { index =>
+        val part = metadata.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+        if (part == null) {
+          throw new AnalysisException(
+            "Could not read schema from the metastore because it is corrupted " +
+              s"(missing part $index of the schema, $numParts parts are expected).")
+        }
+
+        part
+      }
+      // Stick all parts back to a single schema string.
+      DataType.fromJson(parts.mkString).asInstanceOf[StructType]
+    }
+  }
+
+  private def getColumnNamesByType(
+      props: Map[String, String], colType: String, typeName: String): Seq[String] = {
+    require(isDatasourceTable(props))
+
+    for {
+      numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
+      index <- 0 until numCols.toInt
+    } yield props.getOrElse(
+      s"spark.sql.sources.schema.${colType}Col.$index",
+      throw new AnalysisException(
+        s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
+      )
+    )
+  }
+
+  def getPartitionColumnsFromTableProperties(metadata: CatalogTable): Seq[String] = {
+    getColumnNamesByType(metadata.properties, "part", "partitioning columns")
+  }
+
+  def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
+    if (isDatasourceTable(metadata)) {
+      metadata.properties.get("spark.sql.sources.schema.numBuckets").map { numBuckets =>
+        BucketSpec(
+          numBuckets.toInt,
+          getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
+          getColumnNamesByType(metadata.properties, "sort", "sorting columns"))
+      }
+    } else {
+      None
+    }
+  }
+}

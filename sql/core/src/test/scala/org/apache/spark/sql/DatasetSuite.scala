@@ -22,6 +22,8 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
+import org.scalatest.words.MatcherWords.be
+
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -46,12 +48,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("range") {
-    assert(sqlContext.range(10).map(_ + 1).reduce(_ + _) == 55)
-    assert(sqlContext.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
-    assert(sqlContext.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(0, 10).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(0, 10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
+    assert(spark.range(0, 10, 1, 2).map(_ + 1).reduce(_ + _) == 55)
+    assert(spark.range(0, 10, 1, 2).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
   }
 
   test("SPARK-12404: Datatype Helper Serializability") {
@@ -472,7 +474,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14696: implicit encoders for boxed types") {
-    assert(sqlContext.range(1).map { i => i : java.lang.Long }.head == 0L)
+    assert(spark.range(1).map { i => i : java.lang.Long }.head == 0L)
   }
 
   test("SPARK-11894: Incorrect results are returned when using null") {
@@ -510,8 +512,8 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     ))
 
     def buildDataset(rows: Row*): Dataset[NestedStruct] = {
-      val rowRDD = sqlContext.sparkContext.parallelize(rows)
-      sqlContext.createDataFrame(rowRDD, schema).as[NestedStruct]
+      val rowRDD = spark.sparkContext.parallelize(rows)
+      spark.createDataFrame(rowRDD, schema).as[NestedStruct]
     }
 
     checkDataset(
@@ -626,7 +628,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SPARK-14554: Dataset.map may generate wrong java code for wide table") {
-    val wideDF = sqlContext.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
+    val wideDF = spark.range(10).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
     // Make sure the generated code for this plan can compile and execute.
     checkDataset(wideDF.map(_.getLong(0)), 0L until 10 : _*)
   }
@@ -654,9 +656,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     dataset.join(actual, dataset("user") === actual("id")).collect()
   }
 
-  test("SPARK-15097: implicits on dataset's sqlContext can be imported") {
+  test("SPARK-15097: implicits on dataset's spark can be imported") {
     val dataset = Seq(1, 2, 3).toDS()
     checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
+  }
+
+  test("dataset.rdd with generic case class") {
+    val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS
+    val ds2 = ds.map(g => Generic(g.id, g.value))
+    assert(ds.rdd.map(r => r.id).count === 2)
+    assert(ds2.rdd.map(r => r.id).count === 2)
+
+    val ds3 = ds.map(g => new java.lang.Long(g.id))
+    assert(ds3.rdd.map(r => r).count === 2)
   }
 
   test("runtime null check for RowEncoder") {
@@ -674,7 +686,25 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }.getMessage
     assert(message.contains("The 0th field of input row cannot be null"))
   }
+
+  test("createTempView") {
+    val dataset = Seq(1, 2, 3).toDS()
+    dataset.createOrReplaceTempView("tempView")
+
+    // Overrrides the existing temporary view with same name
+    // No exception should be thrown here.
+    dataset.createOrReplaceTempView("tempView")
+
+    // Throws AnalysisException if temp view with same name already exists
+    val e = intercept[AnalysisException](
+      dataset.createTempView("tempView"))
+    intercept[AnalysisException](dataset.createTempView("tempView"))
+    assert(e.message.contains("already exists"))
+    dataset.sparkSession.catalog.dropTempView("tempView")
+  }
 }
+
+case class Generic[T](id: T, value: Double)
 
 case class OtherTuple(_1: String, _2: Int)
 
@@ -735,10 +765,10 @@ object JavaData {
   def apply(a: Int): JavaData = new JavaData(a)
 }
 
-/** Used to test importing dataset.sqlContext.implicits._ */
+/** Used to test importing dataset.spark.implicits._ */
 object DatasetTransform {
   def addOne(ds: Dataset[Int]): Dataset[Int] = {
-    import ds.sqlContext.implicits._
+    import ds.sparkSession.implicits._
     ds.map(_ + 1)
   }
 }

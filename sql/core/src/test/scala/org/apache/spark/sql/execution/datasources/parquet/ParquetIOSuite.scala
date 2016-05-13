@@ -113,7 +113,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
-      val conf = sqlContext.sessionState.newHadoopConf()
+      val conf = spark.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf)
       readParquetFile(path.toString)(df => {
         val sparkTypes = df.schema.map(_.dataType)
@@ -132,7 +132,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
   testStandardAndLegacyModes("fixed-length decimals") {
     def makeDecimalRDD(decimal: DecimalType): DataFrame = {
-      sqlContext
+      spark
         .range(1000)
         // Parquet doesn't allow column names with spaces, have to add an alias here.
         // Minus 500 here so that negative decimals are also tested.
@@ -250,10 +250,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
-      val conf = sqlContext.sessionState.newHadoopConf()
+      val conf = spark.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf)
       val errorMessage = intercept[Throwable] {
-        sqlContext.read.parquet(path.toString).printSchema()
+        spark.read.parquet(path.toString).printSchema()
       }.toString
       assert(errorMessage.contains("Parquet type not supported"))
     }
@@ -271,15 +271,15 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     withTempPath { location =>
       val path = new Path(location.getCanonicalPath)
-      val conf = sqlContext.sessionState.newHadoopConf()
+      val conf = spark.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf)
-      val sparkTypes = sqlContext.read.parquet(path.toString).schema.map(_.dataType)
+      val sparkTypes = spark.read.parquet(path.toString).schema.map(_.dataType)
       assert(sparkTypes === expectedSparkTypes)
     }
   }
 
   test("compression codec") {
-    val hadoopConf = sqlContext.sessionState.newHadoopConf()
+    val hadoopConf = spark.sessionState.newHadoopConf()
     def compressionCodecFor(path: String, codecName: String): String = {
       val codecs = for {
         footer <- readAllFootersWithoutSummaryFiles(new Path(path), hadoopConf)
@@ -296,7 +296,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     def checkCompressionCodec(codec: CompressionCodecName): Unit = {
       withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> codec.name()) {
         withParquetFile(data) { path =>
-          assertResult(sqlContext.conf.parquetCompressionCodec.toUpperCase) {
+          assertResult(spark.conf.get(SQLConf.PARQUET_COMPRESSION).toUpperCase) {
             compressionCodecFor(path, codec.name())
           }
         }
@@ -304,7 +304,8 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     }
 
     // Checks default compression codec
-    checkCompressionCodec(CompressionCodecName.fromConf(sqlContext.conf.parquetCompressionCodec))
+    checkCompressionCodec(
+      CompressionCodecName.fromConf(spark.conf.get(SQLConf.PARQUET_COMPRESSION)))
 
     checkCompressionCodec(CompressionCodecName.UNCOMPRESSED)
     checkCompressionCodec(CompressionCodecName.GZIP)
@@ -351,7 +352,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   }
 
   test("write metadata") {
-    val hadoopConf = sqlContext.sessionState.newHadoopConf()
+    val hadoopConf = spark.sessionState.newHadoopConf()
     withTempPath { file =>
       val path = new Path(file.toURI.toString)
       val fs = FileSystem.getLocal(hadoopConf)
@@ -433,7 +434,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     withTempPath { location =>
       val extraMetadata = Map(CatalystReadSupport.SPARK_METADATA_KEY -> sparkSchema.toString)
       val path = new Path(location.getCanonicalPath)
-      val conf = sqlContext.sessionState.newHadoopConf()
+      val conf = spark.sessionState.newHadoopConf()
       writeMetadata(parquetSchema, path, conf, extraMetadata)
 
       readParquetFile(path.toString) { df =>
@@ -455,7 +456,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     )
     withTempPath { dir =>
       val message = intercept[SparkException] {
-        sqlContext.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+        spark.range(0, 1).write.options(extraOptions).parquet(dir.getCanonicalPath)
       }.getCause.getMessage
       assert(message === "Intentional exception for testing purposes")
     }
@@ -465,10 +466,10 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
     // In 1.3.0, save to fs other than file: without configuring core-site.xml would get:
     // IllegalArgumentException: Wrong FS: hdfs://..., expected: file:///
     intercept[Throwable] {
-      sqlContext.read.parquet("file:///nonexistent")
+      spark.read.parquet("file:///nonexistent")
     }
     val errorMessage = intercept[Throwable] {
-      sqlContext.read.parquet("hdfs://nonexistent")
+      spark.read.parquet("hdfs://nonexistent")
     }.toString
     assert(errorMessage.contains("UnknownHostException"))
   }
@@ -486,14 +487,14 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     withTempPath { dir =>
       val m1 = intercept[SparkException] {
-        sqlContext.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
+        spark.range(1).coalesce(1).write.options(extraOptions).parquet(dir.getCanonicalPath)
       }.getCause.getMessage
       assert(m1.contains("Intentional exception for testing purposes"))
     }
 
     withTempPath { dir =>
       val m2 = intercept[SparkException] {
-        val df = sqlContext.range(1).select('id as 'a, 'id as 'b).coalesce(1)
+        val df = spark.range(1).select('id as 'a, 'id as 'b).coalesce(1)
         df.write.partitionBy("a").options(extraOptions).parquet(dir.getCanonicalPath)
       }.getCause.getMessage
       assert(m2.contains("Intentional exception for testing purposes"))
@@ -512,11 +513,11 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       ParquetOutputFormat.ENABLE_DICTIONARY -> "true"
     )
 
-    val hadoopConf = sqlContext.sessionState.newHadoopConfWithOptions(extraOptions)
+    val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
     withTempPath { dir =>
       val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
-      sqlContext.range(1 << 16).selectExpr("(id % 4) AS i")
+      spark.range(1 << 16).selectExpr("(id % 4) AS i")
         .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
 
       val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
@@ -531,7 +532,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("null and non-null strings") {
     // Create a dataset where the first values are NULL and then some non-null values. The
     // number of non-nulls needs to be bigger than the ParquetReader batch size.
-    val data: Dataset[String] = sqlContext.range(200).map (i =>
+    val data: Dataset[String] = spark.range(200).map (i =>
       if (i < 150) null
       else "a"
     )
@@ -554,7 +555,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         checkAnswer(
           // Decimal column in this file is encoded using plain dictionary
           readResourceParquetFile("dec-in-i32.parquet"),
-          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
+          spark.range(1 << 4).select('id % 10 cast DecimalType(5, 2) as 'i32_dec))
       }
     }
   }
@@ -565,7 +566,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         checkAnswer(
           // Decimal column in this file is encoded using plain dictionary
           readResourceParquetFile("dec-in-i64.parquet"),
-          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
+          spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'i64_dec))
       }
     }
   }
@@ -576,7 +577,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
         checkAnswer(
           // Decimal column in this file is encoded using plain dictionary
           readResourceParquetFile("dec-in-fixed-len.parquet"),
-          sqlContext.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
+          spark.range(1 << 4).select('id % 10 cast DecimalType(10, 2) as 'fixed_len_dec))
       }
     }
   }
@@ -589,7 +590,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
       var hash2: Int = 0
       (false :: true :: Nil).foreach { v =>
         withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> v.toString) {
-          val df = sqlContext.read.parquet(dir.getCanonicalPath)
+          val df = spark.read.parquet(dir.getCanonicalPath)
           val rows = df.queryExecution.toRdd.map(_.copy()).collect()
           val unsafeRows = rows.map(_.asInstanceOf[UnsafeRow])
           if (!v) {
@@ -607,7 +608,7 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
   test("VectorizedParquetRecordReader - direct path read") {
     val data = (0 to 10).map(i => (i, (i + 'a').toChar.toString))
     withTempPath { dir =>
-      sqlContext.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
+      spark.createDataFrame(data).repartition(1).write.parquet(dir.getCanonicalPath)
       val file = SpecificParquetRecordReaderBase.listDirectory(dir).get(0);
       {
         val reader = new VectorizedParquetRecordReader

@@ -978,7 +978,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SET hive.exec.dynamic.partition.mode=strict")
 
     // Should throw when using strict dynamic partition mode without any static partition
-    intercept[SparkException] {
+    intercept[AnalysisException] {
       sql(
         """INSERT INTO TABLE dp_test PARTITION(dp)
           |SELECT key, value, key % 5 FROM src
@@ -1166,7 +1166,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("some show commands are not supported") {
-    assertUnsupportedFeature { sql("SHOW CREATE TABLE my_table") }
     assertUnsupportedFeature { sql("SHOW COMPACTIONS") }
     assertUnsupportedFeature { sql("SHOW TRANSACTIONS") }
     assertUnsupportedFeature { sql("SHOW INDEXES ON my_table") }

@@ -508,7 +508,10 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // These tests use EXPLAIN FORMATTED, which is not supported
     "input4",
     "join0",
-    "plan_json"
+    "plan_json",
+
+    // This test uses CREATE EXTERNAL TABLE without specifying LOCATION
+    "alter2"
   )
 
   /**
@@ -521,7 +524,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "add_partition_no_whitelist",
     "add_partition_with_whitelist",
     "alias_casted_column",
-    "alter2",
     "alter_partition_with_whitelist",
     "alter_rename_partition",
     "ambiguous_col",
@@ -926,6 +928,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_aggregator_error_1",
     "stats_publisher_error_1",
     "subq2",
+    "subquery_exists",
+    "subquery_exists_having",
+    "subquery_notexists",
+    "subquery_notexists_having",
+    "subquery_in",
+    "subquery_in_having",
+    "subquery_notin_having",
     "tablename_with_select",
     "timestamp_3",
     "timestamp_comparison",

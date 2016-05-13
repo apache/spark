@@ -43,7 +43,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) {
   /**
    * A catalog that interacts with external systems.
    */
-  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog
+  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(sparkContext.hadoopConfiguration)
 
   /**
    * A classloader used to load all user-added jar.

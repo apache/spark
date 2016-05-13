@@ -27,18 +27,17 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-
+import org.apache.spark.sql.SparkSession;
+import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 public class JavaLogisticRegressionSuite implements Serializable {
 
+  private transient SparkSession spark;
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
   private transient Dataset<Row> dataset;
 
   private transient JavaRDD<LabeledPoint> datasetRDD;
@@ -46,18 +45,22 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaLogisticRegressionSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaLogisticRegressionSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
+
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
-    dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
+    dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
     dataset.registerTempTable("dataset");
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -66,7 +69,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
     Assert.assertEquals(lr.getLabelCol(), "label");
     LogisticRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    Dataset<Row> predictions = jsql.sql("SELECT label, probability, prediction FROM prediction");
+    Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
     // Check defaults
     Assert.assertEquals(0.5, model.getThreshold(), eps);
@@ -95,23 +98,23 @@ public class JavaLogisticRegressionSuite implements Serializable {
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
     model.transform(dataset).registerTempTable("predAllZero");
-    Dataset<Row> predAllZero = jsql.sql("SELECT prediction, myProbability FROM predAllZero");
-    for (Row r: predAllZero.collectAsList()) {
+    Dataset<Row> predAllZero = spark.sql("SELECT prediction, myProbability FROM predAllZero");
+    for (Row r : predAllZero.collectAsList()) {
       Assert.assertEquals(0.0, r.getDouble(0), eps);
     }
     // Call transform with params, and check that the params worked.
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
       .registerTempTable("predNotAllZero");
-    Dataset<Row> predNotAllZero = jsql.sql("SELECT prediction, myProb FROM predNotAllZero");
+    Dataset<Row> predNotAllZero = spark.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
-    for (Row r: predNotAllZero.collectAsList()) {
+    for (Row r : predNotAllZero.collectAsList()) {
       if (r.getDouble(0) != 0.0) foundNonZero = true;
     }
     Assert.assertTrue(foundNonZero);
 
     // Call fit() with new params, and check as many params as we can.
     LogisticRegressionModel model2 = lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1),
-        lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
+      lr.threshold().w(0.4), lr.probabilityCol().w("theProb"));
     LogisticRegression parent2 = (LogisticRegression) model2.parent();
     Assert.assertEquals(5, parent2.getMaxIter());
     Assert.assertEquals(0.1, parent2.getRegParam(), eps);
@@ -128,10 +131,10 @@ public class JavaLogisticRegressionSuite implements Serializable {
     Assert.assertEquals(2, model.numClasses());
 
     model.transform(dataset).registerTempTable("transformed");
-    Dataset<Row> trans1 = jsql.sql("SELECT rawPrediction, probability FROM transformed");
-    for (Row row: trans1.collectAsList()) {
-      Vector raw = (Vector)row.get(0);
-      Vector prob = (Vector)row.get(1);
+    Dataset<Row> trans1 = spark.sql("SELECT rawPrediction, probability FROM transformed");
+    for (Row row : trans1.collectAsList()) {
+      Vector raw = (Vector) row.get(0);
+      Vector prob = (Vector) row.get(1);
       Assert.assertEquals(raw.size(), 2);
       Assert.assertEquals(prob.size(), 2);
       double probFromRaw1 = 1.0 / (1.0 + Math.exp(-raw.apply(1)));
@@ -139,11 +142,11 @@ public class JavaLogisticRegressionSuite implements Serializable {
       Assert.assertEquals(0, Math.abs(prob.apply(0) - (1.0 - probFromRaw1)), eps);
     }
 
-    Dataset<Row> trans2 = jsql.sql("SELECT prediction, probability FROM transformed");
-    for (Row row: trans2.collectAsList()) {
+    Dataset<Row> trans2 = spark.sql("SELECT prediction, probability FROM transformed");
+    for (Row row : trans2.collectAsList()) {
       double pred = row.getDouble(0);
-      Vector prob = (Vector)row.get(1);
-      double probOfPred = prob.apply((int)pred);
+      Vector prob = (Vector) row.get(1);
+      double probOfPred = prob.apply((int) pred);
       for (int i = 0; i < prob.size(); ++i) {
         Assert.assertTrue(probOfPred >= prob.apply(i));
       }
