@@ -258,6 +258,12 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[BigDecimal] =>
         Invoke(getPath, "toBigDecimal", ObjectType(classOf[BigDecimal]))
 
+      case t if t <:< localTypeOf[java.math.BigInteger] =>
+        Invoke(getPath, "toJavaBigInteger", ObjectType(classOf[java.math.BigInteger]))
+
+      case t if t <:< localTypeOf[scala.math.BigInt] =>
+        Invoke(getPath, "toScalaBigInt", ObjectType(classOf[scala.math.BigInt]))
+
       case t if t <:< localTypeOf[Array[_]] =>
         val TypeRef(_, _, Seq(elementType)) = t
 
@@ -590,6 +596,18 @@ object ScalaReflection extends ScalaReflection {
             DecimalType.SYSTEM_DEFAULT,
             "apply",
             inputObject :: Nil)
+        case t if t <:< localTypeOf[java.math.BigInteger] =>
+          StaticInvoke(
+            Decimal.getClass,
+            DecimalType.BIGINT_DEFAULT,
+            "apply",
+            inputObject :: Nil)
+        case t if t <:< localTypeOf[scala.math.BigInt] =>
+          StaticInvoke(
+            Decimal.getClass,
+            DecimalType.BIGINT_DEFAULT,
+            "apply",
+            inputObject :: Nil)
 
         case t if t <:< localTypeOf[java.lang.Integer] =>
           Invoke(inputObject, "intValue", IntegerType)
@@ -735,6 +753,10 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[BigDecimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
+      case t if t <:< localTypeOf[java.math.BigInteger] =>
+        Schema(DecimalType.BIGINT_DEFAULT, nullable = true)
+      case t if t <:< localTypeOf[scala.math.BigInt] =>
+        Schema(DecimalType.BIGINT_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
