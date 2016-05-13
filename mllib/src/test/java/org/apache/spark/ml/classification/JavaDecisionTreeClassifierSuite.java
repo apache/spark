@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.classification;
 
+import java.io.File;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -33,6 +34,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.util.Utils;
 
 public class JavaDecisionTreeClassifierSuite implements Serializable {
 
@@ -85,18 +87,15 @@ public class JavaDecisionTreeClassifierSuite implements Serializable {
     model.depth();
     model.toDebugString();
 
-    /*
-    // TODO: Add test once save/load are implemented.  SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
-      model3.save(sc.sc(), path);
+      model.save(path);
       DecisionTreeClassificationModel sameModel =
-        DecisionTreeClassificationModel.load(sc.sc(), path);
-      TreeTests.checkEqual(model3, sameModel);
+        DecisionTreeClassificationModel.load(path);
+      TreeTests.checkEqual(model, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);
     }
-    */
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.classification;
 
+import java.io.File;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -35,6 +36,7 @@ import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
+import org.apache.spark.util.Utils;
 
 
 public class JavaRandomForestClassifierSuite implements Serializable {
@@ -114,18 +116,15 @@ public class JavaRandomForestClassifierSuite implements Serializable {
     model.treeWeights();
     Vector importances = model.featureImportances();
 
-    /*
-    // TODO: Add test once save/load are implemented.  SPARK-6725
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
-      model3.save(sc.sc(), path);
+      model.save(path);
       RandomForestClassificationModel sameModel =
-          RandomForestClassificationModel.load(sc.sc(), path);
-      TreeTests.checkEqual(model3, sameModel);
+          RandomForestClassificationModel.load(path);
+      TreeTests.checkEqual(model, sameModel);
     } finally {
       Utils.deleteRecursively(tempDir);
     }
-    */
   }
 }
