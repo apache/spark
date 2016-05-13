@@ -20,7 +20,6 @@ package org.apache.spark.ml.regression;
 import java.io.Serializable;
 import java.util.List;
 
-import org.junit.Before;
 import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
