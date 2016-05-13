@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.{HiveTypeCoercion, TypeCheckResult}
+import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.types._
@@ -96,7 +96,7 @@ case class IfNull(left: Expression, right: Expression) extends RuntimeReplaceabl
 
   override def replaceForTypeCoercion(): Expression = {
     if (left.dataType != right.dataType) {
-      HiveTypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
+      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
         copy(left = Cast(left, dtype), right = Cast(right, dtype))
       }.getOrElse(this)
     } else {
@@ -116,7 +116,7 @@ case class NullIf(left: Expression, right: Expression) extends RuntimeReplaceabl
 
   override def replaceForTypeCoercion(): Expression = {
     if (left.dataType != right.dataType) {
-      HiveTypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
+      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
         copy(left = Cast(left, dtype), right = Cast(right, dtype))
       }.getOrElse(this)
     } else {
@@ -134,7 +134,7 @@ case class Nvl(left: Expression, right: Expression) extends RuntimeReplaceable {
 
   override def replaceForTypeCoercion(): Expression = {
     if (left.dataType != right.dataType) {
-      HiveTypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
+      TypeCoercion.findTightestCommonTypeOfTwo(left.dataType, right.dataType).map { dtype =>
         copy(left = Cast(left, dtype), right = Cast(right, dtype))
       }.getOrElse(this)
     } else {
@@ -154,7 +154,7 @@ case class Nvl2(expr1: Expression, expr2: Expression, expr3: Expression)
 
   override def replaceForTypeCoercion(): Expression = {
     if (expr2.dataType != expr3.dataType) {
-      HiveTypeCoercion.findTightestCommonTypeOfTwo(expr2.dataType, expr3.dataType).map { dtype =>
+      TypeCoercion.findTightestCommonTypeOfTwo(expr2.dataType, expr3.dataType).map { dtype =>
         copy(expr2 = Cast(expr2, dtype), expr3 = Cast(expr3, dtype))
       }.getOrElse(this)
     } else {
