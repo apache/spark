@@ -517,6 +517,8 @@ object TypeCoercion {
         NaNvl(l, Cast(r, DoubleType))
       case NaNvl(l, r) if l.dataType == FloatType && r.dataType == DoubleType =>
         NaNvl(Cast(l, DoubleType), r)
+
+      case e: RuntimeReplaceable => e.replaceForTypeCoercion()
     }
   }
 
