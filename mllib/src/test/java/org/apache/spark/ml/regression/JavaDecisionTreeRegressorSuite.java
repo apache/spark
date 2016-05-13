@@ -92,6 +92,7 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
 
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
+    tempDir.delete();
     try {
       model.save(path);
       DecisionTreeRegressionModel sameModel = DecisionTreeRegressionModel.load(path);
