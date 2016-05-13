@@ -339,7 +339,7 @@ public class CommandBuilderUtils {
   public static String getOutOfMemoryErrorArgument(List<String> cmd) {
     for (String arg : cmd) {
       if (arg.contains("-XX:OnOutOfMemoryError=")) {
-        return "";
+        return arg;
       }
     }
     return "-XX:OnOutOfMemoryError='kill %p'";
