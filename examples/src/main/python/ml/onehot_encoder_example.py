@@ -23,7 +23,10 @@ from pyspark.ml.feature import OneHotEncoder, StringIndexer
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("OneHotEncoderExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("OneHotEncoderExample")\
+        .getOrCreate()
 
     # $example on$
     df = spark.createDataFrame([

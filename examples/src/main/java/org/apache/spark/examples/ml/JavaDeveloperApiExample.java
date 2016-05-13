@@ -49,7 +49,10 @@ import org.apache.spark.sql.SparkSession;
 public class JavaDeveloperApiExample {
 
   public static void main(String[] args) throws Exception {
-    SparkSession spark = SparkSession.builder().appName("JavaDeveloperApiExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaDeveloperApiExample")
+      .getOrCreate();
 
     // Prepare training data.
     List<LabeledPoint> localTraining = Lists.newArrayList(
@@ -59,7 +62,7 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
     Dataset<Row> training = spark.createDataFrame(localTraining, LabeledPoint.class);
 
-    // Create a LogisticRegression instance.  This instance is an Estimator.
+    // Create a LogisticRegression instance. This instance is an Estimator.
     MyJavaLogisticRegression lr = new MyJavaLogisticRegression();
     // Print out the parameters, documentation, and any default values.
     System.out.println("MyJavaLogisticRegression parameters:\n" + lr.explainParams() + "\n");
@@ -67,7 +70,7 @@ public class JavaDeveloperApiExample {
     // We may set parameters using setter methods.
     lr.setMaxIter(10);
 
-    // Learn a LogisticRegression model.  This uses the parameters stored in lr.
+    // Learn a LogisticRegression model. This uses the parameters stored in lr.
     MyJavaLogisticRegressionModel model = lr.fit(training);
 
     // Prepare test data.
@@ -211,7 +214,7 @@ class MyJavaLogisticRegressionModel
   }
 
   /**
-   * Number of classes the label can take.  2 indicates binary classification.
+   * Number of classes the label can take. 2 indicates binary classification.
    */
   public int numClasses() { return 2; }
 

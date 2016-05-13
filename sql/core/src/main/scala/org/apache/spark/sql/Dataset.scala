@@ -245,6 +245,8 @@ class Dataset[T] private[sql](
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map {
       case r: Row => r
       case tuple: Product => Row.fromTuple(tuple)
+      case definedByCtor: DefinedByConstructorParams =>
+        Row.fromSeq(ScalaReflection.getConstructorParameterValues(definedByCtor))
       case o => Row(o)
     }.map { row =>
       row.toSeq.map { cell =>
@@ -2178,8 +2180,9 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] partitioned by the given partitioning expressions preserving
-   * the existing number of partitions. The resulting Datasetis hash partitioned.
+   * Returns a new [[Dataset]] partitioned by the given partitioning expressions, using
+   * `spark.sql.shuffle.partitions` as number of partitions.
+   * The resulting Dataset is hash partitioned.
    *
    * This is the same operation as "DISTRIBUTE BY" in SQL (Hive QL).
    *
@@ -2300,13 +2303,39 @@ class Dataset[T] private[sql](
 
   /**
    * Registers this [[Dataset]] as a temporary table using the given name. The lifetime of this
-   * temporary table is tied to the [[SQLContext]] that was used to create this Dataset.
+   * temporary table is tied to the [[SparkSession]] that was used to create this Dataset.
    *
    * @group basic
    * @since 1.6.0
    */
+  @deprecated("Use createOrReplaceTempView(viewName) instead.", "2.0.0")
   def registerTempTable(tableName: String): Unit = {
-    sparkSession.registerTable(toDF(), tableName)
+    createOrReplaceTempView(tableName)
+  }
+
+  /**
+   * Creates a temporary view using the given name. The lifetime of this
+   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @throws AnalysisException if the view name already exists
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @throws[AnalysisException]
+  def createTempView(viewName: String): Unit = {
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = false)
+  }
+
+  /**
+   * Creates a temporary view using the given name. The lifetime of this
+   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def createOrReplaceTempView(viewName: String): Unit = {
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = true)
   }
 
   /**

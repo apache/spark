@@ -28,7 +28,10 @@ import org.apache.spark.sql.SparkSession
 
 object GradientBoostedTreeRegressorExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("GradientBoostedTreeRegressorExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("GradientBoostedTreeRegressorExample")
+      .getOrCreate()
 
     // $example on$
     // Load and parse the data file, converting it to a DataFrame.
@@ -42,7 +45,7 @@ object GradientBoostedTreeRegressorExample {
       .setMaxCategories(4)
       .fit(data)
 
-    // Split the data into training and test sets (30% held out for testing)
+    // Split the data into training and test sets (30% held out for testing).
     val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
 
     // Train a GBT model.
@@ -51,11 +54,11 @@ object GradientBoostedTreeRegressorExample {
       .setFeaturesCol("indexedFeatures")
       .setMaxIter(10)
 
-    // Chain indexer and GBT in a Pipeline
+    // Chain indexer and GBT in a Pipeline.
     val pipeline = new Pipeline()
       .setStages(Array(featureIndexer, gbt))
 
-    // Train model.  This also runs the indexer.
+    // Train model. This also runs the indexer.
     val model = pipeline.fit(trainingData)
 
     // Make predictions.
@@ -64,7 +67,7 @@ object GradientBoostedTreeRegressorExample {
     // Select example rows to display.
     predictions.select("prediction", "label", "features").show(5)
 
-    // Select (prediction, true label) and compute test error
+    // Select (prediction, true label) and compute test error.
     val evaluator = new RegressionEvaluator()
       .setLabelCol("label")
       .setPredictionCol("prediction")

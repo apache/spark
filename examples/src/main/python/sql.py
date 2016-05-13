@@ -25,7 +25,10 @@ from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerT
 
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("PythonSQL").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PythonSQL")\
+        .getOrCreate()
 
     # A list of Rows. Infer schema from the first row, create a DataFrame and print the schema
     rows = [Row(name="John", age=19), Row(name="Smith", age=23), Row(name="Sarah", age=18)]
@@ -64,9 +67,9 @@ if __name__ == "__main__":
     #  |-- name: string (nullable = true)
 
     # Register this DataFrame as a temporary table.
-    people.registerTempTable("people")
+    people.createOrReplaceTempView("people")
 
-    # SQL statements can be run by using the sql methods provided by sqlContext
+    # SQL statements can be run by using the sql methods provided by `spark`
     teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
     for each in teenagers.collect():

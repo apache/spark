@@ -26,7 +26,10 @@ import org.apache.spark.sql.SparkSession
 
 object PCAExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("PCAExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("PCAExample")
+      .getOrCreate()
 
     // $example on$
     val data = Array(

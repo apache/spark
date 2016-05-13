@@ -38,8 +38,10 @@ from pyspark.sql import Row, SparkSession
 
 def getSparkSessionInstance(sparkConf):
     if ('sparkSessionSingletonInstance' not in globals()):
-        globals()['sparkSessionSingletonInstance'] =\
-            SparkSession.builder.config(conf=sparkConf).getOrCreate()
+        globals()['sparkSessionSingletonInstance'] = SparkSession\
+            .builder\
+            .config(conf=sparkConf)\
+            .getOrCreate()
     return globals()['sparkSessionSingletonInstance']
 
 
@@ -69,7 +71,7 @@ if __name__ == "__main__":
             wordsDataFrame = spark.createDataFrame(rowRdd)
 
             # Register as table
-            wordsDataFrame.registerTempTable("words")
+            wordsDataFrame.createOrReplaceTempView("words")
 
             # Do word count on table using SQL and print it
             wordCountsDataFrame = \

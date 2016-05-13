@@ -95,7 +95,7 @@ public final class JavaSqlNetworkWordCount {
         Dataset<Row> wordsDataFrame = spark.createDataFrame(rowRDD, JavaRecord.class);
 
         // Register as table
-        wordsDataFrame.registerTempTable("words");
+        wordsDataFrame.createOrReplaceTempView("words");
 
         // Do word count on table using SQL and print it
         Dataset<Row> wordCountsDataFrame =
@@ -115,7 +115,10 @@ class JavaSparkSessionSingleton {
   private static transient SparkSession instance = null;
   public static SparkSession getInstance(SparkConf sparkConf) {
     if (instance == null) {
-      instance = SparkSession.builder().config(sparkConf).getOrCreate();
+      instance = SparkSession
+        .builder()
+        .config(sparkConf)
+        .getOrCreate();
     }
     return instance;
   }

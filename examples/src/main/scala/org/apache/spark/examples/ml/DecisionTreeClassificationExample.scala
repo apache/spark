@@ -29,7 +29,10 @@ import org.apache.spark.sql.SparkSession
 
 object DecisionTreeClassificationExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("DecisionTreeClassificationExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("DecisionTreeClassificationExample")
+      .getOrCreate()
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
     val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
@@ -44,10 +47,10 @@ object DecisionTreeClassificationExample {
     val featureIndexer = new VectorIndexer()
       .setInputCol("features")
       .setOutputCol("indexedFeatures")
-      .setMaxCategories(4) // features with > 4 distinct values are treated as continuous
+      .setMaxCategories(4) // features with > 4 distinct values are treated as continuous.
       .fit(data)
 
-    // Split the data into training and test sets (30% held out for testing)
+    // Split the data into training and test sets (30% held out for testing).
     val Array(trainingData, testData) = data.randomSplit(Array(0.7, 0.3))
 
     // Train a DecisionTree model.
@@ -61,11 +64,11 @@ object DecisionTreeClassificationExample {
       .setOutputCol("predictedLabel")
       .setLabels(labelIndexer.labels)
 
-    // Chain indexers and tree in a Pipeline
+    // Chain indexers and tree in a Pipeline.
     val pipeline = new Pipeline()
       .setStages(Array(labelIndexer, featureIndexer, dt, labelConverter))
 
-    // Train model.  This also runs the indexers.
+    // Train model. This also runs the indexers.
     val model = pipeline.fit(trainingData)
 
     // Make predictions.
@@ -74,7 +77,7 @@ object DecisionTreeClassificationExample {
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5)
 
-    // Select (prediction, true label) and compute test error
+    // Select (prediction, true label) and compute test error.
     val evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("indexedLabel")
       .setPredictionCol("prediction")

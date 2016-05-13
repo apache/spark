@@ -21,7 +21,7 @@ import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
-import org.apache.spark.sql.expressions.scala.typed
+import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -231,5 +231,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ds.groupByKey(_.b).agg(SeqAgg.toColumn),
       "a" -> Seq(1, 2)
     )
+  }
+
+  test("spark-15051 alias of aggregator in DataFrame/Dataset[Row]") {
+    val df1 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
+    checkAnswer(df1.agg(RowAgg.toColumn as "b"), Row(6) :: Nil)
+
+    val df2 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
+    checkAnswer(df2.agg(RowAgg.toColumn as "b").select("b"), Row(6) :: Nil)
   }
 }

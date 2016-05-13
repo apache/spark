@@ -281,7 +281,7 @@ class StringFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("number format function") {
-    val df = sqlContext.range(1)
+    val df = spark.range(1)
 
     checkAnswer(
       df.select(format_number(lit(5L), 4)),

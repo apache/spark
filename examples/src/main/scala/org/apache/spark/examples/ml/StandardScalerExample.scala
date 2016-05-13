@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object StandardScalerExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("StandardScalerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("StandardScalerExample")
+      .getOrCreate()
 
     // $example on$
     val dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

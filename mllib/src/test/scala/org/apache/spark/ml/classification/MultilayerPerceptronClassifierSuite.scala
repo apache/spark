@@ -36,7 +36,7 @@ class MultilayerPerceptronClassifierSuite
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    dataset = sqlContext.createDataFrame(Seq(
+    dataset = spark.createDataFrame(Seq(
         (Vectors.dense(0.0, 0.0), 0.0),
         (Vectors.dense(0.0, 1.0), 1.0),
         (Vectors.dense(1.0, 0.0), 1.0),
@@ -77,7 +77,7 @@ class MultilayerPerceptronClassifierSuite
   }
 
   test("Test setWeights by training restart") {
-    val dataFrame = sqlContext.createDataFrame(Seq(
+    val dataFrame = spark.createDataFrame(Seq(
       (Vectors.dense(0.0, 0.0), 0.0),
       (Vectors.dense(0.0, 1.0), 1.0),
       (Vectors.dense(1.0, 0.0), 1.0),
@@ -113,7 +113,7 @@ class MultilayerPerceptronClassifierSuite
     // the input seed is somewhat magic, to make this test pass
     val rdd = sc.parallelize(generateMultinomialLogisticInput(
       coefficients, xMean, xVariance, true, nPoints, 1), 2)
-    val dataFrame = sqlContext.createDataFrame(rdd).toDF("label", "features")
+    val dataFrame = spark.createDataFrame(rdd).toDF("label", "features")
     val numClasses = 3
     val numIterations = 100
     val layers = Array[Int](4, 5, 4, numClasses)
@@ -169,7 +169,7 @@ class MultilayerPerceptronClassifierSuite
     val mpc = new MultilayerPerceptronClassifier().setLayers(layers).setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
         MultilayerPerceptronClassificationModel, MultilayerPerceptronClassifier](
-      mpc, isClassification = true, sqlContext) { (expected, actual) =>
+      mpc, isClassification = true, spark) { (expected, actual) =>
         assert(expected.layers === actual.layers)
         assert(expected.weights === actual.weights)
       }
