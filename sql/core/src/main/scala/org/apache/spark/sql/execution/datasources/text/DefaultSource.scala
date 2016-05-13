@@ -83,19 +83,6 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override private[sql] def buildReaderWithPartitionValues(
-      sparkSession: SparkSession,
-      dataSchema: StructType,
-      partitionSchema: StructType,
-      requiredSchema: StructType,
-      filters: Seq[Filter],
-      options: Map[String, String],
-      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
-    // Text data source doesn't support partitioning. Here we simply delegate to `buildReader`.
-    buildReader(
-      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
-  }
-
   override def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,
@@ -152,4 +139,3 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
     recordWriter.close(context)
   }
 }
-

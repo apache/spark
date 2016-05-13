@@ -65,6 +65,14 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("support for partitioned reading") {
+    val df = spark.read.format("text").load(testDir)
+    val data = df.filter("year = '2015'").select("value").collect()
+
+    assert(data(0) == Row("2015-test"))
+    assert(data.length == 1)
+  }
+
   test("SPARK-13503 Support to specify the option for compression codec for TEXT") {
     val testDf = spark.read.text(testFile)
     val extensionNameMap = Map("bzip2" -> ".bz2", "deflate" -> ".deflate", "gzip" -> ".gz")
@@ -108,6 +116,10 @@ class TextSuite extends QueryTest with SharedSQLContext {
 
   private def testFile: String = {
     Thread.currentThread().getContextClassLoader.getResource("text-suite.txt").toString
+  }
+
+  private def testDir: String = {
+    Thread.currentThread().getContextClassLoader.getResource("partitioned").toString
   }
 
   /** Verifies data and schema. */
