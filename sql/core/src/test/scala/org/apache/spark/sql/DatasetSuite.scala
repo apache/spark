@@ -22,6 +22,8 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
+import org.scalatest.words.MatcherWords.be
+
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
@@ -659,6 +661,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
   }
 
+  test("dataset.rdd with generic case class") {
+    val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS
+    val ds2 = ds.map(g => Generic(g.id, g.value))
+    assert(ds.rdd.map(r => r.id).count === 2)
+    assert(ds2.rdd.map(r => r.id).count === 2)
+
+    val ds3 = ds.map(g => new java.lang.Long(g.id))
+    assert(ds3.rdd.map(r => r).count === 2)
+  }
+
   test("runtime null check for RowEncoder") {
     val schema = new StructType().add("i", IntegerType, nullable = false)
     val df = sqlContext.range(10).map(l => {
@@ -674,7 +686,25 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }.getMessage
     assert(message.contains("The 0th field of input row cannot be null"))
   }
+
+  test("createTempView") {
+    val dataset = Seq(1, 2, 3).toDS()
+    dataset.createOrReplaceTempView("tempView")
+
+    // Overrrides the existing temporary view with same name
+    // No exception should be thrown here.
+    dataset.createOrReplaceTempView("tempView")
+
+    // Throws AnalysisException if temp view with same name already exists
+    val e = intercept[AnalysisException](
+      dataset.createTempView("tempView"))
+    intercept[AnalysisException](dataset.createTempView("tempView"))
+    assert(e.message.contains("already exists"))
+    dataset.sparkSession.catalog.dropTempView("tempView")
+  }
 }
+
+case class Generic[T](id: T, value: Double)
 
 case class OtherTuple(_1: String, _2: Int)
 
