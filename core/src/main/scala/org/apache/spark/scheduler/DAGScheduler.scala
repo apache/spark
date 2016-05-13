@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.annotation.tailrec
 import scala.collection.Map
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Stack}
+import scala.collection.mutable.{HashMap, HashSet, Stack}
 import scala.concurrent.duration._
 import scala.language.existentials
 import scala.language.postfixOps
@@ -403,47 +403,32 @@ class DAGScheduler(
     parents.toList
   }
 
-  /**
-   * Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet.
-   * This is done in topological order to create ancestor stages first to ensure that the result
-   * stage graph is correctly built.
-   */
-  private def getAncestorShuffleDependencies(rdd: RDD[_]): Seq[ShuffleDependency[_, _, _]] = {
-    val parents = new ArrayBuffer[ShuffleDependency[_, _, _]]
+  /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
+  private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
+    val parents = new Stack[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
     val waitingForVisit = new Stack[RDD[_]]
     def visit(r: RDD[_]) {
-      if (visited(r)) {
-        waitingForVisit.pop()
-      } else {
-        val visitedShuffleDeps = new ArrayBuffer[ShuffleDependency[_, _, _]]
-        val unvisitedDeps = new ArrayBuffer[Dependency[_]]
-
-        r.dependencies.foreach {
-          case dep: ShuffleDependency[_, _, _] if !shuffleToMapStage.contains(dep.shuffleId) =>
-            if (visited(dep.rdd)) visitedShuffleDeps += dep
-            else unvisitedDeps += dep
-          case dep if !visited(dep.rdd) => unvisitedDeps += dep
-          case _ =>
-        }
-
-        if (unvisitedDeps.isEmpty) {
-          waitingForVisit.pop()
-          visited += r
-          for (shufDep <- visitedShuffleDeps) { parents += shufDep }
-        } else {
-          for (dep <- unvisitedDeps) {
-            waitingForVisit.push(dep.rdd)
+      if (!visited(r)) {
+        visited += r
+        for (dep <- r.dependencies) {
+          dep match {
+            case shufDep: ShuffleDependency[_, _, _] =>
+              if (!shuffleToMapStage.contains(shufDep.shuffleId)) {
+                parents.push(shufDep)
+              }
+            case _ =>
           }
+          waitingForVisit.push(dep.rdd)
         }
       }
     }
 
     waitingForVisit.push(rdd)
     while (waitingForVisit.nonEmpty) {
-      visit(waitingForVisit.top)
+      visit(waitingForVisit.pop())
     }
     parents
   }
