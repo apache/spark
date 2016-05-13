@@ -1606,7 +1606,7 @@ words.foreachRDD(
       });
       DataFrame wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRow.class);
 
-      // Register as table
+      // Creates a temporary view
       wordsDataFrame.createOrReplaceTempView("words");
 
       // Do word count on table using SQL and print it
@@ -1646,7 +1646,7 @@ def process(time, rdd):
         rowRdd = rdd.map(lambda w: Row(word=w))
         wordsDataFrame = sqlContext.createDataFrame(rowRdd)
 
-        # Register as table
+        # Creates a temporary view
         wordsDataFrame.createOrReplaceTempView("words")
 
         # Do word count on table using SQL and print it

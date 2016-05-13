@@ -703,7 +703,7 @@ val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
 // Apply the schema to the RDD.
 val peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema)
 
-// Register the DataFrames as a table.
+// Creates a temporary view.
 peopleDataFrame.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
@@ -771,10 +771,10 @@ JavaRDD<Row> rowRDD = people.map(
 // Apply the schema to the RDD.
 DataFrame peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema);
 
-// Register the DataFrame as a table.
+// Creates a temporary view.
 peopleDataFrame.createOrReplaceTempView("people");
 
-// SQL can be run over RDDs that have been registered as tables.
+// SQL can be run over a temporary view.
 DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
@@ -824,7 +824,7 @@ schema = StructType(fields)
 # Apply the schema to the RDD.
 schemaPeople = sqlContext.createDataFrame(people, schema)
 
-# Register the DataFrame as a table.
+# Creates a temporary view
 schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
@@ -1072,7 +1072,7 @@ people.write.parquet("people.parquet")
 // The result of loading a Parquet file is also a DataFrame.
 val parquetFile = sqlContext.read.parquet("people.parquet")
 
-//Parquet files can also be registered as tables and then used in SQL statements.
+//Parquet files can also be used to create a temporary view and then used in SQL statements.
 parquetFile.createOrReplaceTempView("parquetFile")
 val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
@@ -1094,7 +1094,7 @@ schemaPeople.write().parquet("people.parquet");
 // The result of loading a parquet file is also a DataFrame.
 DataFrame parquetFile = sqlContext.read().parquet("people.parquet");
 
-// Parquet files can also be registered as tables and then used in SQL statements.
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
 parquetFile.createOrReplaceTempView("parquetFile");
 DataFrame teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
@@ -1120,7 +1120,7 @@ schemaPeople.write.parquet("people.parquet")
 # The result of loading a parquet file is also a DataFrame.
 parquetFile = sqlContext.read.parquet("people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
 parquetFile.createOrReplaceTempView("parquetFile");
 teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
@@ -1144,7 +1144,7 @@ write.parquet(schemaPeople, "people.parquet")
 # The result of loading a parquet file is also a DataFrame.
 parquetFile <- read.parquet(sqlContext, "people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
 registerTempTable(parquetFile, "parquetFile")
 teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 schema <- structType(structField("name", "string"))
@@ -1544,7 +1544,7 @@ people.printSchema();
 //  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
+// Creates a temporary view
 people.createOrReplaceTempView("people");
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
@@ -1582,7 +1582,7 @@ people.printSchema()
 #  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
-# Register this DataFrame as a table.
+# Creates a temporary view.
 people.createOrReplaceTempView("people")
 
 # SQL statements can be run by using the sql methods provided by `sqlContext`.

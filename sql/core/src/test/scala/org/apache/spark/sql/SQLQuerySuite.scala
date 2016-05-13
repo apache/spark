@@ -1912,7 +1912,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       Row(1, 1, 1, 1) :: Row(1, 2, 2, 1) :: Row(2, 1, 1, 2) :: Row(2, 2, 2, 2) ::
         Row(3, 1, 1, 3) :: Row(3, 2, 2, 3) :: Nil)
 
-    // Try with a registered table.
+    // Try with a temporary view
     sql("select struct(a, b) as record from testData2").createOrReplaceTempView("structTable")
     checkAnswer(
       sql("SELECT record.* FROM structTable"),
@@ -1977,7 +1977,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       nestedStructData.select($"record.r1.*"),
       Row(1, 1) :: Row(1, 2) :: Row(2, 1) :: Row(2, 2) :: Row(3, 1) :: Row(3, 2) :: Nil)
 
-    // Try with a registered table
+    // Try with a temporary view
     withTempTable("nestedStructTable") {
       nestedStructData.createOrReplaceTempView("nestedStructTable")
       checkAnswer(

@@ -685,7 +685,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   createQueryTest("case sensitivity when query Hive table",
     "SELECT srcalias.KEY, SRCALIAS.value FROM sRc SrCAlias WHERE SrCAlias.kEy < 15")
 
-  test("case sensitivity: registered table") {
+  test("case sensitivity: created temporary view") {
     val testData =
       TestHive.sparkContext.parallelize(
         TestData(1, "str1") ::
