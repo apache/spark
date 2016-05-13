@@ -42,9 +42,6 @@ private[orc] class OrcOptions(
 }
 
 private[orc] object OrcOptions {
-  // The references of Hive's classes will be minimized.
-  val ORC_COMPRESSION = "orc.compress"
-
   // The ORC compression short names
   private val shortOrcCompressionCodecNames = Map(
     "none" -> "NONE",

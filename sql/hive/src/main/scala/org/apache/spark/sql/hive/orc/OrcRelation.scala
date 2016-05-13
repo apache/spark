@@ -68,7 +68,7 @@ private[sql] class DefaultSource
 
     val configuration = job.getConfiguration
 
-    configuration.set(OrcOptions.ORC_COMPRESSION, orcOptions.compressionCodec)
+    configuration.set(OrcRelation.ORC_COMPRESSION, orcOptions.compressionCodec)
     configuration match {
       case conf: JobConf =>
         conf.setOutputFormat(classOf[OrcOutputFormat])
@@ -187,7 +187,7 @@ private[orc] class OrcOutputWriter(
     val partition = taskAttemptId.getTaskID.getId
     val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
     val compressionExtension = {
-      val name = conf.get(OrcOptions.ORC_COMPRESSION)
+      val name = conf.get(OrcRelation.ORC_COMPRESSION)
       OrcRelation.extensionsForCompressionCodecNames.getOrElse(name, "")
     }
     // It has the `.orc` extension at the end because (de)compression tools
@@ -311,6 +311,9 @@ private[orc] object OrcTableScan {
 }
 
 private[orc] object OrcRelation extends HiveInspectors {
+  // The references of Hive's classes will be minimized.
+  val ORC_COMPRESSION = "orc.compress"
+
   // The extensions for ORC compression codecs
   val extensionsForCompressionCodecNames = Map(
     "NONE" -> "",
