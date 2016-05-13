@@ -72,9 +72,15 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       val firstLine = filteredRdd.first()
       val firstRow = UnivocityParser.tokenizeLine(firstLine, csvOptions)
       val header = if (csvOptions.headerFlag) {
-        firstRow
+        firstRow.zipWithIndex.map { case (value, index) =>
+          if (value == null || value.isEmpty || value == csvOptions.nullValue) {
+            s"_c$index"
+          } else {
+            value
+          }
+        }
       } else {
-        firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
+        firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
       }
       val schemaFields = header.map { fieldName =>
         StructField(fieldName.toString, StringType, nullable = true)

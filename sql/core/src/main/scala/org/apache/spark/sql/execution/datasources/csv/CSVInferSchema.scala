@@ -52,9 +52,15 @@ private[csv] object CSVInferSchema {
     // Read header
     val firstRow = UnivocityParser.tokenizeLine(firstLine, options)
     val header = if (options.headerFlag) {
-      firstRow
+      firstRow.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == options.nullValue) {
+          s"_c$index"
+        } else {
+          value
+        }
+      }
     } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
+      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
     }
 
     val tokenRdd = UnivocityParser.tokenize(dropHeaderRdd, options)

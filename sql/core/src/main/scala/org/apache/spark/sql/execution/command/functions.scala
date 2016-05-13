@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -39,12 +39,11 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
  * }}}
  */
-// TODO: Use Seq[FunctionResource] instead of Seq[(String, String)] for resources.
 case class CreateFunction(
     databaseName: Option[String],
     functionName: String,
     className: String,
-    resources: Seq[(String, String)],
+    resources: Seq[FunctionResource],
     isTemp: Boolean)
   extends RunnableCommand {
 
@@ -156,6 +155,9 @@ case class DropFunction(
       if (databaseName.isDefined) {
         throw new AnalysisException(s"Specifying a database in DROP TEMPORARY FUNCTION " +
           s"is not allowed: '${databaseName.get}'")
+      }
+      if (FunctionRegistry.builtin.functionExists(functionName)) {
+        throw new AnalysisException(s"Cannot drop native function '$functionName'")
       }
       catalog.dropTempFunction(functionName, ifExists)
     } else {

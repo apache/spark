@@ -73,19 +73,6 @@ class SparkSession private(
    |  Session-related state  |
    * ----------------------- */
 
-  {
-    val defaultWarehousePath =
-      SQLConf.WAREHOUSE_PATH
-        .defaultValueString
-        .replace("${system:user.dir}", System.getProperty("user.dir"))
-    val warehousePath = sparkContext.conf.get(
-      SQLConf.WAREHOUSE_PATH.key,
-      defaultWarehousePath)
-    sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
-    sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
-    logInfo(s"Setting warehouse location to $warehousePath")
-  }
-
   /**
    * State shared across sessions, including the [[SparkContext]], cached data, listener,
    * and a catalog that interacts with external systems.
@@ -297,7 +284,7 @@ class SparkSession private(
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *  dataFrame.registerTempTable("people")
+   *  dataFrame.createOrReplaceTempView("people")
    *  sparkSession.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -528,16 +515,15 @@ class SparkSession private(
   }
 
   /**
-   * Registers the given [[DataFrame]] as a temporary table in the catalog.
-   * Temporary tables exist only during the lifetime of this instance of [[SparkSession]].
+   * Creates a temporary view with a DataFrame. The lifetime of this temporary view is tied to
+   * this [[SparkSession]].
    */
-  protected[sql] def registerTable(df: DataFrame, tableName: String): Unit = {
-    sessionState.catalog.createTempTable(
-      sessionState.sqlParser.parseTableIdentifier(tableName).table,
-      df.logicalPlan,
-      overrideIfExists = true)
+  protected[sql] def createTempView(
+      viewName: String, df: DataFrame, replaceIfExists: Boolean) = {
+    sessionState.catalog.createTempView(
+      sessionState.sqlParser.parseTableIdentifier(viewName).table,
+      df.logicalPlan, replaceIfExists)
   }
-
 
   /* ----------------- *
    |  Everything else  |

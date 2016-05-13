@@ -28,13 +28,13 @@ class IsotonicRegressionSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   private def generateIsotonicInput(labels: Seq[Double]): DataFrame = {
-    sqlContext.createDataFrame(
+    spark.createDataFrame(
       labels.zipWithIndex.map { case (label, i) => (label, i.toDouble, 1.0) }
     ).toDF("label", "features", "weight")
   }
 
   private def generatePredictionInput(features: Seq[Double]): DataFrame = {
-    sqlContext.createDataFrame(features.map(Tuple1.apply))
+    spark.createDataFrame(features.map(Tuple1.apply))
       .toDF("features")
   }
 
@@ -145,7 +145,7 @@ class IsotonicRegressionSuite
   }
 
   test("vector features column with feature index") {
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       (4.0, Vectors.dense(0.0, 1.0)),
       (3.0, Vectors.dense(0.0, 2.0)),
       (5.0, Vectors.sparse(2, Array(1), Array(3.0))))
@@ -184,7 +184,7 @@ class IsotonicRegressionSuite
   test("should support all NumericType labels and not support other types") {
     val ir = new IsotonicRegression()
     MLTestingUtils.checkNumericTypes[IsotonicRegressionModel, IsotonicRegression](
-      ir, isClassification = false, sqlContext) { (expected, actual) =>
+      ir, isClassification = false, spark) { (expected, actual) =>
         assert(expected.boundaries === actual.boundaries)
         assert(expected.predictions === actual.predictions)
       }

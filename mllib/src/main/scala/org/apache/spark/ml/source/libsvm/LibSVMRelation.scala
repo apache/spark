@@ -203,10 +203,18 @@ class DefaultSource extends FileFormat with DataSourceRegister {
           }
 
       val converter = RowEncoder(dataSchema)
+      val fullOutput = dataSchema.map { f =>
+        AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
+      }
+      val requiredOutput = fullOutput.filter { a =>
+        requiredSchema.fieldNames.contains(a.name)
+      }
+
+      val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
       points.map { pt =>
         val features = if (sparse) pt.features.toSparse else pt.features.toDense
-        converter.toRow(Row(pt.label, features))
+        requiredColumns(converter.toRow(Row(pt.label, features)))
       }
     }
   }

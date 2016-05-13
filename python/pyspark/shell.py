@@ -41,7 +41,9 @@ atexit.register(lambda: sc.stop())
 try:
     # Try to access HiveConf, it will raise exception if Hive is not added
     sc._jvm.org.apache.hadoop.hive.conf.HiveConf()
-    spark = SparkSession.withHiveSupport(sc)
+    spark = SparkSession.builder\
+        .enableHiveSupport()\
+        .getOrCreate()
 except py4j.protocol.Py4JError:
     spark = SparkSession(sc)
 except TypeError:
