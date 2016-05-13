@@ -1955,23 +1955,22 @@ class ContextTests(unittest.TestCase):
                 temp.write("triple = lambda x: 3*x")
             pkg = __import__(name)
             with SparkContext() as sc:
-                #trips = sc.parallelize([0, 1, 2, 3]).map(test_tmp.triple)
+                #trips = sc.parallelize([0, 1, 2, 3]).map(pkg.triple)
                 #sc.addPyPackage(pkg)
                 trips = sc.parallelize([0, 1, 2, 3]).map(lambda x: pkg.triple(x))
                 self.assertSequenceEqual([0, 3, 6, 9], trips.collect())
         finally:
             shutil.rmtree(name)
 
-    def test_requirements_file(self):
+    def test_add_py_requirements(self):
         import pip
-        with tempfile.NamedTemporaryFile() as temp:
-            temp.write('simplejson\nquadkey>=0.0.5\nsix==1.8.0')
-            with SparkContext() as sc:
-                sc.addRequirementsFile(temp.name)
-                import quadkey
-                qks = sc.parallelize([(0, 0), (1, 1), (2, 2)]) \
-                        .map(lambda pair: quadkey.from_geo(pair, 1).key)
-                self.assertSequenceEqual(['3', '1', '1'], qks.collect())
+        reqs = ['requests', 'quadkey>=0.0.5', 'six==1.8.0']
+        with SparkContext() as sc:
+            sc.addPyRequirements(reqs)
+            import quadkey
+            qks = sc.parallelize([(0, 0), (1, 1), (2, 2)]) \
+                    .map(lambda pair: quadkey.from_geo(pair, 1).key)
+            self.assertSequenceEqual(['3', '1', '1'], qks.collect())
 
     def test_progress_api(self):
         with SparkContext() as sc:

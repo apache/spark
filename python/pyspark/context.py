@@ -213,7 +213,9 @@ class SparkContext(object):
         for path in self._conf.get("spark.submit.pyRequirements", "").split(","):
             if path != "":
                 (dirname, filename) = os.path.split(path)
-                self.addRequirementsFile(os.path.join(SparkFiles.getRootDirectory(), filename))
+                reqs_file = os.path.join(SparkFiles.getRootDirectory(), filename)
+                reqs = open(reqs_file).readlines()
+                self.addPyRequirements(reqs)
 
         # Create a temporary directory inside spark.local.dir:
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir(self._jsc.sc().conf())
@@ -851,20 +853,27 @@ class SparkContext(object):
         finally:
             shutil.rmtree(tmp_dir)
 
-    def addRequirementsFile(self, path):
+    def addPyRequirements(self, reqs):
         """
-        Add a pip requirements file to distribute dependencies for all tasks
-        on thie SparkContext in the future. An ImportError will be thrown if
-        a module in the file can't be downloaded.
+        Add a list of pip requirements to distribute to workers.
+        The reqs list is composed of pip requirements strings.
         See https://pip.pypa.io/en/latest/user_guide.html#requirements-files
-        Raises ImportError if the requirement can't be found
+        Raises ImportError if the requirement can't be found. Example follows:
+
+        reqs = ['pkg1', 'pkg2', 'pkg3>=1.0,<=2.0']
+        sc.addPyRequirements(reqs)
+        // or load from requirements file
+        sc.addPyRequirements(open('requirements.txt').readlines())
         """
         import pip
-        for req in pip.req.parse_requirements(path, session=uuid.uuid1()):
-            if not req.check_if_exists():
-                pip.main(['install', req.req.__str__()])
-            pkg = __import__(req.name)
-            self.addPyPackage(pkg)
+        with tempfile.NamedTemporaryFile() as t:
+            t.write('\n'.join(reqs))
+            t.flush()
+            for req in pip.req.parse_requirements(t.name, session=uuid.uuid1()):
+                if not req.check_if_exists():
+                    pip.main(['install', req.req.__str__()])
+                pkg = __import__(req.name)
+                self.addPyPackage(pkg)
 
     def setCheckpointDir(self, dirName):
         """
