@@ -18,6 +18,7 @@
 package org.apache.spark.ml.regression;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -25,6 +26,7 @@ import java.util.Map;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import static org.junit.Assert.fail;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -94,6 +96,8 @@ public class JavaDecisionTreeRegressorSuite implements Serializable {
       model.save(path);
       DecisionTreeRegressionModel sameModel = DecisionTreeRegressionModel.load(path);
       TreeTests.checkEqual(model, sameModel);
+    } catch (IOException io) {
+      fail("Path already exists");
     } finally {
       Utils.deleteRecursively(tempDir);
     }

@@ -18,6 +18,7 @@
 package org.apache.spark.ml.classification;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
@@ -26,6 +27,7 @@ import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import static org.junit.Assert.fail;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
@@ -123,6 +125,8 @@ public class JavaRandomForestClassifierSuite implements Serializable {
       RandomForestClassificationModel sameModel =
           RandomForestClassificationModel.load(path);
       TreeTests.checkEqual(model, sameModel);
+    } catch (IOException io) {
+      fail("Path already exists");
     } finally {
       Utils.deleteRecursively(tempDir);
     }
