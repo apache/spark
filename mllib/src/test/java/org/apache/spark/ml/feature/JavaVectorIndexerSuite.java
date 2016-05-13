@@ -22,18 +22,14 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.VectorIndexerSuite.FeatureData;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
 
 
 public class JavaVectorIndexerSuite extends SharedSparkSession implements Serializable {
