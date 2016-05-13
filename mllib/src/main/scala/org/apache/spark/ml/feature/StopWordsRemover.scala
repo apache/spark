@@ -78,6 +78,7 @@ class StopWordsRemover(override val uid: String)
   /**
    * Locale for doing a case sensitive comparison
    * Default: English locale ("en")
+   * @see [[http://www.localeplanet.com/java/]]
    * @group param
    */
   val locale: Param[String] = new Param[String](this, "locale",
@@ -126,7 +127,7 @@ class StopWordsRemover(override val uid: String)
 object StopWordsRemover extends DefaultParamsReadable[StopWordsRemover] {
 
   private[feature]
-  def loadLocale(value : String) = new Locale(value)
+  def loadLocale(value : String): java.util.Locale = new Locale(value)
   val supportedLanguages = Set("danish", "dutch", "english", "finnish", "french", "german",
     "hungarian", "italian", "norwegian", "portuguese", "russian", "spanish", "swedish", "turkish")
 
