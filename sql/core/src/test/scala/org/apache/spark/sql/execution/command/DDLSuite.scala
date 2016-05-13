@@ -471,6 +471,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assert(e.getMessage.contains("datasource"))
   }
 
+  test("duplicate keys in table properties") {
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
+    }.getMessage
+    assert(e.contains("The property list contains duplicate keys 'key1'"))
+  }
+
   test("alter table: unset properties") {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
@@ -590,6 +597,13 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE tab1 PARTITION (x='300') RENAME TO PARTITION (x='333')")
     }
+  }
+
+  test("duplicate columns in partition specs") {
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
+    }.getMessage
+    assert(e.contains("The partition spec has duplicate partition columns 'a'"))
   }
 
   test("show tables") {

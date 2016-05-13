@@ -339,11 +339,18 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitTablePropertyList(
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
-    ctx.tableProperty.asScala.map { property =>
+    val properties = ctx.tableProperty.asScala.map { property =>
       val key = visitTablePropertyKey(property.key)
       val value = Option(property.value).map(string).orNull
       key -> value
-    }.toMap
+    }
+    // Check for duplicate property names.
+    properties.groupBy(_._1).filter(_._2.size > 1).foreach {
+      case (name, _) =>
+        throw new ParseException(
+          s"The property list contains duplicate keys '$name'.", ctx)
+    }
+    properties.toMap
   }
 
   /**
