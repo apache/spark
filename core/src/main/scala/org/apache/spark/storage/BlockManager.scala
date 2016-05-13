@@ -1224,7 +1224,7 @@ private[spark] class BlockManager(
         s"${peersReplicatedTo.size} peer(s) instead of $numPeersToReplicateTo peers")
     }
 
-    logInfo(s"block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
+    logDebug(s"block $blockId replicated to ${peersReplicatedTo.mkString(", ")}")
   }
 
   /**
