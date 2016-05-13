@@ -48,14 +48,14 @@ import org.apache.spark.internal.Logging
 package object spark {
 
   object SparkBuildInfo extends Logging {
-
+    val unknownProp = "<unknown>"
+    val props = new Properties()
+    val resourceStream = Thread.currentThread().getContextClassLoader.
+      getResourceAsStream("spark-version-info.properties")
     val (spark_version: String, spark_branch: String, spark_revision: String,
       spark_build_user: String, spark_repo_url: String, spark_build_date: String) =
       try {
-        val unknownProp = "<unknown>"
-        val props = new Properties()
-        props.load(Thread.currentThread().getContextClassLoader.
-          getResourceAsStream("spark-version-info.properties"))
+        props.load(resourceStream)
         (
           props.getProperty("version", unknownProp),
           props.getProperty("branch", unknownProp),
@@ -67,6 +67,15 @@ package object spark {
       } catch {
         case e: Exception => logError("Unable to read spark build properties.", e);
           throw new SparkException("Error load properties from spark-version-info.properties", e)
+      } finally {
+        if (resourceStream != null) {
+          try {
+            resourceStream.close()
+          } catch {
+            case e: Exception => logError("Unable to close spark build info resource stream", e);
+              throw new SparkException("Error closing spark build info resource stream", e)
+          }
+        }
       }
   }
   val SPARK_VERSION = SparkBuildInfo.spark_version
