@@ -1023,34 +1023,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
-  test("select/insert into the data source table") {
-    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
-    val tabName = "tbl"
-    withTable(tabName) {
-      val expectedMsg =
-        s"Please enable Hive support when operating non-temporary tables: `$tabName`"
-      sql(
-        s"""
-           |CREATE TABLE $tabName
-           |USING json
-           |PARTITIONED BY (b)
-           |AS SELECT 1 AS a, "foo" AS b
-        """.stripMargin)
-      val catalogTable =
-        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
-      assert(catalogTable.tableType == CatalogTableType.MANAGED)
-
-      var message = intercept[AnalysisException] {
-        sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
-      }.getMessage
-      assert(message.contains(expectedMsg))
-      message = intercept[AnalysisException] {
-        sql(s"SELECT * FROM $tabName")
-      }.getMessage
-      assert(message.contains(expectedMsg))
-    }
-  }
-
   test("drop default database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {

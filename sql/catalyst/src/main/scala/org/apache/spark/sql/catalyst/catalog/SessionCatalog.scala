@@ -433,6 +433,18 @@ class SessionCatalog(
   }
 
   /**
+   * Return whether a table with the specified name is a data source table.
+   */
+  def isDatasourceTable(name: TableIdentifier): Boolean = synchronized {
+    if (!isTemporaryTable(name) && tableExists(name)) {
+      val metadata = getTableMetadata(name)
+      metadata.properties.contains("spark.sql.sources.provider")
+    } else {
+      false
+    }
+  }
+
+  /**
    * Return whether a table with the specified name is a temporary table.
    *
    * Note: The temporary table cache is checked only when database is not

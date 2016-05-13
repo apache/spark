@@ -439,9 +439,10 @@ class Analyzer(
       try {
         val table = catalog.lookupRelation(u.tableIdentifier, u.alias)
         table match {
-          case SubqueryAlias(_, _: SimpleCatalogRelation) =>
+          case SubqueryAlias(_, s: SimpleCatalogRelation)
+              if !catalog.isDatasourceTable(u.tableIdentifier) =>
             u.failAnalysis("Please enable Hive support when operating non-temporary tables: " +
-                s"${u.tableIdentifier}")
+              s"${u.tableIdentifier}")
           case _ =>
         }
         table
