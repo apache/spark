@@ -63,7 +63,7 @@ class PartitionBatchPruningSuite
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
     }, 5).toDF()
-    pruningData.registerTempTable("pruningData")
+    pruningData.createOrReplaceTempView("pruningData")
     spark.catalog.cacheTable("pruningData")
   }
 
