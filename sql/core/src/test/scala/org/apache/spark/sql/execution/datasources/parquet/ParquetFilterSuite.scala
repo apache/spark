@@ -304,7 +304,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.read.parquet(dir.getCanonicalPath).filter("part = 1"),
+          spark.read.parquet(dir.getCanonicalPath).filter("part = 1"),
           (1 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
@@ -321,7 +321,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // If the "part = 1" filter gets pushed down, this query will throw an exception since
         // "part" is not a valid column in the actual Parquet file
         checkAnswer(
-          sqlContext.read.parquet(dir.getCanonicalPath).filter("a > 0 and (part = 0 or a > 1)"),
+          spark.read.parquet(dir.getCanonicalPath).filter("a > 0 and (part = 0 or a > 1)"),
           (2 to 3).map(i => Row(i, i.toString, 1)))
       }
     }
@@ -339,7 +339,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // The filter "a > 1 or b < 2" will not get pushed down, and the projection is empty,
         // this query will throw an exception since the project from combinedFilter expect
         // two projection while the
-        val df1 = sqlContext.read.parquet(dir.getCanonicalPath)
+        val df1 = spark.read.parquet(dir.getCanonicalPath)
 
         assert(df1.filter("a > 1 or b < 2").count() == 2)
       }
@@ -358,7 +358,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         // test the generate new projection case
         // when projects != partitionAndNormalColumnProjs
 
-        val df1 = sqlContext.read.parquet(dir.getCanonicalPath)
+        val df1 = spark.read.parquet(dir.getCanonicalPath)
 
         checkAnswer(
           df1.filter("a > 1 or b > 2").orderBy("a").selectExpr("a", "b", "c", "d"),
@@ -381,7 +381,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         // If the "c = 1" filter gets pushed down, this query will throw an exception which
         // Parquet emits. This is a Parquet issue (PARQUET-389).
-        val df = sqlContext.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a")
+        val df = spark.read.parquet(pathOne, pathTwo).filter("c = 1").selectExpr("c", "b", "a")
         checkAnswer(
           df,
           Row(1, "1", null))
@@ -394,7 +394,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         df.write.parquet(pathThree)
 
         // We will remove the temporary metadata when writing Parquet file.
-        val schema = sqlContext.read.parquet(pathThree).schema
+        val schema = spark.read.parquet(pathThree).schema
         assert(schema.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
 
         val pathFour = s"${dir.getCanonicalPath}/table4"
@@ -407,7 +407,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
 
         // If the "s.c = 1" filter gets pushed down, this query will throw an exception which
         // Parquet emits.
-        val dfStruct3 = sqlContext.read.parquet(pathFour, pathFive).filter("s.c = 1")
+        val dfStruct3 = spark.read.parquet(pathFour, pathFive).filter("s.c = 1")
           .selectExpr("s")
         checkAnswer(dfStruct3, Row(Row(null, 1)))
 
@@ -420,7 +420,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         dfStruct3.write.parquet(pathSix)
 
         // We will remove the temporary metadata when writing Parquet file.
-        val forPathSix = sqlContext.read.parquet(pathSix).schema
+        val forPathSix = spark.read.parquet(pathSix).schema
         assert(forPathSix.forall(!_.metadata.contains(StructType.metadataKeyForOptionalField)))
 
         // sanity test: make sure optional metadata field is not wrongly set.
@@ -429,7 +429,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         val pathEight = s"${dir.getCanonicalPath}/table8"
         (4 to 6).map(i => (i, i.toString)).toDF("a", "b").write.parquet(pathEight)
 
-        val df2 = sqlContext.read.parquet(pathSeven, pathEight).filter("a = 1").selectExpr("a", "b")
+        val df2 = spark.read.parquet(pathSeven, pathEight).filter("a = 1").selectExpr("a", "b")
         checkAnswer(
           df2,
           Row(1, "1"))
@@ -449,7 +449,7 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         withTempPath { dir =>
           val path = s"${dir.getCanonicalPath}/part=1"
           (1 to 3).map(i => (i, i.toString)).toDF("a", "b").write.parquet(path)
-          val df = sqlContext.read.parquet(path).filter("a = 2")
+          val df = spark.read.parquet(path).filter("a = 2")
 
           // The result should be single row.
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
@@ -470,11 +470,11 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
         (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b").write.parquet(path)
 
         checkAnswer(
-          sqlContext.read.parquet(path).where("not (a = 2) or not(b in ('1'))"),
+          spark.read.parquet(path).where("not (a = 2) or not(b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
 
         checkAnswer(
-          sqlContext.read.parquet(path).where("not (a = 2 and b in ('1'))"),
+          spark.read.parquet(path).where("not (a = 2 and b in ('1'))"),
           (1 to 5).map(i => Row(i, (i % 2).toString)))
       }
     }
@@ -527,19 +527,19 @@ class ParquetFilterSuite extends QueryTest with ParquetTest with SharedSQLContex
           // When a filter is pushed to Parquet, Parquet can apply it to every row.
           // So, we can check the number of rows returned from the Parquet
           // to make sure our filter pushdown work.
-          val df = sqlContext.read.parquet(path).where("b in (0,2)")
+          val df = spark.read.parquet(path).where("b in (0,2)")
           assert(stripSparkFilter(df).count == 3)
 
-          val df1 = sqlContext.read.parquet(path).where("not (b in (1))")
+          val df1 = spark.read.parquet(path).where("not (b in (1))")
           assert(stripSparkFilter(df1).count == 3)
 
-          val df2 = sqlContext.read.parquet(path).where("not (b in (1,3) or a <= 2)")
+          val df2 = spark.read.parquet(path).where("not (b in (1,3) or a <= 2)")
           assert(stripSparkFilter(df2).count == 2)
 
-          val df3 = sqlContext.read.parquet(path).where("not (b in (1,3) and a <= 2)")
+          val df3 = spark.read.parquet(path).where("not (b in (1,3) and a <= 2)")
           assert(stripSparkFilter(df3).count == 4)
 
-          val df4 = sqlContext.read.parquet(path).where("not (a <= 2)")
+          val df4 = spark.read.parquet(path).where("not (a <= 2)")
           assert(stripSparkFilter(df4).count == 3)
         }
       }

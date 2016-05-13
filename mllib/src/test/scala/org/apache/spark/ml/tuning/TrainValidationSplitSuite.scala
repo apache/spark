@@ -34,7 +34,7 @@ import org.apache.spark.sql.types.StructType
 class TrainValidationSplitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   test("train validation with logistic regression") {
-    val dataset = sqlContext.createDataFrame(
+    val dataset = spark.createDataFrame(
       sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
 
     val lr = new LogisticRegression
@@ -58,7 +58,7 @@ class TrainValidationSplitSuite
   }
 
   test("train validation with linear regression") {
-    val dataset = sqlContext.createDataFrame(
+    val dataset = spark.createDataFrame(
         sc.parallelize(LinearDataGenerator.generateLinearInput(
             6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
 

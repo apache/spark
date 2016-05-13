@@ -83,9 +83,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   static {
     specialClasses.put("org.apache.spark.repl.Main", "spark-shell");
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.SparkSQLCLIDriver",
-      "spark-internal");
+      SparkLauncher.NO_RESOURCE);
     specialClasses.put("org.apache.spark.sql.hive.thriftserver.HiveThriftServer2",
-      "spark-internal");
+      SparkLauncher.NO_RESOURCE);
   }
 
   final List<String> sparkArgs;
@@ -112,11 +112,11 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     List<String> submitArgs = args;
     if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
       this.allowsMixedArguments = true;
-      appResource = PYSPARK_SHELL_RESOURCE;
+      appResource = PYSPARK_SHELL;
       submitArgs = args.subList(1, args.size());
     } else if (args.size() > 0 && args.get(0).equals(SPARKR_SHELL)) {
       this.allowsMixedArguments = true;
-      appResource = SPARKR_SHELL_RESOURCE;
+      appResource = SPARKR_SHELL;
       submitArgs = args.subList(1, args.size());
     } else if (args.size() > 0 && args.get(0).equals(RUN_EXAMPLE)) {
       isExample = true;
@@ -134,9 +134,9 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
-    if (PYSPARK_SHELL_RESOURCE.equals(appResource) && !printInfo) {
+    if (PYSPARK_SHELL.equals(appResource) && !printInfo) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL_RESOURCE.equals(appResource) && !printInfo) {
+    } else if (SPARKR_SHELL.equals(appResource) && !printInfo) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -146,6 +146,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   List<String> buildSparkSubmitArgs() {
     List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
+
+    if (!allowsMixedArguments) {
+      checkArgument(appResource != null, "Missing application resource.");
+    }
 
     if (verbose) {
       args.add(parser.VERBOSE);
@@ -278,6 +282,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
     // When launching the pyspark shell, the spark-submit arguments should be stored in the
     // PYSPARK_SUBMIT_ARGS env variable.
+    appResource = PYSPARK_SHELL_RESOURCE;
     constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS");
 
     // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
@@ -301,6 +306,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     }
     // When launching the SparkR shell, store the spark-submit arguments in the SPARKR_SUBMIT_ARGS
     // env variable.
+    appResource = SPARKR_SHELL_RESOURCE;
     constructEnvVarArgs(env, "SPARKR_SUBMIT_ARGS");
 
     // Set shell.R as R_PROFILE_USER to load the SparkR package when the shell comes up.
@@ -435,22 +441,19 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           className = EXAMPLE_CLASS_PREFIX + className;
         }
         mainClass = className;
-        appResource = "spark-internal";
+        appResource = SparkLauncher.NO_RESOURCE;
         return false;
       } else {
         checkArgument(!opt.startsWith("-"), "Unrecognized option: %s", opt);
-        sparkArgs.add(opt);
+        checkState(appResource == null, "Found unrecognized argument but resource is already set.");
+        appResource = opt;
         return false;
       }
     }
 
     @Override
     protected void handleExtraArgs(List<String> extra) {
-      if (isExample) {
-        appArgs.addAll(extra);
-      } else {
-        sparkArgs.addAll(extra);
-      }
+      appArgs.addAll(extra);
     }
 
   }

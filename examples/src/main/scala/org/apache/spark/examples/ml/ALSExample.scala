@@ -23,10 +23,6 @@ import org.apache.spark.ml.evaluation.RegressionEvaluator
 import org.apache.spark.ml.recommendation.ALS
 // $example off$
 import org.apache.spark.sql.SparkSession
-// $example on$
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.DoubleType
-// $example off$
 
 object ALSExample {
 
@@ -65,8 +61,6 @@ object ALSExample {
 
     // Evaluate the model by computing the RMSE on the test data
     val predictions = model.transform(test)
-      .withColumn("rating", col("rating").cast(DoubleType))
-      .withColumn("prediction", col("prediction").cast(DoubleType))
 
     val evaluator = new RegressionEvaluator()
       .setMetricName("rmse")

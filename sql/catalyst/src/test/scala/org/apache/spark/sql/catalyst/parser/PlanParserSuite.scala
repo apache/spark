@@ -48,6 +48,11 @@ class PlanParserSuite extends PlanTest {
     assertEqual("SELECT * FROM a", plan)
   }
 
+  test("explain") {
+    intercept("EXPLAIN logical SELECT 1", "Unsupported SQL statement")
+    intercept("EXPLAIN formatted SELECT 1", "Unsupported SQL statement")
+  }
+
   test("show functions") {
     assertEqual("show functions", ShowFunctions(None, None))
     assertEqual("show functions foo", ShowFunctions(None, Some("foo")))

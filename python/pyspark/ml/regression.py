@@ -40,6 +40,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
                        HasStandardization, HasSolver, HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Linear regression.
 
     The learning objective is to minimize the squared error, with regularization.
@@ -123,6 +125,8 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 
 class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by LinearRegression.
 
     .. versionadded:: 1.4.0
@@ -229,7 +233,9 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns the explained variance regression score.
         explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-        Reference: http://en.wikipedia.org/wiki/Explained_variation
+
+        .. seealso:: `Wikipedia explain variation \
+        <http://en.wikipedia.org/wiki/Explained_variation>`_
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -283,7 +289,9 @@ class LinearRegressionSummary(JavaWrapper):
     def r2(self):
         """
         Returns R^2^, the coefficient of determination.
-        Reference: http://en.wikipedia.org/wiki/Coefficient_of_determination
+
+        .. seealso:: `Wikipedia coefficient of determination \
+        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -627,7 +635,9 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
                             HasSeed, JavaMLWritable, JavaMLReadable, HasVarianceCol):
     """
-    `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
+    .. note:: Experimental
+
+    `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -709,7 +719,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 @inherit_doc
 class DecisionTreeModel(JavaModel):
-    """Abstraction for Decision Tree models.
+    """
+    .. note:: Experimental
+
+    Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
     """
@@ -732,7 +745,10 @@ class DecisionTreeModel(JavaModel):
 
 @inherit_doc
 class TreeEnsembleModels(JavaModel):
-    """Represents a tree ensemble model.
+    """
+    .. note:: Experimental
+
+    Represents a tree ensemble model.
 
     .. versionadded:: 1.5.0
     """
@@ -750,6 +766,8 @@ class TreeEnsembleModels(JavaModel):
 @inherit_doc
 class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by DecisionTreeRegressor.
 
     .. versionadded:: 1.4.0
@@ -782,7 +800,9 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
                             JavaMLWritable, JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
+    .. note:: Experimental
+
+    `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -864,6 +884,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by RandomForestRegressor.
 
     .. versionadded:: 1.4.0
@@ -888,9 +910,11 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
-                   JavaMLReadable):
+                   JavaMLReadable, TreeRegressorParams):
     """
-    `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
+    .. note:: Experimental
+
+    `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
@@ -900,6 +924,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
+    >>> print(gbt.getImpurity())
+    variance
     >>> model = gbt.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
@@ -936,19 +962,21 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
+                 impurity="variance"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
+                 impurity="variance")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         seed=None)
+                         seed=None, impurity="variance")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -957,12 +985,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
+                  impuriy="variance"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
+                  impurity="variance")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -988,6 +1018,8 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
 
 class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by GBTRegressor.
 
     .. versionadded:: 1.4.0
@@ -1013,6 +1045,8 @@ class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             HasFitIntercept, HasMaxIter, HasTol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Accelerated Failure Time (AFT) Model Survival Regression
 
     Fit a parametric AFT survival regression model based on the Weibull distribution
@@ -1153,6 +1187,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by AFTSurvivalRegression.
 
     .. versionadded:: 1.6.0
@@ -1200,6 +1236,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
                                   HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
                                   HasSolver, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Generalized Linear Regression.
 
     Fit a Generalized Linear Model specified by giving a symbolic description of the linear
@@ -1316,6 +1354,8 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
 class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Model fitted by GeneralizedLinearRegression.
 
     .. versionadded:: 2.0.0

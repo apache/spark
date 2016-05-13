@@ -354,10 +354,23 @@ case class InsertIntoTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
+  private[spark] lazy val expectedColumns = {
+    if (table.output.isEmpty) {
+      None
+    } else {
+      val numDynamicPartitions = partition.values.count(_.isEmpty)
+      val (partitionColumns, dataColumns) = table.output
+          .partition(a => partition.keySet.contains(a.name))
+      Some(dataColumns ++ partitionColumns.takeRight(numDynamicPartitions))
+    }
+  }
+
   assert(overwrite || !ifNotExists)
-  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) =>
-      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+  override lazy val resolved: Boolean = childrenResolved && expectedColumns.forall { expected =>
+    child.output.size == expected.size && child.output.zip(expected).forall {
+      case (childAttr, tableAttr) =>
+        DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+    }
   }
 }
 

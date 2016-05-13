@@ -106,7 +106,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   test("should support all NumericType labels and not support other types") {
     val gbt = new GBTClassifier().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[GBTClassificationModel, GBTClassifier](
-      gbt, isClassification = true, sqlContext) { (expected, actual) =>
+      gbt, isClassification = true, spark) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }
@@ -130,7 +130,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   */
 
   test("Fitting without numClasses in metadata") {
-    val df: DataFrame = sqlContext.createDataFrame(TreeTests.featureImportanceData(sc))
+    val df: DataFrame = spark.createDataFrame(TreeTests.featureImportanceData(sc))
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
     gbt.fit(df)
   }
@@ -138,7 +138,7 @@ class GBTClassifierSuite extends SparkFunSuite with MLlibTestSparkContext
   test("extractLabeledPoints with bad data") {
     def getTestData(labels: Seq[Double]): DataFrame = {
       val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      sqlContext.createDataFrame(data)
+      spark.createDataFrame(data)
     }
 
     val gbt = new GBTClassifier().setMaxDepth(1).setMaxIter(1)
