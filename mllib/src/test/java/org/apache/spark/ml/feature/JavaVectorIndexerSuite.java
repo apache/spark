@@ -27,6 +27,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.feature.VectorIndexerSuite.FeatureData;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -35,24 +36,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 
 
-public class JavaVectorIndexerSuite implements Serializable {
-  private transient SparkSession spark;
-  private JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaVectorIndexerSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaVectorIndexerSuite extends SharedSparkSession implements Serializable {
 
   @Test
   public void vectorIndexerAPI() {

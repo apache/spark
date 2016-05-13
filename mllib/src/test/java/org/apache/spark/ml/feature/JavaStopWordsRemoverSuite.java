@@ -24,6 +24,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
@@ -34,23 +35,7 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 
-public class JavaStopWordsRemoverSuite {
-
-  private transient SparkSession spark;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaStopWordsRemoverSuite")
-      .getOrCreate();
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaStopWordsRemoverSuite extends SharedSparkSession {
 
   @Test
   public void javaCompatibilityTest() {

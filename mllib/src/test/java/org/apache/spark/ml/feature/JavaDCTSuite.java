@@ -27,6 +27,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -38,22 +39,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaDCTSuite {
-  private transient SparkSession spark;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaDCTSuite")
-      .getOrCreate();
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaDCTSuite extends SharedSparkSession {
 
   @Test
   public void javaCompatibilityTest() {

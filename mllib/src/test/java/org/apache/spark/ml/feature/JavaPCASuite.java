@@ -28,6 +28,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
@@ -39,24 +40,7 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 
-public class JavaPCASuite implements Serializable {
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaPCASuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaPCASuite extends SharedSparkSession implements Serializable {
 
   public static class VectorPair implements Serializable {
     private Vector features = Vectors.dense(0.0);

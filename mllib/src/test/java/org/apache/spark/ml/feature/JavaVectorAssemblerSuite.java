@@ -24,6 +24,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.SparkConf;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
@@ -36,23 +37,7 @@ import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import static org.apache.spark.sql.types.DataTypes.*;
 
-public class JavaVectorAssemblerSuite {
-  private transient SparkSession spark;
-
-  @Before
-  public void setUp() {
-    SparkConf sparkConf = new SparkConf();
-    sparkConf.setMaster("local");
-    sparkConf.setAppName("JavaVectorAssemblerSuite");
-
-    spark = SparkSession.builder().config(sparkConf).getOrCreate();
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaVectorAssemblerSuite extends SharedSparkSession {
 
   @Test
   public void testVectorAssembler() {
