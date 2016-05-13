@@ -87,6 +87,8 @@ public final class UnsafeExternalRowSorter {
       prefixComparator,
       /* initialSize */ 4096,
       pageSizeBytes,
+      SparkEnv.get().conf().getLong("spark.shuffle.spill.numElementsForceSpillThreshold", UnsafeExternalSorter
+          .DEFAULT_NUM_ELEMENTS_FOR_SPILL_THRESHOLD),
       canUseRadixSort
     );
   }
