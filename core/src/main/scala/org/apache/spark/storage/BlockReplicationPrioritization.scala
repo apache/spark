@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.internal.Logging
 
 /* Trait that should be implemented by any class implementing rack aware prioritization */
-trait BlockReplicationPriotization {
+trait BlockReplicationPrioritization {
 
   /**
    * Method to prioritize a bunch of candidate peers of a block
@@ -36,7 +36,7 @@ trait BlockReplicationPriotization {
 }
 
 class DefaultBlockReplicationPrioritization(host: String)
-  extends BlockReplicationPriotization
+  extends BlockReplicationPrioritization
   with Logging {
 
   /**

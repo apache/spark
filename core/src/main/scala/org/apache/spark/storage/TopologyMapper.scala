@@ -21,13 +21,13 @@ import org.apache.spark.internal.Logging
 
 trait TopologyMapper {
   /**
-   * Gets the rack information given the host name
+   * Gets the topology information given the host name
    *
    * @param hostname Hostname
-   * @return rack information for the given hostname. One can use a 'topology delimiter'
-   *         to make this rack information nested.
+   * @return topology information for the given hostname. One can use a 'topology delimiter'
+   *         to make this topology information nested.
    *         For example : ‘/myrack/myhost’, where ‘/’ is the topology delimiter,
-   *         ‘myrack’ is the rack identifier, and ‘myhost’ is the individual host.
+   *         ‘myrack’ is the topology identifier, and ‘myhost’ is the individual host.
    */
   def getTopologyForHost(hostname: String): String
 }
