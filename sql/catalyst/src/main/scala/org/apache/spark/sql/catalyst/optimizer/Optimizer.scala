@@ -1565,9 +1565,8 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
 
         // Adds an extra Project here, to preserve the output expr id of `SerializeFromObject`.
         // We will remove it later in RemoveAliasOnlyProject rule.
-        val objAttrs = filter.output.zip(s.output).map {
-          case (fout, sout) =>
-            Alias(fout, fout.name)(exprId = sout.exprId)
+        val objAttrs = filter.output.zip(s.output).map { case (fout, sout) =>
+          Alias(fout, fout.name)(exprId = sout.exprId)
         }
         Project(objAttrs, filter)
       }
