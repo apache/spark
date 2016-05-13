@@ -105,7 +105,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
-      HiveTypeCoercion.typeCoercionRules ++
+      TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
@@ -1922,8 +1922,8 @@ class Analyzer(
     }
 
     private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-      val fromPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(from)
-      val toPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(to)
+      val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+      val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
       toPrecedence > 0 && fromPrecedence > toPrecedence
     }
 
