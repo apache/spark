@@ -68,7 +68,7 @@ public class JavaPipelineSuite {
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[]{scaler, lr});
     PipelineModel model = pipeline.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
   }

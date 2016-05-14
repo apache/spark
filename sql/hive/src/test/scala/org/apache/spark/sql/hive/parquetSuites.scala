@@ -171,8 +171,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       sql(s"ALTER TABLE partitioned_parquet_with_complextypes ADD PARTITION (p=$p)")
     }
 
-    (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").registerTempTable("jt")
-    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").registerTempTable("jt_array")
+    (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").createOrReplaceTempView("jt")
+    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").createOrReplaceTempView("jt_array")
 
     setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
   }
@@ -542,7 +542,7 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
           """.stripMargin)
 
         // Temp table to insert data into partitioned table
-        Seq("foo", "bar").toDF("a").registerTempTable("test_temp")
+        Seq("foo", "bar").toDF("a").createOrReplaceTempView("test_temp")
         sql("INSERT INTO test_added_partitions PARTITION(b='0') SELECT a FROM test_temp")
 
         checkAnswer(

@@ -30,7 +30,7 @@ class HiveOperatorQueryableSuite extends QueryTest with TestHiveSingleton {
     hiveContext.loadTestTable("src")
 
     // register a describe command to be a temp table
-    sql("desc src").registerTempTable("mydesc")
+    sql("desc src").createOrReplaceTempView("mydesc")
     checkAnswer(
       sql("desc mydesc"),
       Seq(

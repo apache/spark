@@ -72,7 +72,7 @@ public class JavaSaveLoadSuite {
     }
     JavaRDD<String> rdd = jsc.parallelize(jsonObjects);
     df = spark.read().json(rdd);
-    df.registerTempTable("jsonTable");
+    df.createOrReplaceTempView("jsonTable");
   }
 
   @After

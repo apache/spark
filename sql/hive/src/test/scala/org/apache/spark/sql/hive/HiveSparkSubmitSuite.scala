@@ -355,7 +355,7 @@ object TemporaryHiveUDFTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -393,7 +393,7 @@ object PermanentHiveUDFTest1 extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -429,7 +429,7 @@ object PermanentHiveUDFTest2 extends Logging {
     hiveContext.sessionState.catalog.createFunction(function, ignoreIfExists = false)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -491,7 +491,7 @@ object SparkSubmitClassLoaderTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Load a Hive SerDe from the jar.
     logInfo("Creating a Hive table with a SerDe provided in a jar.")
     hiveContext.sql(
