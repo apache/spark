@@ -1497,12 +1497,13 @@ class Dataset[T] private[sql](
   }
 
   /**
-    * Returns a new [[Dataset]] by sampling a fixed num of rows, using a random seed.
-    * @param withReplacement Sample with replacement or not.
-    * @param num num of rows to generate.
-    * @param seed Seed for sampling
-    * @return the sampling [[Dataset]]
-    */
+   * Returns a new [[Dataset]] by sampling a fixed num of rows, using a random seed.
+   *
+   * @param withReplacement Sample with replacement or not.
+   * @param num num of rows to generate.
+   * @param seed Seed for sampling
+   * @return the sampling [[Dataset]]
+   */
   def takeSample(withReplacement: Boolean, num: Int, seed: Long): Dataset[T] = {
     import sqlContext.implicits._
     val numStDev = 10.0
@@ -1536,12 +1537,12 @@ class Dataset[T] private[sql](
   }
 
   /**
-    * Returns a new [[Dataset]] by sampling a fixed num of rows.
-    *
-    * @param withReplacement Sample with replacement or not.
-    * @param num num of rows to generate.
-    * @return the sampling [[Dataset]]
-    */
+   * Returns a new [[Dataset]] by sampling a fixed num of rows.
+   *
+   * @param withReplacement Sample with replacement or not.
+   * @param num num of rows to generate.
+   * @return the sampling [[Dataset]]
+   */
   def takeSample(withReplacement: Boolean, num: Int): Dataset[T] = {
     takeSample(withReplacement, num, Utils.random.nextLong)
   }
