@@ -435,7 +435,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     {
       val sample = data.takeSample(withReplacement = true, num = 20)
       assert(sample.count === 20) // Got exactly 100 elements
-    val sampleDisCount = sample.distinct.count
+      val sampleDisCount = sample.distinct.count
       assert(sampleDisCount <= 20, "sampling with replacement returned all distinct elements")
       val sampleData = sample.collect()
       assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
@@ -460,16 +460,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       // Chance of getting all distinct elements is still quite low, so test we got < 100
       assert(sample.distinct.count < n, "sampling with replacement returned all distinct elements")
     }
-    {
-      val emptySet = sparkContext.parallelize(Seq.empty[Int], 2)
-      val sample = emptySet.takeSample(false, 20, 1)
-      assert(sample.length === 0)
-    }
-    {
-      val emptySet = sparkContext.parallelize(Seq.empty[Int], 2)
-      val sample = emptySet.takeSample(false, 20, 1)
-      assert(sample.length === 0)
-    }
+  }
+
+  test("test takeSample from a empty Dataset") {
+    val emptySet = sparkContext.parallelize(Seq.empty[Int], 2).toDS()
+    val sample = emptySet.takeSample(false, 20, 1)
+    assert(sample.count === 0)
   }
 
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {

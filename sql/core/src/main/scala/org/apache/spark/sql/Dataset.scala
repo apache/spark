@@ -19,17 +19,12 @@ package org.apache.spark.sql
 
 import java.io.CharArrayWriter
 import java.util.Random
-
-import org.apache.spark.util.random.SamplingUtils
-
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
-
 import com.fasterxml.jackson.core.JsonFactory
 import org.apache.commons.lang3.StringUtils
-
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.function._
@@ -54,6 +49,7 @@ import org.apache.spark.sql.execution.python.EvaluatePython
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
+import org.apache.spark.util.random.SamplingUtils
 
 private[sql] object Dataset {
   def apply[T: Encoder](sparkSession: SparkSession, logicalPlan: LogicalPlan): Dataset[T] = {
@@ -1505,7 +1501,6 @@ class Dataset[T] private[sql](
    * @return the sampling [[Dataset]]
    */
   def takeSample(withReplacement: Boolean, num: Int, seed: Long): Dataset[T] = {
-    import sqlContext.implicits._
     val numStDev = 10.0
     require(num >= 0, "Negative number of elements requested")
     require(num <= (Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt),
