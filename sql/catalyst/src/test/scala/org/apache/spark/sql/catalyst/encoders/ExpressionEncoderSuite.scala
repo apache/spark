@@ -115,6 +115,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
   encodeDecodeTest(Timestamp.valueOf("2016-01-29 10:00:00"), "timestamp")
+  encodeDecodeTest(Array(Timestamp.valueOf("2016-01-29 10:00:00")), "array of timestamp")
   encodeDecodeTest(Array[Byte](13, 21, -23), "binary")
 
   encodeDecodeTest(Seq(31, -123, 4), "seq of int")
