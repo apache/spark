@@ -39,7 +39,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   setupTestData()
 
   test("having clause") {
-    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v").createOrReplaceTempView("hav")
+    Seq(("one", 1), ("two", 2), ("three", 3), ("one", 5)).toDF("k", "v")
+      .createOrReplaceTempView("hav")
     checkAnswer(
       sql("SELECT k, sum(v) FROM hav GROUP BY k HAVING sum(v) > 2"),
       Row("one", 6) :: Row("three", 3) :: Nil)
@@ -1518,7 +1519,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-6145: special cases") {
     spark.read.json(sparkContext.makeRDD(
-      """{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""" :: Nil)).createOrReplaceTempView("t")
+      """{"a": {"b": [1]}, "b": [{"a": 1}], "_c0": {"a": 1}}""" :: Nil))
+      .createOrReplaceTempView("t")
     checkAnswer(sql("SELECT a.b[0] FROM t ORDER BY _c0.a"), Row(1))
     checkAnswer(sql("SELECT b[0].a FROM t ORDER BY _c0.a"), Row(1))
   }

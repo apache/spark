@@ -172,7 +172,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
     }
 
     (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").createOrReplaceTempView("jt")
-    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").createOrReplaceTempView("jt_array")
+    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a")
+      .createOrReplaceTempView("jt_array")
 
     setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
   }
