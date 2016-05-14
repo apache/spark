@@ -18,6 +18,9 @@
 package org.apache.spark.sql
 
 import java.io.CharArrayWriter
+import java.util.Random
+
+import org.apache.spark.util.random.SamplingUtils
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
@@ -1491,6 +1494,56 @@ class Dataset[T] private[sql](
    */
   def sample(withReplacement: Boolean, fraction: Double): Dataset[T] = {
     sample(withReplacement, fraction, Utils.random.nextLong)
+  }
+
+  /**
+    * Returns a new [[Dataset]] by sampling a fixed num of rows, using a random seed.
+    * @param withReplacement Sample with replacement or not.
+    * @param num num of rows to generate.
+    * @param seed Seed for sampling
+    * @return the sampling [[Dataset]]
+    */
+  def takeSample(withReplacement: Boolean, num: Int, seed: Long): Dataset[T] = {
+    import sqlContext.implicits._
+    val numStDev = 10.0
+    require(num >= 0, "Negative number of elements requested")
+    require(num <= (Int.MaxValue - (numStDev * math.sqrt(Int.MaxValue)).toInt),
+      "Cannot support a sample size > Int.MaxValue - " +
+        s"$numStDev * math.sqrt(Int.MaxValue)")
+    if (num == 0) {
+      sqlContext.createDataset[T](Seq())
+    } else {
+      val initialCount = this.count()
+      if (initialCount == 0) {
+        sqlContext.createDataset[T](Seq())
+      } else {
+        val rand = new Random(seed)
+        if (!withReplacement && num >= initialCount) {
+          sqlContext.createDataset[T](Utils.randomizeInPlace(this.collect(), rand))
+        } else {
+          val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
+            withReplacement)
+          var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+          var numIters = 0
+          while (samples.length < num) {
+            samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+            numIters += 1
+          }
+          sqlContext.createDataset[T](Utils.randomizeInPlace(samples, rand).take(num))
+        }
+      }
+    }
+  }
+
+  /**
+    * Returns a new [[Dataset]] by sampling a fixed num of rows.
+    *
+    * @param withReplacement Sample with replacement or not.
+    * @param num num of rows to generate.
+    * @return the sampling [[Dataset]]
+    */
+  def takeSample(withReplacement: Boolean, num: Int): Dataset[T] = {
+    takeSample(withReplacement, num, Utils.random.nextLong)
   }
 
   /**

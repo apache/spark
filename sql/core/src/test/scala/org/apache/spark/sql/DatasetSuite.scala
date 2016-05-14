@@ -402,6 +402,76 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       3, 17, 27, 58, 62)
   }
 
+  test("takeSample") {
+    val n = 1000
+    val data = sparkContext.parallelize(1 to n, 2).toDS()
+    for (num <- List(0, 5, 20, 100)) {
+      val sample = data.takeSample(withReplacement = false, num = num)
+      assert(sample.count === num) // Got exactly num elements
+      assert(sample.distinct.count === num) // Elements are distinct
+      val sampleData = sample.collect()
+      assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement = false, 20, seed)
+      assert(sample.count() === 20) // Got exactly 20 elements
+      assert(sample.distinct.count === 20) // Elements are distinct
+      val sampleData = sample.collect()
+      assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement = false, 100, seed)
+      assert(sample.count === 100) // Got only 100 elements
+      assert(sample.distinct.count === 100) // Elements are distinct
+      val sampleData = sample.collect()
+      assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement = true, 20, seed)
+      assert(sample.count === 20) // Got exactly 20 elements
+      val sampleData = sample.collect()
+      assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
+    }
+    {
+      val sample = data.takeSample(withReplacement = true, num = 20)
+      assert(sample.count === 20) // Got exactly 100 elements
+    val sampleDisCount = sample.distinct.count
+      assert(sampleDisCount <= 20, "sampling with replacement returned all distinct elements")
+      val sampleData = sample.collect()
+      assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
+    }
+    {
+      val sample = data.takeSample(withReplacement = true, num = n)
+      assert(sample.count === n) // Got exactly 100 elements
+      // Chance of getting all distinct elements is astronomically low, so test we got < 100
+      assert(sample.distinct.count < n, "sampling with replacement returned all distinct elements")
+      val sampleData = sample.collect()
+      assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement = true, n, seed)
+      assert(sample.count === n) // Got exactly 100 elements
+      val sampleData = sample.collect()
+      assert(sampleData.forall(x => 1 <= x && x <= n), s"element not in [1, $n]")
+    }
+    for (seed <- 1 to 5) {
+      val sample = data.takeSample(withReplacement = true, 2 * n, seed)
+      assert(sample.count === 2 * n) // Got exactly 200 elements
+      // Chance of getting all distinct elements is still quite low, so test we got < 100
+      assert(sample.distinct.count < n, "sampling with replacement returned all distinct elements")
+    }
+    {
+      val emptySet = sparkContext.parallelize(Seq.empty[Int], 2)
+      val sample = emptySet.takeSample(false, 20, 1)
+      assert(sample.length === 0)
+    }
+    {
+      val emptySet = sparkContext.parallelize(Seq.empty[Int], 2)
+      val sample = emptySet.takeSample(false, 20, 1)
+      assert(sample.length === 0)
+    }
+  }
+
   test("SPARK-11436: we should rebind right encoder when join 2 datasets") {
     val ds1 = Seq("1", "2").toDS().as("a")
     val ds2 = Seq(2, 3).toDS().as("b")
