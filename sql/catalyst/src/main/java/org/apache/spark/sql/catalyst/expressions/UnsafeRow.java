@@ -172,6 +172,20 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
   }
 
   /**
+   * Update this UnsafeRow to point to another UnsafeRow.
+   *
+   * @param other the other UnsafeRow
+   */
+  public void pointTo(UnsafeRow other) {
+    assert numFields >= 0 : "numFields (" + numFields + ") should >= 0";
+    assert numFields == other.numFields : "point to another UnsafeRow with different numFields (" +
+      numFields + ")" ;
+    this.baseObject = other.baseObject;
+    this.baseOffset = other.baseOffset;
+    this.sizeInBytes = other.sizeInBytes;
+  }
+
+  /**
    * Update this UnsafeRow to point to the underlying byte array.
    *
    * @param buf byte array to point to
