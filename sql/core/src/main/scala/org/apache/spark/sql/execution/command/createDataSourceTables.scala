@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
 import java.util.regex.Pattern
 
 import scala.collection.mutable
@@ -357,7 +358,14 @@ object CreateDataSourceTableUtils extends Logging {
           // We don't want Hive metastore to implicitly create a table directory,
           // which may be not the one Data Source table is referring to,
           // yet which will be left behind when the table is dropped for an external table
-          locationUri = Some(relation.location.paths.map(_.toUri.toString).head),
+          locationUri = if (isExternal) {
+            Some(relation.location.paths.map(_.toUri.toString).map {
+              case p if new File(p).isDirectory => p
+              case p => new File(p).getParent
+            }.head)
+          } else {
+            None
+          },
           inputFormat = None,
           outputFormat = None,
           serde = None,
