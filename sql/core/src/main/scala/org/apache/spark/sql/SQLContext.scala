@@ -786,19 +786,6 @@ class SQLContext private[sql](
 object SQLContext {
 
   /**
-   * The active SQLContext for the current thread.
-   */
-  private val activeContext: InheritableThreadLocal[SQLContext] =
-    new InheritableThreadLocal[SQLContext]
-
-  /**
-   * Reference to the created SQLContext.
-   */
-  @transient private val instantiatedContext = new AtomicReference[SQLContext]()
-
-  @transient private val sqlListener = new AtomicReference[SQLListener]()
-
-  /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
    *
    * This function can be used to create a singleton SQLContext object that can be shared across
@@ -810,40 +797,23 @@ object SQLContext {
    * @since 1.5.0
    */
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    val ctx = activeContext.get()
-    if (ctx != null && !ctx.sparkContext.isStopped) {
-      return ctx
-    }
-
-    synchronized {
-      val ctx = instantiatedContext.get()
-      if (ctx == null || ctx.sparkContext.isStopped) {
-        new SQLContext(sparkContext)
-      } else {
-        ctx
-      }
-    }
+    SparkSession.getOrCreateContext(sparkContext)
   }
 
   private[sql] def clearInstantiatedContext(): Unit = {
-    instantiatedContext.set(null)
+    SparkSession.clearInstantiatedContext()
   }
 
   private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
-    synchronized {
-      val ctx = instantiatedContext.get()
-      if (ctx == null || ctx.sparkContext.isStopped) {
-        instantiatedContext.set(sqlContext)
-      }
-    }
+    SparkSession.setInstantiatedContext(sqlContext)
   }
 
   private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
-    Option(instantiatedContext.get())
+    SparkSession.getInstantiatedContextOption()
   }
 
   private[sql] def clearSqlListener(): Unit = {
-    sqlListener.set(null)
+    SparkSession.clearSqlListener()
   }
 
   /**
@@ -854,7 +824,7 @@ object SQLContext {
    * @since 1.6.0
    */
   def setActive(sqlContext: SQLContext): Unit = {
-    activeContext.set(sqlContext)
+    SparkSession.setActiveContext(sqlContext)
   }
 
   /**
@@ -864,11 +834,11 @@ object SQLContext {
    * @since 1.6.0
    */
   def clearActive(): Unit = {
-    activeContext.remove()
+    SparkSession.clearActiveContext()
   }
 
   private[sql] def getActive(): Option[SQLContext] = {
-    Option(activeContext.get())
+    SparkSession.getActiveContext()
   }
 
   /**
@@ -877,46 +847,23 @@ object SQLContext {
    * method for internal use.
    */
   private[sql] def beansToRows(
-        data: Iterator[_],
-        beanInfo: BeanInfo,
-        attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
-    val extractors =
-      beanInfo.getPropertyDescriptors.filterNot(_.getName == "class").map(_.getReadMethod)
-    val methodsToConverts = extractors.zip(attrs).map { case (e, attr) =>
-      (e, CatalystTypeConverters.createToCatalystConverter(attr.dataType))
-    }
-    data.map{ element =>
-      new GenericInternalRow(
-        methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
-      ): InternalRow
-    }
+      data: Iterator[_],
+      beanInfo: BeanInfo,
+      attrs: Seq[AttributeReference]): Iterator[InternalRow] = {
+    SparkSession.beansToRows(data, beanInfo, attrs)
   }
 
   /**
    * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
    */
   private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    if (sqlListener.get() == null) {
-      val listener = new SQLListener(sc.conf)
-      if (sqlListener.compareAndSet(null, listener)) {
-        sc.addSparkListener(listener)
-        sc.ui.foreach(new SQLTab(listener, _))
-      }
-    }
-    sqlListener.get()
+    SparkSession.createListenerAndUI(sc)
   }
 
   /**
    * Extract `spark.sql.*` properties from the conf and return them as a [[Properties]].
    */
   private[sql] def getSQLProperties(sparkConf: SparkConf): Properties = {
-    val properties = new Properties
-    sparkConf.getAll.foreach { case (key, value) =>
-      if (key.startsWith("spark.sql")) {
-        properties.setProperty(key, value)
-      }
-    }
-    properties
+    SparkSession.getSQLProperties(sparkConf)
   }
-
 }
