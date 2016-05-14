@@ -59,7 +59,7 @@ if __name__ == "__main__":
     print("Deviance: " + str(summary.deviance))
     print("Residual Degree Of Freedom: " + str(summary.residualDegreeOfFreedom))
     print("AIC: " + str(summary.aic))
-    print("DevianceResiduals: ")
+    print("Deviance Residuals: ")
     summary.residuals().show()
     # $example off$
 

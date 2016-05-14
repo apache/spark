@@ -40,7 +40,9 @@ public class JavaGeneralizedLinearRegressionExample {
 
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaGeneralizedLinearRegressionExample").getOrCreate();
+      .builder()
+      .appName("JavaGeneralizedLinearRegressionExample")
+      .getOrCreate();
 
     // $example on$
     // Load training data

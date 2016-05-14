@@ -68,7 +68,7 @@ object GeneralizedLinearRegressionExample {
     println(s"Deviance: ${summary.deviance}")
     println(s"Residual Degree Of Freedom: ${summary.residualDegreeOfFreedom}")
     println(s"AIC: ${summary.aic}")
-    println("DevianceResiduals: ")
+    println("Deviance Residuals: ")
     summary.residuals().show()
     // $example off$
 
