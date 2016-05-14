@@ -99,6 +99,17 @@ class ReplSuite extends SparkFunSuite {
     System.clearProperty("spark.driver.port")
   }
 
+  test("SPARK-15236: use in-memory catalog") {
+    Main.conf.set("spark.sql.catalogImplementation", "in-memory")
+    val output = runInterpreter("local",
+    """
+      |org.apache.spark.repl.Main.sparkContext.getConf.get("spark.sql.catalogImplementation")
+    """.stripMargin)
+    assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+    assertContains("res0: String = in-memory", output)
+  }
+
   test("simple foreach with accumulator") {
     val output = runInterpreter("local",
       """
