@@ -448,7 +448,7 @@ class TrainValidationSplitModel(Model, ValidatorParams):
         if extra is None:
             extra = dict()
         bestModel = self.bestModel.copy(extra)
-        validationMetrics = self.validationMetrics
+        validationMetrics = list(self.validationMetrics)
         return TrainValidationSplitModel(bestModel, validationMetrics)
 
 
