@@ -755,7 +755,7 @@ object SparkSession {
    * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
    * @since 2.0.0
    */
-  def builder: Builder = new Builder
+  def builder(): Builder = new Builder
 
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
