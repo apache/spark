@@ -62,8 +62,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   /**
    * Run a CLI operation and expect all the queries and expected answers to be returned.
-    *
-    * @param timeout maximum time for the commands to complete
+   * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
    * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
    *                       is taken as an immediate error condition. That is: if a line containing
@@ -84,7 +83,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
-      val s = s"""$cliScript
+      s"""$cliScript
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
          |  --conf spark.ui.enabled=false
@@ -92,9 +91,6 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
-
-       println(s)
-       s
     }
 
     var next = 0
