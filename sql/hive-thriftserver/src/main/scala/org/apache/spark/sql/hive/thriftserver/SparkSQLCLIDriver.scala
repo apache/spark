@@ -105,6 +105,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     sessionState.cmdProperties.entrySet().asScala.foreach { item =>
       val key = item.getKey.toString
       val value = item.getValue.toString
+      if (key == "hive.metastore.warehouse.dir") {
+        System.setProperty("spark.sql.warehouse.dir", value)
+      }
       // We do not propagate metastore options to the execution copy of hive.
       if (key != "javax.jdo.option.ConnectionURL") {
         conf.set(key, value)

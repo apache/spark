@@ -62,14 +62,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   /**
    * Run a CLI operation and expect all the queries and expected answers to be returned.
-   * @param timeout maximum time for the commands to complete
+    *
+    * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
    * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
    *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
-   *
-   * @param queriesAndExpectedAnswers one or more tuples of query + answer
+    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
       timeout: FiniteDuration,
@@ -84,7 +84,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     val command = {
       val cliScript = "../../bin/spark-sql".split("/").mkString(File.separator)
       val jdbcUrl = s"jdbc:derby:;databaseName=$metastorePath;create=true"
-      s"""$cliScript
+      val s = s"""$cliScript
          |  --master local
          |  --driver-java-options -Dderby.system.durability=test
          |  --conf spark.ui.enabled=false
@@ -92,6 +92,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
+
+       println(s)
+       s
     }
 
     var next = 0
@@ -237,5 +240,12 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("SPARK-11624 Spark SQL CLI should set sessionState only once") {
     runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
       "" -> "This is a test for Spark-11624")
+  }
+
+  test("set warehousePath") {
+    runCliWithin(2.minute)(
+      "set hive.metastore.warehouse.dir;"
+        -> s"hive.metastore.warehouse.dir\t$warehousePath"
+    )
   }
 }
