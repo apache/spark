@@ -256,6 +256,10 @@ class LogisticRegressionSuite
     assert(summarizer4.countInvalid === 2)
     assert(summarizer4.numClasses === 4)
 
+    val summarizer5 = new MultiClassSummarizer
+    assert(summarizer5.histogram.isEmpty)
+    assert(summarizer5.numClasses === 0)
+
     // small map merges large one
     val summarizerA = summarizer1.merge(summarizer2)
     assert(summarizerA.hashCode() === summarizer2.hashCode())
