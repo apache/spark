@@ -86,6 +86,22 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("reset") {
+    spark.wrapped.conf.clear()
+    val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
+    try{
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
+      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
+      sql(s"reset")
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
+    } finally {
+      sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
+    }
+  }
+
   test("invalid conf value") {
     spark.wrapped.conf.clear()
     val e = intercept[IllegalArgumentException] {
