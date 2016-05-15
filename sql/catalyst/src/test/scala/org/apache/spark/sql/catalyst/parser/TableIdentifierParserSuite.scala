@@ -51,7 +51,8 @@ class TableIdentifierParserSuite extends SparkFunSuite {
     "rollup", "row", "rows", "set", "smallint", "table", "timestamp", "to", "trigger",
     "true", "truncate", "update", "user", "using", "values", "with", "regexp", "rlike",
     "bigint", "binary", "boolean", "current_date", "current_timestamp", "date", "double", "float",
-    "int", "smallint", "timestamp", "at")
+    "int", "smallint", "timestamp", "at", "jar", "jars", "file", "files", "source", "list",
+    "reload")
 
   val hiveNonReservedRegression = Seq("left", "right", "left", "right", "full", "inner", "semi",
     "union", "except", "intersect", "schema", "database")
