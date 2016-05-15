@@ -2016,6 +2016,26 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assertDataStructuresEmpty()
   }
 
+  test("Eliminate creating duplicate stage") {
+    val rdd2 = new MyRDD(sc, 2, Nil)
+    val rdd1 = new MyRDD(sc, 2, Nil)
+    val dep1 = new ShuffleDependency(rdd1, new HashPartitioner(1))
+    val dep2 = new ShuffleDependency(rdd2, new HashPartitioner(1))
+    val rdd3 = new MyRDD(sc, 1, List(dep1, dep2), tracker = mapOutputTracker)
+    val dep3 = new ShuffleDependency(rdd3, new HashPartitioner(2))
+    val dep4 = new ShuffleDependency(rdd3, new HashPartitioner(2))
+    val rdd4 = new MyRDD(sc, 2, List(dep3), tracker = mapOutputTracker)
+    val rdd5 = new MyRDD(sc, 2, List(dep4), tracker = mapOutputTracker)
+    val dep5 = new ShuffleDependency(rdd4, new HashPartitioner(1))
+    val dep6 = new ShuffleDependency(rdd5, new HashPartitioner(1))
+    val rdd6 = new MyRDD(sc, 1, List(dep5, dep6), tracker = mapOutputTracker)
+    val dep7 = new ShuffleDependency(rdd6, new HashPartitioner(2))
+    val rdd7 = new MyRDD(sc, 2, List(dep7), tracker = mapOutputTracker)
+    submit(rdd7, Array(0, 1))
+    assert(scheduler.stageIdToStage.size == 8)
+    assert(scheduler.shuffleToMapStage.size == 7)
+  }
+
   /**
    * Assert that the supplied TaskSet has exactly the given hosts as its preferred locations.
    * Note that this checks only the host and not the executor ID.
