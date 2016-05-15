@@ -77,6 +77,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create a [[ResetCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   RESET;
+   * }}}
    */
   override def visitResetConfiguration(
       ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {

@@ -118,7 +118,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 }
 
 /**
- * Command that runs
+ * This command is for resetting SQLConf to the default values. Command that runs
  * {{{
  *   reset;
  * }}}
