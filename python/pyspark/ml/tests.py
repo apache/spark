@@ -595,7 +595,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         evaluator = RegressionEvaluator(metricName="rmse")
 
         grid = ParamGridBuilder() \
-            .addGrid(iee.inducedError, [100.0, 0.0, 10000.0])\
+            .addGrid(iee.inducedError, [100.0, 0.0, 10000.0]) \
             .build()
         tvs = TrainValidationSplit(estimator=iee, estimatorParamMaps=grid, evaluator=evaluator)
         tvsModel = tvs.fit(dataset)
@@ -662,8 +662,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         self.assertEqual(loadedLrModel.intercept, lrModel.intercept)
 
     def test_copy(self):
-        sqlContext = SQLContext(self.sc)
-        dataset = sqlContext.createDataFrame([
+        dataset = self.spark.createDataFrame([
             (10, 10.0),
             (50, 50.0),
             (100, 100.0),
