@@ -32,8 +32,7 @@ import org.apache.hadoop.hive.common.{HiveInterruptCallback, HiveInterruptUtils}
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.exec.Utilities
-import org.apache.hadoop.hive.ql.processors.{AddResourceProcessor, CommandProcessor,
-  CommandProcessorFactory, SetProcessor}
+import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.thrift.transport.TSocket
 
@@ -312,7 +311,10 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
       if (proc != null) {
         // scalastyle:off println
         if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
-          proc.isInstanceOf[AddResourceProcessor]) {
+            proc.isInstanceOf[AddResourceProcessor] || proc.isInstanceOf[DeleteResourceProcessor] ||
+            proc.isInstanceOf[ListResourceProcessor] || proc.isInstanceOf[ReloadProcessor] ||
+            proc.isInstanceOf[ResetProcessor] || proc.isInstanceOf[CompileProcessor] ||
+            proc.isInstanceOf[DfsProcessor] || proc.isInstanceOf[CryptoProcessor]) {
           val driver = new SparkSQLDriver
 
           driver.init()
