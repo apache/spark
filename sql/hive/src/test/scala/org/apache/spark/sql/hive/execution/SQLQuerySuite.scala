@@ -1534,10 +1534,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
 
     sql("drop table test_table")
-    assert(
-      !fs.exists(path),
-      "Once a managed table has been dropped, " +
-        "dirs of this table should also have been deleted.")
+    assert(fs.exists(path), "This is an external table, so the data should not have been dropped")
   }
 
   test("SPARK-14981: DESC not supported for sorting columns") {
