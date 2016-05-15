@@ -341,8 +341,6 @@ case class FlatMapGroupsInRExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val isSerializedRData =
-      if (inputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
     val isDeserializedRData =
       if (outputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
     val serializerForR = if (!isDeserializedRData) {
@@ -351,11 +349,7 @@ case class FlatMapGroupsInRExec(
       SerializationFormats.BYTE
     }
     val (deserializerForR, colNames) =
-      if (!isSerializedRData) {
-        (SerializationFormats.ROW, inputSchema.fieldNames)
-      } else {
-        (SerializationFormats.BYTE, null)
-      }
+      (SerializationFormats.ROW, inputSchema.fieldNames)
 
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
@@ -367,16 +361,16 @@ case class FlatMapGroupsInRExec(
         func, deserializerForR, serializerForR, packageNames, broadcastVars,
         isDataFrame = true, colNames = colNames)
 
-      grouped.flatMap { case (key, rowIter) =>
-        val iter = rowIter.map(getValue)
+      val hasGroups = grouped.hasNext
+      val groupedRBytes = grouped.flatMap { case (key, rowIter) =>
+        val deserializedIter = rowIter.map(getValue)
         val newIter =
-          if (!isSerializedRData) {
-            (iter.asInstanceOf[Iterator[Row]].map {row => rowToRBytes(row)})
-          } else {
-            (iter.asInstanceOf[Iterator[Row]].map { row => row(0) })
-          }
-
-        val outputIter = runner.compute(newIter, -1)
+          deserializedIter.asInstanceOf[Iterator[Row]].map {row => rowToRBytes(row)}
+        val newKey = rowToRBytes(getKey(key).asInstanceOf[Row])
+        Iterator((newKey, newIter))
+      }
+      if (hasGroups) {
+        val outputIter = runner.compute(groupedRBytes, -1, true)
         if (!isDeserializedRData) {
           val result = outputIter.map { bytes => bytesToRow(bytes, outputSchema) }
           result.map(outputObject)
@@ -384,6 +378,8 @@ case class FlatMapGroupsInRExec(
           val result = outputIter.map { bytes => Row.fromSeq(Seq(bytes)) }
           result.map(outputObject)
         }
+      } else {
+        Iterator.empty
       }
     }
   }

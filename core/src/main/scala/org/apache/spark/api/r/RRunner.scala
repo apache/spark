@@ -55,7 +55,8 @@ private[spark] class RRunner[U](
 
   def compute(
       inputIterator: Iterator[_],
-      partitionIndex: Int): Iterator[U] = {
+      partitionIndex: Int,
+      gapplyMode: Boolean): Iterator[U] = {
     // Timing start
     bootTime = System.currentTimeMillis / 1000.0
 
@@ -74,7 +75,7 @@ private[spark] class RRunner[U](
     // the socket used to send out the input of task
     serverSocket.setSoTimeout(10000)
     val inSocket = serverSocket.accept()
-    startStdinThread(inSocket.getOutputStream(), inputIterator, partitionIndex)
+    startStdinThread(inSocket.getOutputStream(), inputIterator, partitionIndex, gapplyMode)
 
     // the socket used to receive the output of task
     val outSocket = serverSocket.accept()
@@ -114,7 +115,8 @@ private[spark] class RRunner[U](
   private def startStdinThread(
       output: OutputStream,
       iter: Iterator[_],
-      partitionIndex: Int): Unit = {
+      partitionIndex: Int,
+      gapplyMode: Boolean): Unit = {
     val env = SparkEnv.get
     val taskContext = TaskContext.get()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
@@ -161,6 +163,12 @@ private[spark] class RRunner[U](
             dataOut.writeInt(1)
           }
 
+          if (!gapplyMode) {
+            dataOut.writeInt(0)
+          } else {
+            dataOut.writeInt(1)
+          }
+
           val printOut = new PrintStream(stream)
 
           def writeElem(elem: Any): Unit = {
@@ -180,6 +188,12 @@ private[spark] class RRunner[U](
 
           for (elem <- iter) {
             elem match {
+              case (key, innerIter: Iterator[_]) =>
+                for (innerElem <- innerIter) {
+                  writeElem(innerElem)
+                }
+                // Writes key which can be used as a boundary in group-aggregate
+                SerDe.writeObject(dataOut, key.asInstanceOf[Array[Byte]])
               case (key, value) =>
                 writeElem(key)
                 writeElem(value)

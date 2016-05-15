@@ -2172,7 +2172,7 @@ test_that("gapply() on a DataFrame", {
       y <- (data.frame(x$a[1], x$c[1], mean(x$b), stringsAsFactors = FALSE))
     },
     schema)
-  actual <- collect(arrange(df3, "a"))
+  actual <- collect(arrange(df3, "a", decreasing = FALSE))
   expected <- collect(select(df, "a", "b", "c"))
   expected <- data.frame(aggregate(expected$b, by = list(expected$a, expected$c), FUN = mean))
   colnames(expected) <- c("a", "c", "avg")

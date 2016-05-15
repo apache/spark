@@ -197,6 +197,31 @@ readMultipleObjects <- function(inputCon) {
   data # this is a list of named lists now
 }
 
+readMultipleObjectsWithKeys <- function(inputCon) {
+  # readMultipleObjects will read multiple continuous objects from
+  # a DataOutputStream. There is no preceding field telling the count
+  # of the objects, so the number of objects varies, we try to read
+  # all objects in a loop until the end of the stream.
+  data <- list()
+  subData <- list()
+  while (TRUE) {
+    # If reaching the end of the stream, type returned should be "".
+    type <- readType(inputCon)
+    print(type)
+    if (type == "") {
+      break
+    } else if (type == "r") {
+      # key boundary detected
+      readTypedObject(inputCon, type)
+      data[[length(data) + 1L]] <- subData
+      subData <- list()
+    } else {
+      subData[[length(subData) + 1L]] <- readTypedObject(inputCon, type)
+    }
+  }
+  data # this is a list of named lists now
+}
+
 readRowList <- function(obj) {
   # readRowList is meant for use inside an lapply. As a result, it is
   # necessary to open a standalone connection for the row and consume
