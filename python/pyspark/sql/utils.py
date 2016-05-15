@@ -67,19 +67,26 @@ def capture_sql_exception(f):
                                              e.java_exception.getStackTrace()))
             if s.startswith('org.apache.spark.sql.AnalysisException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.DatabaseAlreadyExistsException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.DatabaseAlreadyExistsException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.TempFunctionAlreadyExistsException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.TempFunctionAlreadyExistsException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
@@ -87,7 +94,8 @@ def capture_sql_exception(f):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
-            if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException: '):
+            if s.startswith(
+                    'org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
