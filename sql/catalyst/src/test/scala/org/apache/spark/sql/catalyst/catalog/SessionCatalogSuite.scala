@@ -234,7 +234,7 @@ class SessionCatalogSuite extends SparkFunSuite {
 
     val tempTable1 = Range(1, 10, 1, 10, Seq())
     e = intercept[AnalysisException] {
-      catalog.createTempTable(illegalTableName, tempTable1, overrideIfExists = false)
+      catalog.createTempView(illegalTableName, tempTable1, overrideIfExists = false)
     }
     assert(e.getMessage.contains(expectedMsg))
 

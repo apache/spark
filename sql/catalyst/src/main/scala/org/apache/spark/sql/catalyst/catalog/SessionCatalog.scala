@@ -116,7 +116,6 @@ class SessionCatalog(
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
 
-
   /**
    * Format database name, taking into account case sensitivity.
    * Verify the name validity if nameCheck is true.
