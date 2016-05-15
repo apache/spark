@@ -51,6 +51,12 @@ class ContinuousQueryException(CapturedException):
     """
 
 
+class QueryExecutionException(CapturedException):
+    """
+    Failed to execute a query.
+    """
+
+
 def capture_sql_exception(f):
     def deco(*a, **kw):
         try:
@@ -61,12 +67,40 @@ def capture_sql_exception(f):
                                              e.java_exception.getStackTrace()))
             if s.startswith('org.apache.spark.sql.AnalysisException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.DatabaseAlreadyExistsException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.PartitionAlreadyExistsException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.FunctionAlreadyExistsException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.TempFunctionAlreadyExistsException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchTableException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchPartitionsException: '):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis.NoSuchTempFunctionException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
                 raise ParseException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.ContinuousQueryException: '):
                 raise ContinuousQueryException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
+                raise QueryExecutionException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('java.lang.IllegalArgumentException: '):
                 raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
             raise
