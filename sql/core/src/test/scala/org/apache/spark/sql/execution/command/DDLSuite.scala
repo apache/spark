@@ -1002,26 +1002,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     )
   }
 
-  test("set command") {
-    checkAnswer(
-      sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
-      Nil)
-
-    checkAnswer(
-      sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
-      Row("spark.sql.groupByOrdinal", "true"))
-
-    sql("SET spark.sql.groupByOrdinal=false")
-
-    checkAnswer(
-      sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
-      Row("spark.sql.groupByOrdinal", "false"))
-
-    checkAnswer(
-      sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
-      Row("spark.sql.groupByOrdinal", "false"))
-  }
-
   test("drop default database") {
     Seq("true", "false").foreach { caseSensitive =>
       withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
