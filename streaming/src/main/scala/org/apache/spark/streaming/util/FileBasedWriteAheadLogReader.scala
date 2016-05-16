@@ -16,11 +16,12 @@
  */
 package org.apache.spark.streaming.util
 
-import java.io.{IOException, Closeable, EOFException}
+import java.io.{Closeable, EOFException, IOException}
 import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.Logging
+
+import org.apache.spark.internal.Logging
 
 /**
  * A reader for reading write ahead log files written using

@@ -31,7 +31,7 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
 import org.apache.spark.ui.jobs.UIData._
-import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.util.{Distribution, Utils}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
@@ -97,15 +97,15 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val parameterTaskSortColumn = request.getParameter("task.sort")
       val parameterTaskSortDesc = request.getParameter("task.desc")
       val parameterTaskPageSize = request.getParameter("task.pageSize")
+      val parameterTaskPrevPageSize = request.getParameter("task.prevPageSize")
 
       val taskPage = Option(parameterTaskPage).map(_.toInt).getOrElse(1)
-      val taskSortColumn = Option(parameterTaskSortColumn).getOrElse("Index")
+      val taskSortColumn = Option(parameterTaskSortColumn).map { sortColumn =>
+        UIUtils.decodeURLParameter(sortColumn)
+      }.getOrElse("Index")
       val taskSortDesc = Option(parameterTaskSortDesc).map(_.toBoolean).getOrElse(false)
       val taskPageSize = Option(parameterTaskPageSize).map(_.toInt).getOrElse(100)
-
-      // If this is set, expand the dag visualization by default
-      val expandDagVizParam = request.getParameter("expandDagViz")
-      val expandDagViz = expandDagVizParam != null && expandDagVizParam.toBoolean
+      val taskPrevPageSize = Option(parameterTaskPrevPageSize).map(_.toInt).getOrElse(taskPageSize)
 
       val stageId = parameterId.toInt
       val stageAttemptId = parameterAttempt.toInt
@@ -259,21 +259,27 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val dagViz = UIUtils.showDagVizForStage(
         stageId, operationGraphListener.getOperationGraphForStage(stageId))
 
-      val maybeExpandDagViz: Seq[Node] =
-        if (expandDagViz) {
-          UIUtils.expandDagVizOnLoad(forJob = false)
-        } else {
-          Seq.empty
-        }
-
       val accumulableHeaders: Seq[String] = Seq("Accumulable", "Value")
-      def accumulableRow(acc: AccumulableInfo): Elem =
-        <tr><td>{acc.name}</td><td>{acc.value}</td></tr>
+      def accumulableRow(acc: AccumulableInfo): Seq[Node] = {
+        (acc.name, acc.value) match {
+          case (Some(name), Some(value)) => <tr><td>{name}</td><td>{value}</td></tr>
+          case _ => Seq.empty[Node]
+        }
+      }
       val accumulableTable = UIUtils.listingTable(
         accumulableHeaders,
         accumulableRow,
         externalAccumulables.toSeq)
 
+      val page: Int = {
+        // If the user has changed to a larger page size, then go to page 1 in order to avoid
+        // IndexOutOfBoundsException.
+        if (taskPageSize <= taskPrevPageSize) {
+          taskPage
+        } else {
+          1
+        }
+      }
       val currentTime = System.currentTimeMillis()
       val (taskTable, taskTableHTML) = try {
         val _taskTable = new TaskPagedTable(
@@ -292,10 +298,17 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           sortColumn = taskSortColumn,
           desc = taskSortDesc
         )
-        (_taskTable, _taskTable.table(taskPage))
+        (_taskTable, _taskTable.table(page))
       } catch {
         case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
-          (null, <div class="alert alert-error">{e.getMessage}</div>)
+          val errorMessage =
+            <div class="alert alert-error">
+              <p>Error while rendering stage table:</p>
+              <pre>
+                {Utils.exceptionString(e)}
+              </pre>
+            </div>
+          (null, errorMessage)
       }
 
       val jsForScrollingDownToTaskTable =
@@ -317,7 +330,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
         else taskTable.dataSource.slicedTaskIds
 
       // Excludes tasks which failed and have incomplete metrics
-      val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.taskMetrics.isDefined)
+      val validTasks = tasks.filter(t => t.taskInfo.status == "SUCCESS" && t.metrics.isDefined)
 
       val summaryTable: Option[Seq[Node]] =
         if (validTasks.size == 0) {
@@ -335,8 +348,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             getDistributionQuantiles(data).map(d => <td>{Utils.bytesToString(d.toLong)}</td>)
           }
 
-          val deserializationTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.executorDeserializeTime.toDouble
+          val deserializationTimes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.executorDeserializeTime.toDouble
           }
           val deserializationQuantiles =
             <td>
@@ -346,13 +359,13 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +: getFormattedTimeQuantiles(deserializationTimes)
 
-          val serviceTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.executorRunTime.toDouble
+          val serviceTimes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.executorRunTime.toDouble
           }
           val serviceQuantiles = <td>Duration</td> +: getFormattedTimeQuantiles(serviceTimes)
 
-          val gcTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.jvmGCTime.toDouble
+          val gcTimes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.jvmGCTime.toDouble
           }
           val gcQuantiles =
             <td>
@@ -361,8 +374,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +: getFormattedTimeQuantiles(gcTimes)
 
-          val serializationTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.resultSerializationTime.toDouble
+          val serializationTimes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.resultSerializationTime.toDouble
           }
           val serializationQuantiles =
             <td>
@@ -372,8 +385,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
               </span>
             </td> +: getFormattedTimeQuantiles(serializationTimes)
 
-          val gettingResultTimes = validTasks.map { case TaskUIData(info, _, _) =>
-            getGettingResultTime(info, currentTime).toDouble
+          val gettingResultTimes = validTasks.map { taskUIData: TaskUIData =>
+            getGettingResultTime(taskUIData.taskInfo, currentTime).toDouble
           }
           val gettingResultQuantiles =
             <td>
@@ -384,12 +397,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +:
             getFormattedTimeQuantiles(gettingResultTimes)
 
-          val peakExecutionMemory = validTasks.map { case TaskUIData(info, _, _) =>
-            info.accumulables
-              .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-              .map { acc => acc.update.getOrElse("0").toLong }
-              .getOrElse(0L)
-              .toDouble
+          val peakExecutionMemory = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.peakExecutionMemory.toDouble
           }
           val peakExecutionMemoryQuantiles = {
             <td>
@@ -403,8 +412,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           // The scheduler delay includes the network delay to send the task to the worker
           // machine and to send back the result (but not the time to fetch the task result,
           // if it needed to be fetched from the block manager on the worker).
-          val schedulerDelays = validTasks.map { case TaskUIData(info, metrics, _) =>
-            getSchedulerDelay(info, metrics.get, currentTime).toDouble
+          val schedulerDelays = validTasks.map { taskUIData: TaskUIData =>
+            getSchedulerDelay(taskUIData.taskInfo, taskUIData.metrics.get, currentTime).toDouble
           }
           val schedulerDelayTitle = <td><span data-toggle="tooltip"
             title={ToolTips.SCHEDULER_DELAY} data-placement="right">Scheduler Delay</span></td>
@@ -418,30 +427,30 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             )
           }
 
-          val inputSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.inputMetrics.map(_.bytesRead).getOrElse(0L).toDouble
+          val inputSizes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.inputMetrics.bytesRead.toDouble
           }
 
-          val inputRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.inputMetrics.map(_.recordsRead).getOrElse(0L).toDouble
+          val inputRecords = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.inputMetrics.recordsRead.toDouble
           }
 
           val inputQuantiles = <td>Input Size / Records</td> +:
             getFormattedSizeQuantilesWithRecords(inputSizes, inputRecords)
 
-          val outputSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.outputMetrics.map(_.bytesWritten).getOrElse(0L).toDouble
+          val outputSizes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.outputMetrics.bytesWritten.toDouble
           }
 
-          val outputRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.outputMetrics.map(_.recordsWritten).getOrElse(0L).toDouble
+          val outputRecords = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.outputMetrics.recordsWritten.toDouble
           }
 
           val outputQuantiles = <td>Output Size / Records</td> +:
             getFormattedSizeQuantilesWithRecords(outputSizes, outputRecords)
 
-          val shuffleReadBlockedTimes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleReadMetrics.map(_.fetchWaitTime).getOrElse(0L).toDouble
+          val shuffleReadBlockedTimes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.shuffleReadMetrics.fetchWaitTime.toDouble
           }
           val shuffleReadBlockedQuantiles =
             <td>
@@ -452,11 +461,11 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +:
             getFormattedTimeQuantiles(shuffleReadBlockedTimes)
 
-          val shuffleReadTotalSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleReadMetrics.map(_.totalBytesRead).getOrElse(0L).toDouble
+          val shuffleReadTotalSizes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.shuffleReadMetrics.totalBytesRead.toDouble
           }
-          val shuffleReadTotalRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleReadMetrics.map(_.recordsRead).getOrElse(0L).toDouble
+          val shuffleReadTotalRecords = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.shuffleReadMetrics.recordsRead.toDouble
           }
           val shuffleReadTotalQuantiles =
             <td>
@@ -467,8 +476,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +:
             getFormattedSizeQuantilesWithRecords(shuffleReadTotalSizes, shuffleReadTotalRecords)
 
-          val shuffleReadRemoteSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleReadMetrics.map(_.remoteBytesRead).getOrElse(0L).toDouble
+          val shuffleReadRemoteSizes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.shuffleReadMetrics.remoteBytesRead.toDouble
           }
           val shuffleReadRemoteQuantiles =
             <td>
@@ -479,25 +488,25 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
             </td> +:
             getFormattedSizeQuantiles(shuffleReadRemoteSizes)
 
-          val shuffleWriteSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleWriteMetrics.map(_.shuffleBytesWritten).getOrElse(0L).toDouble
+          val shuffleWriteSizes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.shuffleWriteMetrics.bytesWritten.toDouble
           }
 
-          val shuffleWriteRecords = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.shuffleWriteMetrics.map(_.shuffleRecordsWritten).getOrElse(0L).toDouble
+          val shuffleWriteRecords = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.shuffleWriteMetrics.recordsWritten.toDouble
           }
 
           val shuffleWriteQuantiles = <td>Shuffle Write Size / Records</td> +:
             getFormattedSizeQuantilesWithRecords(shuffleWriteSizes, shuffleWriteRecords)
 
-          val memoryBytesSpilledSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.memoryBytesSpilled.toDouble
+          val memoryBytesSpilledSizes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.memoryBytesSpilled.toDouble
           }
           val memoryBytesSpilledQuantiles = <td>Shuffle spill (memory)</td> +:
             getFormattedSizeQuantiles(memoryBytesSpilledSizes)
 
-          val diskBytesSpilledSizes = validTasks.map { case TaskUIData(_, metrics, _) =>
-            metrics.get.diskBytesSpilled.toDouble
+          val diskBytesSpilledSizes = validTasks.map { taskUIData: TaskUIData =>
+            taskUIData.metrics.get.diskBytesSpilled.toDouble
           }
           val diskBytesSpilledQuantiles = <td>Shuffle spill (disk)</td> +:
             getFormattedSizeQuantiles(diskBytesSpilledSizes)
@@ -558,7 +567,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
       val content =
         summary ++
         dagViz ++
-        maybeExpandDagViz ++
         showAdditionalMetrics ++
         makeTimeline(
           // Only show the tasks in the table
@@ -593,13 +601,12 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
         def toProportion(time: Long) = time.toDouble / totalExecutionTime * 100
 
-        val metricsOpt = taskUIData.taskMetrics
+        val metricsOpt = taskUIData.metrics
         val shuffleReadTime =
-          metricsOpt.flatMap(_.shuffleReadMetrics.map(_.fetchWaitTime)).getOrElse(0L)
+          metricsOpt.map(_.shuffleReadMetrics.fetchWaitTime).getOrElse(0L)
         val shuffleReadTimeProportion = toProportion(shuffleReadTime)
         val shuffleWriteTime =
-          (metricsOpt.flatMap(_.shuffleWriteMetrics
-            .map(_.shuffleWriteTime)).getOrElse(0L) / 1e6).toLong
+          (metricsOpt.map(_.shuffleWriteMetrics.writeTime).getOrElse(0L) / 1e6).toLong
         val shuffleWriteTimeProportion = toProportion(shuffleWriteTime)
 
         val serializationTime = metricsOpt.map(_.resultSerializationTime).getOrElse(0L)
@@ -860,7 +867,8 @@ private[ui] class TaskDataSource(
   def slicedTaskIds: Set[Long] = _slicedTaskIds
 
   private def taskRow(taskData: TaskUIData): TaskTableRowData = {
-    val TaskUIData(info, metrics, errorMessage) = taskData
+    val info = taskData.taskInfo
+    val metrics = taskData.metrics
     val duration = if (info.status == "RUNNING") info.timeRunning(currentTime)
       else metrics.map(_.executorRunTime).getOrElse(1L)
     val formatDuration = if (info.status == "RUNNING") UIUtils.formatDuration(duration)
@@ -871,31 +879,31 @@ private[ui] class TaskDataSource(
     val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
     val gettingResultTime = getGettingResultTime(info, currentTime)
 
-    val (taskInternalAccumulables, taskExternalAccumulables) =
-      info.accumulables.partition(_.internal)
-    val externalAccumulableReadable = taskExternalAccumulables.map { acc =>
-      StringEscapeUtils.escapeHtml4(s"${acc.name}: ${acc.update.get}")
-    }
-    val peakExecutionMemoryUsed = taskInternalAccumulables
-      .find { acc => acc.name == InternalAccumulator.PEAK_EXECUTION_MEMORY }
-      .map { acc => acc.update.getOrElse("0").toLong }
-      .getOrElse(0L)
+    val externalAccumulableReadable = info.accumulables
+      .filterNot(_.internal)
+      .flatMap { a =>
+        (a.name, a.update) match {
+          case (Some(name), Some(update)) => Some(StringEscapeUtils.escapeHtml4(s"$name: $update"))
+          case _ => None
+        }
+      }
+    val peakExecutionMemoryUsed = metrics.map(_.peakExecutionMemory).getOrElse(0L)
 
-    val maybeInput = metrics.flatMap(_.inputMetrics)
+    val maybeInput = metrics.map(_.inputMetrics)
     val inputSortable = maybeInput.map(_.bytesRead).getOrElse(0L)
     val inputReadable = maybeInput
-      .map(m => s"${Utils.bytesToString(m.bytesRead)} (${m.readMethod.toString.toLowerCase()})")
+      .map(m => s"${Utils.bytesToString(m.bytesRead)}")
       .getOrElse("")
     val inputRecords = maybeInput.map(_.recordsRead.toString).getOrElse("")
 
-    val maybeOutput = metrics.flatMap(_.outputMetrics)
+    val maybeOutput = metrics.map(_.outputMetrics)
     val outputSortable = maybeOutput.map(_.bytesWritten).getOrElse(0L)
     val outputReadable = maybeOutput
       .map(m => s"${Utils.bytesToString(m.bytesWritten)}")
       .getOrElse("")
     val outputRecords = maybeOutput.map(_.recordsWritten.toString).getOrElse("")
 
-    val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics)
+    val maybeShuffleRead = metrics.map(_.shuffleReadMetrics)
     val shuffleReadBlockedTimeSortable = maybeShuffleRead.map(_.fetchWaitTime).getOrElse(0L)
     val shuffleReadBlockedTimeReadable =
       maybeShuffleRead.map(ms => UIUtils.formatDuration(ms.fetchWaitTime)).getOrElse("")
@@ -909,14 +917,14 @@ private[ui] class TaskDataSource(
     val shuffleReadRemoteSortable = remoteShuffleBytes.getOrElse(0L)
     val shuffleReadRemoteReadable = remoteShuffleBytes.map(Utils.bytesToString).getOrElse("")
 
-    val maybeShuffleWrite = metrics.flatMap(_.shuffleWriteMetrics)
-    val shuffleWriteSortable = maybeShuffleWrite.map(_.shuffleBytesWritten).getOrElse(0L)
+    val maybeShuffleWrite = metrics.map(_.shuffleWriteMetrics)
+    val shuffleWriteSortable = maybeShuffleWrite.map(_.bytesWritten).getOrElse(0L)
     val shuffleWriteReadable = maybeShuffleWrite
-      .map(m => s"${Utils.bytesToString(m.shuffleBytesWritten)}").getOrElse("")
+      .map(m => s"${Utils.bytesToString(m.bytesWritten)}").getOrElse("")
     val shuffleWriteRecords = maybeShuffleWrite
-      .map(_.shuffleRecordsWritten.toString).getOrElse("")
+      .map(_.recordsWritten.toString).getOrElse("")
 
-    val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
+    val maybeWriteTime = metrics.map(_.shuffleWriteMetrics.writeTime)
     val writeTimeSortable = maybeWriteTime.getOrElse(0L)
     val writeTimeReadable = maybeWriteTime.map(t => t / (1000 * 1000)).map { ms =>
       if (ms == 0) "" else UIUtils.formatDuration(ms)
@@ -1006,7 +1014,7 @@ private[ui] class TaskDataSource(
       shuffleRead,
       shuffleWrite,
       bytesSpilled,
-      errorMessage.getOrElse(""))
+      taskData.errorMessage.getOrElse(""))
   }
 
   /**
@@ -1215,7 +1223,14 @@ private[ui] class TaskPagedTable(
 
   override def tableId: String = "task-table"
 
-  override def tableCssClass: String = "table table-bordered table-condensed table-striped"
+  override def tableCssClass: String =
+    "table table-bordered table-condensed table-striped table-head-clickable"
+
+  override def pageSizeFormField: String = "task.pageSize"
+
+  override def prevPageSizeFormField: String = "task.prevPageSize"
+
+  override def pageNumberFormField: String = "task.page"
 
   override val dataSource: TaskDataSource = new TaskDataSource(
     data,
@@ -1232,24 +1247,16 @@ private[ui] class TaskPagedTable(
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    s"${basePath}&task.page=$page&task.sort=${encodedSortColumn}&task.desc=${desc}" +
-      s"&task.pageSize=${pageSize}"
+    basePath +
+      s"&$pageNumberFormField=$page" +
+      s"&task.sort=$encodedSortColumn" +
+      s"&task.desc=$desc" +
+      s"&$pageSizeFormField=$pageSize"
   }
 
-  override def goButtonJavascriptFunction: (String, String) = {
-    val jsFuncName = "goToTaskPage"
+  override def goButtonFormPath: String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
-    val jsFunc = s"""
-      |currentTaskPageSize = ${pageSize}
-      |function goToTaskPage(page, pageSize) {
-      |  // Set page to 1 if the page size changes
-      |  page = pageSize == currentTaskPageSize ? page : 1;
-      |  var url = "${basePath}&task.sort=${encodedSortColumn}&task.desc=${desc}" +
-      |    "&task.page=" + page + "&task.pageSize=" + pageSize;
-      |  window.location.href = url;
-      |}
-     """.stripMargin
-    (jsFuncName, jsFunc)
+    s"$basePath&task.sort=$encodedSortColumn&task.desc=$desc"
   }
 
   def headers: Seq[Node] = {
@@ -1298,21 +1305,27 @@ private[ui] class TaskPagedTable(
     val headerRow: Seq[Node] = {
       taskHeadersAndCssClasses.map { case (header, cssClass) =>
         if (header == sortColumn) {
-          val headerLink =
-            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.desc=${!desc}" +
-              s"&task.pageSize=${pageSize}"
-          val js = Unparsed(s"window.location.href='${headerLink}'")
+          val headerLink = Unparsed(
+            basePath +
+              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.desc=${!desc}" +
+              s"&task.pageSize=$pageSize")
           val arrow = if (desc) "&#x25BE;" else "&#x25B4;" // UP or DOWN
-          <th class={cssClass} onclick={js} style="cursor: pointer;">
-            {header}
-            <span>&nbsp;{Unparsed(arrow)}</span>
+          <th class={cssClass}>
+            <a href={headerLink}>
+              {header}
+              <span>&nbsp;{Unparsed(arrow)}</span>
+            </a>
           </th>
         } else {
-          val headerLink =
-            s"$basePath&task.sort=${URLEncoder.encode(header, "UTF-8")}&task.pageSize=${pageSize}"
-          val js = Unparsed(s"window.location.href='${headerLink}'")
-          <th class={cssClass} onclick={js} style="cursor: pointer;">
-            {header}
+          val headerLink = Unparsed(
+            basePath +
+              s"&task.sort=${URLEncoder.encode(header, "UTF-8")}" +
+              s"&task.pageSize=$pageSize")
+          <th class={cssClass}>
+            <a href={headerLink}>
+              {header}
+            </a>
           </th>
         }
       }

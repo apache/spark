@@ -25,13 +25,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.DataTypes;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
@@ -39,19 +37,20 @@ import org.apache.spark.sql.types.StructType;
 
 
 public class JavaHashingTFSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
+  private transient SparkSession spark;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaHashingTFSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaHashingTFSuite")
+      .getOrCreate();
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -66,21 +65,21 @@ public class JavaHashingTFSuite {
       new StructField("sentence", DataTypes.StringType, false, Metadata.empty())
     });
 
-    DataFrame sentenceData = jsql.createDataFrame(data, schema);
+    Dataset<Row> sentenceData = spark.createDataFrame(data, schema);
     Tokenizer tokenizer = new Tokenizer()
       .setInputCol("sentence")
       .setOutputCol("words");
-    DataFrame wordsData = tokenizer.transform(sentenceData);
+    Dataset<Row> wordsData = tokenizer.transform(sentenceData);
     int numFeatures = 20;
     HashingTF hashingTF = new HashingTF()
       .setInputCol("words")
       .setOutputCol("rawFeatures")
       .setNumFeatures(numFeatures);
-    DataFrame featurizedData = hashingTF.transform(wordsData);
+    Dataset<Row> featurizedData = hashingTF.transform(wordsData);
     IDF idf = new IDF().setInputCol("rawFeatures").setOutputCol("features");
     IDFModel idfModel = idf.fit(featurizedData);
-    DataFrame rescaledData = idfModel.transform(featurizedData);
-    for (Row r : rescaledData.select("features", "label").take(3)) {
+    Dataset<Row> rescaledData = idfModel.transform(featurizedData);
+    for (Row r : rescaledData.select("features", "label").takeAsList(3)) {
       Vector features = r.getAs(0);
       Assert.assertEquals(features.size(), numFeatures);
     }

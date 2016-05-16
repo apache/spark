@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.JavaConverters._
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.types.{DataType, Decimal}
 import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
@@ -24,6 +26,7 @@ import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 class GenericArrayData(val array: Array[Any]) extends ArrayData {
 
   def this(seq: Seq[Any]) = this(seq.toArray)
+  def this(list: java.util.List[Any]) = this(list.asScala)
 
   // TODO: This is boxing.  We should specialize.
   def this(primitiveArray: Array[Int]) = this(primitiveArray.toSeq)

@@ -17,11 +17,10 @@
 
 from abc import abstractmethod, ABCMeta
 
-from pyspark import since
-from pyspark.ml.wrapper import JavaWrapper
-from pyspark.ml.param import Param, Params
+from pyspark import since, keyword_only
+from pyspark.ml.wrapper import JavaParams
+from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
-from pyspark.ml.util import keyword_only
 from pyspark.mllib.common import inherit_doc
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
@@ -81,7 +80,7 @@ class Evaluator(Params):
 
 
 @inherit_doc
-class JavaEvaluator(Evaluator, JavaWrapper):
+class JavaEvaluator(JavaParams, Evaluator):
     """
     Base class for :py:class:`Evaluator`s that wrap Java/Scala
     implementations.
@@ -106,8 +105,11 @@ class JavaEvaluator(Evaluator, JavaWrapper):
 @inherit_doc
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol):
     """
-    Evaluator for binary classification, which expects two input
-    columns: rawPrediction and label.
+    .. note:: Experimental
+
+    Evaluator for binary classification, which expects two input columns: rawPrediction and label.
+    The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
+    1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
     >>> from pyspark.mllib.linalg import Vectors
     >>> scoreAndLabels = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]),
@@ -123,9 +125,9 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     .. versionadded:: 1.4.0
     """
 
-    # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName",
-                       "metric name in evaluation (areaUnderROC|areaUnderPR)")
+                       "metric name in evaluation (areaUnderROC|areaUnderPR)",
+                       typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, rawPredictionCol="rawPrediction", labelCol="label",
@@ -137,9 +139,6 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         super(BinaryClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.BinaryClassificationEvaluator", self.uid)
-        #: param for metric name in evaluation (areaUnderROC|areaUnderPR)
-        self.metricName = Param(self, "metricName",
-                                "metric name in evaluation (areaUnderROC|areaUnderPR)")
         self._setDefault(rawPredictionCol="rawPrediction", labelCol="label",
                          metricName="areaUnderROC")
         kwargs = self.__init__._input_kwargs
@@ -150,8 +149,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._paramMap[self.metricName] = value
-        return self
+        return self._set(metricName=value)
 
     @since("1.4.0")
     def getMetricName(self):
@@ -176,6 +174,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 @inherit_doc
 class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     """
+    .. note:: Experimental
+
     Evaluator for Regression, which expects two input
     columns: prediction and label.
 
@@ -197,7 +197,12 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
     # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
-                       "metric name in evaluation (mse|rmse|r2|mae)")
+                       """metric name in evaluation - one of:
+                       rmse - root mean squared error (default)
+                       mse - mean squared error
+                       r2 - r^2 metric
+                       mae - mean absolute error.""",
+                       typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
@@ -209,9 +214,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         super(RegressionEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.RegressionEvaluator", self.uid)
-        #: param for metric name in evaluation (mse|rmse|r2|mae)
-        self.metricName = Param(self, "metricName",
-                                "metric name in evaluation (mse|rmse|r2|mae)")
         self._setDefault(predictionCol="prediction", labelCol="label",
                          metricName="rmse")
         kwargs = self.__init__._input_kwargs
@@ -222,8 +224,7 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._paramMap[self.metricName] = value
-        return self
+        return self._set(metricName=value)
 
     @since("1.4.0")
     def getMetricName(self):
@@ -248,8 +249,11 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 @inherit_doc
 class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     """
+    .. note:: Experimental
+
     Evaluator for Multiclass Classification, which expects two input
     columns: prediction and label.
+
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
     >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["prediction", "label"])
@@ -264,10 +268,10 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
     .. versionadded:: 1.5.0
     """
-    # a placeholder to make it appear in the generated doc
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|precision|recall|weightedPrecision|weightedRecall)")
+                       "(f1|precision|recall|weightedPrecision|weightedRecall)",
+                       typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, predictionCol="prediction", labelCol="label",
@@ -279,10 +283,6 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         super(MulticlassClassificationEvaluator, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator", self.uid)
-        # param for metric name in evaluation (f1|precision|recall|weightedPrecision|weightedRecall)
-        self.metricName = Param(self, "metricName",
-                                "metric name in evaluation"
-                                " (f1|precision|recall|weightedPrecision|weightedRecall)")
         self._setDefault(predictionCol="prediction", labelCol="label",
                          metricName="f1")
         kwargs = self.__init__._input_kwargs
@@ -293,8 +293,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
         """
         Sets the value of :py:attr:`metricName`.
         """
-        self._paramMap[self.metricName] = value
-        return self
+        return self._set(metricName=value)
 
     @since("1.5.0")
     def getMetricName(self):

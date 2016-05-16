@@ -19,11 +19,10 @@ package org.apache.spark.storage
 
 import java.io.File
 
-import org.apache.spark.util.Utils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-import org.apache.spark.util.SparkConfWithEnv
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 /**
  * Tests for the spark.local.dir and SPARK_LOCAL_DIRS configuration options.

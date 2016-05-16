@@ -20,13 +20,13 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent_2.10</artifactId>
-    <version>1.6.0-SNAPSHOT</version>
+    <artifactId>spark-parent_2.11</artifactId>
+    <version>2.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-core_2.10</artifactId>
+  <artifactId>spark-core_2.11</artifactId>
   <properties>
     <sbt.project.name>core</sbt.project.name>
   </properties>
@@ -125,12 +125,15 @@
       <artifactId>jetty-servlet</artifactId>
       <scope>compile</scope>
     </dependency>
-    <!-- Because we mark jetty as provided and shade it, its dependency
-         orbit is ignored, so we explicitly list it here (see SPARK-5557).-->
     <dependency>
-      <groupId>org.eclipse.jetty.orbit</groupId>
-      <artifactId>javax.servlet</artifactId>
-      <version>${orbit.version}</version>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlets</artifactId>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>javax.servlet-api</artifactId>
+      <version>${javaxservlet.version}</version>
     </dependency>
 
     <dependency>
@@ -186,34 +189,32 @@
       <artifactId>commons-net</artifactId>
     </dependency>
     <dependency>
-      <groupId>${akka.group}</groupId>
-      <artifactId>akka-remote_${scala.binary.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>${akka.group}</groupId>
-      <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>${akka.group}</groupId>
-      <artifactId>akka-testkit_${scala.binary.version}</artifactId>
-      <scope>test</scope>
-    </dependency>
-    <dependency>
       <groupId>org.scala-lang</groupId>
       <artifactId>scala-library</artifactId>
     </dependency>
     <dependency>
       <groupId>org.json4s</groupId>
       <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
-      <version>3.2.10</version>
     </dependency>
     <dependency>
-      <groupId>com.sun.jersey</groupId>
+      <groupId>org.glassfish.jersey.core</groupId>
+      <artifactId>jersey-client</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.core</groupId>
+      <artifactId>jersey-common</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.core</groupId>
       <artifactId>jersey-server</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.sun.jersey</groupId>
-      <artifactId>jersey-core</artifactId>
+      <groupId>org.glassfish.jersey.containers</groupId>
+      <artifactId>jersey-container-servlet</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jersey.containers</groupId>
+      <artifactId>jersey-container-servlet-core</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.mesos</groupId>
@@ -223,6 +224,10 @@
     <dependency>
       <groupId>io.netty</groupId>
       <artifactId>netty-all</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.netty</groupId>
+      <artifactId>netty</artifactId>
     </dependency>
     <dependency>
       <groupId>com.clearspring.analytics</groupId>
@@ -268,41 +273,13 @@
       <version>${oro.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.tachyonproject</groupId>
-      <artifactId>tachyon-client</artifactId>
-      <version>0.8.1</version>
-      <exclusions>
-        <exclusion>
-          <groupId>org.apache.hadoop</groupId>
-          <artifactId>hadoop-client</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.curator</groupId>
-          <artifactId>curator-client</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.curator</groupId>
-          <artifactId>curator-framework</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.apache.curator</groupId>
-          <artifactId>curator-recipes</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>org.tachyonproject</groupId>
-          <artifactId>tachyon-underfs-glusterfs</artifactId>
-        </exclusion>
-      </exclusions>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-java</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.seleniumhq.selenium</groupId>
-      <artifactId>selenium-java</artifactId>
-      <exclusions>
-        <exclusion>
-          <groupId>com.google.guava</groupId>
-          <artifactId>guava</artifactId>
-        </exclusion>
-      </exclusions>
+      <artifactId>selenium-htmlunit-driver</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- Added for selenium: -->
@@ -350,7 +327,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.9</version>
+      <version>0.10.1</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -381,7 +358,7 @@
               <overWriteIfNewer>true</overWriteIfNewer>
               <useSubDirectoryPerType>true</useSubDirectoryPerType>
               <includeArtifactIds>
-                guava,jetty-io,jetty-servlet,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security
+                guava,jetty-io,jetty-servlet,jetty-servlets,jetty-continuation,jetty-http,jetty-plus,jetty-util,jetty-server,jetty-security
               </includeArtifactIds>
               <silent>true</silent>
             </configuration>

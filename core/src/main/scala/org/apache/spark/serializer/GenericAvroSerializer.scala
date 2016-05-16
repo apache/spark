@@ -19,6 +19,7 @@ package org.apache.spark.serializer
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
 import scala.collection.mutable
 
@@ -29,7 +30,7 @@ import org.apache.avro.generic.{GenericData, GenericRecord}
 import org.apache.avro.io._
 import org.apache.commons.io.IOUtils
 
-import org.apache.spark.{SparkException, SparkEnv}
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 
 /**
@@ -71,7 +72,7 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
   def compress(schema: Schema): Array[Byte] = compressCache.getOrElseUpdate(schema, {
     val bos = new ByteArrayOutputStream()
     val out = codec.compressedOutputStream(bos)
-    out.write(schema.toString.getBytes("UTF-8"))
+    out.write(schema.toString.getBytes(StandardCharsets.UTF_8))
     out.close()
     bos.toByteArray
   })
@@ -81,9 +82,12 @@ private[serializer] class GenericAvroSerializer(schemas: Map[Long, String])
    * seen values so to limit the number of times that decompression has to be done.
    */
   def decompress(schemaBytes: ByteBuffer): Schema = decompressCache.getOrElseUpdate(schemaBytes, {
-    val bis = new ByteArrayInputStream(schemaBytes.array())
+    val bis = new ByteArrayInputStream(
+      schemaBytes.array(),
+      schemaBytes.arrayOffset() + schemaBytes.position(),
+      schemaBytes.remaining())
     val bytes = IOUtils.toByteArray(codec.compressedInputStream(bis))
-    new Schema.Parser().parse(new String(bytes, "UTF-8"))
+    new Schema.Parser().parse(new String(bytes, StandardCharsets.UTF_8))
   })
 
   /**

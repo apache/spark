@@ -23,26 +23,30 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaNormalizerSuite {
+  private transient SparkSession spark;
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaNormalizerSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaNormalizerSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -53,17 +57,17 @@ public class JavaNormalizerSuite {
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 3.0)),
       new VectorIndexerSuite.FeatureData(Vectors.dense(1.0, 4.0))
     ));
-    DataFrame dataFrame = jsql.createDataFrame(points, VectorIndexerSuite.FeatureData.class);
+    Dataset<Row> dataFrame = spark.createDataFrame(points, VectorIndexerSuite.FeatureData.class);
     Normalizer normalizer = new Normalizer()
       .setInputCol("features")
       .setOutputCol("normFeatures");
 
     // Normalize each Vector using $L^2$ norm.
-    DataFrame l2NormData = normalizer.transform(dataFrame, normalizer.p().w(2));
+    Dataset<Row> l2NormData = normalizer.transform(dataFrame, normalizer.p().w(2));
     l2NormData.count();
 
     // Normalize each Vector using $L^\infty$ norm.
-    DataFrame lInfNormData =
+    Dataset<Row> lInfNormData =
       normalizer.transform(dataFrame, normalizer.p().w(Double.POSITIVE_INFINITY));
     lInfNormData.count();
   }

@@ -27,37 +27,42 @@ import scala.Tuple3;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaLDASuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaLDA");
-    ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<Tuple2<Long, Vector>>();
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaLDASuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
+
+    ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();
     for (int i = 0; i < LDASuite.tinyCorpus().length; i++) {
-      tinyCorpus.add(new Tuple2<Long, Vector>((Long)LDASuite.tinyCorpus()[i]._1(),
-          LDASuite.tinyCorpus()[i]._2()));
+      tinyCorpus.add(new Tuple2<>((Long) LDASuite.tinyCorpus()[i]._1(),
+        LDASuite.tinyCorpus()[i]._2()));
     }
-    JavaRDD<Tuple2<Long, Vector>> tmpCorpus = sc.parallelize(tinyCorpus, 2);
+    JavaRDD<Tuple2<Long, Vector>> tmpCorpus = jsc.parallelize(tinyCorpus, 2);
     corpus = JavaPairRDD.fromJavaRDD(tmpCorpus);
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -95,7 +100,7 @@ public class JavaLDASuite implements Serializable {
       .setMaxIterations(5)
       .setSeed(12345);
 
-    DistributedLDAModel model = (DistributedLDAModel)lda.run(corpus);
+    DistributedLDAModel model = (DistributedLDAModel) lda.run(corpus);
 
     // Check: basic parameters
     LocalLDAModel localModel = model.toLocal();
@@ -124,7 +129,7 @@ public class JavaLDASuite implements Serializable {
         public Boolean call(Tuple2<Long, Vector> tuple2) {
           return Vectors.norm(tuple2._2(), 1.0) != 0.0;
         }
-    });
+      });
     assertEquals(topicDistributions.count(), nonEmptyCorpus.count());
 
     // Check: javaTopTopicsPerDocuments
@@ -144,7 +149,7 @@ public class JavaLDASuite implements Serializable {
   }
 
   @Test
-  public void OnlineOptimizerCompatibility() {
+  public void onlineOptimizerCompatibility() {
     int k = 3;
     double topicSmoothing = 1.2;
     double termSmoothing = 1.2;
@@ -179,7 +184,7 @@ public class JavaLDASuite implements Serializable {
 
   @Test
   public void localLdaMethods() {
-    JavaRDD<Tuple2<Long, Vector>> docs = sc.parallelize(toyData, 2);
+    JavaRDD<Tuple2<Long, Vector>> docs = jsc.parallelize(toyData, 2);
     JavaPairRDD<Long, Vector> pairedDocs = JavaPairRDD.fromJavaRDD(docs);
 
     // check: topicDistributions
@@ -189,9 +194,9 @@ public class JavaLDASuite implements Serializable {
     double logPerplexity = toyModel.logPerplexity(pairedDocs);
 
     // check: logLikelihood.
-    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<Tuple2<Long, Vector>>();
-    docsSingleWord.add(new Tuple2<Long, Vector>(0L, Vectors.dense(1.0, 0.0, 0.0)));
-    JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(sc.parallelize(docsSingleWord));
+    ArrayList<Tuple2<Long, Vector>> docsSingleWord = new ArrayList<>();
+    docsSingleWord.add(new Tuple2<>(0L, Vectors.dense(1.0, 0.0, 0.0)));
+    JavaPairRDD<Long, Vector> single = JavaPairRDD.fromJavaRDD(jsc.parallelize(docsSingleWord));
     double logLikelihood = toyModel.logLikelihood(single);
   }
 
@@ -199,7 +204,7 @@ public class JavaLDASuite implements Serializable {
   private static int tinyVocabSize = LDASuite.tinyVocabSize();
   private static Matrix tinyTopics = LDASuite.tinyTopics();
   private static Tuple2<int[], double[]>[] tinyTopicDescription =
-      LDASuite.tinyTopicDescription();
+    LDASuite.tinyTopicDescription();
   private JavaPairRDD<Long, Vector> corpus;
   private LocalLDAModel toyModel = LDASuite.toyModel();
   private ArrayList<Tuple2<Long, Vector>> toyData = LDASuite.javaToyData();

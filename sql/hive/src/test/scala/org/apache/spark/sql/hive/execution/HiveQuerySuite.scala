@@ -26,14 +26,15 @@ import scala.util.Try
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.catalyst.expressions.Cast
-import org.apache.spark.sql.catalyst.plans.logical.Project
-import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoin
-import org.apache.spark.sql.hive._
-import org.apache.spark.sql.hive.test.TestHive._
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.{SparkException, SparkFiles}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.Cast
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.catalyst.plans.logical.Project
+import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
+import org.apache.spark.sql.hive._
+import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
+import org.apache.spark.sql.hive.test.TestHive._
 
 case class TestData(a: Int, b: String)
 
@@ -48,7 +49,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
   override def beforeAll() {
-    TestHive.cacheTables = true
+    super.beforeAll()
+    TestHive.setCacheTables(true)
     // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
@@ -56,17 +58,19 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   override def afterAll() {
-    TestHive.cacheTables = false
-    TimeZone.setDefault(originalTimeZone)
-    Locale.setDefault(originalLocale)
-    sql("DROP TEMPORARY FUNCTION udtf_count2")
+    try {
+      TestHive.setCacheTables(false)
+      TimeZone.setDefault(originalTimeZone)
+      Locale.setDefault(originalLocale)
+      sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
+    } finally {
+      super.afterAll()
+    }
   }
 
-  test("SPARK-4908: concurrent hive native commands") {
-    (1 to 100).par.map { _ =>
-      sql("USE default")
-      sql("SHOW DATABASES")
-    }
+  private def assertUnsupportedFeature(body: => Unit): Unit = {
+    val e = intercept[ParseException] { body }
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
   }
 
   // Testing the Broadcast based join for cartesian join (cross join)
@@ -111,7 +115,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   test("SPARK-10484 Optimize the Cartesian (Cross) Join with broadcast based JOIN") {
     def assertBroadcastNestedLoopJoin(sqlText: String): Unit = {
       assert(sql(sqlText).queryExecution.sparkPlan.collect {
-        case _: BroadcastNestedLoopJoin => 1
+        case _: BroadcastNestedLoopJoinExec => 1
       }.nonEmpty)
     }
 
@@ -120,60 +124,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assertBroadcastNestedLoopJoin(spark_10484_3)
     assertBroadcastNestedLoopJoin(spark_10484_4)
   }
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #1",
-    """
-      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH ROLLUP
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #2",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM src group by key%5, key-5
-      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for Rollup #3",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      WITH ROLLUP ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for CUBE #1",
-    """
-      SELECT count(*) AS cnt, key % 5,GROUPING__ID FROM src group by key%5 WITH CUBE
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for CUBE #2",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      WITH CUBE ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
-
-  createQueryTest("SPARK-8976 Wrong Result for GroupingSet",
-    """
-      SELECT
-        count(*) AS cnt,
-        key % 5 as k1,
-        key-5 as k2,
-        GROUPING__ID as k3
-      FROM (SELECT key, key%2, key - 5 FROM src) t group by key%5, key-5
-      GROUPING SETS (key%5, key-5) ORDER BY cnt, k1, k2, k3 LIMIT 10
-    """.stripMargin)
 
   createQueryTest("insert table with generator with column name",
     """
@@ -322,12 +272,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     "SELECT 11 % 10, IF((101.1 % 100.0) BETWEEN 1.01 AND 1.11, \"true\", \"false\"), " +
       "(101 / 2) % 10 FROM src LIMIT 1")
 
-  test("Query expressed in SQL") {
-    setConf("spark.sql.dialect", "sql")
-    assert(sql("SELECT 1").collect() === Array(Row(1)))
-    setConf("spark.sql.dialect", "hiveql")
-  }
-
   test("Query expressed in HiveQL") {
     sql("FROM src SELECT key").collect()
   }
@@ -386,9 +330,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   createQueryTest("partitioned table scan",
     "SELECT ds, hr, key, value FROM srcpart")
-
-  createQueryTest("hash",
-    "SELECT hash('test') FROM src LIMIT 1")
 
   createQueryTest("create table as",
     """
@@ -657,7 +598,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       |select * where key = 4
     """.stripMargin)
 
-  // test get_json_object again Hive, because the HiveCompatabilitySuite cannot handle result
+  // test get_json_object again Hive, because the HiveCompatibilitySuite cannot handle result
   // with newline in it.
   createQueryTest("get_json_object #1",
     "SELECT get_json_object(src_json.json, '$') FROM src_json")
@@ -719,11 +660,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("implement identity function using case statement") {
     val actual = sql("SELECT (CASE key WHEN key THEN key END) FROM src")
+      .rdd
       .map { case Row(i: Int) => i }
       .collect()
       .toSet
 
     val expected = sql("SELECT key FROM src")
+      .rdd
       .map { case Row(i: Int) => i }
       .collect()
       .toSet
@@ -757,7 +700,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   def isExplanation(result: DataFrame): Boolean = {
     val explanation = result.select('plan).collect().map { case Row(plan: String) => plan }
-    explanation.contains("== Physical Plan ==")
+    explanation.head.startsWith("== Physical Plan ==")
   }
 
   test("SPARK-1704: Explain commands as a DataFrame") {
@@ -771,14 +714,14 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2180: HAVING support in GROUP BY clauses (positive)") {
     val fixture = List(("foo", 2), ("bar", 1), ("foo", 4), ("bar", 3))
-      .zipWithIndex.map {case Pair(Pair(value, attr), key) => HavingRow(key, value, attr)}
+      .zipWithIndex.map {case ((value, attr), key) => HavingRow(key, value, attr)}
     TestHive.sparkContext.parallelize(fixture).toDF().registerTempTable("having_test")
     val results =
       sql("SELECT value, max(attr) AS attr FROM having_test GROUP BY value HAVING attr > 3")
       .collect()
-      .map(x => Pair(x.getString(0), x.getInt(1)))
+      .map(x => (x.getString(0), x.getInt(1)))
 
-    assert(results === Array(Pair("foo", 4)))
+    assert(results === Array(("foo", 4)))
     TestHive.reset()
   }
 
@@ -788,6 +731,24 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   test("SPARK-2225: turn HAVING without GROUP BY into a simple filter") {
     assert(sql("select key from src having key > 490").collect().size < 100)
+  }
+
+  test("union/except/intersect") {
+    assertResult(Array(Row(1), Row(1))) {
+      sql("select 1 as a union all select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a union distinct select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a union select 1 as a").collect()
+    }
+    assertResult(Array()) {
+      sql("select 1 as a except select 1 as a").collect()
+    }
+    assertResult(Array(Row(1))) {
+      sql("select 1 as a intersect select 1 as a").collect()
+    }
   }
 
   test("SPARK-5383 alias for udfs with multi output columns") {
@@ -807,29 +768,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(sql("select array(*) from src limit 5").collect().size == 5)
     assert(sql("select concat(key, *) from src limit 5").collect().size == 5)
     assert(sql("select array(key, *) from src limit 5").collect().size == 5)
-  }
-
-  test("Query Hive native command execution result") {
-    val databaseName = "test_native_commands"
-
-    assertResult(0) {
-      sql(s"DROP DATABASE IF EXISTS $databaseName").count()
-    }
-
-    assertResult(0) {
-      sql(s"CREATE DATABASE $databaseName").count()
-    }
-
-    assert(
-      sql("SHOW DATABASES")
-        .select('result)
-        .collect()
-        .map(_.getString(0))
-        .contains(databaseName))
-
-    assert(isExplanation(sql(s"EXPLAIN SELECT key, COUNT(*) FROM src GROUP BY key")))
-
-    TestHive.reset()
   }
 
   test("Exactly once semantics for DDL and command statements") {
@@ -879,40 +817,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("DESCRIBE default.test_describe_commands1")
         .select('col_name, 'data_type, 'comment)
         .collect()
-    }
-
-    // Describe a column is a native command
-    assertResult(Array(Array("value", "string", "from deserializer"))) {
-      sql("DESCRIBE test_describe_commands1 value")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
-    // Describe a column is a native command
-    assertResult(Array(Array("value", "string", "from deserializer"))) {
-      sql("DESCRIBE default.test_describe_commands1 value")
-        .select('result)
-        .collect()
-        .map(_.getString(0).split("\t").map(_.trim))
-    }
-
-    // Describe a partition is a native command
-    assertResult(
-      Array(
-        Array("key", "int"),
-        Array("value", "string"),
-        Array("dt", "string"),
-        Array(""),
-        Array("# Partition Information"),
-        Array("# col_name", "data_type", "comment"),
-        Array(""),
-        Array("dt", "string"))
-    ) {
-      sql("DESCRIBE test_describe_commands1 PARTITION (dt='2008-06-08')")
-        .select('result)
-        .collect()
-        .map(_.getString(0).replaceAll("None", "").trim.split("\t").map(_.trim))
     }
 
     // Describe a registered temporary table.
@@ -991,9 +895,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(checkAddFileRDD.first())
   }
 
-  case class LogEntry(filename: String, message: String)
-  case class LogFile(name: String)
-
   createQueryTest("dynamic_partition",
     """
       |DROP TABLE IF EXISTS dynamic_part_table;
@@ -1045,7 +946,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
         .mkString("/")
 
       // Loads partition data to a temporary table to verify contents
-      val path = s"$warehousePath/dynamic_part_table/$partFolder/part-00000"
+      val path = s"${sparkSession.warehousePath}/dynamic_part_table/$partFolder/part-00000"
 
       sql("DROP TABLE IF EXISTS dp_verify")
       sql("CREATE TABLE dp_verify(intcol INT)")
@@ -1077,7 +978,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql("SET hive.exec.dynamic.partition.mode=strict")
 
     // Should throw when using strict dynamic partition mode without any static partition
-    intercept[SparkException] {
+    intercept[AnalysisException] {
       sql(
         """INSERT INTO TABLE dp_test PARTITION(dp)
           |SELECT key, value, key % 5 FROM src
@@ -1169,51 +1070,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     assert(getConf(testKey, "0") == "")
   }
 
-  test("SET commands semantics for a HiveContext") {
-    // Adapted from its SQL counterpart.
-    val testKey = "spark.sql.key.usedfortestonly"
-    val testVal = "test.val.0"
-    val nonexistentKey = "nonexistent"
-    def collectResults(df: DataFrame): Set[Any] =
-      df.collect().map {
-        case Row(key: String, value: String) => key -> value
-        case Row(key: String, defaultValue: String, doc: String) => (key, defaultValue, doc)
-      }.toSet
-    conf.clear()
-
-    val expectedConfs = conf.getAllDefinedConfs.toSet
-    assertResult(expectedConfs)(collectResults(sql("SET -v")))
-
-    // "SET" itself returns all config variables currently specified in SQLConf.
-    // TODO: Should we be listing the default here always? probably...
-    assert(sql("SET").collect().size === TestHiveContext.overrideConfs.size)
-
-    val defaults = collectResults(sql("SET"))
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey=$testVal"))
-    }
-
-    assert(hiveconf.get(testKey, "") === testVal)
-    assertResult(defaults ++ Set(testKey -> testVal))(collectResults(sql("SET")))
-
-    sql(s"SET ${testKey + testKey}=${testVal + testVal}")
-    assert(hiveconf.get(testKey + testKey, "") == testVal + testVal)
-    assertResult(defaults ++ Set(testKey -> testVal, (testKey + testKey) -> (testVal + testVal))) {
-      collectResults(sql("SET"))
-    }
-
-    // "SET key"
-    assertResult(Set(testKey -> testVal)) {
-      collectResults(sql(s"SET $testKey"))
-    }
-
-    assertResult(Set(nonexistentKey -> "<undefined>")) {
-      collectResults(sql(s"SET $nonexistentKey"))
-    }
-
-    conf.clear()
-  }
-
   test("current_database with multiple sessions") {
     sql("create database a")
     sql("use a")
@@ -1246,18 +1102,35 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   }
 
+  test("use database") {
+    val currentDatabase = sql("select current_database()").first().getString(0)
+
+    sql("CREATE DATABASE hive_test_db")
+    sql("USE hive_test_db")
+    assert("hive_test_db" == sql("select current_database()").first().getString(0))
+
+    intercept[AnalysisException] {
+      sql("USE not_existing_db")
+    }
+
+    sql(s"USE $currentDatabase")
+    assert(currentDatabase == sql("select current_database()").first().getString(0))
+  }
+
   test("lookup hive UDF in another thread") {
     val e = intercept[AnalysisException] {
       range(1).selectExpr("not_a_udf()")
     }
-    assert(e.getMessage.contains("undefined function not_a_udf"))
+    assert(e.getMessage.contains("Undefined function"))
+    assert(e.getMessage.contains("not_a_udf"))
     var success = false
     val t = new Thread("test") {
       override def run(): Unit = {
         val e = intercept[AnalysisException] {
           range(1).selectExpr("not_a_udf()")
         }
-        assert(e.getMessage.contains("undefined function not_a_udf"))
+        assert(e.getMessage.contains("Undefined function"))
+        assert(e.getMessage.contains("not_a_udf"))
         success = true
       }
     }
@@ -1271,7 +1144,60 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   // Put tests that depend on specific Hive settings before these last two test,
   // since they modify /clear stuff.
+
+  test("role management commands are not supported") {
+    assertUnsupportedFeature { sql("CREATE ROLE my_role") }
+    assertUnsupportedFeature { sql("DROP ROLE my_role") }
+    assertUnsupportedFeature { sql("SHOW CURRENT ROLES") }
+    assertUnsupportedFeature { sql("SHOW ROLES") }
+    assertUnsupportedFeature { sql("SHOW GRANT") }
+    assertUnsupportedFeature { sql("SHOW ROLE GRANT USER my_principal") }
+    assertUnsupportedFeature { sql("SHOW PRINCIPALS my_role") }
+    assertUnsupportedFeature { sql("SET ROLE my_role") }
+    assertUnsupportedFeature { sql("GRANT my_role TO USER my_user") }
+    assertUnsupportedFeature { sql("GRANT ALL ON my_table TO USER my_user") }
+    assertUnsupportedFeature { sql("REVOKE my_role FROM USER my_user") }
+    assertUnsupportedFeature { sql("REVOKE ALL ON my_table FROM USER my_user") }
+  }
+
+  test("import/export commands are not supported") {
+    assertUnsupportedFeature { sql("IMPORT TABLE my_table FROM 'my_path'") }
+    assertUnsupportedFeature { sql("EXPORT TABLE my_table TO 'my_path'") }
+  }
+
+  test("some show commands are not supported") {
+    assertUnsupportedFeature { sql("SHOW COMPACTIONS") }
+    assertUnsupportedFeature { sql("SHOW TRANSACTIONS") }
+    assertUnsupportedFeature { sql("SHOW INDEXES ON my_table") }
+    assertUnsupportedFeature { sql("SHOW LOCKS my_table") }
+  }
+
+  test("lock/unlock table and database commands are not supported") {
+    assertUnsupportedFeature { sql("LOCK TABLE my_table SHARED") }
+    assertUnsupportedFeature { sql("UNLOCK TABLE my_table") }
+    assertUnsupportedFeature { sql("LOCK DATABASE my_db SHARED") }
+    assertUnsupportedFeature { sql("UNLOCK DATABASE my_db") }
+  }
+
+  test("create/drop/alter index commands are not supported") {
+    assertUnsupportedFeature {
+      sql("CREATE INDEX my_index ON TABLE my_table(a) as 'COMPACT' WITH DEFERRED REBUILD")}
+    assertUnsupportedFeature { sql("DROP INDEX my_index ON my_table") }
+    assertUnsupportedFeature { sql("ALTER INDEX my_index ON my_table REBUILD")}
+    assertUnsupportedFeature {
+      sql("ALTER INDEX my_index ON my_table set IDXPROPERTIES (\"prop1\"=\"val1_new\")")}
+  }
+
+  test("create/drop macro commands are not supported") {
+    assertUnsupportedFeature {
+      sql("CREATE TEMPORARY MACRO SIGMOID (x DOUBLE) 1.0 / (1.0 + EXP(-x))")
+    }
+    assertUnsupportedFeature { sql("DROP TEMPORARY MACRO SIGMOID") }
+  }
 }
 
 // for SPARK-2180 test
 case class HavingRow(key: Int, value: String, attr: Int)
+
+case class LogEntry(filename: String, message: String)
+case class LogFile(name: String)

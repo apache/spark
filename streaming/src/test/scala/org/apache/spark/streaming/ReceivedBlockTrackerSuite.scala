@@ -29,7 +29,8 @@ import org.apache.hadoop.conf.Configuration
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
+import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StreamBlockId
 import org.apache.spark.streaming.receiver.BlockManagerBasedStoreResult
 import org.apache.spark.streaming.scheduler._
@@ -41,7 +42,6 @@ class ReceivedBlockTrackerSuite
   extends SparkFunSuite with BeforeAndAfter with Matchers with Logging {
 
   val hadoopConf = new Configuration()
-  val akkaTimeout = 10 seconds
   val streamId = 1
 
   var allReceivedBlockTrackers = new ArrayBuffer[ReceivedBlockTracker]()

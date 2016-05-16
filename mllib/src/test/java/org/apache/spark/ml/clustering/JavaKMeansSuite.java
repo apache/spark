@@ -21,37 +21,37 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import org.apache.spark.api.java.JavaSparkContext;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaKMeansSuite implements Serializable {
 
   private transient int k = 5;
-  private transient JavaSparkContext sc;
-  private transient DataFrame dataset;
-  private transient SQLContext sql;
+  private transient Dataset<Row> dataset;
+  private transient SparkSession spark;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaKMeansSuite");
-    sql = new SQLContext(sc);
-
-    dataset = KMeansSuite.generateKMeansData(sql, 50, 3, k);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaKMeansSuite")
+      .getOrCreate();
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k);
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -62,10 +62,10 @@ public class JavaKMeansSuite implements Serializable {
     Vector[] centers = model.clusterCenters();
     assertEquals(k, centers.length);
 
-    DataFrame transformed = model.transform(dataset);
+    Dataset<Row> transformed = model.transform(dataset);
     List<String> columns = Arrays.asList(transformed.columns());
     List<String> expectedColumns = Arrays.asList("features", "prediction");
-    for (String column: expectedColumns) {
+    for (String column : expectedColumns) {
       assertTrue(columns.contains(column));
     }
   }

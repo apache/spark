@@ -17,14 +17,13 @@
 
 package org.apache.spark.repl
 
-import java.io.{BufferedReader, FileReader}
+import java.io.BufferedReader
 
-import Predef.{println => _, _}
-import scala.util.Properties.{jdkHome, javaVersion, versionString, javaVmName}
-
-import scala.tools.nsc.interpreter.{JPrintWriter, ILoop}
+import scala.Predef.{println => _, _}
 import scala.tools.nsc.Settings
+import scala.tools.nsc.interpreter.{ILoop, JPrintWriter}
 import scala.tools.nsc.util.stringFromStream
+import scala.util.Properties.{javaVersion, javaVmName, versionString}
 
 /**
  *  A Spark-specific interactive shell.
@@ -37,23 +36,19 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def initializeSpark() {
     intp.beQuietDuring {
       processLine("""
+        @transient val spark = org.apache.spark.repl.Main.createSparkSession()
         @transient val sc = {
-          val _sc = org.apache.spark.repl.Main.createSparkContext()
-          println("Spark context available as sc " +
+          val _sc = spark.sparkContext
+          _sc.uiWebUrl.foreach(webUrl => println(s"Spark context Web UI available at ${webUrl}"))
+          println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
+          println("Spark session available as 'spark'.")
           _sc
         }
         """)
-      processLine("""
-        @transient val sqlContext = {
-          val _sqlContext = org.apache.spark.repl.Main.createSQLContext()
-          println("SQL context available as sqlContext.")
-          _sqlContext
-        }
-        """)
       processLine("import org.apache.spark.SparkContext._")
-      processLine("import sqlContext.implicits._")
-      processLine("import sqlContext.sql")
+      processLine("import spark.implicits._")
+      processLine("import spark.sql")
       processLine("import org.apache.spark.sql.functions._")
     }
   }
@@ -75,11 +70,9 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     echo("Type :help for more information.")
   }
 
-  import LoopCommand.{ cmd, nullary }
+  private val blockedCommands = Set("implicits", "javap", "power", "type", "kind", "reset")
 
-  private val blockedCommands = Set("implicits", "javap", "power", "type", "kind")
-
-  /** Standard commands **/
+  /** Standard commands */
   lazy val sparkStandardCommands: List[SparkILoop.this.LoopCommand] =
     standardCommands.filter(cmd => !blockedCommands(cmd.name))
 
@@ -112,9 +105,9 @@ object SparkILoop {
         val output = new JPrintWriter(new OutputStreamWriter(ostream), true)
         val repl = new SparkILoop(input, output)
 
-        if (sets.classpath.isDefault)
+        if (sets.classpath.isDefault) {
           sets.classpath.value = sys.props("java.class.path")
-
+        }
         repl process sets
       }
     }

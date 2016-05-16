@@ -25,27 +25,29 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaPolynomialExpansionSuite {
+  private transient SparkSession spark;
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaPolynomialExpansionSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaPolynomialExpansionSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
@@ -73,20 +75,20 @@ public class JavaPolynomialExpansionSuite {
       )
     );
 
-    StructType schema = new StructType(new StructField[] {
+    StructType schema = new StructType(new StructField[]{
       new StructField("features", new VectorUDT(), false, Metadata.empty()),
       new StructField("expected", new VectorUDT(), false, Metadata.empty())
     });
 
-    DataFrame dataset = jsql.createDataFrame(data, schema);
+    Dataset<Row> dataset = spark.createDataFrame(data, schema);
 
-    Row[] pairs = polyExpansion.transform(dataset)
+    List<Row> pairs = polyExpansion.transform(dataset)
       .select("polyFeatures", "expected")
-      .collect();
+      .collectAsList();
 
     for (Row r : pairs) {
-      double[] polyFeatures = ((Vector)r.get(0)).toArray();
-      double[] expected = ((Vector)r.get(1)).toArray();
+      double[] polyFeatures = ((Vector) r.get(0)).toArray();
+      double[] expected = ((Vector) r.get(1)).toArray();
       Assert.assertArrayEquals(polyFeatures, expected, 1e-1);
     }
   }

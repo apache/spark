@@ -19,14 +19,14 @@ package org.apache.spark.storage
 
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.immutable.HashSet
 import scala.collection.mutable
 import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
-import org.apache.spark.rpc.{RpcEndpointRef, RpcEnv, RpcCallContext, ThreadSafeRpcEndpoint}
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{ThreadUtils, Utils}
@@ -60,10 +60,9 @@ class BlockManagerMasterEndpoint(
       register(blockManagerId, maxMemSize, slaveEndpoint)
       context.reply(true)
 
-    case _updateBlockInfo @ UpdateBlockInfo(
-      blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize) =>
-      context.reply(updateBlockInfo(
-        blockManagerId, blockId, storageLevel, deserializedSize, size, externalBlockStoreSize))
+    case _updateBlockInfo @
+        UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+      context.reply(updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size))
       listenerBus.post(SparkListenerBlockUpdated(BlockUpdatedInfo(_updateBlockInfo)))
 
     case GetLocations(blockId) =>
@@ -75,8 +74,8 @@ class BlockManagerMasterEndpoint(
     case GetPeers(blockManagerId) =>
       context.reply(getPeers(blockManagerId))
 
-    case GetRpcHostPortForExecutor(executorId) =>
-      context.reply(getRpcHostPortForExecutor(executorId))
+    case GetExecutorEndpointRef(executorId) =>
+      context.reply(getExecutorEndpointRef(executorId))
 
     case GetMemoryStatus =>
       context.reply(memoryStatus)
@@ -326,8 +325,7 @@ class BlockManagerMasterEndpoint(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long,
-      externalBlockStoreSize: Long): Boolean = {
+      diskSize: Long): Boolean = {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.isDriver && !isLocal) {
@@ -344,8 +342,7 @@ class BlockManagerMasterEndpoint(
       return true
     }
 
-    blockManagerInfo(blockManagerId).updateBlockInfo(
-      blockId, storageLevel, memSize, diskSize, externalBlockStoreSize)
+    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
 
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
@@ -388,15 +385,14 @@ class BlockManagerMasterEndpoint(
   }
 
   /**
-   * Returns the hostname and port of an executor, based on the [[RpcEnv]] address of its
-   * [[BlockManagerSlaveEndpoint]].
+   * Returns an [[RpcEndpointRef]] of the [[BlockManagerSlaveEndpoint]] for sending RPC messages.
    */
-  private def getRpcHostPortForExecutor(executorId: String): Option[(String, Int)] = {
+  private def getExecutorEndpointRef(executorId: String): Option[RpcEndpointRef] = {
     for (
       blockManagerId <- blockManagerIdByExecutor.get(executorId);
       info <- blockManagerInfo.get(blockManagerId)
     ) yield {
-      (info.slaveEndpoint.address.host, info.slaveEndpoint.address.port)
+      info.slaveEndpoint
     }
   }
 
@@ -406,17 +402,13 @@ class BlockManagerMasterEndpoint(
 }
 
 @DeveloperApi
-case class BlockStatus(
-    storageLevel: StorageLevel,
-    memSize: Long,
-    diskSize: Long,
-    externalBlockStoreSize: Long) {
-  def isCached: Boolean = memSize + diskSize + externalBlockStoreSize > 0
+case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long) {
+  def isCached: Boolean = memSize + diskSize > 0
 }
 
 @DeveloperApi
 object BlockStatus {
-  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, 0L, 0L, 0L)
+  def empty: BlockStatus = BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
 }
 
 private[spark] class BlockManagerInfo(
@@ -445,8 +437,7 @@ private[spark] class BlockManagerInfo(
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long,
-      externalBlockStoreSize: Long) {
+      diskSize: Long) {
 
     updateLastSeenMs()
 
@@ -462,7 +453,7 @@ private[spark] class BlockManagerInfo(
     }
 
     if (storageLevel.isValid) {
-      /* isValid means it is either stored in-memory, on-disk or on-externalBlockStore.
+      /* isValid means it is either stored in-memory or on-disk.
        * The memSize here indicates the data size in or dropped from memory,
        * externalBlockStoreSize here indicates the data size in or dropped from externalBlockStore,
        * and the diskSize here indicates the data size in or dropped to disk.
@@ -470,7 +461,7 @@ private[spark] class BlockManagerInfo(
        * Therefore, a safe way to set BlockStatus is to set its info in accurate modes. */
       var blockStatus: BlockStatus = null
       if (storageLevel.useMemory) {
-        blockStatus = BlockStatus(storageLevel, memSize, 0, 0)
+        blockStatus = BlockStatus(storageLevel, memSize = memSize, diskSize = 0)
         _blocks.put(blockId, blockStatus)
         _remainingMem -= memSize
         logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
@@ -478,16 +469,10 @@ private[spark] class BlockManagerInfo(
           Utils.bytesToString(_remainingMem)))
       }
       if (storageLevel.useDisk) {
-        blockStatus = BlockStatus(storageLevel, 0, diskSize, 0)
+        blockStatus = BlockStatus(storageLevel, memSize = 0, diskSize = diskSize)
         _blocks.put(blockId, blockStatus)
         logInfo("Added %s on disk on %s (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
-      }
-      if (storageLevel.useOffHeap) {
-        blockStatus = BlockStatus(storageLevel, 0, 0, externalBlockStoreSize)
-        _blocks.put(blockId, blockStatus)
-        logInfo("Added %s on ExternalBlockStore on %s (size: %s)".format(
-          blockId, blockManagerId.hostPort, Utils.bytesToString(externalBlockStoreSize)))
       }
       if (!blockId.isBroadcast && blockStatus.isCached) {
         _cachedBlocks += blockId
@@ -505,11 +490,6 @@ private[spark] class BlockManagerInfo(
       if (blockStatus.storageLevel.useDisk) {
         logInfo("Removed %s on %s on disk (size: %s)".format(
           blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
-      }
-      if (blockStatus.storageLevel.useOffHeap) {
-        logInfo("Removed %s on %s on externalBlockStore (size: %s)".format(
-          blockId, blockManagerId.hostPort,
-          Utils.bytesToString(blockStatus.externalBlockStoreSize)))
       }
     }
   }

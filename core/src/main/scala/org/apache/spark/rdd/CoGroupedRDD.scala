@@ -17,23 +17,24 @@
 
 package org.apache.spark.rdd
 
-import scala.language.existentials
-
 import java.io.{IOException, ObjectOutputStream}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.collection.{CompactBuffer, ExternalAppendOnlyMap}
 import org.apache.spark.util.Utils
-import org.apache.spark.serializer.Serializer
 
-/** The references to rdd and splitIndex are transient because redundant information is stored
-  * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
-  * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
-  * task closure. */
+/**
+ * The references to rdd and splitIndex are transient because redundant information is stored
+ * in the CoGroupedRDD object.  Because CoGroupedRDD is serialized separately from
+ * CoGroupPartition, if rdd and splitIndex aren't transient, they'll be included twice in the
+ * task closure.
+ */
 private[spark] case class NarrowCoGroupSplitDep(
     @transient rdd: RDD[_],
     @transient splitIndex: Int,
@@ -57,10 +58,10 @@ private[spark] case class NarrowCoGroupSplitDep(
  *                   narrowDeps should always be equal to the number of parents.
  */
 private[spark] class CoGroupPartition(
-    idx: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
+    override val index: Int, val narrowDeps: Array[Option[NarrowCoGroupSplitDep]])
   extends Partition with Serializable {
-  override val index: Int = idx
-  override def hashCode(): Int = idx
+  override def hashCode(): Int = index
+  override def equals(other: Any): Boolean = super.equals(other)
 }
 
 /**
@@ -70,7 +71,7 @@ private[spark] class CoGroupPartition(
  *
  * Note: This is an internal API. We recommend users use RDD.cogroup(...) instead of
  * instantiating this directly.
-
+ *
  * @param rdds parent RDDs.
  * @param part partitioner used to partition the shuffle output
  */
@@ -87,11 +88,11 @@ class CoGroupedRDD[K: ClassTag](
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Array[CoGroup]
 
-  private var serializer: Option[Serializer] = None
+  private var serializer: Serializer = SparkEnv.get.serializer
 
   /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
   def setSerializer(serializer: Serializer): CoGroupedRDD[K] = {
-    this.serializer = Option(serializer)
+    this.serializer = serializer
     this
   }
 
@@ -154,8 +155,7 @@ class CoGroupedRDD[K: ClassTag](
     }
     context.taskMetrics().incMemoryBytesSpilled(map.memoryBytesSpilled)
     context.taskMetrics().incDiskBytesSpilled(map.diskBytesSpilled)
-    context.internalMetricsToAccumulators(
-      InternalAccumulator.PEAK_EXECUTION_MEMORY).add(map.peakMemoryUsedBytes)
+    context.taskMetrics().incPeakExecutionMemory(map.peakMemoryUsedBytes)
     new InterruptibleIterator(context,
       map.iterator.asInstanceOf[Iterator[(K, Array[Iterable[_]])]])
   }

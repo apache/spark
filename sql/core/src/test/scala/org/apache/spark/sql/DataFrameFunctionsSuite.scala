@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -42,15 +44,16 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
 
     val expectedType = ArrayType(IntegerType, containsNull = false)
     assert(row.schema(0).dataType === expectedType)
-    assert(row.getAs[Seq[Int]](0) === Seq(0, 2))
+    assert(row.getSeq[Int](0) === Seq(0, 2))
   }
 
-  // Turn this on once we add a rule to the analyzer to throw a friendly exception
-  ignore("array: throw exception if putting columns of different types into an array") {
-    val df = Seq((0, "str")).toDF("a", "b")
-    intercept[AnalysisException] {
-      df.select(array("a", "b"))
-    }
+  test("map with column expressions") {
+    val df = Seq(1 -> "a").toDF("a", "b")
+    val row = df.select(map($"a" + 1, $"b")).first()
+
+    val expectedType = MapType(IntegerType, StringType, valueContainsNull = true)
+    assert(row.schema(0).dataType === expectedType)
+    assert(row.getMap[Int, String](0) === Map(2 -> "a"))
   }
 
   test("struct with column name") {
@@ -149,12 +152,6 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
       Row("one", "not_one"))
   }
 
-  test("nvl function") {
-    checkAnswer(
-      sql("SELECT nvl(null, 'x'), nvl('y', 'x'), nvl(null, null)"),
-      Row("x", "y", null))
-  }
-
   test("misc md5 function") {
     val df = Seq(("ABC", Array[Byte](1, 2, 3, 4, 5, 6))).toDF("a", "b")
     checkAnswer(
@@ -167,12 +164,12 @@ class DataFrameFunctionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("misc sha1 function") {
-    val df = Seq(("ABC", "ABC".getBytes)).toDF("a", "b")
+    val df = Seq(("ABC", "ABC".getBytes(StandardCharsets.UTF_8))).toDF("a", "b")
     checkAnswer(
       df.select(sha1($"a"), sha1($"b")),
       Row("3c01bdbb26f358bab27f267924aa2c9a03fcfdb8", "3c01bdbb26f358bab27f267924aa2c9a03fcfdb8"))
 
-    val dfEmpty = Seq(("", "".getBytes)).toDF("a", "b")
+    val dfEmpty = Seq(("", "".getBytes(StandardCharsets.UTF_8))).toDF("a", "b")
     checkAnswer(
       dfEmpty.selectExpr("sha1(a)", "sha1(b)"),
       Row("da39a3ee5e6b4b0d3255bfef95601890afd80709", "da39a3ee5e6b4b0d3255bfef95601890afd80709"))

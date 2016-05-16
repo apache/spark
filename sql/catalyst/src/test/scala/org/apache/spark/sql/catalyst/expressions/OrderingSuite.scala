@@ -20,8 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import scala.math._
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{Row, RandomDataGenerator}
-import org.apache.spark.sql.catalyst.{InternalRow, CatalystTypeConverters}
+import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateOrdering
 import org.apache.spark.sql.types._

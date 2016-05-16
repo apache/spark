@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.util.ArrayData;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
+import org.apache.spark.unsafe.hash.Murmur3_x86_32;
 import org.apache.spark.unsafe.types.CalendarInterval;
 import org.apache.spark.unsafe.types.UTF8String;
 
@@ -46,7 +47,7 @@ import org.apache.spark.unsafe.types.UTF8String;
  * Instances of `UnsafeArrayData` act as pointers to row data stored in this format.
  */
 // todo: there is a lof of duplicated code between UnsafeRow and UnsafeArrayData.
-public class UnsafeArrayData extends ArrayData {
+public final class UnsafeArrayData extends ArrayData {
 
   private Object baseObject;
   private long baseOffset;
@@ -80,7 +81,7 @@ public class UnsafeArrayData extends ArrayData {
   }
 
   public Object[] array() {
-    throw new UnsupportedOperationException("Only supported on GenericArrayData.");
+    throw new UnsupportedOperationException("Not supported on UnsafeArrayData.");
   }
 
   /**
@@ -270,8 +271,8 @@ public class UnsafeArrayData extends ArrayData {
     final int offset = getElementOffset(ordinal);
     if (offset < 0) return null;
     final int size = getElementSize(offset, ordinal);
-    final UnsafeRow row = new UnsafeRow();
-    row.pointTo(baseObject, baseOffset + offset, numFields, size);
+    final UnsafeRow row = new UnsafeRow(numFields);
+    row.pointTo(baseObject, baseOffset + offset, size);
     return row;
   }
 
@@ -299,11 +300,7 @@ public class UnsafeArrayData extends ArrayData {
 
   @Override
   public int hashCode() {
-    int result = 37;
-    for (int i = 0; i < sizeInBytes; i++) {
-      result = 37 * result + Platform.getByte(baseObject, baseOffset + i);
-    }
-    return result;
+    return Murmur3_x86_32.hashUnsafeBytes(baseObject, baseOffset, sizeInBytes, 42);
   }
 
   @Override
@@ -339,4 +336,64 @@ public class UnsafeArrayData extends ArrayData {
     arrayCopy.pointTo(arrayDataCopy, Platform.BYTE_ARRAY_OFFSET, sizeInBytes);
     return arrayCopy;
   }
+
+  public static UnsafeArrayData fromPrimitiveArray(int[] arr) {
+    if (arr.length > (Integer.MAX_VALUE - 4) / 8) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final int offsetRegionSize = 4 * arr.length;
+    final int valueRegionSize = 4 * arr.length;
+    final int totalSize = 4 + offsetRegionSize + valueRegionSize;
+    final byte[] data = new byte[totalSize];
+
+    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
+
+    int offsetPosition = Platform.BYTE_ARRAY_OFFSET + 4;
+    int valueOffset = 4 + offsetRegionSize;
+    for (int i = 0; i < arr.length; i++) {
+      Platform.putInt(data, offsetPosition, valueOffset);
+      offsetPosition += 4;
+      valueOffset += 4;
+    }
+
+    Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
+      Platform.BYTE_ARRAY_OFFSET + 4 + offsetRegionSize, valueRegionSize);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, totalSize);
+    return result;
+  }
+
+  public static UnsafeArrayData fromPrimitiveArray(double[] arr) {
+    if (arr.length > (Integer.MAX_VALUE - 4) / 12) {
+      throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
+        "it's too big.");
+    }
+
+    final int offsetRegionSize = 4 * arr.length;
+    final int valueRegionSize = 8 * arr.length;
+    final int totalSize = 4 + offsetRegionSize + valueRegionSize;
+    final byte[] data = new byte[totalSize];
+
+    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
+
+    int offsetPosition = Platform.BYTE_ARRAY_OFFSET + 4;
+    int valueOffset = 4 + offsetRegionSize;
+    for (int i = 0; i < arr.length; i++) {
+      Platform.putInt(data, offsetPosition, valueOffset);
+      offsetPosition += 4;
+      valueOffset += 8;
+    }
+
+    Platform.copyMemory(arr, Platform.DOUBLE_ARRAY_OFFSET, data,
+      Platform.BYTE_ARRAY_OFFSET + 4 + offsetRegionSize, valueRegionSize);
+
+    UnsafeArrayData result = new UnsafeArrayData();
+    result.pointTo(data, Platform.BYTE_ARRAY_OFFSET, totalSize);
+    return result;
+  }
+
+  // TODO: add more specialized methods.
 }

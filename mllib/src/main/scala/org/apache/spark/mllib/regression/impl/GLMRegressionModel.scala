@@ -47,8 +47,7 @@ private[regression] object GLMRegressionModel {
         modelClass: String,
         weights: Vector,
         intercept: Double): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+      val sqlContext = SQLContext.getOrCreate(sc)
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -58,9 +57,7 @@ private[regression] object GLMRegressionModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.write.parquet(Loader.dataPath(path))
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     /**
@@ -71,10 +68,10 @@ private[regression] object GLMRegressionModel {
      */
     def loadData(sc: SparkContext, path: String, modelClass: String, numFeatures: Int): Data = {
       val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val dataRDD = sqlContext.read.parquet(datapath)
       val dataArray = dataRDD.select("weights", "intercept").take(1)
-      assert(dataArray.size == 1, s"Unable to load $modelClass data from: $datapath")
+      assert(dataArray.length == 1, s"Unable to load $modelClass data from: $datapath")
       val data = dataArray(0)
       assert(data.size == 2, s"Unable to load $modelClass data from: $datapath")
       data match {

@@ -115,13 +115,13 @@ head(df)
 
 SparkR supports operating on a variety of data sources through the `DataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
-The general method for creating DataFrames from data sources is `read.df`. This method takes in the `SQLContext`, the path for the file to load and the type of data source. SparkR supports reading JSON and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [CSV](http://spark-packages.org/package/databricks/spark-csv) and [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
+The general method for creating DataFrames from data sources is `read.df`. This method takes in the `SQLContext`, the path for the file to load and the type of data source. SparkR supports reading JSON, CSV and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if creating context through `init`
 you can specify the packages with the `packages` argument.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.init(sparkPackages="com.databricks:spark-csv_2.11:1.0.3")
+sc <- sparkR.init(sparkPackages="com.databricks:spark-avro_2.11:2.0.1")
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
 </div>
@@ -141,14 +141,14 @@ head(people)
 # SparkR automatically infers the schema from the JSON file
 printSchema(people)
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
 {% endhighlight %}
 </div>
 
 The data sources API can also be used to save out DataFrames into multiple file formats. For example we can save the DataFrame from the previous example
-to a Parquet file using `write.df`
+to a Parquet file using `write.df` (Until Spark 1.6, the default mode for writes was `append`. It was changed in Spark 1.7 to `error` to match the Scala API)
 
 <div data-lang="r"  markdown="1">
 {% highlight r %}
@@ -195,7 +195,7 @@ df <- createDataFrame(sqlContext, faithful)
 
 # Get basic information about the DataFrame
 df
-## DataFrame[eruptions:double, waiting:double]
+## SparkDataFrame[eruptions:double, waiting:double]
 
 # Select only the "eruptions" column
 head(select(df, df$eruptions))
@@ -228,14 +228,13 @@ SparkR data frames support a number of commonly used functions to aggregate data
 # We use the `n` operator to count the number of times each waiting time appears
 head(summarize(groupBy(df, df$waiting), count = n(df$waiting)))
 ##  waiting count
-##1      81    13
-##2      60     6
-##3      68     1
+##1      70     4
+##2      67     1
+##3      69     2
 
 # We can also sort the output from the aggregation to get the most common waiting times
 waiting_counts <- summarize(groupBy(df, df$waiting), count = n(df$waiting))
 head(arrange(waiting_counts, desc(waiting_counts$count)))
-
 ##   waiting count
 ##1      78    15
 ##2      83    14
@@ -375,14 +374,20 @@ The following functions are masked by the SparkR package:
     <td><code>sample</code> in <code>package:base</code></td>
     <td><code>base::sample(x, size, replace = FALSE, prob = NULL)</code></td>
   </tr>
-  <tr>
-    <td><code>table</code> in <code>package:base</code></td>
-    <td><code><pre>base::table(...,
-            exclude = if (useNA == "no") c(NA, NaN),
-            useNA = c("no", "ifany", "always"),
-            dnn = list.names(...), deparse.level = 1)</pre></code></td>
-  </tr>
 </table>
+
+Since part of SparkR is modeled on the `dplyr` package, certain functions in SparkR share the same names with those in `dplyr`. Depending on the load order of the two packages, some functions from the package loaded first are masked by those in the package loaded after. In such case, prefix such calls with the package name, for instance, `SparkR::cume_dist(x)` or `dplyr::cume_dist(x)`.
 
 You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-manual/R-devel/library/base/html/search.html)
 
+
+# Migration Guide
+
+## Upgrading From SparkR 1.5.x to 1.6.x
+
+ - Before Spark 1.6.0, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.
+
+## Upgrading From SparkR 1.6.x to 2.0
+
+ - The method `table` has been removed and replaced by `tableToDF`.
+ - The class `DataFrame` has been renamed to `SparkDataFrame` to avoid name conflicts.

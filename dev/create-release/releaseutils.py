@@ -159,7 +159,6 @@ known_components = {
     "build": CORE_COMPONENT,
     "deploy": CORE_COMPONENT,
     "documentation": CORE_COMPONENT,
-    "ec2": "EC2",
     "examples": CORE_COMPONENT,
     "graphx": "GraphX",
     "input/output": CORE_COMPONENT,

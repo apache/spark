@@ -48,7 +48,8 @@ public class JavaIsotonicRegressionExample {
     );
 
     // Split data into training (60%) and test (40%) sets.
-    JavaRDD<Tuple3<Double, Double, Double>>[] splits = parsedData.randomSplit(new double[]{0.6, 0.4}, 11L);
+    JavaRDD<Tuple3<Double, Double, Double>>[] splits =
+        parsedData.randomSplit(new double[]{0.6, 0.4}, 11L);
     JavaRDD<Tuple3<Double, Double, Double>> training = splits[0];
     JavaRDD<Tuple3<Double, Double, Double>> test = splits[1];
 
@@ -62,7 +63,7 @@ public class JavaIsotonicRegressionExample {
         @Override
         public Tuple2<Double, Double> call(Tuple3<Double, Double, Double> point) {
           Double predictedLabel = model.predict(point._2());
-          return new Tuple2<Double, Double>(predictedLabel, point._1());
+          return new Tuple2<>(predictedLabel, point._1());
         }
       }
     );
@@ -80,7 +81,10 @@ public class JavaIsotonicRegressionExample {
 
     // Save and load model
     model.save(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
-    IsotonicRegressionModel sameModel = IsotonicRegressionModel.load(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
+    IsotonicRegressionModel sameModel =
+      IsotonicRegressionModel.load(jsc.sc(), "target/tmp/myIsotonicRegressionModel");
     // $example off$
+
+    jsc.stop();
   }
 }

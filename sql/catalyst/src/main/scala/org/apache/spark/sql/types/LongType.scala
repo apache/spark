@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import scala.math.{Ordering, Integral, Numeric}
+import scala.math.{Integral, Numeric, Ordering}
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi

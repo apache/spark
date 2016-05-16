@@ -18,10 +18,12 @@
 package org.apache.spark.sql.execution.datasources.json
 
 import java.io.ByteArrayOutputStream
+
 import scala.collection.mutable.ArrayBuffer
 
 import com.fasterxml.jackson.core._
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,7 +33,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
-object JacksonParser {
+private[json] class SparkSQLJsonProcessingException(msg: String) extends RuntimeException(msg)
+
+object JacksonParser extends Logging {
 
   def parse(
       input: RDD[String],
@@ -46,12 +50,34 @@ object JacksonParser {
 
   /**
    * Parse the current token (and related children) according to a desired schema
+   * This is an wrapper for the method `convertField()` to handle a row wrapped
+   * with an array.
    */
-  def convertField(
+  def convertRootField(
       factory: JsonFactory,
       parser: JsonParser,
-      schema: DataType,
-      configOptions: JSONOptions): Any = {
+      schema: DataType): Any = {
+    import com.fasterxml.jackson.core.JsonToken._
+    (parser.getCurrentToken, schema) match {
+      case (START_ARRAY, st: StructType) =>
+        // SPARK-3308: support reading top level JSON arrays and take every element
+        // in such an array as a row
+        convertArray(factory, parser, st)
+
+      case (START_OBJECT, ArrayType(st, _)) =>
+        // the business end of SPARK-3308:
+        // when an object is found but an array is requested just wrap it in a list
+        convertField(factory, parser, st) :: Nil
+
+      case _ =>
+        convertField(factory, parser, schema)
+    }
+  }
+
+  private def convertField(
+      factory: JsonFactory,
+      parser: JsonParser,
+      schema: DataType): Any = {
     import com.fasterxml.jackson.core.JsonToken._
     (parser.getCurrentToken, schema) match {
       case (null | VALUE_NULL, _) =>
@@ -59,7 +85,7 @@ object JacksonParser {
 
       case (FIELD_NAME, _) =>
         parser.nextToken()
-        convertField(factory, parser, schema, configOptions)
+        convertField(factory, parser, schema)
 
       case (VALUE_STRING, StringType) =>
         UTF8String.fromString(parser.getText)
@@ -88,7 +114,7 @@ object JacksonParser {
         DateTimeUtils.stringToTime(parser.getText).getTime * 1000L
 
       case (VALUE_NUMBER_INT, TimestampType) =>
-        parser.getLongValue * 1000L
+        parser.getLongValue * 1000000L
 
       case (_, StringType) =>
         val writer = new ByteArrayOutputStream()
@@ -101,42 +127,28 @@ object JacksonParser {
         parser.getFloatValue
 
       case (VALUE_STRING, FloatType) =>
-        // Special case handling for quoted non-numeric numbers.
-        if (configOptions.allowNonNumericNumbers) {
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase()
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toFloat
-          } else {
-            sys.error(s"Cannot parse $value as FloatType.")
-          }
+        // Special case handling for NaN and Infinity.
+        val value = parser.getText
+        if (value.equals("NaN") ||
+          value.equals("Infinity") ||
+          value.equals("-Infinity")) {
+          value.toFloat
         } else {
-          parser.getFloatValue
+          throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
         }
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, DoubleType) =>
         parser.getDoubleValue
 
       case (VALUE_STRING, DoubleType) =>
-        // Special case handling for quoted non-numeric numbers.
-        if (configOptions.allowNonNumericNumbers) {
-          val value = parser.getText
-          val lowerCaseValue = value.toLowerCase()
-          if (lowerCaseValue.equals("nan") ||
-            lowerCaseValue.equals("infinity") ||
-            lowerCaseValue.equals("-infinity") ||
-            lowerCaseValue.equals("inf") ||
-            lowerCaseValue.equals("-inf")) {
-            value.toDouble
-          } else {
-            sys.error(s"Cannot parse $value as DoubleType.")
-          }
+        // Special case handling for NaN and Infinity.
+        val value = parser.getText
+        if (value.equals("NaN") ||
+          value.equals("Infinity") ||
+          value.equals("-Infinity")) {
+          value.toDouble
         } else {
-          parser.getDoubleValue
+          throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
         }
 
       case (VALUE_NUMBER_INT | VALUE_NUMBER_FLOAT, dt: DecimalType) =>
@@ -161,29 +173,23 @@ object JacksonParser {
         false
 
       case (START_OBJECT, st: StructType) =>
-        convertObject(factory, parser, st, configOptions)
-
-      case (START_ARRAY, st: StructType) =>
-        // SPARK-3308: support reading top level JSON arrays and take every element
-        // in such an array as a row
-        convertArray(factory, parser, st, configOptions)
+        convertObject(factory, parser, st)
 
       case (START_ARRAY, ArrayType(st, _)) =>
-        convertArray(factory, parser, st, configOptions)
-
-      case (START_OBJECT, ArrayType(st, _)) =>
-        // the business end of SPARK-3308:
-        // when an object is found but an array is requested just wrap it in a list
-        convertField(factory, parser, st, configOptions) :: Nil
+        convertArray(factory, parser, st)
 
       case (START_OBJECT, MapType(StringType, kt, _)) =>
-        convertMap(factory, parser, kt, configOptions)
+        convertMap(factory, parser, kt)
 
       case (_, udt: UserDefinedType[_]) =>
-        convertField(factory, parser, udt.sqlType, configOptions)
+        convertField(factory, parser, udt.sqlType)
 
       case (token, dataType) =>
-        sys.error(s"Failed to parse a value for data type $dataType (current token: $token).")
+        // We cannot parse this token based on the given data type. So, we throw a
+        // SparkSQLJsonProcessingException and this exception will be caught by
+        // parseJson method.
+        throw new SparkSQLJsonProcessingException(
+          s"Failed to parse a value for data type $dataType (current token: $token).")
     }
   }
 
@@ -195,13 +201,12 @@ object JacksonParser {
   private def convertObject(
       factory: JsonFactory,
       parser: JsonParser,
-      schema: StructType,
-      configOptions: JSONOptions): InternalRow = {
+      schema: StructType): InternalRow = {
     val row = new GenericMutableRow(schema.length)
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       schema.getFieldIndex(parser.getCurrentName) match {
         case Some(index) =>
-          row.update(index, convertField(factory, parser, schema(index).dataType, configOptions))
+          row.update(index, convertField(factory, parser, schema(index).dataType))
 
         case None =>
           parser.skipChildren()
@@ -217,13 +222,12 @@ object JacksonParser {
   private def convertMap(
       factory: JsonFactory,
       parser: JsonParser,
-      valueType: DataType,
-      configOptions: JSONOptions): MapData = {
+      valueType: DataType): MapData = {
     val keys = ArrayBuffer.empty[UTF8String]
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_OBJECT)) {
       keys += UTF8String.fromString(parser.getCurrentName)
-      values += convertField(factory, parser, valueType, configOptions)
+      values += convertField(factory, parser, valueType)
     }
     ArrayBasedMapData(keys.toArray, values.toArray)
   }
@@ -231,17 +235,16 @@ object JacksonParser {
   private def convertArray(
       factory: JsonFactory,
       parser: JsonParser,
-      elementType: DataType,
-      configOptions: JSONOptions): ArrayData = {
+      elementType: DataType): ArrayData = {
     val values = ArrayBuffer.empty[Any]
     while (nextUntil(parser, JsonToken.END_ARRAY)) {
-      values += convertField(factory, parser, elementType, configOptions)
+      values += convertField(factory, parser, elementType)
     }
 
     new GenericArrayData(values.toArray)
   }
 
-  private def parseJson(
+  def parseJson(
       input: Iterator[String],
       schema: StructType,
       columnNameOfCorruptRecords: String,
@@ -249,13 +252,20 @@ object JacksonParser {
 
     def failedRecord(record: String): Seq[InternalRow] = {
       // create a row even if no corrupt record column is present
-      val row = new GenericMutableRow(schema.length)
-      for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
-        require(schema(corruptIndex).dataType == StringType)
-        row.update(corruptIndex, UTF8String.fromString(record))
+      if (configOptions.failFast) {
+        throw new RuntimeException(s"Malformed line in FAILFAST mode: $record")
       }
-
-      Seq(row)
+      if (configOptions.dropMalformed) {
+        logWarning(s"Dropping malformed line: $record")
+        Nil
+      } else {
+        val row = new GenericMutableRow(schema.length)
+        for (corruptIndex <- schema.getFieldIndex(columnNameOfCorruptRecords)) {
+          require(schema(corruptIndex).dataType == StringType)
+          row.update(corruptIndex, UTF8String.fromString(record))
+        }
+        Seq(row)
+      }
     }
 
     val factory = new JsonFactory()
@@ -269,7 +279,7 @@ object JacksonParser {
           Utils.tryWithResource(factory.createParser(record)) { parser =>
             parser.nextToken()
 
-            convertField(factory, parser, schema, configOptions) match {
+            convertRootField(factory, parser, schema) match {
               case null => failedRecord(record)
               case row: InternalRow => row :: Nil
               case array: ArrayData =>
@@ -279,14 +289,13 @@ object JacksonParser {
                   array.toArray[InternalRow](schema)
                 }
               case _ =>
-                sys.error(
-                  s"Failed to parse record $record. Please make sure that each line of " +
-                    "the file (or each string in the RDD) is a valid JSON object or " +
-                    "an array of JSON objects.")
+                failedRecord(record)
             }
           }
         } catch {
           case _: JsonProcessingException =>
+            failedRecord(record)
+          case _: SparkSQLJsonProcessingException =>
             failedRecord(record)
         }
       }

@@ -21,17 +21,15 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.Pipeline;
 import org.apache.spark.ml.PipelineModel;
 import org.apache.spark.ml.PipelineStage;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.feature.HashingTF;
 import org.apache.spark.ml.feature.Tokenizer;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * A simple text classification pipeline that recognizes "spark" from input text. It uses the Java
@@ -44,9 +42,10 @@ import org.apache.spark.sql.SQLContext;
 public class JavaSimpleTextClassificationPipeline {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaSimpleTextClassificationPipeline");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaSimpleTextClassificationPipeline")
+      .getOrCreate();
 
     // Prepare training documents, which are labeled.
     List<LabeledDocument> localTraining = Lists.newArrayList(
@@ -54,7 +53,8 @@ public class JavaSimpleTextClassificationPipeline {
       new LabeledDocument(1L, "b d", 0.0),
       new LabeledDocument(2L, "spark f g h", 1.0),
       new LabeledDocument(3L, "hadoop mapreduce", 0.0));
-    DataFrame training = jsql.createDataFrame(jsc.parallelize(localTraining), LabeledDocument.class);
+    Dataset<Row> training =
+      spark.createDataFrame(localTraining, LabeledDocument.class);
 
     // Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     Tokenizer tokenizer = new Tokenizer()
@@ -79,15 +79,15 @@ public class JavaSimpleTextClassificationPipeline {
       new Document(5L, "l m n"),
       new Document(6L, "spark hadoop spark"),
       new Document(7L, "apache hadoop"));
-    DataFrame test = jsql.createDataFrame(jsc.parallelize(localTest), Document.class);
+    Dataset<Row> test = spark.createDataFrame(localTest, Document.class);
 
     // Make predictions on test documents.
-    DataFrame predictions = model.transform(test);
-    for (Row r: predictions.select("id", "text", "probability", "prediction").collect()) {
+    Dataset<Row> predictions = model.transform(test);
+    for (Row r: predictions.select("id", "text", "probability", "prediction").collectAsList()) {
       System.out.println("(" + r.get(0) + ", " + r.get(1) + ") --> prob=" + r.get(2)
           + ", prediction=" + r.get(3));
     }
 
-    jsc.stop();
+    spark.stop();
   }
 }

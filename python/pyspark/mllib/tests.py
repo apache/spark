@@ -54,9 +54,11 @@ from pyspark.mllib.clustering import StreamingKMeans, StreamingKMeansModel
 from pyspark.mllib.linalg import Vector, SparseVector, DenseVector, VectorUDT, _convert_to_vector,\
     DenseMatrix, SparseMatrix, Vectors, Matrices, MatrixUDT
 from pyspark.mllib.classification import StreamingLogisticRegressionWithSGD
+from pyspark.mllib.recommendation import Rating
 from pyspark.mllib.regression import LabeledPoint, StreamingLinearRegressionWithSGD
 from pyspark.mllib.random import RandomRDDs
 from pyspark.mllib.stat import Statistics
+from pyspark.mllib.feature import HashingTF
 from pyspark.mllib.feature import Word2Vec
 from pyspark.mllib.feature import IDF
 from pyspark.mllib.feature import StandardScaler, ElementwiseProduct
@@ -64,7 +66,8 @@ from pyspark.mllib.util import LinearDataGenerator
 from pyspark.mllib.util import MLUtils
 from pyspark.serializers import PickleSerializer
 from pyspark.streaming import StreamingContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
+from pyspark.sql.utils import IllegalArgumentException
 from pyspark.streaming import StreamingContext
 
 _have_scipy = False
@@ -76,21 +79,25 @@ except:
     pass
 
 ser = PickleSerializer()
-sc = SparkContext('local[4]', "MLlib tests")
 
 
 class MLlibTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = sc
+        self.sc = SparkContext('local[4]', "MLlib tests")
+        self.spark = SparkSession(self.sc)
+
+    def tearDown(self):
+        self.spark.stop()
 
 
 class MLLibStreamingTestCase(unittest.TestCase):
     def setUp(self):
-        self.sc = sc
+        self.sc = SparkContext('local[4]', "MLlib tests")
         self.ssc = StreamingContext(self.sc, 1.0)
 
     def tearDown(self):
         self.ssc.stop(False)
+        self.sc.stop()
 
     @staticmethod
     def _eventually(condition, timeout=30.0, catch_assertions=False):
@@ -388,14 +395,20 @@ class VectorTests(MLlibTestCase):
         self.assertTrue(array_equal(sm.values, [1, 3, 4, 6, 9]))
 
     def test_parse_vector(self):
+        a = DenseVector([])
+        self.assertEqual(str(a), '[]')
+        self.assertEqual(Vectors.parse(str(a)), a)
         a = DenseVector([3, 4, 6, 7])
-        self.assertTrue(str(a), '[3.0,4.0,6.0,7.0]')
-        self.assertTrue(Vectors.parse(str(a)), a)
+        self.assertEqual(str(a), '[3.0,4.0,6.0,7.0]')
+        self.assertEqual(Vectors.parse(str(a)), a)
+        a = SparseVector(4, [], [])
+        self.assertEqual(str(a), '(4,[],[])')
+        self.assertEqual(SparseVector.parse(str(a)), a)
         a = SparseVector(4, [0, 2], [3, 4])
-        self.assertTrue(str(a), '(4,[0,2],[3.0,4.0])')
-        self.assertTrue(Vectors.parse(str(a)), a)
+        self.assertEqual(str(a), '(4,[0,2],[3.0,4.0])')
+        self.assertEqual(Vectors.parse(str(a)), a)
         a = SparseVector(10, [0, 1], [4, 5])
-        self.assertTrue(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
+        self.assertEqual(SparseVector.parse(' (10, [0,1 ],[ 4.0,5.0] )'), a)
 
     def test_norms(self):
         a = DenseVector([0, 2, 3, -1])
@@ -417,6 +430,17 @@ class ListTests(MLlibTestCase):
     Test MLlib algorithms on plain lists, to make sure they're passed through
     as NumPy arrays.
     """
+
+    def test_bisecting_kmeans(self):
+        from pyspark.mllib.clustering import BisectingKMeans
+        data = array([0.0, 0.0, 1.0, 1.0, 9.0, 8.0, 8.0, 9.0]).reshape(4, 2)
+        bskm = BisectingKMeans()
+        model = bskm.train(self.sc.parallelize(data, 2), k=4)
+        p = array([0.0, 0.0])
+        rdd_p = self.sc.parallelize([p])
+        self.assertEqual(model.predict(p), model.predict(rdd_p).first())
+        self.assertEqual(model.computeCost(p), model.computeCost(rdd_p))
+        self.assertEqual(model.k, len(model.clusterCenters))
 
     def test_kmeans(self):
         from pyspark.mllib.clustering import KMeans
@@ -473,6 +497,18 @@ class ListTests(MLlibTestCase):
                                           maxIterations=10, seed=63)
         for c1, c2 in zip(clusters1.weights, clusters2.weights):
             self.assertEqual(round(c1, 7), round(c2, 7))
+
+    def test_gmm_with_initial_model(self):
+        from pyspark.mllib.clustering import GaussianMixture
+        data = self.sc.parallelize([
+            (-10, -5), (-9, -4), (10, 5), (9, 4)
+        ])
+
+        gmm1 = GaussianMixture.train(data, 2, convergenceTol=0.001,
+                                     maxIterations=10, seed=63)
+        gmm2 = GaussianMixture.train(data, 2, convergenceTol=0.001,
+                                     maxIterations=10, seed=63, initialModel=gmm1)
+        self.assertAlmostEqual((gmm1.weights - gmm2.weights).sum(), 0.0)
 
     def test_classification(self):
         from pyspark.mllib.classification import LogisticRegressionWithSGD, SVMWithSGD, NaiveBayes
@@ -664,13 +700,12 @@ class VectorUDTTests(MLlibTestCase):
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1), LabeledPoint(0.0, self.sv1)])
         df = rdd.toDF()
         schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
         self.assertEqual(field.dataType, self.udt)
-        vectors = df.map(lambda p: p.features).collect()
+        vectors = df.rdd.map(lambda p: p.features).collect()
         self.assertEqual(len(vectors), 2)
         for v in vectors:
             if isinstance(v, SparseVector):
@@ -697,12 +732,11 @@ class MatrixUDTTests(MLlibTestCase):
             self.assertEqual(m, self.udt.deserialize(self.udt.serialize(m)))
 
     def test_infer_schema(self):
-        sqlCtx = SQLContext(self.sc)
         rdd = self.sc.parallelize([("dense", self.dm1), ("sparse", self.sm1)])
         df = rdd.toDF()
         schema = df.schema
         self.assertTrue(schema.fields[1].dataType, self.udt)
-        matrices = df.map(lambda x: x._2).collect()
+        matrices = df.rdd.map(lambda x: x._2).collect()
         self.assertEqual(len(matrices), 2)
         for m in matrices:
             if isinstance(m, DenseMatrix):
@@ -885,7 +919,7 @@ class ChiSqTestTests(MLlibTestCase):
 
         # Negative counts in observed
         neg_obs = Vectors.dense([1.0, 2.0, 3.0, -4.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, neg_obs, expected1)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, neg_obs, expected1)
 
         # Count = 0.0 in expected but not observed
         zero_expected = Vectors.dense([1.0, 0.0, 3.0])
@@ -896,7 +930,8 @@ class ChiSqTestTests(MLlibTestCase):
 
         # 0.0 in expected and observed simultaneously
         zero_observed = Vectors.dense([2.0, 0.0, 1.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, zero_observed, zero_expected)
+        self.assertRaises(
+            IllegalArgumentException, Statistics.chiSqTest, zero_observed, zero_expected)
 
     def test_matrix_independence(self):
         data = [40.0, 24.0, 29.0, 56.0, 32.0, 42.0, 31.0, 10.0, 0.0, 30.0, 15.0, 12.0]
@@ -910,15 +945,15 @@ class ChiSqTestTests(MLlibTestCase):
 
         # Negative counts
         neg_counts = Matrices.dense(2, 2, [4.0, 5.0, 3.0, -3.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, neg_counts)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, neg_counts)
 
         # Row sum = 0.0
         row_zero = Matrices.dense(2, 2, [0.0, 1.0, 0.0, 2.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, row_zero)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, row_zero)
 
         # Column sum = 0.0
         col_zero = Matrices.dense(2, 2, [0.0, 0.0, 2.0, 2.0])
-        self.assertRaises(Py4JJavaError, Statistics.chiSqTest, col_zero)
+        self.assertRaises(IllegalArgumentException, Statistics.chiSqTest, col_zero)
 
     def test_chi_sq_pearson(self):
         data = [
@@ -999,13 +1034,15 @@ class Word2VecTests(MLlibTestCase):
             .setNumPartitions(2) \
             .setNumIterations(10) \
             .setSeed(1024) \
-            .setMinCount(3)
+            .setMinCount(3) \
+            .setWindowSize(6)
         self.assertEqual(model.vectorSize, 2)
         self.assertTrue(model.learningRate < 0.02)
         self.assertEqual(model.numPartitions, 2)
         self.assertEqual(model.numIterations, 10)
         self.assertEqual(model.seed, 1024)
         self.assertEqual(model.minCount, 3)
+        self.assertEqual(model.windowSize, 6)
 
     def test_word2vec_get_vectors(self):
         data = [
@@ -1142,7 +1179,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
             clusterWeights=[1.0, 1.0, 1.0, 1.0])
 
         predict_data = [[[1.5, 1.5]], [[-1.5, 1.5]], [[-1.5, -1.5]], [[1.5, -1.5]]]
-        predict_data = [sc.parallelize(batch, 1) for batch in predict_data]
+        predict_data = [self.sc.parallelize(batch, 1) for batch in predict_data]
         predict_stream = self.ssc.queueStream(predict_data)
         predict_val = stkm.predictOn(predict_stream)
 
@@ -1162,6 +1199,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
 
         self._eventually(condition, catch_assertions=True)
 
+    @unittest.skip("SPARK-10086: Flaky StreamingKMeans test in PySpark")
     def test_trainOn_predictOn(self):
         """Test that prediction happens on the updated model."""
         stkm = StreamingKMeans(decayFactor=0.0, k=2)
@@ -1173,7 +1211,7 @@ class StreamingKMeansTest(MLLibStreamingTestCase):
         # classification based in the initial model would have been 0
         # proving that the model is updated.
         batches = [[[-0.5], [0.6], [0.8]], [[0.2], [-0.1], [0.3]]]
-        batches = [sc.parallelize(batch) for batch in batches]
+        batches = [self.sc.parallelize(batch) for batch in batches]
         input_stream = self.ssc.queueStream(batches)
         predict_results = []
 
@@ -1206,7 +1244,7 @@ class LinearDataGeneratorTests(MLlibTestCase):
             self.assertEqual(len(point.features), 3)
 
         linear_data = LinearDataGenerator.generateLinearRDD(
-            sc=sc, nexamples=6, nfeatures=2, eps=0.1,
+            sc=self.sc, nexamples=6, nfeatures=2, eps=0.1,
             nParts=2, intercept=0.0).collect()
         self.assertEqual(len(linear_data), 6)
         for point in linear_data:
@@ -1382,7 +1420,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0, 10.0], xMean, xVariance, 100, 42 + i, 0.1)
-            batches.append(sc.parallelize(batch))
+            batches.append(self.sc.parallelize(batch))
 
         input_stream = self.ssc.queueStream(batches)
         slr.trainOn(input_stream)
@@ -1406,7 +1444,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
-            batches.append(sc.parallelize(batch))
+            batches.append(self.sc.parallelize(batch))
 
         model_weights = []
         input_stream = self.ssc.queueStream(batches)
@@ -1439,7 +1477,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
                 0.0, [10.0, 10.0], [0.0, 0.0], [1.0 / 3.0, 1.0 / 3.0],
                 100, 42 + i, 0.1)
             batches.append(
-                sc.parallelize(batch).map(lambda lp: (lp.label, lp.features)))
+                self.sc.parallelize(batch).map(lambda lp: (lp.label, lp.features)))
 
         input_stream = self.ssc.queueStream(batches)
         output_stream = slr.predictOnValues(input_stream)
@@ -1470,7 +1508,7 @@ class StreamingLinearRegressionWithTests(MLLibStreamingTestCase):
         for i in range(10):
             batch = LinearDataGenerator.generateLinearInput(
                 0.0, [10.0], [0.0], [1.0 / 3.0], 100, 42 + i, 0.1)
-            batches.append(sc.parallelize(batch))
+            batches.append(self.sc.parallelize(batch))
 
         predict_batches = [
             b.map(lambda lp: (lp.label, lp.features)) for b in batches]
@@ -1539,7 +1577,39 @@ class MLUtilsTests(MLlibTestCase):
             shutil.rmtree(load_vectors_path)
 
 
+class ALSTests(MLlibTestCase):
+
+    def test_als_ratings_serialize(self):
+        r = Rating(7, 1123, 3.14)
+        jr = self.sc._jvm.SerDe.loads(bytearray(ser.dumps(r)))
+        nr = ser.loads(bytes(self.sc._jvm.SerDe.dumps(jr)))
+        self.assertEqual(r.user, nr.user)
+        self.assertEqual(r.product, nr.product)
+        self.assertAlmostEqual(r.rating, nr.rating, 2)
+
+    def test_als_ratings_id_long_error(self):
+        r = Rating(1205640308657491975, 50233468418, 1.0)
+        # rating user id exceeds max int value, should fail when pickled
+        self.assertRaises(Py4JJavaError, self.sc._jvm.SerDe.loads, bytearray(ser.dumps(r)))
+
+
+class HashingTFTest(MLlibTestCase):
+
+    def test_binary_term_freqs(self):
+        hashingTF = HashingTF(100).setBinary(True)
+        doc = "a a b c c c".split(" ")
+        n = hashingTF.numFeatures
+        output = hashingTF.transform(doc).toArray()
+        expected = Vectors.sparse(n, {hashingTF.indexOf("a"): 1.0,
+                                      hashingTF.indexOf("b"): 1.0,
+                                      hashingTF.indexOf("c"): 1.0}).toArray()
+        for i in range(0, n):
+            self.assertAlmostEqual(output[i], expected[i], 14, "Error at " + str(i) +
+                                   ": expected " + str(expected[i]) + ", got " + str(output[i]))
+
+
 if __name__ == "__main__":
+    from pyspark.mllib.tests import *
     if not _have_scipy:
         print("NOTE: Skipping SciPy tests as it does not seem to be installed")
     if xmlrunner:

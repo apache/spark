@@ -21,15 +21,16 @@ import java.nio.ByteBuffer
 
 import scala.collection.JavaConverters._
 
-import org.apache.mesos.protobuf.ByteString
 import org.apache.mesos.{Executor => MesosExecutor, ExecutorDriver, MesosExecutorDriver}
 import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
+import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.{Logging, TaskState, SparkConf, SparkEnv}
+import org.apache.spark.{SparkConf, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.mesos.MesosTaskLaunchData
-import org.apache.spark.util.{SignalLogger, Utils}
+import org.apache.spark.util.Utils
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
@@ -121,7 +122,7 @@ private[spark] class MesosExecutorBackend
  */
 private[spark] object MesosExecutorBackend extends Logging {
   def main(args: Array[String]) {
-    SignalLogger.register(log)
+    Utils.initDaemon(log)
     // Create a new Executor and start it running
     val runner = new MesosExecutorBackend()
     new MesosExecutorDriver(runner).run()

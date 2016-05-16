@@ -23,6 +23,7 @@ import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
 import org.apache.spark.util.collection.Sorter;
+import org.apache.spark.util.collection.unsafe.sort.RadixSort;
 
 final class ShuffleInMemorySorter {
 
@@ -30,7 +31,9 @@ final class ShuffleInMemorySorter {
   private static final class SortComparator implements Comparator<PackedRecordPointer> {
     @Override
     public int compare(PackedRecordPointer left, PackedRecordPointer right) {
-      return left.getPartitionId() - right.getPartitionId();
+      int leftId = left.getPartitionId();
+      int rightId = right.getPartitionId();
+      return leftId < rightId ? -1 : (leftId > rightId ? 1 : 0);
     }
   }
   private static final SortComparator SORT_COMPARATOR = new SortComparator();
@@ -45,13 +48,29 @@ final class ShuffleInMemorySorter {
   private LongArray array;
 
   /**
+   * Whether to use radix sort for sorting in-memory partition ids. Radix sort is much faster
+   * but requires additional memory to be reserved memory as pointers are added.
+   */
+  private final boolean useRadixSort;
+
+  /**
+   * Set to 2x for radix sort to reserve extra memory for sorting, otherwise 1x.
+   */
+  private final int memoryAllocationFactor;
+
+  /**
    * The position in the pointer array where new records can be inserted.
    */
   private int pos = 0;
 
-  public ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize) {
+  private int initialSize;
+
+  ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize, boolean useRadixSort) {
     this.consumer = consumer;
     assert (initialSize > 0);
+    this.initialSize = initialSize;
+    this.useRadixSort = useRadixSort;
+    this.memoryAllocationFactor = useRadixSort ? 2 : 1;
     this.array = consumer.allocateArray(initialSize);
     this.sorter = new Sorter<>(ShuffleSortDataFormat.INSTANCE);
   }
@@ -68,6 +87,10 @@ final class ShuffleInMemorySorter {
   }
 
   public void reset() {
+    if (consumer != null) {
+      consumer.freeArray(array);
+      this.array = consumer.allocateArray(initialSize);
+    }
     pos = 0;
   }
 
@@ -78,18 +101,18 @@ final class ShuffleInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * 8L
+      array.size() * (8 / memoryAllocationFactor)
     );
     consumer.freeArray(array);
     array = newArray;
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos < array.size();
+    return pos < array.size() / memoryAllocationFactor;
   }
 
   public long getMemoryUsage() {
-    return array.size() * 8L;
+    return array.size() * 8;
   }
 
   /**
@@ -104,7 +127,7 @@ final class ShuffleInMemorySorter {
    */
   public void insertRecord(long recordPointer, int partitionId) {
     if (!hasSpaceForAnotherRecord()) {
-      expandPointerArray(consumer.allocateArray(array.size() * 2));
+      throw new IllegalStateException("There is no space for new record");
     }
     array.set(pos, PackedRecordPointer.packPointer(recordPointer, partitionId));
     pos++;
@@ -116,17 +139,18 @@ final class ShuffleInMemorySorter {
   public static final class ShuffleSorterIterator {
 
     private final LongArray pointerArray;
-    private final int numRecords;
+    private final int limit;
     final PackedRecordPointer packedRecordPointer = new PackedRecordPointer();
     private int position = 0;
 
-    public ShuffleSorterIterator(int numRecords, LongArray pointerArray) {
-      this.numRecords = numRecords;
+    ShuffleSorterIterator(int numRecords, LongArray pointerArray, int startingPosition) {
+      this.limit = numRecords + startingPosition;
       this.pointerArray = pointerArray;
+      this.position = startingPosition;
     }
 
     public boolean hasNext() {
-      return position < numRecords;
+      return position < limit;
     }
 
     public void loadNext() {
@@ -139,7 +163,15 @@ final class ShuffleInMemorySorter {
    * Return an iterator over record pointers in sorted order.
    */
   public ShuffleSorterIterator getSortedIterator() {
-    sorter.sort(array, 0, pos, SORT_COMPARATOR);
-    return new ShuffleSorterIterator(pos, array);
+    int offset = 0;
+    if (useRadixSort) {
+      offset = RadixSort.sort(
+        array, pos,
+        PackedRecordPointer.PARTITION_ID_START_BYTE_INDEX,
+        PackedRecordPointer.PARTITION_ID_END_BYTE_INDEX, false, false);
+    } else {
+      sorter.sort(array, 0, pos, SORT_COMPARATOR);
+    }
+    return new ShuffleSorterIterator(pos, array, offset);
   }
 }

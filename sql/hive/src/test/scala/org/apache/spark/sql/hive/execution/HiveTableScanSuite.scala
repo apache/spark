@@ -22,7 +22,6 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHive
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
-
 import org.apache.spark.util.Utils
 
 class HiveTableScanSuite extends HiveComparisonTest {
@@ -66,7 +65,7 @@ class HiveTableScanSuite extends HiveComparisonTest {
     TestHive.sql("DROP TABLE IF EXISTS timestamp_query_null")
     TestHive.sql(
       """
-        CREATE EXTERNAL TABLE timestamp_query_null (time TIMESTAMP,id INT)
+        CREATE TABLE timestamp_query_null (time TIMESTAMP,id INT)
         ROW FORMAT DELIMITED
         FIELDS TERMINATED BY ','
         LINES TERMINATED BY '\n'

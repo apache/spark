@@ -50,7 +50,7 @@ class Main {
   public static void main(String[] argsArray) throws Exception {
     checkArgument(argsArray.length > 0, "Not enough arguments: missing class name.");
 
-    List<String> args = new ArrayList<String>(Arrays.asList(argsArray));
+    List<String> args = new ArrayList<>(Arrays.asList(argsArray));
     String className = args.remove(0);
 
     boolean printLaunchCommand = !isEmpty(System.getenv("SPARK_PRINT_LAUNCH_COMMAND"));
@@ -70,7 +70,7 @@ class Main {
           // Ignore parsing exceptions.
         }
 
-        List<String> help = new ArrayList<String>();
+        List<String> help = new ArrayList<>();
         if (parser.className != null) {
           help.add(parser.CLASS);
           help.add(parser.className);
@@ -82,7 +82,7 @@ class Main {
       builder = new SparkClassCommandBuilder(className, args);
     }
 
-    Map<String, String> env = new HashMap<String, String>();
+    Map<String, String> env = new HashMap<>();
     List<String> cmd = builder.buildCommand(env);
     if (printLaunchCommand) {
       System.err.println("Spark Command: " + join(" ", cmd));
@@ -130,7 +130,7 @@ class Main {
       return cmd;
     }
 
-    List<String> newCmd = new ArrayList<String>();
+    List<String> newCmd = new ArrayList<>();
     newCmd.add("env");
 
     for (Map.Entry<String, String> e : childEnv.entrySet()) {
@@ -151,7 +151,7 @@ class Main {
 
     @Override
     protected boolean handle(String opt, String value) {
-      if (opt == CLASS) {
+      if (CLASS.equals(opt)) {
         className = value;
       }
       return false;

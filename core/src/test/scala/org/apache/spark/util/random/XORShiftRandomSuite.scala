@@ -17,14 +17,13 @@
 
 package org.apache.spark.util.random
 
-import org.scalatest.Matchers
+import scala.language.reflectiveCalls
 
 import org.apache.commons.math3.stat.inference.ChiSquareTest
+import org.scalatest.Matchers
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.util.Utils.times
-
-import scala.language.reflectiveCalls
 
 class XORShiftRandomSuite extends SparkFunSuite with Matchers {
 
@@ -54,7 +53,7 @@ class XORShiftRandomSuite extends SparkFunSuite with Matchers {
      * Perform the chi square test on the 5 rows of randomly generated numbers evenly divided into
      * 10 bins. chiSquareTest returns true iff the null hypothesis (that the classifications
      * represented by the counts in the columns of the input 2-way table are independent of the
-     * rows) can be rejected with 100 * (1 - alpha) percent confidence, where alpha is prespeficied
+     * rows) can be rejected with 100 * (1 - alpha) percent confidence, where alpha is prespecified
      * as 0.05
      */
     val chiTest = new ChiSquareTest

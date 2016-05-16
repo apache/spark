@@ -18,10 +18,11 @@
 package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
+import java.util.Iterator;
 
 /**
  * A function that returns zero or more records of type Double from each input record.
  */
 public interface DoubleFlatMapFunction<T> extends Serializable {
-  public Iterable<Double> call(T t) throws Exception;
+  Iterator<Double> call(T t) throws Exception;
 }

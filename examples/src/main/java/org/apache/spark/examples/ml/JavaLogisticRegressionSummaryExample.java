@@ -17,26 +17,26 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 // $example on$
 import org.apache.spark.ml.classification.BinaryLogisticRegressionSummary;
 import org.apache.spark.ml.classification.LogisticRegression;
 import org.apache.spark.ml.classification.LogisticRegressionModel;
 import org.apache.spark.ml.classification.LogisticRegressionTrainingSummary;
-import org.apache.spark.sql.DataFrame;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Row;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.functions;
 // $example off$
 
 public class JavaLogisticRegressionSummaryExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaLogisticRegressionSummaryExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext sqlContext = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaLogisticRegressionSummaryExample")
+      .getOrCreate();
 
     // Load training data
-    DataFrame training = sqlContext.read().format("libsvm")
+    Dataset<Row> training = spark.read().format("libsvm")
       .load("data/mllib/sample_libsvm_data.txt");
 
     LogisticRegression lr = new LogisticRegression()
@@ -65,20 +65,20 @@ public class JavaLogisticRegressionSummaryExample {
       (BinaryLogisticRegressionSummary) trainingSummary;
 
     // Obtain the receiver-operating characteristic as a dataframe and areaUnderROC.
-    DataFrame roc = binarySummary.roc();
+    Dataset<Row> roc = binarySummary.roc();
     roc.show();
     roc.select("FPR").show();
     System.out.println(binarySummary.areaUnderROC());
 
     // Get the threshold corresponding to the maximum F-Measure and rerun LogisticRegression with
     // this selected threshold.
-    DataFrame fMeasure = binarySummary.fMeasureByThreshold();
+    Dataset<Row> fMeasure = binarySummary.fMeasureByThreshold();
     double maxFMeasure = fMeasure.select(functions.max("F-Measure")).head().getDouble(0);
     double bestThreshold = fMeasure.where(fMeasure.col("F-Measure").equalTo(maxFMeasure))
       .select("threshold").head().getDouble(0);
     lrModel.setThreshold(bestThreshold);
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

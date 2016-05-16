@@ -20,18 +20,18 @@ package org.apache.spark.sql.execution
 import scala.util.Random
 
 import org.apache.spark.AccumulatorSuite
+import org.apache.spark.sql.{RandomDataGenerator, Row}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{RandomDataGenerator, Row}
-
 
 /**
  * Test sorting. Many of the test cases generate random data and compares the sorted result with one
  * sorted by a reference implementation ([[ReferenceSort]]).
  */
 class SortSuite extends SparkPlanTest with SharedSQLContext {
-  import testImplicits.localSeqToDataFrameHolder
+  import testImplicits.newProductEncoder
+  import testImplicits.localSeqToDatasetHolder
 
   test("basic sorting using ExternalSort") {
 
@@ -43,13 +43,13 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => Sort('a.asc :: 'b.asc :: Nil, global = true, child = child),
+      (child: SparkPlan) => SortExec('a.asc :: 'b.asc :: Nil, global = true, child = child),
       input.sortBy(t => (t._1, t._2)).map(Row.fromTuple),
       sortAnswers = false)
 
     checkAnswer(
       input.toDF("a", "b", "c"),
-      (child: SparkPlan) => Sort('b.asc :: 'a.asc :: Nil, global = true, child = child),
+      (child: SparkPlan) => SortExec('b.asc :: 'a.asc :: Nil, global = true, child = child),
       input.sortBy(t => (t._2, t._1)).map(Row.fromTuple),
       sortAnswers = false)
   }
@@ -57,8 +57,10 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
   test("sort followed by limit") {
     checkThatPlansAgree(
       (1 to 100).map(v => Tuple1(v)).toDF("a"),
-      (child: SparkPlan) => Limit(10, Sort('a.asc :: Nil, global = true, child = child)),
-      (child: SparkPlan) => Limit(10, ReferenceSort('a.asc :: Nil, global = true, child)),
+      (child: SparkPlan) =>
+        GlobalLimitExec(10, SortExec('a.asc :: Nil, global = true, child = child)),
+      (child: SparkPlan) =>
+        GlobalLimitExec(10, ReferenceSort('a.asc :: Nil, global = true, child)),
       sortAnswers = false
     )
   }
@@ -68,7 +70,7 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
     val stringLength = 1024 * 1024 * 2
     checkThatPlansAgree(
       Seq(Tuple1("a" * stringLength), Tuple1("b" * stringLength)).toDF("a").repartition(1),
-      Sort(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
+      SortExec(sortOrder, global = true, _: SparkPlan, testSpillFrequency = 1),
       ReferenceSort(sortOrder, global = true, _: SparkPlan),
       sortAnswers = false
     )
@@ -78,7 +80,7 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
     AccumulatorSuite.verifyPeakExecutionMemorySet(sparkContext, "unsafe external sort") {
       checkThatPlansAgree(
         (1 to 100).map(v => Tuple1(v)).toDF("a"),
-        (child: SparkPlan) => Sort('a.asc :: Nil, global = true, child = child),
+        (child: SparkPlan) => SortExec('a.asc :: Nil, global = true, child = child),
         (child: SparkPlan) => ReferenceSort('a.asc :: Nil, global = true, child),
         sortAnswers = false)
     }
@@ -99,7 +101,7 @@ class SortSuite extends SparkPlanTest with SharedSQLContext {
       )
       checkThatPlansAgree(
         inputDf,
-        p => ConvertToSafe(Sort(sortOrder, global = true, p: SparkPlan, testSpillFrequency = 23)),
+        p => SortExec(sortOrder, global = true, p: SparkPlan, testSpillFrequency = 23),
         ReferenceSort(sortOrder, global = true, _: SparkPlan),
         sortAnswers = false
       )

@@ -19,8 +19,8 @@ package org.apache.spark.ml.source.libsvm;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 
-import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 
 import org.junit.After;
@@ -28,12 +28,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.DenseVector;
 import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.util.Utils;
 
 
@@ -41,34 +40,35 @@ import org.apache.spark.util.Utils;
  * Test LibSVMRelation in Java.
  */
 public class JavaLibSVMRelationSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext sqlContext;
+  private transient SparkSession spark;
 
   private File tempDir;
   private String path;
 
   @Before
   public void setUp() throws IOException {
-    jsc = new JavaSparkContext("local", "JavaLibSVMRelationSuite");
-    sqlContext = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaLibSVMRelationSuite")
+      .getOrCreate();
 
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
     File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
-    Files.write(s, file, Charsets.US_ASCII);
+    Files.write(s, file, StandardCharsets.UTF_8);
     path = tempDir.toURI().toString();
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
     Utils.deleteRecursively(tempDir);
   }
 
   @Test
   public void verifyLibSVMDF() {
-    DataFrame dataset = sqlContext.read().format("libsvm").option("vectorType", "dense")
+    Dataset<Row> dataset = spark.read().format("libsvm").option("vectorType", "dense")
       .load(path);
     Assert.assertEquals("label", dataset.columns()[0]);
     Assert.assertEquals("features", dataset.columns()[1]);

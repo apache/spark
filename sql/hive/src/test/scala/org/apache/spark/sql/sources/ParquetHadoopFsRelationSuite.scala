@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 
@@ -125,18 +126,18 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
   test("SPARK-8604: Parquet data source should write summary file while doing appending") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      val df = sqlContext.range(0, 5)
+      val df = spark.range(0, 5).toDF()
       df.write.mode(SaveMode.Overwrite).parquet(path)
 
       val summaryPath = new Path(path, "_metadata")
       val commonSummaryPath = new Path(path, "_common_metadata")
 
-      val fs = summaryPath.getFileSystem(hadoopConfiguration)
+      val fs = summaryPath.getFileSystem(spark.sessionState.newHadoopConf())
       fs.delete(summaryPath, true)
       fs.delete(commonSummaryPath, true)
 
       df.write.mode(SaveMode.Append).parquet(path)
-      checkAnswer(sqlContext.read.parquet(path), df.unionAll(df))
+      checkAnswer(spark.read.parquet(path), df.union(df))
 
       assert(fs.exists(summaryPath))
       assert(fs.exists(commonSummaryPath))
@@ -147,12 +148,12 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
 
-      sqlContext.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
-      val df = sqlContext.read.parquet(path).filter('a === 0).select('b)
-      val physicalPlan = df.queryExecution.executedPlan
+      spark.range(2).select('id as 'a, 'id as 'b).write.partitionBy("b").parquet(path)
+      val df = spark.read.parquet(path).filter('a === 0).select('b)
+      val physicalPlan = df.queryExecution.sparkPlan
 
-      assert(physicalPlan.collect { case p: execution.Project => p }.length === 1)
-      assert(physicalPlan.collect { case p: execution.Filter => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.ProjectExec => p }.length === 1)
+      assert(physicalPlan.collect { case p: execution.FilterExec => p }.length === 1)
     }
   }
 
@@ -169,8 +170,61 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
         // The schema consists of the leading columns of the first part-file
         // in the lexicographic order.
-        assert(sqlContext.read.parquet(dir.getCanonicalPath).schema.map(_.name)
+        assert(spark.read.parquet(dir.getCanonicalPath).schema.map(_.name)
           === Seq("a", "b", "c", "d", "part"))
+      }
+    }
+  }
+
+  test(s"SPARK-13537: Fix readBytes in VectorizedPlainValuesReader") {
+    withTempPath { file =>
+      val path = file.getCanonicalPath
+
+      val schema = new StructType()
+        .add("index", IntegerType, nullable = false)
+        .add("col", ByteType, nullable = true)
+
+      val data = Seq(Row(1, -33.toByte), Row(2, 0.toByte), Row(3, -55.toByte), Row(4, 56.toByte),
+        Row(5, 127.toByte), Row(6, -44.toByte), Row(7, 23.toByte), Row(8, -95.toByte),
+        Row(9, 127.toByte), Row(10, 13.toByte))
+
+      val rdd = spark.sparkContext.parallelize(data)
+      val df = spark.createDataFrame(rdd, schema).orderBy("index").coalesce(1)
+
+      df.write
+        .mode("overwrite")
+        .format(dataSourceName)
+        .option("dataSchema", df.schema.json)
+        .save(path)
+
+      val loadedDF = spark
+        .read
+        .format(dataSourceName)
+        .option("dataSchema", df.schema.json)
+        .schema(df.schema)
+        .load(path)
+        .orderBy("index")
+
+      checkAnswer(loadedDF, df)
+    }
+  }
+
+  test("SPARK-13543: Support for specifying compression codec for Parquet via option()") {
+    withSQLConf(SQLConf.PARQUET_COMPRESSION.key -> "UNCOMPRESSED") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/table1"
+        val df = (1 to 5).map(i => (i, (i % 2).toString)).toDF("a", "b")
+        df.write
+          .option("compression", "GzIP")
+          .parquet(path)
+
+        val compressedFiles = new File(path).listFiles()
+        assert(compressedFiles.exists(_.getName.endsWith(".gz.parquet")))
+
+        val copyDf = spark
+          .read
+          .parquet(path)
+        checkAnswer(df, copyDf)
       }
     }
   }

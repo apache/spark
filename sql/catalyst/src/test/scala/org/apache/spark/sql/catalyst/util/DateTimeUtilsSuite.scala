@@ -22,8 +22,8 @@ import java.text.SimpleDateFormat
 import java.util.{Calendar, TimeZone}
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.sql.catalyst.util.DateTimeUtils._
+import org.apache.spark.unsafe.types.UTF8String
 
 class DateTimeUtilsSuite extends SparkFunSuite {
 
@@ -384,9 +384,6 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       Timestamp.valueOf("1700-02-28 12:14:50.123456")).foreach { t =>
       val us = fromJavaTimestamp(t)
       assert(toJavaTimestamp(us) === t)
-      assert(getHours(us) === t.getHours)
-      assert(getMinutes(us) === t.getMinutes)
-      assert(getSeconds(us) === t.getSeconds)
     }
   }
 
