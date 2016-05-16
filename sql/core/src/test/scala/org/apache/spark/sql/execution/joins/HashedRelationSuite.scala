@@ -24,8 +24,10 @@ import org.apache.spark.memory.{StaticMemoryManager, TaskMemoryManager}
 import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.LazilyGeneratedOrdering
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.map.BytesToBytesMap
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.collection.CompactBuffer
@@ -211,5 +213,28 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     val longRelation = LongHashedRelation(rows2, key, 1000, mm)
     assert(longRelation.estimatedSize > (2L << 30))
     longRelation.close()
+  }
+
+  test("SPARK-14752: Ordering with kryo serialization") {
+    val sortOrders = Seq(SortOrder(BoundReference(0, IntegerType, nullable = false), Ascending))
+    val ordering = new LazilyGeneratedOrdering(sortOrders)
+    val ser = new KryoSerializer(new SparkConf).newInstance()
+
+    // get the new ordering object by serializing & de-serializing via kryo
+    val newOrdering = ser.deserialize[LazilyGeneratedOrdering](ser.serialize(ordering))
+
+    // create 2 unsafe rows
+    val valueBytes1 = new Array[Byte](16)
+    val value1 = new UnsafeRow(1)
+    value1.pointTo(valueBytes1, Platform.BYTE_ARRAY_OFFSET, 16)
+    value1.setInt(0, 1)
+
+    val valueBytes2 = new Array[Byte](16)
+    val value2 = new UnsafeRow(1)
+    value2.pointTo(valueBytes2, Platform.BYTE_ARRAY_OFFSET, 16)
+    value2.setInt(0, 2)
+
+    // compare the rows using newly created ordering
+    assert(newOrdering.compare(value1, value2) == -1)
   }
 }
