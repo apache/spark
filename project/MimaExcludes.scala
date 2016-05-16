@@ -716,6 +716,9 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.ShuffleReadMetrics.localBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.remoteBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.localBlocksFetched")
+      ) ++ Seq(
+        // [SPARK-14464] [MLLIB] Better support for logistic regression when features are sparse
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.stat.MultivariateOnlineSummarizer.this")
       )
     case v if v.startsWith("1.6") =>
       Seq(
