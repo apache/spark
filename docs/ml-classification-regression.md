@@ -378,9 +378,9 @@ regression model and extracting model summary statistics.
 
 When working with data that has a relatively small number of features (< 4096), Spark's GeneralizedLinearRegression interface
 allows for flexible specification of [generalized linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) (GLMs) which can be used for various types of
-problems including linear regression, Poisson regression, logistic regression, and others.
+prediction problems including linear regression, Poisson regression, logistic regression, and others.
 
-Contrasted with linear regression where the output is assumed to have a Gaussian
+Contrasted with linear regression where the output is assumed to follow a Gaussian
 distribution, GLMs are specifications of linear models where the response variable $Y_i$ may take on _any_
 distribution from the [exponential family of distributions](https://en.wikipedia.org/wiki/Exponential_family). 
 
@@ -435,7 +435,7 @@ Spark's generalized linear regression interface also provides summary statistics
 fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
 others.
 
-###  Available Families
+###  Available families
 
 <table class="table">
   <thead>
