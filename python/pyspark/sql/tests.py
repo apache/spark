@@ -45,9 +45,6 @@ if sys.version_info[:2] <= (2, 6):
 else:
     import unittest
 
-if sys.version >= '3':
-    unicode = str
-
 from pyspark.sql import SparkSession, HiveContext, Column, Row
 from pyspark.sql.types import *
 from pyspark.sql.types import UserDefinedType, _infer_type
@@ -1039,8 +1036,12 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaises(TypeError, lambda: df[{}])
 
     def test_column_name_with_non_ascii(self):
-        columnName = unicode("数量", "utf-8")
-        self.assertTrue(isinstance(columnName, unicode))
+        if sys.version >= '3':
+            columnName = "数量"
+            self.assertTrue(isinstance(columnName, str))
+        else:
+            columnName = unicode("数量", "utf-8")
+            self.assertTrue(isinstance(columnName, unicode))
         schema = StructType([StructField(columnName, LongType(), True)])
         df = self.spark.createDataFrame([(1,)], schema)
         self.assertEqual(schema, df.schema)
