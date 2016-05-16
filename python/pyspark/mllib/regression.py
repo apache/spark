@@ -21,8 +21,8 @@ import warnings
 
 from pyspark import RDD, since
 from pyspark.streaming.dstream import DStream
+from pyspark.ml.linalg import SparseVector, Vectors, _convert_to_vector
 from pyspark.mllib.common import callMLlibFunc, _py2java, _java2py, inherit_doc
-from pyspark.mllib.linalg import SparseVector, Vectors, _convert_to_vector
 from pyspark.mllib.util import Saveable, Loader
 
 __all__ = ['LabeledPoint', 'LinearModel',
@@ -42,7 +42,7 @@ class LabeledPoint(object):
       Label for this data point.
     :param features:
       Vector of features for this point (NumPy array, list,
-      pyspark.mllib.linalg.SparseVector, or scipy.sparse column matrix).
+      pyspark.ml.linalg.SparseVector, or scipy.sparse column matrix).
 
     Note: 'label' and 'features' are accessible as class attributes.
 

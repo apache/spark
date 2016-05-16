@@ -20,8 +20,8 @@ if sys.version >= '3':
     basestring = str
 
 from pyspark.rdd import RDD, ignore_unicode_prefix
+from pyspark.ml.linalg import Matrix, _convert_to_vector
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import Matrix, _convert_to_vector
 from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.stat.test import ChiSqTestResult, KolmogorovSmirnovTestResult
 
@@ -72,7 +72,7 @@ class Statistics(object):
         :return: :class:`MultivariateStatisticalSummary` object containing
                  column-wise summary statistics.
 
-        >>> from pyspark.mllib.linalg import Vectors
+        >>> from pyspark.ml.linalg import Vectors
         >>> rdd = sc.parallelize([Vectors.dense([2, 0, 0, -2]),
         ...                       Vectors.dense([4, 5, 0,  3]),
         ...                       Vectors.dense([6, 7, 0,  8])])
@@ -124,7 +124,7 @@ class Statistics(object):
         >>> from math import isnan
         >>> isnan(Statistics.corr(x, zeros))
         True
-        >>> from pyspark.mllib.linalg import Vectors
+        >>> from pyspark.ml.linalg import Vectors
         >>> rdd = sc.parallelize([Vectors.dense([1, 0, 0, -2]), Vectors.dense([4, 5, 0, 3]),
         ...                       Vectors.dense([6, 7, 0,  8]), Vectors.dense([9, 0, 0, 1])])
         >>> pearsonCorr = Statistics.corr(rdd)
@@ -190,7 +190,7 @@ class Statistics(object):
         :return: ChiSquaredTest object containing the test statistic, degrees
                  of freedom, p-value, the method used, and the null hypothesis.
 
-        >>> from pyspark.mllib.linalg import Vectors, Matrices
+        >>> from pyspark.ml.linalg import Vectors, Matrices
         >>> observed = Vectors.dense([4, 6, 5])
         >>> pearson = Statistics.chiSqTest(observed)
         >>> print(pearson.statistic)

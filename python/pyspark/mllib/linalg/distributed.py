@@ -27,8 +27,8 @@ if sys.version >= '3':
 from py4j.java_gateway import JavaObject
 
 from pyspark import RDD, since
+from pyspark.ml.linalg import _convert_to_vector, Matrix, QRDecomposition
 from pyspark.mllib.common import callMLlibFunc, JavaModelWrapper
-from pyspark.mllib.linalg import _convert_to_vector, Matrix, QRDecomposition
 from pyspark.mllib.stat import MultivariateStatisticalSummary
 from pyspark.storagelevel import StorageLevel
 
@@ -1186,7 +1186,7 @@ def _test():
     import doctest
     from pyspark import SparkContext
     from pyspark.sql import SQLContext
-    from pyspark.mllib.linalg import Matrices
+    from pyspark.ml.linalg import Matrices
     import pyspark.mllib.linalg.distributed
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
     globs['sc'] = SparkContext('local[2]', 'PythonTest', batchSize=2)

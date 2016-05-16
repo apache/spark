@@ -1207,6 +1207,7 @@ private[python] class PythonMLLibAPI extends Serializable {
 private[spark] object SerDe extends Serializable {
 
   val PYSPARK_PACKAGE = "pyspark.mllib"
+  val PYSPARK_ML_PACKAGE = "pyspark.ml"
 
   /**
    * Base class used for pickle
@@ -1214,8 +1215,10 @@ private[spark] object SerDe extends Serializable {
   private[python] abstract class BasePickler[T: ClassTag]
     extends IObjectPickler with IObjectConstructor {
 
+    protected def packageName: String = PYSPARK_PACKAGE
+
     private val cls = implicitly[ClassTag[T]].runtimeClass
-    private val module = PYSPARK_PACKAGE + "." + cls.getName.split('.')(4)
+    private val module = packageName + "." + cls.getName.split('.')(4)
     private val name = cls.getSimpleName
 
     // register this to Pickler and Unpickler
@@ -1265,6 +1268,8 @@ private[spark] object SerDe extends Serializable {
   // Pickler for DenseVector
   private[python] class DenseVectorPickler extends BasePickler[DenseVector] {
 
+    override protected def packageName = PYSPARK_ML_PACKAGE
+
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val vector: DenseVector = obj.asInstanceOf[DenseVector]
       val bytes = new Array[Byte](8 * vector.size)
@@ -1296,6 +1301,8 @@ private[spark] object SerDe extends Serializable {
 
   // Pickler for DenseMatrix
   private[python] class DenseMatrixPickler extends BasePickler[DenseMatrix] {
+
+    override protected def packageName = PYSPARK_ML_PACKAGE
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val m: DenseMatrix = obj.asInstanceOf[DenseMatrix]
@@ -1333,6 +1340,8 @@ private[spark] object SerDe extends Serializable {
 
   // Pickler for SparseMatrix
   private[python] class SparseMatrixPickler extends BasePickler[SparseMatrix] {
+
+    override protected def packageName = PYSPARK_ML_PACKAGE
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val s = obj.asInstanceOf[SparseMatrix]
@@ -1389,6 +1398,8 @@ private[spark] object SerDe extends Serializable {
   // Pickler for SparseVector
   private[python] class SparseVectorPickler extends BasePickler[SparseVector] {
 
+    override protected def packageName = PYSPARK_ML_PACKAGE
+
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val v: SparseVector = obj.asInstanceOf[SparseVector]
       val n = v.indices.length
@@ -1431,6 +1442,8 @@ private[spark] object SerDe extends Serializable {
   // Pickler for LabeledPoint
   private[python] class LabeledPointPickler extends BasePickler[LabeledPoint] {
 
+    override protected def packageName = PYSPARK_PACKAGE
+
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val point: LabeledPoint = obj.asInstanceOf[LabeledPoint]
       saveObjects(out, pickler, point.label, point.features)
@@ -1446,6 +1459,8 @@ private[spark] object SerDe extends Serializable {
 
   // Pickler for Rating
   private[python] class RatingPickler extends BasePickler[Rating] {
+
+    override protected def packageName = PYSPARK_PACKAGE
 
     def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
       val rating: Rating = obj.asInstanceOf[Rating]
