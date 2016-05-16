@@ -30,7 +30,8 @@ case class CacheTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      sparkSession.registerTable(Dataset.ofRows(sparkSession, logicalPlan), tableName)
+      sparkSession.createTempView(
+        tableName, Dataset.ofRows(sparkSession, logicalPlan), replaceIfExists = true)
     }
     sparkSession.catalog.cacheTable(tableName)
 
