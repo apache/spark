@@ -1596,6 +1596,23 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   }
 
   /**
+   * Statically evaluate an expression containing one or more aggregates on an empty input.
+   */
+  private def evalOnZeroTups(expr : Expression) : Option[Any] = {
+    // AggregateExpressions are Unevaluable, so we need to replace all aggregates
+    // in the expression with the value they would return for zero input tuples.
+    val rewrittenExpr = expr transform {
+      case a @ AggregateExpression(aggFunc, _, _, resultId) =>
+        val resultLit = aggFunc.defaultResult match {
+          case Some(lit) => lit
+          case None => Literal.default(NullType)
+        }
+        Alias(resultLit, "aggVal") (exprId = resultId)
+    }
+    Option(rewrittenExpr.eval())
+  }
+
+  /**
    * Construct a new child plan by left joining the given subqueries to a base plan.
    */
   private def constructLeftJoins(
@@ -1603,9 +1620,32 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       subqueries: ArrayBuffer[ScalarSubquery]): LogicalPlan = {
     subqueries.foldLeft(child) {
       case (currentChild, ScalarSubquery(query, conditions, _)) =>
+        val aggOutputExpr = query.asInstanceOf[Aggregate].aggregateExpressions.head
+        val origOutput = query.output.head
+
+        // Ensure the rewritten subquery returns the same result when a tuple from the
+        // outer query block does not join with the subquery block.
+        // val (outputExpr, rewrittenQuery) = aggFunc.defaultResult match {
+        val (outputExpr, rewrittenQuery) = evalOnZeroTups(aggOutputExpr) match {
+          case Some(value) =>
+            val origExprId = origOutput.exprId
+            val newExprId = NamedExpression.newExprId
+
+            // Renumber the original output, because the outer query refers to its ID.
+            val newQuery = query transformExpressions {
+              case Alias(c, n) => Alias(c, n)(exprId = newExprId)
+            }
+            val coalesceExpr = Alias(
+              Coalesce(Seq(newQuery.output.head, Literal(value))),
+              origOutput.name) (exprId = origExprId)
+            (coalesceExpr, newQuery)
+
+          case None => (origOutput, query)
+        }
+
         Project(
-          currentChild.output :+ query.output.head,
-          Join(currentChild, query, LeftOuter, conditions.reduceOption(And)))
+          currentChild.output :+ outputExpr,
+          Join(currentChild, rewrittenQuery, LeftOuter, conditions.reduceOption(And)))
     }
   }
 
