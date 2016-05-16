@@ -113,7 +113,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       conf.setConfString(SQLConf.WAREHOUSE_PATH.key, value)
       conf.setConfString("hive.metastore.warehouse.dir", value)
       logInfo(s"Changing Hive metastore warehouse path to '$value'")
-    } else if (key.toLowerCase.startsWith("hive.")) {
+    } else if (!key.toLowerCase.startsWith("spark.")) {
       // Need to use the sql command to pass the hive-related conf changes to Hive metastore
       metadataHive.runSqlHive(s"set $key=$value")
       conf.setConfString(key, value)
