@@ -1040,6 +1040,7 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_column_name_with_non_ascii(self):
         columnName = unicode("数量", "utf-8")
+        self.assertTrue(isinstance(columnName, unicode))
         schema = StructType([StructField(columnName, LongType(), True)])
         df = self.spark.createDataFrame([(1,)], schema)
         self.assertEqual(schema, df.schema)
