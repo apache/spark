@@ -381,13 +381,17 @@ allows for flexible specification of [generalized linear models](https://en.wiki
 problems including linear regression, Poisson regression, logistic regression, and others.
 
 Contrasted with linear regression where the output is assumed to have a Gaussian
-distribution, GLMs are specifications of linear models where the output may take on _any_
-distribution from the [exponential family of distributions](https://en.wikipedia.org/wiki/Exponential_family). An exponential family distribution is any
-probability distribution of the form
+distribution, GLMs are specifications of linear models where the response variable $Y_i$ may take on _any_
+distribution from the [exponential family of distributions](https://en.wikipedia.org/wiki/Exponential_family). 
 
 $$
-f\left(y|\theta, \phi, w\right) = e^{\frac{y\theta - b(\theta)}{\phi/w} - c(y, \phi)}\\
 Y_i \sim f\left(\cdot|\theta_i, \phi, w_i\right)
+$$
+
+An exponential family distribution is any probability distribution of the form
+
+$$
+f\left(y|\theta, \phi, w\right) = \exp{\left(\frac{y\theta - b(\theta)}{\phi/w} - c(y, \phi)\right)}
 $$
 
 where the parameter of interest $\theta_i$ is related to the expected value of the response variable
@@ -397,12 +401,27 @@ $$
 \theta_i = h(\mu_i)
 $$
 
-A GLM finds the regression coefficients $\vec{\beta}$ which maximize the joint probability density
-of the data, also known as the likelihood.
+Here, $h(\mu_i)$ is defined by the form of the exponential family distribution used. GLMs also allow specification
+of a link function, which defines the relationship between the expected value of the response variable $\mu_i$
+and the so called _linear predictor_ $\eta_i$:
+
+$$
+g(\mu_i) = \eta_i = \vec{x_i}^T \cdot \vec{\beta}
+$$
+
+Often, the link function is chosen such that $h(\mu) = g(\mu)$, which yields a simplified relationship
+between the parameter of interest $\theta$ and the linear predictor $\eta$. In this case, the link
+function $g(\mu)$ is said to be the "canonical" link function.
+
+$$
+\theta_i = h(g^{-1}(\eta_i)) = \eta_i
+$$
+
+A GLM finds the regression coefficients $\vec{\beta}$ which maximize the likelihood function.
 
 $$
 \min_{\vec{\beta}} \mathcal{L}(\vec{\theta}|\vec{y},X) =
-\prod_{i=1}^{N} e^{\frac{y_i\theta_i - b(\theta_i)}{\phi/w_i} - c(y_i, \phi)}
+\prod_{i=1}^{N} \exp{\left(\frac{y_i\theta_i - b(\theta_i)}{\phi/w_i} - c(y_i, \phi)\right)}
 $$
 
 where the parameter of interest $\theta_i$ is related to the regression coefficients $\vec{\beta}$
@@ -416,6 +435,114 @@ Spark's generalized linear regression interface also provides summary statistics
 fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
 others.
 
+###  Available Families
+
+<table class="table">
+  <thead>
+    <tr>
+      <th></th>
+      <th>PDF</th>
+      <th>Response Type</th>
+      <th>Supported Links</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Gaussian</td>
+      <td>$\frac{1}{\sigma \sqrt{2\pi}} \exp \left( -\frac{(x - \mu)^2}{2\sigma^2}\right)$</td>
+      <td>Continuous</td>
+      <td>Identity*, Log, Inverse</td>
+    </tr>
+    <tr>
+      <td>Binomial</td>
+      <td>$\binom{n}{k}p^k (1-p)^{n-k}$</td>
+      <td>Binary</td>
+      <td>Logit*, Probit, CLogLog</td>
+    </tr>
+    <tr>
+      <td>Poisson</td>
+      <td>$\frac{\lambda^k e^{-\lambda}}{k!}$</td>
+      <td>Count</td>
+      <td>Log*, Identity, Sqrt</td>
+    </tr>
+    <tr>
+      <td>Gamma</td>
+      <td>$\frac{\beta^{\alpha}}{\Gamma(\alpha)} x^{\alpha - 1} e^{-\beta x}$</td>
+      <td>Continuous</td>
+      <td>Inverse*, Idenity, Log</td>
+    </tr>
+    <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
+  </tbody>
+</table>
+
+### Optimization
+
+The `spark.ml` GLM implements the method of 
+[iteratively reweighted least squares](https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares) (IRLS) for finding
+the optimal regression coefficients. GLMs seek to find a maximum likelihood estimate of the
+regression coefficients by finding zeros of the [score equation](https://en.wikipedia.org/wiki/Score_(statistics)). 
+The IRLS solver casts a first-order Taylor approximation of the score equation to a weighted least squares regression and solves it
+iteratively until convergence.
+
+### Input Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>labelCol</td>
+      <td>Double</td>
+      <td>"label"</td>
+      <td>Label to predict</td>
+    </tr>
+    <tr>
+      <td>featuresCol</td>
+      <td>Vector</td>
+      <td>"features"</td>
+      <td>Feature vector</td>
+    </tr>
+    <tr>
+      <td>weightCol</td>
+      <td>Double</td>
+      <td>""</td>
+      <td>Sample weights</td>
+    </tr>
+  </tbody>
+</table>
+
+### Output Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>predictionCol</td>
+      <td>Double</td>
+      <td>"prediction"</td>
+      <td>Predicted label</td>
+    </tr>
+    <tr>
+      <td>linkPredictionCol</td>
+      <td>Double</td>
+      <td>""</td>
+      <td>Linear predicted response</td>
+    </tr>
+  </tbody>
+</table>
+
 
 **Example**
 
@@ -425,26 +552,18 @@ function and extracting model summary statistics.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
-<!--- TODO -->
+{% include_example scala/org/apache/spark/examples/ml/GeneralizedLinearRegressionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
-<!--- TODO -->
+{% include_example java/org/apache/spark/examples/ml/JavaGeneralizedLinearRegressionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
-<!--- TODO -->
+{% include_example python/ml/generalized_linear_regression_example.py %}
 </div>
 
 </div>
-
-### Implementation (developer)
-
-The `spark.ml` GLM implements the method of iteratively reweighted least squares (IRLS) for finding
-the optimal regression coefficients. GLMs seek to find a maximum likelihood estimate of the
-regression coefficients by finding zeros of the score equation. In practice, a first-order Taylor
-approximation of the score equation is cast to a weighted least squares regression and solved
-iteratively until convergence.
 
 
 ## Decision tree regression
