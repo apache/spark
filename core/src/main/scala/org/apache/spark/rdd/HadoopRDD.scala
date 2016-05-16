@@ -363,7 +363,7 @@ private[spark] object HadoopRDD extends Logging {
 
   def containsCachedMetadata(key: String): Boolean = SparkEnv.get.hadoopJobMetadata.containsKey(key)
 
-  private def putCachedMetadata(key: String, value: Any): Unit =
+  private def putCachedMetadata(key: String, value: Object): Unit =
     SparkEnv.get.hadoopJobMetadata.put(key, value)
 
   /** Add Hadoop configuration specific to a single partition and attempt. */
