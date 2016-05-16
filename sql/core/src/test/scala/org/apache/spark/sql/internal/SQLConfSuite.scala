@@ -126,6 +126,17 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     spark.wrapped.conf.clear()
   }
 
+  test("Change warehouse path at runtime") {
+    spark.wrapped.conf.clear()
+    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
+    try{
+      sql(s"set ${SQLConf.WAREHOUSE_PATH.key}=/x/y/z/spark-warehouse")
+      assert(spark.conf.get(SQLConf.WAREHOUSE_PATH) === "/x/y/z/spark-warehouse")
+    } finally {
+      sql(s"set ${SQLConf.WAREHOUSE_PATH.key}=$original")
+    }
+  }
+
   test("SparkSession can access configs set in SparkConf") {
     try {
       sparkContext.conf.set("spark.to.be.or.not.to.be", "my love")

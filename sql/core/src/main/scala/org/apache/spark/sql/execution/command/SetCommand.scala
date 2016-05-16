@@ -65,7 +65,9 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
     // Configures a single property.
     case Some((key, Some(value))) =>
       val runFunc = (sparkSession: SparkSession) => {
-        sparkSession.conf.set(key, value)
+        // Use sessionState.setConfString for ensuring all the hive-related conf changes
+        // are sent to Hive Metastore too.
+        sparkSession.sessionState.setConfString(key, value)
         Seq(Row(key, value))
       }
       (keyValueOutput, runFunc)

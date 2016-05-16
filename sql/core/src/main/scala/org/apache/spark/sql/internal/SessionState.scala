@@ -170,6 +170,10 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
   }
 
+  def setConfString(key: String, value: String): Unit = {
+    conf.setConfString(key, value)
+  }
+
   def addJar(path: String): Unit = {
     sparkSession.sparkContext.addJar(path)
 

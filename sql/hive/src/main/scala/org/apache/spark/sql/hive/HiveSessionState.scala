@@ -17,19 +17,20 @@
 
 package org.apache.spark.sql.hive
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.internal.SessionState
+import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 
 /**
  * A class that holds all session-specific state in a given [[SparkSession]] backed by Hive.
  */
 private[hive] class HiveSessionState(sparkSession: SparkSession)
-  extends SessionState(sparkSession) {
+  extends SessionState(sparkSession) with Logging {
 
   self =>
 
@@ -104,6 +105,22 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
+
+  override def setConfString(key: String, value: String): Unit = {
+    if (key.toLowerCase == SQLConf.WAREHOUSE_PATH.key ||
+        key.toLowerCase == "hive.metastore.warehouse.dir") {
+      metadataHive.runSqlHive(s"set hive.metastore.warehouse.dir=$value")
+      conf.setConfString(SQLConf.WAREHOUSE_PATH.key, value)
+      conf.setConfString("hive.metastore.warehouse.dir", value)
+      logInfo(s"Changing Hive metastore warehouse path to '$value'")
+    } else if (key.toLowerCase.startsWith("hive.")) {
+      // Need to use the sql command to pass the hive-related conf changes to Hive metastore
+      metadataHive.runSqlHive(s"set $key=$value")
+      conf.setConfString(key, value)
+    } else {
+      conf.setConfString(key, value)
+    }
+  }
 
   override def addJar(path: String): Unit = {
     metadataHive.addJar(path)
