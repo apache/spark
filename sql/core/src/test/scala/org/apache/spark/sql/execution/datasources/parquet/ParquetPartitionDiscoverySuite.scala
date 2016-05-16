@@ -400,7 +400,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       // Introduce _temporary dir to the base dir the robustness of the schema discovery process.
       new File(base.getCanonicalPath, "_temporary").mkdir()
 
-      spark.read.parquet(base.getCanonicalPath).registerTempTable("t")
+      spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -484,7 +484,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      spark.read.parquet(base.getCanonicalPath).registerTempTable("t")
+      spark.read.parquet(base.getCanonicalPath).createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -533,7 +533,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       }
 
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
-      parquetRelation.registerTempTable("t")
+      parquetRelation.createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -573,7 +573,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       }
 
       val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
-      parquetRelation.registerTempTable("t")
+      parquetRelation.createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -609,7 +609,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         .option("mergeSchema", "true")
         .format("parquet")
         .load(base.getCanonicalPath)
-        .registerTempTable("t")
+        .createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
