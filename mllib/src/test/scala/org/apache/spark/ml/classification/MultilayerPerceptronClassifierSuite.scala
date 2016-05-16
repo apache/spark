@@ -92,9 +92,9 @@ class MultilayerPerceptronClassifierSuite
       .setMaxIter(1)
       .setTol(1e-6)
     val initialWeights = trainer.fit(dataFrame).weights
-    trainer.setWeights(initialWeights.copy)
+    trainer.setInitialWeights(initialWeights.copy)
     val weights1 = trainer.fit(dataFrame).weights
-    trainer.setWeights(initialWeights.copy)
+    trainer.setInitialWeights(initialWeights.copy)
     val weights2 = trainer.fit(dataFrame).weights
     assert(weights1 ~== weights2 absTol 10e-5,
       "Training should produce the same weights given equal initial weights and number of steps")

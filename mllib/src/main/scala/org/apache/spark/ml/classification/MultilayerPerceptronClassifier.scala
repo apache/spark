@@ -39,6 +39,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
    *
    * @group param
    */
+  @Since("1.5.0")
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
     "Sizes of layers from input layer to output layer. " +
       "E.g., Array(780, 100, 10) means 780 inputs, " +
@@ -46,6 +47,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
     (t: Array[Int]) => t.forall(ParamValidators.gt(0)) && t.length > 1)
 
   /** @group getParam */
+  @Since("1.5.0")
   final def getLayers: Array[Int] = $(layers)
 
   /**
@@ -57,6 +59,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
    *
    * @group expertParam
    */
+  @Since("1.5.0")
   final val blockSize: IntParam = new IntParam(this, "blockSize",
     "Block size for stacking input data in matrices. Data is stacked within partitions." +
       " If block size is more than remaining data in a partition then " +
@@ -64,6 +67,7 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
     ParamValidators.gt(0))
 
   /** @group expertGetParam */
+  @Since("1.5.0")
   final def getBlockSize: Int = $(blockSize)
 
   /**
@@ -73,24 +77,28 @@ private[classification] trait MultilayerPerceptronParams extends PredictorParams
    *
    * @group expertParam
    */
+  @Since("2.0.0")
   final val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
       s"${MultilayerPerceptronClassifier.supportedSolvers.mkString(", ")}. (Default l-bfgs)",
     ParamValidators.inArray[String](MultilayerPerceptronClassifier.supportedSolvers))
 
   /** @group expertGetParam */
+  @Since("2.0.0")
   final def getSolver: String = $(solver)
 
   /**
-   * Model weights. Can be returned either after training or after explicit setting
+   * The initial weights of the model.
    *
    * @group expertParam
    */
-  final val weights: Param[Vector] = new Param[Vector](this, "weights",
-    " Sets the weights of the model ")
+  @Since("2.0.0")
+  final val initialWeights: Param[Vector] = new Param[Vector](this, "initialWeights",
+    "The initial weights of the model")
 
   /** @group expertGetParam */
-  final def getWeights: Vector = $(weights)
+  @Since("2.0.0")
+  final def getInitialWeights: Vector = $(initialWeights)
 
   setDefault(maxIter -> 100, tol -> 1e-4, blockSize -> 128,
     solver -> MultilayerPerceptronClassifier.LBFGS, stepSize -> 0.03)
@@ -198,12 +206,12 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   def setSeed(value: Long): this.type = set(seed, value)
 
   /**
-   * Sets the value of param [[weights]].
+   * Sets the value of param [[initialWeights]].
    *
    * @group expertSetParam
    */
   @Since("2.0.0")
-  def setWeights(value: Vector): this.type = set(weights, value)
+  def setInitialWeights(value: Vector): this.type = set(initialWeights, value)
 
   /**
    * Sets the value of param [[stepSize]].
@@ -232,8 +240,8 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, labels))
     val topology = FeedForwardTopology.multiLayerPerceptron(myLayers, softmaxOnTop = true)
     val trainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
-    if (isDefined(weights)) {
-      trainer.setWeights($(weights))
+    if (isDefined(initialWeights)) {
+      trainer.setWeights($(initialWeights))
     } else {
       trainer.setSeed($(seed))
     }
