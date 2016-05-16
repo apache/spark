@@ -26,13 +26,16 @@ trait BlockReplicationPrioritization {
 
   /**
    * Method to prioritize a bunch of candidate peers of a block
- *
+   *
    * @param peers A list of peers of a BlockManager
+   * @param peersReplicatedTo Set of peers already replicated to
    * @param blockId BlockId of the block being replicated. This can be used as a source of
    *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  def prioritize(peers: Seq[BlockManagerId], blockId: BlockId): Seq[BlockManagerId]
+  def prioritize(peers: Seq[BlockManagerId],
+                 peersReplicatedTo: Set[BlockManagerId],
+                 blockId: BlockId): Seq[BlockManagerId]
 }
 
 class DefaultBlockReplicationPrioritization(host: String)
@@ -44,11 +47,14 @@ class DefaultBlockReplicationPrioritization(host: String)
    * that just makes sure we put blocks on different hosts, if possible
    *
    * @param peers A list of peers of a BlockManager
+   * @param peersReplicatedTo Set of peers already replicated to
    * @param blockId BlockId of the block being replicated. This can be used as a source of
    *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  override def prioritize(peers: Seq[BlockManagerId], blockId: BlockId): Seq[BlockManagerId] = {
+  override def prioritize(peers: Seq[BlockManagerId],
+                          peersReplicatedTo: Set[BlockManagerId],
+                          blockId: BlockId): Seq[BlockManagerId] = {
     val random = new Random(blockId.hashCode)
 
     logDebug(s"Input peers : ${peers.mkString(", ")}")
