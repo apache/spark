@@ -497,8 +497,8 @@ class ALSSuite
           (ex, act) =>
             ex.userFactors.first().getSeq[Float](1) === act.userFactors.first.getSeq[Float](1)
         } { (ex, act, _) =>
-          ex.transform(_: DataFrame).select("prediction").first.getDouble(0) ~==
-            act.transform(_: DataFrame).select("prediction").first.getDouble(0) absTol 1e-6
+          ex.transform(_: DataFrame).select("prediction").first.getFloat(0) ~==
+            act.transform(_: DataFrame).select("prediction").first.getFloat(0) absTol 1e-6
         }
     }
     // check user/item ids falling outside of Int range
