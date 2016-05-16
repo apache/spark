@@ -69,8 +69,8 @@ private[regression] trait IsotonicRegressionBase extends Params with HasFeatures
   setDefault(isotonic -> true, featureIndex -> 0)
 
   /** Checks whether the input has weight column. */
-  protected[ml] def hasWeightCol: Boolean = {
-    isDefined(weightCol) && $(weightCol) != ""
+  protected def hasWeightCol: Boolean = {
+    isDefined(weightCol) && $(weightCol).nonEmpty
   }
 
   /**
