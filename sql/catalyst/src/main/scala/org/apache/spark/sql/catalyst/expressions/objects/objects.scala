@@ -425,7 +425,6 @@ case class MapObjects private(
   override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
     ctx.addMutableState("boolean", loopVar.isNull, "")
     ctx.addMutableState(elementJavaType, loopVar.value, "")
@@ -448,19 +447,19 @@ case class MapObjects private(
       s"new $convertedType[$dataLength]"
     }
 
-    val loopNullCheck = if (primitiveElement) {
-      s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
-    } else {
-      s"${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
+    val loopNullCheck = inputData.dataType match {
+      case _: ArrayType => s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
+      // The element of primitive array will never be null.
+      case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
+        s"${loopVar.isNull} = false"
+      case _ => s"${loopVar.isNull} = ${loopVar.value} == null;"
     }
 
     val code = s"""
       ${genInputData.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
 
-      boolean ${ev.isNull} = ${genInputData.value} == null;
-      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-
-      if (!${ev.isNull}) {
+      if (!${genInputData.isNull}) {
         $convertedType[] $convertedArray = null;
         int $dataLength = ${genInputData.value}$lengthFunction;
         $convertedArray = $arrayConstructor;
@@ -481,11 +480,10 @@ case class MapObjects private(
           $loopIndex += 1;
         }
 
-        ${ev.isNull} = false;
         ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
       }
     """
-    ev.copy(code = code)
+    ev.copy(code = code, isNull = genInputData.isNull)
   }
 }
 
