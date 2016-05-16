@@ -23,7 +23,7 @@ import sys
 from pyspark.ml.classification import LogisticRegression
 from pyspark.mllib.linalg import DenseVector
 from pyspark.mllib.regression import LabeledPoint
-from pyspark.sql import Row, SparkSession
+from pyspark.sql import SparkSession
 
 """
 A simple example demonstrating ways to specify parameters for Estimators and Transformers.
