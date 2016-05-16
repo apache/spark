@@ -24,7 +24,8 @@ import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, DecodeUsingSerializer, EncodeUsingSerializer}
+import org.apache.spark.sql.catalyst.expressions.objects.{DecodeUsingSerializer, EncodeUsingSerializer}
+import org.apache.spark.sql.catalyst.expressions.BoundReference
 import org.apache.spark.sql.types._
 
 /**

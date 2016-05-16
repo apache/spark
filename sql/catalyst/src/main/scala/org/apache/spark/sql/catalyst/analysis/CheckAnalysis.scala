@@ -241,16 +241,15 @@ trait CheckAnalysis extends PredicateHelper {
           case s @ SetOperation(left, right) if left.output.length != right.output.length =>
             failAnalysis(
               s"${s.nodeName} can only be performed on tables with the same number of columns, " +
-               s"but the left table has ${left.output.length} columns and the right has " +
-               s"${right.output.length}")
+                s"but the left table has ${left.output.length} columns and the right has " +
+                s"${right.output.length}")
 
           case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
             val firstError = s.children.find(_.output.length != s.children.head.output.length).get
             failAnalysis(
-              s"""
-                |Unions can only be performed on tables with the same number of columns,
-                | but one table has '${firstError.output.length}' columns and another table has
-                | '${s.children.head.output.length}' columns""".stripMargin)
+              s"Unions can only be performed on tables with the same number of columns, " +
+                s"but one table has '${firstError.output.length}' columns and another table has " +
+                s"'${s.children.head.output.length}' columns")
 
           case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
             p match {

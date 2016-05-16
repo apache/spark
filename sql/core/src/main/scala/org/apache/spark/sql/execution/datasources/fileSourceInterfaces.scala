@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, Inter
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
-import org.apache.spark.sql.sources.{BaseRelation, Filter}
+import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, Filter}
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
@@ -157,8 +157,12 @@ case class HadoopFsRelation(
 
   def refresh(): Unit = location.refresh()
 
-  override def toString: String =
-    s"HadoopFiles"
+  override def toString: String = {
+    fileFormat match {
+      case source: DataSourceRegister => source.shortName()
+      case _ => "HadoopFiles"
+    }
+  }
 
   /** Returns the list of files that will be read when scanning this relation. */
   override def inputFiles: Array[String] =

@@ -19,16 +19,15 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.parquet.hadoop.metadata.CompressionCodecName
 
-import org.apache.spark.internal.Logging
 import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Options for the Parquet data source.
  */
-class ParquetOptions(
+private[parquet] class ParquetOptions(
     @transient private val parameters: Map[String, String],
     @transient private val sqlConf: SQLConf)
-  extends Logging with Serializable {
+  extends Serializable {
 
   import ParquetOptions._
 
@@ -48,7 +47,7 @@ class ParquetOptions(
 }
 
 
-object ParquetOptions {
+private[parquet] object ParquetOptions {
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
     "none" -> CompressionCodecName.UNCOMPRESSED,

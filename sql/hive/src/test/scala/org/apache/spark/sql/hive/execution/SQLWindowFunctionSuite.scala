@@ -353,7 +353,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
 
     checkAnswer(actual, expected)
 
-    spark.catalog.dropTempTable("nums")
+    spark.catalog.dropTempView("nums")
   }
 
   test("SPARK-7595: Window will cause resolve failed with self join") {
