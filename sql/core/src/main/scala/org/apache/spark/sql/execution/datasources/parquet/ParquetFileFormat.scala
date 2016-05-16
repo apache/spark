@@ -797,7 +797,7 @@ private[sql] object ParquetFileFormat extends Logging {
 
     // Set the number of partitions to prevent following schema reads from generating many tasks
     // in case of a small number of parquet files.
-    val numParallelism = Math.min(partialFileStatusInfo.size,
+    val numParallelism = Math.min(partialFileStatusInfo.size + 1,
       sparkSession.sparkContext.defaultParallelism)
 
     // Issues a Spark job to read Parquet schema in parallel.
