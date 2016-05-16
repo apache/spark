@@ -153,7 +153,7 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.
 
 A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
 represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
-each with its own probability. The spark.ml implementation uses the
+each with its own probability. The `spark.ml` implementation uses the
 [expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
 algorithm to induce the maximum-likelihood model given a set of samples.
 
@@ -207,7 +207,6 @@ model.
     </tr>
   </tbody>
 </table>
-
 
 ### Example
 
