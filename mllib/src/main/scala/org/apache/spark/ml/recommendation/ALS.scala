@@ -59,7 +59,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    * Default: "user"
    * @group param
    */
-  val userCol = new Param[String](this, "userCol", "column name for user ids. Must be within " +
+  val userCol = new Param[String](this, "userCol", "column name for user ids. Ids must be within " +
     "the integer value range.")
 
   /** @group getParam */
@@ -72,7 +72,7 @@ private[recommendation] trait ALSModelParams extends Params with HasPredictionCo
    * Default: "item"
    * @group param
    */
-  val itemCol = new Param[String](this, "itemCol", "column name for item ids. Must be within " +
+  val itemCol = new Param[String](this, "itemCol", "column name for item ids. Ids must be within " +
     "the integer value range.")
 
   /** @group getParam */
