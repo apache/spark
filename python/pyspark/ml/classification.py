@@ -883,6 +883,12 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
         """
         return self._call_java("featureImportances")
 
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
+
 
 @inherit_doc
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
