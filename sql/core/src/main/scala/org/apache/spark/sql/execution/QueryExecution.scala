@@ -110,7 +110,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
    */
   def hiveResultString(): Seq[String] = executedPlan match {
     case ExecutedCommandExec(desc: DescribeTableCommand) =>
-      SQLExecution.withNewExecutionId(self, this) {
+      SQLExecution.withNewExecutionId(sparkSession, this) {
         // If it is a describe command for a Hive table, we want to have the output format
         // be similar with Hive.
         desc.run(sparkSession).map {
@@ -122,11 +122,11 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
         }
       }
     case command: ExecutedCommandExec =>
-      SQLExecution.withNewExecutionId(self, this) {
+      SQLExecution.withNewExecutionId(sparkSession, this) {
         command.executeCollect().map(_.getString(0))
       }
     case other =>
-      SQLExecution.withNewExecutionId(self, this) {
+      SQLExecution.withNewExecutionId(sparkSession, this) {
         val result: Seq[Seq[Any]] = other.executeCollectPublic().map(_.toSeq).toSeq
         // We need the types so we can output struct field names
         val types = analyzed.output.map(_.dataType)
