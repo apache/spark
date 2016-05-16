@@ -702,6 +702,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("already exists"))
     dataset.sparkSession.catalog.dropTempView("tempView")
   }
+
+  test("SPARK-14218: showString schema order in the output") {
+    val ds = Seq((1, "one"), (2, "two"), (3, "three")).toDF("b", "a").as[ClassData]
+    val expectedAnswer = """+-----+---+
+                           ||    a|  b|
+                           |+-----+---+
+                           ||  one|  1|
+                           ||  two|  2|
+                           ||three|  3|
+                           |+-----+---+
+                           |""".stripMargin
+    assert(ds.showString(10) === expectedAnswer)
+  }
 }
 
 case class Generic[T](id: T, value: Double)
