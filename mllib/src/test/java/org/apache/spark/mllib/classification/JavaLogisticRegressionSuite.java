@@ -61,7 +61,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   }
 
   @Test
-  public void runLRUsingConstructor() {
+  public void runLRWithSGDUsingConstructor() {
     int nPoints = 10000;
     double A = 2.0;
     double B = -1.5;
@@ -83,7 +83,7 @@ public class JavaLogisticRegressionSuite implements Serializable {
   }
 
   @Test
-  public void runLRUsingStaticMethods() {
+  public void runLRWithSGDUsingStaticMethods() {
     int nPoints = 10000;
     double A = 0.0;
     double B = -2.5;
@@ -95,6 +95,25 @@ public class JavaLogisticRegressionSuite implements Serializable {
 
     LogisticRegressionModel model = LogisticRegressionWithSGD.train(
       testRDD.rdd(), 100, 1.0, 1.0);
+
+    int numAccurate = validatePrediction(validationData, model);
+    Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
+  }
+
+  @Test
+  public void runLRWithLBFGSUsingConstructor() {
+    int nPoints = 10000;
+    double A = 0.0;
+    double B = -2.5;
+
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(
+            LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 42), 2).cache();
+    List<LabeledPoint> validationData =
+            LogisticRegressionSuite.generateLogisticInputAsList(A, B, nPoints, 17);
+
+    LogisticRegressionWithLBFGS lrImpl = new LogisticRegressionWithLBFGS();
+
+    LogisticRegressionModel model = lrImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
     Assert.assertTrue(numAccurate > nPoints * 4.0 / 5.0);
