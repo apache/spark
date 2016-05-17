@@ -10,6 +10,9 @@ displayTitle: Feature Extraction and Transformation - spark.mllib
 
 ## TF-IDF
 
+**Note** We recommend using the DataFrame-based API, which is detailed in the [ML user guide on 
+TF-IDF](ml-features.html#tf-idf).
+
 [Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
 vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
 Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
@@ -43,8 +46,6 @@ where different raw features may become the same term after hashing.
 To reduce the chance of collision, we can increase the target feature dimension, i.e., 
 the number of buckets of the hash table.
 The default feature dimension is `$2^{20} = 1,048,576$`.
-
-We recommend users to adapt to the DataFrame-based API in [ML user guide on TF-IDF](ml-features.html#tf-idf).
 
 **Note:** `spark.mllib` doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 

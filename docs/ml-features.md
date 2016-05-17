@@ -51,7 +51,9 @@ are calculated based on the mapped indices. This approach avoids the need to com
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
 chance of collision, we can increase the target feature dimension, i.e., the number of buckets 
-of the hash table. The default feature dimension is `$2^{18} = 262,144$`.
+of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
+it is advisable to use a power of two as the feature dimension, otherwise the features will 
+not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`. 
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
@@ -60,11 +62,11 @@ of the hash table. The default feature dimension is `$2^{18} = 262,144$`.
 `IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and 
 scales each column. Intuitively, it down-weights columns which appear frequently in a corpus.
 
-Please refer to the [MLlib user guide on TF-IDF](mllib-feature-extraction.html#tf-idf) for RDD-based API.
-
-**Note:** `spark.mllib` doesn't provide tools for text segmentation.
+**Note:** `spark.ml` doesn't provide tools for text segmentation.
 We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
 [scalanlp/chalk](https://github.com/scalanlp/chalk).
+
+**Examples**
 
 In the following code segment, we start with a set of sentences.  We split each sentence into words 
 using `Tokenizer`.  For each sentence (bag of words), we use `HashingTF` to hash the sentence into 
