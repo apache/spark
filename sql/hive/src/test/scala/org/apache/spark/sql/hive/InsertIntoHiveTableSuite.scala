@@ -22,9 +22,10 @@ import java.io.File
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -216,30 +217,32 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
   }
 
   test("SPARK-10216: Avoid empty files during overwrite into Hive table with group by query") {
-    val testDataset = hiveContext.sparkContext.parallelize(
-      (1 to 2).map(i => TestData(i, i.toString))).toDF()
-    testDataset.registerTempTable("testDataset")
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      val testDataset = hiveContext.sparkContext.parallelize(
+        (1 to 2).map(i => TestData(i, i.toString))).toDF()
+      testDataset.createOrReplaceTempView("testDataset")
 
-    val tmpDir = Utils.createTempDir()
-    sql(
-      s"""
-        |CREATE TABLE table1(key int,value string)
-        |location '${tmpDir.toURI.toString}'
-      """.stripMargin)
-    sql(
-      """
-        |INSERT OVERWRITE TABLE table1
-        |SELECT count(key), value FROM testDataset GROUP BY value
-      """.stripMargin)
+      val tmpDir = Utils.createTempDir()
+      sql(
+        s"""
+          |CREATE TABLE table1(key int,value string)
+          |location '${tmpDir.toURI.toString}'
+        """.stripMargin)
+      sql(
+        """
+          |INSERT OVERWRITE TABLE table1
+          |SELECT count(key), value FROM testDataset GROUP BY value
+        """.stripMargin)
 
-    val overwrittenFiles = tmpDir.listFiles()
-      .filter(f => f.isFile && !f.getName.endsWith(".crc"))
-      .sortBy(_.getName)
-    val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
+      val overwrittenFiles = tmpDir.listFiles()
+        .filter(f => f.isFile && !f.getName.endsWith(".crc"))
+        .sortBy(_.getName)
+      val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
 
-    assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
+      assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
 
-    sql("DROP TABLE table1")
+      sql("DROP TABLE table1")
+    }
   }
 
   test("Reject partitioning that does not match table") {
