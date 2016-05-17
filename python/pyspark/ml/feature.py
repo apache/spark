@@ -29,8 +29,7 @@ from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 
-__all__ = ['LabeledPoint',
-           'Binarizer',
+__all__ = ['Binarizer',
            'Bucketizer',
            'ChiSqSelector', 'ChiSqSelectorModel',
            'CountVectorizer', 'CountVectorizerModel',
@@ -58,36 +57,6 @@ __all__ = ['LabeledPoint',
            'VectorIndexer', 'VectorIndexerModel',
            'VectorSlicer',
            'Word2Vec', 'Word2VecModel']
-
-
-class LabeledPoint(object):
-
-    """
-    Class that represents the features and labels of a data point.
-
-    :param label:
-      Label for this data point.
-    :param features:
-      Vector of features for this point (NumPy array, list,
-      pyspark.ml.linalg.SparseVector, or scipy.sparse column matrix).
-
-    Note: 'label' and 'features' are accessible as class attributes.
-
-    .. versionadded:: 1.0.0
-    """
-
-    def __init__(self, label, features):
-        self.label = float(label)
-        self.features = _convert_to_vector(features)
-
-    def __reduce__(self):
-        return (LabeledPoint, (self.label, self.features))
-
-    def __str__(self):
-        return "(" + ",".join((str(self.label), str(self.features))) + ")"
-
-    def __repr__(self):
-        return "LabeledPoint(%s, %s)" % (self.label, self.features)
 
 
 @inherit_doc

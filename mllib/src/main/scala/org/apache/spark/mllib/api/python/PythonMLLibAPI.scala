@@ -1623,24 +1623,6 @@ private[spark] object SerDe extends Serializable {
     }
   }
 
-  // Pickler for ML LabeledPoint
-  private[python] class MLLabeledPointPickler extends BasePickler[MLLabeledPoint] {
-
-    override protected def packageName = PYSPARK_ML_PACKAGE
-
-    def saveState(obj: Object, out: OutputStream, pickler: Pickler): Unit = {
-      val point: MLLabeledPoint = obj.asInstanceOf[MLLabeledPoint]
-      saveObjects(out, pickler, point.label, point.features)
-    }
-
-    def construct(args: Array[Object]): Object = {
-      if (args.length != 2) {
-        throw new PickleException("should be 2")
-      }
-      new MLLabeledPoint(args(0).asInstanceOf[Double], args(1).asInstanceOf[NewVector])
-    }
-  }
-
   // Pickler for Rating
   private[python] class RatingPickler extends BasePickler[Rating] {
 
@@ -1684,7 +1666,6 @@ private[spark] object SerDe extends Serializable {
         new NewSparseMatrixPickler().register()
         new NewSparseVectorPickler().register()
         new LabeledPointPickler().register()
-        new MLLabeledPointPickler().register()
         new RatingPickler().register()
         initialized = true
       }
