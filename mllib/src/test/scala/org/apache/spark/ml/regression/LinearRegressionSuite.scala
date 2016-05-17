@@ -610,20 +610,31 @@ class LinearRegressionSuite
         val model1 = new LinearRegression()
           .setFitIntercept(fitIntercept)
           .setWeightCol("weight")
+          .setPredictionCol("myPrediction")
           .setSolver(solver)
           .fit(datasetWithWeightConstantLabel)
         val actual1 = Vectors.dense(model1.intercept, model1.coefficients(0),
             model1.coefficients(1))
         assert(actual1 ~== expected(idx) absTol 1e-4)
 
+        // Schema of summary.predictions should be a superset of the input dataset
+        assert((datasetWithWeightConstantLabel.schema.fieldNames.toSet + model1.getPredictionCol)
+          .subsetOf(model1.summary.predictions.schema.fieldNames.toSet))
+
         val model2 = new LinearRegression()
           .setFitIntercept(fitIntercept)
           .setWeightCol("weight")
+          .setPredictionCol("myPrediction")
           .setSolver(solver)
           .fit(datasetWithWeightZeroLabel)
         val actual2 = Vectors.dense(model2.intercept, model2.coefficients(0),
             model2.coefficients(1))
         assert(actual2 ~==  Vectors.dense(0.0, 0.0, 0.0) absTol 1e-4)
+
+        // Schema of summary.predictions should be a superset of the input dataset
+        assert((datasetWithWeightZeroLabel.schema.fieldNames.toSet + model2.getPredictionCol)
+          .subsetOf(model2.summary.predictions.schema.fieldNames.toSet))
+
         idx += 1
       }
     }
@@ -672,7 +683,7 @@ class LinearRegressionSuite
 
   test("linear regression model training summary") {
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
-      val trainer = new LinearRegression().setSolver(solver)
+      val trainer = new LinearRegression().setSolver(solver).setPredictionCol("myPrediction")
       val model = trainer.fit(datasetWithDenseFeature)
       val trainerNoPredictionCol = trainer.setPredictionCol("")
       val modelNoPredictionCol = trainerNoPredictionCol.fit(datasetWithDenseFeature)
@@ -682,7 +693,7 @@ class LinearRegressionSuite
       assert(modelNoPredictionCol.hasSummary)
 
       // Schema should be a superset of the input dataset
-      assert((datasetWithDenseFeature.schema.fieldNames.toSet + "prediction").subsetOf(
+      assert((datasetWithDenseFeature.schema.fieldNames.toSet + model.getPredictionCol).subsetOf(
         model.summary.predictions.schema.fieldNames.toSet))
       // Validate that we re-insert a prediction column for evaluation
       val modelNoPredictionColFieldNames
