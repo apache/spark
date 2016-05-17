@@ -53,8 +53,10 @@ case class ExprCode(var code: String, var isNull: String, var value: String)
  *               to null.
  * @param value A term for a value of a common sub-expression. Not valid if `isNull`
  *              is set to `true`.
+ * @param exprCode A [[ExprCode]] which represents the Java source evaluateing this subexpression.
+ *                 If it is set to None, meaning that the Java source is evaluated in other place.
  */
-case class SubExprEliminationState(isNull: String, value: String)
+case class SubExprEliminationState(isNull: String, value: String, exprCode: Option[ExprCode])
 
 /**
  * Codes and common subexpressions mapping used for subexpression elimination.
@@ -612,8 +614,16 @@ class CodegenContext {
    * populates the mapping of common subexpressions to the generated code snippets. The generated
    * code snippets will be returned and should be inserted into generated codes before these
    * common subexpressions actually are used first time.
+   *
+   * @param expressions The expressions to extract subexpressions from.
+   * @param evaluateWhenNeed Set it to true if we want to evaluate these common subexpressions
+   *                         only when they are first referred in expressions. Set it to false
+   *                         will return Java source of these subexpressions in [[SubExprCodes]].
+   *                         So we can evaluate them at once.
    */
-  def subexpressionEliminationForWholeStageCodegen(expressions: Seq[Expression]): SubExprCodes = {
+  def subexpressionEliminationForWholeStageCodegen(
+      expressions: Seq[Expression],
+      evaluateWhenNeed: Boolean = false): SubExprCodes = {
     // Create a clear EquivalentExpressions and SubExprEliminationState mapping
     val equivalentExpressions: EquivalentExpressions = new EquivalentExpressions
     val subExprEliminationExprs = mutable.HashMap.empty[Expression, SubExprEliminationState]
@@ -632,9 +642,18 @@ class CodegenContext {
 
       // Generate the code for this expression tree.
       val code = expr.genCode(this)
-      val state = SubExprEliminationState(code.isNull, code.value)
+      val exprCode = if (evaluateWhenNeed) {
+        Some(code)
+      } else {
+        None
+      }
+      val state = SubExprEliminationState(code.isNull, code.value, exprCode)
       e.foreach(subExprEliminationExprs.put(_, state))
-      code.code.trim
+      if (evaluateWhenNeed) {
+        ""
+      } else {
+        code.code.trim
+      }
     }
     SubExprCodes(codes, subExprEliminationExprs.toMap)
   }
@@ -691,7 +710,7 @@ class CodegenContext {
         s"$value = ${defaultValue(expr.dataType)};")
 
       subexprFunctions += s"$fnName($INPUT_ROW);"
-      val state = SubExprEliminationState(isNull, value)
+      val state = SubExprEliminationState(isNull, value, None)
       e.foreach(subExprEliminationExprs.put(_, state))
     }
   }
