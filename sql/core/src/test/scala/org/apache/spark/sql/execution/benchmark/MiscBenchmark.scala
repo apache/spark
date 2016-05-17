@@ -132,4 +132,23 @@ class MiscBenchmark extends BenchmarkBase {
     collect limit 2 millions                 3348 / 4005          0.3        3193.3       0.2X
      */
   }
+
+  ignore("generate explode") {
+    val N = 1 << 24
+    runBenchmark("generate explode", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "array(rand(), rand(), rand(), rand(), rand()) as values")
+      df.selectExpr("key", "explode(values) value").count()
+    }
+
+    /**
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 4.4.0-21-generic
+    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
+    generate explode:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate explode wholestage off               8916 / 9250          1.9         531.5       1.0X
+    generate explode wholestage on                 732 /  781         22.9          43.6      12.2X
+     */
+  }
 }
