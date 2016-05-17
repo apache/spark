@@ -716,6 +716,14 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.ShuffleReadMetrics.localBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.remoteBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.localBlocksFetched")
+      ) ++ Seq(
+        // [SPARK-15290] Move annotations, like @Since / @DeveloperApi, into spark-tags
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Private"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.AlphaComponent"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Experimental"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.DeveloperApi")
       )
     case v if v.startsWith("1.6") =>
       Seq(

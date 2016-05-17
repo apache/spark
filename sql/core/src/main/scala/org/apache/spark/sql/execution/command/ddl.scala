@@ -497,20 +497,27 @@ private[sql] object DDLUtils {
   // will be inferred at runtime when the table is referenced.
   def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
     require(isDatasourceTable(metadata))
+    val props = metadata.properties
+    if (props.isDefinedAt("spark.sql.sources.schema")) {
+      // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
+      // After SPARK-6024, we removed this flag.
+      // Although we are not using spark.sql.sources.schema any more, we need to still support.
+      props.get("spark.sql.sources.schema").map(DataType.fromJson(_).asInstanceOf[StructType])
+    } else {
+      metadata.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+        val parts = (0 until numParts.toInt).map { index =>
+          val part = metadata.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+          if (part == null) {
+            throw new AnalysisException(
+              "Could not read schema from the metastore because it is corrupted " +
+                s"(missing part $index of the schema, $numParts parts are expected).")
+          }
 
-    metadata.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
-      val parts = (0 until numParts.toInt).map { index =>
-        val part = metadata.properties.get(s"spark.sql.sources.schema.part.$index").orNull
-        if (part == null) {
-          throw new AnalysisException(
-            "Could not read schema from the metastore because it is corrupted " +
-              s"(missing part $index of the schema, $numParts parts are expected).")
+          part
         }
-
-        part
+        // Stick all parts back to a single schema string.
+        DataType.fromJson(parts.mkString).asInstanceOf[StructType]
       }
-      // Stick all parts back to a single schema string.
-      DataType.fromJson(parts.mkString).asInstanceOf[StructType]
     }
   }
 
