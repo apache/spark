@@ -46,17 +46,20 @@ private[mllib] object LocalKMeans extends Logging {
 
     // Initialize centers by sampling using the k-means++ procedure.
     centers(0) = pickWeighted(rand, points, weights).toDense
+    val costArray = points.map { point =>
+      KMeans.fastSquaredDistance(point, centers(0))
+    }
+    
     for (i <- 1 until k) {
-      // Pick the next center with a probability proportional to cost under current centers
-      val curCenters = centers.view.take(i)
-      val sum = points.view.zip(weights).map { case (p, w) =>
-        w * KMeans.pointCost(curCenters, p)
+      val sum = costArray.view.zip(weights).map{
+        case (c, w) =>
+          w*c
       }.sum
       val r = rand.nextDouble() * sum
       var cumulativeScore = 0.0
       var j = 0
       while (j < points.length && cumulativeScore < r) {
-        cumulativeScore += weights(j) * KMeans.pointCost(curCenters, points(j))
+        cumulativeScore += weights(j) * costArray(j)
         j += 1
       }
       if (j == 0) {
@@ -66,6 +69,12 @@ private[mllib] object LocalKMeans extends Logging {
       } else {
         centers(i) = points(j - 1).toDense
       }
+
+      //update costArray
+      for(p <- 0 to points.length-1){
+        costArray(p)=math.min(KMeans.fastSquaredDistance(points(p), centers(i)),costArray(p))
+      }
+
     }
 
     // Run up to maxIterations iterations of Lloyd's algorithm
