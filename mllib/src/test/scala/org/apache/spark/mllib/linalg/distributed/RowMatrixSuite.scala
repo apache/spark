@@ -204,7 +204,7 @@ class RowMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("pca") {
     for (mat <- Seq(denseMat, sparseMat); k <- 1 to n) {
-      val (pc, expVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
+      val (pc, expVariance) = mat.computePrincipalComponentsAndExplainedVariance(Left(k))
       assert(pc.numRows === n)
       assert(pc.numCols === k)
       assertColumnEqualUpToSign(pc.toBreeze.asInstanceOf[BDM[Double]], principalComponents, k)

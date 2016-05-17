@@ -17,6 +17,8 @@
 
 package org.apache.spark.mllib.feature
 
+import java.util.Arrays
+
 import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.linalg._
@@ -31,7 +33,14 @@ import org.apache.spark.rdd.RDD
 @Since("1.4.0")
 class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
   require(k > 0,
-    s"Number of principal components must be positive but got ${k}")
+    s"Number of principal components must be positive but got $k")
+
+  var pcFilter: Either[Int, Double] = Left(k)
+
+  def this(requiredVariance: Double) = {
+    this(k = 1)
+    pcFilter = Right(requiredVariance)
+  }
 
   /**
    * Computes a [[PCAModel]] that contains the principal components of the input vectors.
@@ -44,7 +53,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       s"source vector size is ${sources.first().size} must be greater than k=$k")
 
     val mat = new RowMatrix(sources)
-    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(k)
+    val (pc, explainedVariance) = mat.computePrincipalComponentsAndExplainedVariance(pcFilter)
     val densePC = pc match {
       case dm: DenseMatrix =>
         dm
@@ -66,7 +75,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
       case sv: SparseVector =>
         sv.toDense
     }
-    new PCAModel(k, densePC, denseExplainedVariance)
+    new PCAModel(explainedVariance.size, densePC, denseExplainedVariance)
   }
 
   /**
