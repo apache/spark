@@ -64,6 +64,10 @@ public class SparkLauncher {
   /** Configuration key for the number of executor CPU cores. */
   public static final String EXECUTOR_CORES = "spark.executor.cores";
 
+  public static final String PYSPARK_DRIVER_PYTHON = "pyspark.driver.python";
+
+  public static final String PYSPARK_EXECUTOR_PYTHON = "pyspark.executor.python";
+
   /** Logger name to use when launching a child process. */
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
 

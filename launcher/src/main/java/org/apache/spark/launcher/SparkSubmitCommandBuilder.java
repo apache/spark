@@ -294,11 +294,16 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     appResource = PYSPARK_SHELL_RESOURCE;
     constructEnvVarArgs(env, "PYSPARK_SUBMIT_ARGS");
 
-    // The executable is the PYSPARK_DRIVER_PYTHON env variable set by the pyspark script,
-    // followed by PYSPARK_DRIVER_PYTHON_OPTS.
+    // The executable is the argument --pyspark-driver-python or the PYSPARK_DRIVER_PYTHON
+    // env variable set by the pyspark script, followed by PYSPARK_DRIVER_PYTHON_OPTS.
     List<String> pyargs = new ArrayList<>();
-    pyargs.add(firstNonEmpty(System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
+    pyargs.add(firstNonEmpty(conf.get(SparkLauncher.PYSPARK_DRIVER_PYTHON),
+            System.getenv("PYSPARK_DRIVER_PYTHON"), "python"));
     String pyOpts = System.getenv("PYSPARK_DRIVER_PYTHON_OPTS");
+    if (conf.containsKey(SparkLauncher.PYSPARK_EXECUTOR_PYTHON)) {
+      // pass --pyspark-executor-python to python by environment variable.
+      env.put("PYSPARK_PYTHON", conf.get(SparkLauncher.PYSPARK_EXECUTOR_PYTHON));
+    }
     if (!isEmpty(pyOpts)) {
       pyargs.addAll(parseOptionString(pyOpts));
     }
@@ -406,6 +411,10 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
         conf.put(SparkLauncher.DRIVER_EXTRA_LIBRARY_PATH, value);
       } else if (opt.equals(DRIVER_CLASS_PATH)) {
         conf.put(SparkLauncher.DRIVER_EXTRA_CLASSPATH, value);
+      } else if (opt.equals(PYSPARK_DRIVER_PYTHON)) {
+        conf.put(SparkLauncher.PYSPARK_DRIVER_PYTHON, value);
+      } else if (opt.equals(PYSPARK_EXECUTOR_PYTHON)) {
+        conf.put(SparkLauncher.PYSPARK_EXECUTOR_PYTHON, value);
       } else if (opt.equals(CONF)) {
         String[] setConf = value.split("=", 2);
         checkArgument(setConf.length == 2, "Invalid argument to %s: %s", CONF, value);

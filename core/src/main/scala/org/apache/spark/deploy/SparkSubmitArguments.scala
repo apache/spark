@@ -64,6 +64,8 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
   var verbose: Boolean = false
   var isPython: Boolean = false
   var pyFiles: String = null
+  var pysparkDriverPython: String = null
+  var pysparkExecutorPython: String = null
   var isR: Boolean = false
   var action: SparkSubmitAction = null
   val sparkProperties: HashMap[String, String] = new HashMap[String, String]()
@@ -129,7 +131,7 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
    */
   private def ignoreNonSparkProperties(): Unit = {
     sparkProperties.foreach { case (k, v) =>
-      if (!k.startsWith("spark.")) {
+      if (!k.startsWith("spark.") && !k.startsWith("pyspark.")) {
         sparkProperties -= k
         SparkSubmit.printWarning(s"Ignoring non-spark config property: $k=$v")
       }
@@ -170,6 +172,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
       .orNull
     totalExecutorCores = Option(totalExecutorCores)
       .orElse(sparkProperties.get("spark.cores.max"))
+      .orNull
+    pysparkDriverPython = Option(pysparkDriverPython)
+      .orElse(sparkProperties.get("pyspark.driver.python"))
       .orNull
     name = Option(name).orElse(sparkProperties.get("spark.app.name")).orNull
     jars = Option(jars).orElse(sparkProperties.get("spark.jars")).orNull
@@ -395,6 +400,12 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
 
       case PY_FILES =>
         pyFiles = Utils.resolveURIs(value)
+
+      case PYSPARK_DRIVER_PYTHON =>
+        pysparkDriverPython = value
+
+      case PYSPARK_EXECUTOR_PYTHON =>
+        pysparkExecutorPython = value
 
       case ARCHIVES =>
         archives = Utils.resolveURIs(value)

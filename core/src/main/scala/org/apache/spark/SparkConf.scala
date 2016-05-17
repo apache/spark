@@ -62,7 +62,8 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging with Seria
 
   private[spark] def loadFromSystemProperties(silent: Boolean): SparkConf = {
     // Load any spark.* system properties
-    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")) {
+    for ((key, value) <- Utils.getSystemProperties if key.startsWith("spark.")
+      || key.startsWith("pyspark.")) {
       set(key, value, silent)
     }
     this
