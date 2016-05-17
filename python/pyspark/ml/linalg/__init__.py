@@ -775,19 +775,6 @@ class Vectors(object):
         return DenseVector(elements)
 
     @staticmethod
-    def stringify(vector):
-        """
-        Converts a vector into a string, which can be recognized by
-        Vectors.parse().
-
-        >>> Vectors.stringify(Vectors.sparse(2, [1], [1.0]))
-        '(2,[1],[1.0])'
-        >>> Vectors.stringify(Vectors.dense([0.0, 1.0]))
-        '[0.0,1.0]'
-        """
-        return str(vector)
-
-    @staticmethod
     def squared_distance(v1, v2):
         """
         Squared distance between two vectors.
