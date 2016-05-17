@@ -175,8 +175,8 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   private def verifySchema(schema: StructType): Unit = {
-    schema.foreach {
-      field => field.dataType match {
+    schema.foreach { field =>
+      field.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
           throw new AnalysisException(
             s"CSV data source does not support ${field.dataType.simpleString} data type.")
