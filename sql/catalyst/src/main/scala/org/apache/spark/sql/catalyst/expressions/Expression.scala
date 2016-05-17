@@ -222,6 +222,33 @@ trait Unevaluable extends Expression {
 
 
 /**
+ * An expression that gets replaced at runtime (currently by the optimizer) into a different
+ * expression for evaluation. This is mainly used to provide compatibility with other databases.
+ * For example, we use this to support "nvl" by replacing it with "coalesce".
+ */
+trait RuntimeReplaceable extends Unevaluable {
+  /**
+   * Method for concrete implementations to override that specifies how to construct the expression
+   * that should replace the current one.
+   */
+  def replaceForEvaluation(): Expression
+
+  /**
+   * Method for concrete implementations to override that specifies how to coerce the input types.
+   */
+  def replaceForTypeCoercion(): Expression
+
+  /** The expression that should be used during evaluation. */
+  lazy val replaced: Expression = replaceForEvaluation()
+
+  override def nullable: Boolean = replaced.nullable
+  override def foldable: Boolean = replaced.foldable
+  override def dataType: DataType = replaced.dataType
+  override def checkInputDataTypes(): TypeCheckResult = replaced.checkInputDataTypes()
+}
+
+
+/**
  * Expressions that don't have SQL representation should extend this trait.  Examples are
  * `ScalaUDF`, `ScalaUDAF`, and object expressions like `MapObjects` and `Invoke`.
  */

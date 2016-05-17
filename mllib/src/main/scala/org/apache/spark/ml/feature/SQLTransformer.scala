@@ -48,6 +48,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   /**
    * SQL statement parameter. The statement is provided in string form.
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -66,7 +67,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val tableName = Identifiable.randomUID(uid)
-    dataset.registerTempTable(tableName)
+    dataset.createOrReplaceTempView(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
     dataset.sparkSession.sql(realStatement)
   }
@@ -79,7 +80,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
     val dummyDF = sqlContext.createDataFrame(dummyRDD, schema)
     val tableName = Identifiable.randomUID(uid)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    dummyDF.registerTempTable(tableName)
+    dummyDF.createOrReplaceTempView(tableName)
     val outputSchema = sqlContext.sql(realStatement).schema
     sqlContext.dropTempTable(tableName)
     outputSchema

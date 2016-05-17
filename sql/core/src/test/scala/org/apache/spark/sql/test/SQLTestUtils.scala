@@ -153,7 +153,7 @@ private[sql] trait SQLTestUtils
     try f finally {
       // If the test failed part way, we don't want to mask the failure by failing to remove
       // temp tables that never got created.
-      try tableNames.foreach(spark.catalog.dropTempTable) catch {
+      try tableNames.foreach(spark.catalog.dropTempView) catch {
         case _: NoSuchTableException =>
       }
     }

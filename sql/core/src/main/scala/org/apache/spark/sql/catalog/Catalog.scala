@@ -175,13 +175,13 @@ abstract class Catalog {
       options: Map[String, String]): DataFrame
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached before, then it will also be uncached.
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached before, then it will also be uncached.
    *
-   * @param tableName the name of the table to be dropped.
+   * @param viewName the name of the view to be dropped.
    * @since 2.0.0
    */
-  def dropTempTable(tableName: String): Unit
+  def dropTempView(viewName: String): Unit
 
   /**
    * Returns true if the table is currently cached in-memory.

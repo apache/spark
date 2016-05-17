@@ -171,7 +171,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "ZLIB")
+        .option("compression", "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -180,7 +180,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "SNAPPY")
+        .option("compression", "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -189,7 +189,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "NONE")
+        .option("compression", "NONE")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -201,7 +201,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "LZO")
+        .option("compression", "LZO")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
