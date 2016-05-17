@@ -27,7 +27,7 @@ from array import array
 
 if sys.version >= "3":
     long = int
-    unicode = str
+    basestring = unicode = str
 
 from py4j.protocol import register_input_converter
 from py4j.java_gateway import JavaClass
@@ -401,6 +401,7 @@ class StructField(DataType):
         False
         """
         assert isinstance(dataType, DataType), "dataType should be DataType"
+        assert isinstance(name, basestring), "field name should be string"
         if not isinstance(name, str):
             name = name.encode('utf-8')
         self.name = name
