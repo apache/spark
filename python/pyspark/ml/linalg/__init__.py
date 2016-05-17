@@ -44,8 +44,7 @@ from pyspark.sql.types import UserDefinedType, StructField, StructType, ArrayTyp
 
 
 __all__ = ['Vector', 'DenseVector', 'SparseVector', 'Vectors',
-           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices',
-           'QRDecomposition']
+           'Matrix', 'DenseMatrix', 'SparseMatrix', 'Matrices']
 
 
 if sys.version_info[:2] == (2, 7):
@@ -1134,34 +1133,6 @@ class Matrices(object):
         Create a SparseMatrix
         """
         return SparseMatrix(numRows, numCols, colPtrs, rowIndices, values)
-
-
-class QRDecomposition(object):
-    """
-    .. note:: Experimental
-
-    Represents QR factors.
-    """
-    def __init__(self, Q, R):
-        self._Q = Q
-        self._R = R
-
-    @property
-    @since('2.0.0')
-    def Q(self):
-        """
-        An orthogonal matrix Q in a QR decomposition.
-        May be null if not computed.
-        """
-        return self._Q
-
-    @property
-    @since('2.0.0')
-    def R(self):
-        """
-        An upper triangular matrix R in a QR decomposition.
-        """
-        return self._R
 
 
 def _test():
