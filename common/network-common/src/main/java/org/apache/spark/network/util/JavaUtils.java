@@ -17,7 +17,6 @@
 
 package org.apache.spark.network.util;
 
-import java.io.BufferedInputStream;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
