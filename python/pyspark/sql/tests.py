@@ -228,6 +228,13 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaises(AnalysisException, lambda: df.select(df.c).first())
         self.assertRaises(AnalysisException, lambda: df.select(df["c"]).first())
 
+    def test_column_name_encoding(self):
+        """Ensure that created columns has `str` type consistently."""
+        columns = self.spark.createDataFrame([('Alice', 1)], ['name', u'age']).columns
+        self.assertEqual(columns, ['name', 'age'])
+        self.assertTrue(isinstance(columns[0], str))
+        self.assertTrue(isinstance(columns[1], str))
+
     def test_explode(self):
         from pyspark.sql.functions import explode
         d = [Row(a=1, intlist=[1, 2, 3], mapfield={"a": "b"})]
