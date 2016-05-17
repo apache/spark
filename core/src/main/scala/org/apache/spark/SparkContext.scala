@@ -1388,8 +1388,6 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * List the file resources that were added.
-   * @param files
-   * @return
    */
   def listFiles(): Seq[String] = {
     addedFiles.keySet.toSeq

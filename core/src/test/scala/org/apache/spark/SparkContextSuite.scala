@@ -108,7 +108,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(byteArray2.length === 0)
   }
 
-  test("addFile works") {
+  test("basic case for addFile and listFiles") {
     val dir = Utils.createTempDir()
 
     val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
