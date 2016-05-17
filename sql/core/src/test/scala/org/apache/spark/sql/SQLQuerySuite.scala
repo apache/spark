@@ -2560,10 +2560,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
 
-    checkAnswer(
-      sql(s"SELECT '$literal' AS DUMMY"),
-      Row(s"$expected") :: Nil)
-
     literal =
       """|\\u002a/
          |{
@@ -2620,7 +2616,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
           |  }.f();
           |}
           |/*""".stripMargin
-
     checkAnswer(
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
