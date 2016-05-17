@@ -24,7 +24,7 @@ import org.apache.spark.deploy.mesos.ui.MesosClusterUI
 import org.apache.spark.deploy.rest.mesos.MesosRestServer
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.cluster.mesos._
-import org.apache.spark.util.{SparkUncaughtExceptionHandler, ShutdownHookManager, Utils}
+import org.apache.spark.util.{ShutdownHookManager, SparkUncaughtExceptionHandler, Utils}
 
 /*
  * A dispatcher that is responsible for managing and launching drivers, and is intended to be
