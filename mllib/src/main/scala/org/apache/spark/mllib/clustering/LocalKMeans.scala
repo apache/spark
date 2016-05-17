@@ -49,7 +49,7 @@ private[mllib] object LocalKMeans extends Logging {
     val costArray = points.map(KMeans.fastSquaredDistance(_, centers(0)))
 
     for (i <- 1 until k) {
-      val sum = costArray.view.zip(weights).map(p => p._1 * p._2).sum
+      val sum = costArray.zip(weights).map(p => p._1 * p._2).sum
       val r = rand.nextDouble() * sum
       var cumulativeScore = 0.0
       var j = 0
