@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, SparkSession}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
@@ -178,7 +178,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     schema.foreach { field =>
       field.dataType match {
         case _: ArrayType | _: MapType | _: StructType =>
-          throw new AnalysisException(
+          throw new UnsupportedOperationException(
             s"CSV data source does not support ${field.dataType.simpleString} data type.")
         case _ =>
       }
