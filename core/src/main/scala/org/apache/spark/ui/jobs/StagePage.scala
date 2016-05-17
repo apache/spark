@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.util.Date
+import java.util.{Date, TimeZone}
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.HashSet
@@ -26,7 +26,7 @@ import scala.xml.{Elem, Node, Unparsed}
 
 import org.apache.commons.lang3.StringEscapeUtils
 
-import org.apache.spark.{InternalAccumulator, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
@@ -585,6 +585,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
+    val offset = TimeZone.getTimeZone(System.getProperty("user.timezone"))
+      .getOffset(System.currentTimeMillis()) / 1000 / 60
 
     val executorsArrayStr =
       tasks.sortBy(-_.taskInfo.launchTime).take(MAX_TIMELINE_TASKS).map { taskUIData =>
@@ -746,7 +748,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
-      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime)")}
+      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, $offset)")}
     </script>
   }
 

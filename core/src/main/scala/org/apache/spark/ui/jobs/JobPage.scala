@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import java.util.Date
+import java.util.{Date, TimeZone}
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{Buffer, HashMap, ListBuffer}
@@ -146,6 +146,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
 
     val stageEventJsonAsStrSeq = makeStageEvent(stages)
     val executorsJsonAsStrSeq = makeExecutorEvent(executors)
+    val offset = TimeZone.getTimeZone(System.getProperty("user.timezone"))
+      .getOffset(System.currentTimeMillis()) / 1000 / 60
 
     val groupJsonArrayAsStr =
       s"""
@@ -179,7 +181,8 @@ private[ui] class JobPage(parent: JobsTab) extends WebUIPage("job") {
       </div>
     </div> ++
     <script type="text/javascript">
-      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, ${appStartTime});")}
+      {Unparsed(s"drawJobTimeline(${groupJsonArrayAsStr}, ${eventArrayAsStr}, " +
+      s"${appStartTime}, ${offset});")}
     </script>
   }
 
