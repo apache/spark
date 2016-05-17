@@ -785,6 +785,17 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * List added file(s), jar(s), depending on the requested resource
+   */
+  override def visitListResources(ctx: ListResourcesContext): LogicalPlan = withOrigin(ctx) {
+    ctx.identifier.getText.toLowerCase match {
+      case "files" | "file" => ListFiles()
+      case "jars" | "jar" => ListJars()
+      case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
+    }
+  }
+
+  /**
    * Create a table, returning either a [[CreateTableCommand]] or a
    * [[CreateTableAsSelectLogicalPlan]].
    *

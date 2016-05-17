@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
  * Adds a jar to the current session so it can be used (for UDFs or serdes).
@@ -44,5 +44,33 @@ case class AddFileCommand(path: String) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sparkContext.addFile(path)
     Seq.empty[Row]
+  }
+}
+
+/**
+ * List files
+ */
+case class ListFiles() extends RunnableCommand {
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("result", StringType, nullable = false) :: Nil)
+    schema.toAttributes
+  }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sparkContext.listFiles().map(Row(_))
+  }
+}
+
+/**
+ * List jars
+ */
+case class ListJars() extends RunnableCommand {
+  override val output: Seq[Attribute] = {
+    val schema = StructType(
+      StructField("result", StringType, nullable = false) :: Nil)
+    schema.toAttributes
+  }
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.sparkContext.listJars().map(Row(_))
   }
 }

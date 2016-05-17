@@ -876,6 +876,10 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
+    assert(sql("list jars").
+      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+    assert(sql("list jar").
+      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
   }
 
   test("CREATE TEMPORARY FUNCTION") {
@@ -899,6 +903,10 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
 
     assert(checkAddFileRDD.first())
+    assert(sql("list files").
+      filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
+    assert(sql("list file").
+      filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
   }
 
   createQueryTest("dynamic_partition",
