@@ -47,7 +47,6 @@ import org.apache.spark.{SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.yarn.config._
 import org.apache.spark.internal.config._
-import org.apache.spark.launcher.CommandBuilderUtils
 import org.apache.spark.launcher.YarnCommandBuilderUtils
 import org.apache.spark.util.Utils
 
@@ -422,7 +421,9 @@ object YarnSparkHadoopUtil {
     if (Utils.isWindows) {
       javaOpts += escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {
-      CommandBuilderUtils.addOutOfMemoryErrorArgument(javaOpts.asJava)
+      if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
+        javaOpts.add("-XX:OnOutOfMemoryError='kill %p'")
+      }
     }
   }
 

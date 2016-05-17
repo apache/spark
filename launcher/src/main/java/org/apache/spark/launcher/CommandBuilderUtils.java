@@ -25,7 +25,7 @@ import java.util.Map;
 /**
  * Helper methods for command builders.
  */
-public class CommandBuilderUtils {
+class CommandBuilderUtils {
 
   static final String DEFAULT_MEM = "1g";
   static final String DEFAULT_PROPERTIES_FILE = "spark-defaults.conf";
@@ -331,18 +331,6 @@ public class CommandBuilderUtils {
     }
 
     cmd.add("-XX:MaxPermSize=256m");
-  }
-
-  /**
-   * Gets the OutOfMemoryError option for Spark if the user hasn't set it.
-   */
-  public static void addOutOfMemoryErrorArgument(List<String> cmd) {
-    for (String arg : cmd) {
-      if (arg.contains("-XX:OnOutOfMemoryError=")) {
-        return;
-      }
-    }
-    cmd.add("-XX:OnOutOfMemoryError='kill %p'");
   }
 
   /**
