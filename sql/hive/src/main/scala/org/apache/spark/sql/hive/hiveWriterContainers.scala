@@ -178,19 +178,21 @@ private[hive] class SparkHiveWriterContainer(
 
   // this function is executed on executor side
   def writeToFile(context: TaskContext, iterator: Iterator[InternalRow]): Unit = {
-    val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = prepareForWrite()
-    executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
+    if (iterator.hasNext) {
+      val (serializer, standardOI, fieldOIs, dataTypes, wrappers, outputData) = prepareForWrite()
+      executorSideSetup(context.stageId, context.partitionId, context.attemptNumber)
 
-    iterator.foreach { row =>
-      var i = 0
-      while (i < fieldOIs.length) {
-        outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
-        i += 1
+      iterator.foreach { row =>
+        var i = 0
+        while (i < fieldOIs.length) {
+          outputData(i) = if (row.isNullAt(i)) null else wrappers(i)(row.get(i, dataTypes(i)))
+          i += 1
+        }
+        writer.write(serializer.serialize(outputData, standardOI))
       }
-      writer.write(serializer.serialize(outputData, standardOI))
-    }
 
-    close()
+      close()
+    }
   }
 }
 
