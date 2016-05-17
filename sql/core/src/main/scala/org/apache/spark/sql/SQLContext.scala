@@ -303,8 +303,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def refreshTable(tableName: String): Unit = {
-    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
-    sessionState.catalog.refreshTable(tableIdent)
+    sparkSession.catalog.refreshTable(tableName)
   }
 
   // scalastyle:off

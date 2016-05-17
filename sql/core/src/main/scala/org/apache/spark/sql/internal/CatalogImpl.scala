@@ -345,6 +345,17 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     sparkSession.cacheManager.lookupCachedData(qName).nonEmpty
   }
 
+  /**
+   * Refresh the cache entry for a metastore table, if any.
+   *
+   * @group cachemgmt
+   * @since 2.0.0
+   */
+  override def refreshTable(tableName: String): Unit = {
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionCatalog.refreshTable(tableIdent)
+  }
+
 }
 
 
