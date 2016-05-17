@@ -465,6 +465,8 @@ class SparkSession(object):
                 return (obj, )
             schema = StructType().add("value", datatype)
         else:
+            if isinstance(schema, list):
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):
