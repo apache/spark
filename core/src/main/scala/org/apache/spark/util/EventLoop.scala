@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.util.concurrent.{BlockingQueue, LinkedBlockingDeque}
-import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.util.control.NonFatal
 
