@@ -608,7 +608,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         self.assertEqual(0.0, bestModelMetric, "Best model has RMSE of 0")
         self.assertEqual(len(grid), len(validationMetrics),
                          "validationMetrics has the same size of grid parameter")
-        self.assertEqual(bestModelMetric, min(validationMetrics))
+        self.assertEqual(0.0, min(validationMetrics))
 
     def test_fit_maximize_metric(self):
         dataset = self.spark.createDataFrame([
@@ -635,7 +635,7 @@ class TrainValidationSplitTests(SparkSessionTestCase):
         self.assertEqual(1.0, bestModelMetric, "Best model has R-squared of 1")
         self.assertEqual(len(grid), len(validationMetrics),
                          "validationMetrics has the same size of grid parameter")
-        self.assertEqual(bestModelMetric, max(validationMetrics))
+        self.assertEqual(1.0, max(validationMetrics))
 
     def test_save_load(self):
         # This tests saving and loading the trained model only.
