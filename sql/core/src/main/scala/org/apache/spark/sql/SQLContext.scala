@@ -294,6 +294,19 @@ class SQLContext private[sql](
     sparkSession.catalog.clearCache()
   }
 
+  /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
+   */
+  def refreshTable(tableName: String): Unit = {
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionState.catalog.refreshTable(tableIdent)
+  }
+
   // scalastyle:off
   // Disable style checker so "implicits" object can start with lowercase i
   /**

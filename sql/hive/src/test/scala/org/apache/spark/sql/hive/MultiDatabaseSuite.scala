@@ -202,7 +202,8 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         activateDatabase(db) {
           sql(
-            s"""CREATE EXTERNAL TABLE t (id BIGINT)
+            s"""
+               |CREATE EXTERNAL TABLE t (id BIGINT)
                |PARTITIONED BY (p INT)
                |STORED AS PARQUET
                |LOCATION '$path'
@@ -217,7 +218,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
           df.write.parquet(s"$path/p=2")
           sql("ALTER TABLE t ADD PARTITION (p=2)")
-          hiveContext.sessionState.refreshTable("t")
+          hiveContext.refreshTable("t")
           checkAnswer(
             spark.table("t"),
             df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
@@ -234,11 +235,12 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         val path = dir.getCanonicalPath
 
         sql(
-          s"""CREATE EXTERNAL TABLE $db.t (id BIGINT)
-               |PARTITIONED BY (p INT)
-               |STORED AS PARQUET
-               |LOCATION '$path'
-             """.stripMargin)
+          s"""
+             |CREATE EXTERNAL TABLE $db.t (id BIGINT)
+             |PARTITIONED BY (p INT)
+             |STORED AS PARQUET
+             |LOCATION '$path'
+           """.stripMargin)
 
         checkAnswer(spark.table(s"$db.t"), spark.emptyDataFrame)
 
@@ -249,7 +251,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         df.write.parquet(s"$path/p=2")
         sql(s"ALTER TABLE $db.t ADD PARTITION (p=2)")
-        hiveContext.sessionState.refreshTable(s"$db.t")
+        hiveContext.refreshTable(s"$db.t")
         checkAnswer(
           spark.table(s"$db.t"),
           df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
@@ -279,11 +281,11 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         val message = intercept[AnalysisException] {
           sql(
             s"""
-            |CREATE TABLE `d:b`.`t:a` (a int)
-            |USING parquet
-            |OPTIONS (
-            |  path '$path'
-            |)
+               |CREATE TABLE `d:b`.`t:a` (a int)
+               |USING parquet
+               |OPTIONS (
+               |  path '$path'
+               |)
             """.stripMargin)
         }.getMessage
         assert(message.contains("is not a valid name for metastore"))
@@ -293,12 +295,12 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
         val message = intercept[AnalysisException] {
           sql(
             s"""
-              |CREATE TABLE `d:b`.`table` (a int)
-              |USING parquet
-              |OPTIONS (
-              |  path '$path'
-              |)
-              """.stripMargin)
+               |CREATE TABLE `d:b`.`table` (a int)
+               |USING parquet
+               |OPTIONS (
+               |  path '$path'
+               |)
+             """.stripMargin)
         }.getMessage
         assert(message.contains("is not a valid name for metastore"))
       }
