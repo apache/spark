@@ -101,22 +101,18 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
     val modifyAcls = acls.get(ApplicationAccessType.MODIFY_APP)
 
     viewAcls match {
-      case Some(vacls) => {
+      case Some(vacls) =>
         val aclSet = vacls.split(',').map(_.trim).toSet
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
     modifyAcls match {
-      case Some(macls) => {
+      case Some(macls) =>
         val aclSet = macls.split(',').map(_.trim).toSet
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
   }
 
@@ -135,26 +131,22 @@ class YarnSparkHadoopUtilSuite extends SparkFunSuite with Matchers with Logging
     val modifyAcls = acls.get(ApplicationAccessType.MODIFY_APP)
 
     viewAcls match {
-      case Some(vacls) => {
+      case Some(vacls) =>
         val aclSet = vacls.split(',').map(_.trim).toSet
         assert(aclSet.contains("user1"))
         assert(aclSet.contains("user2"))
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
     modifyAcls match {
-      case Some(macls) => {
+      case Some(macls) =>
         val aclSet = macls.split(',').map(_.trim).toSet
         assert(aclSet.contains("user3"))
         assert(aclSet.contains("user4"))
         assert(aclSet.contains(System.getProperty("user.name", "invalid")))
-      }
-      case None => {
+      case None =>
         fail()
-      }
     }
 
   }

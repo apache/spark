@@ -22,6 +22,7 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
@@ -67,6 +68,9 @@ object PhysicalOperation extends PredicateHelper {
         val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
+
+      case BroadcastHint(child) =>
+        collectProjectsAndFilters(child)
 
       case other =>
         (None, Nil, other, Map.empty)
@@ -139,20 +143,20 @@ object ExtractEquiJoinKeys extends Logging with PredicateHelper {
 }
 
 /**
-  * A pattern that collects the filter and inner joins.
-  *
-  *          Filter
-  *            |
-  *        inner Join
-  *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
-  *      Filter   plan2
-  *        |
-  *  inner join
-  *      /    \
-  *   plan0    plan1
-  *
-  * Note: This pattern currently only works for left-deep trees.
-  */
+ * A pattern that collects the filter and inner joins.
+ *
+ *          Filter
+ *            |
+ *        inner Join
+ *          /    \            ---->      (Seq(plan0, plan1, plan2), conditions)
+ *      Filter   plan2
+ *        |
+ *  inner join
+ *      /    \
+ *   plan0    plan1
+ *
+ * Note: This pattern currently only works for left-deep trees.
+ */
 object ExtractFiltersAndInnerJoins extends PredicateHelper {
 
   // flatten all inner joins, which are next to each other
@@ -213,6 +217,78 @@ object IntegerIndex {
     // When resolving ordinal in Sort and Group By, negative values are extracted
     // for issuing error messages.
     case UnaryMinus(IntegerLiteral(v)) => Some(-v)
+    case _ => None
+  }
+}
+
+/**
+ * An extractor used when planning the physical execution of an aggregation. Compared with a logical
+ * aggregation, the following transformations are performed:
+ *  - Unnamed grouping expressions are named so that they can be referred to across phases of
+ *    aggregation
+ *  - Aggregations that appear multiple times are deduplicated.
+ *  - The compution of the aggregations themselves is separated from the final result. For example,
+ *    the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
+ *    computation that computes `count.resultAttribute + 1`.
+ */
+object PhysicalAggregation {
+  // groupingExpressions, aggregateExpressions, resultExpressions, child
+  type ReturnType =
+    (Seq[NamedExpression], Seq[AggregateExpression], Seq[NamedExpression], LogicalPlan)
+
+  def unapply(a: Any): Option[ReturnType] = a match {
+    case logical.Aggregate(groupingExpressions, resultExpressions, child) =>
+      // A single aggregate expression might appear multiple times in resultExpressions.
+      // In order to avoid evaluating an individual aggregate function multiple times, we'll
+      // build a set of the distinct aggregate expressions and build a function which can
+      // be used to re-write expressions so that they reference the single copy of the
+      // aggregate function which actually gets computed.
+      val aggregateExpressions = resultExpressions.flatMap { expr =>
+        expr.collect {
+          case agg: AggregateExpression => agg
+        }
+      }.distinct
+
+      val namedGroupingExpressions = groupingExpressions.map {
+        case ne: NamedExpression => ne -> ne
+        // If the expression is not a NamedExpressions, we add an alias.
+        // So, when we generate the result of the operator, the Aggregate Operator
+        // can directly get the Seq of attributes representing the grouping expressions.
+        case other =>
+          val withAlias = Alias(other, other.toString)()
+          other -> withAlias
+      }
+      val groupExpressionMap = namedGroupingExpressions.toMap
+
+      // The original `resultExpressions` are a set of expressions which may reference
+      // aggregate expressions, grouping column values, and constants. When aggregate operator
+      // emits output rows, we will use `resultExpressions` to generate an output projection
+      // which takes the grouping columns and final aggregate result buffer as input.
+      // Thus, we must re-write the result expressions so that their attributes match up with
+      // the attributes of the final result projection's input row:
+      val rewrittenResultExpressions = resultExpressions.map { expr =>
+        expr.transformDown {
+          case ae: AggregateExpression =>
+            // The final aggregation buffer's attributes will be `finalAggregationAttributes`,
+            // so replace each aggregate expression by its corresponding attribute in the set:
+            ae.resultAttribute
+          case expression =>
+            // Since we're using `namedGroupingAttributes` to extract the grouping key
+            // columns, we need to replace grouping key expressions with their corresponding
+            // attributes. We do not rely on the equality check at here since attributes may
+            // differ cosmetically. Instead, we use semanticEquals.
+            groupExpressionMap.collectFirst {
+              case (expr, ne) if expr semanticEquals expression => ne.toAttribute
+            }.getOrElse(expression)
+        }.asInstanceOf[NamedExpression]
+      }
+
+      Some((
+        namedGroupingExpressions.map(_._2),
+        aggregateExpressions,
+        rewrittenResultExpressions,
+        child))
+
     case _ => None
   }
 }

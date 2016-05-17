@@ -38,7 +38,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.mock.MockitoSugar
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.streaming.scheduler._
 import org.apache.spark.util.{CompletionIterator, ManualClock, ThreadUtils, Utils}
 
@@ -471,10 +471,11 @@ class BatchedWriteAheadLogSuite extends CommonWriteAheadLogTests(
     // the BatchedWriteAheadLog should bubble up any exceptions that may have happened during writes
     val batchedWal = new BatchedWriteAheadLog(wal, sparkConf)
 
-    intercept[RuntimeException] {
+    val e = intercept[SparkException] {
       val buffer = mock[ByteBuffer]
       batchedWal.write(buffer, 2L)
     }
+    assert(e.getCause.getMessage === "Hello!")
   }
 
   // we make the write requests in separate threads so that we don't block the test thread

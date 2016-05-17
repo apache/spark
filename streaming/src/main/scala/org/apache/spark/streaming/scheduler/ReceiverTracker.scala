@@ -92,6 +92,8 @@ private[streaming] case object AllReceiverIds extends ReceiverTrackerLocalMessag
 private[streaming] case class UpdateReceiverRateLimit(streamUID: Int, newRate: Long)
   extends ReceiverTrackerLocalMessage
 
+private[streaming] case object GetAllReceiverInfo extends ReceiverTrackerLocalMessage
+
 /**
  * This class manages the execution of the receivers of ReceiverInputDStreams. Instance of
  * this class must be created after all input streams have been added and StreamingContext.start()
@@ -232,6 +234,26 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
         }
       }
     }
+  }
+
+  /**
+   * Get the executors allocated to each receiver.
+   * @return a map containing receiver ids to optional executor ids.
+   */
+  def allocatedExecutors(): Map[Int, Option[String]] = synchronized {
+    if (isTrackerStarted) {
+      endpoint.askWithRetry[Map[Int, ReceiverTrackingInfo]](GetAllReceiverInfo).mapValues {
+        _.runningExecutor.map {
+          _.executorId
+        }
+      }
+    } else {
+      Map.empty
+    }
+  }
+
+  def numReceivers(): Int = {
+    receiverInputStreams.size
   }
 
   /** Register a receiver */
@@ -412,11 +434,11 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
    * worker nodes as a parallel collection, and runs them.
    */
   private def launchReceivers(): Unit = {
-    val receivers = receiverInputStreams.map(nis => {
+    val receivers = receiverInputStreams.map { nis =>
       val rcvr = nis.getReceiver()
       rcvr.setReceiverId(nis.id)
       rcvr
-    })
+    }
 
     runDummySparkJob()
 
@@ -506,9 +528,12 @@ class ReceiverTracker(ssc: StreamingContext, skipReceiverLaunch: Boolean = false
       case DeregisterReceiver(streamId, message, error) =>
         deregisterReceiver(streamId, message, error)
         context.reply(true)
+
       // Local messages
       case AllReceiverIds =>
         context.reply(receiverTrackingInfos.filter(_._2.state != ReceiverState.INACTIVE).keys.toSeq)
+      case GetAllReceiverInfo =>
+        context.reply(receiverTrackingInfos.toMap)
       case StopAllReceivers =>
         assert(isTrackerStopping || isTrackerStopped)
         stopReceivers()

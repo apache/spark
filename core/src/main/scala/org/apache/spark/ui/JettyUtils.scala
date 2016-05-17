@@ -25,11 +25,11 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
-import org.eclipse.jetty.server.{Connector, Request, Server}
+import org.eclipse.jetty.server.{Request, Server, ServerConnector}
 import org.eclipse.jetty.server.handler._
-import org.eclipse.jetty.server.nio.SelectChannelConnector
-import org.eclipse.jetty.server.ssl.SslSelectChannelConnector
 import org.eclipse.jetty.servlet._
+import org.eclipse.jetty.servlets.gzip.GzipHandler
+import org.eclipse.jetty.util.component.LifeCycle
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
@@ -83,9 +83,7 @@ private[spark] object JettyUtils extends Logging {
             val result = servletParams.responder(request)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
             response.setHeader("X-Frame-Options", xFrameOptionsValue)
-            // scalastyle:off println
-            response.getWriter.println(servletParams.extractFn(result))
-            // scalastyle:on println
+            response.getWriter.print(servletParams.extractFn(result))
           } else {
             response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
             response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -244,10 +242,16 @@ private[spark] object JettyUtils extends Logging {
 
     // Bind to the given port, or throw a java.net.BindException if the port is occupied
     def connect(currentPort: Int): (Server, Int) = {
-      val server = new Server
-      val connectors = new ArrayBuffer[Connector]
+      val pool = new QueuedThreadPool
+      if (serverName.nonEmpty) {
+        pool.setName(serverName)
+      }
+      pool.setDaemon(true)
+
+      val server = new Server(pool)
+      val connectors = new ArrayBuffer[ServerConnector]
       // Create a connector on port currentPort to listen for HTTP requests
-      val httpConnector = new SelectChannelConnector()
+      val httpConnector = new ServerConnector(server)
       httpConnector.setPort(currentPort)
       connectors += httpConnector
 
@@ -261,8 +265,9 @@ private[spark] object JettyUtils extends Logging {
           }
         val scheme = "https"
         // Create a connector on port securePort to listen for HTTPS requests
-        val connector = new SslSelectChannelConnector(factory)
+        val connector = new ServerConnector(server, factory)
         connector.setPort(securePort)
+
         connectors += connector
 
         // redirect the HTTP requests to HTTPS port
@@ -270,34 +275,27 @@ private[spark] object JettyUtils extends Logging {
       }
 
       gzipHandlers.foreach(collection.addHandler)
-      connectors.foreach(_.setHost(hostName))
       // As each acceptor and each selector will use one thread, the number of threads should at
       // least be the number of acceptors and selectors plus 1. (See SPARK-13776)
       var minThreads = 1
-      connectors.foreach { c =>
+      connectors.foreach { connector =>
         // Currently we only use "SelectChannelConnector"
-        val connector = c.asInstanceOf[SelectChannelConnector]
         // Limit the max acceptor number to 8 so that we don't waste a lot of threads
-        connector.setAcceptors(math.min(connector.getAcceptors, 8))
+        connector.setAcceptQueueSize(math.min(connector.getAcceptors, 8))
+        connector.setHost(hostName)
         // The number of selectors always equals to the number of acceptors
         minThreads += connector.getAcceptors * 2
       }
       server.setConnectors(connectors.toArray)
-
-      val pool = new QueuedThreadPool
-      if (serverName.nonEmpty) {
-        pool.setName(serverName)
-      }
       pool.setMaxThreads(math.max(pool.getMaxThreads, minThreads))
-      pool.setDaemon(true)
-      server.setThreadPool(pool)
+
       val errorHandler = new ErrorHandler()
       errorHandler.setShowStacks(true)
       server.addBean(errorHandler)
       server.setHandler(collection)
       try {
         server.start()
-        (server, server.getConnectors.head.getLocalPort)
+        (server, httpConnector.getLocalPort)
       } catch {
         case e: Exception =>
           server.stop()
@@ -350,4 +348,15 @@ private[spark] object JettyUtils extends Logging {
 private[spark] case class ServerInfo(
     server: Server,
     boundPort: Int,
-    rootHandler: ContextHandlerCollection)
+    rootHandler: ContextHandlerCollection) {
+
+  def stop(): Unit = {
+    server.stop()
+    // Stop the ThreadPool if it supports stop() method (through LifeCycle).
+    // It is needed because stopping the Server won't stop the ThreadPool it uses.
+    val threadPool = server.getThreadPool
+    if (threadPool != null && threadPool.isInstanceOf[LifeCycle]) {
+      threadPool.asInstanceOf[LifeCycle].stop
+    }
+  }
+}

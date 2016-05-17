@@ -17,41 +17,72 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import java.util.concurrent.ConcurrentHashMap
+import javax.annotation.concurrent.GuardedBy
 
-import scala.collection.JavaConverters._
+import scala.collection.mutable
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.FunctionBuilder
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionInfo}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
-
+import org.apache.spark.sql.catalyst.util.StringUtils
 
 /**
  * An internal catalog that is used by a Spark Session. This internal catalog serves as a
  * proxy to the underlying metastore (e.g. Hive Metastore) and it also manages temporary
  * tables and functions of the Spark Session that it belongs to.
+ *
+ * This class must be thread-safe.
  */
-class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
-  import ExternalCatalog._
+class SessionCatalog(
+    externalCatalog: ExternalCatalog,
+    functionResourceLoader: FunctionResourceLoader,
+    functionRegistry: FunctionRegistry,
+    conf: CatalystConf,
+    hadoopConf: Configuration) extends Logging {
+  import CatalogTypes.TablePartitionSpec
 
-  def this(externalCatalog: ExternalCatalog) {
-    this(externalCatalog, new SimpleCatalystConf(true))
+  // For testing only.
+  def this(
+      externalCatalog: ExternalCatalog,
+      functionRegistry: FunctionRegistry,
+      conf: CatalystConf) {
+    this(
+      externalCatalog,
+      DummyFunctionResourceLoader,
+      functionRegistry,
+      conf,
+      new Configuration())
   }
 
-  protected[this] val tempTables = new ConcurrentHashMap[String, LogicalPlan]
-  protected[this] val tempFunctions = new ConcurrentHashMap[String, CatalogFunction]
+  // For testing only.
+  def this(externalCatalog: ExternalCatalog) {
+    this(externalCatalog, new SimpleFunctionRegistry, new SimpleCatalystConf(true))
+  }
+
+  /** List of temporary tables, mapping from table name to their logical plan. */
+  @GuardedBy("this")
+  protected val tempTables = new mutable.HashMap[String, LogicalPlan]
 
   // Note: we track current database here because certain operations do not explicitly
   // specify the database (e.g. DROP TABLE my_table). In these cases we must first
   // check whether the temporary table or function exists, then, if not, operate on
   // the corresponding item in the current database.
-  protected[this] var currentDb = {
+  @GuardedBy("this")
+  protected var currentDb = {
     val defaultName = "default"
-    val defaultDbDefinition = CatalogDatabase(defaultName, "default database", "", Map())
+    val defaultDbDefinition =
+      CatalogDatabase(defaultName, "default database", conf.warehousePath, Map())
     // Initialize default database if it doesn't already exist
     createDatabase(defaultDbDefinition, ignoreIfExists = true)
-    defaultName
+    formatDatabaseName(defaultName)
   }
 
   /**
@@ -61,6 +92,44 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
     if (conf.caseSensitiveAnalysis) name else name.toLowerCase
   }
 
+  /**
+   * Format database name, taking into account case sensitivity.
+   */
+  protected[this] def formatDatabaseName(name: String): String = {
+    if (conf.caseSensitiveAnalysis) name else name.toLowerCase
+  }
+
+  /**
+   * This method is used to make the given path qualified before we
+   * store this path in the underlying external catalog. So, when a path
+   * does not contain a scheme, this path will not be changed after the default
+   * FileSystem is changed.
+   */
+  private def makeQualifiedPath(path: String): Path = {
+    val hadoopPath = new Path(path)
+    val fs = hadoopPath.getFileSystem(hadoopConf)
+    fs.makeQualified(hadoopPath)
+  }
+
+  protected[this] def requireDbExists(db: String): Unit = {
+    if (!databaseExists(db)) {
+      throw new NoSuchDatabaseException(db)
+    }
+  }
+
+  protected[this] def requireTableExists(name: TableIdentifier): Unit = {
+    if (!tableExists(name)) {
+      val db = name.database.getOrElse(currentDb)
+      throw new NoSuchTableException(db = db, table = name.table)
+    }
+  }
+
+  private def requireTableNotExists(name: TableIdentifier): Unit = {
+    if (tableExists(name)) {
+      val db = name.database.getOrElse(currentDb)
+      throw new TableAlreadyExistsException(db = db, table = name.table)
+    }
+  }
   // ----------------------------------------------------------------------------
   // Databases
   // ----------------------------------------------------------------------------
@@ -68,23 +137,36 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   // ----------------------------------------------------------------------------
 
   def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean): Unit = {
-    externalCatalog.createDatabase(dbDefinition, ignoreIfExists)
+    val qualifiedPath = makeQualifiedPath(dbDefinition.locationUri).toString
+    val dbName = formatDatabaseName(dbDefinition.name)
+    externalCatalog.createDatabase(
+      dbDefinition.copy(name = dbName, locationUri = qualifiedPath),
+      ignoreIfExists)
   }
 
   def dropDatabase(db: String, ignoreIfNotExists: Boolean, cascade: Boolean): Unit = {
-    externalCatalog.dropDatabase(db, ignoreIfNotExists, cascade)
+    val dbName = formatDatabaseName(db)
+    if (dbName == "default") {
+      throw new AnalysisException(s"Can not drop default database")
+    }
+    externalCatalog.dropDatabase(dbName, ignoreIfNotExists, cascade)
   }
 
   def alterDatabase(dbDefinition: CatalogDatabase): Unit = {
-    externalCatalog.alterDatabase(dbDefinition)
+    val dbName = formatDatabaseName(dbDefinition.name)
+    requireDbExists(dbName)
+    externalCatalog.alterDatabase(dbDefinition.copy(name = dbName))
   }
 
-  def getDatabase(db: String): CatalogDatabase = {
-    externalCatalog.getDatabase(db)
+  def getDatabaseMetadata(db: String): CatalogDatabase = {
+    val dbName = formatDatabaseName(db)
+    requireDbExists(dbName)
+    externalCatalog.getDatabase(dbName)
   }
 
   def databaseExists(db: String): Boolean = {
-    externalCatalog.databaseExists(db)
+    val dbName = formatDatabaseName(db)
+    externalCatalog.databaseExists(dbName)
   }
 
   def listDatabases(): Seq[String] = {
@@ -95,13 +177,21 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
     externalCatalog.listDatabases(pattern)
   }
 
-  def getCurrentDatabase: String = currentDb
+  def getCurrentDatabase: String = synchronized { currentDb }
 
   def setCurrentDatabase(db: String): Unit = {
-    if (!databaseExists(db)) {
-      throw new AnalysisException(s"cannot set current database to non-existent '$db'")
-    }
-    currentDb = db
+    val dbName = formatDatabaseName(db)
+    requireDbExists(dbName)
+    synchronized { currentDb = dbName }
+  }
+
+  /**
+   * Get the path for creating a non-default database when database location is not provided
+   * by users.
+   */
+  def getDefaultDBPath(db: String): String = {
+    val database = formatDatabaseName(db)
+    new Path(new Path(conf.warehousePath), database + ".db").toString
   }
 
   // ----------------------------------------------------------------------------
@@ -122,9 +212,10 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * If no such database is specified, create it in the current database.
    */
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
-    val db = tableDefinition.name.database.getOrElse(currentDb)
-    val table = formatTableName(tableDefinition.name.table)
-    val newTableDefinition = tableDefinition.copy(name = TableIdentifier(table, Some(db)))
+    val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableDefinition.identifier.table)
+    val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
+    requireDbExists(db)
     externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
   }
 
@@ -138,20 +229,83 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * this becomes a no-op.
    */
   def alterTable(tableDefinition: CatalogTable): Unit = {
-    val db = tableDefinition.name.database.getOrElse(currentDb)
-    val table = formatTableName(tableDefinition.name.table)
-    val newTableDefinition = tableDefinition.copy(name = TableIdentifier(table, Some(db)))
+    val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableDefinition.identifier.table)
+    val tableIdentifier = TableIdentifier(table, Some(db))
+    val newTableDefinition = tableDefinition.copy(identifier = tableIdentifier)
+    requireDbExists(db)
+    requireTableExists(tableIdentifier)
     externalCatalog.alterTable(db, newTableDefinition)
   }
 
   /**
    * Retrieve the metadata of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
    */
-  def getTable(name: TableIdentifier): CatalogTable = {
-    val db = name.database.getOrElse(currentDb)
+  def getTableMetadata(name: TableIdentifier): CatalogTable = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(name.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
     externalCatalog.getTable(db, table)
+  }
+
+  /**
+   * Retrieve the metadata of an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then return None if it doesn't exist.
+   */
+  def getTableMetadataOption(name: TableIdentifier): Option[CatalogTable] = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    requireDbExists(db)
+    externalCatalog.getTableOption(db, table)
+  }
+
+  /**
+   * Load files stored in given path into an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   */
+  def loadTable(
+      name: TableIdentifier,
+      loadPath: String,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean): Unit = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
+    externalCatalog.loadTable(db, table, loadPath, isOverwrite, holdDDLTime)
+  }
+
+  /**
+   * Load files stored in given path into the partition of an existing metastore table.
+   * If no database is specified, assume the table is in the current database.
+   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   */
+  def loadPartition(
+      name: TableIdentifier,
+      loadPath: String,
+      partition: TablePartitionSpec,
+      isOverwrite: Boolean,
+      holdDDLTime: Boolean,
+      inheritTableSpecs: Boolean,
+      isSkewedStoreAsSubdir: Boolean): Unit = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(name.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Some(db)))
+    externalCatalog.loadPartition(db, table, loadPath, partition, isOverwrite, holdDDLTime,
+      inheritTableSpecs, isSkewedStoreAsSubdir)
+  }
+
+  def defaultTablePath(tableIdent: TableIdentifier): String = {
+    val dbName = formatDatabaseName(tableIdent.database.getOrElse(getCurrentDatabase))
+    val dbLocation = getDatabaseMetadata(dbName).locationUri
+
+    new Path(new Path(dbLocation), formatTableName(tableIdent.table)).toString
   }
 
   // -------------------------------------------------------------
@@ -161,13 +315,13 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   /**
    * Create a temporary table.
    */
-  def createTempTable(
+  def createTempView(
       name: String,
       tableDefinition: LogicalPlan,
-      ignoreIfExists: Boolean): Unit = {
+      overrideIfExists: Boolean): Unit = synchronized {
     val table = formatTableName(name)
-    if (tempTables.containsKey(table) && !ignoreIfExists) {
-      throw new AnalysisException(s"Temporary table '$name' already exists.")
+    if (tempTables.contains(table) && !overrideIfExists) {
+      throw new TempTableAlreadyExistsException(name)
     }
     tempTables.put(table, tableDefinition)
   }
@@ -181,17 +335,32 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    *
    * This assumes the database specified in `oldName` matches the one specified in `newName`.
    */
-  def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = {
-    if (oldName.database != newName.database) {
-      throw new AnalysisException("rename does not support moving tables across databases")
+  def renameTable(oldName: TableIdentifier, newName: TableIdentifier): Unit = synchronized {
+    val db = formatDatabaseName(oldName.database.getOrElse(currentDb))
+    requireDbExists(db)
+    val newDb = formatDatabaseName(newName.database.getOrElse(currentDb))
+    if (db != newDb) {
+      throw new AnalysisException(
+        s"RENAME TABLE source and destination databases do not match: '$db' != '$newDb'")
     }
-    val db = oldName.database.getOrElse(currentDb)
     val oldTableName = formatTableName(oldName.table)
     val newTableName = formatTableName(newName.table)
-    if (oldName.database.isDefined || !tempTables.containsKey(oldTableName)) {
+    if (oldName.database.isDefined || !tempTables.contains(oldTableName)) {
+      requireTableExists(TableIdentifier(oldTableName, Some(db)))
+      requireTableNotExists(TableIdentifier(newTableName, Some(db)))
       externalCatalog.renameTable(db, oldTableName, newTableName)
     } else {
-      val table = tempTables.remove(oldTableName)
+      if (newName.database.isDefined) {
+        throw new AnalysisException(
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': cannot specify database " +
+            s"name '${newName.database.get}' in the destination table")
+      }
+      if (tempTables.contains(newTableName)) {
+        throw new AnalysisException(
+          s"RENAME TEMPORARY TABLE from '$oldName' to '$newName': destination table already exists")
+      }
+      val table = tempTables(oldTableName)
+      tempTables.remove(oldTableName)
       tempTables.put(newTableName, table)
     }
   }
@@ -203,11 +372,18 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * If no database is specified, this will first attempt to drop a temporary table with
    * the same name, then, if that does not exist, drop the table from the current database.
    */
-  def dropTable(name: TableIdentifier, ignoreIfNotExists: Boolean): Unit = {
-    val db = name.database.getOrElse(currentDb)
+  def dropTable(name: TableIdentifier, ignoreIfNotExists: Boolean): Unit = synchronized {
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.containsKey(table)) {
-      externalCatalog.dropTable(db, table, ignoreIfNotExists)
+    if (name.database.isDefined || !tempTables.contains(table)) {
+      requireDbExists(db)
+      // When ignoreIfNotExists is false, no exception is issued when the table does not exist.
+      // Instead, log it as an error message.
+      if (tableExists(TableIdentifier(table, Option(db)))) {
+        externalCatalog.dropTable(db, table, ignoreIfNotExists = true)
+      } else if (!ignoreIfNotExists) {
+        throw new NoSuchTableException(db = db, table = table)
+      }
     } else {
       tempTables.remove(table)
     }
@@ -221,19 +397,21 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * the same name, then, if that does not exist, return the table from the current database.
    */
   def lookupRelation(name: TableIdentifier, alias: Option[String] = None): LogicalPlan = {
-    val db = name.database.getOrElse(currentDb)
-    val table = formatTableName(name.table)
-    val relation =
-      if (name.database.isDefined || !tempTables.containsKey(table)) {
-        val metadata = externalCatalog.getTable(db, table)
-        CatalogRelation(db, metadata, alias)
-      } else {
-        tempTables.get(table)
-      }
-    val qualifiedTable = SubqueryAlias(table, relation)
-    // If an alias was specified by the lookup, wrap the plan in a subquery so that
-    // attributes are properly qualified with this alias.
-    alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+    synchronized {
+      val db = formatDatabaseName(name.database.getOrElse(currentDb))
+      val table = formatTableName(name.table)
+      val relation =
+        if (name.database.isDefined || !tempTables.contains(table)) {
+          val metadata = externalCatalog.getTable(db, table)
+          SimpleCatalogRelation(db, metadata, alias)
+        } else {
+          tempTables(table)
+        }
+      val qualifiedTable = SubqueryAlias(table, relation)
+      // If an alias was specified by the lookup, wrap the plan in a subquery so that
+      // attributes are properly qualified with this alias.
+      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+    }
   }
 
   /**
@@ -244,10 +422,10 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * table with the same name, we will return false if the specified database does not
    * contain the table.
    */
-  def tableExists(name: TableIdentifier): Boolean = {
-    val db = name.database.getOrElse(currentDb)
+  def tableExists(name: TableIdentifier): Boolean = synchronized {
+    val db = formatDatabaseName(name.database.getOrElse(currentDb))
     val table = formatTableName(name.table)
-    if (name.database.isDefined || !tempTables.containsKey(table)) {
+    if (name.database.isDefined || !tempTables.contains(table)) {
       externalCatalog.tableExists(db, table)
     } else {
       true // it's a temporary table
@@ -255,22 +433,36 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   }
 
   /**
+   * Return whether a table with the specified name is a temporary table.
+   *
+   * Note: The temporary table cache is checked only when database is not
+   * explicitly specified.
+   */
+  def isTemporaryTable(name: TableIdentifier): Boolean = synchronized {
+    name.database.isEmpty && tempTables.contains(formatTableName(name.table))
+  }
+
+  /**
    * List all tables in the specified database, including temporary tables.
    */
-  def listTables(db: String): Seq[TableIdentifier] = listTables(db, "*")
+  def listTables(db: String): Seq[TableIdentifier] = listTables(formatDatabaseName(db), "*")
 
   /**
    * List all matching tables in the specified database, including temporary tables.
    */
   def listTables(db: String, pattern: String): Seq[TableIdentifier] = {
+    val dbName = formatDatabaseName(db)
+    requireDbExists(dbName)
     val dbTables =
-      externalCatalog.listTables(db, pattern).map { t => TableIdentifier(t, Some(db)) }
-    val regex = pattern.replaceAll("\\*", ".*").r
-    val _tempTables = tempTables.keys().asScala
-      .filter { t => regex.pattern.matcher(t).matches() }
-      .map { t => TableIdentifier(t) }
-    dbTables ++ _tempTables
+      externalCatalog.listTables(dbName, pattern).map { t => TableIdentifier(t, Some(dbName)) }
+    synchronized {
+      val _tempTables = StringUtils.filterPattern(tempTables.keys.toSeq, pattern)
+        .map { t => TableIdentifier(t) }
+      dbTables ++ _tempTables
+    }
   }
+
+  // TODO: It's strange that we have both refresh and invalidate here.
 
   /**
    * Refresh the cache entry for a metastore table, if any.
@@ -278,10 +470,15 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   def refreshTable(name: TableIdentifier): Unit = { /* no-op */ }
 
   /**
+   * Invalidate the cache entry for a metastore table, if any.
+   */
+  def invalidateTable(name: TableIdentifier): Unit = { /* no-op */ }
+
+  /**
    * Drop all existing temporary tables.
    * For testing only.
    */
-  def clearTempTables(): Unit = {
+  def clearTempTables(): Unit = synchronized {
     tempTables.clear()
   }
 
@@ -289,8 +486,8 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * Return a temporary table exactly as it was stored.
    * For testing only.
    */
-  private[catalog] def getTempTable(name: String): Option[LogicalPlan] = {
-    Option(tempTables.get(name))
+  private[catalog] def getTempTable(name: String): Option[LogicalPlan] = synchronized {
+    tempTables.get(name)
   }
 
   // ----------------------------------------------------------------------------
@@ -313,8 +510,11 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
       tableName: TableIdentifier,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
-    val db = tableName.database.getOrElse(currentDb)
+    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.createPartitions(db, table, parts, ignoreIfExists)
   }
 
@@ -324,11 +524,14 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    */
   def dropPartitions(
       tableName: TableIdentifier,
-      parts: Seq[TablePartitionSpec],
+      specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = {
-    val db = tableName.database.getOrElse(currentDb)
+    requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
-    externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
+    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists)
   }
 
   /**
@@ -341,8 +544,13 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
-    val db = tableName.database.getOrElse(currentDb)
+    val tableMetadata = getTableMetadata(tableName)
+    requireExactMatchedPartitionSpec(specs, tableMetadata)
+    requireExactMatchedPartitionSpec(newSpecs, tableMetadata)
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.renamePartitions(db, table, specs, newSpecs)
   }
 
@@ -356,8 +564,11 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * this becomes a no-op.
    */
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
-    val db = tableName.database.getOrElse(currentDb)
+    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.alterPartitions(db, table, parts)
   }
 
@@ -366,19 +577,65 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * If no database is specified, assume the table is in the current database.
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
-    val db = tableName.database.getOrElse(currentDb)
+    requireExactMatchedPartitionSpec(Seq(spec), getTableMetadata(tableName))
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.getPartition(db, table, spec)
   }
 
   /**
-   * List all partitions in a table, assuming it exists.
-   * If no database is specified, assume the table is in the current database.
+   * List the metadata of all partitions that belong to the specified table, assuming it exists.
+   *
+   * A partial partition spec may optionally be provided to filter the partitions returned.
+   * For instance, if there exist partitions (a='1', b='2'), (a='1', b='3') and (a='2', b='4'),
+   * then a partial spec of (a='1') will return the first two only.
    */
-  def listPartitions(tableName: TableIdentifier): Seq[CatalogTablePartition] = {
-    val db = tableName.database.getOrElse(currentDb)
+  def listPartitions(
+      tableName: TableIdentifier,
+      partialSpec: Option[TablePartitionSpec] = None): Seq[CatalogTablePartition] = {
+    val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
-    externalCatalog.listPartitions(db, table)
+    requireDbExists(db)
+    requireTableExists(TableIdentifier(table, Option(db)))
+    externalCatalog.listPartitions(db, table, partialSpec)
+  }
+
+  /**
+   * Verify if the input partition spec exactly matches the existing defined partition spec
+   * The columns must be the same but the orders could be different.
+   */
+  private def requireExactMatchedPartitionSpec(
+      specs: Seq[TablePartitionSpec],
+      table: CatalogTable): Unit = {
+    val defined = table.partitionColumnNames.sorted
+    specs.foreach { s =>
+      if (s.keys.toSeq.sorted != defined) {
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must match " +
+            s"the partition spec (${table.partitionColumnNames.mkString(", ")}) defined in " +
+            s"table '${table.identifier}'")
+      }
+    }
+  }
+
+  /**
+   * Verify if the input partition spec partially matches the existing defined partition spec
+   * That is, the columns of partition spec should be part of the defined partition spec.
+   */
+  private def requirePartialMatchedPartitionSpec(
+      specs: Seq[TablePartitionSpec],
+      table: CatalogTable): Unit = {
+    val defined = table.partitionColumnNames
+    specs.foreach { s =>
+      if (!s.keys.forall(defined.contains)) {
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
+            s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
+            s"in table '${table.identifier}'")
+      }
+    }
   }
 
   // ----------------------------------------------------------------------------
@@ -398,36 +655,61 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
    * Create a metastore function in the database specified in `funcDefinition`.
    * If no such database is specified, create it in the current database.
    */
-  def createFunction(funcDefinition: CatalogFunction): Unit = {
-    val db = funcDefinition.name.database.getOrElse(currentDb)
-    val newFuncDefinition = funcDefinition.copy(
-      name = FunctionIdentifier(funcDefinition.name.funcName, Some(db)))
-    externalCatalog.createFunction(db, newFuncDefinition)
+  def createFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
+    val db = formatDatabaseName(funcDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    val identifier = FunctionIdentifier(funcDefinition.identifier.funcName, Some(db))
+    val newFuncDefinition = funcDefinition.copy(identifier = identifier)
+    if (!functionExists(identifier)) {
+      externalCatalog.createFunction(db, newFuncDefinition)
+    } else if (!ignoreIfExists) {
+      throw new FunctionAlreadyExistsException(db = db, func = identifier.toString)
+    }
   }
 
   /**
    * Drop a metastore function.
    * If no database is specified, assume the function is in the current database.
    */
-  def dropFunction(name: FunctionIdentifier): Unit = {
-    val db = name.database.getOrElse(currentDb)
-    externalCatalog.dropFunction(db, name.funcName)
+  def dropFunction(name: FunctionIdentifier, ignoreIfNotExists: Boolean): Unit = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    val identifier = name.copy(database = Some(db))
+    if (functionExists(identifier)) {
+      // TODO: registry should just take in FunctionIdentifier for type safety
+      if (functionRegistry.functionExists(identifier.unquotedString)) {
+        // If we have loaded this function into the FunctionRegistry,
+        // also drop it from there.
+        // For a permanent function, because we loaded it to the FunctionRegistry
+        // when it's first used, we also need to drop it from the FunctionRegistry.
+        functionRegistry.dropFunction(identifier.unquotedString)
+      }
+      externalCatalog.dropFunction(db, name.funcName)
+    } else if (!ignoreIfNotExists) {
+      throw new NoSuchFunctionException(db = db, func = identifier.toString)
+    }
   }
 
   /**
-   * Alter a metastore function whose name that matches the one specified in `funcDefinition`.
+   * Retrieve the metadata of a metastore function.
    *
-   * If no database is specified in `funcDefinition`, assume the function is in the
-   * current database.
-   *
-   * Note: If the underlying implementation does not support altering a certain field,
-   * this becomes a no-op.
+   * If a database is specified in `name`, this will return the function in that database.
+   * If no database is specified, this will return the function in the current database.
    */
-  def alterFunction(funcDefinition: CatalogFunction): Unit = {
-    val db = funcDefinition.name.database.getOrElse(currentDb)
-    val newFuncDefinition = funcDefinition.copy(
-      name = FunctionIdentifier(funcDefinition.name.funcName, Some(db)))
-    externalCatalog.alterFunction(db, newFuncDefinition)
+  def getFunctionMetadata(name: FunctionIdentifier): CatalogFunction = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    externalCatalog.getFunction(db, name.funcName)
+  }
+
+  /**
+   * Check if the specified function exists.
+   */
+  def functionExists(name: FunctionIdentifier): Boolean = {
+    val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
+    requireDbExists(db)
+    functionRegistry.functionExists(name.unquotedString) ||
+      externalCatalog.functionExists(db, name.funcName)
   }
 
   // ----------------------------------------------------------------
@@ -435,92 +717,184 @@ class SessionCatalog(externalCatalog: ExternalCatalog, conf: CatalystConf) {
   // ----------------------------------------------------------------
 
   /**
+   * Construct a [[FunctionBuilder]] based on the provided class that represents a function.
+   *
+   * This performs reflection to decide what type of [[Expression]] to return in the builder.
+   */
+  private[sql] def makeFunctionBuilder(name: String, functionClassName: String): FunctionBuilder = {
+    // TODO: at least support UDAFs here
+    throw new UnsupportedOperationException("Use sqlContext.udf.register(...) instead.")
+  }
+
+  /**
+   * Loads resources such as JARs and Files for a function. Every resource is represented
+   * by a tuple (resource type, resource uri).
+   */
+  def loadFunctionResources(resources: Seq[FunctionResource]): Unit = {
+    resources.foreach(functionResourceLoader.loadResource)
+  }
+
+  /**
    * Create a temporary function.
    * This assumes no database is specified in `funcDefinition`.
    */
-  def createTempFunction(funcDefinition: CatalogFunction, ignoreIfExists: Boolean): Unit = {
-    require(funcDefinition.name.database.isEmpty,
-      "attempted to create a temporary function while specifying a database")
-    val name = funcDefinition.name.funcName
-    if (tempFunctions.containsKey(name) && !ignoreIfExists) {
-      throw new AnalysisException(s"Temporary function '$name' already exists.")
+  def createTempFunction(
+      name: String,
+      info: ExpressionInfo,
+      funcDefinition: FunctionBuilder,
+      ignoreIfExists: Boolean): Unit = {
+    if (functionRegistry.lookupFunctionBuilder(name).isDefined && !ignoreIfExists) {
+      throw new TempFunctionAlreadyExistsException(name)
     }
-    tempFunctions.put(name, funcDefinition)
+    functionRegistry.registerFunction(name, info, funcDefinition)
   }
 
   /**
    * Drop a temporary function.
    */
-  // TODO: The reason that we distinguish dropFunction and dropTempFunction is that
-  // Hive has DROP FUNCTION and DROP TEMPORARY FUNCTION. We may want to consolidate
-  // dropFunction and dropTempFunction.
   def dropTempFunction(name: String, ignoreIfNotExists: Boolean): Unit = {
-    if (!tempFunctions.containsKey(name) && !ignoreIfNotExists) {
-      throw new AnalysisException(
-        s"Temporary function '$name' cannot be dropped because it does not exist!")
+    if (!functionRegistry.dropFunction(name) && !ignoreIfNotExists) {
+      throw new NoSuchTempFunctionException(name)
     }
-    tempFunctions.remove(name)
+  }
+
+  protected def failFunctionLookup(name: String): Nothing = {
+    throw new NoSuchFunctionException(db = currentDb, func = name)
   }
 
   /**
-   * Rename a function.
-   *
-   * If a database is specified in `oldName`, this will rename the function in that database.
-   * If no database is specified, this will first attempt to rename a temporary function with
-   * the same name, then, if that does not exist, rename the function in the current database.
-   *
-   * This assumes the database specified in `oldName` matches the one specified in `newName`.
+   * Look up the [[ExpressionInfo]] associated with the specified function, assuming it exists.
    */
-  def renameFunction(oldName: FunctionIdentifier, newName: FunctionIdentifier): Unit = {
-    if (oldName.database != newName.database) {
-      throw new AnalysisException("rename does not support moving functions across databases")
-    }
-    val db = oldName.database.getOrElse(currentDb)
-    if (oldName.database.isDefined || !tempFunctions.containsKey(oldName.funcName)) {
-      externalCatalog.renameFunction(db, oldName.funcName, newName.funcName)
-    } else {
-      val func = tempFunctions.remove(oldName.funcName)
-      val newFunc = func.copy(name = func.name.copy(funcName = newName.funcName))
-      tempFunctions.put(newName.funcName, newFunc)
-    }
+  private[spark] def lookupFunctionInfo(name: FunctionIdentifier): ExpressionInfo = synchronized {
+    // TODO: just make function registry take in FunctionIdentifier instead of duplicating this
+    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
+    val qualifiedName = name.copy(database = database)
+    functionRegistry.lookupFunction(name.funcName)
+      .orElse(functionRegistry.lookupFunction(qualifiedName.unquotedString))
+      .getOrElse {
+        val db = qualifiedName.database.get
+        requireDbExists(db)
+        if (externalCatalog.functionExists(db, name.funcName)) {
+          val metadata = externalCatalog.getFunction(db, name.funcName)
+          new ExpressionInfo(metadata.className, qualifiedName.unquotedString)
+        } else {
+          failFunctionLookup(name.funcName)
+        }
+      }
   }
 
   /**
-   * Retrieve the metadata of an existing function.
+   * Return an [[Expression]] that represents the specified function, assuming it exists.
    *
-   * If a database is specified in `name`, this will return the function in that database.
-   * If no database is specified, this will first attempt to return a temporary function with
-   * the same name, then, if that does not exist, return the function in the current database.
+   * For a temporary function or a permanent function that has been loaded,
+   * this method will simply lookup the function through the
+   * FunctionRegistry and create an expression based on the builder.
+   *
+   * For a permanent function that has not been loaded, we will first fetch its metadata
+   * from the underlying external catalog. Then, we will load all resources associated
+   * with this function (i.e. jars and files). Finally, we create a function builder
+   * based on the function class and put the builder into the FunctionRegistry.
+   * The name of this function in the FunctionRegistry will be `databaseName.functionName`.
    */
-  def getFunction(name: FunctionIdentifier): CatalogFunction = {
-    val db = name.database.getOrElse(currentDb)
-    if (name.database.isDefined || !tempFunctions.containsKey(name.funcName)) {
-      externalCatalog.getFunction(db, name.funcName)
-    } else {
-      tempFunctions.get(name.funcName)
+  def lookupFunction(
+      name: FunctionIdentifier,
+      children: Seq[Expression]): Expression = synchronized {
+    // Note: the implementation of this function is a little bit convoluted.
+    // We probably shouldn't use a single FunctionRegistry to register all three kinds of functions
+    // (built-in, temp, and external).
+    if (name.database.isEmpty && functionRegistry.functionExists(name.funcName)) {
+      // This function has been already loaded into the function registry.
+      return functionRegistry.lookupFunction(name.funcName, children)
     }
+
+    // If the name itself is not qualified, add the current database to it.
+    val database = name.database.orElse(Some(currentDb)).map(formatDatabaseName)
+    val qualifiedName = name.copy(database = database)
+
+    if (functionRegistry.functionExists(qualifiedName.unquotedString)) {
+      // This function has been already loaded into the function registry.
+      // Unlike the above block, we find this function by using the qualified name.
+      return functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
+    }
+
+    // The function has not been loaded to the function registry, which means
+    // that the function is a permanent function (if it actually has been registered
+    // in the metastore). We need to first put the function in the FunctionRegistry.
+    // TODO: why not just check whether the function exists first?
+    val catalogFunction = try {
+      externalCatalog.getFunction(currentDb, name.funcName)
+    } catch {
+      case e: AnalysisException => failFunctionLookup(name.funcName)
+      case e: NoSuchPermanentFunctionException => failFunctionLookup(name.funcName)
+    }
+    loadFunctionResources(catalogFunction.resources)
+    // Please note that qualifiedName is provided by the user. However,
+    // catalogFunction.identifier.unquotedString is returned by the underlying
+    // catalog. So, it is possible that qualifiedName is not exactly the same as
+    // catalogFunction.identifier.unquotedString (difference is on case-sensitivity).
+    // At here, we preserve the input from the user.
+    val info = new ExpressionInfo(catalogFunction.className, qualifiedName.unquotedString)
+    val builder = makeFunctionBuilder(qualifiedName.unquotedString, catalogFunction.className)
+    createTempFunction(qualifiedName.unquotedString, info, builder, ignoreIfExists = false)
+    // Now, we need to create the Expression.
+    functionRegistry.lookupFunction(qualifiedName.unquotedString, children)
   }
 
-  // TODO: implement lookupFunction that returns something from the registry itself
+  /**
+   * List all functions in the specified database, including temporary functions.
+   */
+  def listFunctions(db: String): Seq[FunctionIdentifier] = listFunctions(db, "*")
 
   /**
    * List all matching functions in the specified database, including temporary functions.
    */
   def listFunctions(db: String, pattern: String): Seq[FunctionIdentifier] = {
-    val dbFunctions =
-      externalCatalog.listFunctions(db, pattern).map { f => FunctionIdentifier(f, Some(db)) }
-    val regex = pattern.replaceAll("\\*", ".*").r
-    val _tempFunctions = tempFunctions.keys().asScala
-      .filter { f => regex.pattern.matcher(f).matches() }
+    val dbName = formatDatabaseName(db)
+    requireDbExists(dbName)
+    val dbFunctions = externalCatalog.listFunctions(dbName, pattern)
+      .map { f => FunctionIdentifier(f, Some(dbName)) }
+    val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
-    dbFunctions ++ _tempFunctions
+    dbFunctions ++ loadedFunctions
   }
 
+
+  // -----------------
+  // | Other methods |
+  // -----------------
+
   /**
-   * Return a temporary function. For testing only.
+   * Drop all existing databases (except "default"), tables, partitions and functions,
+   * and set the current database to "default".
+   *
+   * This is mainly used for tests.
    */
-  private[catalog] def getTempFunction(name: String): Option[CatalogFunction] = {
-    Option(tempFunctions.get(name))
+  private[sql] def reset(): Unit = synchronized {
+    val default = "default"
+    listDatabases().filter(_ != default).foreach { db =>
+      dropDatabase(db, ignoreIfNotExists = false, cascade = true)
+    }
+    listTables(default).foreach { table =>
+      dropTable(table, ignoreIfNotExists = false)
+    }
+    listFunctions(default).foreach { func =>
+      if (func.database.isDefined) {
+        dropFunction(func, ignoreIfNotExists = false)
+      } else {
+        dropTempFunction(func.funcName, ignoreIfNotExists = false)
+      }
+    }
+    tempTables.clear()
+    functionRegistry.clear()
+    // restore built-in functions
+    FunctionRegistry.builtin.listFunction().foreach { f =>
+      val expressionInfo = FunctionRegistry.builtin.lookupFunction(f)
+      val functionBuilder = FunctionRegistry.builtin.lookupFunctionBuilder(f)
+      require(expressionInfo.isDefined, s"built-in function '$f' is missing expression info")
+      require(functionBuilder.isDefined, s"built-in function '$f' is missing function builder")
+      functionRegistry.registerFunction(f, expressionInfo.get, functionBuilder.get)
+    }
+    setCurrentDatabase(default)
   }
 
 }

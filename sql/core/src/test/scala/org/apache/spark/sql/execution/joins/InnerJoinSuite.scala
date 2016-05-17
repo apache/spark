@@ -32,7 +32,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
   import testImplicits.newProductEncoder
   import testImplicits.localSeqToDatasetHolder
 
-  private lazy val myUpperCaseData = sqlContext.createDataFrame(
+  private lazy val myUpperCaseData = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, "A"),
       Row(2, "B"),
@@ -43,7 +43,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       Row(null, "G")
     )), new StructType().add("N", IntegerType).add("L", StringType))
 
-  private lazy val myLowerCaseData = sqlContext.createDataFrame(
+  private lazy val myLowerCaseData = spark.createDataFrame(
     sparkContext.parallelize(Seq(
       Row(1, "a"),
       Row(2, "b"),
@@ -91,7 +91,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan,
         side: BuildSide) = {
-      val broadcastJoin = joins.BroadcastHashJoin(
+      val broadcastJoin = joins.BroadcastHashJoinExec(
         leftKeys,
         rightKeys,
         Inner,
@@ -99,7 +99,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         boundCondition,
         leftPlan,
         rightPlan)
-      EnsureRequirements(sqlContext.sessionState.conf).apply(broadcastJoin)
+      EnsureRequirements(spark.sessionState.conf).apply(broadcastJoin)
     }
 
     def makeShuffledHashJoin(
@@ -110,10 +110,10 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         rightPlan: SparkPlan,
         side: BuildSide) = {
       val shuffledHashJoin =
-        joins.ShuffledHashJoin(leftKeys, rightKeys, Inner, side, None, leftPlan, rightPlan)
+        joins.ShuffledHashJoinExec(leftKeys, rightKeys, Inner, side, None, leftPlan, rightPlan)
       val filteredJoin =
-        boundCondition.map(Filter(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
-      EnsureRequirements(sqlContext.sessionState.conf).apply(filteredJoin)
+        boundCondition.map(FilterExec(_, shuffledHashJoin)).getOrElse(shuffledHashJoin)
+      EnsureRequirements(spark.sessionState.conf).apply(filteredJoin)
     }
 
     def makeSortMergeJoin(
@@ -123,8 +123,8 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
         leftPlan: SparkPlan,
         rightPlan: SparkPlan) = {
       val sortMergeJoin =
-        joins.SortMergeJoin(leftKeys, rightKeys, Inner, boundCondition, leftPlan, rightPlan)
-      EnsureRequirements(sqlContext.sessionState.conf).apply(sortMergeJoin)
+        joins.SortMergeJoinExec(leftKeys, rightKeys, Inner, boundCondition, leftPlan, rightPlan)
+      EnsureRequirements(spark.sessionState.conf).apply(sortMergeJoin)
     }
 
     test(s"$testName using BroadcastHashJoin (build=left)") {
@@ -189,7 +189,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using CartesianProduct") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          Filter(condition(), CartesianProduct(left, right)),
+          CartesianProductExec(left, right, Some(condition())),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
@@ -198,7 +198,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build left") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoin(left, right, BuildLeft, Inner, Some(condition())),
+          BroadcastNestedLoopJoinExec(left, right, BuildLeft, Inner, Some(condition())),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }
@@ -207,7 +207,7 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
     test(s"$testName using BroadcastNestedLoopJoin build right") {
       withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
         checkAnswer2(leftRows, rightRows, (left: SparkPlan, right: SparkPlan) =>
-          BroadcastNestedLoopJoin(left, right, BuildRight, Inner, Some(condition())),
+          BroadcastNestedLoopJoinExec(left, right, BuildRight, Inner, Some(condition())),
           expectedAnswer.map(Row.fromTuple),
           sortAnswers = true)
       }

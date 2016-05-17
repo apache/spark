@@ -199,21 +199,21 @@ class SparkSubmitSuite
     val (childArgs, classpath, sysProps, mainClass) = prepareSubmitEnvironment(appArgs)
     val childArgsStr = childArgs.mkString(" ")
     childArgsStr should include ("--class org.SomeClass")
-    childArgsStr should include ("--executor-memory 5g")
-    childArgsStr should include ("--driver-memory 4g")
-    childArgsStr should include ("--executor-cores 5")
     childArgsStr should include ("--arg arg1 --arg arg2")
-    childArgsStr should include ("--queue thequeue")
     childArgsStr should include regex ("--jar .*thejar.jar")
-    childArgsStr should include regex ("--addJars .*one.jar,.*two.jar,.*three.jar")
-    childArgsStr should include regex ("--files .*file1.txt,.*file2.txt")
-    childArgsStr should include regex ("--archives .*archive1.txt,.*archive2.txt")
     mainClass should be ("org.apache.spark.deploy.yarn.Client")
     classpath should have length (0)
+
+    sysProps("spark.executor.memory") should be ("5g")
+    sysProps("spark.driver.memory") should be ("4g")
+    sysProps("spark.executor.cores") should be ("5")
+    sysProps("spark.yarn.queue") should be ("thequeue")
+    sysProps("spark.yarn.dist.jars") should include regex (".*one.jar,.*two.jar,.*three.jar")
+    sysProps("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
+    sysProps("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
     sysProps("spark.app.name") should be ("beauty")
     sysProps("spark.ui.enabled") should be ("false")
     sysProps("SPARK_SUBMIT") should be ("true")
-    sysProps.keys should not contain ("spark.jars")
   }
 
   test("handles YARN client mode") {
@@ -249,7 +249,8 @@ class SparkSubmitSuite
     sysProps("spark.executor.instances") should be ("6")
     sysProps("spark.yarn.dist.files") should include regex (".*file1.txt,.*file2.txt")
     sysProps("spark.yarn.dist.archives") should include regex (".*archive1.txt,.*archive2.txt")
-    sysProps("spark.jars") should include regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
+    sysProps("spark.yarn.dist.jars") should include
+      regex (".*one.jar,.*two.jar,.*three.jar,.*thejar.jar")
     sysProps("SPARK_SUBMIT") should be ("true")
     sysProps("spark.ui.enabled") should be ("false")
   }

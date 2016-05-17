@@ -72,7 +72,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("hive struct udf") {
     sql(
       """
-      |CREATE EXTERNAL TABLE hiveUDFTestTable (
+      |CREATE TABLE hiveUDFTestTable (
       |   pair STRUCT<id: INT, value: INT>
       |)
       |PARTITIONED BY (partition STRING)
@@ -303,7 +303,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDFTwoListList() FROM testUDF")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFTwoListList")
     }
 
@@ -313,7 +313,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDFAnd() FROM testUDF")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDFAnd")
     }
 
@@ -323,7 +323,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDAFPercentile(a) FROM testUDF GROUP BY b")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFPercentile")
     }
 
@@ -333,7 +333,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDAFAverage() FROM testUDF GROUP BY b")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDAFAverage")
     }
 
@@ -343,11 +343,11 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       val message = intercept[AnalysisException] {
         sql("SELECT testUDTFExplode() FROM testUDF")
       }.getMessage
-      assert(message.contains("No handler for Hive udf"))
+      assert(message.contains("No handler for Hive UDF"))
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTFExplode")
     }
 
-    sqlContext.dropTempTable("testUDF")
+    spark.catalog.dropTempView("testUDF")
   }
 
   test("Hive UDF in group by") {

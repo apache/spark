@@ -19,23 +19,25 @@ package org.apache.spark.ml.source.libsvm
 
 import java.io.IOException
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 private[libsvm] class LibSVMOutputWriter(
     path: String,
@@ -83,12 +85,12 @@ private[libsvm] class LibSVMOutputWriter(
  * optionally specify options, for example:
  * {{{
  *   // Scala
- *   val df = sqlContext.read.format("libsvm")
+ *   val df = spark.read.format("libsvm")
  *     .option("numFeatures", "780")
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = sqlContext.read().format("libsvm")
+ *   DataFrame df = spark.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}
@@ -110,15 +112,18 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   @Since("1.6.0")
   override def shortName(): String = "libsvm"
 
+  override def toString: String = "LibSVM"
+
   private def verifySchema(dataSchema: StructType): Unit = {
     if (dataSchema.size != 2 ||
       (!dataSchema(0).dataType.sameType(DataTypes.DoubleType)
         || !dataSchema(1).dataType.sameType(new VectorUDT()))) {
-      throw new IOException(s"Illegal schema for libsvm data, schema=${dataSchema}")
+      throw new IOException(s"Illegal schema for libsvm data, schema=$dataSchema")
     }
   }
+
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     Some(
@@ -127,8 +132,34 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         StructField("features", new VectorUDT(), nullable = false) :: Nil))
   }
 
+  override def prepareRead(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      files: Seq[FileStatus]): Map[String, String] = {
+    def computeNumFeatures(): Int = {
+      val dataFiles = files.filterNot(_.getPath.getName startsWith "_")
+      val path = if (dataFiles.length == 1) {
+        dataFiles.head.getPath.toUri.toString
+      } else if (dataFiles.isEmpty) {
+        throw new IOException("No input path specified for libsvm data")
+      } else {
+        throw new IOException("Multiple input paths are not supported for libsvm data.")
+      }
+
+      val sc = sparkSession.sparkContext
+      val parsed = MLUtils.parseLibSVMFile(sc, path, sc.defaultParallelism)
+      MLUtils.computeNumFeatures(parsed)
+    }
+
+    val numFeatures = options.get("numFeatures").filter(_.toInt > 0).getOrElse {
+      computeNumFeatures()
+    }
+
+    new CaseInsensitiveMap(options + ("numFeatures" -> numFeatures.toString))
+  }
+
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -144,36 +175,47 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
+  override def buildReader(
+      sparkSession: SparkSession,
       dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: This does not handle cases where column pruning has been performed.
-
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
     verifySchema(dataSchema)
-    val dataFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
+    val numFeatures = options("numFeatures").toInt
+    assert(numFeatures > 0)
 
-    val path = if (dataFiles.length == 1) dataFiles(0).getPath.toUri.toString
-    else if (dataFiles.isEmpty) throw new IOException("No input path specified for libsvm data")
-    else throw new IOException("Multiple input paths are not supported for libsvm data.")
+    val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
 
-    val numFeatures = options.getOrElse("numFeatures", "-1").toInt
-    val vectorType = options.getOrElse("vectorType", "sparse")
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
-    val sc = sqlContext.sparkContext
-    val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
-    val sparse = vectorType == "sparse"
-    baseRdd.map { pt =>
-      val features = if (sparse) pt.features.toSparse else pt.features.toDense
-      Row(pt.label, features)
-    }.mapPartitions { externalRows =>
+    (file: PartitionedFile) => {
+      val points =
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
+          .map(_.toString.trim)
+          .filterNot(line => line.isEmpty || line.startsWith("#"))
+          .map { line =>
+            val (label, indices, values) = MLUtils.parseLibSVMRecord(line)
+            LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
+          }
+
       val converter = RowEncoder(dataSchema)
-      externalRows.map(converter.toRow)
+      val fullOutput = dataSchema.map { f =>
+        AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
+      }
+      val requiredOutput = fullOutput.filter { a =>
+        requiredSchema.fieldNames.contains(a.name)
+      }
+
+      val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
+
+      points.map { pt =>
+        val features = if (sparse) pt.features.toSparse else pt.features.toDense
+        requiredColumns(converter.toRow(Row(pt.label, features)))
+      }
     }
   }
 }
