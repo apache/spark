@@ -484,18 +484,19 @@ authenticate principals associated with services and clients. This allows client
 make requests of these authenticated services; the services to grant rights
 to the authenticated principals.
 
-Hadoop services issue *hadoop tokens* to grant access to the services and data,
-tokens which the client must supply over Hadoop IPC and REST/Web APIs as proof of access rights.
-For Spark applications launched in a YARN cluster to interact with HDFS, HBase and Hive,
-the application must acquire the relevant tokens
-using the Kerberos credentials of the user launching the application —that is, the principal whose
-identity will become that of the launched Spark application.
+Hadoop services issue *hadoop tokens* to grant access to the services and data.
+Clients must first acquire tokens for the services they will access and pass them along with their
+application as it is launched in the YARN cluster.
+
+For a Spark application to interact with HDFS, HBase and Hive, it must acquire the relevant tokens
+using the Kerberos credentials of the user launching the application
+—that is, the principal whose identity will become that of the launched Spark application.
 
 This is normally done at launch time: in a secure cluster Spark will automatically obtain a
 token for the cluster's HDFS filesystem, and potentially for HBase and Hive.
 
 An HBase token will be obtained if HBase is in on classpath, the HBase configuration declares
-the application is secure (i.e. `hbase.security.authentication==kerberos`),
+the application is secure (i.e. `hbase-site.xml` sets `hbase.security.authentication` to `kerberos`),
 and `spark.yarn.security.tokens.hbase.enabled` is not set to `false`.
 
 Similarly, a Hive token will be obtained if Hive is on the classpath, its configuration
@@ -509,12 +510,6 @@ launch time. This is done by listing them in the `spark.yarn.access.namenodes` p
 ```
 spark.yarn.access.namenodes hdfs://ireland.example.org:8020/,hdfs://frankfurt.example.org:8020/
 ```
-
-Hadoop tokens expire. They can be renewed "for a while".
-Eventually, they will stop being renewable —after which all attempts to
-access secure data will fail. The only way to avoid that is for the application to be launched
-with the secrets needed to log in to Kerberos directly: a "keytab". Consult
-the [Spark Property](#Spark Properties) `spark.yarn.keytab` for the specifics.
 
 ## Launching your application with Apache Oozie
 
