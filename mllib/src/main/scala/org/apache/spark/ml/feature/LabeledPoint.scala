@@ -17,19 +17,22 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.linalg.Vectors
-import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.util.MLlibTestSparkContext
+import scala.beans.BeanInfo
 
-class ElementwiseProductSuite
-  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.ml.linalg.Vector
 
-  test("read/write") {
-    val ep = new ElementwiseProduct()
-      .setInputCol("myInputCol")
-      .setOutputCol("myOutputCol")
-      .setScalingVec(Vectors.dense(0.1, 0.2))
-    testDefaultReadWrite(ep)
+/**
+ * Class that represents the features and labels of a data point.
+ *
+ * @param label Label for this data point.
+ * @param features List of features for this data point.
+ */
+@Since("2.0.0")
+@Experimental
+@BeanInfo
+case class LabeledPoint(@Since("2.0.0") label: Double, @Since("2.0.0") features: Vector) {
+  override def toString: String = {
+    s"($label,$features)"
   }
 }

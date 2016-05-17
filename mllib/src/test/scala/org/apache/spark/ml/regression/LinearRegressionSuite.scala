@@ -21,12 +21,12 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{DenseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.{DenseVector, Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
 class LinearRegressionSuite
@@ -45,7 +45,7 @@ class LinearRegressionSuite
     datasetWithDenseFeature = spark.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 6.3, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2).map(_.asML))
     /*
        datasetWithDenseFeatureWithoutIntercept is not needed for correctness testing
        but is useful for illustrating training model without intercept
@@ -53,7 +53,7 @@ class LinearRegressionSuite
     datasetWithDenseFeatureWithoutIntercept = spark.createDataFrame(
       sc.parallelize(LinearDataGenerator.generateLinearInput(
         intercept = 0.0, weights = Array(4.7, 7.2), xMean = Array(0.9, -1.3),
-        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2))
+        xVariance = Array(0.7, 1.2), nPoints = 10000, seed, eps = 0.1), 2).map(_.asML))
 
     val r = new Random(seed)
     // When feature size is larger than 4096, normal optimizer is choosed
@@ -64,7 +64,7 @@ class LinearRegressionSuite
         intercept = 0.0, weights = Seq.fill(featureSize)(r.nextDouble()).toArray,
         xMean = Seq.fill(featureSize)(r.nextDouble()).toArray,
         xVariance = Seq.fill(featureSize)(r.nextDouble()).toArray, nPoints = 200,
-        seed, eps = 0.1, sparsity = 0.7), 2))
+        seed, eps = 0.1, sparsity = 0.7), 2).map(_.asML))
 
     /*
        R code:
@@ -795,7 +795,7 @@ class LinearRegressionSuite
     Seq("auto", "l-bfgs", "normal").foreach { solver =>
       val (data, weightedData) = {
         val activeData = LinearDataGenerator.generateLinearInput(
-          6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+          6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1).map(_.asML)
 
         val rnd = new Random(8392)
         val signedData = activeData.map { case p: LabeledPoint =>
@@ -822,7 +822,7 @@ class LinearRegressionSuite
         }
 
         val noiseData = LinearDataGenerator.generateLinearInput(
-          2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1)
+          2, Array(1, 3), Array(0.9, -1.3), Array(0.7, 1.2), 500, 1, 0.1).map(_.asML)
         val weightedNoiseData = noiseData.map {
           case LabeledPoint(label, features) => Instance(label, weight = 0, features)
         }
