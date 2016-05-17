@@ -633,7 +633,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
         StructField("freq", LongType))
       val schema = StructType(fields)
       val rowDataRDD = model.freqSequences.map { x =>
-        Row(x.sequence.toSeq.map(_.toSeq), x.freq)
+        Row(x.sequence, x.freq)
       }
       sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
     }
