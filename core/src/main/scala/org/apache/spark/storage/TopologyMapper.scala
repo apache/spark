@@ -17,8 +17,14 @@
 
 package org.apache.spark.storage
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 
+/**
+ * ::DeveloperApi::
+ * TopologyMapper provides topology information for a given host
+ */
+@DeveloperApi
 trait TopologyMapper {
   /**
    * Gets the topology information given the host name
@@ -32,6 +38,7 @@ trait TopologyMapper {
   def getTopologyForHost(hostname: String): String
 }
 
+@DeveloperApi
 class DefaultTopologyMapper extends TopologyMapper with Logging {
   override def getTopologyForHost(hostname: String): String = {
     logDebug(s"Got a request for $hostname")

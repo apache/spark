@@ -17,11 +17,17 @@
 
 package org.apache.spark.storage
 
-import scala.util.Random
+import org.apache.spark.annotation.DeveloperApi
 
+import scala.util.Random
 import org.apache.spark.internal.Logging
 
-/* Trait that should be implemented by any class implementing rack aware prioritization */
+/**
+ * ::DeveloperApi::
+ * BlockReplicationPrioritization provides logic for prioritizing a sequence of peers for
+ * replicating blocks
+ */
+@DeveloperApi
 trait BlockReplicationPrioritization {
 
   /**
@@ -38,6 +44,7 @@ trait BlockReplicationPrioritization {
                  blockId: BlockId): Seq[BlockManagerId]
 }
 
+@DeveloperApi
 class DefaultBlockReplicationPrioritization(host: String)
   extends BlockReplicationPrioritization
   with Logging {
