@@ -46,34 +46,46 @@ private[spark] class DiskBlockObjectWriter(
   extends OutputStream
   with Logging {
 
+  /**
+   * Guards against close calls, e.g. from a wrapping stream.
+   * Call manualClose to close the stream that was extended by this trait.
+   */
+  private trait ManualCloseOutputStream extends OutputStream {
+    abstract override def close(): Unit = {
+      flush()
+    }
+
+    def manualClose(): Unit = {
+      super.close()
+    }
+  }
+
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null
+  private var mcs: ManualCloseOutputStream = null
   private var bs: OutputStream = null
   private var fos: FileOutputStream = null
   private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialized = false
+  private var streamOpen = false
   private var hasBeenClosed = false
-  private var commitAndCloseHasBeenCalled = false
 
   /**
    * Cursors used to represent positions in the file.
    *
-   * xxxxxxxx|--------|---       |
-   *         ^        ^          ^
-   *         |        |        finalPosition
-   *         |      reportedPosition
-   *       initialPosition
+   * xxxxxxxx|--------|---|
+   *           ^          ^
+   *           |        committedPosition
+   *         reportedPosition
    *
-   * initialPosition: Offset in the file where we start writing. Immutable.
    * reportedPosition: Position at the time of the last update to the write metrics.
-   * finalPosition: Offset where we stopped writing. Set on closeAndCommit() then never changed.
+   * committedPosition: Offset after last committed write.
    * -----: Current writes to the underlying file.
    * xxxxx: Existing contents of the file.
    */
-  private val initialPosition = file.length()
-  private var finalPosition: Long = -1
-  private var reportedPosition = initialPosition
+  private var committedPosition = file.length()
+  private var reportedPosition = committedPosition
 
   /**
    * Keep track of number of records written and also use this to periodically
@@ -81,31 +93,35 @@ private[spark] class DiskBlockObjectWriter(
    */
   private var numRecordsWritten = 0
 
+  private def initialize(): Unit = {
+    fos = new FileOutputStream(file, true)
+    channel = fos.getChannel()
+    ts = new TimeTrackingOutputStream(writeMetrics, fos)
+    class ManualCloseBufferedOutputStream
+      extends BufferedOutputStream(ts, bufferSize) with ManualCloseOutputStream
+    mcs = new ManualCloseBufferedOutputStream
+  }
+
   def open(): DiskBlockObjectWriter = {
     if (hasBeenClosed) {
       throw new IllegalStateException("Writer already closed. Cannot be reopened.")
     }
-    fos = new FileOutputStream(file, true)
-    ts = new TimeTrackingOutputStream(writeMetrics, fos)
-    channel = fos.getChannel()
-    bs = compressStream(new BufferedOutputStream(ts, bufferSize))
+    if (!initialized) {
+      initialize()
+      initialized = true
+    }
+    bs = compressStream(mcs)
     objOut = serializerInstance.serializeStream(bs)
-    initialized = true
+    streamOpen = true
     this
   }
 
   override def close() {
     if (initialized) {
       Utils.tryWithSafeFinally {
-        if (syncWrites) {
-          // Force outstanding writes to disk and track how long it takes
-          objOut.flush()
-          val start = System.nanoTime()
-          fos.getFD.sync()
-          writeMetrics.incWriteTime(System.nanoTime() - start)
-        }
+        commit()
       } {
-        objOut.close()
+        mcs.manualClose()
       }
 
       channel = null
@@ -114,34 +130,48 @@ private[spark] class DiskBlockObjectWriter(
       ts = null
       objOut = null
       initialized = false
+      streamOpen = false
       hasBeenClosed = true
     }
   }
 
-  def isOpen: Boolean = objOut != null
-
   /**
    * Flush the partial writes and commit them as a single atomic block.
+   * A commit may write additional bytes to frame the atomic block.
+   *
+   * @return file segment with previous offset and length committed on this call.
    */
-  def commitAndClose(): Unit = {
-    if (initialized) {
+  def commit(): FileSegment = {
+    if (streamOpen) {
       // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
       //       serializer stream and the lower level stream.
       objOut.flush()
       bs.flush()
-      close()
-      finalPosition = file.length()
-      // In certain compression codecs, more bytes are written after close() is called
-      writeMetrics.incBytesWritten(finalPosition - reportedPosition)
+      objOut.close()
+      streamOpen = false
+
+      if (syncWrites) {
+        // Force outstanding writes to disk and track how long it takes
+        val start = System.nanoTime()
+        fos.getFD.sync()
+        writeMetrics.incWriteTime(System.nanoTime() - start)
+      }
+
+      val pos = channel.position()
+      val fileSegment = new FileSegment(file, committedPosition, pos - committedPosition)
+      committedPosition = pos
+      // In certain compression codecs, more bytes are written after streams are closed
+      writeMetrics.incBytesWritten(committedPosition - reportedPosition)
+      reportedPosition = committedPosition
+      fileSegment
     } else {
-      finalPosition = file.length()
+      new FileSegment(file, committedPosition, 0)
     }
-    commitAndCloseHasBeenCalled = true
   }
 
 
   /**
-   * Reverts writes that haven't been flushed yet. Callers should invoke this function
+   * Reverts writes that haven't been committed yet. Callers should invoke this function
    * when there are runtime exceptions. This method will not throw, though it may be
    * unsuccessful in truncating written data.
    *
@@ -152,16 +182,15 @@ private[spark] class DiskBlockObjectWriter(
     // truncating the file to its initial position.
     try {
       if (initialized) {
-        writeMetrics.decBytesWritten(reportedPosition - initialPosition)
+        writeMetrics.decBytesWritten(reportedPosition - committedPosition)
         writeMetrics.decRecordsWritten(numRecordsWritten)
-        objOut.flush()
-        bs.flush()
+        streamOpen = false
         close()
       }
 
       val truncateStream = new FileOutputStream(file, true)
       try {
-        truncateStream.getChannel.truncate(initialPosition)
+        truncateStream.getChannel.truncate(committedPosition)
         file
       } finally {
         truncateStream.close()
@@ -177,7 +206,7 @@ private[spark] class DiskBlockObjectWriter(
    * Writes a key-value pair.
    */
   def write(key: Any, value: Any) {
-    if (!initialized) {
+    if (!streamOpen) {
       open()
     }
 
@@ -189,7 +218,7 @@ private[spark] class DiskBlockObjectWriter(
   override def write(b: Int): Unit = throw new UnsupportedOperationException()
 
   override def write(kvBytes: Array[Byte], offs: Int, len: Int): Unit = {
-    if (!initialized) {
+    if (!streamOpen) {
       open()
     }
 
@@ -206,18 +235,6 @@ private[spark] class DiskBlockObjectWriter(
     if (numRecordsWritten % 16384 == 0) {
       updateBytesWritten()
     }
-  }
-
-  /**
-   * Returns the file segment of committed data that this Writer has written.
-   * This is only valid after commitAndClose() has been called.
-   */
-  def fileSegment(): FileSegment = {
-    if (!commitAndCloseHasBeenCalled) {
-      throw new IllegalStateException(
-        "fileSegment() is only valid after commitAndClose() has been called")
-    }
-    new FileSegment(file, initialPosition, finalPosition - initialPosition)
   }
 
   /**
