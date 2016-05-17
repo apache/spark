@@ -110,6 +110,25 @@ public class TaskMemoryManagerSuite {
   }
 
   @Test
+  public void shouldNotForceSpillingInDifferentModes() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
+    c1.use(80);
+    Assert.assertEquals(80, c1.getUsed());
+    c2.use(80);
+    Assert.assertEquals(20, c2.getUsed());  // not enough memory
+    Assert.assertEquals(80, c1.getUsed());  // not spilled
+
+    c2.use(10);
+    Assert.assertEquals(10, c2.getUsed());  // spilled
+    Assert.assertEquals(80, c1.getUsed());  // not spilled
+  }
+
+  @Test
   public void offHeapConfigurationBackwardsCompatibility() {
     // Tests backwards-compatibility with the old `spark.unsafe.offHeap` configuration, which
     // was deprecated in Spark 1.6 and replaced by `spark.memory.offHeap.enabled` (see SPARK-12251).
