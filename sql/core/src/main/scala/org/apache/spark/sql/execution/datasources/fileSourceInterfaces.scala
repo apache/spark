@@ -353,7 +353,8 @@ private[sql] object HadoopFsRelation extends Logging {
    */
   def createLocatedFileStatus(f: FileStatus, locations: Array[BlockLocation]): LocatedFileStatus = {
     // The other constructor of LocatedFileStatus will call FileStatus.getPermission(), which is
-    // very slow on some file system (RawLocalFileSystem).
+    // very slow on some file system (RawLocalFileSystem, which is launch a subprocess and parse the
+    // stdout).
     val lfs = new LocatedFileStatus(f.getLen, f.isDirectory, f.getReplication, f.getBlockSize,
       f.getModificationTime, 0, null, null, null, null, f.getPath, locations)
     if (f.isSymlink) {
