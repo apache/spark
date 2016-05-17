@@ -189,6 +189,20 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
            |COLLECTION ITEMS TERMINATED BY '@'
            |MAP KEYS TERMINATED BY '#'
            |NULL DEFINED AS 'NaN'
+         """.stripMargin
+      )
+
+      checkCreateTable("t1")
+    }
+  }
+
+  test("hive table with STORED AS clause") {
+    withTable("t1") {
+      sql(
+        s"""CREATE TABLE t1 (
+           |  c1 INT COMMENT 'bla',
+           |  c2 STRING
+           |)
            |STORED AS PARQUET
          """.stripMargin
       )
@@ -231,6 +245,26 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
       sql("CREATE VIEW v1 (b) AS SELECT 1 AS a")
       checkCreateView("v1")
     }
+  }
+
+  test("hive bucketing not supported") {
+    withTable("t1") {
+      createRawHiveTable(
+        s"""CREATE TABLE t1 (a INT, b STRING)
+           |CLUSTERED BY (a)
+           |SORTED BY (b)
+           |INTO 2 BUCKETS
+         """.stripMargin
+      )
+
+      intercept[UnsupportedOperationException] {
+        sql("SHOW CREATE TABLE t1")
+      }
+    }
+  }
+
+  private def createRawHiveTable(ddl: String): Unit = {
+    hiveContext.sharedState.metadataHive.runSqlHive(ddl)
   }
 
   private def checkCreateTable(table: String): Unit = {
