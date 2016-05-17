@@ -86,7 +86,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("reset") {
+  test("reset - public conf") {
     spark.wrapped.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
     try{
@@ -99,6 +99,22 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
     } finally {
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
+    }
+  }
+
+  test("reset - internal conf") {
+    spark.wrapped.conf.clear()
+    val original = spark.conf.get(SQLConf.NATIVE_VIEW)
+    try{
+      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
+      sql(s"set ${SQLConf.NATIVE_VIEW.key}=false")
+      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === false)
+      assert(sql(s"set").where(s"key = '${SQLConf.NATIVE_VIEW.key}'").count() == 1)
+      sql(s"reset")
+      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
+      assert(sql(s"set").where(s"key = '${SQLConf.NATIVE_VIEW.key}'").count() == 0)
+    } finally {
+      sql(s"set ${SQLConf.NATIVE_VIEW}=$original")
     }
   }
 

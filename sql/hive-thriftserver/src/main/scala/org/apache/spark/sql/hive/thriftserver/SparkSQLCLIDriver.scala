@@ -311,77 +311,78 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
 
       if (proc != null) {
         // scalastyle:off println
-        if (proc.isInstanceOf[Driver] || proc.isInstanceOf[SetProcessor] ||
-            proc.isInstanceOf[AddResourceProcessor] || proc.isInstanceOf[ResetProcessor]) {
-          val driver = new SparkSQLDriver
+        proc match {
+          case _: Driver | _: SetProcessor | _: AddResourceProcessor | _: ResetProcessor =>
+            val driver = new SparkSQLDriver
 
-          driver.init()
-          val out = sessionState.out
-          val err = sessionState.err
-          val start: Long = System.currentTimeMillis()
-          if (sessionState.getIsVerbose) {
-            out.println(cmd)
-          }
-          val rc = driver.run(cmd)
-          val end = System.currentTimeMillis()
-          val timeTaken: Double = (end - start) / 1000.0
-
-          ret = rc.getResponseCode
-          if (ret != 0) {
-            // For analysis exception, only the error is printed out to the console.
-            rc.getException() match {
-              case e : AnalysisException =>
-                err.println(s"""Error in query: ${e.getMessage}""")
-              case _ => err.println(rc.getErrorMessage())
+            driver.init()
+            val out = sessionState.out
+            val err = sessionState.err
+            val start: Long = System.currentTimeMillis()
+            if (sessionState.getIsVerbose) {
+              out.println(cmd)
             }
-            driver.close()
-            return ret
-          }
+            val rc = driver.run(cmd)
+            val end = System.currentTimeMillis()
+            val timeTaken: Double = (end - start) / 1000.0
 
-          val res = new JArrayList[String]()
-
-          if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
-            // Print the column names.
-            Option(driver.getSchema.getFieldSchemas).foreach { fields =>
-              out.println(fields.asScala.map(_.getName).mkString("\t"))
-            }
-          }
-
-          var counter = 0
-          try {
-            while (!out.checkError() && driver.getResults(res)) {
-              res.asScala.foreach { l =>
-                counter += 1
-                out.println(l)
+            ret = rc.getResponseCode
+            if (ret != 0) {
+              // For analysis exception, only the error is printed out to the console.
+              rc.getException() match {
+                case e : AnalysisException =>
+                  err.println(s"""Error in query: ${e.getMessage}""")
+                case _ => err.println(rc.getErrorMessage())
               }
-              res.clear()
+              driver.close()
+              return ret
             }
-          } catch {
-            case e: IOException =>
-              console.printError(
-                s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
-                   |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
-                 """.stripMargin)
-              ret = 1
-          }
 
-          val cret = driver.close()
-          if (ret == 0) {
-            ret = cret
-          }
+            val res = new JArrayList[String]()
 
-          var responseMsg = s"Time taken: $timeTaken seconds"
-          if (counter != 0) {
-            responseMsg += s", Fetched $counter row(s)"
-          }
-          console.printInfo(responseMsg, null)
-          // Destroy the driver to release all the locks.
-          driver.destroy()
-        } else {
-          if (sessionState.getIsVerbose) {
-            sessionState.out.println(tokens(0) + " " + cmd_1)
-          }
-          ret = proc.run(cmd_1).getResponseCode
+            if (HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_HEADER)) {
+              // Print the column names.
+              Option(driver.getSchema.getFieldSchemas).foreach { fields =>
+                out.println(fields.asScala.map(_.getName).mkString("\t"))
+              }
+            }
+
+            var counter = 0
+            try {
+              while (!out.checkError() && driver.getResults(res)) {
+                res.asScala.foreach { l =>
+                  counter += 1
+                  out.println(l)
+                }
+                res.clear()
+              }
+            } catch {
+              case e: IOException =>
+                console.printError(
+                  s"""Failed with exception ${e.getClass.getName}: ${e.getMessage}
+                     |${org.apache.hadoop.util.StringUtils.stringifyException(e)}
+                   """.stripMargin)
+                ret = 1
+            }
+
+            val cret = driver.close()
+            if (ret == 0) {
+              ret = cret
+            }
+
+            var responseMsg = s"Time taken: $timeTaken seconds"
+            if (counter != 0) {
+              responseMsg += s", Fetched $counter row(s)"
+            }
+            console.printInfo(responseMsg, null)
+            // Destroy the driver to release all the locks.
+            driver.destroy()
+
+          case _ =>
+            if (sessionState.getIsVerbose) {
+              sessionState.out.println(tokens(0) + " " + cmd_1)
+            }
+            ret = proc.run(cmd_1).getResponseCode
         }
         // scalastyle:on println
       }

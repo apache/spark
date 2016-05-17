@@ -780,7 +780,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   }
 
   def reset(): Unit = {
-    sqlConfEntries.values.asScala.filter(_.isPublic).foreach { entry =>
+    sqlConfEntries.values.asScala.foreach { entry =>
       unsetConf(entry)
     }
   }
