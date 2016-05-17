@@ -755,10 +755,11 @@ class DAGScheduler(
 
   /**
    * Check for waiting stages which are now eligible for resubmission.
-   * Ordinarily run after the parent stage completed successfully.
+   * Submits stages that depend on the given parent stage. Called when the parent stage completes
+   * successfully.
    */
   private def submitWaitingChildStages(parent: Stage) {
-    logTrace("Checking for newly runnable parent stages")
+    logTrace(s"Checking if any dependencies of $parent are now runnable")
     logTrace("running: " + runningStages)
     logTrace("waiting: " + waitingStages)
     logTrace("failed: " + failedStages)
