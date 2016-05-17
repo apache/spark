@@ -521,6 +521,9 @@ private[deploy] class SparkSubmitArguments(args: Seq[String], env: Map[String, S
         |  --files FILES               Comma-separated list of files to be placed in the working
         |                              directory of each executor.
         |
+        |  --pyspark-driver-python     python in driver side.
+        |  --pyspark-eecutor-python    python in executor side.
+        |
         |  --conf PROP=VALUE           Arbitrary Spark configuration property.
         |  --properties-file FILE      Path to a file from which to load extra properties. If not
         |                              specified, this will look for conf/spark-defaults.conf.

@@ -465,9 +465,9 @@ object SparkSubmit {
       OptionAssigner(args.keytab, YARN, ALL_DEPLOY_MODES, sysProp = "spark.yarn.keytab"),
 
       // PySpark only
-      OptionAssigner(args.pysparkDriverPython, STANDALONE | YARN, ALL_DEPLOY_MODES,
+      OptionAssigner(args.pysparkDriverPython, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "pyspark.driver.python"),
-      OptionAssigner(args.pysparkExecutorPython, STANDALONE | YARN, ALL_DEPLOY_MODES,
+      OptionAssigner(args.pysparkExecutorPython, ALL_CLUSTER_MGRS, ALL_DEPLOY_MODES,
         sysProp = "pyspark.executor.python"),
 
       // Other options
