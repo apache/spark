@@ -278,28 +278,6 @@ class DenseVector(Vector):
             ar = ar.astype(np.float64)
         self.array = ar
 
-    @staticmethod
-    def parse(s):
-        """
-        Parse string representation back into the DenseVector.
-
-        >>> DenseVector.parse(' [ 0.0,1.0,2.0,  3.0]')
-        DenseVector([0.0, 1.0, 2.0, 3.0])
-        """
-        start = s.find('[')
-        if start == -1:
-            raise ValueError("Array should start with '['.")
-        end = s.find(']')
-        if end == -1:
-            raise ValueError("Array should end with ']'.")
-        s = s[start + 1: end]
-
-        try:
-            values = [float(val) for val in s.split(',') if val]
-        except ValueError:
-            raise ValueError("Unable to parse values from %s" % s)
-        return DenseVector(values)
-
     def __reduce__(self):
         return DenseVector, (self.array.tostring(),)
 
@@ -556,55 +534,6 @@ class SparseVector(Vector):
         return (
             SparseVector,
             (self.size, self.indices.tostring(), self.values.tostring()))
-
-    @staticmethod
-    def parse(s):
-        """
-        Parse string representation back into the SparseVector.
-
-        >>> SparseVector.parse(' (4, [0,1 ],[ 4.0,5.0] )')
-        SparseVector(4, {0: 4.0, 1: 5.0})
-        """
-        start = s.find('(')
-        if start == -1:
-            raise ValueError("Tuple should start with '('")
-        end = s.find(')')
-        if start == -1:
-            raise ValueError("Tuple should end with ')'")
-        s = s[start + 1: end].strip()
-
-        size = s[: s.find(',')]
-        try:
-            size = int(size)
-        except ValueError:
-            raise ValueError("Cannot parse size %s." % size)
-
-        ind_start = s.find('[')
-        if ind_start == -1:
-            raise ValueError("Indices array should start with '['.")
-        ind_end = s.find(']')
-        if ind_end == -1:
-            raise ValueError("Indices array should end with ']'")
-        new_s = s[ind_start + 1: ind_end]
-        ind_list = new_s.split(',')
-        try:
-            indices = [int(ind) for ind in ind_list if ind]
-        except ValueError:
-            raise ValueError("Unable to parse indices from %s." % new_s)
-        s = s[ind_end + 1:].strip()
-
-        val_start = s.find('[')
-        if val_start == -1:
-            raise ValueError("Values array should start with '['.")
-        val_end = s.find(']')
-        if val_end == -1:
-            raise ValueError("Values array should end with ']'.")
-        val_list = s[val_start + 1: val_end].split(',')
-        try:
-            values = [float(val) for val in val_list if val]
-        except ValueError:
-            raise ValueError("Unable to parse values from %s." % s)
-        return SparseVector(size, indices, values)
 
     def dot(self, other):
         """
@@ -879,23 +808,6 @@ class Vectors(object):
         Find norm of the given vector.
         """
         return _convert_to_vector(vector).norm(p)
-
-    @staticmethod
-    def parse(s):
-        """Parse a string representation back into the Vector.
-
-        >>> Vectors.parse('[2,1,2 ]')
-        DenseVector([2.0, 1.0, 2.0])
-        >>> Vectors.parse(' ( 100,  [0],  [2])')
-        SparseVector(100, {0: 2.0})
-        """
-        if s.find('(') == -1 and s.find('[') != -1:
-            return DenseVector.parse(s)
-        elif s.find('(') != -1:
-            return SparseVector.parse(s)
-        else:
-            raise ValueError(
-                "Cannot find tokens '[' or '(' from the input string.")
 
     @staticmethod
     def zeros(size):
