@@ -453,9 +453,9 @@ case class MapObjects private(
     val code = s"""
       ${genInputData.code}
       ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
-      $determineCollectionType
 
       if (!${genInputData.isNull}) {
+        $determineCollectionType
         $convertedType[] $convertedArray = null;
         int $dataLength = $getLength;
         $convertedArray = $arrayConstructor;
