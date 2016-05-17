@@ -214,7 +214,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
   def setInitialWeights(value: Vector): this.type = set(initialWeights, value)
 
   /**
-   * Sets the value of param [[stepSize]].
+   * Sets the value of param [[stepSize]] (applicable only for solver "gd").
    * Default is 0.03.
    *
    * @group setParam
@@ -255,7 +255,7 @@ class MultilayerPerceptronClassifier @Since("1.5.0") (
         .setConvergenceTol($(tol))
         .setStepSize($(stepSize))
     } else {
-      throw new UnsupportedOperationException(
+      throw new IllegalArgumentException(
         s"The solver $solver is not supported by MultilayerPerceptronClassifier.")
     }
     trainer.setStackSize($(blockSize))
