@@ -166,6 +166,7 @@
     <netlib.java.version>1.1.2</netlib.java.version>
     <calcite.version>1.2.0-incubating</calcite.version>
     <commons-codec.version>1.10</commons-codec.version>
+    <commons-io.version>2.4</commons-io.version>
     <!-- org.apache.commons/commons-lang/-->
     <commons-lang2.version>2.6</commons-lang2.version>
     <!-- org.apache.commons/commons-lang3/-->
@@ -285,9 +286,8 @@
     <dependencies>
       <dependency>
         <groupId>org.apache.spark</groupId>
-        <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+        <artifactId>spark-tags_${scala.binary.version}</artifactId>
         <version>${project.version}</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
@@ -375,6 +375,11 @@
         <groupId>commons-lang</groupId>
         <artifactId>commons-lang</artifactId>
         <version>${commons-lang2.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>${commons-io.version}</version>
       </dependency>
       <dependency>
         <groupId>commons-codec</groupId>
