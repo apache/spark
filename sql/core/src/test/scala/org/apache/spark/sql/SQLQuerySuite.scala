@@ -2497,17 +2497,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("check code injection is prevented") {
-    // `\u002A/` is `*/`
-    // So, if those characters are in the query, we need to escape them.
-    val literal =
-      """|\\\\u002A/
+    // The end of comment (*/) should be escaped.
+    var literal =
+      """|*/
          |{
          |  new Object() {
          |    void f() { throw new RuntimeException("This exception is injected."); }
          |  }.f();
          |}
          |/*""".stripMargin
-    val expected =
+    var expected =
+      """|*/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    // `\u002A` is `*` and `\u002F` is `/`
+    // so if the end of comment consists of those characters in queries, we need to escape them.
+    literal =
       """|\\u002A/
          |{
          |  new Object() {
@@ -2515,7 +2528,239 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
          |  }.f();
          |}
          |/*""".stripMargin
+    expected =
+      s"""|${"\\u002A/"}
+          |{
+          |  new Object() {
+          |    void f() { throw new RuntimeException("This exception is injected."); }
+          |  }.f();
+          |}
+          |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
 
+    literal =
+      """|\\\\u002A/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      """|\\u002A/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|\\u002a/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      s"""|${"\\u002a/"}
+          |{
+          |  new Object() {
+          |    void f() { throw new RuntimeException("This exception is injected."); }
+          |  }.f();
+          |}
+          |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|\\\\u002a/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      """|\\u002a/
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|*\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      s"""|${"*\\u002F"}
+          |{
+          |  new Object() {
+          |    void f() { throw new RuntimeException("This exception is injected."); }
+          |  }.f();
+          |}
+          |/*""".stripMargin
+
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|*\\\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      """|*\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|*\\u002f
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      s"""|${"*\\u002f"}
+          |{
+          |  new Object() {
+          |    void f() { throw new RuntimeException("This exception is injected."); }
+          |  }.f();
+          |}
+          |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|*\\\\u002f
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      """|*\\u002f
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|\\u002A\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      s"""|${"\\u002A\\u002F"}
+          |{
+          |  new Object() {
+          |    void f() { throw new RuntimeException("This exception is injected."); }
+          |  }.f();
+          |}
+          |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|\\\\u002A\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      s"""|${"\\\\u002A\\u002F"}
+          |{
+          |  new Object() {
+          |    void f() { throw new RuntimeException("This exception is injected."); }
+          |  }.f();
+          |}
+          |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|\\u002A\\\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      s"""|${"\\u002A\\\\u002F"}
+          |{
+          |  new Object() {
+          |    void f() { throw new RuntimeException("This exception is injected."); }
+          |  }.f();
+          |}
+          |/*""".stripMargin
+    checkAnswer(
+      sql(s"SELECT '$literal' AS DUMMY"),
+      Row(s"$expected") :: Nil)
+
+    literal =
+      """|\\\\u002A\\\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
+    expected =
+      """|\\u002A\\u002F
+         |{
+         |  new Object() {
+         |    void f() { throw new RuntimeException("This exception is injected."); }
+         |  }.f();
+         |}
+         |/*""".stripMargin
     checkAnswer(
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)

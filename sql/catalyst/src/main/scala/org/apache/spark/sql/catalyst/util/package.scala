@@ -172,7 +172,7 @@ package object util {
     // and \u0022 will remain, means not escaped.
     // Otherwise, the runtime Java compiler will fail to compile or code injection can be allowed.
     // For details, see SPARK-15165.
-    str.substring(0, len).replace("*/", "\\*\\/")
+    str.substring(0, len).replace("*/", "*\\/")
       .replaceAll("(^|[^\\\\])(\\\\(\\\\\\\\)*u)", "$1\\\\$2") + suffix
   }
 
