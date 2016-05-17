@@ -22,8 +22,9 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.executor.{ShuffleReadMetrics, ShuffleWriteMetrics, TaskMetrics}
-import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
+import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo}
 import org.apache.spark.storage.{BlockId, BlockStatus}
+import org.apache.spark.util.AccumulatorContext
 import org.apache.spark.util.collection.OpenHashSet
 
 private[spark] object UIData {
@@ -117,7 +118,7 @@ private[spark] object UIData {
     def metrics: Option[TaskMetricsUIData] = _metrics
 
     def updateTaskInfo(taskInfo: TaskInfo): Unit = {
-      _taskInfo = TaskUIData.dropInternalAccumulables(taskInfo)
+      _taskInfo = TaskUIData.dropInternalAndSQLAccumulables(taskInfo)
     }
 
     def updateTaskMetrics(metrics: Option[TaskMetrics]): Unit = {
@@ -127,7 +128,7 @@ private[spark] object UIData {
 
   object TaskUIData {
     def apply(taskInfo: TaskInfo, metrics: Option[TaskMetrics]): TaskUIData = {
-      new TaskUIData(dropInternalAccumulables(taskInfo), toTaskMetricsUIData(metrics))
+      new TaskUIData(dropInternalAndSQLAccumulables(taskInfo), toTaskMetricsUIData(metrics))
     }
 
     private def toTaskMetricsUIData(metrics: Option[TaskMetrics]): Option[TaskMetricsUIData] = {
@@ -150,7 +151,11 @@ private[spark] object UIData {
       }
     }
 
-    private[spark] def dropInternalAccumulables(taskInfo: TaskInfo): TaskInfo = {
+    /**
+     * We don't need to store internal or SQL accumulables as their values will be shown in other
+     * places, so drop them to reduce the memory usage.
+     */
+    private[spark] def dropInternalAndSQLAccumulables(taskInfo: TaskInfo): TaskInfo = {
       val newTaskInfo = new TaskInfo(
         taskId = taskInfo.taskId,
         index = taskInfo.index,
@@ -162,8 +167,9 @@ private[spark] object UIData {
         speculative = taskInfo.speculative
       )
       newTaskInfo.gettingResultTime = taskInfo.gettingResultTime
-      newTaskInfo.accumulables ++=
-        taskInfo.accumulables.filter(accum => !accum.internal && accum.metadata != Some("sql"))
+      newTaskInfo.accumulables ++= taskInfo.accumulables.filter {
+        accum => !accum.internal && accum.metadata != Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)
+      }
       newTaskInfo.finishTime = taskInfo.finishTime
       newTaskInfo.failed = taskInfo.failed
       newTaskInfo
