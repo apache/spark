@@ -1166,7 +1166,6 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
   }
 
   test("some show commands are not supported") {
-    assertUnsupportedFeature { sql("SHOW CREATE TABLE my_table") }
     assertUnsupportedFeature { sql("SHOW COMPACTIONS") }
     assertUnsupportedFeature { sql("SHOW TRANSACTIONS") }
     assertUnsupportedFeature { sql("SHOW INDEXES ON my_table") }

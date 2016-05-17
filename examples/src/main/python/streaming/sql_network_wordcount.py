@@ -71,7 +71,7 @@ if __name__ == "__main__":
             wordsDataFrame = spark.createDataFrame(rowRdd)
 
             # Register as table
-            wordsDataFrame.registerTempTable("words")
+            wordsDataFrame.createOrReplaceTempView("words")
 
             # Do word count on table using SQL and print it
             wordCountsDataFrame = \

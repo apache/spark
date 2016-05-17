@@ -26,9 +26,7 @@ import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils {
@@ -75,7 +73,7 @@ private[sql] object SQLUtils {
         org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
       case r"\Astruct<(.+)${fieldsStr}>\Z" =>
         if (fieldsStr(fieldsStr.length - 1) == ',') {
-          throw new IllegalArgumentException(s"Invaid type $dataType")
+          throw new IllegalArgumentException(s"Invalid type $dataType")
         }
         val fields = fieldsStr.split(",")
         val structFields = fields.map { field =>
@@ -83,11 +81,11 @@ private[sql] object SQLUtils {
             case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
               createStructField(fieldName, fieldType, true)
 
-            case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+            case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
           }
         }
         createStructType(structFields)
-      case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
     }
   }
 

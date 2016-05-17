@@ -86,7 +86,6 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.
 </div>
 </div>
 
-
 ## Latent Dirichlet allocation (LDA)
 
 `LDA` is implemented as an `Estimator` that supports both `EMLDAOptimizer` and `OnlineLDAOptimizer`,
@@ -116,8 +115,8 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.
 {% include_example python/ml/lda_example.py %}
 </div>
 </div>
-## Bisecting k-means
 
+## Bisecting k-means
 
 Bisecting k-means is a kind of [hierarchical clustering](https://en.wikipedia.org/wiki/Hierarchical_clustering) using a
 divisive (or "top-down") approach: all observations start in one cluster, and splits are performed recursively as one
@@ -148,5 +147,4 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.
 
 {% include_example python/ml/bisecting_k_means_example.py %}
 </div>
-
 </div>

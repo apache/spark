@@ -249,7 +249,7 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     try {
       f(tableName)
     } finally {
-      spark.catalog.dropTempTable(tableName)
+      spark.catalog.dropTempView(tableName)
     }
   }
 

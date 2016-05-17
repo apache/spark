@@ -848,7 +848,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   import GeneralizedLinearRegression._
 
   /**
-   * Field in "predictions" which gives the prediction value of each instance.
+   * Field in "predictions" which gives the predicted value of each instance.
    * This is set to a new column name if the original model's `predictionCol` is not set.
    */
   @Since("2.0.0")
@@ -870,7 +870,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   protected val model: GeneralizedLinearRegressionModel =
     origModel.copy(ParamMap.empty).setPredictionCol(predictionCol)
 
-  /** predictions output by the model's `transform` method */
+  /** Predictions output by the model's `transform` method. */
   @Since("2.0.0") @transient val predictions: DataFrame = model.transform(dataset)
 
   private[regression] lazy val family: Family = Family.fromName(model.getFamily)
@@ -880,10 +880,10 @@ class GeneralizedLinearRegressionSummary private[regression] (
     family.defaultLink
   }
 
-  /** Number of instances in DataFrame predictions */
+  /** Number of instances in DataFrame predictions. */
   private[regression] lazy val numInstances: Long = predictions.count()
 
-  /** The numeric rank of the fitted linear model */
+  /** The numeric rank of the fitted linear model. */
   @Since("2.0.0")
   lazy val rank: Long = if (model.getFitIntercept) {
     model.coefficients.size + 1
@@ -891,17 +891,17 @@ class GeneralizedLinearRegressionSummary private[regression] (
     model.coefficients.size
   }
 
-  /** Degrees of freedom */
+  /** Degrees of freedom. */
   @Since("2.0.0")
   lazy val degreesOfFreedom: Long = {
     numInstances - rank
   }
 
-  /** The residual degrees of freedom */
+  /** The residual degrees of freedom. */
   @Since("2.0.0")
   lazy val residualDegreeOfFreedom: Long = degreesOfFreedom
 
-  /** The residual degrees of freedom for the null model */
+  /** The residual degrees of freedom for the null model. */
   @Since("2.0.0")
   lazy val residualDegreeOfFreedomNull: Long = if (model.getFitIntercept) {
     numInstances - 1
@@ -944,7 +944,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   }
 
   /**
-   * Get the default residuals(deviance residuals) of the fitted model.
+   * Get the default residuals (deviance residuals) of the fitted model.
    */
   @Since("2.0.0")
   def residuals(): DataFrame = devianceResiduals
@@ -1000,7 +1000,7 @@ class GeneralizedLinearRegressionSummary private[regression] (
   /**
    * The dispersion of the fitted model.
    * It is taken as 1.0 for the "binomial" and "poisson" families, and otherwise
-   * estimated by the residual Pearson's Chi-Squared statistic(which is defined as
+   * estimated by the residual Pearson's Chi-Squared statistic (which is defined as
    * sum of the squares of the Pearson residuals) divided by the residual degrees of freedom.
    */
   @Since("2.0.0")

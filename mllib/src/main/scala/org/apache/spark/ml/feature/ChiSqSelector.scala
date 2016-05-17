@@ -82,17 +82,18 @@ final class ChiSqSelector(override val uid: String)
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    val input: RDD[OldLabeledPoint] = dataset.select($(labelCol), $(featuresCol)).rdd.map {
-      case Row(label: Double, features: Vector) =>
-        OldLabeledPoint(label, OldVectors.fromML(features))
-    }
+    val input: RDD[OldLabeledPoint] =
+      dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+        case Row(label: Double, features: Vector) =>
+          OldLabeledPoint(label, OldVectors.fromML(features))
+      }
     val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
     copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 

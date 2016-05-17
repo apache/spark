@@ -321,7 +321,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
       val sink = new MemorySink(df.schema)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
-      resultDf.registerTempTable(queryName)
+      resultDf.createOrReplaceTempView(queryName)
       val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
         queryName,
         checkpointLocation,

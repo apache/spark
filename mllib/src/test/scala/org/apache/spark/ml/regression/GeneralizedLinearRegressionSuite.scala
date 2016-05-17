@@ -1021,7 +1021,7 @@ class GeneralizedLinearRegressionSuite
     val glr = new GeneralizedLinearRegression().setMaxIter(1)
     MLTestingUtils.checkNumericTypes[
         GeneralizedLinearRegressionModel, GeneralizedLinearRegression](
-      glr, isClassification = false, spark) { (expected, actual) =>
+      glr, spark, isClassification = false) { (expected, actual) =>
         assert(expected.intercept === actual.intercept)
         assert(expected.coefficients === actual.coefficients)
       }

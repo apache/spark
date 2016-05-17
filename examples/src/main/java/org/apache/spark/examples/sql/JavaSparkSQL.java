@@ -75,7 +75,7 @@ public class JavaSparkSQL {
 
     // Apply a schema to an RDD of Java Beans and register it as a table.
     Dataset<Row> schemaPeople = spark.createDataFrame(people, Person.class);
-    schemaPeople.registerTempTable("people");
+    schemaPeople.createOrReplaceTempView("people");
 
     // SQL can be run over RDDs that have been registered as tables.
     Dataset<Row> teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -102,7 +102,7 @@ public class JavaSparkSQL {
     Dataset<Row> parquetFile = spark.read().parquet("people.parquet");
 
     //Parquet files can also be registered as tables and then used in SQL statements.
-    parquetFile.registerTempTable("parquetFile");
+    parquetFile.createOrReplaceTempView("parquetFile");
     Dataset<Row> teenagers2 =
       spark.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
     teenagerNames = teenagers2.toJavaRDD().map(new Function<Row, String>() {
@@ -131,7 +131,7 @@ public class JavaSparkSQL {
     //  |-- name: StringType
 
     // Register this DataFrame as a table.
-    peopleFromJsonFile.registerTempTable("people");
+    peopleFromJsonFile.createOrReplaceTempView("people");
 
     // SQL statements can be run by using the sql methods provided by `spark`
     Dataset<Row> teenagers3 = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -163,7 +163,7 @@ public class JavaSparkSQL {
     //  |    |-- state: StringType
     //  |-- name: StringType
 
-    peopleFromJsonRDD.registerTempTable("people2");
+    peopleFromJsonRDD.createOrReplaceTempView("people2");
 
     Dataset<Row> peopleWithCity = spark.sql("SELECT name, address.city FROM people2");
     List<String> nameAndCity = peopleWithCity.toJavaRDD().map(new Function<Row, String>() {

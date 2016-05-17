@@ -19,7 +19,7 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -79,5 +79,13 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
     val instance = new ChiSqSelectorModel("myChiSqSelectorModel", oldModel)
     val newInstance = testDefaultReadWrite(instance)
     assert(newInstance.selectedFeatures === instance.selectedFeatures)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val css = new ChiSqSelector()
+    MLTestingUtils.checkNumericTypes[ChiSqSelectorModel, ChiSqSelector](
+      css, spark) { (expected, actual) =>
+        assert(expected.selectedFeatures === actual.selectedFeatures)
+      }
   }
 }
