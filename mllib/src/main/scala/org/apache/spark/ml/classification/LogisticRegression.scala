@@ -366,9 +366,10 @@ class LogisticRegression @Since("1.2.0") (
           Vectors.zeros(if ($(fitIntercept)) numFeatures + 1 else numFeatures)
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size != numFeatures) {
-          val vec = optInitialModel.get.coefficients
+          val vecSize = optInitialModel.get.coefficients.size
           logWarning(
-            s"Initial coefficients provided $vec did not match the expected size $numFeatures")
+            s"Initial coefficients will be ignored!! As its size $vecSize did not match the " +
+            s"expected size $numFeatures")
         }
 
         if (optInitialModel.isDefined && optInitialModel.get.coefficients.size == numFeatures) {
@@ -744,7 +745,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
   def countInvalid: Long = totalInvalidCnt
 
   /** @return The number of distinct labels in the input dataset. */
-  def numClasses: Int = distinctMap.keySet.max + 1
+  def numClasses: Int = if (distinctMap.isEmpty) 0 else distinctMap.keySet.max + 1
 
   /** @return The weightSum of each label in the input dataset. */
   def histogram: Array[Double] = {

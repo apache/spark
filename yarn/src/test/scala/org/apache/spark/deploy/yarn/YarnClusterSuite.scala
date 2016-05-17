@@ -147,7 +147,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
       .setPropertiesFile(propsFile)
       .setMaster("yarn")
       .setDeployMode("client")
-      .setAppResource("spark-internal")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(mainClassName(YarnLauncherTestApp.getClass))
       .startApplication()
 
@@ -197,7 +197,7 @@ class YarnClusterSuite extends BaseYarnClusterSuite {
     // needed locations.
     val sparkHome = sys.props("spark.test.home")
     val pythonPath = Seq(
-        s"$sparkHome/python/lib/py4j-0.9.2-src.zip",
+        s"$sparkHome/python/lib/py4j-0.10.1-src.zip",
         s"$sparkHome/python")
     val extraEnv = Map(
       "PYSPARK_ARCHIVES_PATH" -> pythonPath.map("local:" + _).mkString(File.pathSeparator),

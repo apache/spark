@@ -124,6 +124,10 @@ class MemorySink(val schema: StructType) extends Sink with Logging {
     batches.flatten
   }
 
+  def latestBatchId: Option[Int] = synchronized {
+    if (batches.size == 0) None else Some(batches.size - 1)
+  }
+
   def lastBatch: Seq[Row] = synchronized { batches.last }
 
   def toDebugString: String = synchronized {

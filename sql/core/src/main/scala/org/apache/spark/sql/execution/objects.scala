@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.types.{DataType, ObjectType}
 
@@ -158,7 +159,7 @@ case class MapPartitionsExec(
  * Applies the given function to each input object.
  * The output of its child must be a single-field row containing the input object.
  *
- * This operator is kind of a safe version of [[ProjectExec]], as it's output is custom object,
+ * This operator is kind of a safe version of [[ProjectExec]], as its output is custom object,
  * we need to use safe row to contain it.
  */
 case class MapElementsExec(

@@ -36,19 +36,14 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
   def initializeSpark() {
     intp.beQuietDuring {
       processLine("""
+        @transient val spark = org.apache.spark.repl.Main.createSparkSession()
         @transient val sc = {
-          val _sc = org.apache.spark.repl.Main.createSparkContext()
+          val _sc = spark.sparkContext
           _sc.uiWebUrl.foreach(webUrl => println(s"Spark context Web UI available at ${webUrl}"))
           println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
-          _sc
-        }
-        """)
-      processLine("""
-        @transient val spark = {
-          val _session = org.apache.spark.repl.Main.createSparkSession()
           println("Spark session available as 'spark'.")
-          _session
+          _sc
         }
         """)
       processLine("import org.apache.spark.SparkContext._")

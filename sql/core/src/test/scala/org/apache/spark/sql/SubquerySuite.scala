@@ -281,4 +281,16 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     assert(msg1.getMessage.contains(
       "The correlated scalar subquery can only contain equality predicates"))
   }
+
+  test("disjunctive correlated scalar subquery") {
+    checkAnswer(
+      sql("""
+        |select a
+        |from   l
+        |where  (select count(*)
+        |        from   r
+        |        where (a = c and d = 2.0) or (a = c and d = 1.0)) > 0
+        """.stripMargin),
+      Row(3) :: Nil)
+  }
 }

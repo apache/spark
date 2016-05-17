@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.SparkContext;
 // $example on$
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.param.ParamMap;
@@ -29,7 +27,7 @@ import org.apache.spark.ml.tuning.TrainValidationSplitModel;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 // $example off$
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 /**
  * Java example demonstrating model selection using TrainValidationSplit.
@@ -44,13 +42,13 @@ import org.apache.spark.sql.SQLContext;
  */
 public class JavaModelSelectionViaTrainValidationSplitExample {
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf()
-      .setAppName("JavaModelSelectionViaTrainValidationSplitExample");
-    SparkContext sc = new SparkContext(conf);
-    SQLContext jsql = new SQLContext(sc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaModelSelectionViaTrainValidationSplitExample")
+      .getOrCreate();
 
     // $example on$
-    Dataset<Row> data = jsql.read().format("libsvm")
+    Dataset<Row> data = spark.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
     // Prepare training and test data.
@@ -87,6 +85,6 @@ public class JavaModelSelectionViaTrainValidationSplitExample {
       .show();
     // $example off$
 
-    sc.stop();
+    spark.stop();
   }
 }

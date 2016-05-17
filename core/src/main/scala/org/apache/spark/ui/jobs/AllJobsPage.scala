@@ -23,6 +23,8 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.{HashMap, ListBuffer}
 import scala.xml._
 
+import org.apache.commons.lang3.StringEscapeUtils
+
 import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
@@ -87,9 +89,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         case JobExecutionStatus.UNKNOWN => "unknown"
       }
 
-      // The timeline library treats contents as HTML, so we have to escape them; for the
-      // data-title attribute string we have to escape them twice since that's in a string.
+      // The timeline library treats contents as HTML, so we have to escape them. We need to add
+      // extra layers of escaping in order to embed this in a Javascript string literal.
       val escapedDesc = Utility.escape(displayJobDescription)
+      val jsEscapedDesc = StringEscapeUtils.escapeEcmaScript(escapedDesc)
       val jobEventJsonAsStr =
         s"""
            |{
@@ -99,7 +102,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
            |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
-           |     'data-title="${Utility.escape(escapedDesc)} (Job ${jobId})<br>' +
+           |     'data-title="${jsEscapedDesc} (Job ${jobId})<br>' +
            |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
@@ -109,7 +112,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                        ""
                      }
                   }">' +
-           |    '${escapedDesc} (Job ${jobId})</div>'
+           |    '${jsEscapedDesc} (Job ${jobId})</div>'
            |}
          """.stripMargin
       jobEventJsonAsStr
