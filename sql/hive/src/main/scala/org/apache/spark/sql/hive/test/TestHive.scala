@@ -522,6 +522,7 @@ private[hive] class TestHiveSessionState(
         super.clear()
         TestHiveContext.overrideConfs.foreach { case (k, v) => setConfString(k, v) }
         setConfString("hive.metastore.warehouse.dir", self.warehousePath.toURI.toString)
+        setConfString("spark.sql.warehouse.dir", self.warehousePath.toURI.toString)
       }
     }
   }
