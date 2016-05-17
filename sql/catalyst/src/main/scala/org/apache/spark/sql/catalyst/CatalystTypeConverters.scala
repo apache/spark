@@ -19,13 +19,11 @@ package org.apache.spark.sql.catalyst
 
 import java.lang.{Iterable => JavaIterable}
 import java.math.{BigDecimal => JavaBigDecimal}
-import java.math.{BigInteger => JavaBigInteger}
 import java.sql.{Date, Timestamp}
 import java.util.{Map => JavaMap}
 import javax.annotation.Nullable
 
 import scala.language.existentials
-import scala.math.{BigInt => ScalaBigInt}
 
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
@@ -323,13 +321,11 @@ object CatalystTypeConverters {
   }
 
   private class DecimalConverter(dataType: DecimalType)
-  extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
+    extends CatalystTypeConverter[Any, JavaBigDecimal, Decimal] {
     override def toCatalystImpl(scalaValue: Any): Decimal = {
       val decimal = scalaValue match {
         case d: BigDecimal => Decimal(d)
         case d: JavaBigDecimal => Decimal(d)
-        case d: JavaBigInteger => Decimal(d)
-        case d: ScalaBigInt => Decimal(d)
         case d: Decimal => d
       }
       if (decimal.changePrecision(dataType.precision, dataType.scale)) {

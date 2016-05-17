@@ -131,17 +131,17 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   /**
    * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
    */
-  def set(BigIntVal: BigInteger): Decimal = {
+  def set(bigintval: BigInteger): Decimal = {
     try {
       this.decimalVal = null
-      this.longVal = BigIntVal.longValueExact()
+      this.longVal = bigintval.longValueExact()
       this._precision = DecimalType.MAX_PRECISION
       this._scale = 0
       this
     }
     catch {
       case e: ArithmeticException =>
-        throw new IllegalArgumentException(s"BigInteger ${BigIntVal} too large for decimal")
+        throw new IllegalArgumentException(s"BigInteger ${bigintval} too large for decimal")
      }
   }
 
@@ -171,6 +171,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       java.math.BigDecimal.valueOf(longVal, _scale)
     }
   }
+
+  def toScalaBigInt: BigInt = BigInt(toLong)
+
+  def toJavaBigInteger: java.math.BigInteger =
+    java.math.BigInteger.valueOf(toLong)
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
@@ -407,6 +412,8 @@ object Decimal {
   def fromDecimal(value: Any): Decimal = {
     value match {
       case j: java.math.BigDecimal => apply(j)
+      case k: scala.math.BigInt => apply(k)
+      case l: java.math.BigInteger => apply(l)
       case d: Decimal => d
     }
   }
