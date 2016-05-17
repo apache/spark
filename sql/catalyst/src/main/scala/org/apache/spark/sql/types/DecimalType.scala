@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import java.math.BigInteger
-
 import scala.reflect.runtime.universe.typeTag
 
 import org.apache.spark.annotation.DeveloperApi
