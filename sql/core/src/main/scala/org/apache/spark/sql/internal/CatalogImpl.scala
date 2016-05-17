@@ -283,16 +283,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached/persisted before, it's also unpersisted.
    *
-   * @param tableName the name of the table to be unregistered.
+   * @param viewName the name of the view to be dropped.
    * @group ddl_ops
    * @since 2.0.0
    */
-  override def dropTempTable(tableName: String): Unit = {
-    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName))
-    sessionCatalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
+  override def dropTempView(viewName: String): Unit = {
+    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
+    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
   }
 
   /**

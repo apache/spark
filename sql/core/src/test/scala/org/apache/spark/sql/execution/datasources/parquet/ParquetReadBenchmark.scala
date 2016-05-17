@@ -52,7 +52,7 @@ object ParquetReadBenchmark {
   }
 
   def withTempTable(tableNames: String*)(f: => Unit): Unit = {
-    try f finally tableNames.foreach(spark.catalog.dropTempTable)
+    try f finally tableNames.foreach(spark.catalog.dropTempView)
   }
 
   def withSQLConf(pairs: (String, String)*)(f: => Unit): Unit = {

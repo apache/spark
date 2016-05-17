@@ -753,7 +753,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (temp) {
       throw new ParseException(
         "CREATE TEMPORARY TABLE is not supported yet. " +
-          "Please use registerTempTable as an alternative.", ctx)
+          "Please use CREATE TEMPORARY VIEW as an alternative.", ctx)
     }
     if (ctx.skewSpec != null) {
       throw operationNotAllowed("CREATE TABLE ... SKEWED BY", ctx)

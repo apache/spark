@@ -228,7 +228,7 @@ class OneVsRestSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   test("should support all NumericType labels and not support other types") {
     val ovr = new OneVsRest().setClassifier(new LogisticRegression().setMaxIter(1))
     MLTestingUtils.checkNumericTypes[OneVsRestModel, OneVsRest](
-      ovr, isClassification = true, spark) { (expected, actual) =>
+      ovr, spark) { (expected, actual) =>
         val expectedModels = expected.models.map(m => m.asInstanceOf[LogisticRegressionModel])
         val actualModels = actual.models.map(m => m.asInstanceOf[LogisticRegressionModel])
         assert(expectedModels.length === actualModels.length)

@@ -160,7 +160,7 @@ class SparkSession(object):
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> df = allTypes.toDF()
-        >>> df.registerTempTable("allTypes")
+        >>> df.createOrReplaceTempView("allTypes")
         >>> spark.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
@@ -484,7 +484,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerTable(df, "table1")
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
@@ -497,7 +497,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerTable(df, "table1")
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
