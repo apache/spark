@@ -479,7 +479,7 @@ class HiveContext(SQLContext):
         location of blocks. When those change outside of Spark SQL, users should
         call this function to invalidate the cache.
         """
-        self._ssql_ctx.refreshTable(tableName)
+        self.sparkSession.catalog.refreshTable(tableName)
 
 
 class UDFRegistration(object):
