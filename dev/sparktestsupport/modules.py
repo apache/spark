@@ -406,6 +406,7 @@ pyspark_ml = Module(
         "pyspark.ml.feature",
         "pyspark.ml.classification",
         "pyspark.ml.clustering",
+        "pyspark.ml.linalg.__init__",
         "pyspark.ml.recommendation",
         "pyspark.ml.regression",
         "pyspark.ml.tuning",
