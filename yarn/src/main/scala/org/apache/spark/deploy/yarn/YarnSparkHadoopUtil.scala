@@ -418,7 +418,7 @@ object YarnSparkHadoopUtil {
    * variable. Windows .cmd files escape a '%' by '%%'. Thus, the correct way of writing
    * '%%p' in an escaped way is '%%%%p'.
    */
-  def addOutOfMemoryErrorArgument(javaOpts: ListBuffer[String]): Unit = {
+  private[yarn] def addOutOfMemoryErrorArgument(javaOpts: ListBuffer[String]): Unit = {
     if (Utils.isWindows) {
       javaOpts += escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
     } else {
