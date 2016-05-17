@@ -50,14 +50,6 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
-  private def makeDataset[T <: DefinedByConstructorParams: TypeTag](data: Seq[T]): Dataset[T] = {
-    val enc = ExpressionEncoder[T]()
-    val encoded = data.map(d => enc.toRow(d).copy())
-    val plan = new LocalRelation(enc.schema.toAttributes, encoded)
-    val queryExecution = sparkSession.executePlan(plan)
-    new Dataset[T](sparkSession, queryExecution, enc)
-  }
-
   /**
    * Returns the current default database in this session.
    */
@@ -83,7 +75,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         description = metadata.description,
         locationUri = metadata.locationUri)
     }
-    makeDataset(databases)
+    CatalogImpl.makeDataset(databases, sparkSession)
   }
 
   /**
@@ -111,7 +103,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         tableType = metadata.map(_.tableType.name).getOrElse("TEMPORARY"),
         isTemporary = isTemp)
     }
-    makeDataset(tables)
+    CatalogImpl.makeDataset(tables, sparkSession)
   }
 
   /**
@@ -137,7 +129,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         className = metadata.getClassName,
         isTemporary = funcIdent.database.isEmpty)
     }
-    makeDataset(functions)
+    CatalogImpl.makeDataset(functions, sparkSession)
   }
 
   /**
@@ -166,7 +158,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         isPartition = partitionColumnNames.contains(c.name),
         isBucket = bucketColumnNames.contains(c.name))
     }
-    makeDataset(columns)
+    CatalogImpl.makeDataset(columns, sparkSession)
   }
 
   /**
@@ -233,7 +225,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         userSpecifiedSchema = None,
         source,
         temporary = false,
-        options,
+        options = options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
     sparkSession.executePlan(cmd).toRdd
@@ -280,6 +274,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         source,
         temporary = false,
         options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
     sparkSession.executePlan(cmd).toRdd
@@ -287,16 +283,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached/persisted before, it's also unpersisted.
    *
-   * @param tableName the name of the table to be unregistered.
+   * @param viewName the name of the view to be dropped.
    * @group ddl_ops
    * @since 2.0.0
    */
-  override def dropTempTable(tableName: String): Unit = {
-    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName))
-    sessionCatalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
+  override def dropTempView(viewName: String): Unit = {
+    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
+    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
   }
 
   /**
@@ -347,6 +343,21 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   protected[sql] def isCached(qName: Dataset[_]): Boolean = {
     sparkSession.cacheManager.lookupCachedData(qName).nonEmpty
+  }
+
+}
+
+
+private[sql] object CatalogImpl {
+
+  def makeDataset[T <: DefinedByConstructorParams: TypeTag](
+      data: Seq[T],
+      sparkSession: SparkSession): Dataset[T] = {
+    val enc = ExpressionEncoder[T]()
+    val encoded = data.map(d => enc.toRow(d).copy())
+    val plan = new LocalRelation(enc.schema.toAttributes, encoded)
+    val queryExecution = sparkSession.executePlan(plan)
+    new Dataset[T](sparkSession, queryExecution, enc)
   }
 
 }

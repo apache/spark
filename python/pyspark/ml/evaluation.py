@@ -105,6 +105,8 @@ class JavaEvaluator(JavaParams, Evaluator):
 @inherit_doc
 class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol):
     """
+    .. note:: Experimental
+
     Evaluator for binary classification, which expects two input columns: rawPrediction and label.
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
@@ -172,6 +174,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 @inherit_doc
 class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     """
+    .. note:: Experimental
+
     Evaluator for Regression, which expects two input
     columns: prediction and label.
 
@@ -193,7 +197,11 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
     # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
-                       "metric name in evaluation (mse|rmse|r2|mae)",
+                       """metric name in evaluation - one of:
+                       rmse - root mean squared error (default)
+                       mse - mean squared error
+                       r2 - r^2 metric
+                       mae - mean absolute error.""",
                        typeConverter=TypeConverters.toString)
 
     @keyword_only
@@ -241,8 +249,11 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 @inherit_doc
 class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     """
+    .. note:: Experimental
+
     Evaluator for Multiclass Classification, which expects two input
     columns: prediction and label.
+
     >>> scoreAndLabels = [(0.0, 0.0), (0.0, 1.0), (0.0, 0.0),
     ...     (1.0, 0.0), (1.0, 1.0), (1.0, 1.0), (1.0, 1.0), (2.0, 2.0), (2.0, 0.0)]
     >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["prediction", "label"])

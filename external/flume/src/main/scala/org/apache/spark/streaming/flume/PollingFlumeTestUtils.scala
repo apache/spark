@@ -116,7 +116,7 @@ private[flume] class PollingFlumeTestUtils {
   /**
    * Send data and wait until all data has been received
    */
-  def sendDatAndEnsureAllDataHasBeenReceived(): Unit = {
+  def sendDataAndEnsureAllDataHasBeenReceived(): Unit = {
     val executor = Executors.newCachedThreadPool()
     val executorCompletion = new ExecutorCompletionService[Void](executor)
 
@@ -174,7 +174,7 @@ private[flume] class PollingFlumeTestUtils {
     val queueRemaining = channel.getClass.getDeclaredField("queueRemaining")
     queueRemaining.setAccessible(true)
     val m = queueRemaining.get(channel).getClass.getDeclaredMethod("availablePermits")
-    if (m.invoke(queueRemaining.get(channel)).asInstanceOf[Int] != 5000) {
+    if (m.invoke(queueRemaining.get(channel)).asInstanceOf[Int] != channelCapacity) {
       throw new AssertionError(s"Channel ${channel.getName} is not empty")
     }
   }

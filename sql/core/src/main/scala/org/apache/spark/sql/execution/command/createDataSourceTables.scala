@@ -26,9 +26,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types._
@@ -51,6 +51,8 @@ case class CreateDataSourceTableCommand(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
+    partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
   extends RunnableCommand {
@@ -84,7 +86,7 @@ case class CreateDataSourceTableCommand(
 
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path") && managedIfNoPath) {
+      if (!new CaseInsensitiveMap(options).contains("path") && managedIfNoPath) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
@@ -103,8 +105,8 @@ case class CreateDataSourceTableCommand(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
       userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
       provider = provider,
       options = optionsWithPath,
       isExternal = isExternal)
@@ -157,7 +159,7 @@ case class CreateDataSourceTableAsSelectCommand(
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path")) {
+      if (!new CaseInsensitiveMap(options).contains("path")) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
@@ -192,7 +194,14 @@ case class CreateDataSourceTableAsSelectCommand(
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+              if (query.schema.size != l.schema.size) {
+                throw new AnalysisException(
+                  s"The column number of the existing schema[${l.schema}] " +
+                    s"doesn't match the data schema[${query.schema}]'s")
+              }
               existingSchema = Some(l.schema)
+            case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
+              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }

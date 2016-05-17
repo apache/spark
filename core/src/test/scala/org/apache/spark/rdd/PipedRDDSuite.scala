@@ -171,7 +171,7 @@ class PipedRDDSuite extends SparkFunSuite with SharedSparkContext {
       val pipedPwd = nums.pipe(Seq("pwd"), separateWorkingDir = true)
       val collectPwd = pipedPwd.collect()
       assert(collectPwd(0).contains("tasks/"))
-      val pipedLs = nums.pipe(Seq("ls"), separateWorkingDir = true).collect()
+      val pipedLs = nums.pipe(Seq("ls"), separateWorkingDir = true, bufferSize = 16384).collect()
       // make sure symlinks were created
       assert(pipedLs.length > 0)
       // clean up top level tasks directory

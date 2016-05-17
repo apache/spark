@@ -49,16 +49,25 @@ abstract class PartitioningAwareFileCatalog(
   protected def leafDirToChildrenFiles: Map[Path, Array[FileStatus]]
 
   override def listFiles(filters: Seq[Expression]): Seq[Partition] = {
-    if (partitionSpec().partitionColumns.isEmpty) {
+    val selectedPartitions = if (partitionSpec().partitionColumns.isEmpty) {
       Partition(InternalRow.empty, allFiles().filterNot(_.getPath.getName startsWith "_")) :: Nil
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
-          Partition(
-            values,
-            leafDirToChildrenFiles(path).filterNot(_.getPath.getName startsWith "_"))
+          val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
+            case Some(existingDir) =>
+              // Directory has children files in it, return them
+              existingDir.filterNot(_.getPath.getName.startsWith("_"))
+
+            case None =>
+              // Directory does not exist, or has no children files
+              Nil
+          }
+          Partition(values, files)
       }
     }
+    logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
+    selectedPartitions
   }
 
   override def allFiles(): Seq[FileStatus] = {

@@ -25,6 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -84,10 +85,10 @@ object RowEncoder {
         "fromJavaDate",
         inputObject :: Nil)
 
-    case _: DecimalType =>
+    case d: DecimalType =>
       StaticInvoke(
         Decimal.getClass,
-        DecimalType.SYSTEM_DEFAULT,
+        d,
         "fromDecimal",
         inputObject :: Nil)
 
@@ -162,7 +163,7 @@ object RowEncoder {
    * `org.apache.spark.sql.types.Decimal`.
    */
   private def externalDataTypeForInput(dt: DataType): DataType = dt match {
-    // In order to support both Decimal and java BigDecimal in external row, we make this
+    // In order to support both Decimal and java/scala BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
     case _ => externalDataTypeFor(dt)

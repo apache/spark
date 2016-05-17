@@ -413,7 +413,7 @@ public class TaskMemoryManager {
   /**
    * Returns Tungsten memory mode
    */
-  public MemoryMode getTungstenMemoryMode(){
+  public MemoryMode getTungstenMemoryMode() {
     return tungstenMemoryMode;
   }
 }
