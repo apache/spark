@@ -67,6 +67,8 @@ class SQLContext private[sql](
 
   self =>
 
+  sparkSession.sparkContext.assertNotStopped()
+
   // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
   // real functionality resides. This class remains mainly for backward compatibility.
 
