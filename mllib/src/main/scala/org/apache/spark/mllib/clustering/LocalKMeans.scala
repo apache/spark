@@ -65,8 +65,8 @@ private[mllib] object LocalKMeans extends Logging {
         centers(i) = points(j - 1).toDense
       }
 
-      //update costArray
-      for(p <- points.indices){
+      // update costArray
+      for(p <- points.indices) {
         costArray(p) = math.min(KMeans.fastSquaredDistance(points(p), centers(i)), costArray(p))
       }
 
