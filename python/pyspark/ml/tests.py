@@ -1409,8 +1409,8 @@ class VectorUDTTests(MLlibTestCase):
             self.assertEqual(v, self.udt.deserialize(self.udt.serialize(v)))
 
     def test_infer_schema(self):
-        rdd = self.sc.parallelize([LabeledPoint(1.0, self.dv1),
-                                   LabeledPoint(0.0, self.sv1)])
+        rdd = self.sc.parallelize([Row(label=1.0, features=self.dv1),
+                                   Row(label=0.0, features=self.sv1)])
         df = rdd.toDF()
         schema = df.schema
         field = [f for f in schema.fields if f.name == "features"][0]
