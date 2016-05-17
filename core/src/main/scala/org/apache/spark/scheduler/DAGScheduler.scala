@@ -1283,13 +1283,8 @@ class DAGScheduler(
             // TODO: Cancel running tasks in the stage
             logInfo(s"Resubmitting $mapStage (${mapStage.name}) and " +
               s"$failedStage (${failedStage.name}) due to fetch failure")
-            // We might get lots of fetch failed for this stage, from lots of executors.
-            // Its better if we can resubmit for all the failed executors at one time, so lets
-            // just wait a *bit* before we resubmit.
             messageScheduler.schedule(new Runnable {
-              override def run(): Unit = {
-                eventProcessLoop.post(ResubmitFailedStages)
-              }
+              override def run(): Unit = eventProcessLoop.post(ResubmitFailedStages)
             }, DAGScheduler.RESUBMIT_TIMEOUT, TimeUnit.MILLISECONDS)
           }
           failedStages += failedStage
