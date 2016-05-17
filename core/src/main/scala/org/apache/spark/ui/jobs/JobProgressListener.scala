@@ -382,14 +382,10 @@ class JobProgressListener(conf: SparkConf) extends SparkListener with Logging {
           case org.apache.spark.Success =>
             stageData.completedIndices.add(info.index)
             stageData.numCompleteTasks += 1
-<<<<<<< HEAD
-            (None, taskEnd.taskMetrics.accumulatorUpdates())
+            None
           case TaskKilled =>
             stageData.numKilledTasks += 1
-            (Some(TaskKilled.toErrorString), Seq.empty[AccumulableInfo])
-=======
-            None
->>>>>>> master
+            Some(TaskKilled.toErrorString)
           case e: ExceptionFailure => // Handle ExceptionFailure because we might have accumUpdates
             stageData.numFailedTasks += 1
             Some(e.toErrorString)
