@@ -641,7 +641,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       )
     }
 
-    if (!metadata.fullyMapped) {
+    if (metadata.hasUnsupportedFeatures) {
       reportUnsupportedError()
     }
 
@@ -660,9 +660,9 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       if (metadata.schema.nonEmpty) {
         builder ++= metadata.schema.map(_.name).mkString("(", ", ", ")")
       }
-      builder ++= metadata.viewOriginalText.mkString(" AS\n", "", "\n")
+      builder ++= metadata.viewText.mkString(" AS\n", "", "\n")
     } else {
-      showHiveTableDataColumns(metadata, builder)
+      showHiveTableHeader(metadata, builder)
       showHiveTableNonDataColumns(metadata, builder)
       showHiveTableStorageInfo(metadata, builder)
       showHiveTableProperties(metadata, builder)
@@ -671,7 +671,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     builder.toString()
   }
 
-  private def showHiveTableDataColumns(metadata: CatalogTable, builder: StringBuilder): Unit = {
+  private def showHiveTableHeader(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val columns = metadata.schema.filterNot { column =>
       metadata.partitionColumnNames.contains(column.name)
     }.map(columnToDDLFragment)
@@ -679,6 +679,11 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     if (columns.nonEmpty) {
       builder ++= columns.mkString("(", ", ", ")\n")
     }
+
+    metadata
+      .comment
+      .map("COMMENT '" + escapeSingleQuotedString(_) + "'\n")
+      .foreach(builder.append)
   }
 
   private def columnToDDLFragment(column: CatalogColumn): String = {
@@ -693,13 +698,8 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     }
 
     if (metadata.bucketColumnNames.nonEmpty) {
-      builder ++= metadata.bucketColumnNames.mkString("CLUSTERED BY (", ", ", ")\n")
-
-      if (metadata.sortColumnNames.nonEmpty) {
-        builder ++= metadata.bucketColumnNames.mkString("SORTED BY (", ", ", ")\n")
-      }
-
-      builder ++= s"INTO ${metadata.numBuckets} BUCKETS\n"
+      throw new UnsupportedOperationException(
+        "Creating Hive table with bucket spec is not supported yet.")
     }
   }
 
@@ -738,11 +738,18 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
 
   private def showHiveTableProperties(metadata: CatalogTable, builder: StringBuilder): Unit = {
     if (metadata.properties.nonEmpty) {
-      val props = metadata.properties.map { case (key, value) =>
+      val filteredProps = metadata.properties.filterNot {
+        // Skips "EXTERNAL" property for external tables
+        case (key, _) => key == "EXTERNAL" && metadata.tableType == EXTERNAL
+      }
+
+      val props = filteredProps.map { case (key, value) =>
         s"'${escapeSingleQuotedString(key)}' = '${escapeSingleQuotedString(value)}'"
       }
 
-      builder ++= props.mkString("TBLPROPERTIES (", ",\n  ", ")\n")
+      if (props.nonEmpty) {
+        builder ++= props.mkString("TBLPROPERTIES (", ",\n  ", ")\n")
+      }
     }
   }
 
