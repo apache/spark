@@ -36,7 +36,8 @@ class IncrementalExecution(
   extends QueryExecution(sparkSession, logicalPlan) {
 
   // TODO: make this always part of planning.
-  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy :: Nil
+  val stateStrategy =
+    ((_: SparkPlanner) => sparkSession.sessionState.planner.StatefulAggregationStrategy) :: Nil
 
   // Modified planner with stateful operations.
   override def planner: SparkPlanner =

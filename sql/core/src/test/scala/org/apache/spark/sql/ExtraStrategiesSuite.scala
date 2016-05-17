@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, SparkPlanner}
 import org.apache.spark.sql.test.SharedSQLContext
 
 case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
@@ -38,7 +38,7 @@ case class FastOperator(output: Seq[Attribute]) extends SparkPlan {
   override def children: Seq[SparkPlan] = Nil
 }
 
-object TestStrategy extends Strategy {
+case class TestStrategy(planner: SparkPlanner) extends Strategy {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case Project(Seq(attr), _) if attr.name == "a" =>
       FastOperator(attr.toAttribute :: Nil) :: Nil

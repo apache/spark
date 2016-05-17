@@ -26,15 +26,15 @@ import org.apache.spark.sql.internal.SQLConf
 class SparkPlanner(
     val sparkContext: SparkContext,
     val conf: SQLConf,
-    val extraStrategies: Seq[Strategy])
+    val extraStrategies: Seq[SparkPlanner => Strategy])
   extends SparkStrategies {
 
   def numPartitions: Int = conf.numShufflePartitions
 
   def strategies: Seq[Strategy] =
-      extraStrategies ++ (
-      FileSourceStrategy ::
-      DataSourceStrategy ::
+      extraStrategies.map(_(this)) ++ (
+      FileSourceStrategy(this) ::
+      DataSourceStrategy(this) ::
       DDLStrategy ::
       SpecialLimits ::
       Aggregation ::

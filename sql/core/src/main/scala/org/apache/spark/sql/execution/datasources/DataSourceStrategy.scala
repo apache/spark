@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.DataSourceScanExec.PUSHED_FILTERS
+import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -123,7 +124,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
-private[sql] object DataSourceStrategy extends Strategy with Logging {
+private[sql] case class DataSourceStrategy(planner: SparkPlanner) extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[execution.SparkPlan] = plan match {
     case PhysicalOperation(projects, filters, l @ LogicalRelation(t: CatalystScan, _, _)) =>
       pruneFilterProjectRaw(
@@ -156,18 +157,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
       ExecutedCommandExec(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil
-  }
-
-  // Get the bucket ID based on the bucketing values.
-  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
-  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
-    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
-    mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
-    val bucketIdGeneration = UnsafeProjection.create(
-      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
-      bucketColumn :: Nil)
-
-    bucketIdGeneration(mutableRow).getInt(0)
   }
 
   // Based on Public API.
@@ -213,7 +202,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
     }}
 
     val (unhandledPredicates, pushedFilters) =
-      selectFilters(relation.relation, candidatePredicates)
+      DataSourceStrategy.selectFilters(relation.relation, candidatePredicates)
 
     // A set of column attributes that are only referenced by pushed down filters.  We can eliminate
     // them from requested columns.
@@ -290,6 +279,21 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
    */
   private[this] def toCatalystRDD(relation: LogicalRelation, rdd: RDD[Row]): RDD[InternalRow] = {
     toCatalystRDD(relation, relation.output, rdd)
+  }
+}
+
+object DataSourceStrategy {
+
+  // Get the bucket ID based on the bucketing values.
+  // Restriction: Bucket pruning works iff the bucketing column has one and only one column.
+  def getBucketId(bucketColumn: Attribute, numBuckets: Int, value: Any): Int = {
+    val mutableRow = new SpecificMutableRow(Seq(bucketColumn.dataType))
+    mutableRow(0) = Cast(Literal(value), bucketColumn.dataType).eval(null)
+    val bucketIdGeneration = UnsafeProjection.create(
+      HashPartitioning(bucketColumn :: Nil, numBuckets).partitionIdExpression :: Nil,
+      bucketColumn :: Nil)
+
+    bucketIdGeneration(mutableRow).getInt(0)
   }
 
   /**

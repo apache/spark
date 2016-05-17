@@ -32,7 +32,8 @@ private[hive] trait HiveStrategies {
   val sparkSession: SparkSession
 
   object Scripts extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def planner: SparkPlanner = self
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.ScriptTransformation(input, script, output, child, ioschema) =>
         val hiveIoSchema = HiveScriptIOSchema(ioschema)
         ScriptTransformation(input, script, output, planLater(child), hiveIoSchema) :: Nil
@@ -41,7 +42,8 @@ private[hive] trait HiveStrategies {
   }
 
   object DataSinks extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def planner: SparkPlanner = self
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(
           table: MetastoreRelation, partition, child, overwrite, ifNotExists) =>
         execution.InsertIntoHiveTable(
@@ -59,7 +61,8 @@ private[hive] trait HiveStrategies {
    * applied.
    */
   object HiveTableScans extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+    override def planner: SparkPlanner = self
+    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
         // Filter out all predicates that only deal with partition keys, these are given to the
         // hive table scan operator to be used for partition pruning.

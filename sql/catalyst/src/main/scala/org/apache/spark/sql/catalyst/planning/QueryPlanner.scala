@@ -27,6 +27,16 @@ import org.apache.spark.sql.catalyst.trees.TreeNode
  * empty list should be returned.
  */
 abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends Logging {
+
+  def planner: QueryPlanner[PhysicalPlan]
+
+  /**
+   * Returns a placeholder for a physical plan that executes `plan`. This placeholder will be
+   * filled in automatically by the QueryPlanner using the other execution strategies that are
+   * available.
+   */
+  protected def planLater(plan: LogicalPlan): PhysicalPlan = planner.plan(plan).next()
+
   def apply(plan: LogicalPlan): Seq[PhysicalPlan]
 }
 
@@ -46,13 +56,6 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
 abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   /** A list of execution strategies that can be used by the planner */
   def strategies: Seq[GenericStrategy[PhysicalPlan]]
-
-  /**
-   * Returns a placeholder for a physical plan that executes `plan`. This placeholder will be
-   * filled in automatically by the QueryPlanner using the other execution strategies that are
-   * available.
-   */
-  protected def planLater(plan: LogicalPlan): PhysicalPlan = this.plan(plan).next()
 
   def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
