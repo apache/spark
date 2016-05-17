@@ -125,12 +125,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           val namedQuery = visitNamedQuery(nCtx)
           (namedQuery.alias, namedQuery)
       }
-
       // Check for duplicate names.
-      ctes.groupBy(_._1).filter(_._2.size > 1).foreach { case (name, _) =>
-        throw new ParseException(s"Name '$name' is used for multiple common table expressions", ctx)
-      }
-
+      checkDuplicateKeys(ctes, ctx)
       With(query, ctes.toMap)
     }
   }
@@ -224,9 +220,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       name -> value
     }
     // Check for duplicate partition columns in one spec.
-    parts.groupBy(_._1).filter(_._2.size > 1).foreach { case (name, _) =>
-      throw new ParseException(s"The partition spec has duplicate partition columns '$name'.", ctx)
-    }
+    checkDuplicateKeys(parts, ctx)
     parts.toMap
   }
 

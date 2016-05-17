@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.catalyst.parser
 
+import scala.collection.mutable
 import scala.collection.mutable.StringBuilder
 
 import org.antlr.v4.runtime.{CharStream, ParserRuleContext, Token}
@@ -41,6 +42,14 @@ object ParserUtils {
 
   def operationNotAllowed(message: String, ctx: ParserRuleContext): ParseException = {
     new ParseException(s"Operation not allowed: $message", ctx)
+  }
+
+  /** Check if duplicate keys exist in a set of key-value pairs. */
+  def checkDuplicateKeys(
+      keyPairs: mutable.Buffer[_ <: (String, Any)], ctx: ParserRuleContext): Unit = {
+    keyPairs.groupBy(_._1).filter(_._2.size > 1).foreach { case (key, _) =>
+      throw new ParseException(s"Found duplicate keys '$key'.", ctx)
+    }
   }
 
   /** Get the code that creates the given node. */

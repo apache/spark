@@ -345,9 +345,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       key -> value
     }
     // Check for duplicate property names.
-    properties.groupBy(_._1).filter(_._2.size > 1).foreach { case (name, _) =>
-      throw new ParseException(s"The property list contains duplicate keys '$name'.", ctx)
-    }
+    checkDuplicateKeys(properties, ctx)
     properties.toMap
   }
 
