@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.types
 
-import java.math.BigInteger
-
 import scala.language.postfixOps
 
 import org.scalatest.PrivateMethodTester

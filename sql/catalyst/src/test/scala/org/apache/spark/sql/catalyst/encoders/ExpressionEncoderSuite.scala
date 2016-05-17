@@ -113,7 +113,6 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   encodeDecodeTest(BigInt("23134123123"), "scala biginteger")
   encodeDecodeTest(new BigInteger("23134123123"), "java BigInteger")
 
-
   encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")

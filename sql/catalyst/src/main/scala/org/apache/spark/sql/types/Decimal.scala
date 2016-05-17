@@ -174,8 +174,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toScalaBigInt: BigInt = BigInt(toLong)
 
-  def toJavaBigInteger: java.math.BigInteger =
-    java.math.BigInteger.valueOf(toLong)
+  def toJavaBigInteger: java.math.BigInteger = java.math.BigInteger.valueOf(toLong)
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
