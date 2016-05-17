@@ -90,8 +90,8 @@ private class RandomForest (
    * @return RandomForestModel that can be used for prediction.
    */
   def run(input: RDD[LabeledPoint]): RandomForestModel = {
-    val trees: Array[NewDTModel] =
-      NewRandomForest.run(input, strategy, numTrees, featureSubsetStrategy, seed.toLong, None)
+    val trees: Array[NewDTModel] = NewRandomForest.run(input.map(_.asML), strategy, numTrees,
+      featureSubsetStrategy, seed.toLong, None)
     new RandomForestModel(strategy.algo, trees.map(_.toOld))
   }
 

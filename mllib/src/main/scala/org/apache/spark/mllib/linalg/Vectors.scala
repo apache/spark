@@ -22,6 +22,7 @@ import java.util
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
+import scala.language.implicitConversions
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.json4s.DefaultFormats
@@ -925,4 +926,25 @@ object SparseVector {
   private[spark] def fromML(v: newlinalg.SparseVector): SparseVector = {
     new SparseVector(v.size, v.indices, v.values)
   }
+}
+
+/**
+ * Implicit methods available in Scala for converting [[org.apache.spark.mllib.linalg.Vector]] to
+ * [[org.apache.spark.ml.linalg.Vector]] and vice versa.
+ */
+private[spark] object VectorImplicits {
+
+  implicit def mllibVectorToMLVector(v: Vector): newlinalg.Vector = v.asML
+
+  implicit def mllibDenseVectorToMLDenseVector(v: DenseVector): newlinalg.DenseVector = v.asML
+
+  implicit def mllibSparseVectorToMLSparseVector(v: SparseVector): newlinalg.SparseVector = v.asML
+
+  implicit def mlVectorToMLlibVector(v: newlinalg.Vector): Vector = Vectors.fromML(v)
+
+  implicit def mlDenseVectorToMLlibDenseVector(v: newlinalg.DenseVector): DenseVector =
+    Vectors.fromML(v).asInstanceOf[DenseVector]
+
+  implicit def mlSparseVectorToMLlibSparseVector(v: newlinalg.SparseVector): SparseVector =
+    Vectors.fromML(v).asInstanceOf[SparseVector]
 }

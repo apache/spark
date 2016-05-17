@@ -19,9 +19,9 @@ package org.apache.spark.ml.optim
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.Instance
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 
 class IterativelyReweightedLeastSquaresSuite extends SparkFunSuite with MLlibTestSparkContext {
