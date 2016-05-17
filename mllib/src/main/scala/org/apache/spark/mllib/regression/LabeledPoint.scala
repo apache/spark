@@ -20,6 +20,7 @@ package org.apache.spark.mllib.regression
 import scala.beans.BeanInfo
 
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.feature.{LabeledPoint => NewLabeledPoint}
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.NumericParser
 import org.apache.spark.SparkException
@@ -37,6 +38,10 @@ case class LabeledPoint @Since("1.0.0") (
     @Since("1.0.0") features: Vector) {
   override def toString: String = {
     s"($label,$features)"
+  }
+
+  private[spark] def asML: NewLabeledPoint = {
+    NewLabeledPoint(label, features.asML)
   }
 }
 
@@ -66,5 +71,9 @@ object LabeledPoint {
       val features = Vectors.dense(parts(1).trim().split(' ').map(java.lang.Double.parseDouble))
       LabeledPoint(label, features)
     }
+  }
+
+  private[spark] def fromML(point: NewLabeledPoint): LabeledPoint = {
+    LabeledPoint(point.label, Vectors.fromML(point.features))
   }
 }

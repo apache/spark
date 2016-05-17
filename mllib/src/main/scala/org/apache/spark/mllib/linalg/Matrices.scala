@@ -20,6 +20,7 @@ package org.apache.spark.mllib.linalg
 import java.util.{Arrays, Random}
 
 import scala.collection.mutable.{ArrayBuffer, ArrayBuilder => MArrayBuilder, HashSet => MHashSet}
+import scala.language.implicitConversions
 
 import breeze.linalg.{CSCMatrix => BSM, DenseMatrix => BDM, Matrix => BM}
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
@@ -1211,4 +1212,25 @@ object Matrices {
     case sm: newlinalg.SparseMatrix =>
       SparseMatrix.fromML(sm)
   }
+}
+
+/**
+ * Implicit methods available in Scala for converting [[org.apache.spark.mllib.linalg.Matrix]] to
+ * [[org.apache.spark.ml.linalg.Matrix]] and vice versa.
+ */
+private[spark] object MatrixImplicits {
+
+  implicit def mllibMatrixToMLMatrix(m: Matrix): newlinalg.Matrix = m.asML
+
+  implicit def mllibDenseMatrixToMLDenseMatrix(m: DenseMatrix): newlinalg.DenseMatrix = m.asML
+
+  implicit def mllibSparseMatrixToMLSparseMatrix(m: SparseMatrix): newlinalg.SparseMatrix = m.asML
+
+  implicit def mlMatrixToMLlibMatrix(m: newlinalg.Matrix): Matrix = Matrices.fromML(m)
+
+  implicit def mlDenseMatrixToMLlibDenseMatrix(m: newlinalg.DenseMatrix): DenseMatrix =
+    Matrices.fromML(m).asInstanceOf[DenseMatrix]
+
+  implicit def mlSparseMatrixToMLlibSparseMatrix(m: newlinalg.SparseMatrix): SparseMatrix =
+    Matrices.fromML(m).asInstanceOf[SparseMatrix]
 }

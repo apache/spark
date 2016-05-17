@@ -29,8 +29,9 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.JsonVectorConverter
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: DeveloperApi ::
@@ -92,7 +93,7 @@ class Param[T](val parent: String, val name: String, val doc: String, val isVali
       case x: String =>
         compact(render(JString(x)))
       case v: Vector =>
-        v.toJson
+        JsonVectorConverter.toJson(v)
       case _ =>
         throw new NotImplementedError(
           "The default jsonEncode only supports string and vector. " +
@@ -128,7 +129,7 @@ private[ml] object Param {
         val keys = v.map(_._1)
         assert(keys.contains("type") && keys.contains("values"),
           s"Expect a JSON serialized vector but cannot find fields 'type' and 'values' in $json.")
-        Vectors.fromJson(json).asInstanceOf[T]
+        JsonVectorConverter.fromJson(json).asInstanceOf[T]
       case _ =>
         throw new NotImplementedError(
           "The default jsonDecode only supports string and vector. " +
