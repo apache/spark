@@ -636,8 +636,8 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
     def reportUnsupportedError(features: Seq[String]): Unit = {
       throw new AnalysisException(
         s"Failed to execute SHOW CREATE TABLE against table ${metadata.identifier.quotedString}, " +
-          "which is created by Hive and uses the following feature(s) that are not yet supported " +
-          "by Spark SQL:\n" + features.map(" - " + _).mkString("\n")
+          "which is created by Hive and uses the following unsupported feature(s)\n" +
+          features.map(" - " + _).mkString("\n")
       )
     }
 
