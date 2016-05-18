@@ -32,9 +32,6 @@ Run with:
 """
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        print("Usage: simple_params_example", file=sys.stderr)
-        exit(1)
     spark = SparkSession \
         .builder \
         .appName("SimpleTextClassificationPipeline") \
