@@ -1506,7 +1506,7 @@ people.printSchema()
 //  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
+// Creates a temporary view using the DataFrame
 people.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.

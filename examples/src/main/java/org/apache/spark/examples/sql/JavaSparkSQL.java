@@ -130,7 +130,7 @@ public class JavaSparkSQL {
     //  |-- age: IntegerType
     //  |-- name: StringType
 
-    // Creates a temporary view
+    // Creates a temporary view using the DataFrame
     peopleFromJsonFile.createOrReplaceTempView("people");
 
     // SQL statements can be run by using the sql methods provided by `spark`
