@@ -130,7 +130,6 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
           | There was a failed job.
           | ----- Begin Job Failure Msg -----
           | ${Utils.exceptionString(failure)}
-
           | ----- End Job Failure Msg ----
         """.
           stripMargin
@@ -312,6 +311,7 @@ private[spark] abstract class MockBackend(
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+    // We have to implement this b/c of SPARK-15385.
     // Its OK for this to be a no-op, because even if a backend does implement killTask,
     // it really can only be "best-effort" in any case, and the scheduler should be robust to that.
     // And in fact its reasonably simulating a case where a real backend finishes tasks in between
