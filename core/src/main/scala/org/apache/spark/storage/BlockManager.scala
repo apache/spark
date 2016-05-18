@@ -1166,8 +1166,8 @@ private[spark] class BlockManager(
       peersFailedToReplicateTo: Set[BlockManagerId]): Set[BlockManagerId] = {
 
       if (numFailures > maxReplicationFailures
-                || peersForReplication.isEmpty
-                || peersReplicatedTo.size == numPeersToReplicateTo) {
+          || peersForReplication.isEmpty
+          || peersReplicatedTo.size == numPeersToReplicateTo) {
         // This selection of a peer and replication is continued in a loop until one of the
         // following 3 conditions is fulfilled:
         // (i) specified number of peers have been replicated to
@@ -1201,7 +1201,7 @@ private[spark] class BlockManager(
             // we have a failed replication, so we get the list of peers again
             // we don't want peers we have already replicated to and the ones that
             // have failed previously
-            val filteredPeers = getPeers(true).filter{p =>
+            val filteredPeers = getPeers(true).filter { p =>
               !(updatedFailedPeers.contains(p) || peersReplicatedTo.contains(p))
             }
             val updatedPeers =
@@ -1214,7 +1214,8 @@ private[spark] class BlockManager(
     }
 
     val startTime = System.currentTimeMillis
-    val peersReplicatedTo = replicateBlock(0,
+    val peersReplicatedTo = replicateBlock(
+      0,
       blockReplicationPrioritizer.prioritize(getPeers(false), Set.empty, blockId),
       Set.empty,
       Set.empty)

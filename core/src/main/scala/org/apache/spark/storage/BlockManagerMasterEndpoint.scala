@@ -140,7 +140,6 @@ class BlockManagerMasterEndpoint(
       }
 
     case GetTopologyInfo(host) => context.reply(getTopologyInfoForHost(host))
-
   }
 
   private def getTopologyInfoForHost(host: String): String = {

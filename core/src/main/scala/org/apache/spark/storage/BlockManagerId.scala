@@ -122,9 +122,9 @@ private[spark] object BlockManagerId {
    * @return A new [[org.apache.spark.storage.BlockManagerId]].
    */
   def apply(execId: String,
-            host: String,
-            port: Int,
-            topologyInfo: Option[String] = None): BlockManagerId =
+    host: String,
+    port: Int,
+    topologyInfo: Option[String] = None): BlockManagerId =
     getCachedBlockManagerId(new BlockManagerId(execId, host, port, topologyInfo))
 
   def apply(in: ObjectInput): BlockManagerId = {

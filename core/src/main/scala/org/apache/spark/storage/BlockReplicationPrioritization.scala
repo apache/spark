@@ -17,9 +17,9 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.annotation.DeveloperApi
-
 import scala.util.Random
+
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 
 /**
@@ -40,8 +40,8 @@ trait BlockReplicationPrioritization {
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
   def prioritize(peers: Seq[BlockManagerId],
-                 peersReplicatedTo: Set[BlockManagerId],
-                 blockId: BlockId): Seq[BlockManagerId]
+    peersReplicatedTo: Set[BlockManagerId],
+    blockId: BlockId): Seq[BlockManagerId]
 }
 
 @DeveloperApi
@@ -60,8 +60,8 @@ class DefaultBlockReplicationPrioritization(host: String)
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
   override def prioritize(peers: Seq[BlockManagerId],
-                          peersReplicatedTo: Set[BlockManagerId],
-                          blockId: BlockId): Seq[BlockManagerId] = {
+    peersReplicatedTo: Set[BlockManagerId],
+    blockId: BlockId): Seq[BlockManagerId] = {
     val random = new Random(blockId.hashCode)
 
     logDebug(s"Input peers : ${peers.mkString(", ")}")
