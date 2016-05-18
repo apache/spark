@@ -94,6 +94,11 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.0.0")
   def getLinkPredictionCol: String = $(linkPredictionCol)
 
+  /** Checks whether we should output link prediction. */
+  private[regression] def hasLinkPredictionCol: Boolean = {
+    isDefined(linkPredictionCol) && $(linkPredictionCol).nonEmpty
+  }
+
   import GeneralizedLinearRegression._
 
   @Since("2.0.0")
@@ -107,7 +112,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
         s"with ${$(family)} family does not support ${$(link)} link function.")
     }
     val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
-    if (isDefined(linkPredictionCol) && $(linkPredictionCol).nonEmpty) {
+    if (hasLinkPredictionCol) {
       SchemaUtils.appendColumn(newSchema, $(linkPredictionCol), DoubleType)
     } else {
       newSchema
@@ -729,7 +734,7 @@ class GeneralizedLinearRegressionModel private[ml] (
     if ($(predictionCol).nonEmpty) {
       output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
     }
-    if (isDefined(linkPredictionCol) && $(linkPredictionCol).nonEmpty) {
+    if (hasLinkPredictionCol) {
       output = output.withColumn($(linkPredictionCol), predictLinkUDF(col($(featuresCol))))
     }
     output.toDF()
