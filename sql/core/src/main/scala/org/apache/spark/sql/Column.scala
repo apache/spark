@@ -40,12 +40,12 @@ private[sql] object Column {
   def unapply(col: Column): Option[Expression] = Some(col.expr)
 
    def generateAlias(e: Expression): String = {
-    e match {
-      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-        s"${a.aggregateFunction.prettyName}"
-      case expr => usePrettyExpression(expr).sql
-    }
-  }
+     e match {
+       case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+         s"${a.aggregateFunction.prettyName}"
+       case expr => usePrettyExpression(expr).sql
+     }
+   }
 }
 
 /**

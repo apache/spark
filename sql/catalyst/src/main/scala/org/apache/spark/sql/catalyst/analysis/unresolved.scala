@@ -331,9 +331,9 @@ case class UnresolvedExtractValue(child: Expression, extraction: Expression)
  *
  */
 case class UnresolvedAlias(
-     child: Expression,
-     aliasName: Option[String] = None,
-     aliasFunc: Option[Expression => String] = None)
+    child: Expression,
+    aliasName: Option[String] = None,
+    aliasFunc: Option[Expression => String] = None)
   extends UnaryExpression with NamedExpression with Unevaluable {
 
   override def toAttribute: Attribute = throw new UnresolvedException(this, "toAttribute")
