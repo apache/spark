@@ -285,7 +285,6 @@ class SparkConfSuite extends SparkFunSuite with LocalSparkContext with ResetSyst
     assert(conf.contains("spark.io.compression.lz4.blockSize"))
     assert(conf.contains("spark.io.unknown") === false)
   }
-
 }
 
 class Class1 {}
