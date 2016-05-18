@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution.joins
 import scala.concurrent._
 import scala.concurrent.duration._
 
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -57,6 +58,8 @@ case class BroadcastHashOuterJoin(
     }
   }
 
+  val lazyBroadcast: Boolean = sqlContext.conf.autoBroadcastJoinLazy
+
   override def requiredChildDistribution: Seq[Distribution] =
     UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
 
@@ -66,6 +69,26 @@ case class BroadcastHashOuterJoin(
   // for the same query.
   @transient
   private lazy val broadcastFuture = {
+    // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
+    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
+    future {
+      // This will run in another thread. Set the execution id so that we can connect these jobs
+      // with the correct execution.
+      SQLExecution.withExecutionId(sparkContext, executionId) {
+        doBroadcast()
+      }
+    }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
+  }
+
+  private def broadcastRelation = {
+    if (lazyBroadcast) {
+      doBroadcast()
+    } else {
+      Await.result(broadcastFuture, timeout)
+    }
+  }
+
+  private def doBroadcast(): Broadcast[HashedRelation] = {
     val numBuildRows = joinType match {
       case RightOuter => longMetric("numLeftRows")
       case LeftOuter => longMetric("numRightRows")
@@ -74,30 +97,24 @@ case class BroadcastHashOuterJoin(
           s"HashOuterJoin should not take $x as the JoinType")
     }
 
-    // broadcastFuture is used in "doExecute". Therefore we can get the execution id correctly here.
-    val executionId = sparkContext.getLocalProperty(SQLExecution.EXECUTION_ID_KEY)
-    future {
-      // This will run in another thread. Set the execution id so that we can connect these jobs
-      // with the correct execution.
-      SQLExecution.withExecutionId(sparkContext, executionId) {
-        // Note that we use .execute().collect() because we don't want to convert data to Scala
-        // types
-        val input: Array[InternalRow] = buildPlan.execute().map { row =>
-          numBuildRows += 1
-          row.copy()
-        }.collect()
-        // The following line doesn't run in a job so we cannot track the metric value. However, we
-        // have already tracked it in the above lines. So here we can use
-        // `SQLMetrics.nullLongMetric` to ignore it.
-        val hashed = HashedRelation(
-          input.iterator, SQLMetrics.nullLongMetric, buildKeyGenerator, input.size)
-        sparkContext.broadcast(hashed)
-      }
-    }(BroadcastHashJoin.broadcastHashJoinExecutionContext)
+    // Note that we use .execute().collect() because we don't want to convert data to Scala
+    // types
+    val input: Array[InternalRow] = buildPlan.execute().map { row =>
+      numBuildRows += 1
+      row.copy()
+    }.collect()
+    // The following line doesn't run in a job so we cannot track the metric value. However, we
+    // have already tracked it in the above lines. So here we can use
+    // `SQLMetrics.nullLongMetric` to ignore it.
+    val hashed = HashedRelation(
+      input.iterator, SQLMetrics.nullLongMetric, buildKeyGenerator, input.size)
+    sparkContext.broadcast(hashed)
   }
 
   protected override def doPrepare(): Unit = {
-    broadcastFuture
+    if (!lazyBroadcast) {
+      broadcastFuture
+    }
   }
 
   override def doExecute(): RDD[InternalRow] = {
@@ -110,11 +127,10 @@ case class BroadcastHashOuterJoin(
     }
     val numOutputRows = longMetric("numOutputRows")
 
-    val broadcastRelation = Await.result(broadcastFuture, timeout)
-
+    val localBroadcast = broadcastRelation
     streamedPlan.execute().mapPartitions { streamedIter =>
       val joinedRow = new JoinedRow()
-      val hashTable = broadcastRelation.value
+      val hashTable = localBroadcast.value
       val keyGenerator = streamedKeyGenerator
 
       hashTable match {
