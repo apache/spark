@@ -163,7 +163,7 @@ run_command() {
 
   echo "$newpid" > "$pid"
   
-  #here add this loop to check the daemon process turn into java process. It takes at most 5 seconds.
+  #Poll for up to 5 seconds for the java process to start
   for i in {1..10}
   do
     if [[ $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
