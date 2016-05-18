@@ -362,11 +362,11 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-    * Dump the credentials' tokens to string values.
-    *
-    * @param credentials credentials
-    * @return an iterator over the string values. If no credentials are passed in: an empty list
-    */
+   * Dump the credentials' tokens to string values.
+   *
+   * @param credentials credentials
+   * @return an iterator over the string values. If no credentials are passed in: an empty list
+   */
   private[spark] def dumpTokens(credentials: Credentials): Iterable[String] = {
     if (credentials != null) {
       credentials.getAllTokens.asScala.map(tokenToString)
@@ -376,13 +376,13 @@ class SparkHadoopUtil extends Logging {
   }
 
   /**
-    * Convert a token to a string for logging.
-    * If its an abstract delegation token, attempt to unmarshall it and then
-    * print more details, including timestamps in human-readable form.
-    *
-    * @param token token to convert to a string
-    * @return a printable string value.
-    */
+   * Convert a token to a string for logging.
+   * If its an abstract delegation token, attempt to unmarshall it and then
+   * print more details, including timestamps in human-readable form.
+   *
+   * @param token token to convert to a string
+   * @return a printable string value.
+   */
   private[spark] def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
     val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
     val buffer = new StringBuilder(128)
@@ -399,9 +399,8 @@ class SparkHadoopUtil extends Logging {
         case _ =>
       }
     } catch {
-      case e: IOException => {
+      case e: IOException =>
         logDebug("Failed to decode $token: $e", e)
-      }
     }
     buffer.toString
   }
