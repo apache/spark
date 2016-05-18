@@ -356,10 +356,11 @@ case class FlatMapGroupsInRExec(
       val getKey = deserializeRowToObject(keyDeserializer, groupingAttributes)
       val getValue = deserializeRowToObject(valueDeserializer, dataAttributes)
       val outputObject = wrapObjectToRow(outputObjAttr.dataType)
+      val groupNames = groupingAttributes.map(_.name).toArray
 
       val runner = new RRunner[Array[Byte]](
         func, deserializerForR, serializerForR, packageNames, broadcastVars,
-        isDataFrame = true, colNames = colNames)
+        isDataFrame = true, colNames = colNames, key = groupNames)
 
       val hasGroups = grouped.hasNext
       val groupedRBytes = grouped.flatMap { case (key, rowIter) =>
@@ -369,8 +370,9 @@ case class FlatMapGroupsInRExec(
         val newKey = rowToRBytes(getKey(key).asInstanceOf[Row])
         Iterator((newKey, newIter))
       }
+
       if (hasGroups) {
-        val outputIter = runner.compute(groupedRBytes, -1, true)
+        val outputIter = runner.compute(groupedRBytes, -1)
         if (!isDeserializedRData) {
           val result = outputIter.map { bytes => bytesToRow(bytes, outputSchema) }
           result.map(outputObject)

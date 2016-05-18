@@ -198,16 +198,16 @@ readMultipleObjects <- function(inputCon) {
 }
 
 readMultipleObjectsWithKeys <- function(inputCon) {
-  # readMultipleObjects will read multiple continuous objects from
+  # readMultipleObjectsWithKeys will read multiple continuous objects from
   # a DataOutputStream. There is no preceding field telling the count
   # of the objects, so the number of objects varies, we try to read
-  # all objects in a loop until the end of the stream.
+  # all objects in a loop until the end of the stream. The rows in
+  # the stream are separated by grouping-key boundary
   data <- list()
   subData <- list()
   while (TRUE) {
     # If reaching the end of the stream, type returned should be "".
     type <- readType(inputCon)
-    print(type)
     if (type == "") {
       break
     } else if (type == "r") {

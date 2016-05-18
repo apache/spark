@@ -89,7 +89,7 @@ object PartitionsRHelper {
       func, deserializer, serializer, packageNames, broadcastVars,
       isDataFrame = true, colNames = colNames)
     // Partition index is ignored. Dataset has no support for mapPartitionsWithIndex.
-    val outputIter = runner.compute(newIter, -1, false)
+    val outputIter = runner.compute(newIter, -1)
 
     if (serializer == SerializationFormats.ROW) {
       outputIter.map { bytes => bytesToRow(bytes, outputSchema) }

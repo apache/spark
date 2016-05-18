@@ -84,16 +84,19 @@ broadcastElap <- elapsedSecs()
 # as number of partitions to create.
 numPartitions <- SparkR:::readInt(inputCon)
 
-isDataFrame <- as.logical(SparkR:::readInt(inputCon))
+# 0 - RDD mode, 1 - dapply mode, 2 - gapply mode
+mode <- SparkR:::readInt(inputCon)
 
-# If isDataFrame, then read column names
-if (isDataFrame) {
+# If DataFrame - mode = 1 and mode = 2, then read column names
+if (mode > 0) {
   colNames <- SparkR:::readObject(inputCon)
+  if (mode == 2) {
+    # TODO pass the key to R function on gapply mode
+    key <- SparkR:::readObject(inputCon)
+  }
 }
 
 isEmpty <- SparkR:::readInt(inputCon)
-
-isGapplyMode <- SparkR:::readInt(inputCon)
 
 if (isEmpty != 0) {
   if (numPartitions == -1) {
@@ -102,7 +105,7 @@ if (isEmpty != 0) {
       dataList <- list(SparkR:::readDeserialize(inputCon))
     } else if (deserializer == "string") {
       dataList <- list(as.list(readLines(inputCon)))
-    } else if (deserializer == "row" && isGapplyMode == 1) {
+    } else if (deserializer == "row" && mode == 2) {
       dataList <- SparkR:::readMultipleObjectsWithKeys(inputCon)
     } else if (deserializer == "row"){
       dataList <- list(SparkR:::readMultipleObjects(inputCon))
@@ -111,7 +114,7 @@ if (isEmpty != 0) {
     inputElap <- elapsedSecs()
     for (i in 1:length(dataList)) {
       data <- dataList[[i]]
-      if (isDataFrame) {
+      if (mode > 0) {
         if (deserializer == "row") {
           # Transform the list of rows into a data.frame
           # Note that the optional argument stringsAsFactors for rbind is
