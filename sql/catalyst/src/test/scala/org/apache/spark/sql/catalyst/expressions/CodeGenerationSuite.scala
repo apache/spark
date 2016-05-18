@@ -177,6 +177,55 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(internalRow === internalRow2)
   }
 
+  test("reuse cached code") {
+    val schema1 = new StructType(Array(
+      StructField("a1", StringType, true),
+      StructField("b1", IntegerType, true),
+      StructField("c1", new StructType(Array(
+        StructField("aa1", StringType, true),
+        StructField("bb1", IntegerType, true)
+      )), true),
+      StructField("d1", new StructType(Array(
+        StructField("a1", new StructType(Array(
+          StructField("b1", StringType, true),
+          StructField("", IntegerType, true)
+        )), true)
+      )), true)
+    ))
+
+    val schema2 = new StructType(Array(
+      StructField("a2", StringType, true),
+      StructField("b2", IntegerType, true),
+      StructField("c2", new StructType(Array(
+        StructField("aa2", StringType, true),
+        StructField("bb2", IntegerType, true)
+      )), true),
+      StructField("d2", new StructType(Array(
+        StructField("a2", new StructType(Array(
+          StructField("b2", StringType, true),
+          StructField("", IntegerType, true)
+        )), true)
+      )), true)
+    ))
+
+    val row = Row("a", 1, Row("b", 2), Row(Row("c", 3)))
+    val lit = Literal.create(row, schema1)
+    val internalRow = lit.value.asInstanceOf[InternalRow]
+
+    // The first UnsafeProjection.create(schema1) should return an instance of a class
+    // which is generated, compiled and cached.
+    // The second UnsafeProjection.create(schema2) should return an instance of the class
+    // which is already cached.
+    // So the class of unsafeProj1 is same for unsafeProj2
+    val unsafeProj1 = UnsafeProjection.create(schema1)
+    val unsafeProj2 = UnsafeProjection.create(schema2)
+    assert(unsafeProj1.getClass eq unsafeProj2.getClass)
+
+    val unsafeRow1 = unsafeProj1(internalRow)
+    val unsafeRow2 = unsafeProj2(internalRow)
+    assert(unsafeRow1 == unsafeRow2)
+  }
+
   test("*/ in the data") {
     // When */ appears in a comment block (i.e. in /**/), code gen will break.
     // So, in Expression and CodegenFallback, we escape */ to \*\/.

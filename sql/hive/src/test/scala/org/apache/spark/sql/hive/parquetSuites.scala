@@ -634,7 +634,7 @@ class ParquetSourceSuite extends ParquetPartitioningTest {
              """.stripMargin)
 
           checkAnswer(
-            sqlContext.read.parquet(path),
+            spark.read.parquet(path),
             Row("1st", "2nd", Seq(Row("val_a", "val_b"))))
         }
       }

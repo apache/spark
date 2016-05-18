@@ -23,7 +23,7 @@ import org.apache.spark.ml.evaluation.Evaluator
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -38,17 +38,17 @@ object MLTestingUtils extends SparkFunSuite {
   def checkNumericTypes[M <: Model[M], T <: Estimator[M]](
       estimator: T,
       isClassification: Boolean,
-      sqlContext: SQLContext)(check: (M, M) => Unit): Unit = {
+      spark: SparkSession)(check: (M, M) => Unit): Unit = {
     val dfs = if (isClassification) {
-      genClassifDFWithNumericLabelCol(sqlContext)
+      genClassifDFWithNumericLabelCol(spark)
     } else {
-      genRegressionDFWithNumericLabelCol(sqlContext)
+      genRegressionDFWithNumericLabelCol(spark)
     }
     val expected = estimator.fit(dfs(DoubleType))
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => estimator.fit(dfs(t)))
     actuals.foreach(actual => check(expected, actual))
 
-    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+    val dfWithStringLabels = spark.createDataFrame(Seq(
       ("0", Vectors.dense(0, 2, 3), 0.0)
     )).toDF("label", "features", "censor")
     val thrown = intercept[IllegalArgumentException] {
@@ -58,13 +58,13 @@ object MLTestingUtils extends SparkFunSuite {
       "Column label must be of type NumericType but was actually of type StringType"))
   }
 
-  def checkNumericTypes[T <: Evaluator](evaluator: T, sqlContext: SQLContext): Unit = {
-    val dfs = genEvaluatorDFWithNumericLabelCol(sqlContext, "label", "prediction")
+  def checkNumericTypes[T <: Evaluator](evaluator: T, spark: SparkSession): Unit = {
+    val dfs = genEvaluatorDFWithNumericLabelCol(spark, "label", "prediction")
     val expected = evaluator.evaluate(dfs(DoubleType))
     val actuals = dfs.keys.filter(_ != DoubleType).map(t => evaluator.evaluate(dfs(t)))
     actuals.foreach(actual => assert(expected === actual))
 
-    val dfWithStringLabels = sqlContext.createDataFrame(Seq(
+    val dfWithStringLabels = spark.createDataFrame(Seq(
       ("0", 0d)
     )).toDF("label", "prediction")
     val thrown = intercept[IllegalArgumentException] {
@@ -75,10 +75,10 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   def genClassifDFWithNumericLabelCol(
-      sqlContext: SQLContext,
+      spark: SparkSession,
       labelColName: String = "label",
       featuresColName: String = "features"): Map[NumericType, DataFrame] = {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, Vectors.dense(0, 2, 3)),
       (1, Vectors.dense(0, 3, 1)),
       (0, Vectors.dense(0, 2, 2)),
@@ -95,11 +95,11 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   def genRegressionDFWithNumericLabelCol(
-      sqlContext: SQLContext,
+      spark: SparkSession,
       labelColName: String = "label",
       featuresColName: String = "features",
       censorColName: String = "censor"): Map[NumericType, DataFrame] = {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, Vectors.dense(0)),
       (1, Vectors.dense(1)),
       (2, Vectors.dense(2)),
@@ -117,10 +117,10 @@ object MLTestingUtils extends SparkFunSuite {
   }
 
   def genEvaluatorDFWithNumericLabelCol(
-      sqlContext: SQLContext,
+      spark: SparkSession,
       labelColName: String = "label",
       predictionColName: String = "prediction"): Map[NumericType, DataFrame] = {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 0d),
       (1, 1d),
       (2, 2d),

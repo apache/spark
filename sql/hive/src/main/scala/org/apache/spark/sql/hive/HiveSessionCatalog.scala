@@ -62,7 +62,8 @@ private[sql] class HiveSessionCatalog(
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
-      val newName = name.copy(table = table)
+      val database = name.database.map(formatDatabaseName)
+      val newName = name.copy(database = database, table = table)
       metastoreCatalog.lookupRelation(newName, alias)
     } else {
       val relation = tempTables(table)
@@ -181,10 +182,12 @@ private[sql] class HiveSessionCatalog(
     //   // This function is a Hive builtin function.
     //   ...
     // }
-    Try(super.lookupFunction(name, children)) match {
+    val database = name.database.map(formatDatabaseName)
+    val funcName = name.copy(database = database)
+    Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(name.unquotedString)) {
+        if (functionRegistry.functionExists(funcName.unquotedString)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
@@ -193,7 +196,7 @@ private[sql] class HiveSessionCatalog(
           // This function is not in functionRegistry, let's try to load it as a Hive's
           // built-in function.
           // Hive is case insensitive.
-          val functionName = name.unquotedString.toLowerCase
+          val functionName = funcName.unquotedString.toLowerCase
           // TODO: This may not really work for current_user because current_user is not evaluated
           // with session info.
           // We do not need to use executionHive at here because we only load
@@ -201,12 +204,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(name.unquotedString))
+                failFunctionLookup(funcName.unquotedString))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(name.unquotedString)
+              case NonFatal(e) => failFunctionLookup(funcName.unquotedString)
             }
           }
           val className = functionInfo.getFunctionClass.getName

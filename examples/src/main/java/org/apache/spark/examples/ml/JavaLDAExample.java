@@ -17,26 +17,15 @@
 
 package org.apache.spark.examples.ml;
 // $example on$
-import java.util.regex.Pattern;
-
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.clustering.LDA;
 import org.apache.spark.ml.clustering.LDAModel;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.catalyst.expressions.GenericRow;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 // $example off$
 
 /**
- * An example demonstrating LDA
+ * An example demonstrating LDA.
  * Run with
  * <pre>
  * bin/run-example ml.JavaLDAExample
@@ -44,53 +33,37 @@ import org.apache.spark.sql.types.StructType;
  */
 public class JavaLDAExample {
 
-  // $example on$
-  private static class ParseVector implements Function<String, Row> {
-    private static final Pattern separator = Pattern.compile(" ");
-
-    @Override
-    public Row call(String line) {
-      String[] tok = separator.split(line);
-      double[] point = new double[tok.length];
-      for (int i = 0; i < tok.length; ++i) {
-        point[i] = Double.parseDouble(tok[i]);
-      }
-      Vector[] points = {Vectors.dense(point)};
-      return new GenericRow(points);
-    }
-  }
-
   public static void main(String[] args) {
-
-    String inputFile = "data/mllib/sample_lda_data.txt";
-
-    // Parses the arguments
+    // Creates a SparkSession
     SparkSession spark = SparkSession
       .builder()
       .appName("JavaLDAExample")
       .getOrCreate();
 
-    // Loads data
-    JavaRDD<Row> points = spark.read().text(inputFile).javaRDD().map(new ParseVector());
-    StructField[] fields = {new StructField("features", new VectorUDT(), false, Metadata.empty())};
-    StructType schema = new StructType(fields);
-    Dataset<Row> dataset = spark.createDataFrame(points, schema);
+    // $example on$
+    // Loads data.
+    Dataset<Row> dataset = spark.read().format("libsvm")
+      .load("data/mllib/sample_lda_libsvm_data.txt");
 
-    // Trains a LDA model
-    LDA lda = new LDA()
-      .setK(10)
-      .setMaxIter(10);
+    // Trains a LDA model.
+    LDA lda = new LDA().setK(10).setMaxIter(10);
     LDAModel model = lda.fit(dataset);
 
-    System.out.println(model.logLikelihood(dataset));
-    System.out.println(model.logPerplexity(dataset));
+    double ll = model.logLikelihood(dataset);
+    double lp = model.logPerplexity(dataset);
+    System.out.println("The lower bound on the log likelihood of the entire corpus: " + ll);
+    System.out.println("The upper bound bound on perplexity: " + lp);
 
-    // Shows the result
+    // Describe topics.
     Dataset<Row> topics = model.describeTopics(3);
+    System.out.println("The topics described by their top-weighted terms:");
     topics.show(false);
-    model.transform(dataset).show(false);
+
+    // Shows the result.
+    Dataset<Row> transformed = model.transform(dataset);
+    transformed.show(false);
+    // $example off$
 
     spark.stop();
   }
-  // $example off$
 }

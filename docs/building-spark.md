@@ -123,6 +123,21 @@ To produce a Spark package compiled with Scala 2.10, use the `-Dscala-2.10` prop
     ./dev/change-scala-version.sh 2.10
     mvn -Pyarn -Phadoop-2.4 -Dscala-2.10 -DskipTests clean package
 
+# PySpark Tests with Maven
+
+If you are building PySpark and wish to run the PySpark tests you will need to build Spark with hive support.
+
+{% highlight bash %}
+build/mvn -DskipTests clean package -Phive
+./python/run-tests
+{% endhighlight %}
+
+The run-tests script also can be limited to a specific Python version or a specific module
+
+    ./python/run-tests --python-executables=python --modules=pyspark-sql
+
+**Note:** You can also run Python tests with an sbt build, provided you build Spark with hive support.
+
 # Spark Tests in Maven
 
 Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.org/user_guide/using_the_scalatest_maven_plugin).
