@@ -608,7 +608,7 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
-    info.markSuccessful()
+    info.markFinished(state = TaskState.FINISHED)
     removeRunningTask(tid)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -617,12 +617,12 @@ private[spark] class TaskSetManager(
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
     sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
-    // Kill other task attempts if any as the one attempt succeeded
-    for (attemptInfo <- taskAttempts(index) if attemptInfo.attemptNumber != info.attemptNumber
-        && attemptInfo.running) {
-      logInfo("Killing attempt " + attemptInfo.attemptNumber + " for task " + attemptInfo.id +
-        " in stage " + taskSet.id + " (TID " + attemptInfo.taskId + ") on " + attemptInfo.host +
-        " as the attempt " + info.attemptNumber + " succeeded on " + info.host)
+    // Kill any other attempts for the same task (since those are unnecessary now that one
+    // attempt completed successfully).
+    for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
+      logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
+        s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
+        s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
       sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
     }
     if (!successful(index)) {
@@ -652,11 +652,7 @@ private[spark] class TaskSetManager(
       return
     }
     removeRunningTask(tid)
-    if (state == TaskState.KILLED) {
-      info.markKilled()
-    } else {
-      info.markFailed()
-    }
+    info.markFinished(state = state)
     val index = info.index
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty

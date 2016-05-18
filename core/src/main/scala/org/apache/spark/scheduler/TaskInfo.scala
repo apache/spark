@@ -20,6 +20,8 @@ package org.apache.spark.scheduler
 import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.TaskState
+import org.apache.spark.TaskState.TaskState
 
 /**
  * :: DeveloperApi ::
@@ -64,18 +66,13 @@ class TaskInfo(
     gettingResultTime = time
   }
 
-  private[spark] def markSuccessful(time: Long = System.currentTimeMillis) {
+  private[spark] def markFinished(time: Long = System.currentTimeMillis, state: TaskState) {
     finishTime = time
-  }
-
-  private[spark] def markFailed(time: Long = System.currentTimeMillis) {
-    finishTime = time
-    failed = true
-  }
-
-  private[spark] def markKilled(time: Long = System.currentTimeMillis) {
-    finishTime = time
-    killed = true
+    if (state == TaskState.FAILED) {
+      failed = true
+    } else if (state == TaskState.KILLED) {
+      killed = true
+    }
   }
 
   def gettingResult: Boolean = gettingResultTime != 0

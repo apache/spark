@@ -338,7 +338,7 @@ private[spark] object UIUtils extends Logging {
       failed: Int,
       skipped: Int,
       total: Int): Seq[Node] = {
-    makeProgressBar(started, completed, failed, skipped, 0, total)
+    makeProgressBar(started, completed, failed, skipped, killed = 0, total)
   }
 
   def makeProgressBar(

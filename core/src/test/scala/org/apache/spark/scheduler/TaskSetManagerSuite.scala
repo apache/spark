@@ -819,8 +819,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // Wait for the threshold time to start speculative attempt for the running task
     Thread.sleep(100)
-    val speculation = manager.checkSpeculatableTasks
-    assert(speculation === true)
+    assert(manager.checkSpeculatableTasks)
     // Offer resource to start the speculative attempt for the running task
     val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption5.isDefined)
@@ -831,6 +830,8 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sched.backend = mock(classOf[SchedulerBackend])
     // Complete the speculative attempt for the running task
     manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
+    // It ends the task with success status as part of manager.handleSuccessfulTask() and
+    // issues sched.backend.killTask() for any other running attempts for the same task
     assert(sched.endedTasks(3) === Success)
     // Verify that it kills other running attempt
     verify(sched.backend).killTask(3, "exec2", true)
