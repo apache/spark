@@ -170,9 +170,13 @@ public class RadixSort {
   /**
    * Specialization of sort() for key-prefix arrays. In this type of array, each record consists
    * of two longs, only the second of which is sorted on.
+   *
+   * @param startIndex starting index in the array to sort from. This parameter is not supported
+   *    in the plain sort() implementation.
    */
   public static int sortKeyPrefixArray(
       LongArray array,
+      int startIndex,
       int numRecords,
       int startByteIndex,
       int endByteIndex,
@@ -182,10 +186,11 @@ public class RadixSort {
     assert endByteIndex <= 7 : "endByteIndex (" + endByteIndex + ") should <= 7";
     assert endByteIndex > startByteIndex;
     assert numRecords * 4 <= array.size();
-    int inIndex = 0;
-    int outIndex = numRecords * 2;
+    int inIndex = startIndex;
+    int outIndex = startIndex + numRecords * 2;
     if (numRecords > 0) {
-      long[][] counts = getKeyPrefixArrayCounts(array, numRecords, startByteIndex, endByteIndex);
+      long[][] counts = getKeyPrefixArrayCounts(
+        array, startIndex, numRecords, startByteIndex, endByteIndex);
       for (int i = startByteIndex; i <= endByteIndex; i++) {
         if (counts[i] != null) {
           sortKeyPrefixArrayAtByte(
@@ -205,13 +210,14 @@ public class RadixSort {
    * getCounts with some added parameters but that seems to hurt in benchmarks.
    */
   private static long[][] getKeyPrefixArrayCounts(
-      LongArray array, int numRecords, int startByteIndex, int endByteIndex) {
+      LongArray array, int startIndex, int numRecords, int startByteIndex, int endByteIndex) {
     long[][] counts = new long[8][];
     long bitwiseMax = 0;
     long bitwiseMin = -1L;
-    long limit = array.getBaseOffset() + numRecords * 16;
+    long baseOffset = array.getBaseOffset() + startIndex * 8;
+    long limit = baseOffset + numRecords * 16;
     Object baseObject = array.getBaseObject();
-    for (long offset = array.getBaseOffset(); offset < limit; offset += 16) {
+    for (long offset = baseOffset; offset < limit; offset += 16) {
       long value = Platform.getLong(baseObject, offset + 8);
       bitwiseMax |= value;
       bitwiseMin &= value;
@@ -220,7 +226,7 @@ public class RadixSort {
     for (int i = startByteIndex; i <= endByteIndex; i++) {
       if (((bitsChanged >>> (i * 8)) & 0xff) != 0) {
         counts[i] = new long[256];
-        for (long offset = array.getBaseOffset(); offset < limit; offset += 16) {
+        for (long offset = baseOffset; offset < limit; offset += 16) {
           counts[i][(int)((Platform.getLong(baseObject, offset + 8) >>> (i * 8)) & 0xff)]++;
         }
       }

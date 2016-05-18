@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection.unsafe.sort;
 
 import java.util.Comparator;
+import java.util.LinkedList;
 
 import org.apache.avro.reflect.Nullable;
 
@@ -95,6 +96,14 @@ public final class UnsafeInMemorySorter {
    */
   private int pos = 0;
 
+  /**
+   * If sorting with radix sort, specifies the starting position in the sort buffer where records
+   * with non-null prefixes are kept. Positions [0..nullPos) will contain null-prefixed records,
+   * and positions [nullPos..pos) non-null prefixed records. This lets us avoid radix sorting
+   * over null values.
+   */
+  private int nullPos = 0;
+
   private long initialSize;
 
   private long totalSortTimeNanos = 0L;
@@ -153,6 +162,7 @@ public final class UnsafeInMemorySorter {
       this.array = consumer.allocateArray(initialSize);
     }
     pos = 0;
+    nullPos = 0;
   }
 
   /**
@@ -198,14 +208,27 @@ public final class UnsafeInMemorySorter {
    * @param recordPointer pointer to a record in a data page, encoded by {@link TaskMemoryManager}.
    * @param keyPrefix a user-defined key prefix
    */
-  public void insertRecord(long recordPointer, long keyPrefix) {
+  public void insertRecord(long recordPointer, long keyPrefix, boolean prefixIsNull) {
     if (!hasSpaceForAnotherRecord()) {
       throw new IllegalStateException("There is no space for new record");
     }
-    array.set(pos, recordPointer);
-    pos++;
-    array.set(pos, keyPrefix);
-    pos++;
+    if (prefixIsNull && radixSortSupport != null) {
+      // Swap forward a non-null record to make room for this one at the beginning of the array.
+      array.set(pos, array.get(nullPos));
+      pos++;
+      array.set(pos, array.get(nullPos + 1));
+      pos++;
+      // Place this record in the vacated position.
+      array.set(nullPos, recordPointer);
+      nullPos++;
+      array.set(nullPos, keyPrefix);
+      nullPos++;
+    } else {
+      array.set(pos, recordPointer);
+      pos++;
+      array.set(pos, keyPrefix);
+      pos++;
+    }
   }
 
   public final class SortedIterator extends UnsafeSorterIterator implements Cloneable {
@@ -272,20 +295,32 @@ public final class UnsafeInMemorySorter {
    * Return an iterator over record pointers in sorted order. For efficiency, all calls to
    * {@code next()} will return the same mutable object.
    */
-  public SortedIterator getSortedIterator() {
+  public UnsafeSorterIterator getSortedIterator() {
     int offset = 0;
     long start = System.nanoTime();
     if (sorter != null) {
       if (this.radixSortSupport != null) {
-        // TODO(ekl) we should handle NULL values before radix sort for efficiency, since they
-        // force a full-width sort (and we cannot radix-sort nullable long fields at all).
         offset = RadixSort.sortKeyPrefixArray(
-          array, pos / 2, 0, 7, radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
+          array, nullPos, (pos - nullPos) / 2, 0, 7,
+          radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
         sorter.sort(array, 0, pos / 2, sortComparator);
       }
     }
     totalSortTimeNanos += System.nanoTime() - start;
-    return new SortedIterator(pos / 2, offset);
+    if (nullPos > 0) {
+      assert radixSortSupport != null : "Nulls are only stored separately with radix sort";
+      LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
+      if (radixSortSupport.sortDescending()) {
+        queue.add(new SortedIterator((pos - nullPos) / 2, offset));
+        queue.add(new SortedIterator(nullPos / 2, 0));
+      } else {
+        queue.add(new SortedIterator(nullPos / 2, 0));
+        queue.add(new SortedIterator((pos - nullPos) / 2, offset));
+      }
+      return new UnsafeExternalSorter.ChainedIterator(queue);
+    } else {
+      return new SortedIterator(pos / 2, offset);
+    }
   }
 }

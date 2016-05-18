@@ -68,10 +68,16 @@ case class SortExec(
       SortPrefixUtils.canSortFullyWithPrefix(boundSortExpression)
 
     // The generator for prefix
-    val prefixProjection = UnsafeProjection.create(Seq(SortPrefix(boundSortExpression)))
+    val prefixExpr = SortPrefix(boundSortExpression)
+    val prefixProjection = UnsafeProjection.create(Seq(prefixExpr))
     val prefixComputer = new UnsafeExternalRowSorter.PrefixComputer {
-      override def computePrefix(row: InternalRow): Long = {
-        prefixProjection.apply(row).getLong(0)
+      private val result = new UnsafeExternalRowSorter.PrefixComputer.Prefix
+      override def computePrefix(row: InternalRow):
+          UnsafeExternalRowSorter.PrefixComputer.Prefix = {
+        val prefix = prefixProjection.apply(row)
+        result.isNull = prefix.isNullAt(0)
+        result.value = if (result.isNull) prefixExpr.nullValue else prefix.getLong(0)
+        result
       }
     }
 

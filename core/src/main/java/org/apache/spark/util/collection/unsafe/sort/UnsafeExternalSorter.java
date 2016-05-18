@@ -369,7 +369,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   /**
    * Write a record to the sorter.
    */
-  public void insertRecord(Object recordBase, long recordOffset, int length, long prefix)
+  public void insertRecord(
+      Object recordBase, long recordOffset, int length, long prefix, boolean prefixIsNull)
     throws IOException {
 
     growPointerArrayIfNecessary();
@@ -384,7 +385,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     Platform.copyMemory(recordBase, recordOffset, base, pageCursor, length);
     pageCursor += length;
     assert(inMemSorter != null);
-    inMemSorter.insertRecord(recordAddress, prefix);
+    inMemSorter.insertRecord(recordAddress, prefix, prefixIsNull);
   }
 
   /**
@@ -396,7 +397,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
    * record length = key length + value length + 4
    */
   public void insertKVRecord(Object keyBase, long keyOffset, int keyLen,
-      Object valueBase, long valueOffset, int valueLen, long prefix)
+      Object valueBase, long valueOffset, int valueLen, long prefix, boolean prefixIsNull)
     throws IOException {
 
     growPointerArrayIfNecessary();
@@ -415,7 +416,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     pageCursor += valueLen;
 
     assert(inMemSorter != null);
-    inMemSorter.insertRecord(recordAddress, prefix);
+    inMemSorter.insertRecord(recordAddress, prefix, prefixIsNull);
   }
 
   /**
@@ -465,7 +466,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private boolean loaded = false;
     private int numRecords = 0;
 
-    SpillableIterator(UnsafeInMemorySorter.SortedIterator inMemIterator) {
+    SpillableIterator(UnsafeSorterIterator inMemIterator) {
       this.upstream = inMemIterator;
       this.numRecords = inMemIterator.getNumRecords();
     }
