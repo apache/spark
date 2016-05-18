@@ -46,7 +46,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    */
   @Since("1.5.0")
   final val k = new IntParam(this, "k", "The number of clusters to create. " +
-    "Must be > 1. Default: 2.", ParamValidators.gt(1))
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("1.5.0")
@@ -60,7 +60,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    */
   @Since("1.5.0")
   final val initMode = new Param[String](this, "initMode", "The initialization algorithm. " +
-    "Supported options: 'random' and 'k-means||'. Default: 'k-means||'.",
+    "Supported options: 'random' and 'k-means||'.",
     (value: String) => MLlibKMeans.validateInitMode(value))
 
   /** @group expertGetParam */
@@ -74,7 +74,7 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    */
   @Since("1.5.0")
   final val initSteps = new IntParam(this, "initSteps", "The number of steps for k-means|| " +
-    "initialization mode. Must be > 0. Default: 5.", ParamValidators.gt(0))
+    "initialization mode. Must be > 0.", ParamValidators.gt(0))
 
   /** @group expertGetParam */
   @Since("1.5.0")

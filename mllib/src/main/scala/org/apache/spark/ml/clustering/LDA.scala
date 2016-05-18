@@ -51,7 +51,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    */
   @Since("1.6.0")
   final val k = new IntParam(this, "k", "The number of topics (clusters) to infer. " +
-    "Must be > 1. Default: 10.", ParamValidators.gt(1))
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("1.6.0")

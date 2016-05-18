@@ -50,7 +50,7 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
    */
   @Since("2.0.0")
   final val k = new IntParam(this, "k", "Number of independent Gaussians in the mixture model. " +
-    "Must be > 1. Default: 2.", ParamValidators.gt(1))
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("2.0.0")

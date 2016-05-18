@@ -47,7 +47,7 @@ private[clustering] trait BisectingKMeansParams extends Params
    */
   @Since("2.0.0")
   final val k = new IntParam(this, "k", "The desired number of leaf clusters. " +
-    "Must be > 1. Default: 4.", ParamValidators.gt(1))
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -61,7 +61,7 @@ private[clustering] trait BisectingKMeansParams extends Params
   @Since("2.0.0")
   final val minDivisibleClusterSize = new DoubleParam(this, "minDivisibleClusterSize",
     "The minimum number of points (if >= 1.0) or the minimum proportion " +
-      "of points (if < 1.0) of a divisible cluster (default: 1.0).", ParamValidators.gt(0.0))
+      "of points (if < 1.0) of a divisible cluster.", ParamValidators.gt(0.0))
 
   /** @group expertGetParam */
   @Since("2.0.0")
