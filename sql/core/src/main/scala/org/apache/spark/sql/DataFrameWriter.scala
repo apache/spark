@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.streaming.{ConsoleSink, MemoryPlan, MemorySink, StreamExecution}
+import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -330,6 +330,13 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         trigger)
       continuousQuery
     } else {
+     val dataSource =
+        DataSource(
+          df.sparkSession,
+          className = source,
+          options = extraOptions.toMap,
+          partitionColumns = normalizedParCols.getOrElse(Nil))
+
       val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
       val checkpointLocation = extraOptions.get("checkpointLocation")
         .orElse {
@@ -341,23 +348,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             "through option() or SQLConf")
         }
 
-      val sink = if (source == "console") {
-        new ConsoleSink(extraOptions.toMap)
-      } else {
-        val dataSource =
-          DataSource(
-            df.sparkSession,
-            className = source,
-            options = extraOptions.toMap,
-            partitionColumns = normalizedParCols.getOrElse(Nil))
-        dataSource.createSink()
-      }
-
       df.sparkSession.sessionState.continuousQueryManager.startQuery(
         queryName,
         checkpointLocation,
         df,
-        sink,
+        dataSource.createSink(),
         trigger)
     }
   }
