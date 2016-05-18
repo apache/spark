@@ -118,13 +118,6 @@ class MultiExecutorMockBackend(
   }
 
   override def defaultParallelism(): Int = nHosts * nExecutorsPerHost * nCoresPerExecutor
-
-  override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
-    // Its OK for this to be a no-op, because even if a backend does implement killTask,
-    // it really can only be "best-effort" in any case, and the scheduler should be robust to that.
-    // And in fact its reasonably simulating a case where a real backend finishes tasks in between
-    // the time when the scheduler sends the msg to kill tasks, and the backend receives the msg.
-  }
 }
 
 class MockRDDWithLocalityPrefs(
