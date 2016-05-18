@@ -585,8 +585,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
-    val offset = TimeZone.getTimeZone(System.getProperty("user.timezone"))
-      .getOffset(System.currentTimeMillis()) / 1000 / 60
+    val offset = TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
     val executorsArrayStr =
       tasks.sortBy(-_.taskInfo.launchTime).take(MAX_TIMELINE_TASKS).map { taskUIData =>

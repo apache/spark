@@ -172,8 +172,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
     val jobEventJsonAsStrSeq = makeJobEvent(jobs)
     val executorEventJsonAsStrSeq = makeExecutorEvent(executors)
-    val offset = TimeZone.getTimeZone(System.getProperty("user.timezone"))
-      .getOffset(System.currentTimeMillis()) / 1000 / 60
+    val offset = TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
     val groupJsonArrayAsStr =
       s"""
