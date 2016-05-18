@@ -27,13 +27,13 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.LogisticRegression;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
 import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 public class JavaCrossValidatorSuite implements Serializable {
 

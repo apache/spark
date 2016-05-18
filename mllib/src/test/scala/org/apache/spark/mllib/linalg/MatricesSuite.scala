@@ -560,4 +560,55 @@ class MatricesSuite extends SparkFunSuite {
     compare(oldSM0, newSM0)
     compare(oldDM0, newDM0)
   }
+
+  test("implicit conversions between new local linalg and mllib linalg") {
+
+    def mllibMatrixToTriple(m: Matrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mllibDenseMatrixToTriple(m: DenseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mllibSparseMatrixToTriple(m: SparseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mlMatrixToTriple(m: newlinalg.Matrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mlDenseMatrixToTriple(m: newlinalg.DenseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mlSparseMatrixToTriple(m: newlinalg.SparseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def compare(m1: (Array[Double], Int, Int), m2: (Array[Double], Int, Int)): Unit = {
+      assert(m1._1 === m2._1)
+      assert(m1._2 === m2._2)
+      assert(m1._3 === m2._3)
+    }
+
+    val dm: DenseMatrix = new DenseMatrix(3, 2, Array(0.0, 0.0, 1.0, 0.0, 2.0, 3.5))
+    val sm: SparseMatrix = dm.toSparse
+    val sm0: Matrix = sm.asInstanceOf[Matrix]
+    val dm0: Matrix = dm.asInstanceOf[Matrix]
+
+    val newSM: newlinalg.SparseMatrix = sm.asML
+    val newDM: newlinalg.DenseMatrix = dm.asML
+    val newSM0: newlinalg.Matrix = sm0.asML
+    val newDM0: newlinalg.Matrix = dm0.asML
+
+    import org.apache.spark.mllib.linalg.MatrixImplicits._
+
+    compare(mllibMatrixToTriple(dm0), mllibMatrixToTriple(newDM0))
+    compare(mllibMatrixToTriple(sm0), mllibMatrixToTriple(newSM0))
+
+    compare(mllibDenseMatrixToTriple(dm), mllibDenseMatrixToTriple(newDM))
+    compare(mllibSparseMatrixToTriple(sm), mllibSparseMatrixToTriple(newSM))
+
+    compare(mlMatrixToTriple(dm0), mlMatrixToTriple(newDM))
+    compare(mlMatrixToTriple(sm0), mlMatrixToTriple(newSM0))
+
+    compare(mlDenseMatrixToTriple(dm), mlDenseMatrixToTriple(newDM))
+    compare(mlSparseMatrixToTriple(sm), mlSparseMatrixToTriple(newSM))
+  }
 }

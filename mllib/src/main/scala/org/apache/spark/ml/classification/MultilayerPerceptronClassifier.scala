@@ -24,11 +24,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor, PredictorParams}
 import org.apache.spark.ml.ann.{FeedForwardTopology, FeedForwardTrainer}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasStepSize, HasTol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.Dataset
 
 /** Params for Multilayer Perceptron. */

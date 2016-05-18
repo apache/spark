@@ -68,6 +68,7 @@ class SparkSession private(
     this(sc, None)
   }
 
+  sparkContext.assertNotStopped()
 
   /* ----------------------- *
    |  Session-related state  |

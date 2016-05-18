@@ -19,13 +19,13 @@ package org.apache.spark.sql.hive
 
 import java.io.File
 
-import org.apache.hadoop.hive.conf.HiveConf
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -45,8 +45,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     // Since every we are doing tests for DDL statements,
     // it is better to reset before every test.
     hiveContext.reset()
-    // Register the testData, which will be used in every test.
-    testData.registerTempTable("testData")
+    // Creates a temporary view with testData, which will be used in all tests.
+    testData.createOrReplaceTempView("testData")
   }
 
   test("insertInto() HiveTable") {
@@ -98,7 +98,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     val rowRDD = hiveContext.sparkContext.parallelize(
       (1 to 100).map(i => Row(scala.collection.mutable.HashMap(s"key$i" -> s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithMapValue")
+    df.createOrReplaceTempView("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m MAP <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
 
@@ -118,10 +118,10 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
     sql(
       s"""
-         |CREATE TABLE table_with_partition(c1 string)
-         |PARTITIONED by (p1 string,p2 string,p3 string,p4 string,p5 string)
-         |location '${tmpDir.toURI.toString}'
-        """.stripMargin)
+        |CREATE TABLE table_with_partition(c1 string)
+        |PARTITIONED by (p1 string,p2 string,p3 string,p4 string,p5 string)
+        |location '${tmpDir.toURI.toString}'
+      """.stripMargin)
     sql(
       """
         |INSERT OVERWRITE TABLE table_with_partition
@@ -171,7 +171,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       StructField("a", ArrayType(StringType, containsNull = false))))
     val rowRDD = hiveContext.sparkContext.parallelize((1 to 100).map(i => Row(Seq(s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithArrayValue")
+    df.createOrReplaceTempView("tableWithArrayValue")
     sql("CREATE TABLE hiveTableWithArrayValue(a Array <STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithArrayValue SELECT a FROM tableWithArrayValue")
 
@@ -188,7 +188,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     val rowRDD = hiveContext.sparkContext.parallelize(
       (1 to 100).map(i => Row(Map(s"key$i" -> s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithMapValue")
+    df.createOrReplaceTempView("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m Map <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
 
@@ -205,7 +205,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     val rowRDD = hiveContext.sparkContext.parallelize(
       (1 to 100).map(i => Row(Row(s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithStructValue")
+    df.createOrReplaceTempView("tableWithStructValue")
     sql("CREATE TABLE hiveTableWithStructValue(s Struct <f: STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithStructValue SELECT s FROM tableWithStructValue")
 
@@ -214,6 +214,35 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       rowRDD.collect().toSeq)
 
     sql("DROP TABLE hiveTableWithStructValue")
+  }
+
+  test("SPARK-10216: Avoid empty files during overwrite into Hive table with group by query") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      val testDataset = hiveContext.sparkContext.parallelize(
+        (1 to 2).map(i => TestData(i, i.toString))).toDF()
+      testDataset.createOrReplaceTempView("testDataset")
+
+      val tmpDir = Utils.createTempDir()
+      sql(
+        s"""
+          |CREATE TABLE table1(key int,value string)
+          |location '${tmpDir.toURI.toString}'
+        """.stripMargin)
+      sql(
+        """
+          |INSERT OVERWRITE TABLE table1
+          |SELECT count(key), value FROM testDataset GROUP BY value
+        """.stripMargin)
+
+      val overwrittenFiles = tmpDir.listFiles()
+        .filter(f => f.isFile && !f.getName.endsWith(".crc"))
+        .sortBy(_.getName)
+      val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
+
+      assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
+
+      sql("DROP TABLE table1")
+    }
   }
 
   test("Reject partitioning that does not match table") {

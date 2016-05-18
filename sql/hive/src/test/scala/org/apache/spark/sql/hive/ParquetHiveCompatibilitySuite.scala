@@ -74,7 +74,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
 
             val schema = spark.table("parquet_compat").schema
             val rowRDD = spark.sparkContext.parallelize(rows).coalesce(1)
-            spark.createDataFrame(rowRDD, schema).registerTempTable("data")
+            spark.createDataFrame(rowRDD, schema).createOrReplaceTempView("data")
             spark.sql("INSERT INTO TABLE parquet_compat SELECT * FROM data")
           }
         }

@@ -25,10 +25,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types._
 

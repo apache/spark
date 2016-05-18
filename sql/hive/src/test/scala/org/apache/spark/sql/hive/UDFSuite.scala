@@ -53,7 +53,7 @@ class UDFSuite
     sql("USE default")
 
     testDF = (1 to 10).map(i => s"sTr$i").toDF("value")
-    testDF.registerTempTable(testTableName)
+    testDF.createOrReplaceTempView(testTableName)
     expectedDF = (1 to 10).map(i => s"STR$i").toDF("value")
     super.beforeAll()
   }
