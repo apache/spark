@@ -133,6 +133,10 @@ object JacksonParser extends Logging {
           value.equals("Infinity") ||
           value.equals("-Infinity")) {
           value.toFloat
+        } else if (value.equals("+INF")) {
+          Float.PositiveInfinity
+        } else if (value.equals("-INF")) {
+          Float.NegativeInfinity
         } else {
           throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
         }
@@ -147,6 +151,10 @@ object JacksonParser extends Logging {
           value.equals("Infinity") ||
           value.equals("-Infinity")) {
           value.toDouble
+        } else if (value.equals("+INF")) {
+          Double.PositiveInfinity
+        } else if (value.equals("-INF")) {
+          Double.NegativeInfinity
         } else {
           throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
         }

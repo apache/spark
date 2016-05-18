@@ -106,8 +106,10 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // quoted non-numeric numbers should still work even allowNonNumericNumbers is off.
-    testCases = Seq("""{"age": "NaN"}""", """{"age": "Infinity"}""", """{"age": "-Infinity"}""")
-    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isNegInfinity)
+    testCases = Seq("""{"age": "NaN"}""", """{"age": "Infinity"}""", """{"age": "-Infinity"}""",
+      """{"age": "+INF"}""", """{"age": "-INF"}""")
+    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isNegInfinity,
+      _.isPosInfinity, _.isNegInfinity)
     val schema = StructType(StructField("age", DoubleType, true) :: Nil)
 
     testCases.zipWithIndex.foreach { case (str, idx) =>
