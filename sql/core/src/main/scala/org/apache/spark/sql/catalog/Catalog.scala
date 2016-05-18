@@ -217,6 +217,9 @@ abstract class Catalog {
    * table, such as the location of blocks. When those change outside of Spark SQL, users should
    * call this function to invalidate the cache.
    *
+   * If this table is cached as an InMemoryRelation, drop the original cached version and make the
+   * new version cached lazily.
+   *
    * @since 2.0.0
    */
   def refreshTable(tableName: String): Unit

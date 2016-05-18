@@ -163,6 +163,9 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
 
   def refreshTable(tableName: String): Unit = {
+    // Different from SparkSession.catalog.refreshTable, this API only refreshes the metadata.
+    // It does not reload the cached data. That means, if this table is cached as
+    // an InMemoryRelation, we do not refresh the cached data.
     catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
   }
 
