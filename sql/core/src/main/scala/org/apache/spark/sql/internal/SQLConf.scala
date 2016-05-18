@@ -605,7 +605,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
-  def defaultSizeInBytes: Long = getConf(DEFAULT_SIZE_IN_BYTES, Long.MaxValue)
+  def defaultSizeInBytes: Long =
+    getConf(DEFAULT_SIZE_IN_BYTES, autoBroadcastJoinThreshold + 1L)
 
   def isParquetBinaryAsString: Boolean = getConf(PARQUET_BINARY_AS_STRING)
 
