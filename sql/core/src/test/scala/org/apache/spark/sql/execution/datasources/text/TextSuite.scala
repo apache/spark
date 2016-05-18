@@ -119,7 +119,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   private def testDir: String = {
-    Thread.currentThread().getContextClassLoader.getResource("partitioned").toString
+    Thread.currentThread().getContextClassLoader.getResource("text-partitioned").toString
   }
 
   /** Verifies data and schema. */
