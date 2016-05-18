@@ -26,38 +26,39 @@ import com.github.fommil.netlib.BLAS.{getInstance => NativeBLAS}
 private[ann] object BreezeUtil {
 
   // TODO: switch to MLlib BLAS interface
-  private def transposeString(a: BDM[Double]): String = if (a.isTranspose) "T" else "N"
+  private def transposeString(A: BDM[Double]): String = if (A.isTranspose) "T" else "N"
 
   /**
    * DGEMM: C := alpha * A * B + beta * C
    * @param alpha alpha
-   * @param a A
-   * @param b B
+   * @param A A
+   * @param B B
    * @param beta beta
-   * @param c C
+   * @param C C
    */
-  def dgemm(alpha: Double, a: BDM[Double], b: BDM[Double], beta: Double, c: BDM[Double]): Unit = {
+  def dgemm(alpha: Double, A: BDM[Double], B: BDM[Double], beta: Double, C: BDM[Double]): Unit = {
     // TODO: add code if matrices isTranspose!!!
-    require(a.cols == b.rows, "A & B Dimension mismatch!")
-    require(a.rows == c.rows, "A & C Dimension mismatch!")
-    require(b.cols == c.cols, "A & C Dimension mismatch!")
-    NativeBLAS.dgemm(transposeString(a), transposeString(b), c.rows, c.cols, a.cols,
-      alpha, a.data, a.offset, a.majorStride, b.data, b.offset, b.majorStride,
-      beta, c.data, c.offset, c.rows)
+    require(A.cols == B.rows, "A & B Dimension mismatch!")
+    require(A.rows == C.rows, "A & C Dimension mismatch!")
+    require(B.cols == C.cols, "A & C Dimension mismatch!")
+    NativeBLAS.dgemm(transposeString(A), transposeString(B), C.rows, C.cols, A.cols,
+      alpha, A.data, A.offset, A.majorStride, B.data, B.offset, B.majorStride,
+      beta, C.data, C.offset, C.rows)
   }
 
   /**
    * DGEMV: y := alpha * A * x + beta * y
    * @param alpha alpha
-   * @param a A
+   * @param A A
    * @param x x
    * @param beta beta
    * @param y y
    */
-  def dgemv(alpha: Double, a: BDM[Double], x: BDV[Double], beta: Double, y: BDV[Double]): Unit = {
-    require(a.cols == x.length, "A & b Dimension mismatch!")
-    NativeBLAS.dgemv(transposeString(a), a.rows, a.cols,
-      alpha, a.data, a.offset, a.majorStride, x.data, x.offset, x.stride,
+  def dgemv(alpha: Double, A: BDM[Double], x: BDV[Double], beta: Double, y: BDV[Double]): Unit = {
+    require(A.cols == x.length, "A & x Dimension mismatch!")
+    require(A.rows == y.length, "A & y Dimension mismatch!")
+    NativeBLAS.dgemv(transposeString(A), A.rows, A.cols,
+      alpha, A.data, A.offset, A.majorStride, x.data, x.offset, x.stride,
       beta, y.data, y.offset, y.stride)
   }
 }

@@ -376,45 +376,6 @@ case class MapObjects private(
     lambdaFunction: Expression,
     inputData: Expression) extends Expression with NonSQLExpression {
 
-  @tailrec
-  private def itemAccessorMethod(dataType: DataType): String => String = dataType match {
-    case NullType =>
-      val nullTypeClassName = NullType.getClass.getName + ".MODULE$"
-      (i: String) => s".get($i, $nullTypeClassName)"
-    case IntegerType => (i: String) => s".getInt($i)"
-    case LongType => (i: String) => s".getLong($i)"
-    case FloatType => (i: String) => s".getFloat($i)"
-    case DoubleType => (i: String) => s".getDouble($i)"
-    case ByteType => (i: String) => s".getByte($i)"
-    case ShortType => (i: String) => s".getShort($i)"
-    case BooleanType => (i: String) => s".getBoolean($i)"
-    case StringType => (i: String) => s".getUTF8String($i)"
-    case s: StructType => (i: String) => s".getStruct($i, ${s.size})"
-    case a: ArrayType => (i: String) => s".getArray($i)"
-    case _: MapType => (i: String) => s".getMap($i)"
-    case udt: UserDefinedType[_] => itemAccessorMethod(udt.sqlType)
-    case DecimalType.Fixed(p, s) => (i: String) => s".getDecimal($i, $p, $s)"
-    case DateType => (i: String) => s".getInt($i)"
-  }
-
-  private lazy val (lengthFunction, itemAccessor, primitiveElement) = inputData.dataType match {
-    case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
-      (".size()", (i: String) => s".apply($i)", false)
-    case ObjectType(cls) if cls.isArray =>
-      (".length", (i: String) => s"[$i]", false)
-    case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
-      (".size()", (i: String) => s".get($i)", false)
-    case ArrayType(t, _) =>
-      val (sqlType, primitiveElement) = t match {
-        case m: MapType => (m, false)
-        case s: StructType => (s, false)
-        case s: StringType => (s, false)
-        case udt: UserDefinedType[_] => (udt.sqlType, false)
-        case o => (o, true)
-      }
-      (".numElements()", itemAccessorMethod(sqlType), primitiveElement)
-  }
-
   override def nullable: Boolean = true
 
   override def children: Seq[Expression] = lambdaFunction :: inputData :: Nil
@@ -425,7 +386,6 @@ case class MapObjects private(
   override def dataType: DataType = ArrayType(lambdaFunction.dataType)
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val javaType = ctx.javaType(dataType)
     val elementJavaType = ctx.javaType(loopVar.dataType)
     ctx.addMutableState("boolean", loopVar.isNull, "")
     ctx.addMutableState(elementJavaType, loopVar.value, "")
@@ -448,27 +408,61 @@ case class MapObjects private(
       s"new $convertedType[$dataLength]"
     }
 
-    val loopNullCheck = if (primitiveElement) {
-      s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
-    } else {
-      s"${loopVar.isNull} = ${genInputData.isNull} || ${loopVar.value} == null;"
+    // In RowEncoder, we use `Object` to represent Array or Seq, so we need to determine the type
+    // of input collection at runtime for this case.
+    val seq = ctx.freshName("seq")
+    val array = ctx.freshName("array")
+    val determineCollectionType = inputData.dataType match {
+      case ObjectType(cls) if cls == classOf[Object] =>
+        val seqClass = classOf[Seq[_]].getName
+        s"""
+          $seqClass $seq = null;
+          $elementJavaType[] $array = null;
+          if (${genInputData.value}.getClass().isArray()) {
+            $array = ($elementJavaType[]) ${genInputData.value};
+          } else {
+            $seq = ($seqClass) ${genInputData.value};
+          }
+         """
+      case _ => ""
+    }
+
+
+    val (getLength, getLoopVar) = inputData.dataType match {
+      case ObjectType(cls) if classOf[Seq[_]].isAssignableFrom(cls) =>
+        s"${genInputData.value}.size()" -> s"${genInputData.value}.apply($loopIndex)"
+      case ObjectType(cls) if cls.isArray =>
+        s"${genInputData.value}.length" -> s"${genInputData.value}[$loopIndex]"
+      case ObjectType(cls) if classOf[java.util.List[_]].isAssignableFrom(cls) =>
+        s"${genInputData.value}.size()" -> s"${genInputData.value}.get($loopIndex)"
+      case ArrayType(et, _) =>
+        s"${genInputData.value}.numElements()" -> ctx.getValue(genInputData.value, et, loopIndex)
+      case ObjectType(cls) if cls == classOf[Object] =>
+        s"$seq == null ? $array.length : $seq.size()" ->
+          s"$seq == null ? $array[$loopIndex] : $seq.apply($loopIndex)"
+    }
+
+    val loopNullCheck = inputData.dataType match {
+      case _: ArrayType => s"${loopVar.isNull} = ${genInputData.value}.isNullAt($loopIndex);"
+      // The element of primitive array will never be null.
+      case ObjectType(cls) if cls.isArray && cls.getComponentType.isPrimitive =>
+        s"${loopVar.isNull} = false"
+      case _ => s"${loopVar.isNull} = ${loopVar.value} == null;"
     }
 
     val code = s"""
       ${genInputData.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
 
-      boolean ${ev.isNull} = ${genInputData.value} == null;
-      $javaType ${ev.value} = ${ctx.defaultValue(dataType)};
-
-      if (!${ev.isNull}) {
+      if (!${genInputData.isNull}) {
+        $determineCollectionType
         $convertedType[] $convertedArray = null;
-        int $dataLength = ${genInputData.value}$lengthFunction;
+        int $dataLength = $getLength;
         $convertedArray = $arrayConstructor;
 
         int $loopIndex = 0;
         while ($loopIndex < $dataLength) {
-          ${loopVar.value} =
-            ($elementJavaType)${genInputData.value}${itemAccessor(loopIndex)};
+          ${loopVar.value} = ($elementJavaType) ($getLoopVar);
           $loopNullCheck
 
           ${genFunction.code}
@@ -481,11 +475,10 @@ case class MapObjects private(
           $loopIndex += 1;
         }
 
-        ${ev.isNull} = false;
         ${ev.value} = new ${classOf[GenericArrayData].getName}($convertedArray);
       }
     """
-    ev.copy(code = code)
+    ev.copy(code = code, isNull = genInputData.isNull)
   }
 }
 

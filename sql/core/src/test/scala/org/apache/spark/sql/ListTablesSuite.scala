@@ -29,7 +29,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
   private lazy val df = (1 to 10).map(i => (i, s"str$i")).toDF("key", "value")
 
   before {
-    df.registerTempTable("listtablessuitetable")
+    df.createOrReplaceTempView("listtablessuitetable")
   }
 
   after {
@@ -74,7 +74,7 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContex
       case tableDF =>
         assert(expectedSchema === tableDF.schema)
 
-        tableDF.registerTempTable("tables")
+        tableDF.createOrReplaceTempView("tables")
         checkAnswer(
           sql(
             "SELECT isTemporary, tableName from tables WHERE tableName = 'listtablessuitetable'"),

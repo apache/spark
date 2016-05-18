@@ -185,6 +185,23 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(encoder.serializer.head.nullable == false)
   }
 
+  test("RowEncoder should support array as the external type for ArrayType") {
+    val schema = new StructType()
+      .add("array", ArrayType(IntegerType))
+      .add("nestedArray", ArrayType(ArrayType(StringType)))
+      .add("deepNestedArray", ArrayType(ArrayType(ArrayType(LongType))))
+    val encoder = RowEncoder(schema)
+    val input = Row(
+      Array(1, 2, null),
+      Array(Array("abc", null), null),
+      Array(Seq(Array(0L, null), null), null))
+    val row = encoder.toRow(input)
+    val convertedBack = encoder.fromRow(row)
+    assert(convertedBack.getSeq(0) == Seq(1, 2, null))
+    assert(convertedBack.getSeq(1) == Seq(Seq("abc", null), null))
+    assert(convertedBack.getSeq(2) == Seq(Seq(Seq(0L, null), null), null))
+  }
+
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
       val encoder = RowEncoder(schema)

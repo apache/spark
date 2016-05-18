@@ -446,10 +446,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Each line in the text file is a new row in the resulting Dataset. For example:
    * {{{
    *   // Scala:
-   *   sqlContext.read.text("/path/to/spark/README.md")
+   *   spark.read.text("/path/to/spark/README.md")
    *
    *   // Java:
-   *   sqlContext.read().text("/path/to/spark/README.md")
+   *   spark.read().text("/path/to/spark/README.md")
    * }}}
    *
    * @param paths input path
@@ -457,7 +457,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).as[String](sparkSession.implicits.newStringEncoder)
+    format("text").load(paths : _*).select("value")
+      .as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

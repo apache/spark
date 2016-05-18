@@ -18,14 +18,16 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.classification.LogisticRegressionSuite._
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.mllib.classification.LogisticRegressionSuite._
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{Dataset, Row}
 
 class MultilayerPerceptronClassifierSuite
@@ -134,12 +136,13 @@ class MultilayerPerceptronClassifierSuite
       .setNumClasses(numClasses)
     lr.optimizer.setRegParam(0.0)
       .setNumIterations(numIterations)
-    val lrModel = lr.run(rdd)
-    val lrPredictionAndLabels = lrModel.predict(rdd.map(_.features)).zip(rdd.map(_.label))
+    val lrModel = lr.run(rdd.map(OldLabeledPoint.fromML))
+    val lrPredictionAndLabels =
+      lrModel.predict(rdd.map(p => OldVectors.fromML(p.features))).zip(rdd.map(_.label))
     // MLP's predictions should not differ a lot from LR's.
     val lrMetrics = new MulticlassMetrics(lrPredictionAndLabels)
     val mlpMetrics = new MulticlassMetrics(mlpPredictionAndLabels)
-    assert(mlpMetrics.confusionMatrix ~== lrMetrics.confusionMatrix absTol 100)
+    assert(mlpMetrics.confusionMatrix.asML ~== lrMetrics.confusionMatrix.asML absTol 100)
   }
 
   test("read/write: MultilayerPerceptronClassifier") {
