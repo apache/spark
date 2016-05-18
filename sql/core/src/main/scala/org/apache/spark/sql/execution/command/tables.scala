@@ -22,6 +22,9 @@ import java.net.URI
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -265,6 +268,54 @@ case class LoadData(
         loadPath.toString,
         isOverwrite,
         holdDDLTime = false)
+    }
+    Seq.empty[Row]
+  }
+}
+
+/**
+ * A command to truncate table.
+ *
+ * The syntax of this command is:
+ * {{{
+ *  TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
+ * }}}
+ */
+case class TruncateTable(
+    tableName: TableIdentifier,
+    partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    val catalog = sparkSession.sessionState.catalog
+    if (!catalog.tableExists(tableName)) {
+      throw new AnalysisException(s"table in TRUNCATE TABLE does not exist: '$tableName'")
+    }
+    if (catalog.isTemporaryTable(tableName)) {
+      throw new AnalysisException(s"table in TRUNCATE TABLE cannot be temporary: '$tableName'")
+    }
+    val locations = if (partitionSpec.isDefined) {
+        catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
+      } else {
+        val table = catalog.getTableMetadata(tableName)
+        if (table.partitionColumnNames.nonEmpty) {
+          catalog.listPartitions(tableName).map(_.storage.locationUri)
+        } else {
+          Seq(table.storage.locationUri)
+        }
+      }
+    locations.foreach { location =>
+      if (location.isDefined) {
+        val path = new Path(location.get)
+        try {
+          val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+          fs.delete(path, true)
+          fs.mkdirs(path)
+        } catch {
+          case NonFatal(e) =>
+            throw new AnalysisException(
+              s"TRUNCATE TABLE: Fail to clear the input path: '$path', exception: ${e.getMessage}")
+        }
+      }
     }
     Seq.empty[Row]
   }
