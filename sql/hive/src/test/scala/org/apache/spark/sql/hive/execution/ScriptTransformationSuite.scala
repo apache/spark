@@ -113,7 +113,7 @@ class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
   test("SPARK-14400 script transformation should fail for bad script command") {
     val rowsDf = Seq("a", "b", "c").map(Tuple1.apply).toDF("a")
 
-    val e = intercept[Exception] {
+    val e = intercept[SparkException] {
       val plan =
         new ScriptTransformation(
           input = Seq(rowsDf.col("a").expr),

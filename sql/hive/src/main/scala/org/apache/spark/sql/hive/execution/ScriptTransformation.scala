@@ -127,7 +127,7 @@ case class ScriptTransformation(
         }
         val mutableRow = new SpecificMutableRow(output.map(_.dataType))
 
-        private def checkFailureAndPropagate(): Unit = {
+        private def checkFailureAndPropagate(cause: Throwable = null): Unit = {
           if (writerThread.exception.isDefined) {
             throw writerThread.exception.get
           }
@@ -142,50 +142,63 @@ case class ScriptTransformation(
             if (exitCode != 0) {
               logError(stderrBuffer.toString) // log the stderr circular buffer
               throw new SparkException(s"Subprocess exited with status $exitCode. " +
-                s"Error: ${stderrBuffer.toString}")
+                s"Error: ${stderrBuffer.toString}", cause)
             }
           } catch {
             case _: IllegalThreadStateException =>
-            // This means that the process is still active so the command was being launched
-            // Ignore the exception and move ahead
+            // This means that the process is still alive. Move ahead
           }
         }
 
         override def hasNext: Boolean = {
-          if (outputSerde == null) {
-            if (curLine == null) {
-              curLine = reader.readLine()
+          try {
+            if (outputSerde == null) {
               if (curLine == null) {
-                checkFailureAndPropagate()
-                false
+                curLine = reader.readLine()
+                if (curLine == null) {
+                  checkFailureAndPropagate()
+                  false
+                } else {
+                  true
+                }
               } else {
                 true
+              }
+            } else if (scriptOutputWritable == null) {
+              scriptOutputWritable = reusedWritableObject
+
+              if (scriptOutputReader != null) {
+                if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
+                  checkFailureAndPropagate()
+                  false
+                } else {
+                  true
+                }
+              } else {
+                try {
+                  scriptOutputWritable.readFields(scriptOutputStream)
+                  true
+                } catch {
+                  case _: EOFException =>
+                    // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
+                    // Ideally the proc should *not* be alive at this point but
+                    // there can be a lag between EOF being written out and the process
+                    // being terminated. So explicitly waiting for the process to be done.
+                    proc.waitFor()
+                    checkFailureAndPropagate()
+                    false
+                }
               }
             } else {
               true
             }
-          } else if (scriptOutputWritable == null) {
-            scriptOutputWritable = reusedWritableObject
+          } catch {
+            case NonFatal(e) =>
+              // If this exception is due to abrupt / unclean termination of `proc`,
+              // then detect it and propagate a better exception message for end users
+              checkFailureAndPropagate(e)
 
-            if (scriptOutputReader != null) {
-              if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
-                checkFailureAndPropagate()
-                false
-              } else {
-                true
-              }
-            } else {
-              try {
-                scriptOutputWritable.readFields(scriptOutputStream)
-                true
-              } catch {
-                case _: EOFException =>
-                  checkFailureAndPropagate()
-                  false
-              }
-            }
-          } else {
-            true
+              throw e
           }
         }
 
@@ -304,7 +317,6 @@ private class ScriptTransformationWriterThread(
           }
         }
       }
-      outputStream.close()
       threwException = false
     } catch {
       case NonFatal(e) =>
@@ -315,6 +327,7 @@ private class ScriptTransformationWriterThread(
         throw e
     } finally {
       try {
+        outputStream.close()
         if (proc.waitFor() != 0) {
           logError(stderrBuffer.toString) // log the stderr circular buffer
         }
