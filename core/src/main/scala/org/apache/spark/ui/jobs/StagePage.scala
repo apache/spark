@@ -585,7 +585,6 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     val executorsSet = new HashSet[(String, String)]
     var minLaunchTime = Long.MaxValue
     var maxFinishTime = Long.MinValue
-    val offset = TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
     val executorsArrayStr =
       tasks.sortBy(-_.taskInfo.launchTime).take(MAX_TIMELINE_TASKS).map { taskUIData =>
@@ -747,7 +746,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawTaskAssignmentTimeline(" +
-      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, $offset)")}
+      s"$groupArrayStr, $executorsArrayStr, $minLaunchTime, $maxFinishTime, " +
+        s"${UIUtils.getTimeZoneOffset()})")}
     </script>
   }
 

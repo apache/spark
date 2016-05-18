@@ -172,7 +172,6 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
 
     val jobEventJsonAsStrSeq = makeJobEvent(jobs)
     val executorEventJsonAsStrSeq = makeExecutorEvent(executors)
-    val offset = TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 
     val groupJsonArrayAsStr =
       s"""
@@ -207,7 +206,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawApplicationTimeline(${groupJsonArrayAsStr}," +
-      s"${eventArrayAsStr}, ${startTime}, ${offset});")}
+      s"${eventArrayAsStr}, ${startTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
   }
 
