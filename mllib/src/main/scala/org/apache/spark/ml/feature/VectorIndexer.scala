@@ -240,7 +240,7 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
 
 /**
  * :: Experimental ::
- * Model fitted by [[VectorIndexer]].  Transform categorical features to use 0-based indices
+ * Model fitted by [[VectorIndexer]]. Transform categorical features to use 0-based indices
  * instead of their original values.
  *  - Categorical features are mapped to indices.
  *  - Continuous features (columns) are left unchanged.

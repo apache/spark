@@ -107,7 +107,7 @@ object PCA extends DefaultParamsReadable[PCA] {
 
 /**
  * :: Experimental ::
- * Model fitted by [[PCA]].  Transforms vectors to a lower dimensional space.
+ * Model fitted by [[PCA]]. Transforms vectors to a lower dimensional space.
  *
  * @param pc A principal components Matrix. Each column is one principal component.
  * @param explainedVariance A vector of proportions of variance explained by

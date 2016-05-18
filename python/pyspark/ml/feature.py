@@ -2413,7 +2413,7 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by PCA.  Transforms vectors to a lower dimensional space.
+    Model fitted by PCA. Transforms vectors to a lower dimensional space.
 
     .. versionadded:: 1.5.0
     """
