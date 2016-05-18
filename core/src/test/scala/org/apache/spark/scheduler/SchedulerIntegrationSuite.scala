@@ -26,7 +26,6 @@ import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals
 import org.scalatest.Assertions.AssertionsHelper
-import org.scalatest.BeforeAndAfter
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
@@ -47,15 +46,14 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     with LocalSparkContext {
   val conf = new SparkConf
 
-  /** Set of TaskSets the DAGScheduler has requested executed. */
-  val runningTaskSets = HashSet[TaskSet]()
-
-  var taskScheduler: TaskSchedulerImpl = null
+  var taskScheduler: TestTaskScheduler = null
   var scheduler: DAGScheduler = null
   var backend: T = _
 
   override def beforeEach(): Unit = {
-    runningTaskSets.clear()
+    if (taskScheduler != null) {
+      taskScheduler.runningTaskSets.clear()
+    }
     results.clear()
     failure = null
     super.beforeEach()
@@ -74,17 +72,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     conf.setMaster(s"mock[${backendClassName}]")
     sc = new SparkContext(conf)
     backend = sc.schedulerBackend.asInstanceOf[T]
-    taskScheduler = new TaskSchedulerImpl(sc) {
-      override def submitTasks(taskSet: TaskSet): Unit = {
-        runningTaskSets += taskSet
-        super.submitTasks(taskSet)
-      }
-
-      override def taskSetFinished(manager: TaskSetManager): Unit = {
-        runningTaskSets -= manager.taskSet
-        super.taskSetFinished(manager)
-      }
-    }
+    taskScheduler = sc.taskScheduler.asInstanceOf[TestTaskScheduler]
     taskScheduler.initialize(sc.schedulerBackend)
     backend.taskScheduler = taskScheduler
     scheduler = new DAGScheduler(sc, taskScheduler)
@@ -132,7 +120,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     if (noFailure) {
       // When a job fails, we terminate before waiting for all the task end events to come in,
       // so there might still be a running task set
-      assert(runningTaskSets.isEmpty)
+      assert(taskScheduler.runningTaskSets.isEmpty)
       assert(!backend.hasTasks)
       if (failure != null) {
         // if there is a job failure, it can be a bit hard to tease the job failure msg apart
@@ -142,7 +130,6 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
           | There was a failed job.
           | ----- Begin Job Failure Msg -----
           | ${Utils.exceptionString(failure)}
-
           | ----- End Job Failure Msg ----
         """.
           stripMargin
@@ -324,6 +311,7 @@ private[spark] abstract class MockBackend(
   }
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
+    // We have to implement this b/c of SPARK-15385.
     // Its OK for this to be a no-op, because even if a backend does implement killTask,
     // it really can only be "best-effort" in any case, and the scheduler should be robust to that.
     // And in fact its reasonably simulating a case where a real backend finishes tasks in between
@@ -381,6 +369,51 @@ object MockRDD extends AssertionsHelper with TripleEquals {
       assert(partitioner != null)
       assert(partitioner.numPartitions === numPartitions)
     }
+  }
+}
+
+/** Simple cluster manager that wires up our mock backend. */
+private class MockExternalClusterManager extends ExternalClusterManager {
+
+  val MOCK_REGEX = """mock\[(.*)\]""".r
+  def canCreate(masterURL: String): Boolean = MOCK_REGEX.findFirstIn(masterURL).isDefined
+
+  def createTaskScheduler(
+      sc: SparkContext,
+      masterURL: String): TaskScheduler = {
+    new TestTaskScheduler(sc)
+ }
+
+  def createSchedulerBackend(
+      sc: SparkContext,
+      masterURL: String,
+      scheduler: TaskScheduler): SchedulerBackend = {
+    masterURL match {
+      case MOCK_REGEX(backendClassName) =>
+        val backendClass = Utils.classForName(backendClassName)
+        val ctor = backendClass.getConstructor(classOf[SparkConf], classOf[TaskSchedulerImpl])
+        ctor.newInstance(sc.getConf, scheduler).asInstanceOf[SchedulerBackend]
+    }
+  }
+
+  def initialize(scheduler: TaskScheduler, backend: SchedulerBackend): Unit = {
+    scheduler.asInstanceOf[TaskSchedulerImpl].initialize(backend)
+  }
+}
+
+/** TaskSchedulerImpl that just tracks a tiny bit more state to enable checks in tests. */
+class TestTaskScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
+  /** Set of TaskSets the DAGScheduler has requested executed. */
+  val runningTaskSets = HashSet[TaskSet]()
+
+  override def submitTasks(taskSet: TaskSet): Unit = {
+    runningTaskSets += taskSet
+    super.submitTasks(taskSet)
+  }
+
+  override def taskSetFinished(manager: TaskSetManager): Unit = {
+    runningTaskSets -= manager.taskSet
+    super.taskSetFinished(manager)
   }
 }
 
