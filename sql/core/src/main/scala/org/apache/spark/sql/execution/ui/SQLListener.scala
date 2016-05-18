@@ -164,7 +164,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
         taskEnd.taskInfo.taskId,
         taskEnd.stageId,
         taskEnd.stageAttemptId,
-        taskEnd.taskMetrics.accumulators().map(a => a.toInfo(Some(a.value), None)),
+        taskEnd.taskMetrics.externalAccums.map(a => a.toInfo(Some(a.value), None)),
         finishTask = true)
     }
   }

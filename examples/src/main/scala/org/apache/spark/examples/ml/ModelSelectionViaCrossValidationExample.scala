@@ -42,7 +42,9 @@ object ModelSelectionViaCrossValidationExample {
 
   def main(args: Array[String]): Unit = {
     val spark = SparkSession
-      .builder.appName("ModelSelectionViaCrossValidationExample").getOrCreate()
+      .builder
+      .appName("ModelSelectionViaCrossValidationExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training data from a list of (id, text, label) tuples.

@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -284,7 +284,7 @@ class SparkSession private(
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *  dataFrame.registerTempTable("people")
+   *  dataFrame.createOrReplaceTempView("people")
    *  sparkSession.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -515,16 +515,15 @@ class SparkSession private(
   }
 
   /**
-   * Registers the given [[DataFrame]] as a temporary table in the catalog.
-   * Temporary tables exist only during the lifetime of this instance of [[SparkSession]].
+   * Creates a temporary view with a DataFrame. The lifetime of this temporary view is tied to
+   * this [[SparkSession]].
    */
-  protected[sql] def registerTable(df: DataFrame, tableName: String): Unit = {
-    sessionState.catalog.createTempTable(
-      sessionState.sqlParser.parseTableIdentifier(tableName).table,
-      df.logicalPlan,
-      overrideIfExists = true)
+  protected[sql] def createTempView(
+      viewName: String, df: DataFrame, replaceIfExists: Boolean) = {
+    sessionState.catalog.createTempView(
+      sessionState.sqlParser.parseTableIdentifier(viewName).table,
+      df.logicalPlan, replaceIfExists)
   }
-
 
   /* ----------------- *
    |  Everything else  |
@@ -756,7 +755,7 @@ object SparkSession {
    * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
    * @since 2.0.0
    */
-  def builder: Builder = new Builder
+  def builder(): Builder = new Builder
 
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"

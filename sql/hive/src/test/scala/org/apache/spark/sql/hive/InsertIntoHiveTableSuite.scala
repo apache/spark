@@ -251,7 +251,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
       sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
       // this will pick up the output partitioning from the table definition
-      sqlContext.table("source").write.insertInto("partitioned")
+      spark.table("source").write.insertInto("partitioned")
 
       checkAnswer(sql("SELECT * FROM partitioned"), data.collect().toSeq)
     }
@@ -272,7 +272,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       sql(
         """CREATE TABLE partitioned (id bigint, data string)
           |PARTITIONED BY (part1 string, part2 string)""".stripMargin)
-      sqlContext.table("source").write.insertInto("partitioned")
+      spark.table("source").write.insertInto("partitioned")
 
       checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)
     }
@@ -283,7 +283,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       sql("CREATE TABLE partitioned (id bigint, data string) PARTITIONED BY (part string)")
       val data = (1 to 10).map(i => (i.toLong, s"data-$i")).toDF("id", "data")
 
-      val logical = InsertIntoTable(sqlContext.table("partitioned").logicalPlan,
+      val logical = InsertIntoTable(spark.table("partitioned").logicalPlan,
         Map("part" -> None), data.logicalPlan, overwrite = false, ifNotExists = false)
       assert(!logical.resolved, "Should not resolve: missing partition data")
     }

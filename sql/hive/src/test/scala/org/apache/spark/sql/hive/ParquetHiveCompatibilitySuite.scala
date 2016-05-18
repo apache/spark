@@ -70,12 +70,12 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
                  |$ddl
                """.stripMargin)
 
-            sqlContext.sql(ddl)
+            spark.sql(ddl)
 
-            val schema = sqlContext.table("parquet_compat").schema
-            val rowRDD = sqlContext.sparkContext.parallelize(rows).coalesce(1)
-            sqlContext.createDataFrame(rowRDD, schema).registerTempTable("data")
-            sqlContext.sql("INSERT INTO TABLE parquet_compat SELECT * FROM data")
+            val schema = spark.table("parquet_compat").schema
+            val rowRDD = spark.sparkContext.parallelize(rows).coalesce(1)
+            spark.createDataFrame(rowRDD, schema).registerTempTable("data")
+            spark.sql("INSERT INTO TABLE parquet_compat SELECT * FROM data")
           }
         }
 
@@ -84,7 +84,7 @@ class ParquetHiveCompatibilitySuite extends ParquetCompatibilityTest with TestHi
         // Unfortunately parquet-hive doesn't add `UTF8` annotation to BINARY when writing strings.
         // Have to assume all BINARY values are strings here.
         withSQLConf(SQLConf.PARQUET_BINARY_AS_STRING.key -> "true") {
-          checkAnswer(sqlContext.read.parquet(path), rows)
+          checkAnswer(spark.read.parquet(path), rows)
         }
       }
     }

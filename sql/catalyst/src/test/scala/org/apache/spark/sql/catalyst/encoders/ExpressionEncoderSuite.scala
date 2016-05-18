@@ -108,7 +108,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   encodeDecodeTest(new java.lang.Double(-3.7), "boxed double")
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
-  // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+  encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
 
   encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
@@ -336,6 +336,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
           Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
           Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+        case (left: Comparable[Any], right: Comparable[Any]) => left.compareTo(right) == 0
         case _ => input == convertedBack
       }
 

@@ -100,7 +100,7 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
     }
     writer.start()
 
-    val input = sqlContext.read.format("text").stream(inputDir)
+    val input = spark.read.format("text").stream(inputDir)
 
     def startStream(): ContinuousQuery = {
       val output = input
@@ -150,6 +150,6 @@ class FileStressSuite extends StreamTest with SharedSQLContext {
     streamThread.join()
 
     logError(s"Stream restarted $failures times.")
-    assert(sqlContext.read.parquet(outputDir).distinct().count() == numRecords)
+    assert(spark.read.parquet(outputDir).distinct().count() == numRecords)
   }
 }

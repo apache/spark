@@ -38,7 +38,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
       Vectors.sparse(3, Array(0, 2), Array(5, 5)),
       Vectors.sparse(3, Array(0), Array(-2.5)))
 
-    val df = sqlContext.createDataFrame(data.zip(expected)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(expected)).toDF("features", "expected")
     val scaler = new MinMaxScaler()
       .setInputCol("features")
       .setOutputCol("scaled")
@@ -57,7 +57,7 @@ class MinMaxScalerSuite extends SparkFunSuite with MLlibTestSparkContext with De
 
   test("MinMaxScaler arguments max must be larger than min") {
     withClue("arguments max must be larger than min") {
-      val dummyDF = sqlContext.createDataFrame(Seq(
+      val dummyDF = spark.createDataFrame(Seq(
         (1, Vectors.dense(1.0, 2.0)))).toDF("id", "feature")
       intercept[IllegalArgumentException] {
         val scaler = new MinMaxScaler().setMin(10).setMax(0).setInputCol("feature")

@@ -43,7 +43,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaModelSelectionViaTrainValidationSplitExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaModelSelectionViaTrainValidationSplitExample").getOrCreate();
+      .builder()
+      .appName("JavaModelSelectionViaTrainValidationSplitExample")
+      .getOrCreate();
 
     // $example on$
     Dataset<Row> data = spark.read().format("libsvm")

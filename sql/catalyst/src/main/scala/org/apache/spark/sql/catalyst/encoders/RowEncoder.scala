@@ -25,12 +25,33 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
  * internal binary representation.
+ *
+ * The following is a mapping between Spark SQL types and its allowed external types:
+ * {{{
+ *   BooleanType -> java.lang.Boolean
+ *   ByteType -> java.lang.Byte
+ *   ShortType -> java.lang.Short
+ *   IntegerType -> java.lang.Integer
+ *   FloatType -> java.lang.Float
+ *   DoubleType -> java.lang.Double
+ *   StringType -> String
+ *   DecimalType -> java.math.BigDecimal or scala.math.BigDecimal or Decimal
+ *
+ *   DateType -> java.sql.Date
+ *   TimestampType -> java.sql.Timestamp
+ *
+ *   BinaryType -> byte array
+ *   ArrayType -> scala.collection.Seq or Array
+ *   MapType -> scala.collection.Map
+ *   StructType -> org.apache.spark.sql.Row or Product
+ * }}}
  */
 object RowEncoder {
   def apply(schema: StructType): ExpressionEncoder[Row] = {
@@ -84,10 +105,10 @@ object RowEncoder {
         "fromJavaDate",
         inputObject :: Nil)
 
-    case _: DecimalType =>
+    case d: DecimalType =>
       StaticInvoke(
         Decimal.getClass,
-        DecimalType.SYSTEM_DEFAULT,
+        d,
         "fromDecimal",
         inputObject :: Nil)
 
@@ -162,9 +183,11 @@ object RowEncoder {
    * `org.apache.spark.sql.types.Decimal`.
    */
   private def externalDataTypeForInput(dt: DataType): DataType = dt match {
-    // In order to support both Decimal and java BigDecimal in external row, we make this
+    // In order to support both Decimal and java/scala BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
+    // In order to support both Array and Seq in external row, we make this as java.lang.Object.
+    case _: ArrayType => ObjectType(classOf[java.lang.Object])
     case _ => externalDataTypeFor(dt)
   }
 

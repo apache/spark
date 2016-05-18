@@ -290,7 +290,7 @@ trait StreamTest extends QueryTest with Timeouts {
             verify(currentStream == null, "stream already running")
             lastStream = currentStream
             currentStream =
-              sqlContext
+              spark
                 .streams
                 .startQuery(
                   StreamExecution.nextName,

@@ -53,6 +53,7 @@ class ListingFileCatalog(
     if (cachedPartitionSpec == null) {
       cachedPartitionSpec = inferPartitioning()
     }
+    logTrace(s"Partition spec: $cachedPartitionSpec")
     cachedPartitionSpec
   }
 

@@ -183,7 +183,7 @@ class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
   }
 
   test("pipeline validateParams") {
-    val df = sqlContext.createDataFrame(
+    val df = spark.createDataFrame(
       Seq(
         (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
         (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),

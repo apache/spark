@@ -26,32 +26,37 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaAssociationRulesSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaFPGrowth");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaAssociationRulesSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
   public void runAssociationRules() {
 
     @SuppressWarnings("unchecked")
-    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = sc.parallelize(Arrays.asList(
-      new FreqItemset<String>(new String[] {"a"}, 15L),
-      new FreqItemset<String>(new String[] {"b"}, 35L),
-      new FreqItemset<String>(new String[] {"a", "b"}, 12L)
+    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = jsc.parallelize(Arrays.asList(
+      new FreqItemset<String>(new String[]{"a"}, 15L),
+      new FreqItemset<String>(new String[]{"b"}, 35L),
+      new FreqItemset<String>(new String[]{"a", "b"}, 12L)
     ));
 
     JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).run(freqItemsets);
   }
 }
-

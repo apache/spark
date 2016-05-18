@@ -38,6 +38,6 @@ class MulticlassClassificationEvaluatorSuite
   }
 
   test("should support all NumericType labels and not support other types") {
-    MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, sqlContext)
+    MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, spark)
   }
 }

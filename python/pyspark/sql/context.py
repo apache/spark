@@ -302,7 +302,7 @@ class SQLContext(object):
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
-        self.sparkSession.catalog.registerTable(df, tableName)
+        df.createOrReplaceTempView(tableName)
 
     @since(1.6)
     def dropTempTable(self, tableName):
@@ -311,7 +311,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
-        self.sparkSession.catalog.dropTempTable(tableName)
+        self.sparkSession.catalog.dropTempView(tableName)
 
     @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
@@ -455,7 +455,7 @@ class HiveContext(SQLContext):
 
     def __init__(self, sparkContext, jhiveContext=None):
         if jhiveContext is None:
-            sparkSession = SparkSession.withHiveSupport(sparkContext)
+            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

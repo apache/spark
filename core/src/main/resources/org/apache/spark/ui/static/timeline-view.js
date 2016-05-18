@@ -41,7 +41,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
     $(".item.range.job.application-timeline-object").each(function() {
       var getSelectorForJobEntry = function(baseElem) {
         var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
-        var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
+        var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
        return "#job-" + jobId;
       };
 
@@ -113,7 +113,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
     $(".item.range.stage.job-timeline-object").each(function() {
       var getSelectorForStageEntry = function(baseElem) {
         var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
-        var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].split(".");
+        var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)$")[1].split(".");
         return "#stage-" + stageIdAndAttempt[0] + "-" + stageIdAndAttempt[1];
       };
 

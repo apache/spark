@@ -453,11 +453,11 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
   test("schema merging failure error message") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sqlContext.range(3).write.parquet(s"$path/p=1")
-      sqlContext.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
+      spark.range(3).write.parquet(s"$path/p=1")
+      spark.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
 
       val message = intercept[SparkException] {
-        sqlContext.read.option("mergeSchema", "true").parquet(path).schema
+        spark.read.option("mergeSchema", "true").parquet(path).schema
       }.getMessage
 
       assert(message.contains("Failed merging schema of file"))
@@ -466,13 +466,13 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
     // test for second merging (after read Parquet schema in parallel done)
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sqlContext.range(3).write.parquet(s"$path/p=1")
-      sqlContext.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
+      spark.range(3).write.parquet(s"$path/p=1")
+      spark.range(3).selectExpr("CAST(id AS INT) AS id").write.parquet(s"$path/p=2")
 
-      sqlContext.sparkContext.conf.set("spark.default.parallelism", "20")
+      spark.sparkContext.conf.set("spark.default.parallelism", "20")
 
       val message = intercept[SparkException] {
-        sqlContext.read.option("mergeSchema", "true").parquet(path).schema
+        spark.read.option("mergeSchema", "true").parquet(path).schema
       }.getMessage
 
       assert(message.contains("Failed merging schema:"))

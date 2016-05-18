@@ -21,43 +21,44 @@ import java.util.Arrays;
 import java.util.List;
 
 import edu.emory.mathcs.jtransforms.dct.DoubleDCT_1D;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
 public class JavaDCTSuite {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
+  private transient SparkSession spark;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaDCTSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaDCTSuite")
+      .getOrCreate();
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
   public void javaCompatibilityTest() {
-    double[] input = new double[] {1D, 2D, 3D, 4D};
-    Dataset<Row> dataset = jsql.createDataFrame(
+    double[] input = new double[]{1D, 2D, 3D, 4D};
+    Dataset<Row> dataset = spark.createDataFrame(
       Arrays.asList(RowFactory.create(Vectors.dense(input))),
       new StructType(new StructField[]{
         new StructField("vec", (new VectorUDT()), false, Metadata.empty())

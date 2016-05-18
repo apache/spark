@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.columnar
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.commons.lang.StringUtils
+
 import org.apache.spark.{Accumulable, Accumulator}
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
@@ -177,7 +179,9 @@ private[sql] case class InMemoryRelation(
       }
     }.persist(storageLevel)
 
-    cached.setName(tableName.map(n => s"In-memory table $n").getOrElse(child.toString))
+    cached.setName(
+      tableName.map(n => s"In-memory table $n")
+        .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
     _cachedColumnBuffers = cached
   }
 

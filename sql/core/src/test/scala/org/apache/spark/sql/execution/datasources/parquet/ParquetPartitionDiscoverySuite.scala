@@ -400,7 +400,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       // Introduce _temporary dir to the base dir the robustness of the schema discovery process.
       new File(base.getCanonicalPath, "_temporary").mkdir()
 
-      sqlContext.read.parquet(base.getCanonicalPath).registerTempTable("t")
+      spark.read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -484,7 +484,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      sqlContext.read.parquet(base.getCanonicalPath).registerTempTable("t")
+      spark.read.parquet(base.getCanonicalPath).registerTempTable("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -532,7 +532,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = sqlContext.read.format("parquet").load(base.getCanonicalPath)
+      val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -572,7 +572,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      val parquetRelation = sqlContext.read.format("parquet").load(base.getCanonicalPath)
+      val parquetRelation = spark.read.format("parquet").load(base.getCanonicalPath)
       parquetRelation.registerTempTable("t")
 
       withTempTable("t") {
@@ -604,7 +604,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         (1 to 10).map(i => (i, i.toString)).toDF("intField", "stringField"),
         makePartitionDir(base, defaultPartitionName, "pi" -> 2))
 
-      sqlContext
+      spark
         .read
         .option("mergeSchema", "true")
         .format("parquet")
@@ -622,7 +622,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
   test("SPARK-7749 Non-partitioned table should have empty partition spec") {
     withTempPath { dir =>
       (1 to 10).map(i => (i, i.toString)).toDF("a", "b").write.parquet(dir.getCanonicalPath)
-      val queryExecution = sqlContext.read.parquet(dir.getCanonicalPath).queryExecution
+      val queryExecution = spark.read.parquet(dir.getCanonicalPath).queryExecution
       queryExecution.analyzed.collectFirst {
         case LogicalRelation(relation: HadoopFsRelation, _, _) =>
           assert(relation.partitionSpec === PartitionSpec.emptySpec)
@@ -636,7 +636,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       val df = Seq("/", "[]", "?").zipWithIndex.map(_.swap).toDF("i", "s")
       df.write.format("parquet").partitionBy("s").save(dir.getCanonicalPath)
-      checkAnswer(sqlContext.read.parquet(dir.getCanonicalPath), df.collect())
+      checkAnswer(spark.read.parquet(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -676,12 +676,12 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     }
 
     val schema = StructType(partitionColumns :+ StructField(s"i", StringType))
-    val df = sqlContext.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
+    val df = spark.createDataFrame(sparkContext.parallelize(row :: Nil), schema)
 
     withTempPath { dir =>
       df.write.format("parquet").partitionBy(partitionColumns.map(_.name): _*).save(dir.toString)
       val fields = schema.map(f => Column(f.name).cast(f.dataType))
-      checkAnswer(sqlContext.read.load(dir.toString).select(fields: _*), row)
+      checkAnswer(spark.read.load(dir.toString).select(fields: _*), row)
     }
   }
 
@@ -697,7 +697,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       Files.touch(new File(s"${dir.getCanonicalPath}/b=1", ".DS_Store"))
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
-      checkAnswer(sqlContext.read.format("parquet").load(dir.getCanonicalPath), df)
+      checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df)
     }
   }
 
@@ -714,7 +714,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
-      checkAnswer(sqlContext.read.format("parquet").load(tablePath.getCanonicalPath), df)
+      checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
 
     withTempPath { dir =>
@@ -731,7 +731,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       Files.touch(new File(s"${tablePath.getCanonicalPath}/", "_SUCCESS"))
       Files.createParentDirs(new File(s"${dir.getCanonicalPath}/b=1/c=1/.foo/bar"))
 
-      checkAnswer(sqlContext.read.format("parquet").load(tablePath.getCanonicalPath), df)
+      checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
     }
   }
 
@@ -746,7 +746,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         .save(tablePath.getCanonicalPath)
 
       val twoPartitionsDF =
-        sqlContext
+        spark
           .read
           .option("basePath", tablePath.getCanonicalPath)
           .parquet(
@@ -756,7 +756,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       checkAnswer(twoPartitionsDF, df.filter("b != 3"))
 
       intercept[AssertionError] {
-        sqlContext
+        spark
           .read
           .parquet(
             s"${tablePath.getCanonicalPath}/b=1",
@@ -829,7 +829,7 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
           Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1", "_SUCCESS"))
           Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1", "_SUCCESS"))
           Files.touch(new File(s"${tablePath.getCanonicalPath}/b=1/c=1/d=1", "_SUCCESS"))
-          checkAnswer(sqlContext.read.format("parquet").load(tablePath.getCanonicalPath), df)
+          checkAnswer(spark.read.format("parquet").load(tablePath.getCanonicalPath), df)
         }
       }
     }
@@ -884,9 +884,9 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
     withTempPath { dir =>
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "1") {
         val path = dir.getCanonicalPath
-        val df = sqlContext.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
+        val df = spark.range(5).select('id as 'a, 'id as 'b, 'id as 'c).coalesce(1)
         df.write.partitionBy("b", "c").parquet(path)
-        checkAnswer(sqlContext.read.parquet(path), df)
+        checkAnswer(spark.read.parquet(path), df)
       }
     }
   }

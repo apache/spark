@@ -597,7 +597,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sparkSession.registerTable(df, tableName)
+    sparkSession.createTempView(tableName, df, replaceIfExists = true)
   }
 
   /**
@@ -609,7 +609,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def dropTempTable(tableName: String): Unit = {
-    sparkSession.catalog.dropTempTable(tableName)
+    sparkSession.catalog.dropTempView(tableName)
   }
 
   /**

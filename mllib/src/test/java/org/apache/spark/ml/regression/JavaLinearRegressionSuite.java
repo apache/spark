@@ -30,25 +30,26 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite
-  .generateLogisticInputAsList;
-
+import org.apache.spark.sql.SparkSession;
+import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 public class JavaLinearRegressionSuite implements Serializable {
 
+  private transient SparkSession spark;
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
   private transient Dataset<Row> dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaLinearRegressionSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaLinearRegressionSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
-    dataset = jsql.createDataFrame(datasetRDD, LabeledPoint.class);
+    dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
     dataset.registerTempTable("dataset");
   }
 
@@ -65,7 +66,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     assertEquals("auto", lr.getSolver());
     LinearRegressionModel model = lr.fit(dataset);
     model.transform(dataset).registerTempTable("prediction");
-    Dataset<Row> predictions = jsql.sql("SELECT label, prediction FROM prediction");
+    Dataset<Row> predictions = spark.sql("SELECT label, prediction FROM prediction");
     predictions.collect();
     // Check defaults
     assertEquals("features", model.getFeaturesCol());
@@ -76,8 +77,8 @@ public class JavaLinearRegressionSuite implements Serializable {
   public void linearRegressionWithSetters() {
     // Set params, train, and check as many params as we can.
     LinearRegression lr = new LinearRegression()
-        .setMaxIter(10)
-        .setRegParam(1.0).setSolver("l-bfgs");
+      .setMaxIter(10)
+      .setRegParam(1.0).setSolver("l-bfgs");
     LinearRegressionModel model = lr.fit(dataset);
     LinearRegression parent = (LinearRegression) model.parent();
     assertEquals(10, parent.getMaxIter());
@@ -85,7 +86,7 @@ public class JavaLinearRegressionSuite implements Serializable {
 
     // Call fit() with new params, and check as many params as we can.
     LinearRegressionModel model2 =
-        lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1), lr.predictionCol().w("thePred"));
+      lr.fit(dataset, lr.maxIter().w(5), lr.regParam().w(0.1), lr.predictionCol().w("thePred"));
     LinearRegression parent2 = (LinearRegression) model2.parent();
     assertEquals(5, parent2.getMaxIter());
     assertEquals(0.1, parent2.getRegParam(), 0.0);

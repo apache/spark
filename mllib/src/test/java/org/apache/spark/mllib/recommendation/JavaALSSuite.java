@@ -32,40 +32,46 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaALSSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaALS");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaALS")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   private void validatePrediction(
-      MatrixFactorizationModel model,
-      int users,
-      int products,
-      double[] trueRatings,
-      double matchThreshold,
-      boolean implicitPrefs,
-      double[] truePrefs) {
+    MatrixFactorizationModel model,
+    int users,
+    int products,
+    double[] trueRatings,
+    double matchThreshold,
+    boolean implicitPrefs,
+    double[] truePrefs) {
     List<Tuple2<Integer, Integer>> localUsersProducts = new ArrayList<>(users * products);
-    for (int u=0; u < users; ++u) {
-      for (int p=0; p < products; ++p) {
+    for (int u = 0; u < users; ++u) {
+      for (int p = 0; p < products; ++p) {
         localUsersProducts.add(new Tuple2<>(u, p));
       }
     }
-    JavaPairRDD<Integer, Integer> usersProducts = sc.parallelizePairs(localUsersProducts);
+    JavaPairRDD<Integer, Integer> usersProducts = jsc.parallelizePairs(localUsersProducts);
     List<Rating> predictedRatings = model.predict(usersProducts).collect();
     Assert.assertEquals(users * products, predictedRatings.size());
     if (!implicitPrefs) {
-      for (Rating r: predictedRatings) {
+      for (Rating r : predictedRatings) {
         double prediction = r.rating();
         double correct = trueRatings[r.product() * users + r.user()];
         Assert.assertTrue(String.format("Prediction=%2.4f not below match threshold of %2.2f",
@@ -76,7 +82,7 @@ public class JavaALSSuite implements Serializable {
       // (ref Mahout's implicit ALS tests)
       double sqErr = 0.0;
       double denom = 0.0;
-      for (Rating r: predictedRatings) {
+      for (Rating r : predictedRatings) {
         double prediction = r.rating();
         double truePref = truePrefs[r.product() * users + r.user()];
         double confidence = 1.0 +
@@ -98,9 +104,9 @@ public class JavaALSSuite implements Serializable {
     int users = 50;
     int products = 100;
     Tuple3<List<Rating>, double[], double[]> testData =
-        ALSSuite.generateRatingsAsJava(users, products, features, 0.7, false, false);
+      ALSSuite.generateRatingsAsJava(users, products, features, 0.7, false, false);
 
-    JavaRDD<Rating> data = sc.parallelize(testData._1());
+    JavaRDD<Rating> data = jsc.parallelize(testData._1());
     MatrixFactorizationModel model = ALS.train(data.rdd(), features, iterations);
     validatePrediction(model, users, products, testData._2(), 0.3, false, testData._3());
   }
@@ -112,9 +118,9 @@ public class JavaALSSuite implements Serializable {
     int users = 100;
     int products = 200;
     Tuple3<List<Rating>, double[], double[]> testData =
-        ALSSuite.generateRatingsAsJava(users, products, features, 0.7, false, false);
+      ALSSuite.generateRatingsAsJava(users, products, features, 0.7, false, false);
 
-    JavaRDD<Rating> data = sc.parallelize(testData._1());
+    JavaRDD<Rating> data = jsc.parallelize(testData._1());
 
     MatrixFactorizationModel model = new ALS().setRank(features)
       .setIterations(iterations)
@@ -129,9 +135,9 @@ public class JavaALSSuite implements Serializable {
     int users = 80;
     int products = 160;
     Tuple3<List<Rating>, double[], double[]> testData =
-        ALSSuite.generateRatingsAsJava(users, products, features, 0.7, true, false);
+      ALSSuite.generateRatingsAsJava(users, products, features, 0.7, true, false);
 
-    JavaRDD<Rating> data = sc.parallelize(testData._1());
+    JavaRDD<Rating> data = jsc.parallelize(testData._1());
     MatrixFactorizationModel model = ALS.trainImplicit(data.rdd(), features, iterations);
     validatePrediction(model, users, products, testData._2(), 0.4, true, testData._3());
   }
@@ -143,9 +149,9 @@ public class JavaALSSuite implements Serializable {
     int users = 100;
     int products = 200;
     Tuple3<List<Rating>, double[], double[]> testData =
-        ALSSuite.generateRatingsAsJava(users, products, features, 0.7, true, false);
+      ALSSuite.generateRatingsAsJava(users, products, features, 0.7, true, false);
 
-    JavaRDD<Rating> data = sc.parallelize(testData._1());
+    JavaRDD<Rating> data = jsc.parallelize(testData._1());
 
     MatrixFactorizationModel model = new ALS().setRank(features)
       .setIterations(iterations)
@@ -161,9 +167,9 @@ public class JavaALSSuite implements Serializable {
     int users = 80;
     int products = 160;
     Tuple3<List<Rating>, double[], double[]> testData =
-        ALSSuite.generateRatingsAsJava(users, products, features, 0.7, true, true);
+      ALSSuite.generateRatingsAsJava(users, products, features, 0.7, true, true);
 
-    JavaRDD<Rating> data = sc.parallelize(testData._1());
+    JavaRDD<Rating> data = jsc.parallelize(testData._1());
     MatrixFactorizationModel model = new ALS().setRank(features)
       .setIterations(iterations)
       .setImplicitPrefs(true)
@@ -179,8 +185,8 @@ public class JavaALSSuite implements Serializable {
     int users = 200;
     int products = 50;
     List<Rating> testData = ALSSuite.generateRatingsAsJava(
-        users, products, features, 0.7, true, false)._1();
-    JavaRDD<Rating> data = sc.parallelize(testData);
+      users, products, features, 0.7, true, false)._1();
+    JavaRDD<Rating> data = jsc.parallelize(testData);
     MatrixFactorizationModel model = new ALS().setRank(features)
       .setIterations(iterations)
       .setImplicitPrefs(true)
@@ -193,7 +199,7 @@ public class JavaALSSuite implements Serializable {
   private static void validateRecommendations(Rating[] recommendations, int howMany) {
     Assert.assertEquals(howMany, recommendations.length);
     for (int i = 1; i < recommendations.length; i++) {
-      Assert.assertTrue(recommendations[i-1].rating() >= recommendations[i].rating());
+      Assert.assertTrue(recommendations[i - 1].rating() >= recommendations[i].rating());
     }
     Assert.assertTrue(recommendations[0].rating() > 0.7);
   }

@@ -349,6 +349,9 @@ object MimaExcludes {
         // [SPARK-13686][MLLIB][STREAMING] Add a constructor parameter `reqParam` to (Streaming)LinearRegressionWithSGD
         ProblemFilters.exclude[MissingMethodProblem]("org.apache.spark.mllib.regression.LinearRegressionWithSGD.this")
       ) ++ Seq(
+        // SPARK-15250 Remove deprecated json API in DataFrameReader
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.sql.DataFrameReader.json")
+      ) ++ Seq(
         // SPARK-13920: MIMA checks should apply to @Experimental and @DeveloperAPI APIs
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.Aggregator.combineCombinersByKey"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.Aggregator.combineValuesByKey"),
@@ -713,6 +716,14 @@ object MimaExcludes {
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.executor.ShuffleReadMetrics.localBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.remoteBlocksFetched"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.status.api.v1.ShuffleReadMetrics.localBlocksFetched")
+      ) ++ Seq(
+        // [SPARK-15290] Move annotations, like @Since / @DeveloperApi, into spark-tags
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package$"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.package"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Private"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.AlphaComponent"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Experimental"),
+        ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.DeveloperApi")
       )
     case v if v.startsWith("1.6") =>
       Seq(

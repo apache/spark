@@ -517,7 +517,7 @@ class LDAModel(JavaModel):
     def estimatedDocConcentration(self):
         """
         Value for :py:attr:`LDA.docConcentration` estimated from data.
-        If Online LDA was used and :py:attr::`LDA.optimizeDocConcentration` was set to false,
+        If Online LDA was used and :py:attr:`LDA.optimizeDocConcentration` was set to false,
         then this returns the fixed (given) value for the :py:attr:`LDA.docConcentration` parameter.
         """
         return self._call_java("estimatedDocConcentration")

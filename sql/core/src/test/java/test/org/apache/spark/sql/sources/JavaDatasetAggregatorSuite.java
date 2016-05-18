@@ -30,7 +30,7 @@ import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.KeyValueGroupedDataset;
 import org.apache.spark.sql.expressions.Aggregator;
-import org.apache.spark.sql.expressions.java.typed;
+import org.apache.spark.sql.expressions.javalang.typed;
 
 /**
  * Suite for testing the aggregate functionality of Datasets in Java.

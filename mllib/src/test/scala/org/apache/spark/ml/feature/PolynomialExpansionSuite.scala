@@ -59,7 +59,7 @@ class PolynomialExpansionSuite
     Vectors.sparse(19, Array.empty, Array.empty))
 
   test("Polynomial expansion with default parameter") {
-    val df = sqlContext.createDataFrame(data.zip(twoDegreeExpansion)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(twoDegreeExpansion)).toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
@@ -76,7 +76,7 @@ class PolynomialExpansionSuite
   }
 
   test("Polynomial expansion with setter") {
-    val df = sqlContext.createDataFrame(data.zip(threeDegreeExpansion)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(threeDegreeExpansion)).toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
@@ -94,7 +94,7 @@ class PolynomialExpansionSuite
   }
 
   test("Polynomial expansion with degree 1 is identity on vectors") {
-    val df = sqlContext.createDataFrame(data.zip(data)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(data)).toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")

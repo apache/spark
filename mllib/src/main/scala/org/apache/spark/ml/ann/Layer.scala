@@ -64,8 +64,9 @@ private[ann] trait Layer extends Serializable {
    * @return the layer model
    */
   def createModel(initialWeights: BDV[Double]): LayerModel
+
   /**
-   * Returns the instance of the layer with random generated weights
+   * Returns the instance of the layer with random generated weights.
    *
    * @param weights vector for weights initialization, must be equal to weightSize
    * @param random random number generator
@@ -83,11 +84,11 @@ private[ann] trait LayerModel extends Serializable {
 
   val weights: BDV[Double]
   /**
-   * Evaluates the data (process the data through the layer)
+   * Evaluates the data (process the data through the layer).
    * Output is allocated based on the size provided by the
-   * LayerModel implementation and the stack (batch) size
+   * LayerModel implementation and the stack (batch) size.
    * Developer is responsible for checking the size of output
-   * when writing to it
+   * when writing to it.
    *
    * @param data data
    * @param output output (modified in place)
@@ -95,11 +96,11 @@ private[ann] trait LayerModel extends Serializable {
   def eval(data: BDM[Double], output: BDM[Double]): Unit
 
   /**
-   * Computes the delta for back propagation
+   * Computes the delta for back propagation.
    * Delta is allocated based on the size provided by the
-   * LayerModel implementation and the stack (batch) size
+   * LayerModel implementation and the stack (batch) size.
    * Developer is responsible for checking the size of
-   * prevDelta when writing to it
+   * prevDelta when writing to it.
    *
    * @param delta delta of this layer
    * @param output output of this layer
@@ -108,10 +109,10 @@ private[ann] trait LayerModel extends Serializable {
   def computePrevDelta(delta: BDM[Double], output: BDM[Double], prevDelta: BDM[Double]): Unit
 
   /**
-   * Computes the gradient
-   * cumGrad is a wrapper on the part of the weight vector
-   * size of cumGrad is based on weightSize provided by
-   * implementation of LayerModel
+   * Computes the gradient.
+   * cumGrad is a wrapper on the part of the weight vector.
+   * Size of cumGrad is based on weightSize provided by
+   * implementation of LayerModel.
    *
    * @param delta delta for this layer
    * @param input input data
@@ -197,11 +198,11 @@ private[ann] object AffineLayerModel {
   }
 
   /**
-   * Initialize weights randomly in the interval
-   * Uses [Bottou-88] heuristic [-a/sqrt(in); a/sqrt(in)]
-   * where a is chosen in a such way that the weight variance corresponds
+   * Initialize weights randomly in the interval.
+   * Uses [Bottou-88] heuristic [-a/sqrt(in); a/sqrt(in)],
+   * where `a` is chosen in such a way that the weight variance corresponds
    * to the points to the maximal curvature of the activation function
-   * (which is approximately 2.38 for a standard sigmoid)
+   * (which is approximately 2.38 for a standard sigmoid).
    *
    * @param numIn number of inputs
    * @param numOut number of outputs
@@ -306,7 +307,7 @@ private[ann] class FunctionalLayer (val activationFunction: ActivationFunction) 
 /**
  * Functional layer model. Holds no weights.
  *
- * @param layer functiona layer
+ * @param layer functional layer
  */
 private[ann] class FunctionalLayerModel private[ann] (val layer: FunctionalLayer)
   extends LayerModel {
@@ -352,6 +353,7 @@ private[ann] trait TopologyModel extends Serializable {
    * Array of layer models
    */
   val layerModels: Array[LayerModel]
+
   /**
    * Forward propagation
    *
@@ -410,7 +412,7 @@ private[ml] object FeedForwardTopology {
    * Creates a multi-layer perceptron
    *
    * @param layerSizes sizes of layers including input and output size
-   * @param softmaxOnTop wether to use SoftMax or Sigmoid function for an output layer.
+   * @param softmaxOnTop whether to use SoftMax or Sigmoid function for an output layer.
    *                Softmax is default
    * @return multilayer perceptron topology
    */
