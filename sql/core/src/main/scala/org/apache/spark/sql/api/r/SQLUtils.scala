@@ -19,6 +19,7 @@ package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
+import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -108,6 +109,8 @@ private[sql] object SQLUtils {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
         new java.lang.Float(d)
+      // Scala Map is the only allowed external type of map type in Row.
+      case m: java.util.Map[_, _] => m.asScala
       case _ => data
     }
   }
@@ -118,7 +121,7 @@ private[sql] object SQLUtils {
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
       doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
-    }.toSeq)
+    })
   }
 
   private[sql] def rowToRBytes(row: Row): Array[Byte] = {
