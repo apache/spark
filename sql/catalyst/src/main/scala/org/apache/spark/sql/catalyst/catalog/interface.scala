@@ -208,6 +208,6 @@ case class SimpleCatalogRelation(
   }
 
   require(
-    metadata.identifier.database.contains(databaseName),
+    metadata.identifier.database == Some(databaseName),
     "provided database does not match the one specified in the table definition")
 }
