@@ -74,7 +74,7 @@ case class SortPrefix(child: SortOrder) extends UnaryExpression {
       Long.MinValue
     case dt: DecimalType if dt.precision - dt.scale <= Decimal.MAX_LONG_DIGITS =>
       Long.MinValue
-    case dt: DecimalType =>
+    case _: DecimalType =>
       DoublePrefixComparator.computePrefix(Double.NegativeInfinity)
     case _ => 0L
   }
