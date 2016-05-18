@@ -480,15 +480,13 @@ object CreateDataSourceTableUtils extends Logging {
               s"Could not persist $qualifiedTableName in a Hive compatible way. Persisting " +
                 s"it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, e)
-            val table =
-              newSparkSQLSpecificMetastoreTable()
+            val table = newSparkSQLSpecificMetastoreTable()
             sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
         }
 
       case (None, message) =>
         logWarning(message)
-        val table =
-          newSparkSQLSpecificMetastoreTable()
+        val table = newSparkSQLSpecificMetastoreTable()
         sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
     }
   }
