@@ -78,35 +78,35 @@ private[columnar] class BasicColumnBuilder[JvmType](
   }
 
   override def appendColumn(column: ColumnVector, numRows: Integer): Unit = {
-    val row = new org.apache.spark.sql.catalyst.expressions.GenericMutableRow(1)
-    columnType match {
-      case _: ColumnType[Float] =>
-        buffer = ensureFreeSpace(buffer, columnType.defaultSize * numRows)
-        var i = 0
-        while (i < numRows) {
-          if (!column.isNullAt(i)) {
-            val v = column.getFloat(i)
-            print(s"i=$i, v=$v, nRows=$numRows, columnType=${columnType.getClass.getName}\n")
-            // row.setFloat(0, v)
-            // columnType.append(row, 0, buffer)
-            buffer.putFloat(v)
-          }
-          i += 1
+    // val row = new org.apache.spark.sql.catalyst.expressions.GenericMutableRow(1)
+    if (columnType.isInstanceOf[FLOAT.type]) {
+      buffer = ensureFreeSpace(buffer, columnType.defaultSize * numRows)
+      var i = 0
+      while (i < numRows) {
+        if (!column.isNullAt(i)) {
+          val v = column.getFloat(i)
+          print(s"i=$i, v=$v, nRows=$numRows, columnType=${columnType.getClass.getName}\n")
+          // row.setFloat(0, v)
+          // columnType.append(row, 0, buffer)
+          buffer.putFloat(v)
         }
-      case _: ColumnType[Double] =>
-        buffer = ensureFreeSpace(buffer, columnType.defaultSize * numRows)
-        var i = 0
-        while (i < numRows) {
-          if (!column.isNullAt(i)) {
-            val v = column.getDouble(i)
-            print(s"i=$i, v=$v, nRows=$numRows, columnType=${columnType.getClass.getName}\n")
-            // row.setDouble(0, v)
-            // columnType.append(row, 0, buffer)
-            buffer.putDouble(v)
-          }
-          i += 1
+        i += 1
+      }
+    } else if (columnType.isInstanceOf[DOUBLE.type]) {
+      buffer = ensureFreeSpace(buffer, columnType.defaultSize * numRows)
+      var i = 0
+      while (i < numRows) {
+        if (!column.isNullAt(i)) {
+          val v = column.getDouble(i)
+          print(s"i=$i, v=$v, nRows=$numRows, columnType=${columnType.getClass.getName}\n")
+          // row.setDouble(0, v)
+          // columnType.append(row, 0, buffer)
+          buffer.putDouble(v)
         }
-      case _ => throw new UnsupportedOperationException()
+        i += 1
+      }
+    } else {
+      throw new UnsupportedOperationException()
     }
   }
 
