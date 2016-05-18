@@ -189,7 +189,7 @@ object KMeansModel extends MLReadable[KMeansModel] {
    * We store all cluster centers in a single row and use this class to store model data by
    * Spark 1.6 and earlier. A model can be loaded from such older data for backward compatibility.
    */
-  private case class OldData(clusterCenters: Array[Vector])
+  private case class OldData(clusterCenters: Array[OldVector])
 
   /** [[MLWriter]] instance for [[KMeansModel]] */
   private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
@@ -224,13 +224,12 @@ object KMeansModel extends MLReadable[KMeansModel] {
 
       val clusterCenters = if (major.toInt >= 2) {
         val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
-        data.collect().sortBy(_.clusterIdx).map(_.clusterCenter)
+        data.collect().sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
       } else {
         // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.
         sqlContext.read.parquet(dataPath).as[OldData].head().clusterCenters
       }
-      val model = new KMeansModel(metadata.uid,
-        new MLlibKMeansModel(clusterCenters.map(OldVectors.fromML)))
+      val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
