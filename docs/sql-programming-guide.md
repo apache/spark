@@ -529,7 +529,7 @@ case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
 val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt)).toDF()
-people.registerTempTable("people")
+people.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name, age FROM people WHERE age >= 13 AND age <= 19")
@@ -605,7 +605,7 @@ JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").m
 
 // Apply a schema to an RDD of JavaBeans and register it as a table.
 DataFrame schemaPeople = sqlContext.createDataFrame(people, Person.class);
-schemaPeople.registerTempTable("people");
+schemaPeople.createOrReplaceTempView("people");
 
 // SQL can be run over RDDs that have been registered as tables.
 DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -643,7 +643,7 @@ people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
 
 # Infer the schema, and register the DataFrame as a table.
 schemaPeople = sqlContext.createDataFrame(people)
-schemaPeople.registerTempTable("people")
+schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -703,8 +703,8 @@ val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
 // Apply the schema to the RDD.
 val peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema)
 
-// Register the DataFrames as a table.
-peopleDataFrame.registerTempTable("people")
+// Creates a temporary view using the DataFrame.
+peopleDataFrame.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val results = sqlContext.sql("SELECT name FROM people")
@@ -771,10 +771,10 @@ JavaRDD<Row> rowRDD = people.map(
 // Apply the schema to the RDD.
 DataFrame peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema);
 
-// Register the DataFrame as a table.
-peopleDataFrame.registerTempTable("people");
+// Creates a temporary view using the DataFrame.
+peopleDataFrame.createOrReplaceTempView("people");
 
-// SQL can be run over RDDs that have been registered as tables.
+// SQL can be run over a temporary view created using DataFrames.
 DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
@@ -824,8 +824,8 @@ schema = StructType(fields)
 # Apply the schema to the RDD.
 schemaPeople = sqlContext.createDataFrame(people, schema)
 
-# Register the DataFrame as a table.
-schemaPeople.registerTempTable("people")
+# Creates a temporary view using the DataFrame
+schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
 results = sqlContext.sql("SELECT name FROM people")
@@ -844,7 +844,7 @@ for name in names.collect():
 # Data Sources
 
 Spark SQL supports operating on a variety of data sources through the `DataFrame` interface.
-A DataFrame can be operated on as normal RDDs and can also be registered as a temporary table.
+A DataFrame can be operated on as normal RDDs and can also be used to create a temporary view.
 Registering a DataFrame as a table allows you to run SQL queries over its data. This section
 describes the general methods for loading and saving data using the Spark Data Sources and then
 goes into specific options that are available for the built-in data sources.
@@ -1072,8 +1072,8 @@ people.write.parquet("people.parquet")
 // The result of loading a Parquet file is also a DataFrame.
 val parquetFile = sqlContext.read.parquet("people.parquet")
 
-//Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile")
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile")
 val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
@@ -1094,8 +1094,8 @@ schemaPeople.write().parquet("people.parquet");
 // The result of loading a parquet file is also a DataFrame.
 DataFrame parquetFile = sqlContext.read().parquet("people.parquet");
 
-// Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile");
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile");
 DataFrame teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
@@ -1120,8 +1120,8 @@ schemaPeople.write.parquet("people.parquet")
 # The result of loading a parquet file is also a DataFrame.
 parquetFile = sqlContext.read.parquet("people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile");
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile");
 teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
@@ -1144,7 +1144,7 @@ write.parquet(schemaPeople, "people.parquet")
 # The result of loading a parquet file is also a DataFrame.
 parquetFile <- read.parquet(sqlContext, "people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
 registerTempTable(parquetFile, "parquetFile")
 teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 schema <- structType(structField("name", "string"))
@@ -1506,8 +1506,8 @@ people.printSchema()
 //  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
-people.registerTempTable("people")
+// Creates a temporary view using the DataFrame
+people.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -1544,8 +1544,8 @@ people.printSchema();
 //  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
-people.registerTempTable("people");
+// Creates a temporary view using the DataFrame
+people.createOrReplaceTempView("people");
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -1582,8 +1582,8 @@ people.printSchema()
 #  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
-# Register this DataFrame as a table.
-people.registerTempTable("people")
+# Creates a temporary view using the DataFrame.
+people.createOrReplaceTempView("people")
 
 # SQL statements can be run by using the sql methods provided by `sqlContext`.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")

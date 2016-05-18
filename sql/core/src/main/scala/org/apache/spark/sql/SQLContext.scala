@@ -376,7 +376,7 @@ class SQLContext private[sql](
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *  dataFrame.registerTempTable("people")
+   *  dataFrame.createOrReplaceTempView("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *

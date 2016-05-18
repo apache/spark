@@ -294,7 +294,8 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_udf2(self):
         self.spark.catalog.registerFunction("strlen", lambda string: len(string), IntegerType())
-        self.spark.createDataFrame(self.sc.parallelize([Row(a="test")])).registerTempTable("test")
+        self.spark.createDataFrame(self.sc.parallelize([Row(a="test")]))\
+            .createOrReplaceTempView("test")
         [res] = self.spark.sql("SELECT strlen(a) FROM test WHERE strlen(a) > 1").collect()
         self.assertEqual(4, res[0])
 
@@ -320,7 +321,7 @@ class SQLTests(ReusedPySparkTestCase):
     def test_udf_with_array_type(self):
         d = [Row(l=list(range(3)), d={"key": list(range(5))})]
         rdd = self.sc.parallelize(d)
-        self.spark.createDataFrame(rdd).registerTempTable("test")
+        self.spark.createDataFrame(rdd).createOrReplaceTempView("test")
         self.spark.catalog.registerFunction("copylist", lambda l: list(l), ArrayType(IntegerType()))
         self.spark.catalog.registerFunction("maplen", lambda d: len(d), IntegerType())
         [(l1, l2)] = self.spark.sql("select copylist(l), maplen(d) from test").collect()
@@ -360,7 +361,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(df.is_cached)
         self.assertEqual(2, df.count())
 
-        df.registerTempTable("temp")
+        df.createOrReplaceTempView("temp")
         df = self.spark.sql("select foo from temp")
         df.count()
         df.collect()
@@ -420,7 +421,7 @@ class SQLTests(ReusedPySparkTestCase):
         df = self.spark.createDataFrame(rdd)
         self.assertEqual([], df.rdd.map(lambda r: r.l).first())
         self.assertEqual([None, ""], df.rdd.map(lambda r: r.s).collect())
-        df.registerTempTable("test")
+        df.createOrReplaceTempView("test")
         result = self.spark.sql("SELECT l[0].a from test where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
@@ -428,7 +429,7 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(df.schema, df2.schema)
         self.assertEqual({}, df2.rdd.map(lambda r: r.d).first())
         self.assertEqual([None, ""], df2.rdd.map(lambda r: r.s).collect())
-        df2.registerTempTable("test2")
+        df2.createOrReplaceTempView("test2")
         result = self.spark.sql("SELECT l[0].a from test2 where d['key'].d = '2'")
         self.assertEqual(1, result.head()[0])
 
@@ -487,7 +488,7 @@ class SQLTests(ReusedPySparkTestCase):
              datetime(2010, 1, 1, 1, 1, 1), 1, 2, [1, 2, 3], None)
         self.assertEqual(r, results.first())
 
-        df.registerTempTable("table2")
+        df.createOrReplaceTempView("table2")
         r = self.spark.sql("SELECT byte1 - 1 AS byte1, byte2 + 1 AS byte2, " +
                            "short1 + 1 AS short1, short2 - 1 AS short2, int1 - 1 AS int1, " +
                            "float1 + 1.5 as float1 FROM table2").first()
@@ -515,7 +516,7 @@ class SQLTests(ReusedPySparkTestCase):
         row = Row(l=[Row(a=1, b='s')], d={"key": Row(c=1.0, d="2")})
         self.assertEqual(1, row.asDict()['l'][0].a)
         df = self.sc.parallelize([row]).toDF()
-        df.registerTempTable("test")
+        df.createOrReplaceTempView("test")
         row = self.spark.sql("select l, d from test").head()
         self.assertEqual(1, row.asDict()["l"][0].a)
         self.assertEqual(1.0, row.asDict()['d']['key'].c)
@@ -556,7 +557,7 @@ class SQLTests(ReusedPySparkTestCase):
         schema = df.schema
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), ExamplePointUDT)
-        df.registerTempTable("labeled_point")
+        df.createOrReplaceTempView("labeled_point")
         point = self.spark.sql("SELECT point FROM labeled_point").head().point
         self.assertEqual(point, ExamplePoint(1.0, 2.0))
 
@@ -565,7 +566,7 @@ class SQLTests(ReusedPySparkTestCase):
         schema = df.schema
         field = [f for f in schema.fields if f.name == "point"][0]
         self.assertEqual(type(field.dataType), PythonOnlyUDT)
-        df.registerTempTable("labeled_point")
+        df.createOrReplaceTempView("labeled_point")
         point = self.spark.sql("SELECT point FROM labeled_point").head().point
         self.assertEqual(point, PythonOnlyPoint(1.0, 2.0))
 
@@ -1427,7 +1428,7 @@ class SQLTests(ReusedPySparkTestCase):
         spark.sql("CREATE DATABASE some_db")
         self.assertEquals(spark.catalog.listTables(), [])
         self.assertEquals(spark.catalog.listTables("some_db"), [])
-        spark.createDataFrame([(1, 1)]).registerTempTable("temp_tab")
+        spark.createDataFrame([(1, 1)]).createOrReplaceTempView("temp_tab")
         spark.sql("CREATE TABLE tab1 (name STRING, age INT)")
         spark.sql("CREATE TABLE some_db.tab2 (name STRING, age INT)")
         tables = sorted(spark.catalog.listTables(), key=lambda t: t.name)
@@ -1554,8 +1555,8 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_cache(self):
         spark = self.spark
-        spark.createDataFrame([(2, 2), (3, 3)]).registerTempTable("tab1")
-        spark.createDataFrame([(2, 2), (3, 3)]).registerTempTable("tab2")
+        spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab1")
+        spark.createDataFrame([(2, 2), (3, 3)]).createOrReplaceTempView("tab2")
         self.assertFalse(spark.catalog.isCached("tab1"))
         self.assertFalse(spark.catalog.isCached("tab2"))
         spark.catalog.cacheTable("tab1")

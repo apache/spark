@@ -42,7 +42,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
 
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
     df = caseInsensitiveContext.read.json(rdd)
-    df.registerTempTable("jsonTable")
+    df.createOrReplaceTempView("jsonTable")
   }
 
   override def afterAll(): Unit = {
@@ -123,7 +123,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
     // verify the append mode
     df.write.mode(SaveMode.Append).json(path.toString)
     val df2 = df.union(df)
-    df2.registerTempTable("jsonTable2")
+    df2.createOrReplaceTempView("jsonTable2")
 
     checkLoad(df2, "jsonTable2")
   }

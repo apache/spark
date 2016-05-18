@@ -50,7 +50,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
-    dataset.registerTempTable("dataset");
+    dataset.createOrReplaceTempView("dataset");
   }
 
   @After
@@ -65,7 +65,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     assertEquals("label", lr.getLabelCol());
     assertEquals("auto", lr.getSolver());
     LinearRegressionModel model = lr.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, prediction FROM prediction");
     predictions.collect();
     // Check defaults
