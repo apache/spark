@@ -137,7 +137,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = version,
           hadoopVersion = VersionInfo.getVersion,
           sparkConf = sparkConf,
-          hadoopConf,
+          hadoopConf = hadoopConf,
           config = buildConf(),
           ivyPath = ivyPath).createClient()
     }
