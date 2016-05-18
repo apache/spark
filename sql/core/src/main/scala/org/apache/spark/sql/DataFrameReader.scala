@@ -440,10 +440,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a text file and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
+   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value". If the directory structure of the text files
+   * contains partitioning information, those are ignored in the resulting Dataset.
    *
-   * Each line in the text file is a new row in the resulting Dataset. For example:
+   * Each line in the text files is a new element in the resulting Dataset. For example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
