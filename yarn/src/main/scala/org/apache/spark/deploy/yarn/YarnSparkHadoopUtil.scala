@@ -406,6 +406,12 @@ object YarnSparkHadoopUtil {
   }
 
   /**
+   * Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
+   * Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
+   * an inconsistent state.
+   * TODO: If the OOM is not recoverable by rescheduling it on different node, then do
+   * 'something' to fail job ... akin to blacklisting trackers in mapred ?
+   *
    * The handler if an OOM Exception is thrown by the JVM must be configured on Windows
    * differently: the 'taskkill' command should be used, whereas Unix-based systems use 'kill'.
    *
@@ -419,7 +425,9 @@ object YarnSparkHadoopUtil {
    */
   private[yarn] def addOutOfMemoryErrorArgument(javaOpts: ListBuffer[String]): Unit = {
     if (Utils.isWindows) {
-      javaOpts += escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
+      if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
+        javaOpts += escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
+      }
     } else {
       if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
         javaOpts += "-XX:OnOutOfMemoryError='kill %p'"

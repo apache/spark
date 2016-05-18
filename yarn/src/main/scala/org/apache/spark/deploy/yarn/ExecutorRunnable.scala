@@ -128,11 +128,6 @@ private[yarn] class ExecutorRunnable(
     }
   }
 
-  // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
-  // Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
-  // an inconsistent state.
-  // TODO: If the OOM is not recoverable by rescheduling it on different node, then do
-  // 'something' to fail job ... akin to blacklisting trackers in mapred ?
   private def prepareCommand(
       masterAddress: String,
       slaveId: String,
