@@ -84,7 +84,6 @@ class Main {
 
     Map<String, String> env = new HashMap<>();
     List<String> cmd = builder.buildCommand(env);
-
     if (printLaunchCommand) {
       System.err.println("Spark Command: " + join(" ", cmd));
       System.err.println("========================================");
