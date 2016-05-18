@@ -352,7 +352,7 @@ class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by CountVectorizer.
+    Model fitted by :py:class:`CountVectorizer`.
 
     .. versionadded:: 1.6.0
     """
@@ -655,7 +655,7 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by IDF.
+    Model fitted by :py:class:`IDF`.
 
     .. versionadded:: 1.4.0
     """
@@ -1550,7 +1550,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by StandardScaler.
+    Model fitted by :py:class:`StandardScaler`.
 
     .. versionadded:: 1.4.0
     """
@@ -1642,7 +1642,7 @@ class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by StringIndexer.
+    Model fitted by :py:class:`StringIndexer`.
 
     .. versionadded:: 1.4.0
     """
@@ -2024,7 +2024,7 @@ class VectorIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by VectorIndexer.
+    Model fitted by :py:class:`VectorIndexer`.
 
     Transform categorical features to use 0-based indices instead of their original values.
       - Categorical features are mapped to indices.
@@ -2307,7 +2307,7 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by Word2Vec.
+    Model fitted by :py:class:`Word2Vec`.
 
     .. versionadded:: 1.4.0
     """
@@ -2413,7 +2413,7 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by PCA. Transforms vectors to a lower dimensional space.
+    Model fitted by :py:class:`PCA`. Transforms vectors to a lower dimensional space.
 
     .. versionadded:: 1.5.0
     """
@@ -2637,7 +2637,7 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by ChiSqSelector.
+    Model fitted by :py:class:`ChiSqSelector`.
 
     .. versionadded:: 2.0.0
     """
