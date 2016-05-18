@@ -109,6 +109,7 @@ object DecimalType extends AbstractDataType {
   val MAX_SCALE = 38
   val SYSTEM_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 18)
   val USER_DEFAULT: DecimalType = DecimalType(10, 0)
+  val BIGINT_DEFAULT: DecimalType = DecimalType(MAX_PRECISION, 0)
 
   // The decimal types compatible with other numeric types
   private[sql] val ByteDecimal = DecimalType(3, 0)
