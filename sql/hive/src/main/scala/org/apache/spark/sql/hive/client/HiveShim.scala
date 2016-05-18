@@ -286,7 +286,7 @@ private[client] class Shim_v0_12 extends Shim with Logging {
       predicates: Seq[Expression]): Seq[Partition] = {
     // getPartitionsByFilter() doesn't support binary comparison ops in Hive 0.12.
     // See HIVE-4888.
-    logWarning("Hive 0.12 doesn't support predicate pushdown to metastore. " +
+    logDebug("Hive 0.12 doesn't support predicate pushdown to metastore. " +
       "Please use Hive 0.13 or higher.")
     getAllPartitions(hive, table)
   }
@@ -343,46 +343,29 @@ private[client] class Shim_v0_12 extends Shim with Logging {
     dropIndexMethod.invoke(hive, dbName, tableName, indexName, true: JBoolean)
   }
 
-  // Hive 0.12 doesn't support permanent functions. Here we use a in-memory map to simulate the
-  // permanent function registry.
-  private var functionMap = Map.empty[String, CatalogFunction]
-  private val functionDDLNotSupported = "Hive 0.12 doesn't support creating permanent functions. " +
-    "Please use Hive 0.13 or higher."
-
   override def createFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
-    logWarning(functionDDLNotSupported)
-    functionMap += func.identifier.funcName -> func
+    throw new AnalysisException("Hive 0.12 doesn't support creating permanent functions. " +
+      "Please use Hive 0.13 or higher.")
   }
 
   def dropFunction(hive: Hive, db: String, name: String): Unit = {
-    logWarning(functionDDLNotSupported)
-    functionMap -= name
+    throw new NoSuchPermanentFunctionException(db, name)
   }
 
   def renameFunction(hive: Hive, db: String, oldName: String, newName: String): Unit = {
-    logWarning(functionDDLNotSupported)
-    val newFunction: Option[CatalogFunction] = functionMap.get(oldName).map{old =>
-      val newIdentifier = old.identifier.copy(funcName = newName)
-      old.copy(identifier = newIdentifier)
-    }
-
-    newFunction.foreach(createFunction(hive, db, _))
-    dropFunction(hive, db, oldName)
+    throw new NoSuchPermanentFunctionException(db, oldName)
   }
 
   def alterFunction(hive: Hive, db: String, func: CatalogFunction): Unit = {
-    logWarning(functionDDLNotSupported)
-    createFunction(hive, db, func)
+    throw new NoSuchPermanentFunctionException(db, func.identifier.funcName)
   }
 
   def getFunctionOption(hive: Hive, db: String, name: String): Option[CatalogFunction] = {
-    logWarning(functionDDLNotSupported)
-    functionMap.get(name)
+    None
   }
 
   def listFunctions(hive: Hive, db: String, pattern: String): Seq[String] = {
-    logWarning(functionDDLNotSupported)
-    functionMap.keys.toSeq.filter(_.matches(pattern))
+    Seq.empty[String]
   }
 }
 

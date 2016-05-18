@@ -20,18 +20,24 @@ package org.apache.spark.sql.hive.client
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.util.VersionInfo
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal, NamedExpression}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.tags.ExtendedHiveTest
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 /**
  * A simple set of tests that call the methods of a [[HiveClient]], loading different version
@@ -116,7 +122,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     assert(getNestedMessages(e) contains "Unknown column 'A0.OWNER_NAME' in 'field list'")
   }
 
-  private val versions = Seq("12", "13", "14", "1.0.0", "1.1.0", "1.2.0")
+  private val versions = Seq("0.12", "0.13", "0.14", "1.0", "1.1", "1.2")
 
   private var client: HiveClient = null
 
@@ -143,10 +149,9 @@ class VersionsSuite extends SparkFunSuite with Logging {
         schema = Seq(CatalogColumn("key", "int")),
         storage = CatalogStorageFormat(
           locationUri = None,
-          inputFormat = Some(classOf[org.apache.hadoop.mapred.TextInputFormat].getName),
-          outputFormat = Some(
-            classOf[org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat[_, _]].getName),
-          serde = Some(classOf[org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe].getName()),
+          inputFormat = Some(classOf[TextInputFormat].getName),
+          outputFormat = Some(classOf[HiveIgnoreKeyTextOutputFormat[_, _]].getName),
+          serde = Some(classOf[LazySimpleSerDe].getName()),
           compressed = false,
           serdeProperties = Map.empty
         ))
@@ -202,7 +207,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: createTable") {
       client.createTable(table("default", tableName = "src"), ignoreIfExists = false)
-      // Creates a temporary table
       client.createTable(table("default", "temporary"), ignoreIfExists = false)
     }
 
@@ -241,7 +245,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: listTables(database, pattern)") {
       assert(client.listTables("default", pattern = "src") === Seq("src"))
-      assert(client.listTables("default", pattern = "nonexist") === Seq.empty[String])
+      assert(client.listTables("default", pattern = "nonexist").isEmpty)
     }
 
     test(s"$version: dropTable") {
@@ -261,7 +265,6 @@ class VersionsSuite extends SparkFunSuite with Logging {
       compressed = false,
       serdeProperties = Map.empty)
 
-
     test(s"$version: sql create partitioned table") {
       client.runSqlHive("CREATE TABLE src_part (value INT) PARTITIONED BY (key1 INT, key2 INT)")
     }
@@ -279,12 +282,11 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: getPartitionsByFilter") {
       // Only one partition [1, 1] for key2 == 1
-      val result = client.getPartitionsByFilter(client.getTable("default", "src_part"), Seq(EqualTo(
-        AttributeReference("key2", IntegerType, false)(NamedExpression.newExprId),
-        Literal(1))))
+      val result = client.getPartitionsByFilter(client.getTable("default", "src_part"),
+        Seq(EqualTo(AttributeReference("key2", IntegerType)(), Literal(1))))
 
       // Hive 0.12 doesn't support getPartitionsByFilter, it ignores the filter condition.
-      if (version != "12") {
+      if (version != "0.12") {
         assert(result.size == 1)
       }
     }
@@ -351,9 +353,12 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
-      val storage = storageFormat.copy(compressed = true)
+      val newLocation = Utils.createTempDir().getPath()
+      val storage = storageFormat.copy(locationUri = Some(newLocation))
       val partition = CatalogTablePartition(spec, storage)
       client.alterPartitions("default", "src_part", Seq(partition))
+      assert(client.getPartition("default", "src_part", spec)
+        .storage.locationUri == Some(newLocation))
     }
 
     test(s"$version: dropPartitions") {
@@ -373,40 +378,91 @@ class VersionsSuite extends SparkFunSuite with Logging {
 
     test(s"$version: createFunction") {
       val functionClass = "org.apache.spark.MyFunc1"
-      client.createFunction("default", function("func1", functionClass))
+      if (version == "0.12") {
+        // Hive 0.12 doesn't support creating permanent functions
+        intercept[AnalysisException] {
+          client.createFunction("default", function("func1", functionClass))
+        }
+      } else {
+        client.createFunction("default", function("func1", functionClass))
+      }
     }
 
     test(s"$version: functionExists") {
-      assert(client.functionExists("default", "func1") == true)
+      if (version == "0.12") {
+        // Hive 0.12 doesn't allow customized permanent functions
+        assert(client.functionExists("default", "func1") == false)
+      } else {
+        assert(client.functionExists("default", "func1") == true)
+      }
     }
 
     test(s"$version: renameFunction") {
-      client.renameFunction("default", "func1", "func2")
-      assert(client.functionExists("default", "func2") == true)
+      if (version == "0.12") {
+        // Hive 0.12 doesn't allow customized permanent functions
+        intercept[NoSuchPermanentFunctionException] {
+          client.renameFunction("default", "func1", "func2")
+        }
+      } else {
+        client.renameFunction("default", "func1", "func2")
+        assert(client.functionExists("default", "func2") == true)
+      }
     }
 
     test(s"$version: alterFunction") {
       val functionClass = "org.apache.spark.MyFunc2"
-      client.alterFunction("default", function("func2", functionClass))
+      if (version == "0.12") {
+        // Hive 0.12 doesn't allow customized permanent functions
+        intercept[NoSuchPermanentFunctionException] {
+          client.alterFunction("default", function("func2", functionClass))
+        }
+      } else {
+        client.alterFunction("default", function("func2", functionClass))
+      }
     }
 
     test(s"$version: getFunction") {
-      // No exception should be thrown
-      val func = client.getFunction("default", "func2")
-      assert(func.className == "org.apache.spark.MyFunc2")
+      if (version == "0.12") {
+        // Hive 0.12 doesn't allow customized permanent functions
+        intercept[NoSuchPermanentFunctionException] {
+          client.getFunction("default", "func2")
+        }
+      } else {
+        // No exception should be thrown
+        val func = client.getFunction("default", "func2")
+        assert(func.className == "org.apache.spark.MyFunc2")
+      }
     }
 
     test(s"$version: getFunctionOption") {
-      assert(client.getFunctionOption("default", "func2").isDefined)
+      if (version == "0.12") {
+        // Hive 0.12 doesn't allow customized permanent functions
+        assert(client.getFunctionOption("default", "func2").isEmpty)
+      } else {
+        assert(client.getFunctionOption("default", "func2").isDefined)
+      }
     }
 
     test(s"$version: listFunctions") {
-      assert(client.listFunctions("default", "fun.*").size == 1)
+      if (version == "0.12") {
+        // Hive 0.12 doesn't allow customized permanent functions
+        assert(client.listFunctions("default", "fun.*").isEmpty)
+      } else {
+        assert(client.listFunctions("default", "fun.*").size == 1)
+      }
     }
 
     test(s"$version: dropFunction") {
-      client.dropFunction("default", "func2")
-      assert(client.listFunctions("default", "fun.*").size == 0)
+      if (version == "0.12") {
+        // Hive 0.12 doesn't support creating permanent functions
+        intercept[NoSuchPermanentFunctionException] {
+          client.dropFunction("default", "func2")
+        }
+      } else {
+        // No exception should be thrown
+        client.dropFunction("default", "func2")
+        assert(client.listFunctions("default", "fun.*").size == 0)
+      }
     }
 
     ///////////////////////////////////////////////////////////////////////////
@@ -428,7 +484,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
     ///////////////////////////////////////////////////////////////////////////
 
     test(s"$version: version") {
-      client.version.fullVersion
+      assert(client.version.fullVersion.startsWith(version))
     }
 
     test(s"$version: getConf") {
@@ -447,21 +503,29 @@ class VersionsSuite extends SparkFunSuite with Logging {
       client.setError(new PrintStream(new ByteArrayOutputStream()))
     }
 
-    test(s"$version: addJar") {
-      client.addJar(".")
-    }
-
     test(s"$version: newSession") {
       val newClient = client.newSession()
       assert(newClient != null)
     }
 
-    test(s"$version: withHiveState") {
-      client.withHiveState{Thread.currentThread().getContextClassLoader}
+    test(s"$version: withHiveState and addJar") {
+      val newClassPath = "."
+      client.addJar(newClassPath)
+      client.withHiveState {
+        // No exception should be thrown.
+        // withHiveState changes the classloader to MutableURLClassLoader
+        val classLoader = Thread.currentThread().getContextClassLoader
+          .asInstanceOf[MutableURLClassLoader]
+
+        val urls = classLoader.getURLs()
+        urls.contains(new File(newClassPath).toURI.toURL)
+      }
     }
 
     test(s"$version: reset") {
+      // Clears all database, tables, functions...
       client.reset()
+      assert(client.listTables("default").isEmpty)
     }
   }
 }
