@@ -247,7 +247,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
-  test("hive bucketing not supported") {
+  test("hive bucketing is not supported") {
     withTable("t1") {
       createRawHiveTable(
         s"""CREATE TABLE t1 (a INT, b STRING)
@@ -257,9 +257,11 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
          """.stripMargin
       )
 
-      intercept[UnsupportedOperationException] {
+      val cause = intercept[UnsupportedOperationException] {
         sql("SHOW CREATE TABLE t1")
       }
+
+      assert(cause.getMessage.contains(" - bucketing"))
     }
   }
 
