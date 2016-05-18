@@ -299,7 +299,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
    *
    * @return the tuple of the codegen context and the actual generated source.
    */
-  def doCodeGen(): (CodegenContext, SourceCode) = {
+  def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
     val source = s"""
@@ -334,7 +334,10 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
     // try to compile, helpful for debug
     val cleanedSource =
-      new SourceCode(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToCommentMap())
+      new CodeAndComment(
+        CodeFormatter.stripExtraNewLines(source),
+        ctx.copyPlaceHolderToCommentMap())
+
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
     (ctx, cleanedSource)

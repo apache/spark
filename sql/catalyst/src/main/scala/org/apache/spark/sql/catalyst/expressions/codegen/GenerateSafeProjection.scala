@@ -181,7 +181,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       }
     """
 
-    val code = new SourceCode(codeBody, ctx.getPlaceHolderToCommentMap())
+    val code = new CodeAndComment(codeBody, ctx.copyPlaceHolderToCommentMap())
     lazy val formatted = CodeFormatter.format(code)
     logDebug(s"code for ${expressions.mkString(",")}:\n$formatted")
 

@@ -26,7 +26,7 @@ import org.apache.commons.lang3.StringUtils
  * Written by Matei Zaharia.
  */
 object CodeFormatter {
-  def format(code: SourceCode): String = {
+  def format(code: CodeAndComment): String = {
     StringUtils.replaceEach(
       new CodeFormatter().addLines(code.body).result(),
       code.comment.keys.toArray,

@@ -721,9 +721,9 @@ class CodegenContext {
   }
 
   /**
-   * Get a immutable map of the pair of a place holder and a corresponding comment
+   * Copy an immutable map of the pair of a place holder and a corresponding comment
    */
-  def getPlaceHolderToCommentMap(): immutable.Map[String, String] = {
+  def copyPlaceHolderToCommentMap(): immutable.Map[String, String] = {
     immutable.Map() ++ placeHolderToCommentMap
   }
 }
@@ -739,12 +739,12 @@ abstract class GeneratedClass {
 /**
  * A wrapper for the source code to be compiled by [[CodeGenerator]].
  */
-class SourceCode(val body: String, val comment: Map[String, String]) extends Serializable {
+class CodeAndComment(val body: String, val comment: Map[String, String]) extends Serializable {
   override def equals(that: Any): Boolean = {
-    if (!that.isInstanceOf[SourceCode]) {
+    if (!that.isInstanceOf[CodeAndComment]) {
       return false
     }
-    val thatSourceCode = that.asInstanceOf[SourceCode]
+    val thatSourceCode = that.asInstanceOf[CodeAndComment]
     if (thatSourceCode eq null) return false
 
     return body == thatSourceCode.body
@@ -797,14 +797,14 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  def compile(code: SourceCode): GeneratedClass = {
+  def compile(code: CodeAndComment): GeneratedClass = {
     cache.get(code)
   }
 
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: SourceCode): GeneratedClass = {
+  private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
@@ -856,8 +856,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[SourceCode, GeneratedClass]() {
-        override def load(code: SourceCode): GeneratedClass = {
+      new CacheLoader[CodeAndComment, GeneratedClass]() {
+        override def load(code: CodeAndComment): GeneratedClass = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()

@@ -193,7 +193,7 @@ object GenerateUnsafeRowJoiner extends CodeGenerator[(StructType, StructType), U
        |  }
        |}
      """.stripMargin
-    val code = new SourceCode(codeBody, Map.empty)
+    val code = new CodeAndComment(codeBody, Map.empty)
     lazy val formatted = CodeFormatter.format(code)
     logDebug(s"SpecificUnsafeRowJoiner($schema1, $schema2):\n$formatted")
 
