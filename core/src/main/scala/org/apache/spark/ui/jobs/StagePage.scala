@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import java.net.URLEncoder
-import java.util.{Date, TimeZone}
+import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.HashSet

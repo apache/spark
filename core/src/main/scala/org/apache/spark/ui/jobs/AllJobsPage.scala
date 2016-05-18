@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import java.util.{Date, TimeZone}
+import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable.{HashMap, ListBuffer}
