@@ -33,7 +33,7 @@ import org.apache.spark.TaskState._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.CallSite
+import org.apache.spark.util.{CallSite, Utils}
 
 /**
  * Tests for the  entire scheduler code -- DAGScheduler, TaskSchedulerImpl, TaskSets,
@@ -44,7 +44,7 @@ import org.apache.spark.util.CallSite
  * disconnecting, etc.).
  */
 abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends SparkFunSuite
-    with BeforeAndAfter with LocalSparkContext {
+    with LocalSparkContext {
   val conf = new SparkConf
 
   /** Set of TaskSets the DAGScheduler has requested executed. */
@@ -54,12 +54,25 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
   var scheduler: DAGScheduler = null
   var backend: T = _
 
-  before {
+  override def beforeEach(): Unit = {
     runningTaskSets.clear()
     results.clear()
     failure = null
+    super.beforeEach()
+  }
+
+  override def afterEach(): Unit = {
+    super.afterEach()
+    taskScheduler.stop()
+    backend.stop()
+    scheduler.stop()
+  }
+
+  def setupScheduler(conf: SparkConf): Unit = {
+    conf.setAppName(this.getClass().getSimpleName())
     val backendClassName = implicitly[ClassTag[T]].runtimeClass.getName()
-    sc = new SparkContext(s"mock[${backendClassName}]", this.getClass().getSimpleName())
+    conf.setMaster(s"mock[${backendClassName}]")
+    sc = new SparkContext(conf)
     backend = sc.schedulerBackend.asInstanceOf[T]
     taskScheduler = new TaskSchedulerImpl(sc) {
       override def submitTasks(taskSet: TaskSet): Unit = {
@@ -78,10 +91,17 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     taskScheduler.setDAGScheduler(scheduler)
   }
 
-  after {
-    taskScheduler.stop()
-    backend.stop()
-    scheduler.stop()
+  def testScheduler(name: String)(testBody: => Unit): Unit = {
+    testScheduler(name, Seq())(testBody)
+  }
+
+  def testScheduler(name: String, extraConfs: Seq[(String, String)])(testBody: => Unit): Unit = {
+    test(name) {
+      val conf = new SparkConf()
+      extraConfs.foreach{ case (k, v) => conf.set(k, v)}
+      setupScheduler(conf)
+      testBody
+    }
   }
 
   val results = new HashMap[Int, Any]()
@@ -110,11 +130,26 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
 
   protected def assertDataStructuresEmpty(noFailure: Boolean = true): Unit = {
     if (noFailure) {
-      assert(failure === null)
+      // When a job fails, we terminate before waiting for all the task end events to come in,
+      // so there might still be a running task set
+      assert(runningTaskSets.isEmpty)
+      assert(!backend.hasTasks)
+      if (failure != null) {
+        // if there is a job failure, it can be a bit hard to tease the job failure msg apart
+        // from the test failure msg, so we do a little extra formatting
+        val msg =
+        raw"""
+          | There was a failed job.
+          | ----- Begin Job Failure Msg -----
+          | ${Utils.exceptionString(failure)}
+
+          | ----- End Job Failure Msg ----
+        """.
+          stripMargin
+        fail(msg)
+      }
     }
     assert(scheduler.activeJobs.isEmpty)
-    assert(runningTaskSets.isEmpty)
-    assert(!backend.hasTasks)
   }
 
   /**
@@ -308,7 +343,7 @@ private[spark] class SingleCoreMockBackend(
   }
 }
 
-class ExecutorTaskStatus(val host: String, val executorId: String, var freeCores: Int)
+case class ExecutorTaskStatus(host: String, executorId: String, var freeCores: Int)
 
 class MockRDD(
   sc: SparkContext,
@@ -350,7 +385,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
   /**
    * Very simple one stage job.  Backend successfully completes each task, one by one
    */
-  test("super simple job") {
+  testScheduler("super simple job") {
     def runBackend(): Unit = {
       val task = backend.beginTask()
       backend.taskSuccess(task, 42)
@@ -372,7 +407,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    *
    * Backend successfully completes each task
    */
-  test("multi-stage job") {
+  testScheduler("multi-stage job") {
 
     def stageToOutputParts(stageId: Int): Int = {
       stageId match {
@@ -422,7 +457,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    * (a) map output is available whenever we run stage 1
    * (b) we get a second attempt for stage 0 & stage 1
    */
-  test("job with fetch failure") {
+  testScheduler("job with fetch failure") {
     val input = new MockRDD(sc, 2, Nil)
     val shuffledRdd = shuffle(10, input)
     val shuffleId = shuffledRdd.shuffleDeps.head.shuffleId
@@ -462,7 +497,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
     assertDataStructuresEmpty()
   }
 
-  test("job failure after 4 attempts") {
+  testScheduler("job failure after 4 attempts") {
     def runBackend(): Unit = {
       val task = backend.beginTask()
       val failure = new ExceptionFailure(new RuntimeException("test task failure"), Seq())
