@@ -26,14 +26,10 @@ import scala.language.reflectiveCalls
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.{PartitionDropOptions, TableType => HiveTableType}
+import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
-import org.apache.hadoop.hive.metastore.api.{Function => HiveFunction, FunctionType}
-import org.apache.hadoop.hive.metastore.api.{NoSuchObjectException, PrincipalType}
-import org.apache.hadoop.hive.metastore.api.{ResourceType, ResourceUri}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
-import org.apache.hadoop.hive.ql.plan.AddPartitionDesc
 import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.security.UserGroupInformation
@@ -41,13 +37,13 @@ import org.apache.hadoop.security.UserGroupInformation
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{NoSuchDatabaseException, NoSuchPartitionException}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
-import org.apache.spark.util.{CausedBy, CircularBuffer, Utils}
+import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
  * A class that wraps the HiveClient and converts its responses to externally visible classes.
@@ -400,11 +396,7 @@ private[hive] class HiveClientImpl(
       table: String,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = withHiveState {
-    val addPartitionDesc = new AddPartitionDesc(db, table, ignoreIfExists)
-    parts.foreach { s =>
-      addPartitionDesc.addPartition(s.spec.asJava, s.storage.locationUri.orNull)
-    }
-    client.createPartitions(addPartitionDesc)
+    shim.createPartitions(client, db, table, parts, ignoreIfExists)
   }
 
   override def dropPartitions(
@@ -430,10 +422,9 @@ private[hive] class HiveClientImpl(
       }.distinct
     var droppedParts = ArrayBuffer.empty[java.util.List[String]]
     matchingParts.foreach { partition =>
-      val dropOptions = new PartitionDropOptions
-      dropOptions.ifExists = ignoreIfNotExists
       try {
-        client.dropPartition(db, table, partition, dropOptions)
+        val deleteData = true
+        client.dropPartition(db, table, partition, deleteData)
       } catch {
         case e: Exception =>
           val remainingParts = matchingParts.toBuffer -- droppedParts
@@ -629,37 +620,28 @@ private[hive] class HiveClientImpl(
   }
 
   override def createFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    client.createFunction(toHiveFunction(func, db))
+    shim.createFunction(client, db, func)
   }
 
   override def dropFunction(db: String, name: String): Unit = withHiveState {
-    client.dropFunction(db, name)
+    shim.dropFunction(client, db, name)
   }
 
   override def renameFunction(db: String, oldName: String, newName: String): Unit = withHiveState {
-    val catalogFunc = getFunction(db, oldName)
-      .copy(identifier = FunctionIdentifier(newName, Some(db)))
-    val hiveFunc = toHiveFunction(catalogFunc, db)
-    client.alterFunction(db, oldName, hiveFunc)
+    shim.renameFunction(client, db, oldName, newName)
   }
 
   override def alterFunction(db: String, func: CatalogFunction): Unit = withHiveState {
-    client.alterFunction(db, func.identifier.funcName, toHiveFunction(func, db))
+    shim.alterFunction(client, db, func)
   }
 
   override def getFunctionOption(
-      db: String,
-      name: String): Option[CatalogFunction] = withHiveState {
-    try {
-      Option(client.getFunction(db, name)).map(fromHiveFunction)
-    } catch {
-      case CausedBy(ex: NoSuchObjectException) if ex.getMessage.contains(name) =>
-        None
-    }
+      db: String, name: String): Option[CatalogFunction] = withHiveState {
+    shim.getFunctionOption(client, db, name)
   }
 
   override def listFunctions(db: String, pattern: String): Seq[String] = withHiveState {
-    client.getFunctions(db, pattern).asScala
+    shim.listFunctions(client, db, pattern)
   }
 
   def addJar(path: String): Unit = {
@@ -707,36 +689,6 @@ private[hive] class HiveClientImpl(
   private def toOutputFormat(name: String) =
     Utils.classForName(name)
       .asInstanceOf[Class[_ <: org.apache.hadoop.hive.ql.io.HiveOutputFormat[_, _]]]
-
-  private def toHiveFunction(f: CatalogFunction, db: String): HiveFunction = {
-    val resourceUris = f.resources.map { resource =>
-      new ResourceUri(
-        ResourceType.valueOf(resource.resourceType.resourceType.toUpperCase()), resource.uri)
-    }
-    new HiveFunction(
-      f.identifier.funcName,
-      db,
-      f.className,
-      null,
-      PrincipalType.USER,
-      (System.currentTimeMillis / 1000).toInt,
-      FunctionType.JAVA,
-      resourceUris.asJava)
-  }
-
-  private def fromHiveFunction(hf: HiveFunction): CatalogFunction = {
-    val name = FunctionIdentifier(hf.getFunctionName, Option(hf.getDbName))
-    val resources = hf.getResourceUris.asScala.map { uri =>
-      val resourceType = uri.getResourceType() match {
-        case ResourceType.ARCHIVE => "archive"
-        case ResourceType.FILE => "file"
-        case ResourceType.JAR => "jar"
-        case r => throw new AnalysisException(s"Unknown resource type: $r")
-      }
-      FunctionResource(FunctionResourceType.fromString(resourceType), uri.getUri())
-    }
-    new CatalogFunction(name, hf.getClassName, resources)
-  }
 
   private def toHiveColumn(c: CatalogColumn): FieldSchema = {
     new FieldSchema(c.name, c.dataType, c.comment.orNull)
