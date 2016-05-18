@@ -2421,6 +2421,8 @@ object SparkContext extends Logging {
         (backend, scheduler)
 
       case MOCK_REGEX(backendClassName) =>
+        // This is a Scheduler integration test, so we setup a mock backend.  Not a documented
+        // feature or meant to be publicly visible at all.
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backendClass = Utils.classForName(backendClassName)
         val ctor = backendClass.getConstructor(classOf[SparkConf], classOf[TaskSchedulerImpl])
@@ -2528,6 +2530,7 @@ object SparkContext extends Logging {
  * A collection of regexes for extracting information from the master string.
  */
 private object SparkMasterRegex {
+  /** Used for Scheduler integration tests, to plug in a mock backend */
   val MOCK_REGEX = """mock\[(.*)\]""".r
   // Regular expression used for local[N] and local[*] master formats
   val LOCAL_N_REGEX = """local\[([0-9]+|\*)\]""".r
