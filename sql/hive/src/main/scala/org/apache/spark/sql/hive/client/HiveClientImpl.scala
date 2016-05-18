@@ -339,6 +339,13 @@ private[hive] class HiveClientImpl(
       // partition columns are part of the schema
       val partCols = h.getPartCols.asScala.map(fromHiveColumn)
       val schema = h.getCols.asScala.map(fromHiveColumn) ++ partCols
+
+      // Skew spec, storage handler, and bucketing info can't be mapped to CatalogTable (yet)
+      val hasUnsupportedFeatures =
+        !h.getSkewedColNames.isEmpty ||
+          h.getStorageHandler != null ||
+          !h.getBucketCols.isEmpty
+
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -365,7 +372,8 @@ private[hive] class HiveClientImpl(
         ),
         properties = h.getParameters.asScala.toMap,
         viewOriginalText = Option(h.getViewOriginalText),
-        viewText = Option(h.getViewExpandedText))
+        viewText = Option(h.getViewExpandedText),
+        hasUnsupportedFeatures = hasUnsupportedFeatures)
     }
   }
 

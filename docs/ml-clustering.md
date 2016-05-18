@@ -148,3 +148,85 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.
 {% include_example python/ml/bisecting_k_means_example.py %}
 </div>
 </div>
+
+## Gaussian Mixture Model (GMM)
+
+A [Gaussian Mixture Model](http://en.wikipedia.org/wiki/Mixture_model#Multivariate_Gaussian_mixture_model)
+represents a composite distribution whereby points are drawn from one of *k* Gaussian sub-distributions,
+each with its own probability. The `spark.ml` implementation uses the
+[expectation-maximization](http://en.wikipedia.org/wiki/Expectation%E2%80%93maximization_algorithm)
+algorithm to induce the maximum-likelihood model given a set of samples.
+
+`GaussianMixture` is implemented as an `Estimator` and generates a `GaussianMixtureModel` as the base
+model.
+
+### Input Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>featuresCol</td>
+      <td>Vector</td>
+      <td>"features"</td>
+      <td>Feature vector</td>
+    </tr>
+  </tbody>
+</table>
+
+### Output Columns
+
+<table class="table">
+  <thead>
+    <tr>
+      <th align="left">Param name</th>
+      <th align="left">Type(s)</th>
+      <th align="left">Default</th>
+      <th align="left">Description</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>predictionCol</td>
+      <td>Int</td>
+      <td>"prediction"</td>
+      <td>Predicted cluster center</td>
+    </tr>
+    <tr>
+      <td>probabilityCol</td>
+      <td>Vector</td>
+      <td>"probability"</td>
+      <td>Probability of each cluster</td>
+    </tr>
+  </tbody>
+</table>
+
+### Example
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.clustering.GaussianMixture) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/GaussianMixtureExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/clustering/GaussianMixture.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaGaussianMixtureExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.clustering.GaussianMixture) for more details.
+
+{% include_example python/ml/gaussian_mixture_example.py %}
+</div>
+</div>

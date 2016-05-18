@@ -49,9 +49,9 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
-    l.registerTempTable("l")
-    r.registerTempTable("r")
-    t.registerTempTable("t")
+    l.createOrReplaceTempView("l")
+    r.createOrReplaceTempView("r")
+    t.createOrReplaceTempView("t")
   }
 
   test("simple uncorrelated scalar subquery") {
@@ -99,7 +99,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
 
   test("uncorrelated scalar subquery on a DataFrame generated query") {
     val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
-    df.registerTempTable("subqueryData")
+    df.createOrReplaceTempView("subqueryData")
 
     checkAnswer(
       sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),

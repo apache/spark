@@ -2952,8 +2952,8 @@ object functions {
    *  import org.apache.spark.sql._
    *
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-   *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
+   *  val spark = df.sparkSession
+   *  spark.udf.register("simpleUDF", (v: Int) => v * v)
    *  df.select($"id", callUDF("simpleUDF", $"value"))
    * }}}
    *
