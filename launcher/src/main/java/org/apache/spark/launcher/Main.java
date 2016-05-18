@@ -83,16 +83,8 @@ class Main {
     }
 
     Map<String, String> env = new HashMap<>();
-    List<String> cmd = new ArrayList<>();
-    try {
-      cmd = builder.buildCommand(env);
-    } catch (IllegalArgumentException e) {
-      if (argsArray.length == 1) {
-        printUsage();
-      } else {
-        System.err.println(e.getMessage());
-      }
-    }
+    List<String> cmd = builder.buildCommand(env);
+
     if (printLaunchCommand) {
       System.err.println("Spark Command: " + join(" ", cmd));
       System.err.println("========================================");
@@ -108,80 +100,6 @@ class Main {
         System.out.print('\0');
       }
     }
-  }
-
-  private static void printUsage() {
-    String usage = "Usage: spark-submit [options] <app jar | python file> [app arguments]\n" +
-    "Usage: spark-submit --kill [submission ID] --master [spark://...]\n" +
-    "Usage: spark-submit --status [submission ID] --master [spark://...]\n" +
-    "Usage: spark-submit run-example [options] example-class [example args]\n";
-    System.err.println(usage);
-    String mem = CommandBuilderUtils.DEFAULT_MEM;
-    String options =
-    "Options:\n"+
-    "  --master MASTER_URL         spark://host:port, mesos://host:port, yarn, or local.\n" +
-    "  --deploy-mode DEPLOY_MODE   Whether to launch the driver program locally (\"client\") or\n" +
-    "                              on one of the worker machines inside the cluster (\"cluster\")\n" +
-    "                              (Default: client).\n" +
-    "  --class CLASS_NAME          Your application's main class (for Java / Scala apps).\n" +
-    "  --name NAME                 A name of your application.\n" +
-    "  --jars JARS                 Comma-separated list of local jars to include on the driver\n" +
-    "                              and executor classpaths.\n" +
-    "  --packages                  Comma-separated list of maven coordinates of jars to include\n" +
-    "                              on the driver and executor classpaths. Will search the local\n" +
-    "                              maven repo, then maven central and any additional remote\n" +
-    "                              repositories given by --repositories. The format for the\n" +
-    "                              coordinates should be groupId:artifactId:version.\n" +
-    "  --exclude-packages          Comma-separated list of groupId:artifactId, to exclude while\n" +
-    "                              resolving the dependencies provided in --packages to avoid\n" +
-    "                              dependency conflicts.\n" +
-    "  --repositories              Comma-separated list of additional remote repositories to\n" +
-    "                              search for the maven coordinates given with --packages.\n" +
-    "  --py-files PY_FILES         Comma-separated list of .zip, .egg, or .py files to place\n" +
-    "                              on the PYTHONPATH for Python apps.\n" +
-    "  --files FILES               Comma-separated list of files to be placed in the working\n" +
-    "                              directory of each executor.\n\n" +
-    "  --conf PROP=VALUE           Arbitrary Spark configuration property.\n" +
-    "  --properties-file FILE      Path to a file from which to load extra properties. If not\n" +
-    "                              specified, this will look for conf/spark-defaults.conf.\n\n" +
-    "  --driver-memory MEM         Memory for driver (e.g. 1000M, 2G) (Default: " + mem + ").\n" +
-    "  --driver-java-options       Extra Java options to pass to the driver.\n" +
-    "  --driver-library-path       Extra library path entries to pass to the driver.\n" +
-    "  --driver-class-path         Extra class path entries to pass to the driver. Note that\n" +
-    "                              jars added with --jars are automatically included in the\n" +
-    "                              classpath.\n\n" +
-    "  --executor-memory MEM       Memory per executor (e.g. 1000M, 2G) (Default: 1G).\n\n" +
-    "  --proxy-user NAME           User to impersonate when submitting the application.\n" +
-    "                              This argument does not work with --principal / --keytab.\n\n" +
-    "  --help, -h                  Show this help message and exit.\n" +
-    "  --verbose, -v               Print additional debug output.\n" +
-    "  --version,                  Print the version of current Spark.\n\n" +
-    " Spark standalone with cluster deploy mode only:\n" +
-    "  --driver-cores NUM          Cores for driver (Default: 1).\n\n" +
-    " Spark standalone or Mesos with cluster deploy mode only:\n" +
-    "  --supervise                 If given, restarts the driver on failure.\n" +
-    "  --kill SUBMISSION_ID        If given, kills the driver specified.\n" +
-    "  --status SUBMISSION_ID      If given, requests the status of the driver specified.\n\n"+
-    " Spark standalone and Mesos only:\n" +
-    "  --total-executor-cores      NUM Total cores for all executors.\n\n" +
-    " Spark standalone and YARN only:\n" +
-    "  --executor-cores NUM        Number of cores per executor. (Default: 1 in YARN mode,\n" +
-    "                              or all available cores on the worker in standalone mode)\n\n" +
-    " YARN-only:\n" +
-    "  --driver-cores NUM          Number of cores used by the driver, only in cluster mode\n" +
-    "                              (Default: 1).\n" +
-    "  --queue QUEUE_NAME          The YARN queue to submit to (Default: \"default\").\n" +
-    "  --num-executors NUM         Number of executors to launch (Default: 2).\n" +
-    "  --archives ARCHIVES         Comma separated list of archives to be extracted into the\n" +
-    "                              working directory of each executor.\n" +
-    "  --principal PRINCIPAL       Principal to be used to login to KDC, while running on\n" +
-    "                              secure HDFS.\n" +
-    "  --keytab KEYTAB             The full path to the file that contains the keytab for the\n" +
-    "                              principal specified above. This keytab will be copied to\n" +
-    "                              the node running the Application Master via the Secure\n" +
-    "                              Distributed Cache, for renewing the login tickets and the\n" +
-    "                              delegation tokens periodically.\n";
-    System.err.println(options);
   }
 
   /**
