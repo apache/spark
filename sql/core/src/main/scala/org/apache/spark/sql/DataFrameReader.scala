@@ -457,7 +457,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).as[String](sparkSession.implicits.newStringEncoder)
+    format("text").load(paths : _*).select("value")
+      .as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

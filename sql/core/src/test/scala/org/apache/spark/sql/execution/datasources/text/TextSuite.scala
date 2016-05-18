@@ -65,6 +65,16 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("reading partitioned data using read.text()") {
+    val partitionedData = Thread.currentThread().getContextClassLoader
+      .getResource("text-partitioned").toString
+    val df = spark.read.text(partitionedData)
+    val data = df.collect()
+
+    assert(df.schema == new StructType().add("value", StringType))
+    assert(data.length == 2)
+  }
+
   test("support for partitioned reading") {
     val partitionedData = Thread.currentThread().getContextClassLoader
       .getResource("text-partitioned").toString
