@@ -88,7 +88,7 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   def getQuantilesCol: String = $(quantilesCol)
 
   /** Checks whether the input has quantiles column name. */
-  protected def hasQuantilesCol: Boolean = {
+  private[regression] def hasQuantilesCol: Boolean = {
     isDefined(quantilesCol) && $(quantilesCol).nonEmpty
   }
 
