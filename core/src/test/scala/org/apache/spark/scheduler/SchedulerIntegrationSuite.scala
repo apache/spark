@@ -301,7 +301,12 @@ private[spark] abstract class MockBackend(
 
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
 
-  def generateOffers(): Seq[WorkerOffer]
+  def generateOffers(): Seq[WorkerOffer] = {
+    executorIdToExecutor.values.map { exec =>
+      WorkerOffer(executorId = exec.executorId, host = exec.host,
+        cores = exec.freeCores)
+    }.toSeq
+  }
 
   /**
    * This is called by the scheduler whenever it has tasks it would like to schedule
@@ -337,10 +342,6 @@ private[spark] class SingleCoreMockBackend(
   val executorIdToExecutor: Map[String, ExecutorTaskStatus] = Map(
     localExecutorId -> new ExecutorTaskStatus(localExecutorHostname, localExecutorId, freeCores)
   )
-
-  override def generateOffers(): Seq[WorkerOffer] = {
-    Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-  }
 }
 
 case class ExecutorTaskStatus(host: String, executorId: String, var freeCores: Int)

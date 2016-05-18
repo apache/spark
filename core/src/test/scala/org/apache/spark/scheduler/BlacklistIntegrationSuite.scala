@@ -117,13 +117,6 @@ class MultiExecutorMockBackend(
     }.toMap
   }
 
-  override def generateOffers(): Seq[WorkerOffer] = {
-    executorIdToExecutor.values.map { exec =>
-      WorkerOffer(executorId = exec.executorId, host = exec.host,
-        cores = exec.freeCores)
-    }.toSeq
-  }
-
   override def defaultParallelism(): Int = nHosts * nExecutorsPerHost * nCoresPerExecutor
 
   override def killTask(taskId: Long, executorId: String, interruptThread: Boolean): Unit = {
