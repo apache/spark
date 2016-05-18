@@ -330,7 +330,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         trigger)
       continuousQuery
     } else {
-     val dataSource =
+      val dataSource =
         DataSource(
           df.sparkSession,
           className = source,
