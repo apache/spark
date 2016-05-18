@@ -222,17 +222,15 @@ object KMeansModel extends MLReadable[KMeansModel] {
       val versionRegex = "([0-9]+)\\.(.+)".r
       val versionRegex(major, _) = metadata.sparkVersion
 
-      val model = if (major.toInt >= 2) {
+      val clusterCenters = if (major.toInt >= 2) {
         val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
-        val clusterCenters = data.collect().sortBy(_.clusterIdx).map(_.clusterCenter)
-        new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters.map(OldVectors.fromML)))
+        data.collect().sortBy(_.clusterIdx).map(_.clusterCenter)
       } else {
         // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.
-        val data: Dataset[OldData] = sqlContext.read.parquet(dataPath).as[OldData]
-        val clusterCenters = data.head().clusterCenters
-        new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters.map(OldVectors.fromML)))
+        sqlContext.read.parquet(dataPath).as[OldData].head().clusterCenters
       }
-
+      val model = new KMeansModel(metadata.uid,
+        new MLlibKMeansModel(clusterCenters.map(OldVectors.fromML)))
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
