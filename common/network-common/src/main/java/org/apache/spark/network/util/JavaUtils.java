@@ -144,7 +144,7 @@ public class JavaUtils {
     } catch (Exception e) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
     } finally {
-      if (process != null && process.isAlive()) {
+      if (process != null) {
         process.destroy();
       }
     }
