@@ -703,7 +703,7 @@ val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
 // Apply the schema to the RDD.
 val peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema)
 
-// Creates a temporary view.
+// Creates a temporary view using the DataFrame.
 peopleDataFrame.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
@@ -771,10 +771,10 @@ JavaRDD<Row> rowRDD = people.map(
 // Apply the schema to the RDD.
 DataFrame peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema);
 
-// Creates a temporary view.
+// Creates a temporary view using the DataFrame.
 peopleDataFrame.createOrReplaceTempView("people");
 
-// SQL can be run over a temporary view.
+// SQL can be run over a temporary view created using DataFrames.
 DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
@@ -824,7 +824,7 @@ schema = StructType(fields)
 # Apply the schema to the RDD.
 schemaPeople = sqlContext.createDataFrame(people, schema)
 
-# Creates a temporary view
+# Creates a temporary view using the DataFrame
 schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
@@ -1072,7 +1072,7 @@ people.write.parquet("people.parquet")
 // The result of loading a Parquet file is also a DataFrame.
 val parquetFile = sqlContext.read.parquet("people.parquet")
 
-//Parquet files can also be used to create a temporary view and then used in SQL statements.
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
 parquetFile.createOrReplaceTempView("parquetFile")
 val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
@@ -1544,7 +1544,7 @@ people.printSchema();
 //  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Creates a temporary view
+// Creates a temporary view using the DataFrame
 people.createOrReplaceTempView("people");
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
@@ -1582,7 +1582,7 @@ people.printSchema()
 #  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
-# Creates a temporary view.
+# Creates a temporary view using the DataFrame.
 people.createOrReplaceTempView("people")
 
 # SQL statements can be run by using the sql methods provided by `sqlContext`.
