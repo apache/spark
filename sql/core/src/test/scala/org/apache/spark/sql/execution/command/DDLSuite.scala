@@ -29,8 +29,10 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFor
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private val escapedIdentifier = "`(.+)`".r
@@ -348,6 +350,48 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     createTable(catalog, tableIdent1)
     val expectedTable = generateTable(catalog, tableIdent1)
     assert(catalog.getTableMetadata(tableIdent1) === expectedTable)
+  }
+
+  test("create table using") {
+    val catalog = spark.sessionState.catalog
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT, b INT) USING parquet")
+      val table = catalog.getTableMetadata(TableIdentifier("tbl"))
+      assert(table.tableType == CatalogTableType.MANAGED)
+      assert(table.schema == Seq(CatalogColumn("a", "int"), CatalogColumn("b", "int")))
+      assert(table.properties("spark.sql.sources.provider") == "parquet")
+    }
+  }
+
+  test("create table using - with partitioned by") {
+    val catalog = spark.sessionState.catalog
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT, b INT) USING parquet PARTITIONED BY (a)")
+      val table = catalog.getTableMetadata(TableIdentifier("tbl"))
+      assert(table.tableType == CatalogTableType.MANAGED)
+      assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
+      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(DDLUtils.getSchemaFromTableProperties(table) ==
+        Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
+      assert(DDLUtils.getPartitionColumnsFromTableProperties(table) ==
+        Seq("a"))
+    }
+  }
+
+  test("create table using - with bucket") {
+    val catalog = spark.sessionState.catalog
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(a INT, b INT) USING parquet " +
+        "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS")
+      val table = catalog.getTableMetadata(TableIdentifier("tbl"))
+      assert(table.tableType == CatalogTableType.MANAGED)
+      assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
+      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(DDLUtils.getSchemaFromTableProperties(table) ==
+        Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
+      assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
+        Some(BucketSpec(5, Seq("a"), Seq("b"))))
+    }
   }
 
   test("alter table: rename") {

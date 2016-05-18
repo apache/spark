@@ -1187,7 +1187,7 @@ object TPCDSBenchmark {
 
   def setupTables(dataLocation: String): Map[String, Long] = {
     tables.map { tableName =>
-      spark.read.parquet(s"$dataLocation/$tableName").registerTempTable(tableName)
+      spark.read.parquet(s"$dataLocation/$tableName").createOrReplaceTempView(tableName)
       tableName -> spark.table(tableName).count()
     }.toMap
   }

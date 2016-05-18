@@ -165,7 +165,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -183,7 +183,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -237,7 +237,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -265,7 +265,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("CartesianProduct metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)

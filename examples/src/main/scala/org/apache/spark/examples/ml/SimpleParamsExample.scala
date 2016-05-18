@@ -19,9 +19,9 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{Row, SparkSession}
 
 /**

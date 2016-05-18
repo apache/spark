@@ -10,6 +10,9 @@ displayTitle: Feature Extraction and Transformation - spark.mllib
 
 ## TF-IDF
 
+**Note** We recommend using the DataFrame-based API, which is detailed in the [ML user guide on 
+TF-IDF](ml-features.html#tf-idf).
+
 [Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a feature 
 vectorization method widely used in text mining to reflect the importance of a term to a document in the corpus.
 Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.

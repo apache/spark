@@ -266,7 +266,7 @@ class DataFrameReader(object):
         :param tableName: string, name of the table.
 
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
-        >>> df.registerTempTable('tmpTable')
+        >>> df.createOrReplaceTempView('tmpTable')
         >>> spark.read.table('tmpTable').dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
