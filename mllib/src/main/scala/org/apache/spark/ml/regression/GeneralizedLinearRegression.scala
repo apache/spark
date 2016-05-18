@@ -56,7 +56,7 @@ private[regression] trait GeneralizedLinearRegressionBase extends PredictorParam
   @Since("2.0.0")
   final val family: Param[String] = new Param(this, "family",
     "The name of family which is a description of the error distribution to be used in the " +
-      s"model. Supported options: ${supportedFamilyNames.mkString(", ")}. (Default is 'gaussian')",
+      s"model. Supported options: ${supportedFamilyNames.mkString(", ")}.",
     ParamValidators.inArray[String](supportedFamilyNames.toArray))
 
   /** @group getParam */
