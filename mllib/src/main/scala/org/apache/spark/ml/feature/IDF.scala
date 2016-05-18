@@ -38,12 +38,12 @@ import org.apache.spark.sql.types.StructType
 private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol {
 
   /**
-   * The minimum of documents in which a term should appear.
+   * The minimum number of documents in which a term should appear.
    * Default: 0
    * @group param
    */
   final val minDocFreq = new IntParam(
-    this, "minDocFreq", "minimum of documents in which a term should appear for filtering")
+    this, "minDocFreq", "minimum number of documents in which a term should appear for filtering")
 
   setDefault(minDocFreq -> 0)
 
