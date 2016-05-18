@@ -25,11 +25,11 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.regression.LabeledPoint;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import org.apache.spark.ml.feature.LabeledPoint;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 public class JavaLogisticRegressionSuite extends SharedSparkSession implements Serializable {
 
@@ -42,7 +42,7 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession implements S
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
-    dataset.registerTempTable("dataset");
+    dataset.createOrReplaceTempView("dataset");
   }
 
   @Test
@@ -50,7 +50,7 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession implements S
     LogisticRegression lr = new LogisticRegression();
     Assert.assertEquals(lr.getLabelCol(), "label");
     LogisticRegressionModel model = lr.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
     // Check defaults
@@ -79,14 +79,14 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession implements S
 
     // Modify model params, and check that the params worked.
     model.setThreshold(1.0);
-    model.transform(dataset).registerTempTable("predAllZero");
+    model.transform(dataset).createOrReplaceTempView("predAllZero");
     Dataset<Row> predAllZero = spark.sql("SELECT prediction, myProbability FROM predAllZero");
     for (Row r : predAllZero.collectAsList()) {
       Assert.assertEquals(0.0, r.getDouble(0), eps);
     }
     // Call transform with params, and check that the params worked.
     model.transform(dataset, model.threshold().w(0.0), model.probabilityCol().w("myProb"))
-      .registerTempTable("predNotAllZero");
+      .createOrReplaceTempView("predNotAllZero");
     Dataset<Row> predNotAllZero = spark.sql("SELECT prediction, myProb FROM predNotAllZero");
     boolean foundNonZero = false;
     for (Row r : predNotAllZero.collectAsList()) {
@@ -112,7 +112,7 @@ public class JavaLogisticRegressionSuite extends SharedSparkSession implements S
     LogisticRegressionModel model = lr.fit(dataset);
     Assert.assertEquals(2, model.numClasses());
 
-    model.transform(dataset).registerTempTable("transformed");
+    model.transform(dataset).createOrReplaceTempView("transformed");
     Dataset<Row> trans1 = spark.sql("SELECT rawPrediction, probability FROM transformed");
     for (Row row : trans1.collectAsList()) {
       Vector raw = (Vector) row.get(0);

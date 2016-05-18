@@ -21,11 +21,14 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -93,7 +96,9 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
+    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+      case Row(v: Vector) => OldVectors.fromML(v)
+    }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
     copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
@@ -145,7 +150,11 @@ class StandardScalerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
-    val scale = udf { scaler.transform _ }
+
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    val transformer: Vector => Vector = v => scaler.transform(OldVectors.fromML(v)).asML
+
+    val scale = udf(transformer)
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
 

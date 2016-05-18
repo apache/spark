@@ -25,12 +25,13 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.classification.LogisticRegression;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
 import org.apache.spark.ml.param.ParamMap;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+
 
 public class JavaCrossValidatorSuite extends SharedSparkSession implements Serializable {
 

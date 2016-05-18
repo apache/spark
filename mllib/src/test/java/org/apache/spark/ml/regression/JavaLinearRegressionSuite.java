@@ -25,10 +25,10 @@ import static org.junit.Assert.assertEquals;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.regression.LabeledPoint;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 public class JavaLinearRegressionSuite extends SharedSparkSession implements Serializable {
   private transient Dataset<Row> dataset;
@@ -38,7 +38,7 @@ public class JavaLinearRegressionSuite extends SharedSparkSession implements Ser
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
-    dataset.registerTempTable("dataset");
+    dataset.createOrReplaceTempView("dataset");
   }
 
   @Test
@@ -47,7 +47,7 @@ public class JavaLinearRegressionSuite extends SharedSparkSession implements Ser
     assertEquals("label", lr.getLabelCol());
     assertEquals("auto", lr.getSolver());
     LinearRegressionModel model = lr.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, prediction FROM prediction");
     predictions.collect();
     // Check defaults

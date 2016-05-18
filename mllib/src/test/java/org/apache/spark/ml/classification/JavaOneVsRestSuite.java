@@ -27,10 +27,10 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
+import org.apache.spark.ml.feature.LabeledPoint;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 
 public class JavaOneVsRestSuite extends SharedSparkSession implements Serializable {
 

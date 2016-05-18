@@ -22,11 +22,11 @@ import org.junit.Test;
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.classification.LogisticRegression;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.feature.StandardScaler;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import static org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 /**
  * Test Pipeline construction and fitting in Java.
@@ -51,7 +51,7 @@ public class JavaPipelineSuite extends SharedSparkSession {
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[]{scaler, lr});
     PipelineModel model = pipeline.fit(dataset);
-    model.transform(dataset).registerTempTable("prediction");
+    model.transform(dataset).createOrReplaceTempView("prediction");
     Dataset<Row> predictions = spark.sql("SELECT label, probability, prediction FROM prediction");
     predictions.collectAsList();
   }

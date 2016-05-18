@@ -321,7 +321,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
         nanvl($"b", $"e"), nanvl($"e", $"f")),
       Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
     )
-    testData.registerTempTable("t")
+    testData.createOrReplaceTempView("t")
     checkAnswer(
       sql(
         "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +

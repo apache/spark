@@ -98,7 +98,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    sparkContext.parallelize(data).toDF().registerTempTable("t")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
     withTempTable("t") {
       checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
@@ -223,7 +223,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
@@ -233,7 +233,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
@@ -324,7 +324,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
              """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.registerTempTable("empty")
+          emptyDF.createOrReplaceTempView("empty")
 
           // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
@@ -340,7 +340,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           assert(errorMessage.contains("Unable to infer schema for ORC"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-          singleRowDF.registerTempTable("single")
+          singleRowDF.createOrReplaceTempView("single")
 
           spark.sql(
             s"""INSERT INTO TABLE empty_orc
@@ -422,7 +422,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                """.stripMargin)
 
             val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-            singleRowDF.registerTempTable("single")
+            singleRowDF.createOrReplaceTempView("single")
 
             spark.sql(
               s"""INSERT INTO TABLE dummy_orc

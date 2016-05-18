@@ -19,10 +19,11 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{DoubleParam, ParamValidators}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -52,7 +53,7 @@ class Normalizer(override val uid: String)
 
   override protected def createTransformFunc: Vector => Vector = {
     val normalizer = new feature.Normalizer($(p))
-    normalizer.transform
+    vector => normalizer.transform(OldVectors.fromML(vector)).asML
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
