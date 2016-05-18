@@ -72,12 +72,64 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       inputTypes: Seq[DataType],
       bufferHolder: String,
       isTopLevel: Boolean = false): String = {
+    var colOutVars: Seq[String] = Seq.empty
     val rowWriterClass = classOf[UnsafeRowWriter].getName
     val rowWriter = ctx.freshName("rowWriter")
-    ctx.addMutableState(rowWriterClass, rowWriter,
-      s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+    if (!ctx.generateColumnWrite) {
+      ctx.addMutableState(rowWriterClass, rowWriter,
+        s"this.$rowWriter = new $rowWriterClass($bufferHolder, ${inputs.length});")
+    } else if (isTopLevel) {
+      val columnarBatchClz = "org.apache.spark.sql.execution.vectorized.ColumnarBatch"
+      val columnVectorClz = "org.apache.spark.sql.execution.vectorized.ColumnVector"
 
-    val resetWriter = if (isTopLevel) {
+      ctx.columnarBatch = ctx.freshName("columnarBatch")
+      ctx.addMutableState(s"$columnarBatchClz", ctx.columnarBatch, "")
+
+      val metadataEmpty = "org.apache.spark.sql.types.Metadata.empty()"
+      val columnarBatchAllocate = inputs.zip(inputTypes).zipWithIndex.map {
+        case ((input, dataType), index) =>
+        val dt = dataType match {
+          case udt: UserDefinedType[_] => udt.sqlType
+          case other => other
+        }
+        val dtClsName = dt match {
+          case FloatType => "org.apache.spark.sql.types.DataTypes.FloatType"
+          case DoubleType => "org.apache.spark.sql.types.DataTypes.DoubleType"
+          case _ => throw new UnsupportedOperationException()
+        }
+        s"""
+        new org.apache.spark.sql.types.StructField(
+          "col$index", $dtClsName, ${(input.isNull != "false")}, $metadataEmpty)
+       """.stripMargin + (if (inputs.length  - 1 != index) "," else "")
+      }
+
+      colOutVars = inputs.indices.map(i => ctx.freshName("colOutInstance" + i))
+      val columnOutAssigns = colOutVars.zipWithIndex.map { case (name, i) =>
+        ctx.addMutableState(columnVectorClz, name, "")
+        s"$name = ${ctx.columnarBatch}.column($i);"
+      }
+
+      val batchSchema = ctx.freshName("batchSchema")
+      val allocateCS = ctx.freshName("allocateColumnarStorage")
+      ctx.addNewFunction(allocateCS,
+        s"""
+         |void $allocateCS() {
+         |org.apache.spark.sql.types.StructType $batchSchema =
+         |  new org.apache.spark.sql.types.StructType(
+         |    new org.apache.spark.sql.types.StructField[] {
+         |  ${columnarBatchAllocate.mkString("\n")}
+         |});
+         |
+         |${ctx.columnarBatch} = ${columnarBatchClz}.allocate(
+         |  $batchSchema, org.apache.spark.memory.MemoryMode.ON_HEAP);
+         |registerColumnarBatch(${ctx.columnarBatch});
+         |${columnOutAssigns.mkString("", "\n", "\n")}
+         |}
+       """.stripMargin)
+      ctx.addMutableState("", "", s"$allocateCS();");
+    }
+
+    val resetWriter = if (ctx.generateColumnWrite) "" else if (isTopLevel) {
       // For top level row writer, it always writes to the beginning of the global buffer holder,
       // which means its fixed-size region always in the same position, so we don't need to call
       // `reset` to set up its fixed-size region every time.
@@ -100,14 +152,21 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
         }
         val tmpCursor = ctx.freshName("tmpCursor")
 
-        val setNull = dt match {
+        val setNull = if (ctx.generateColumnWrite) {
+          s"${colOutVars(index)}.putNull(${ctx.rowWriteIdx});"
+        } else dt match {
           case t: DecimalType if t.precision > Decimal.MAX_LONG_DIGITS =>
             // Can't call setNullAt() for DecimalType with precision larger than 18.
             s"$rowWriter.write($index, (Decimal) null, ${t.precision}, ${t.scale});"
           case _ => s"$rowWriter.setNullAt($index);"
         }
 
-        val writeField = dt match {
+        val writeField = if (ctx.generateColumnWrite) {
+          s"""
+           System.out.println("rowIdx["+${ctx.rowWriteIdx}+"]: v="+${input.value});
+           ${colOutVars(index)}.putFloat(${ctx.rowWriteIdx}, ${input.value});
+         """.stripMargin
+        } else dt match {
           case t: StructType =>
             s"""
               // Remember the current cursor so that we can calculate how many bytes are
@@ -299,19 +358,23 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
     val exprEvals = ctx.generateExpressions(expressions, useSubexprElimination)
     val exprTypes = expressions.map(_.dataType)
 
-    val numVarLenFields = exprTypes.count {
+    val numVarLenFields = if (ctx.generateColumnWrite) 0 else exprTypes.count {
       case dt if UnsafeRow.isFixedLength(dt) => false
       // TODO: consider large decimal and interval type
       case _ => true
     }
 
     val result = ctx.freshName("result")
-    ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+    if (!ctx.generateColumnWrite) {
+      ctx.addMutableState("UnsafeRow", result, s"$result = new UnsafeRow(${expressions.length});")
+    }
 
     val holder = ctx.freshName("holder")
-    val holderClass = classOf[BufferHolder].getName
-    ctx.addMutableState(holderClass, holder,
-      s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
+    if (!ctx.generateColumnWrite) {
+      val holderClass = classOf[BufferHolder].getName
+      ctx.addMutableState(holderClass, holder,
+        s"this.$holder = new $holderClass($result, ${numVarLenFields * 32});")
+    }
 
     val resetBufferHolder = if (numVarLenFields == 0) {
       ""

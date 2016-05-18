@@ -22,6 +22,7 @@ import java.nio.{ByteBuffer, ByteOrder}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.columnar.ColumnBuilder._
 import org.apache.spark.sql.execution.columnar.compression.{AllCompressionSchemes, CompressibleColumnBuilder}
+import org.apache.spark.sql.execution.vectorized.ColumnVector
 import org.apache.spark.sql.types._
 
 private[columnar] trait ColumnBuilder {
@@ -44,6 +45,10 @@ private[columnar] trait ColumnBuilder {
    * Returns the final columnar byte buffer.
    */
   def build(): ByteBuffer
+
+  def appendColumn(columnVector: ColumnVector, numRows: Integer): Unit = {
+    throw new UnsupportedOperationException()
+  }
 }
 
 private[columnar] class BasicColumnBuilder[JvmType](
@@ -70,6 +75,39 @@ private[columnar] class BasicColumnBuilder[JvmType](
   override def appendFrom(row: InternalRow, ordinal: Int): Unit = {
     buffer = ensureFreeSpace(buffer, columnType.actualSize(row, ordinal))
     columnType.append(row, ordinal, buffer)
+  }
+
+  override def appendColumn(column: ColumnVector, numRows: Integer): Unit = {
+    val row = new org.apache.spark.sql.catalyst.expressions.GenericMutableRow(1)
+    columnType match {
+      case _: ColumnType[Float] =>
+        buffer = ensureFreeSpace(buffer, columnType.defaultSize * numRows)
+        var i = 0
+        while (i < numRows) {
+          if (!column.isNullAt(i)) {
+            val v = column.getFloat(i)
+            print(s"i=$i, v=$v, nRows=$numRows, columnType=${columnType.getClass.getName}\n")
+            // row.setFloat(0, v)
+            // columnType.append(row, 0, buffer)
+            buffer.putFloat(v)
+          }
+          i += 1
+        }
+      case _: ColumnType[Double] =>
+        buffer = ensureFreeSpace(buffer, columnType.defaultSize * numRows)
+        var i = 0
+        while (i < numRows) {
+          if (!column.isNullAt(i)) {
+            val v = column.getDouble(i)
+            print(s"i=$i, v=$v, nRows=$numRows, columnType=${columnType.getClass.getName}\n")
+            // row.setDouble(0, v)
+            // columnType.append(row, 0, buffer)
+            buffer.putDouble(v)
+          }
+          i += 1
+        }
+      case _ => throw new UnsupportedOperationException()
+    }
   }
 
   override def build(): ByteBuffer = {

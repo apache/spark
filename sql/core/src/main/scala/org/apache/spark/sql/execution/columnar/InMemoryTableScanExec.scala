@@ -135,6 +135,13 @@ private[sql] case class InMemoryRelation(
     val output = child.output
     val cached = child.execute().mapPartitionsInternal { rowIterator =>
       new Iterator[CachedBatch] {
+        val columnIterator = if (
+          rowIterator.isInstanceOf[org.apache.spark.sql.execution.ColumnIterator[InternalRow]]) {
+            rowIterator.asInstanceOf[org.apache.spark.sql.execution.ColumnIterator[InternalRow]]
+          } else {
+            null
+          }
+
         def next(): CachedBatch = {
           val columnBuilders = output.map { attribute =>
             ColumnBuilder(attribute.dataType, batchSize, attribute.name, useCompression)
@@ -142,28 +149,44 @@ private[sql] case class InMemoryRelation(
 
           var rowCount = 0
           var totalSize = 0L
-          while (rowIterator.hasNext && rowCount < batchSize
-            && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
-            val row = rowIterator.next()
 
-            // Added for SPARK-6082. This assertion can be useful for scenarios when something
-            // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
+          if (columnIterator == null) {
+            while (rowIterator.hasNext && rowCount < batchSize
+              && totalSize < ColumnBuilder.MAX_BATCH_SIZE_IN_BYTE) {
+              val row = rowIterator.next()
+
+              // Added for SPARK-6082. This assertion can be useful for scenarios when something
+              // like Hive TRANSFORM is used. The external data generation script used in TRANSFORM
             // may result malformed rows, causing ArrayIndexOutOfBoundsException, which is somewhat
-            // hard to decipher.
-            assert(
-              row.numFields == columnBuilders.length,
-              s"Row column number mismatch, expected ${output.size} columns, " +
-                s"but got ${row.numFields}." +
-                s"\nRow content: $row")
+              // hard to decipher.
+              assert(
+                row.numFields == columnBuilders.length,
+                s"Row column number mismatch, expected ${output.size} columns, " +
+                  s"but got ${row.numFields}." +
+                  s"\nRow content: $row")
 
+              var i = 0
+              totalSize = 0
+              while (i < row.numFields) {
+                columnBuilders(i).appendFrom(row, i)
+                totalSize += columnBuilders(i).columnStats.sizeInBytes
+                i += 1
+              }
+              rowCount += 1
+            }
+          } else {
+            val numColumns = columnIterator.numColumns
+            val numRows = columnIterator.numRows
             var i = 0
-            totalSize = 0
-            while (i < row.numFields) {
-              columnBuilders(i).appendFrom(row, i)
-              totalSize += columnBuilders(i).columnStats.sizeInBytes
+            while (i < numColumns) {
+              val name = columnBuilders(i).getClass.getName
+              print(s"columnBuilder[$i]: $name, numColumns=$numColumns, numRows=$numRows\n")
+              columnIterator.rowIdx = 0
+              columnBuilders(i).appendColumn(columnIterator.column(i), numRows)
+              columnIterator.rowIdx = numRows
               i += 1
             }
-            rowCount += 1
+            rowCount = columnIterator.rowIdx
           }
 
           val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
@@ -175,7 +198,9 @@ private[sql] case class InMemoryRelation(
           }, stats)
         }
 
-        def hasNext: Boolean = rowIterator.hasNext
+        def hasNext: Boolean = {
+          if (columnIterator == null) rowIterator.hasNext else columnIterator.hasNextRow
+        }
       }
     }.persist(storageLevel)
 

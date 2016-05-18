@@ -304,19 +304,28 @@ private[sql] case class BatchedDataSourceScanExec(
          |}""".stripMargin)
 
     ctx.currentVars = null
+    ctx.isRow = false  // always false
+    ctx.isRowWrite = false  // always false
     val rowidx = ctx.freshName("rowIdx")
+    val rowWriteIdx = ctx.freshName("rowWriteIdx")
+    ctx.rowWriteIdx = rowWriteIdx
     val columnsBatchInput = (output zip colVars).map { case (attr, colVar) =>
       genCodeColumnVector(ctx, colVar, rowidx, attr.dataType, attr.nullable)
     }
-    s"""
+    val isColumnarBatchAccessed = if (ctx.isRowWrite) "" else "isColumnarBatchAccessed = true;"
+    val source = s"""
        |if ($batch == null) {
+       |  $isColumnarBatchAccessed
        |  $nextBatch();
        |}
+       |int $rowWriteIdx = 0;
        |while ($batch != null) {
        |  int numRows = $batch.numRows();
        |  while ($idx < numRows) {
        |    int $rowidx = $idx++;
        |    ${consume(ctx, columnsBatchInput).trim}
+       |    $rowWriteIdx++;
+       |    ${ctx.columnarBatch}.setNumRows($rowWriteIdx);
        |    if (shouldStop()) return;
        |  }
        |  $batch = null;
@@ -325,6 +334,9 @@ private[sql] case class BatchedDataSourceScanExec(
        |$scanTimeMetric.add($scanTimeTotalNs / (1000 * 1000));
        |$scanTimeTotalNs = 0;
      """.stripMargin
+     ctx.isRowWrite = true  // always true
+     ctx.isRow = true  // always true
+     source
   }
 }
 

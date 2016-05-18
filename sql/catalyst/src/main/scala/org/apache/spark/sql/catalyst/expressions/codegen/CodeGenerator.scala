@@ -131,8 +131,9 @@ class CodegenContext {
   def declareMutableStates(): String = {
     // It's possible that we add same mutable state twice, e.g. the `mergeExpressions` in
     // `TypedAggregateExpression`, we should call `distinct` here to remove the duplicated ones.
-    mutableStates.distinct.map { case (javaType, variableName, _) =>
+    mutableStates.distinct.map { case (javaType, variableName, _) if variableName != "" =>
       s"private $javaType $variableName;"
+      case _ => ""
     }.mkString("\n")
   }
 
@@ -187,6 +188,14 @@ class CodegenContext {
 
   /** The variable name of the input row in generated code. */
   final var INPUT_ROW = "i"
+
+  var isRow = true
+  var enableColumnCodeGen = false
+  var iteratorInput = ""
+  var isRowWrite = true
+  var generateColumnWrite = false
+  var rowWriteIdx = ""
+  var columnarBatch = ""
 
   /**
    * The map from a variable name to it's next ID.

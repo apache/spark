@@ -132,7 +132,9 @@ trait CodegenSupport extends SparkPlan {
         val evaluateInputs = evaluateVariables(outputVars)
         // generate the code to create a UnsafeRow
         ctx.currentVars = outputVars
+        ctx.generateColumnWrite = !ctx.isRowWrite && parent.isInstanceOf[WholeStageCodegenExec]
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
+        ctx.generateColumnWrite = false
         val code = s"""
           |$evaluateInputs
           |${ev.code.trim}
@@ -352,13 +354,36 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
         val clazz = CodeGenerator.compile(cleanedSource)
         val buffer = clazz.generate(references).asInstanceOf[BufferedRowIterator]
         buffer.init(index, Array(iter))
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = {
-            val v = buffer.hasNext
-            if (!v) durationMs += buffer.durationMs()
-            v
+        if (!buffer.isColumnarBatch()) {
+          new Iterator[InternalRow] {
+            override def hasNext: Boolean = {
+              val v = buffer.hasNext
+              if (!v) durationMs += buffer.durationMs()
+              v
+            }
+            override def next: InternalRow = buffer.next()
           }
-          override def next: InternalRow = buffer.next()
+        } else {
+          new ColumnIterator[InternalRow] {
+            override def hasNext: Boolean = {
+              val v = buffer.hasNext
+              if (!v) durationMs += buffer.durationMs()
+              v
+            }
+            override def next: InternalRow = buffer.next()
+
+            override def computeColumn: Unit = {
+              buffer.processNext
+            }
+            override def numColumns: Integer = buffer.numColumns
+            override def numRows: Integer = buffer.numRows
+            override def column(i: Integer):
+            org.apache.spark.sql.execution.vectorized.ColumnVector = buffer.column(i)
+            override def hasNextRow: Boolean = {
+              if (numRows == 0) { buffer.processNext }
+              if (rowIdx < numRows) true else false
+            }
+          }
         }
       }
     } else {
@@ -394,9 +419,10 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     } else {
       ""
     }
+    val append = if (ctx.isRowWrite) s"append(${row.value}$doCopy);" else ""
     s"""
       |${row.code}
-      |append(${row.value}$doCopy);
+      |$append
      """.stripMargin.trim
   }
 
@@ -416,6 +442,17 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   override def simpleString: String = "WholeStageCodegen"
 }
 
+abstract class ColumnIterator[T] extends Iterator[T] {
+  def computeColumn: Unit = { }
+  def columnarBatch: T = { null.asInstanceOf[T] }
+  def numColumns: Integer = { 0 }
+  def numRows: Integer = { 0 }
+  def column(i: Integer): org.apache.spark.sql.execution.vectorized.ColumnVector = {
+    null
+  }
+  def hasNextRow: Boolean = { false }
+  var rowIdx: Integer = 0
+}
 
 /**
  * Find the chained plans that support codegen, collapse them together as WholeStageCodegen.
