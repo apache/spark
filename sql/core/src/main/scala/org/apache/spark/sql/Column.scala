@@ -38,6 +38,14 @@ private[sql] object Column {
   def apply(expr: Expression): Column = new Column(expr)
 
   def unapply(col: Column): Option[Expression] = Some(col.expr)
+
+   def generateAlias(e: Expression): String = {
+    e match {
+      case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+        s"${a.aggregateFunction.prettyName}"
+      case expr => usePrettyExpression(expr).sql
+    }
+  }
 }
 
 /**
@@ -157,11 +165,13 @@ class Column(protected[sql] val expr: Expression) extends Logging {
       case other => Alias(expr, usePrettyExpression(expr).sql)()
     }
 
-    case a: AggregateExpression if (a.aggregateFunction.isInstanceOf[TypedAggregateExpression]) =>
-      Alias(a, s"${a.aggregateFunction.prettyName}")()
+    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
+      UnresolvedAlias(a, None, Some(Column.generateAlias))
 
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
+
+
 
   override def toString: String = usePrettyExpression(expr).sql
 

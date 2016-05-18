@@ -243,12 +243,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   test("spark-15114 shorter system generated alias names") {
     val ds = Seq(1, 3, 2, 5).toDS()
-    assert(ds.select(typed.sum((i: Int) => i)).columns.head === "typedsumdouble")
+    assert(ds.select(typed.sum((i: Int) => i)).columns.head === "typedsumdouble_c1")
     val ds2 = ds.select(typed.sum((i: Int) => i), typed.avg((i: Int) => i))
-    assert(ds2.columns.head === "typedsumdouble")
-    assert(ds2.columns.last === "typedaverage")
+    assert(ds2.columns.head === "typedsumdouble_c1")
+    assert(ds2.columns.last === "typedaverage_c2")
     val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last == "rowagg")
+    assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last == "rowagg_c2")
     assert(df.groupBy($"j").agg(RowAgg.toColumn as "agg1").columns.last == "agg1")
   }
 }

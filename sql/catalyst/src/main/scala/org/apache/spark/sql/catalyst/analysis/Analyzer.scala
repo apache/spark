@@ -177,8 +177,11 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr.transformUp { case u @ UnresolvedAlias(child, optionalAliasName) =>
+          expr.transformUp { case u @ UnresolvedAlias(child, optionalAliasName, optGenAliasFunc) =>
             child match {
+              case e if optGenAliasFunc.isDefined =>
+                val v: String = optGenAliasFunc.get.apply(e)
+                Alias(child, s"${v}_c${i + 1}")()
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
@@ -656,7 +659,7 @@ class Analyzer(
         // Using Dataframe/Dataset API: testData2.groupBy($"a", $"b").agg($"*")
         case s: Star => s.expand(child, resolver)
         // Using SQL API without running ResolveAlias: SELECT * FROM testData2 group by a, b
-        case UnresolvedAlias(s: Star, _) => s.expand(child, resolver)
+        case UnresolvedAlias(s: Star, _, _) => s.expand(child, resolver)
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
@@ -1335,14 +1338,14 @@ class Analyzer(
     }
 
     private def hasNestedGenerator(expr: NamedExpression): Boolean = expr match {
-      case UnresolvedAlias(_: Generator, _) => false
+      case UnresolvedAlias(_: Generator, _, _) => false
       case Alias(_: Generator, _) => false
       case MultiAlias(_: Generator, _) => false
       case other => hasGenerator(other)
     }
 
     private def trimAlias(expr: NamedExpression): Expression = expr match {
-      case UnresolvedAlias(child, _) => child
+      case UnresolvedAlias(child, _, _) => child
       case Alias(child, _) => child
       case MultiAlias(child, _) => child
       case _ => expr
