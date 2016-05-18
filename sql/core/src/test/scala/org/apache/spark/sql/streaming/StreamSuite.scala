@@ -77,7 +77,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
 
   test("sql queries") {
     val inputData = MemoryStream[Int]
-    inputData.toDF().registerTempTable("stream")
+    inputData.toDF().createOrReplaceTempView("stream")
     val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
 
     testStream(evens)(

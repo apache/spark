@@ -35,8 +35,8 @@ object RDDRelation {
     import spark.implicits._
 
     val df = spark.createDataFrame((1 to 100).map(i => Record(i, s"val_$i")))
-    // Any RDD containing case classes can be registered as a table.  The schema of the table is
-    // automatically inferred using scala reflection.
+    // Any RDD containing case classes can be used to create a temporary view.  The schema of the
+    // view is automatically inferred using scala reflection.
     df.createOrReplaceTempView("records")
 
     // Once tables have been registered, you can run SQL queries over them.
@@ -66,7 +66,7 @@ object RDDRelation {
     // Queries can be run using the DSL on parquet files just like the original RDD.
     parquetFile.where($"key" === 1).select($"value".as("a")).collect().foreach(println)
 
-    // These files can also be registered as tables.
+    // These files can also be used to create a temporary view.
     parquetFile.createOrReplaceTempView("parquetFile")
     spark.sql("SELECT * FROM parquetFile").collect().foreach(println)
 
