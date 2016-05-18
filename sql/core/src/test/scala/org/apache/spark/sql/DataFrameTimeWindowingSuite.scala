@@ -245,11 +245,11 @@ class DataFrameTimeWindowingSuite extends QueryTest with SharedSQLContext with B
     Seq(
       ("2016-03-27 19:39:34", 1),
       ("2016-03-27 19:39:56", 2),
-      ("2016-03-27 19:39:27", 4)).toDF("time", "value").registerTempTable(tableName)
+      ("2016-03-27 19:39:27", 4)).toDF("time", "value").createOrReplaceTempView(tableName)
     try {
       f(tableName)
     } finally {
-      spark.catalog.dropTempTable(tableName)
+      spark.catalog.dropTempView(tableName)
     }
   }
 

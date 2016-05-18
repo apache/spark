@@ -160,8 +160,8 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return A DataFrame containing for the contingency table.
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
-   *      (3, 3))).toDF("key", "value")
+   *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2), (3, 3)))
+   *      .toDF("key", "value")
    *    val ct = df.stat.crosstab("key", "value")
    *    ct.show()
    *    +---------+---+---+---+
@@ -197,7 +197,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    val rows = Seq.tabulate(100) { i =>
    *      if (i % 2 == 0) (1, -1.0) else (i, i * -1.0)
    *    }
-   *    val df = sqlContext.createDataFrame(rows).toDF("a", "b")
+   *    val df = spark.createDataFrame(rows).toDF("a", "b")
    *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
    *    // "a" and "b"
    *    val freqSingles = df.stat.freqItems(Array("a", "b"), 0.4)
@@ -258,7 +258,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    *    val rows = Seq.tabulate(100) { i =>
    *      if (i % 2 == 0) (1, -1.0) else (i, i * -1.0)
    *    }
-   *    val df = sqlContext.createDataFrame(rows).toDF("a", "b")
+   *    val df = spark.createDataFrame(rows).toDF("a", "b")
    *    // find the items with a frequency greater than 0.4 (observed 40% of the time) for columns
    *    // "a" and "b"
    *    val freqSingles = df.stat.freqItems(Seq("a", "b"), 0.4)
@@ -314,7 +314,7 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
    * @return a new [[DataFrame]] that represents the stratified sample
    *
    * {{{
-   *    val df = sqlContext.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
+   *    val df = spark.createDataFrame(Seq((1, 1), (1, 2), (2, 1), (2, 1), (2, 3), (3, 2),
    *      (3, 3))).toDF("key", "value")
    *    val fractions = Map(1 -> 1.0, 3 -> 0.5)
    *    df.stat.sampleBy("key", fractions, 36L).show()

@@ -19,10 +19,10 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.classification.{ClassificationModel, Classifier, ClassifierParams}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors}
 import org.apache.spark.ml.param.{IntParam, ParamMap}
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 
 /**
@@ -50,7 +50,7 @@ object DeveloperApiExample {
       LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5))))
 
-    // Create a LogisticRegression instance.  This instance is an Estimator.
+    // Create a LogisticRegression instance. This instance is an Estimator.
     val lr = new MyLogisticRegression()
     // Print out the parameters, documentation, and any default values.
     println("MyLogisticRegression parameters:\n" + lr.explainParams() + "\n")
@@ -58,7 +58,7 @@ object DeveloperApiExample {
     // We may set parameters using setter methods.
     lr.setMaxIter(10)
 
-    // Learn a LogisticRegression model.  This uses the parameters stored in lr.
+    // Learn a LogisticRegression model. This uses the parameters stored in lr.
     val model = lr.fit(training.toDF())
 
     // Prepare test data.
@@ -84,7 +84,7 @@ object DeveloperApiExample {
 /**
  * Example of defining a parameter trait for a user-defined type of [[Classifier]].
  *
- * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
+ * NOTE: This is private since it is an example. In practice, you may not want it to be private.
  */
 private trait MyLogisticRegressionParams extends ClassifierParams {
 
@@ -96,7 +96,7 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
    *   - def getMyParamName
    *   - def setMyParamName
    * Here, we have a trait to be mixed in with the Estimator and Model (MyLogisticRegression
-   * and MyLogisticRegressionModel).  We place the setter (setMaxIter) method in the Estimator
+   * and MyLogisticRegressionModel). We place the setter (setMaxIter) method in the Estimator
    * class since the maxIter parameter is only used during training (not in the Model).
    */
   val maxIter: IntParam = new IntParam(this, "maxIter", "max number of iterations")
@@ -106,7 +106,7 @@ private trait MyLogisticRegressionParams extends ClassifierParams {
 /**
  * Example of defining a type of [[Classifier]].
  *
- * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
+ * NOTE: This is private since it is an example. In practice, you may not want it to be private.
  */
 private class MyLogisticRegression(override val uid: String)
   extends Classifier[Vector, MyLogisticRegression, MyLogisticRegressionModel]
@@ -138,7 +138,7 @@ private class MyLogisticRegression(override val uid: String)
 /**
  * Example of defining a type of [[ClassificationModel]].
  *
- * NOTE: This is private since it is an example.  In practice, you may not want it to be private.
+ * NOTE: This is private since it is an example. In practice, you may not want it to be private.
  */
 private class MyLogisticRegressionModel(
     override val uid: String,
@@ -169,7 +169,7 @@ private class MyLogisticRegressionModel(
     Vectors.dense(-margin, margin)
   }
 
-  /** Number of classes the label can take.  2 indicates binary classification. */
+  /** Number of classes the label can take. 2 indicates binary classification. */
   override val numClasses: Int = 2
 
   /** Number of features the model was trained on. */

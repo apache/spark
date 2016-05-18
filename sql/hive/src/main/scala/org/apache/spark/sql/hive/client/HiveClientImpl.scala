@@ -20,6 +20,7 @@ package org.apache.spark.sql.hive.client
 import java.io.{File, PrintStream}
 
 import scala.collection.JavaConverters._
+import scala.collection.mutable.ArrayBuffer
 import scala.language.reflectiveCalls
 
 import org.apache.hadoop.conf.Configuration
@@ -338,6 +339,13 @@ private[hive] class HiveClientImpl(
       // partition columns are part of the schema
       val partCols = h.getPartCols.asScala.map(fromHiveColumn)
       val schema = h.getCols.asScala.map(fromHiveColumn) ++ partCols
+
+      // Skew spec, storage handler, and bucketing info can't be mapped to CatalogTable (yet)
+      val hasUnsupportedFeatures =
+        !h.getSkewedColNames.isEmpty ||
+          h.getStorageHandler != null ||
+          !h.getBucketCols.isEmpty
+
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -364,7 +372,8 @@ private[hive] class HiveClientImpl(
         ),
         properties = h.getParameters.asScala.toMap,
         viewOriginalText = Option(h.getViewOriginalText),
-        viewText = Option(h.getViewExpandedText))
+        viewText = Option(h.getViewExpandedText),
+        hasUnsupportedFeatures = hasUnsupportedFeatures)
     }
   }
 
@@ -405,20 +414,43 @@ private[hive] class HiveClientImpl(
       ignoreIfNotExists: Boolean): Unit = withHiveState {
     // TODO: figure out how to drop multiple partitions in one call
     val hiveTable = client.getTable(db, table, true /* throw exception */)
-    specs.foreach { s =>
-      // The provided spec here can be a partial spec, i.e. it will match all partitions
-      // whose specs are supersets of this partial spec. E.g. If a table has partitions
-      // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
-      val matchingParts = client.getPartitions(hiveTable, s.asJava).asScala
-      if (matchingParts.isEmpty && !ignoreIfNotExists) {
-        throw new AnalysisException(
-          s"partition to drop '$s' does not exist in table '$table' database '$db'")
+    // do the check at first and collect all the matching partitions
+    val matchingParts =
+      specs.flatMap { s =>
+        // The provided spec here can be a partial spec, i.e. it will match all partitions
+        // whose specs are supersets of this partial spec. E.g. If a table has partitions
+        // (b='1', c='1') and (b='1', c='2'), a partial spec of (b='1') will match both.
+        val parts = client.getPartitions(hiveTable, s.asJava).asScala
+        if (parts.isEmpty && !ignoreIfNotExists) {
+          throw new AnalysisException(
+            s"No partition is dropped. One partition spec '$s' does not exist in table '$table' " +
+            s"database '$db'")
+        }
+        parts.map(_.getValues)
+      }.distinct
+    var droppedParts = ArrayBuffer.empty[java.util.List[String]]
+    matchingParts.foreach { partition =>
+      val dropOptions = new PartitionDropOptions
+      dropOptions.ifExists = ignoreIfNotExists
+      try {
+        client.dropPartition(db, table, partition, dropOptions)
+      } catch {
+        case e: Exception =>
+          val remainingParts = matchingParts.toBuffer -- droppedParts
+          logError(
+            s"""
+               |======================
+               |Attempt to drop the partition specs in table '$table' database '$db':
+               |${specs.mkString("\n")}
+               |In this attempt, the following partitions have been dropped successfully:
+               |${droppedParts.mkString("\n")}
+               |The remaining partitions have not been dropped:
+               |${remainingParts.mkString("\n")}
+               |======================
+             """.stripMargin)
+          throw e
       }
-      matchingParts.foreach { hivePartition =>
-        val dropOptions = new PartitionDropOptions
-        dropOptions.ifExists = ignoreIfNotExists
-        client.dropPartition(db, table, hivePartition.getValues, dropOptions)
-      }
+      droppedParts += partition
     }
   }
 

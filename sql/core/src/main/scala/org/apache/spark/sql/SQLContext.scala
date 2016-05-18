@@ -67,6 +67,8 @@ class SQLContext private[sql](
 
   self =>
 
+  sparkSession.sparkContext.assertNotStopped()
+
   // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
   // real functionality resides. This class remains mainly for backward compatibility.
 
@@ -374,7 +376,7 @@ class SQLContext private[sql](
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *  dataFrame.registerTempTable("people")
+   *  dataFrame.createOrReplaceTempView("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -597,7 +599,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sparkSession.registerTable(df, tableName)
+    sparkSession.createTempView(tableName, df, replaceIfExists = true)
   }
 
   /**
@@ -609,7 +611,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def dropTempTable(tableName: String): Unit = {
-    sparkSession.catalog.dropTempTable(tableName)
+    sparkSession.catalog.dropTempView(tableName)
   }
 
   /**

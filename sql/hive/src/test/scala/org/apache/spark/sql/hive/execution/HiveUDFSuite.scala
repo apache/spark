@@ -72,7 +72,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("hive struct udf") {
     sql(
       """
-      |CREATE EXTERNAL TABLE hiveUDFTestTable (
+      |CREATE TABLE hiveUDFTestTable (
       |   pair STRUCT<id: INT, value: INT>
       |)
       |PARTITIONED BY (partition STRING)
@@ -153,7 +153,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("UDFIntegerToString") {
     val testData = hiveContext.sparkContext.parallelize(
       IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil).toDF()
-    testData.registerTempTable("integerTable")
+    testData.createOrReplaceTempView("integerTable")
 
     val udfName = classOf[UDFIntegerToString].getName
     sql(s"CREATE TEMPORARY FUNCTION testUDFIntegerToString AS '$udfName'")
@@ -167,7 +167,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("UDFToListString") {
     val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
     val errMsg = intercept[AnalysisException] {
@@ -182,7 +182,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("UDFToListInt") {
     val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
     val errMsg = intercept[AnalysisException] {
@@ -197,7 +197,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("UDFToStringIntMap") {
     val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToStringIntMap " +
       s"AS '${classOf[UDFToStringIntMap].getName}'")
@@ -213,7 +213,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
   test("UDFToIntIntMap") {
     val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
-    testData.registerTempTable("inputTable")
+    testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToIntIntMap " +
       s"AS '${classOf[UDFToIntIntMap].getName}'")
@@ -232,7 +232,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) :: Nil).toDF()
-    testData.registerTempTable("listListIntTable")
+    testData.createOrReplaceTempView("listListIntTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListListInt AS '${classOf[UDFListListInt].getName}'")
     checkAnswer(
@@ -247,7 +247,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     val testData = hiveContext.sparkContext.parallelize(
       ListStringCaseClass(Seq("a", "b", "c")) ::
       ListStringCaseClass(Seq("d", "e")) :: Nil).toDF()
-    testData.registerTempTable("listStringTable")
+    testData.createOrReplaceTempView("listStringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFListString AS '${classOf[UDFListString].getName}'")
     checkAnswer(
@@ -261,7 +261,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   test("UDFStringString") {
     val testData = hiveContext.sparkContext.parallelize(
       StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil).toDF()
-    testData.registerTempTable("stringTable")
+    testData.createOrReplaceTempView("stringTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testStringStringUDF AS '${classOf[UDFStringString].getName}'")
     checkAnswer(
@@ -283,7 +283,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) ::
       Nil).toDF()
-    testData.registerTempTable("TwoListTable")
+    testData.createOrReplaceTempView("TwoListTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFTwoListList AS '${classOf[UDFTwoListList].getName}'")
     checkAnswer(
@@ -295,7 +295,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
-    Seq((1, 2)).toDF("a", "b").registerTempTable("testUDF")
+    Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("testUDF")
 
     {
       // HiveSimpleUDF
@@ -347,12 +347,12 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
       sql("DROP TEMPORARY FUNCTION IF EXISTS testUDTFExplode")
     }
 
-    spark.catalog.dropTempTable("testUDF")
+    spark.catalog.dropTempView("testUDF")
   }
 
   test("Hive UDF in group by") {
     withTempTable("tab1") {
-      Seq(Tuple1(1451400761)).toDF("test_date").registerTempTable("tab1")
+      Seq(Tuple1(1451400761)).toDF("test_date").createOrReplaceTempView("tab1")
       sql(s"CREATE TEMPORARY FUNCTION testUDFToDate AS '${classOf[GenericUDFToDate].getName}'")
       val count = sql("select testUDFToDate(cast(test_date as timestamp))" +
         " from tab1 group by testUDFToDate(cast(test_date as timestamp))").count()

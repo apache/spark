@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
@@ -104,7 +105,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
-      HiveTypeCoercion.typeCoercionRules ++
+      TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
@@ -1921,8 +1922,8 @@ class Analyzer(
     }
 
     private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-      val fromPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(from)
-      val toPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(to)
+      val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+      val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
       toPrecedence > 0 && fromPrecedence > toPrecedence
     }
 

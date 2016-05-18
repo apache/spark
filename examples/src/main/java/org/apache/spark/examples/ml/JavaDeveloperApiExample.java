@@ -24,13 +24,13 @@ import com.google.common.collect.Lists;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.classification.Classifier;
 import org.apache.spark.ml.classification.ClassificationModel;
+import org.apache.spark.ml.feature.LabeledPoint;
+import org.apache.spark.ml.linalg.BLAS;
+import org.apache.spark.ml.linalg.Vector;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.ml.param.IntParam;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.util.Identifiable$;
-import org.apache.spark.mllib.linalg.BLAS;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
@@ -62,7 +62,7 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
     Dataset<Row> training = spark.createDataFrame(localTraining, LabeledPoint.class);
 
-    // Create a LogisticRegression instance.  This instance is an Estimator.
+    // Create a LogisticRegression instance. This instance is an Estimator.
     MyJavaLogisticRegression lr = new MyJavaLogisticRegression();
     // Print out the parameters, documentation, and any default values.
     System.out.println("MyJavaLogisticRegression parameters:\n" + lr.explainParams() + "\n");
@@ -70,7 +70,7 @@ public class JavaDeveloperApiExample {
     // We may set parameters using setter methods.
     lr.setMaxIter(10);
 
-    // Learn a LogisticRegression model.  This uses the parameters stored in lr.
+    // Learn a LogisticRegression model. This uses the parameters stored in lr.
     MyJavaLogisticRegressionModel model = lr.fit(training);
 
     // Prepare test data.
@@ -214,7 +214,7 @@ class MyJavaLogisticRegressionModel
   }
 
   /**
-   * Number of classes the label can take.  2 indicates binary classification.
+   * Number of classes the label can take. 2 indicates binary classification.
    */
   public int numClasses() { return 2; }
 

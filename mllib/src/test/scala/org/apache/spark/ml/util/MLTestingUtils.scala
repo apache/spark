@@ -20,9 +20,9 @@ package org.apache.spark.ml.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.evaluation.Evaluator
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree.impl.TreeTests
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -37,8 +37,8 @@ object MLTestingUtils extends SparkFunSuite {
 
   def checkNumericTypes[M <: Model[M], T <: Estimator[M]](
       estimator: T,
-      isClassification: Boolean,
-      spark: SparkSession)(check: (M, M) => Unit): Unit = {
+      spark: SparkSession,
+      isClassification: Boolean = true)(check: (M, M) => Unit): Unit = {
     val dfs = if (isClassification) {
       genClassifDFWithNumericLabelCol(spark)
     } else {

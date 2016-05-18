@@ -29,7 +29,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources.{FileScanRDD, HadoopFsRelation, LocalityTestFileSystem, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{FileScanRDD, LocalityTestFileSystem}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -91,7 +91,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
 
     // Self-join
-    df.registerTempTable("t")
+    df.createOrReplaceTempView("t")
     withTempTable("t") {
       checkAnswer(
         sql(
@@ -337,7 +337,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       intercept[AnalysisException] {
@@ -347,7 +347,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
@@ -459,7 +459,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       intercept[AnalysisException] {
@@ -474,7 +474,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       partitionedTestDF.write
@@ -876,6 +876,26 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
         checkLocality()
+      }
+    }
+  }
+
+  test("SPARK-10216: Avoid empty files during overwriting with group by query") {
+    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
+      withTempPath { path =>
+        val df = spark.range(0, 5)
+        val groupedDF = df.groupBy("id").count()
+        groupedDF.write
+          .format(dataSourceName)
+          .mode(SaveMode.Overwrite)
+          .save(path.getCanonicalPath)
+
+        val overwrittenFiles = path.listFiles()
+          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
+          .sortBy(_.getName)
+        val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
+
+        assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
       }
     }
   }

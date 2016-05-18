@@ -95,7 +95,7 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
 
   test("UDTs and UDFs") {
     spark.udf.register("testType", (d: UDT.MyDenseVector) => d.isInstanceOf[UDT.MyDenseVector])
-    pointsRDD.registerTempTable("points")
+    pointsRDD.createOrReplaceTempView("points")
     checkAnswer(
       sql("SELECT testType(features) from points"),
       Seq(Row(true), Row(true)))
