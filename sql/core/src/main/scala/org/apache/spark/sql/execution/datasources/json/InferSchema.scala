@@ -114,16 +114,7 @@ private[sql] object InferSchema {
         // record fields' types have been combined.
         NullType
 
-      case VALUE_STRING =>
-        // If there is only one row, the following non-numeric numbers will be incorrectly
-        // recognized as StringType.
-        val value = parser.getText
-        if (value.equals("NaN") ||
-          value.equals("Infinity") ||
-          value.equals("-Infinity")) {
-          return DoubleType
-        }
-        return StringType
+      case VALUE_STRING => StringType
       case START_OBJECT =>
         val builder = Array.newBuilder[StructField]
         while (nextUntil(parser, END_OBJECT)) {
