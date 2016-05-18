@@ -784,7 +784,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     1.0
     >>> model.totalNumNodes
     15
-    >>> print(str(model.toDebugString))
+    >>> print(model.toDebugString)
     GBTClassificationModel (uid=...)...with 5 trees...
     >>> gbtc_path = temp_path + "gbtc"
     >>> gbt.save(gbtc_path)
