@@ -480,7 +480,7 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     try {
       Option(hive.getFunction(db, name)).map(fromHiveFunction)
     } catch {
-      case CausedBy(ex: NoSuchObjectException) if ex.getMessage.contains(name) =>
+      case CausedBy(ex: Exception) if ex.getMessage.contains(s"$name does not exist") =>
         None
     }
   }
