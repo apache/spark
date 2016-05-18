@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.io.File
 import java.util.regex.Pattern
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
@@ -349,7 +350,7 @@ object CreateDataSourceTableUtils extends Logging {
         className = provider,
         options = options)
 
-    def newSparkSQLSpecificMetastoreTable(relation: HadoopFsRelation): CatalogTable = {
+    def newSparkSQLSpecificMetastoreTable(): CatalogTable = {
       CatalogTable(
         identifier = tableIdent,
         tableType = tableType,
@@ -358,11 +359,21 @@ object CreateDataSourceTableUtils extends Logging {
           // We don't want Hive metastore to implicitly create a table directory,
           // which may be not the one Data Source table is referring to,
           // yet which will be left behind when the table is dropped for an external table
-          locationUri = if (isExternal) {
-            Some(relation.location.paths.map(_.toUri.toString).map {
-              case p if new File(p).isDirectory => p
-              case p => new File(p).getParent
-            }.head)
+          locationUri = if (new CaseInsensitiveMap(options).get("path").isDefined) {
+            val path = new Path(new CaseInsensitiveMap(options).get("path").get)
+            val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+            if (fs.exists(path)) {
+              // if the provided path exists, Hive metastore only takes directory
+              // as table data location
+              if (fs.getFileStatus(path).isDirectory) {
+                Some(path.toUri.toString)
+              } else {
+                Some(path.getParent.toUri.toString)
+              }
+            } else {
+              // If the path does not exists yet, it is assumed to be directory
+              Some(path.toUri.toString)
+            }
           } else {
             None
           },
@@ -470,14 +481,14 @@ object CreateDataSourceTableUtils extends Logging {
                 s"it into Hive metastore in Spark SQL specific format."
             logWarning(warningMessage, e)
             val table =
-              newSparkSQLSpecificMetastoreTable(resolvedRelation.asInstanceOf[HadoopFsRelation])
+              newSparkSQLSpecificMetastoreTable()
             sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
         }
 
       case (None, message) =>
         logWarning(message)
         val table =
-          newSparkSQLSpecificMetastoreTable(resolvedRelation.asInstanceOf[HadoopFsRelation])
+          newSparkSQLSpecificMetastoreTable()
         sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
     }
   }

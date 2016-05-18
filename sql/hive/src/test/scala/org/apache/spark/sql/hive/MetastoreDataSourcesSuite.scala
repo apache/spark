@@ -1108,10 +1108,16 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("SPARK-15269: non-hive compative table") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      spark.range(1).write.json(path)
+      val df = spark.range(1).toDF()
+
+      val hadoopPath = new Path(path, "data")
+      val fs = hadoopPath.getFileSystem(spark.sessionState.newHadoopConf())
+      val qualified = hadoopPath.makeQualified(fs.getUri, fs.getWorkingDirectory)
+      fs.delete(qualified, true)
+      df.write.mode(SaveMode.Overwrite).json(qualified.toUri.toString)
 
       withTable("ddl_test1") {
-        sql(s"CREATE TABLE ddl_test1 USING json OPTIONS (PATH '$path')")
+        sql(s"CREATE TABLE ddl_test1 USING json OPTIONS (PATH '${qualified.toUri.toString}')")
         sql("DROP TABLE ddl_test1")
         sql(s"CREATE TABLE ddl_test1 USING json AS SELECT 10 AS a")
         checkAnswer(sql("select * from ddl_test1"), Seq(Row(10)))
