@@ -33,7 +33,7 @@ class NumericParserSuite extends SparkFunSuite {
     malformatted.foreach { s =>
       intercept[SparkException] {
         NumericParser.parse(s)
-        println(s"Didn't detect malformatted string $s.")
+        throw new RuntimeException(s"Didn't detect malformatted string $s.")
       }
     }
   }

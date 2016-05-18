@@ -19,47 +19,50 @@ package org.apache.spark.sql
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{BooleanType, StringType, StructField, StructType}
 
-class ListTablesSuite extends QueryTest with BeforeAndAfter {
-
-  private lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
+class ListTablesSuite extends QueryTest with BeforeAndAfter with SharedSQLContext {
+  import testImplicits._
 
   private lazy val df = (1 to 10).map(i => (i, s"str$i")).toDF("key", "value")
 
   before {
-    df.registerTempTable("ListTablesSuiteTable")
+    df.createOrReplaceTempView("listtablessuitetable")
   }
 
   after {
-    ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
   }
 
   test("get all tables") {
     checkAnswer(
-      ctx.tables().filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      spark.wrapped.tables().filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
     checkAnswer(
-      ctx.sql("SHOW tables").filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      sql("SHOW tables").filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
-    ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
-    assert(ctx.tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+    assert(spark.wrapped.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
-  test("getting all Tables with a database name has no impact on returned table names") {
+  test("getting all tables with a database name has no impact on returned table names") {
     checkAnswer(
-      ctx.tables("DB").filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      spark.wrapped.tables("default").filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
     checkAnswer(
-      ctx.sql("show TABLES in DB").filter("tableName = 'ListTablesSuiteTable'"),
-      Row("ListTablesSuiteTable", true))
+      sql("show TABLES in default").filter("tableName = 'listtablessuitetable'"),
+      Row("listtablessuitetable", true))
 
-    ctx.catalog.unregisterTable(Seq("ListTablesSuiteTable"))
-    assert(ctx.tables().filter("tableName = 'ListTablesSuiteTable'").count() === 0)
+    spark.sessionState.catalog.dropTable(
+      TableIdentifier("listtablessuitetable"), ignoreIfNotExists = true)
+    assert(spark.wrapped.tables().filter("tableName = 'listtablessuitetable'").count() === 0)
   }
 
   test("query the returned DataFrame of tables") {
@@ -67,20 +70,20 @@ class ListTablesSuite extends QueryTest with BeforeAndAfter {
       StructField("tableName", StringType, false) ::
       StructField("isTemporary", BooleanType, false) :: Nil)
 
-    Seq(ctx.tables(), ctx.sql("SHOW TABLes")).foreach {
+    Seq(spark.wrapped.tables(), sql("SHOW TABLes")).foreach {
       case tableDF =>
         assert(expectedSchema === tableDF.schema)
 
-        tableDF.registerTempTable("tables")
+        tableDF.createOrReplaceTempView("tables")
         checkAnswer(
-          ctx.sql(
-            "SELECT isTemporary, tableName from tables WHERE tableName = 'ListTablesSuiteTable'"),
-          Row(true, "ListTablesSuiteTable")
+          sql(
+            "SELECT isTemporary, tableName from tables WHERE tableName = 'listtablessuitetable'"),
+          Row(true, "listtablessuitetable")
         )
         checkAnswer(
-          ctx.tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),
+          spark.wrapped.tables().filter("tableName = 'tables'").select("tableName", "isTemporary"),
           Row("tables", true))
-        ctx.dropTempTable("tables")
+        spark.catalog.dropTempView("tables")
     }
   }
 }

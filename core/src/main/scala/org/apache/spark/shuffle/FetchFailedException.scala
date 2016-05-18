@@ -17,8 +17,8 @@
 
 package org.apache.spark.shuffle
 
-import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.{FetchFailed, TaskEndReason}
+import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.Utils
 
 /**

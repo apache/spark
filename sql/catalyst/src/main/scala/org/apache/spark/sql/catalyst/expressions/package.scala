@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.catalyst
 
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.types.{StructField, StructType}
+
 /**
  * A set of classes that can be used to represent trees of relational expressions.  A key goal of
  * the expression library is to hide the details of naming and scoping from developers who want to
@@ -49,9 +52,10 @@ package org.apache.spark.sql.catalyst
  */
 package object expressions  {
 
-  type InternalRow = org.apache.spark.sql.catalyst.InternalRow
-
-  val InternalRow = org.apache.spark.sql.catalyst.InternalRow
+  /**
+   * Used as input into expressions whose output does not depend on any input value.
+   */
+  val EmptyRow: InternalRow = null
 
   /**
    * Converts a [[InternalRow]] to another Row given a sequence of expression that define each
@@ -77,4 +81,22 @@ package object expressions  {
     /** Uses the given row to store the output of the projection. */
     def target(row: MutableRow): MutableProjection
   }
+
+
+  /**
+   * Helper functions for working with `Seq[Attribute]`.
+   */
+  implicit class AttributeSeq(attrs: Seq[Attribute]) {
+    /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
+    def toStructType: StructType = {
+      StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
+    }
+  }
+
+  /**
+   * When an expression inherits this, meaning the expression is null intolerant (i.e. any null
+   * input will result in null output). We will use this information during constructing IsNotNull
+   * constraints.
+   */
+  trait NullIntolerant
 }

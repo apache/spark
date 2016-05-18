@@ -19,27 +19,30 @@ package org.apache.spark.sql.sources
 
 import java.io.{File, IOException}
 
-import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
-
-  import caseInsensitiveContext.sql
-
-  private lazy val sparkContext = caseInsensitiveContext.sparkContext
-
-  var path: File = null
+class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
+  protected override lazy val sql = caseInsensitiveContext.sql _
+  private var path: File = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    caseInsensitiveContext.read.json(rdd).registerTempTable("jt")
+    caseInsensitiveContext.read.json(rdd).createOrReplaceTempView("jt")
   }
 
   override def afterAll(): Unit = {
-    caseInsensitiveContext.dropTempTable("jt")
+    try {
+      caseInsensitiveContext.dropTempTable("jt")
+    } finally {
+      super.afterAll()
+    }
   }
 
   after {
@@ -50,7 +53,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -74,7 +77,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql(
         s"""
            |CREATE TEMPORARY TABLE jsonTable
-           |USING org.apache.spark.sql.json.DefaultSource
+           |USING json
            |OPTIONS (
            |  path '${path.toString}'
            |) AS
@@ -91,7 +94,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -102,26 +105,24 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    val message = intercept[DDLException]{
+    val message = intercept[ParseException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
         |SELECT a * 4 FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains(s"a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
-      "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
+    assert(message.toLowerCase.contains("operation not allowed"))
 
     // Overwrite the temporary table.
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -138,7 +139,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -153,28 +154,26 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {
-    val message = intercept[DDLException]{
+    val message = intercept[ParseException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
         |SELECT b FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains("a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
-      "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
+    assert(message.toLowerCase.contains("operation not allowed"))
   }
 
   test("a CTAS statement with column definitions is not allowed") {
-    intercept[DDLException]{
+    intercept[AnalysisException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -187,7 +186,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS
@@ -198,7 +197,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with BeforeAndAfterAll {
       sql(
         s"""
         |CREATE TEMPORARY TABLE jsonTable
-        |USING org.apache.spark.sql.json.DefaultSource
+        |USING json
         |OPTIONS (
         |  path '${path.toString}'
         |) AS

@@ -109,17 +109,22 @@ class PageRankSuite extends SparkFunSuite with LocalSparkContext {
       assert(notMatching === 0)
 
       val staticErrors = staticRanks2.map { case (vid, pr) =>
-        val correct = (vid > 0 && pr == resetProb) ||
-          (vid == 0 && math.abs(pr - (resetProb + (1.0 - resetProb) * (resetProb *
-            (nVertices - 1)) )) < 1.0E-5)
+        val correct = (vid > 0 && pr == 0.0) ||
+          (vid == 0 && pr == resetProb)
         if (!correct) 1 else 0
       }
       assert(staticErrors.sum === 0)
 
       val dynamicRanks = starGraph.personalizedPageRank(0, 0, resetProb).vertices.cache()
       assert(compareRanks(staticRanks2, dynamicRanks) < errorTol)
+
+      // We have one outbound edge from 1 to 0
+      val otherStaticRanks2 = starGraph.staticPersonalizedPageRank(1, numIter = 2, resetProb)
+        .vertices.cache()
+      val otherDynamicRanks = starGraph.personalizedPageRank(1, 0, resetProb).vertices.cache()
+      assert(compareRanks(otherDynamicRanks, otherStaticRanks2) < errorTol)
     }
-  } // end of test Star PageRank
+  } // end of test Star PersonalPageRank
 
   test("Grid PageRank") {
     withSpark { sc =>

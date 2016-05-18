@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import org.apache.spark._
@@ -41,3 +42,4 @@ object HdfsTest {
     sc.stop()
   }
 }
+// scalastyle:on println

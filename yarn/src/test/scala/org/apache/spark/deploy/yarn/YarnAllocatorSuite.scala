@@ -25,14 +25,16 @@ import org.apache.hadoop.net.DNSToSwitchMapping
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.client.api.AMRMClient
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest
-
-import org.apache.spark.{SecurityManager, SparkFunSuite}
-import org.apache.spark.SparkConf
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
-import org.apache.spark.deploy.yarn.YarnAllocator._
-import org.apache.spark.scheduler.SplitInfo
-
+import org.mockito.Mockito._
 import org.scalatest.{BeforeAndAfterEach, Matchers}
+
+import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.yarn.config._
+import org.apache.spark.deploy.yarn.YarnAllocator._
+import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil._
+import org.apache.spark.rpc.RpcEndpointRef
+import org.apache.spark.scheduler.SplitInfo
+import org.apache.spark.util.ManualClock
 
 class MockResolver extends DNSToSwitchMapping {
 
@@ -55,7 +57,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   val sparkConf = new SparkConf()
   sparkConf.set("spark.driver.host", "localhost")
   sparkConf.set("spark.driver.port", "4040")
-  sparkConf.set("spark.yarn.jar", "notarealjar.jar")
+  sparkConf.set(SPARK_JARS, Seq("notarealjar.jar"))
   sparkConf.set("spark.yarn.launchContainers", "false")
 
   val appAttemptId = ApplicationAttemptId.newInstance(ApplicationId.newInstance(0, 0), 0)
@@ -69,34 +71,43 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
   var containerNum = 0
 
   override def beforeEach() {
+    super.beforeEach()
     rmClient = AMRMClient.createAMRMClient()
     rmClient.init(conf)
     rmClient.start()
   }
 
   override def afterEach() {
-    rmClient.stop()
+    try {
+      rmClient.stop()
+    } finally {
+      super.afterEach()
+    }
   }
 
   class MockSplitInfo(host: String) extends SplitInfo(null, host, null, 1, null) {
+    override def hashCode(): Int = 0
     override def equals(other: Any): Boolean = false
   }
 
   def createAllocator(maxExecutors: Int = 5): YarnAllocator = {
     val args = Array(
-      "--num-executors", s"$maxExecutors",
-      "--executor-cores", "5",
-      "--executor-memory", "2048",
       "--jar", "somejar.jar",
       "--class", "SomeClass")
+    val sparkConfClone = sparkConf.clone()
+    sparkConfClone
+      .set("spark.executor.instances", maxExecutors.toString)
+      .set("spark.executor.cores", "5")
+      .set("spark.executor.memory", "2048")
     new YarnAllocator(
       "not used",
+      mock(classOf[RpcEndpointRef]),
       conf,
-      sparkConf,
+      sparkConfClone,
       rmClient,
       appAttemptId,
-      new ApplicationMasterArguments(args),
-      new SecurityManager(sparkConf))
+      new SecurityManager(sparkConf),
+      Map())
   }
 
   def createContainer(host: String): Container = {
@@ -111,7 +122,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val handler = createAllocator(1)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
-    handler.getNumPendingAllocate should be (1)
+    handler.getPendingAllocate.size should be (1)
 
     val container = createContainer("host1")
     handler.handleAllocatedContainers(Array(container))
@@ -129,7 +140,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val handler = createAllocator(4)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
-    handler.getNumPendingAllocate should be (4)
+    handler.getPendingAllocate.size should be (4)
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host1")
@@ -149,7 +160,7 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val handler = createAllocator(2)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
-    handler.getNumPendingAllocate should be (2)
+    handler.getPendingAllocate.size should be (2)
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
@@ -169,11 +180,11 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val handler = createAllocator(4)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
-    handler.getNumPendingAllocate should be (4)
+    handler.getPendingAllocate.size should be (4)
 
-    handler.requestTotalExecutors(3)
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map.empty)
     handler.updateResourceRequests()
-    handler.getNumPendingAllocate should be (3)
+    handler.getPendingAllocate.size should be (3)
 
     val container = createContainer("host1")
     handler.handleAllocatedContainers(Array(container))
@@ -182,20 +193,20 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.allocatedContainerToHostMap.get(container.getId).get should be ("host1")
     handler.allocatedHostToContainersMap.get("host1").get should contain (container.getId)
 
-    handler.requestTotalExecutors(2)
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map.empty)
     handler.updateResourceRequests()
-    handler.getNumPendingAllocate should be (1)
+    handler.getPendingAllocate.size should be (1)
   }
 
   test("decrease total requested executors to less than currently running") {
     val handler = createAllocator(4)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
-    handler.getNumPendingAllocate should be (4)
+    handler.getPendingAllocate.size should be (4)
 
-    handler.requestTotalExecutors(3)
+    handler.requestTotalExecutorsWithPreferredLocalities(3, 0, Map.empty)
     handler.updateResourceRequests()
-    handler.getNumPendingAllocate should be (3)
+    handler.getPendingAllocate.size should be (3)
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
@@ -203,9 +214,9 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
 
     handler.getNumExecutorsRunning should be (2)
 
-    handler.requestTotalExecutors(1)
+    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map.empty)
     handler.updateResourceRequests()
-    handler.getNumPendingAllocate should be (0)
+    handler.getPendingAllocate.size should be (0)
     handler.getNumExecutorsRunning should be (2)
   }
 
@@ -213,13 +224,13 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     val handler = createAllocator(4)
     handler.updateResourceRequests()
     handler.getNumExecutorsRunning should be (0)
-    handler.getNumPendingAllocate should be (4)
+    handler.getPendingAllocate.size should be (4)
 
     val container1 = createContainer("host1")
     val container2 = createContainer("host2")
     handler.handleAllocatedContainers(Array(container1, container2))
 
-    handler.requestTotalExecutors(1)
+    handler.requestTotalExecutorsWithPreferredLocalities(1, 0, Map.empty)
     handler.executorIdToContainer.keys.foreach { id => handler.killExecutor(id ) }
 
     val statuses = Seq(container1, container2).map { c =>
@@ -228,7 +239,31 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     handler.updateResourceRequests()
     handler.processCompletedContainers(statuses.toSeq)
     handler.getNumExecutorsRunning should be (0)
-    handler.getNumPendingAllocate should be (1)
+    handler.getPendingAllocate.size should be (1)
+  }
+
+  test("lost executor removed from backend") {
+    val handler = createAllocator(4)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (4)
+
+    val container1 = createContainer("host1")
+    val container2 = createContainer("host2")
+    handler.handleAllocatedContainers(Array(container1, container2))
+
+    handler.requestTotalExecutorsWithPreferredLocalities(2, 0, Map())
+
+    val statuses = Seq(container1, container2).map { c =>
+      ContainerStatus.newInstance(c.getId(), ContainerState.COMPLETE, "Failed", -1)
+    }
+    handler.updateResourceRequests()
+    handler.processCompletedContainers(statuses.toSeq)
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (2)
+    handler.getNumExecutorsFailed should be (2)
+    handler.getNumUnexpectedContainerRelease should be (2)
   }
 
   test("memory exceeded diagnostic regexes") {
@@ -242,4 +277,48 @@ class YarnAllocatorSuite extends SparkFunSuite with Matchers with BeforeAndAfter
     assert(pmemMsg.contains("2.1 MB of 2 GB physical memory used."))
   }
 
+  test("window based failure executor counting") {
+    sparkConf.set("spark.yarn.executor.failuresValidityInterval", "100s")
+    val handler = createAllocator(4)
+    val clock = new ManualClock(0L)
+    handler.setClock(clock)
+
+    handler.updateResourceRequests()
+    handler.getNumExecutorsRunning should be (0)
+    handler.getPendingAllocate.size should be (4)
+
+    val containers = Seq(
+      createContainer("host1"),
+      createContainer("host2"),
+      createContainer("host3"),
+      createContainer("host4")
+    )
+    handler.handleAllocatedContainers(containers)
+
+    val failedStatuses = containers.map { c =>
+      ContainerStatus.newInstance(c.getId, ContainerState.COMPLETE, "Failed", -1)
+    }
+
+    handler.getNumExecutorsFailed should be (0)
+
+    clock.advance(100 * 1000L)
+    handler.processCompletedContainers(failedStatuses.slice(0, 1))
+    handler.getNumExecutorsFailed should be (1)
+
+    clock.advance(101 * 1000L)
+    handler.getNumExecutorsFailed should be (0)
+
+    handler.processCompletedContainers(failedStatuses.slice(1, 3))
+    handler.getNumExecutorsFailed should be (2)
+
+    clock.advance(50 * 1000L)
+    handler.processCompletedContainers(failedStatuses.slice(3, 4))
+    handler.getNumExecutorsFailed should be (3)
+
+    clock.advance(51 * 1000L)
+    handler.getNumExecutorsFailed should be (1)
+
+    clock.advance(50 * 1000L)
+    handler.getNumExecutorsFailed should be (0)
+  }
 }

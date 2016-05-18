@@ -19,25 +19,21 @@ package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.concurrent.Await
 import scala.xml.Node
 
-import akka.pattern.ask
 import org.json4s.JValue
 
+import org.apache.spark.deploy.DeployMessages.{KillDriverResponse, MasterStateResponse, RequestKillDriver, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.DeployMessages.{RequestKillDriver, MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master._
-import org.apache.spark.ui.{WebUIPage, UIUtils}
+import org.apache.spark.ui.{UIUtils, WebUIPage}
 import org.apache.spark.util.Utils
 
 private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
-  private val master = parent.masterActorRef
-  private val timeout = parent.timeout
+  private val master = parent.masterEndpointRef
 
   def getMasterState: MasterStateResponse = {
-    val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    Await.result(stateFuture, timeout)
+    master.askWithRetry[MasterStateResponse](RequestMasterState)
   }
 
   override def renderJson(request: HttpServletRequest): JValue = {
@@ -53,7 +49,9 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   }
 
   def handleDriverKillRequest(request: HttpServletRequest): Unit = {
-    handleKillRequest(request, id => { master ! RequestKillDriver(id) })
+    handleKillRequest(request, id => {
+      master.ask[KillDriverResponse](RequestKillDriver(id))
+    })
   }
 
   private def handleKillRequest(request: HttpServletRequest, action: String => Unit): Unit = {
@@ -109,18 +107,18 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
                   </li>
                 }.getOrElse { Seq.empty }
               }
-              <li><strong>Alive Workers:</strong> {aliveWorkers.size}</li>
+              <li><strong>Alive Workers:</strong> {aliveWorkers.length}</li>
               <li><strong>Cores in use:</strong> {aliveWorkers.map(_.cores).sum} Total,
                 {aliveWorkers.map(_.coresUsed).sum} Used</li>
               <li><strong>Memory in use:</strong>
                 {Utils.megabytesToString(aliveWorkers.map(_.memory).sum)} Total,
                 {Utils.megabytesToString(aliveWorkers.map(_.memoryUsed).sum)} Used</li>
               <li><strong>Applications:</strong>
-                {state.activeApps.size} Running,
-                {state.completedApps.size} Completed </li>
+                {state.activeApps.length} <a href="#running-app">Running</a>,
+                {state.completedApps.length} <a href="#completed-app">Completed</a> </li>
               <li><strong>Drivers:</strong>
-                {state.activeDrivers.size} Running,
-                {state.completedDrivers.size} Completed </li>
+                {state.activeDrivers.length} Running,
+                {state.completedDrivers.length} Completed </li>
               <li><strong>Status:</strong> {state.status}</li>
             </ul>
           </div>
@@ -135,7 +133,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> Running Applications </h4>
+            <h4 id="running-app"> Running Applications </h4>
             {activeAppsTable}
           </div>
         </div>
@@ -154,7 +152,7 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
 
         <div class="row-fluid">
           <div class="span12">
-            <h4> Completed Applications </h4>
+            <h4 id="completed-app"> Completed Applications </h4>
             {completedAppsTable}
           </div>
         </div>
@@ -208,7 +206,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
         {killLink}
       </td>
       <td>
-        <a href={app.desc.appUiUrl}>{app.desc.name}</a>
+        {
+          if (app.isFinished) {
+            app.desc.name
+          } else {
+            <a href={app.desc.appUiUrl}>{app.desc.name}</a>
+          }
+        }
       </td>
       <td>
         {app.coresGranted}

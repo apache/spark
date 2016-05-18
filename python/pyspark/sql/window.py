@@ -17,8 +17,7 @@
 
 import sys
 
-from pyspark import SparkContext
-from pyspark.sql import since
+from pyspark import since, SparkContext
 from pyspark.sql.column import _to_seq, _to_java_column
 
 __all__ = ["Window", "WindowSpec"]
@@ -61,10 +60,10 @@ class Window(object):
     @since(1.4)
     def orderBy(*cols):
         """
-        Creates a :class:`WindowSpec` with the partitioning defined.
+        Creates a :class:`WindowSpec` with the ordering defined.
         """
         sc = SparkContext._active_spark_context
-        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.partitionBy(_to_java_cols(cols))
+        jspec = sc._jvm.org.apache.spark.sql.expressions.Window.orderBy(_to_java_cols(cols))
         return WindowSpec(jspec)
 
 

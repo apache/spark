@@ -17,9 +17,10 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.annotation.DeveloperApi
-
 import scala.reflect.ClassTag
+
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rpc.RpcEnv
 
 /**
  * Allows Master to persist any state that is necessary in order to recover from a failure.
@@ -39,12 +40,12 @@ abstract class PersistenceEngine {
    * Defines how the object is serialized and persisted. Implementation will
    * depend on the store used.
    */
-  def persist(name: String, obj: Object)
+  def persist(name: String, obj: Object): Unit
 
   /**
    * Defines how the object referred by its name is removed from the store.
    */
-  def unpersist(name: String)
+  def unpersist(name: String): Unit
 
   /**
    * Gives all objects, matching a prefix. This defines how objects are
@@ -80,8 +81,11 @@ abstract class PersistenceEngine {
    * Returns the persisted data sorted by their respective ids (which implies that they're
    * sorted by time of creation).
    */
-  final def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
-    (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
+  final def readPersistedData(
+      rpcEnv: RpcEnv): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
+    rpcEnv.deserialize { () =>
+      (read[ApplicationInfo]("app_"), read[DriverInfo]("driver_"), read[WorkerInfo]("worker_"))
+    }
   }
 
   def close() {}

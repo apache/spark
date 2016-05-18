@@ -17,150 +17,161 @@
 
 package org.apache.spark.sql
 
-import org.scalatest.BeforeAndAfterEach
-
-import org.apache.spark.sql.TestData._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.joins._
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSQLContext
 
 
-class JoinSuite extends QueryTest with BeforeAndAfterEach {
-  // Ensures tables are loaded.
-  TestData
+class JoinSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
-  lazy val ctx = org.apache.spark.sql.test.TestSQLContext
-  import ctx.implicits._
-  import ctx.logicalPlanToSparkQuery
+  setupTestData()
+
+  def statisticSizeInByte(df: DataFrame): BigInt = {
+    df.queryExecution.optimizedPlan.statistics.sizeInBytes
+  }
 
   test("equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, $"x.a" === $"y.a", "inner").queryExecution.optimizedPlan
-    val planned = ctx.planner.HashJoin(join)
+    val planned = spark.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 
-  def assertJoin(sqlString: String, c: Class[_]): Any = {
-    val df = ctx.sql(sqlString)
+  def assertJoin(pair: (String, Class[_])): Any = {
+    val (sqlString, c) = pair
+    val df = sql(sqlString)
     val physical = df.queryExecution.sparkPlan
     val operators = physical.collect {
-      case j: ShuffledHashJoin => j
-      case j: HashOuterJoin => j
-      case j: LeftSemiJoinHash => j
-      case j: BroadcastHashJoin => j
-      case j: LeftSemiJoinBNL => j
-      case j: CartesianProduct => j
-      case j: BroadcastNestedLoopJoin => j
-      case j: BroadcastLeftSemiJoinHash => j
-      case j: SortMergeJoin => j
+      case j: BroadcastHashJoinExec => j
+      case j: ShuffledHashJoinExec => j
+      case j: CartesianProductExec => j
+      case j: BroadcastNestedLoopJoinExec => j
+      case j: SortMergeJoinExec => j
     }
 
     assert(operators.size === 1)
-    if (operators(0).getClass() != c) {
-      fail(s"$sqlString expected operator: $c, but got ${operators(0)}\n physical: \n$physical")
+    if (operators.head.getClass != c) {
+      fail(s"$sqlString expected operator: $c, but got ${operators.head}\n physical: \n$physical")
     }
   }
 
   test("join operator selection") {
-    ctx.cacheManager.clearCache()
+    spark.cacheManager.clearCache()
 
-    val SORTMERGEJOIN_ENABLED: Boolean = ctx.conf.sortMergeJoinEnabled
-    Seq(
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash]),
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[LeftSemiJoinBNL]),
-      ("SELECT * FROM testData JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData LEFT JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData RIGHT JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a", classOf[CartesianProduct]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[ShuffledHashJoin]),
-      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[HashOuterJoin]),
-      ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
-        classOf[HashOuterJoin]),
-      ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
-        classOf[HashOuterJoin]),
-      ("SELECT * FROM testData full outer join testData2 ON key = a", classOf[HashOuterJoin]),
-      ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
-        classOf[BroadcastNestedLoopJoin]),
-      ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
-        classOf[BroadcastNestedLoopJoin]),
-      ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
-        classOf[BroadcastNestedLoopJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    try {
-      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
       Seq(
-        ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoin]),
-        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2", classOf[SortMergeJoin]),
-        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2", classOf[SortMergeJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    } finally {
-      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, SORTMERGEJOIN_ENABLED)
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2", classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData JOIN testData2", classOf[CartesianProductExec]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key = 2", classOf[CartesianProductExec]),
+        ("SELECT * FROM testData LEFT JOIN testData2", classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData RIGHT JOIN testData2", classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2", classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2",
+          classOf[CartesianProductExec]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key > a", classOf[CartesianProductExec]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
+          classOf[CartesianProductExec]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a and key = 2",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData JOIN testData2 ON key = a where key = 2",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData LEFT JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData full outer join testData2 ON key = a",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData left JOIN testData2 ON (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData right JOIN testData2 ON (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData full JOIN testData2 ON (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData ANTI JOIN testData2 ON key = a", classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData LEFT ANTI JOIN testData2", classOf[BroadcastNestedLoopJoinExec])
+      ).foreach(assertJoin)
     }
   }
 
+//  ignore("SortMergeJoin shouldn't work on unsortable columns") {
+//    Seq(
+//      ("SELECT * FROM arrayData JOIN complexData ON data = a", classOf[ShuffledHashJoin])
+//    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
+//  }
+
   test("broadcasted hash join operator selection") {
-    ctx.cacheManager.clearCache()
-    ctx.sql("CACHE TABLE testData")
-
-    val SORTMERGEJOIN_ENABLED: Boolean = ctx.conf.sortMergeJoinEnabled
+    spark.cacheManager.clearCache()
+    sql("CACHE TABLE testData")
     Seq(
-      ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
-      ("SELECT * FROM testData join testData2 ON key = a and key = 2", classOf[BroadcastHashJoin]),
+      ("SELECT * FROM testData join testData2 ON key = a",
+        classOf[BroadcastHashJoinExec]),
+      ("SELECT * FROM testData join testData2 ON key = a and key = 2",
+        classOf[BroadcastHashJoinExec]),
       ("SELECT * FROM testData join testData2 ON key = a where key = 2",
-        classOf[BroadcastHashJoin])
-    ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    try {
-      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, true)
-      Seq(
-        ("SELECT * FROM testData join testData2 ON key = a", classOf[BroadcastHashJoin]),
-        ("SELECT * FROM testData join testData2 ON key = a and key = 2",
-          classOf[BroadcastHashJoin]),
-        ("SELECT * FROM testData join testData2 ON key = a where key = 2",
-          classOf[BroadcastHashJoin])
-      ).foreach { case (query, joinClass) => assertJoin(query, joinClass) }
-    } finally {
-      ctx.conf.setConf(SQLConf.SORTMERGE_JOIN, SORTMERGEJOIN_ENABLED)
-    }
+        classOf[BroadcastHashJoinExec])
+    ).foreach(assertJoin)
+    sql("UNCACHE TABLE testData")
+  }
 
-    ctx.sql("UNCACHE TABLE testData")
+  test("broadcasted hash outer join operator selection") {
+    spark.cacheManager.clearCache()
+    sql("CACHE TABLE testData")
+    sql("CACHE TABLE testData2")
+    Seq(
+      ("SELECT * FROM testData LEFT JOIN testData2 ON key = a",
+        classOf[BroadcastHashJoinExec]),
+      ("SELECT * FROM testData RIGHT JOIN testData2 ON key = a where key = 2",
+        classOf[BroadcastHashJoinExec]),
+      ("SELECT * FROM testData right join testData2 ON key = a and key = 2",
+        classOf[BroadcastHashJoinExec])
+    ).foreach(assertJoin)
+    sql("UNCACHE TABLE testData")
   }
 
   test("multiple-key equi-join is hash-join") {
     val x = testData2.as("x")
     val y = testData2.as("y")
     val join = x.join(y, ($"x.a" === $"y.a") && ($"x.b" === $"y.b")).queryExecution.optimizedPlan
-    val planned = ctx.planner.HashJoin(join)
+    val planned = spark.sessionState.planner.JoinSelection(join)
     assert(planned.size === 1)
   }
 
   test("inner join where, one match per row") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData).where('n === 'N),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")
-      ))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        upperCaseData.join(lowerCaseData).where('n === 'N),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")
+        ))
+    }
   }
 
   test("inner join ON, one match per row") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N"),
-      Seq(
-        Row(1, "A", 1, "a"),
-        Row(2, "B", 2, "b"),
-        Row(3, "C", 3, "c"),
-        Row(4, "D", 4, "d")
-      ))
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        upperCaseData.join(lowerCaseData, $"n" === $"N"),
+        Seq(
+          Row(1, "A", 1, "a"),
+          Row(2, "B", 2, "b"),
+          Row(3, "C", 3, "c"),
+          Row(4, "D", 4, "d")
+        ))
+    }
   }
 
   test("inner join, where, multiple matches") {
@@ -184,7 +195,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("big inner join, 4 matches per row") {
-    val bigData = testData.unionAll(testData).unionAll(testData).unionAll(testData)
+    val bigData = testData.union(testData).union(testData).union(testData)
     val bigDataX = bigData.as("x")
     val bigDataY = bigData.as("y")
 
@@ -203,134 +214,141 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
   }
 
   test("left outer join") {
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N", "left"),
-      Row(1, "A", 1, "a") ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        upperCaseData.join(lowerCaseData, $"n" === $"N", "left"),
+        Row(1, "A", 1, "a") ::
+          Row(2, "B", 2, "b") ::
+          Row(3, "C", 3, "c") ::
+          Row(4, "D", 4, "d") ::
+          Row(5, "E", null, null) ::
+          Row(6, "F", null, null) :: Nil)
 
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > 1, "left"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+      checkAnswer(
+        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"n" > 1, "left"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", 2, "b") ::
+          Row(3, "C", 3, "c") ::
+          Row(4, "D", 4, "d") ::
+          Row(5, "E", null, null) ::
+          Row(6, "F", null, null) :: Nil)
 
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > 1, "left"),
-      Row(1, "A", null, null) ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+      checkAnswer(
+        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"N" > 1, "left"),
+        Row(1, "A", null, null) ::
+          Row(2, "B", 2, "b") ::
+          Row(3, "C", 3, "c") ::
+          Row(4, "D", 4, "d") ::
+          Row(5, "E", null, null) ::
+          Row(6, "F", null, null) :: Nil)
 
-    checkAnswer(
-      upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
-      Row(1, "A", 1, "a") ::
-        Row(2, "B", 2, "b") ::
-        Row(3, "C", 3, "c") ::
-        Row(4, "D", 4, "d") ::
-        Row(5, "E", null, null) ::
-        Row(6, "F", null, null) :: Nil)
+      checkAnswer(
+        upperCaseData.join(lowerCaseData, $"n" === $"N" && $"l" > $"L", "left"),
+        Row(1, "A", 1, "a") ::
+          Row(2, "B", 2, "b") ::
+          Row(3, "C", 3, "c") ::
+          Row(4, "D", 4, "d") ::
+          Row(5, "E", null, null) ::
+          Row(6, "F", null, null) :: Nil)
 
-    // Make sure we are choosing left.outputPartitioning as the
-    // outputPartitioning for the outer join operator.
-    checkAnswer(
-      ctx.sql(
-        """
+      // Make sure we are choosing left.outputPartitioning as the
+      // outputPartitioning for the outer join operator.
+      checkAnswer(
+        sql(
+          """
           |SELECT l.N, count(*)
-          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
+          |FROM uppercasedata l LEFT OUTER JOIN allnulls r ON (l.N = r.a)
           |GROUP BY l.N
-        """.stripMargin),
-      Row(1, 1) ::
+          """.stripMargin),
+      Row(
+        1, 1) ::
         Row(2, 1) ::
         Row(3, 1) ::
         Row(4, 1) ::
         Row(5, 1) ::
         Row(6, 1) :: Nil)
 
-    checkAnswer(
-      ctx.sql(
-        """
-          |SELECT r.a, count(*)
-          |FROM upperCaseData l LEFT OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY r.a
-        """.stripMargin),
-      Row(null, 6) :: Nil)
+      checkAnswer(
+        sql(
+          """
+            |SELECT r.a, count(*)
+            |FROM uppercasedata l LEFT OUTER JOIN allnulls r ON (l.N = r.a)
+            |GROUP BY r.a
+          """.stripMargin),
+        Row(null, 6) :: Nil)
+    }
   }
 
   test("right outer join") {
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N", "right"),
-      Row(1, "a", 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > 1, "right"),
-      Row(null, null, 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > 1, "right"),
-      Row(null, null, 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
-    checkAnswer(
-      lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
-      Row(1, "a", 1, "A") ::
-        Row(2, "b", 2, "B") ::
-        Row(3, "c", 3, "C") ::
-        Row(4, "d", 4, "D") ::
-        Row(null, null, 5, "E") ::
-        Row(null, null, 6, "F") :: Nil)
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkAnswer(
+        lowerCaseData.join(upperCaseData, $"n" === $"N", "right"),
+        Row(1, "a", 1, "A") ::
+          Row(2, "b", 2, "B") ::
+          Row(3, "c", 3, "C") ::
+          Row(4, "d", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"n" > 1, "right"),
+        Row(null, null, 1, "A") ::
+          Row(2, "b", 2, "B") ::
+          Row(3, "c", 3, "C") ::
+          Row(4, "d", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"N" > 1, "right"),
+        Row(null, null, 1, "A") ::
+          Row(2, "b", 2, "B") ::
+          Row(3, "c", 3, "C") ::
+          Row(4, "d", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
+      checkAnswer(
+        lowerCaseData.join(upperCaseData, $"n" === $"N" && $"l" > $"L", "right"),
+        Row(1, "a", 1, "A") ::
+          Row(2, "b", 2, "B") ::
+          Row(3, "c", 3, "C") ::
+          Row(4, "d", 4, "D") ::
+          Row(null, null, 5, "E") ::
+          Row(null, null, 6, "F") :: Nil)
 
-    // Make sure we are choosing right.outputPartitioning as the
-    // outputPartitioning for the outer join operator.
-    checkAnswer(
-      ctx.sql(
-        """
-          |SELECT l.a, count(*)
-          |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY l.a
-        """.stripMargin),
-      Row(null, 6))
+      // Make sure we are choosing right.outputPartitioning as the
+      // outputPartitioning for the outer join operator.
+      checkAnswer(
+        sql(
+          """
+            |SELECT l.a, count(*)
+            |FROM allnulls l RIGHT OUTER JOIN uppercasedata r ON (l.a = r.N)
+            |GROUP BY l.a
+          """.stripMargin),
+        Row(null,
+          6))
 
-    checkAnswer(
-      ctx.sql(
-        """
-          |SELECT r.N, count(*)
-          |FROM allNulls l RIGHT OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY r.N
-        """.stripMargin),
-      Row(1, 1) ::
-        Row(2, 1) ::
-        Row(3, 1) ::
-        Row(4, 1) ::
-        Row(5, 1) ::
-        Row(6, 1) :: Nil)
+      checkAnswer(
+        sql(
+          """
+            |SELECT r.N, count(*)
+            |FROM allnulls l RIGHT OUTER JOIN uppercasedata r ON (l.a = r.N)
+            |GROUP BY r.N
+          """.stripMargin),
+        Row(1
+          , 1) ::
+          Row(2, 1) ::
+          Row(3, 1) ::
+          Row(4, 1) ::
+          Row(5, 1) ::
+          Row(6, 1) :: Nil)
+    }
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).registerTempTable("left")
-    upperCaseData.where('N >= 3).registerTempTable("right")
+    upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
+    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
 
-    val left = UnresolvedRelation(Seq("left"), None)
-    val right = UnresolvedRelation(Seq("right"), None)
+    val left = UnresolvedRelation(TableIdentifier("left"), None)
+    val right = UnresolvedRelation(TableIdentifier("right"), None)
 
     checkAnswer(
       left.join(right, $"left.N" === $"right.N", "full"),
@@ -342,7 +360,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"left.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"left.N" =!= 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -352,7 +370,7 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 6, "F") :: Nil)
 
     checkAnswer(
-      left.join(right, ($"left.N" === $"right.N") && ($"right.N" !== 3), "full"),
+      left.join(right, ($"left.N" === $"right.N") && ($"right.N" =!= 3), "full"),
       Row(1, "A", null, null) ::
         Row(2, "B", null, null) ::
         Row(3, "C", null, null) ::
@@ -361,24 +379,27 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, null, 5, "E") ::
         Row(null, null, 6, "F") :: Nil)
 
-    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join operator.
+    // Make sure we are UnknownPartitioning as the outputPartitioning for the outer join
+    // operator.
     checkAnswer(
-      ctx.sql(
+      sql(
         """
-          |SELECT l.a, count(*)
-          |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
-          |GROUP BY l.a
-        """.stripMargin),
+        |SELECT l.a, count(*)
+        |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
+        |GROUP BY l.a
+      """.
+          stripMargin),
       Row(null, 10))
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT r.N, count(*)
           |FROM allNulls l FULL OUTER JOIN upperCaseData r ON (l.a = r.N)
           |GROUP BY r.N
         """.stripMargin),
-      Row(1, 1) ::
+      Row
+        (1, 1) ::
         Row(2, 1) ::
         Row(3, 1) ::
         Row(4, 1) ::
@@ -387,13 +408,14 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, 4) :: Nil)
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
           |SELECT l.N, count(*)
           |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
           |GROUP BY l.N
         """.stripMargin),
-      Row(1, 1) ::
+      Row(1
+        , 1) ::
         Row(2, 1) ::
         Row(3, 1) ::
         Row(4, 1) ::
@@ -402,42 +424,130 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(null, 4) :: Nil)
 
     checkAnswer(
-      ctx.sql(
+      sql(
         """
-          |SELECT r.a, count(*)
-          |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
-          |GROUP BY r.a
-        """.stripMargin),
+        |SELECT r.a, count(*)
+        |FROM upperCaseData l FULL OUTER JOIN allNulls r ON (l.N = r.a)
+        |GROUP BY r.a
+      """.
+          stripMargin),
       Row(null, 10))
   }
 
-  test("broadcasted left semi join operator selection") {
-    ctx.cacheManager.clearCache()
-    ctx.sql("CACHE TABLE testData")
-    val tmp = ctx.conf.autoBroadcastJoinThreshold
+  test("broadcasted existence join operator selection") {
+    spark.cacheManager.clearCache()
+    sql("CACHE TABLE testData")
 
-    ctx.sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=1000000000")
-    Seq(
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
-        classOf[BroadcastLeftSemiJoinHash])
-    ).foreach {
-      case (query, joinClass) => assertJoin(query, joinClass)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
+      Seq(
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[BroadcastHashJoinExec]),
+        ("SELECT * FROM testData ANT JOIN testData2 ON key = a", classOf[BroadcastHashJoinExec])
+      ).foreach(assertJoin)
     }
 
-    ctx.sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
-
-    Seq(
-      ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a", classOf[LeftSemiJoinHash])
-    ).foreach {
-      case (query, joinClass) => assertJoin(query, joinClass)
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      Seq(
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData LEFT ANTI JOIN testData2 ON key = a",
+          classOf[SortMergeJoinExec])
+      ).foreach(assertJoin)
     }
 
-    ctx.setConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, tmp)
-    ctx.sql("UNCACHE TABLE testData")
+    sql("UNCACHE TABLE testData")
+  }
+
+  test("cross join with broadcast") {
+    sql("CACHE TABLE testData")
+
+    val sizeInByteOfTestData = statisticSizeInByte(spark.table("testData"))
+
+    // we set the threshold is greater than statistic of the cached table testData
+    withSQLConf(
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> (sizeInByteOfTestData + 1).toString()) {
+
+      assert(statisticSizeInByte(spark.table("testData2")) >
+        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+
+      assert(statisticSizeInByte(spark.table("testData")) <
+        spark.conf.get(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD))
+
+      Seq(
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
+          classOf[SortMergeJoinExec]),
+        ("SELECT * FROM testData LEFT SEMI JOIN testData2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData JOIN testData2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData LEFT JOIN testData2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData RIGHT JOIN testData2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData LEFT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData RIGHT JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key = 2",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData JOIN testData2 WHERE key > a",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData FULL OUTER JOIN testData2 WHERE key > a",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData left JOIN testData2 WHERE (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData right JOIN testData2 WHERE (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoinExec]),
+        ("SELECT * FROM testData full JOIN testData2 WHERE (key * a != key + a)",
+          classOf[BroadcastNestedLoopJoinExec])
+      ).foreach(assertJoin)
+
+      checkAnswer(
+        sql(
+          """
+            SELECT x.value, y.a, y.b FROM testData x JOIN testData2 y WHERE x.key = 2
+          """.stripMargin),
+        Row("2", 1, 1) ::
+        Row("2", 1, 2) ::
+        Row("2", 2, 1) ::
+        Row("2", 2, 2) ::
+        Row("2", 3, 1) ::
+        Row("2", 3, 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            SELECT x.value, y.a, y.b FROM testData x JOIN testData2 y WHERE x.key < y.a
+          """.stripMargin),
+        Row("1", 2, 1) ::
+        Row("1", 2, 2) ::
+        Row("1", 3, 1) ::
+        Row("1", 3, 2) ::
+        Row("2", 3, 1) ::
+        Row("2", 3, 2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            SELECT x.value, y.a, y.b FROM testData x JOIN testData2 y ON x.key < y.a
+          """.stripMargin),
+        Row("1", 2, 1) ::
+          Row("1", 2, 2) ::
+          Row("1", 3, 1) ::
+          Row("1", 3, 2) ::
+          Row("2", 3, 1) ::
+          Row("2", 3, 2) :: Nil)
+    }
+
+    sql("UNCACHE TABLE testData")
   }
 
   test("left semi join") {
-    val df = ctx.sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
+    val df = sql("SELECT * FROM testData2 LEFT SEMI JOIN testData ON key = a")
     checkAnswer(df,
       Row(1, 1) ::
         Row(1, 2) ::
@@ -445,6 +555,5 @@ class JoinSuite extends QueryTest with BeforeAndAfterEach {
         Row(2, 2) ::
         Row(3, 1) ::
         Row(3, 2) :: Nil)
-
   }
 }

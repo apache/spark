@@ -27,7 +27,6 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.selenium.WebBrowser
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.hive.HiveContext
 import org.apache.spark.ui.SparkUICssErrorHandler
 
 class UISeleniumSuite
@@ -36,9 +35,8 @@ class UISeleniumSuite
 
   implicit var webDriver: WebDriver = _
   var server: HiveThriftServer2 = _
-  var hc: HiveContext = _
   val uiPort = 20000 + Random.nextInt(10000)
-  override def mode: ServerMode.Value = ServerMode.binary
+  override def mode: ServerMode.Value = ServerMode.http
 
   override def beforeAll(): Unit = {
     webDriver = new HtmlUnitDriver {

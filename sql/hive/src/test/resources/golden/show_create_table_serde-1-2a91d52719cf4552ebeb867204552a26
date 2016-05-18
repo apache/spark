@@ -1,4 +1,4 @@
-CREATE  TABLE `tmp_showcrt1`(
+CREATE TABLE `tmp_showcrt1`(
   `key` int, 
   `value` string, 
   `newvalue` bigint)

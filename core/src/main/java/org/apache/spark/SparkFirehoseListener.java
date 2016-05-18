@@ -28,7 +28,7 @@ import org.apache.spark.scheduler.*;
  * this was a concrete Scala class, default implementations of new event handlers would be inherited
  * from the SparkListener trait).
  */
-public class SparkFirehoseListener implements SparkListener {
+public class SparkFirehoseListener implements SparkListenerInterface {
 
     public void onEvent(SparkListenerEvent event) { }
 
@@ -111,5 +111,15 @@ public class SparkFirehoseListener implements SparkListener {
     @Override
     public final void onExecutorRemoved(SparkListenerExecutorRemoved executorRemoved) {
         onEvent(executorRemoved);
+    }
+
+    @Override
+    public void onBlockUpdated(SparkListenerBlockUpdated blockUpdated) {
+        onEvent(blockUpdated);
+    }
+
+    @Override
+    public void onOtherEvent(SparkListenerEvent event) {
+        onEvent(event);
     }
 }

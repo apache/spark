@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
-import org.apache.spark.mllib.util.{LocalClusterSparkContext, LinearDataGenerator,
+import org.apache.spark.mllib.util.{LinearDataGenerator, LocalClusterSparkContext,
   MLlibTestSparkContext}
 import org.apache.spark.util.Utils
 
@@ -100,7 +100,7 @@ class LassoSuite extends SparkFunSuite with MLlibTestSparkContext {
     val testRDD = sc.parallelize(testData, 2).cache()
 
     val ls = new LassoWithSGD()
-    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40)
+    ls.optimizer.setStepSize(1.0).setRegParam(0.01).setNumIterations(40).setConvergenceTol(0.0005)
 
     val model = ls.run(testRDD, initialWeights)
     val weight0 = model.weights(0)

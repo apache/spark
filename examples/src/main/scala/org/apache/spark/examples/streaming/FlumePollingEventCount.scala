@@ -15,14 +15,13 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.flume._
 import org.apache.spark.util.IntParam
-import java.net.InetSocketAddress
 
 /**
  *  Produces a count of events received from Flume.
@@ -65,3 +64,4 @@ object FlumePollingEventCount {
     ssc.awaitTermination()
   }
 }
+// scalastyle:on println

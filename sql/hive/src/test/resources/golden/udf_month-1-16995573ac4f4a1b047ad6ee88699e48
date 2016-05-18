@@ -1,6 +1,8 @@
-minute(date) - Returns the minute of date
-date is a string in the format of 'yyyy-MM-dd HH:mm:ss' or 'HH:mm:ss'.
-Example:
+minute(param) - Returns the minute component of the string/timestamp/interval
+param can be one of:
+1. A string in the format of 'yyyy-MM-dd HH:mm:ss' or 'HH:mm:ss'.
+2. A timestamp value
+3. A day-time interval valueExample:
    > SELECT minute('2009-07-30 12:58:59') FROM src LIMIT 1;
   58
   > SELECT minute('12:58:59') FROM src LIMIT 1;

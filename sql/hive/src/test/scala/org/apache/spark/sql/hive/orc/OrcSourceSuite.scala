@@ -21,12 +21,16 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.sources._
+import org.apache.spark.sql.types._
 
 case class OrcData(intField: Int, stringField: String)
 
-abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
+abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterAll {
+  import hiveContext._
+
   var orcTableDir: File = null
   var orcTableAsDir: File = null
 
@@ -43,17 +47,11 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
     orcTableDir.mkdir()
     import org.apache.spark.sql.hive.test.TestHive.implicits._
 
-    // Originally we were using a 10-row RDD for testing.  However, when default parallelism is
-    // greater than 10 (e.g., running on a node with 32 cores), this RDD contains empty partitions,
-    // which result in empty ORC files.  Unfortunately, ORC doesn't handle empty files properly and
-    // causes build failure on Jenkins, which happens to have 32 cores. Please refer to SPARK-8501
-    // for more details.  To workaround this issue before fixing SPARK-8501, we simply increase row
-    // number in this RDD to avoid empty partitions.
     sparkContext
-      .makeRDD(1 to 100)
+      .makeRDD(1 to 10)
       .map(i => OrcData(i, s"part-$i"))
       .toDF()
-      .registerTempTable(s"orc_temp_table")
+      .createOrReplaceTempView(s"orc_temp_table")
 
     sql(
       s"""CREATE EXTERNAL TABLE normal_orc(
@@ -71,40 +69,44 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
   }
 
   override def afterAll(): Unit = {
-    orcTableDir.delete()
-    orcTableAsDir.delete()
+    try {
+      orcTableDir.delete()
+      orcTableAsDir.delete()
+    } finally {
+      super.afterAll()
+    }
   }
 
   test("create temporary orc table") {
-    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_source"), Row(100))
+    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_source"), Row(10))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      (1 to 100).map(i => Row(i, s"part-$i")))
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source where intField > 5"),
-      (6 to 100).map(i => Row(i, s"part-$i")))
+      (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
-      (1 to 100).map(i => Row(1, s"part-$i")))
+      (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("create temporary orc table as") {
-    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source"), Row(100))
+    checkAnswer(sql("SELECT COUNT(*) FROM normal_orc_as_source"), Row(10))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      (1 to 100).map(i => Row(i, s"part-$i")))
+      (1 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source WHERE intField > 5"),
-      (6 to 100).map(i => Row(i, s"part-$i")))
+      (6 to 10).map(i => Row(i, s"part-$i")))
 
     checkAnswer(
       sql("SELECT COUNT(intField), stringField FROM normal_orc_source GROUP BY stringField"),
-      (1 to 100).map(i => Row(1, s"part-$i")))
+      (1 to 10).map(i => Row(1, s"part-$i")))
   }
 
   test("appending insert") {
@@ -112,7 +114,7 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_source"),
-      (1 to 5).map(i => Row(i, s"part-$i")) ++ (6 to 100).flatMap { i =>
+      (1 to 5).map(i => Row(i, s"part-$i")) ++ (6 to 10).flatMap { i =>
         Seq.fill(2)(Row(i, s"part-$i"))
       })
   }
@@ -125,7 +127,36 @@ abstract class OrcSuite extends QueryTest with BeforeAndAfterAll {
 
     checkAnswer(
       sql("SELECT * FROM normal_orc_as_source"),
-      (6 to 100).map(i => Row(i, s"part-$i")))
+      (6 to 10).map(i => Row(i, s"part-$i")))
+  }
+
+  test("write null values") {
+    sql("DROP TABLE IF EXISTS orcNullValues")
+
+    val df = sql(
+      """
+        |SELECT
+        |  CAST(null as TINYINT) as c0,
+        |  CAST(null as SMALLINT) as c1,
+        |  CAST(null as INT) as c2,
+        |  CAST(null as BIGINT) as c3,
+        |  CAST(null as FLOAT) as c4,
+        |  CAST(null as DOUBLE) as c5,
+        |  CAST(null as DECIMAL(7,2)) as c6,
+        |  CAST(null as TIMESTAMP) as c7,
+        |  CAST(null as DATE) as c8,
+        |  CAST(null as STRING) as c9,
+        |  CAST(null as VARCHAR(10)) as c10
+        |FROM orc_temp_table limit 1
+      """.stripMargin)
+
+    df.write.format("orc").saveAsTable("orcNullValues")
+
+    checkAnswer(
+      sql("SELECT * FROM orcNullValues"),
+      Row.fromSeq(Seq.fill(11)(null)))
+
+    sql("DROP TABLE IF EXISTS orcNullValues")
   }
 }
 
@@ -133,7 +164,7 @@ class OrcSourceSuite extends OrcSuite {
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    sql(
+    hiveContext.sql(
       s"""CREATE TEMPORARY TABLE normal_orc_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
@@ -141,12 +172,45 @@ class OrcSourceSuite extends OrcSuite {
          |)
        """.stripMargin)
 
-    sql(
+    hiveContext.sql(
       s"""CREATE TEMPORARY TABLE normal_orc_as_source
          |USING org.apache.spark.sql.hive.orc
          |OPTIONS (
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).getCanonicalPath}'
          |)
        """.stripMargin)
+  }
+
+  test("SPARK-12218 Converting conjunctions into ORC SearchArguments") {
+    // The `LessThan` should be converted while the `StringContains` shouldn't
+    val schema = new StructType(
+      Array(
+        StructField("a", IntegerType, nullable = true),
+        StructField("b", StringType, nullable = true)))
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        LessThan("a", 10),
+        StringContains("b", "prefix")
+      )).get.toString
+    }
+
+    // The `LessThan` should be converted while the whole inner `And` shouldn't
+    assertResult(
+      """leaf-0 = (LESS_THAN a 10)
+        |expr = leaf-0
+      """.stripMargin.trim
+    ) {
+      OrcFilters.createFilter(schema, Array(
+        LessThan("a", 10),
+        Not(And(
+          GreaterThan("a", 1),
+          StringContains("b", "prefix")
+        ))
+      )).get.toString
+    }
   }
 }

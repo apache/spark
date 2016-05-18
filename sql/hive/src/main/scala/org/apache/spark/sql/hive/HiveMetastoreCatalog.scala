@@ -17,44 +17,51 @@
 
 package org.apache.spark.sql.hive
 
-import com.google.common.base.Objects
+import scala.collection.JavaConverters._
+
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
-
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.StatsSetupConst
-import org.apache.hadoop.hive.metastore.Warehouse
-import org.apache.hadoop.hive.metastore.api.FieldSchema
-import org.apache.hadoop.hive.ql.metadata._
-import org.apache.hadoop.hive.ql.plan.TableDesc
 
-import org.apache.spark.Logging
-import org.apache.spark.sql.catalyst.analysis.{Catalog, MultiInstanceRelation, OverrideCatalog}
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.hive.client._
-import org.apache.spark.sql.parquet.ParquetRelation2
-import org.apache.spark.sql.sources.{CreateTableUsingAsSelect, LogicalRelation, Partition => ParquetPartition, PartitionSpec, ResolvedDataSource}
+import org.apache.spark.sql.execution.command.CreateTableAsSelectLogicalPlan
+import org.apache.spark.sql.execution.datasources.{Partition => _, _}
+import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
+import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.{AnalysisException, SQLContext, SaveMode, sources}
 
-/* Implicit conversions */
-import scala.collection.JavaConversions._
 
-private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: HiveContext)
-  extends Catalog with Logging {
+/**
+ * Legacy catalog for interacting with the Hive metastore.
+ *
+ * This is still used for things like creating data source tables, but in the future will be
+ * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
+ */
+private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
+  private val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
+  private val client = sparkSession.sharedState.asInstanceOf[HiveSharedState].metadataHive
 
-  val conf = hive.conf
-
-  /** Usages should lock on `this`. */
-  protected[hive] lazy val hiveWarehouse = new Warehouse(hive.hiveconf)
-
-  // TODO: Use this everywhere instead of tuples or databaseName, tableName,.
   /** A fully qualified identifier for a table (i.e., database.tableName) */
-  case class QualifiedTableName(database: String, name: String) {
-    def toLowerCase: QualifiedTableName = QualifiedTableName(database.toLowerCase, name.toLowerCase)
+  case class QualifiedTableName(database: String, name: String)
+
+  private def getCurrentDatabase: String = sessionState.catalog.getCurrentDatabase
+
+  def getQualifiedTableName(tableIdent: TableIdentifier): QualifiedTableName = {
+    QualifiedTableName(
+      tableIdent.database.getOrElse(getCurrentDatabase).toLowerCase,
+      tableIdent.table.toLowerCase)
+  }
+
+  private def getQualifiedTableName(t: CatalogTable): QualifiedTableName = {
+    QualifiedTableName(
+      t.identifier.database.getOrElse(getCurrentDatabase).toLowerCase,
+      t.identifier.table.toLowerCase)
   }
 
   /** A cache of Spark SQL data source tables that have been accessed. */
@@ -63,6 +70,8 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       override def load(in: QualifiedTableName): LogicalPlan = {
         logDebug(s"Creating new cached data source for $in")
         val table = client.getTable(in.database, in.name)
+
+        // TODO: the following code is duplicated with FindDataSourceTable.readDataSourceTable
 
         def schemaStringFromParts: Option[String] = {
           table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
@@ -81,6 +90,17 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           }
         }
 
+        def getColumnNames(colType: String): Seq[String] = {
+          table.properties.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").map {
+            numCols => (0 until numCols.toInt).map { index =>
+              table.properties.getOrElse(s"spark.sql.sources.schema.${colType}Col.$index",
+                throw new AnalysisException(
+                  s"Could not read $colType columns from the metastore because it is corrupted " +
+                    s"(missing part $index of it, $numCols parts are expected)."))
+            }
+          }.getOrElse(Nil)
+        }
+
         // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
         // After SPARK-6024, we removed this flag.
         // Although we are not using spark.sql.sources.schema any more, we need to still support.
@@ -91,30 +111,34 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
           schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
 
         // We only need names at here since userSpecifiedSchema we loaded from the metastore
-        // contains partition columns. We can always get datatypes of partitioning columns
+        // contains partition columns. We can always get data types of partitioning columns
         // from userSpecifiedSchema.
-        val partitionColumns = table.partitionColumns.map(_.name)
+        val partitionColumns = getColumnNames("part")
 
-        // It does not appear that the ql client for the metastore has a way to enumerate all the
-        // SerDe properties directly...
-        val options = table.serdeProperties
+        val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
+          BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
+        }
 
-        val resolvedRelation =
-          ResolvedDataSource(
-            hive,
-            userSpecifiedSchema,
-            partitionColumns.toArray,
-            table.properties("spark.sql.sources.provider"),
-            options)
+        val options = table.storage.serdeProperties
+        val dataSource =
+          DataSource(
+            sparkSession,
+            userSpecifiedSchema = userSpecifiedSchema,
+            partitionColumns = partitionColumns,
+            bucketSpec = bucketSpec,
+            className = table.properties("spark.sql.sources.provider"),
+            options = options)
 
-        LogicalRelation(resolvedRelation.relation)
+        LogicalRelation(
+          dataSource.resolveRelation(checkPathExist = true),
+          metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
       }
     }
 
     CacheBuilder.newBuilder().maximumSize(1000).build(cacheLoader)
   }
 
-  override def refreshTable(databaseName: String, tableName: String): Unit = {
+  def refreshTable(tableIdent: TableIdentifier): Unit = {
     // refreshTable does not eagerly reload the cache. It just invalidate the cache.
     // Next time when we use the table, it will be populated in the cache.
     // Since we also cache ParquetRelations converted from Hive Parquet tables and
@@ -123,316 +147,288 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     // it is better at here to invalidate the cache to avoid confusing waring logs from the
     // cache loader (e.g. cannot find data source provider, which is only defined for
     // data source table.).
-    invalidateTable(databaseName, tableName)
+    invalidateTable(tableIdent)
   }
 
-  def invalidateTable(databaseName: String, tableName: String): Unit = {
-    cachedDataSourceTables.invalidate(QualifiedTableName(databaseName, tableName).toLowerCase)
+  def invalidateTable(tableIdent: TableIdentifier): Unit = {
+    cachedDataSourceTables.invalidate(getQualifiedTableName(tableIdent))
   }
 
-  val caseSensitive: Boolean = false
-
-  /**
-   * Creates a data source table (a table created with USING clause) in Hive's metastore.
-   * Returns true when the table has been created. Otherwise, false.
-   */
-  def createDataSourceTable(
-      tableName: String,
-      userSpecifiedSchema: Option[StructType],
-      partitionColumns: Array[String],
-      provider: String,
-      options: Map[String, String],
-      isExternal: Boolean): Unit = {
-    val (dbName, tblName) = processDatabaseAndTableName(client.currentDatabase, tableName)
-    val tableProperties = new scala.collection.mutable.HashMap[String, String]
-    tableProperties.put("spark.sql.sources.provider", provider)
-
-    // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
-    // stored into a single metastore SerDe property.  In this case, we split the JSON string and
-    // store each part as a separate SerDe property.
-    if (userSpecifiedSchema.isDefined) {
-      val threshold = conf.schemaStringLengthThreshold
-      val schemaJsonString = userSpecifiedSchema.get.json
-      // Split the JSON string.
-      val parts = schemaJsonString.grouped(threshold).toSeq
-      tableProperties.put("spark.sql.sources.schema.numParts", parts.size.toString)
-      parts.zipWithIndex.foreach { case (part, index) =>
-        tableProperties.put(s"spark.sql.sources.schema.part.$index", part)
-      }
-    }
-
-    val metastorePartitionColumns = userSpecifiedSchema.map { schema =>
-      val fields = partitionColumns.map(col => schema(col))
-      fields.map { field =>
-        HiveColumn(
-          name = field.name,
-          hiveType = HiveMetastoreTypes.toMetastoreType(field.dataType),
-          comment = "")
-      }.toSeq
-    }.getOrElse {
-      if (partitionColumns.length > 0) {
-        // The table does not have a specified schema, which means that the schema will be inferred
-        // when we load the table. So, we are not expecting partition columns and we will discover
-        // partitions when we load the table. However, if there are specified partition columns,
-        // we simplily ignore them and provide a warning message..
-        logWarning(
-          s"The schema and partitions of table $tableName will be inferred when it is loaded. " +
-            s"Specified partition columns (${partitionColumns.mkString(",")}) will be ignored.")
-      }
-      Seq.empty[HiveColumn]
-    }
-
-    val tableType = if (isExternal) {
-      tableProperties.put("EXTERNAL", "TRUE")
-      ExternalTable
-    } else {
-      tableProperties.put("EXTERNAL", "FALSE")
-      ManagedTable
-    }
-
-    client.createTable(
-      HiveTable(
-        specifiedDatabase = Option(dbName),
-        name = tblName,
-        schema = Seq.empty,
-        partitionColumns = metastorePartitionColumns,
-        tableType = tableType,
-        properties = tableProperties.toMap,
-        serdeProperties = options))
-  }
-
-  def hiveDefaultTableFilePath(tableName: String): String = {
+  def hiveDefaultTableFilePath(tableIdent: TableIdentifier): String = {
     // Code based on: hiveWarehouse.getTablePath(currentDatabase, tableName)
-    new Path(
-      new Path(client.getDatabase(client.currentDatabase).location),
-      tableName.toLowerCase).toString
-  }
-
-  def tableExists(tableIdentifier: Seq[String]): Boolean = {
-    val tableIdent = processTableIdentifier(tableIdentifier)
-    val databaseName =
-      tableIdent
-        .lift(tableIdent.size - 2)
-        .getOrElse(client.currentDatabase)
-    val tblName = tableIdent.last
-    client.getTableOption(databaseName, tblName).isDefined
+    val QualifiedTableName(dbName, tblName) = getQualifiedTableName(tableIdent)
+    new Path(new Path(client.getDatabase(dbName).locationUri), tblName).toString
   }
 
   def lookupRelation(
-      tableIdentifier: Seq[String],
+      tableIdent: TableIdentifier,
       alias: Option[String]): LogicalPlan = {
-    val tableIdent = processTableIdentifier(tableIdentifier)
-    val databaseName = tableIdent.lift(tableIdent.size - 2).getOrElse(
-      client.currentDatabase)
-    val tblName = tableIdent.last
-    val table = client.getTable(databaseName, tblName)
+    val qualifiedTableName = getQualifiedTableName(tableIdent)
+    val table = client.getTable(qualifiedTableName.database, qualifiedTableName.name)
 
     if (table.properties.get("spark.sql.sources.provider").isDefined) {
-      val dataSourceTable =
-        cachedDataSourceTables(QualifiedTableName(databaseName, tblName).toLowerCase)
+      val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
+      val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.
       // Otherwise, wrap the table with a Subquery using the table name.
-      val withAlias =
-        alias.map(a => Subquery(a, dataSourceTable)).getOrElse(
-          Subquery(tableIdent.last, dataSourceTable))
-
-      withAlias
-    } else if (table.tableType == VirtualView) {
+      alias.map(a => SubqueryAlias(a, qualifiedTable)).getOrElse(qualifiedTable)
+    } else if (table.tableType == CatalogTableType.VIEW) {
       val viewText = table.viewText.getOrElse(sys.error("Invalid view without text."))
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => Subquery(table.name, HiveQl.createPlan(viewText))
-        case Some(aliasText) => Subquery(aliasText, HiveQl.createPlan(viewText))
+        case None => SubqueryAlias(table.identifier.table, sparkSession.parseSql(viewText))
+        case Some(aliasText) => SubqueryAlias(aliasText, sparkSession.parseSql(viewText))
       }
     } else {
-      MetastoreRelation(databaseName, tblName, alias)(table)(hive)
+      MetastoreRelation(
+        qualifiedTableName.database, qualifiedTableName.name, alias)(table, client, sparkSession)
     }
   }
 
-  private def convertToParquetRelation(metastoreRelation: MetastoreRelation): LogicalRelation = {
-    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
-    val mergeSchema = hive.convertMetastoreParquetWithSchemaMerging
+  private def getCached(
+      tableIdentifier: QualifiedTableName,
+      metastoreRelation: MetastoreRelation,
+      schemaInMetastore: StructType,
+      expectedFileFormat: Class[_ <: FileFormat],
+      expectedBucketSpec: Option[BucketSpec],
+      partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
 
-    // NOTE: Instead of passing Metastore schema directly to `ParquetRelation2`, we have to
-    // serialize the Metastore schema to JSON and pass it as a data source option because of the
-    // evil case insensitivity issue, which is reconciled within `ParquetRelation2`.
-    val parquetOptions = Map(
-      ParquetRelation2.METASTORE_SCHEMA -> metastoreSchema.json,
-      ParquetRelation2.MERGE_SCHEMA -> mergeSchema.toString)
-    val tableIdentifier =
-      QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
+    cachedDataSourceTables.getIfPresent(tableIdentifier) match {
+      case null => None // Cache miss
+      case logical @ LogicalRelation(relation: HadoopFsRelation, _, _) =>
+        val pathsInMetastore = metastoreRelation.catalogTable.storage.locationUri.toSeq
+        val cachedRelationFileFormatClass = relation.fileFormat.getClass
 
-    def getCached(
-        tableIdentifier: QualifiedTableName,
-        pathsInMetastore: Seq[String],
-        schemaInMetastore: StructType,
-        partitionSpecInMetastore: Option[PartitionSpec]): Option[LogicalRelation] = {
-      cachedDataSourceTables.getIfPresent(tableIdentifier) match {
-        case null => None // Cache miss
-        case logical@LogicalRelation(parquetRelation: ParquetRelation2) =>
-          // If we have the same paths, same schema, and same partition spec,
-          // we will use the cached Parquet Relation.
-          val useCached =
-            parquetRelation.paths.toSet == pathsInMetastore.toSet &&
-            logical.schema.sameType(metastoreSchema) &&
-            parquetRelation.partitionSpec == partitionSpecInMetastore.getOrElse {
-              PartitionSpec(StructType(Nil), Array.empty[sources.Partition])
+        expectedFileFormat match {
+          case `cachedRelationFileFormatClass` =>
+            // If we have the same paths, same schema, and same partition spec,
+            // we will use the cached relation.
+            val useCached =
+              relation.location.paths.map(_.toString).toSet == pathsInMetastore.toSet &&
+                logical.schema.sameType(schemaInMetastore) &&
+                relation.bucketSpec == expectedBucketSpec &&
+                relation.partitionSpec == partitionSpecInMetastore.getOrElse {
+                  PartitionSpec(StructType(Nil), Array.empty[PartitionDirectory])
+                }
+
+            if (useCached) {
+              Some(logical)
+            } else {
+              // If the cached relation is not updated, we invalidate it right away.
+              cachedDataSourceTables.invalidate(tableIdentifier)
+              None
             }
-
-          if (useCached) {
-            Some(logical)
-          } else {
-            // If the cached relation is not updated, we invalidate it right away.
+          case _ =>
+            logWarning(
+              s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} " +
+                s"should be stored as $expectedFileFormat. However, we are getting " +
+                s"a ${relation.fileFormat} from the metastore cache. This cached " +
+                s"entry will be invalidated.")
             cachedDataSourceTables.invalidate(tableIdentifier)
             None
-          }
-        case other =>
-          logWarning(
-            s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
-              s"as Parquet. However, we are getting a $other from the metastore cache. " +
-              s"This cached entry will be invalidated.")
-          cachedDataSourceTables.invalidate(tableIdentifier)
-          None
-      }
+        }
+      case other =>
+        logWarning(
+          s"${metastoreRelation.databaseName}.${metastoreRelation.tableName} should be stored " +
+            s"as $expectedFileFormat. However, we are getting a $other from the metastore cache. " +
+            s"This cached entry will be invalidated.")
+        cachedDataSourceTables.invalidate(tableIdentifier)
+        None
     }
+  }
+
+  private def convertToLogicalRelation(
+      metastoreRelation: MetastoreRelation,
+      options: Map[String, String],
+      defaultSource: FileFormat,
+      fileFormatClass: Class[_ <: FileFormat],
+      fileType: String): LogicalRelation = {
+    val metastoreSchema = StructType.fromAttributes(metastoreRelation.output)
+    val tableIdentifier =
+      QualifiedTableName(metastoreRelation.databaseName, metastoreRelation.tableName)
+    val bucketSpec = None  // We don't support hive bucketed tables, only ones we write out.
 
     val result = if (metastoreRelation.hiveQlTable.isPartitioned) {
       val partitionSchema = StructType.fromAttributes(metastoreRelation.partitionKeys)
       val partitionColumnDataTypes = partitionSchema.map(_.dataType)
-      val partitions = metastoreRelation.hiveQlPartitions.map { p =>
+      // We're converting the entire table into HadoopFsRelation, so predicates to Hive metastore
+      // are empty.
+      val partitions = metastoreRelation.getHiveQlPartitions().map { p =>
         val location = p.getLocation
-        val values = InternalRow.fromSeq(p.getValues.zip(partitionColumnDataTypes).map {
+        val values = InternalRow.fromSeq(p.getValues.asScala.zip(partitionColumnDataTypes).map {
           case (rawValue, dataType) => Cast(Literal(rawValue), dataType).eval(null)
         })
-        ParquetPartition(values, location)
+        PartitionDirectory(values, location)
       }
       val partitionSpec = PartitionSpec(partitionSchema, partitions)
-      val paths = partitions.map(_.path)
 
-      val cached = getCached(tableIdentifier, paths, metastoreSchema, Some(partitionSpec))
-      val parquetRelation = cached.getOrElse {
+      val cached = getCached(
+        tableIdentifier,
+        metastoreRelation,
+        metastoreSchema,
+        fileFormatClass,
+        bucketSpec,
+        Some(partitionSpec))
+
+      val hadoopFsRelation = cached.getOrElse {
+        val fileCatalog = new MetaStorePartitionedTableFileCatalog(
+          sparkSession,
+          new Path(metastoreRelation.catalogTable.storage.locationUri.get),
+          partitionSpec)
+
+        val inferredSchema = if (fileType.equals("parquet")) {
+          val inferredSchema =
+            defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
+          inferredSchema.map { inferred =>
+            ParquetRelation.mergeMetastoreParquetSchema(metastoreSchema, inferred)
+          }.getOrElse(metastoreSchema)
+        } else {
+          defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles()).get
+        }
+
+        val relation = HadoopFsRelation(
+          sparkSession = sparkSession,
+          location = fileCatalog,
+          partitionSchema = partitionSchema,
+          dataSchema = inferredSchema,
+          bucketSpec = bucketSpec,
+          fileFormat = defaultSource,
+          options = options)
+
         val created = LogicalRelation(
-          new ParquetRelation2(
-            paths.toArray, None, Some(partitionSpec), parquetOptions)(hive))
+          relation,
+          metastoreTableIdentifier =
+            Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
 
-      parquetRelation
+      hadoopFsRelation
     } else {
       val paths = Seq(metastoreRelation.hiveQlTable.getDataLocation.toString)
 
-      val cached = getCached(tableIdentifier, paths, metastoreSchema, None)
-      val parquetRelation = cached.getOrElse {
-        val created = LogicalRelation(
-          new ParquetRelation2(paths.toArray, None, None, parquetOptions)(hive))
+      val cached = getCached(tableIdentifier,
+        metastoreRelation,
+        metastoreSchema,
+        fileFormatClass,
+        bucketSpec,
+        None)
+      val logicalRelation = cached.getOrElse {
+        val created =
+          LogicalRelation(
+            DataSource(
+              sparkSession = sparkSession,
+              paths = paths,
+              userSpecifiedSchema = Some(metastoreRelation.schema),
+              bucketSpec = bucketSpec,
+              options = options,
+              className = fileType).resolveRelation(),
+              metastoreTableIdentifier =
+                Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+
+
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
 
-      parquetRelation
+      logicalRelation
     }
-
-    result.newInstance()
-  }
-
-  override def getTables(databaseName: Option[String]): Seq[(String, Boolean)] = {
-    val db = databaseName.getOrElse(client.currentDatabase)
-
-    client.listTables(db).map(tableName => (tableName, false))
-  }
-
-  protected def processDatabaseAndTableName(
-      databaseName: Option[String],
-      tableName: String): (Option[String], String) = {
-    if (!caseSensitive) {
-      (databaseName.map(_.toLowerCase), tableName.toLowerCase)
-    } else {
-      (databaseName, tableName)
-    }
-  }
-
-  protected def processDatabaseAndTableName(
-      databaseName: String,
-      tableName: String): (String, String) = {
-    if (!caseSensitive) {
-      (databaseName.toLowerCase, tableName.toLowerCase)
-    } else {
-      (databaseName, tableName)
-    }
+    result.copy(expectedOutputAttributes = Some(metastoreRelation.output))
   }
 
   /**
    * When scanning or writing to non-partitioned Metastore Parquet tables, convert them to Parquet
    * data source relations for better performance.
-   *
-   * This rule can be considered as [[HiveStrategies.ParquetConversion]] done right.
    */
   object ParquetConversions extends Rule[LogicalPlan] {
+    private def shouldConvertMetastoreParquet(relation: MetastoreRelation): Boolean = {
+      relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") &&
+        sessionState.convertMetastoreParquet
+    }
+
+    private def convertToParquetRelation(relation: MetastoreRelation): LogicalRelation = {
+      val defaultSource = new ParquetDefaultSource()
+      val fileFormatClass = classOf[ParquetDefaultSource]
+
+      val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
+      val options = Map(
+        ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
+        ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
+          relation.tableName,
+          Some(relation.databaseName)
+        ).unquotedString
+      )
+
+      convertToLogicalRelation(relation, options, defaultSource, fileFormatClass, "parquet")
+    }
+
     override def apply(plan: LogicalPlan): LogicalPlan = {
-      if (!plan.resolved) {
+      if (!plan.resolved || plan.analyzed) {
         return plan
       }
 
-      // Collects all `MetastoreRelation`s which should be replaced
-      val toBeReplaced = plan.collect {
+      plan transformUp {
         // Write path
-        case InsertIntoTable(relation: MetastoreRelation, _, _, _, _)
-            // Inserting into partitioned table is not supported in Parquet data source (yet).
-            if !relation.hiveQlTable.isPartitioned &&
-              hive.convertMetastoreParquet &&
-              conf.parquetUseDataSourceApi &&
-              relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
-          val parquetRelation = convertToParquetRelation(relation)
-          val attributedRewrites = relation.output.zip(parquetRelation.output)
-          (relation, parquetRelation, attributedRewrites)
+        case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
+          // Inserting into partitioned table is not supported in Parquet data source (yet).
+          if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
+          InsertIntoTable(convertToParquetRelation(r), partition, child, overwrite, ifNotExists)
 
         // Write path
-        case InsertIntoHiveTable(relation: MetastoreRelation, _, _, _, _)
+        case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
           // Inserting into partitioned table is not supported in Parquet data source (yet).
-          if !relation.hiveQlTable.isPartitioned &&
-            hive.convertMetastoreParquet &&
-            conf.parquetUseDataSourceApi &&
-            relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
-          val parquetRelation = convertToParquetRelation(relation)
-          val attributedRewrites = relation.output.zip(parquetRelation.output)
-          (relation, parquetRelation, attributedRewrites)
+          if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreParquet(r) =>
+          InsertIntoTable(convertToParquetRelation(r), partition, child, overwrite, ifNotExists)
 
         // Read path
-        case p @ PhysicalOperation(_, _, relation: MetastoreRelation)
-            if hive.convertMetastoreParquet &&
-              conf.parquetUseDataSourceApi &&
-              relation.tableDesc.getSerdeClassName.toLowerCase.contains("parquet") =>
+        case relation: MetastoreRelation if shouldConvertMetastoreParquet(relation) =>
           val parquetRelation = convertToParquetRelation(relation)
-          val attributedRewrites = relation.output.zip(parquetRelation.output)
-          (relation, parquetRelation, attributedRewrites)
+          SubqueryAlias(relation.alias.getOrElse(relation.tableName), parquetRelation)
+      }
+    }
+  }
+
+  /**
+   * When scanning Metastore ORC tables, convert them to ORC data source relations
+   * for better performance.
+   */
+  object OrcConversions extends Rule[LogicalPlan] {
+    private def shouldConvertMetastoreOrc(relation: MetastoreRelation): Boolean = {
+      relation.tableDesc.getSerdeClassName.toLowerCase.contains("orc") &&
+        sessionState.convertMetastoreOrc
+    }
+
+    private def convertToOrcRelation(relation: MetastoreRelation): LogicalRelation = {
+      val defaultSource = new OrcDefaultSource()
+      val fileFormatClass = classOf[OrcDefaultSource]
+      val options = Map[String, String]()
+
+      convertToLogicalRelation(relation, options, defaultSource, fileFormatClass, "orc")
+    }
+
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (!plan.resolved || plan.analyzed) {
+        return plan
       }
 
-      val relationMap = toBeReplaced.map(r => (r._1, r._2)).toMap
-      val attributedRewrites = AttributeMap(toBeReplaced.map(_._3).fold(Nil)(_ ++: _))
-
-      // Replaces all `MetastoreRelation`s with corresponding `ParquetRelation2`s, and fixes
-      // attribute IDs referenced in other nodes.
-      plan.transformUp {
-        case r: MetastoreRelation if relationMap.contains(r) =>
-          val parquetRelation = relationMap(r)
-          val alias = r.alias.getOrElse(r.tableName)
-          Subquery(alias, parquetRelation)
-
+      plan transformUp {
+        // Write path
         case InsertIntoTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
-          if relationMap.contains(r) =>
-          val parquetRelation = relationMap(r)
-          InsertIntoTable(parquetRelation, partition, child, overwrite, ifNotExists)
+          // Inserting into partitioned table is not supported in Orc data source (yet).
+          if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreOrc(r) =>
+          InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists)
 
+        // Write path
         case InsertIntoHiveTable(r: MetastoreRelation, partition, child, overwrite, ifNotExists)
-          if relationMap.contains(r) =>
-          val parquetRelation = relationMap(r)
-          InsertIntoTable(parquetRelation, partition, child, overwrite, ifNotExists)
+          // Inserting into partitioned table is not supported in Orc data source (yet).
+          if !r.hiveQlTable.isPartitioned && shouldConvertMetastoreOrc(r) =>
+          InsertIntoTable(convertToOrcRelation(r), partition, child, overwrite, ifNotExists)
 
-        case other => other.transformExpressions {
-          case a: Attribute if a.resolved => attributedRewrites.getOrElse(a, a)
-        }
+        // Read path
+        case relation: MetastoreRelation if shouldConvertMetastoreOrc(relation) =>
+          val orcRelation = convertToOrcRelation(relation)
+          SubqueryAlias(relation.alias.getOrElse(relation.tableName), orcRelation)
       }
     }
   }
@@ -446,23 +442,22 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
       // Wait until children are resolved.
       case p: LogicalPlan if !p.childrenResolved => p
       case p: LogicalPlan if p.resolved => p
-      case p @ CreateTableAsSelect(table, child, allowExisting) =>
-        val schema = if (table.schema.size > 0) {
+
+      case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>
+        val schema = if (table.schema.nonEmpty) {
           table.schema
         } else {
-          child.output.map {
-            attr => new HiveColumn(
-              attr.name,
-              HiveMetastoreTypes.toMetastoreType(attr.dataType), null)
+          child.output.map { a =>
+            CatalogColumn(a.name, a.dataType.catalogString, a.nullable)
           }
         }
 
         val desc = table.copy(schema = schema)
 
-        if (hive.convertCTAS && table.serde.isEmpty) {
+        if (sessionState.convertCTAS && table.storage.serde.isEmpty) {
           // Do the conversion when spark.sql.hive.convertCTAS is true and the query
           // does not specify any storage format (file format and storage handler).
-          if (table.specifiedDatabase.isDefined) {
+          if (table.identifier.database.isDefined) {
             throw new AnalysisException(
               "Cannot specify database name in a CTAS statement " +
                 "when spark.sql.hive.convertCTAS is set to true.")
@@ -470,31 +465,28 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
 
           val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
           CreateTableUsingAsSelect(
-            desc.name,
-            hive.conf.defaultDataSourceName,
+            TableIdentifier(desc.identifier.table),
+            sessionState.conf.defaultDataSourceName,
             temporary = false,
             Array.empty[String],
+            bucketSpec = None,
             mode,
             options = Map.empty[String, String],
             child
           )
         } else {
-          val desc = if (table.serde.isEmpty) {
+          val desc = if (table.storage.serde.isEmpty) {
             // add default serde
-            table.copy(
+            table.withNewStorage(
               serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
           } else {
             table
           }
 
-          val (dbName, tblName) =
-            processDatabaseAndTableName(
-              desc.specifiedDatabase.getOrElse(client.currentDatabase), desc.name)
+          val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
 
           execution.CreateTableAsSelect(
-            desc.copy(
-              specifiedDatabase = Some(dbName),
-              name = tblName),
+            desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
             child,
             allowExisting)
         }
@@ -543,23 +535,36 @@ private[hive] class HiveMetastoreCatalog(val client: ClientInterface, hive: Hive
     }
   }
 
-  /**
-   * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
-   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
-   */
-  override def registerTable(tableIdentifier: Seq[String], plan: LogicalPlan): Unit = {
-    throw new UnsupportedOperationException
-  }
+}
 
-  /**
-   * UNIMPLEMENTED: It needs to be decided how we will persist in-memory tables to the metastore.
-   * For now, if this functionality is desired mix in the in-memory [[OverrideCatalog]].
-   */
-  override def unregisterTable(tableIdentifier: Seq[String]): Unit = {
-    throw new UnsupportedOperationException
-  }
+/**
+ * An override of the standard HDFS listing based catalog, that overrides the partition spec with
+ * the information from the metastore.
+ * @param tableBasePath The default base path of the Hive metastore table
+ * @param partitionSpec The partition specifications from Hive metastore
+ */
+private[hive] class MetaStorePartitionedTableFileCatalog(
+    sparkSession: SparkSession,
+    tableBasePath: Path,
+    override val partitionSpec: PartitionSpec)
+  extends ListingFileCatalog(
+    sparkSession,
+    MetaStorePartitionedTableFileCatalog.getPaths(tableBasePath, partitionSpec),
+    Map.empty,
+    Some(partitionSpec.partitionColumns)) {
+}
 
-  override def unregisterAllTables(): Unit = {}
+private[hive] object MetaStorePartitionedTableFileCatalog {
+  /** Get the list of paths to list files in the for a metastore table */
+  def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
+    // If there are no partitions currently specified then use base path,
+    // otherwise use the paths corresponding to the partitions.
+    if (partitionSpec.partitions.isEmpty) {
+      Seq(tableBasePath)
+    } else {
+      partitionSpec.partitions.map(_.path)
+    }
+  }
 }
 
 /**
@@ -576,7 +581,7 @@ private[hive] case class InsertIntoHiveTable(
   extends LogicalPlan {
 
   override def children: Seq[LogicalPlan] = child :: Nil
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = Seq.empty
 
   val numDynamicPartitions = partition.values.count(_.isEmpty)
 
@@ -586,184 +591,5 @@ private[hive] case class InsertIntoHiveTable(
 
   override lazy val resolved: Boolean = childrenResolved && child.output.zip(tableOutput).forall {
     case (childAttr, tableAttr) => childAttr.dataType.sameType(tableAttr.dataType)
-  }
-}
-
-private[hive] case class MetastoreRelation
-    (databaseName: String, tableName: String, alias: Option[String])
-    (val table: HiveTable)
-    (@transient sqlContext: SQLContext)
-  extends LeafNode with MultiInstanceRelation {
-
-  self: Product =>
-
-  override def equals(other: Any): Boolean = other match {
-    case relation: MetastoreRelation =>
-      databaseName == relation.databaseName &&
-        tableName == relation.tableName &&
-        alias == relation.alias &&
-        output == relation.output
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    Objects.hashCode(databaseName, tableName, alias, output)
-  }
-
-  @transient val hiveQlTable: Table = {
-    // We start by constructing an API table as Hive performs several important transformations
-    // internally when converting an API table to a QL table.
-    val tTable = new org.apache.hadoop.hive.metastore.api.Table()
-    tTable.setTableName(table.name)
-    tTable.setDbName(table.database)
-
-    val tableParameters = new java.util.HashMap[String, String]()
-    tTable.setParameters(tableParameters)
-    table.properties.foreach { case (k, v) => tableParameters.put(k, v) }
-
-    tTable.setTableType(table.tableType.name)
-
-    val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
-    tTable.setSd(sd)
-    sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
-    tTable.setPartitionKeys(
-      table.partitionColumns.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
-
-    table.location.foreach(sd.setLocation)
-    table.inputFormat.foreach(sd.setInputFormat)
-    table.outputFormat.foreach(sd.setOutputFormat)
-
-    val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    sd.setSerdeInfo(serdeInfo)
-    table.serde.foreach(serdeInfo.setSerializationLib)
-    val serdeParameters = new java.util.HashMap[String, String]()
-    serdeInfo.setParameters(serdeParameters)
-    table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-
-    new Table(tTable)
-  }
-
-  @transient val hiveQlPartitions: Seq[Partition] = table.getAllPartitions.map { p =>
-    val tPartition = new org.apache.hadoop.hive.metastore.api.Partition
-    tPartition.setDbName(databaseName)
-    tPartition.setTableName(tableName)
-    tPartition.setValues(p.values)
-
-    val sd = new org.apache.hadoop.hive.metastore.api.StorageDescriptor()
-    tPartition.setSd(sd)
-    sd.setCols(table.schema.map(c => new FieldSchema(c.name, c.hiveType, c.comment)))
-
-    sd.setLocation(p.storage.location)
-    sd.setInputFormat(p.storage.inputFormat)
-    sd.setOutputFormat(p.storage.outputFormat)
-
-    val serdeInfo = new org.apache.hadoop.hive.metastore.api.SerDeInfo
-    sd.setSerdeInfo(serdeInfo)
-    serdeInfo.setSerializationLib(p.storage.serde)
-
-    val serdeParameters = new java.util.HashMap[String, String]()
-    serdeInfo.setParameters(serdeParameters)
-    table.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-    p.storage.serdeProperties.foreach { case (k, v) => serdeParameters.put(k, v) }
-
-    new Partition(hiveQlTable, tPartition)
-  }
-
-  @transient override lazy val statistics: Statistics = Statistics(
-    sizeInBytes = {
-      val totalSize = hiveQlTable.getParameters.get(StatsSetupConst.TOTAL_SIZE)
-      val rawDataSize = hiveQlTable.getParameters.get(StatsSetupConst.RAW_DATA_SIZE)
-      // TODO: check if this estimate is valid for tables after partition pruning.
-      // NOTE: getting `totalSize` directly from params is kind of hacky, but this should be
-      // relatively cheap if parameters for the table are populated into the metastore.  An
-      // alternative would be going through Hadoop's FileSystem API, which can be expensive if a lot
-      // of RPCs are involved.  Besides `totalSize`, there are also `numFiles`, `numRows`,
-      // `rawDataSize` keys (see StatsSetupConst in Hive) that we can look at in the future.
-      BigInt(
-        // When table is external,`totalSize` is always zero, which will influence join strategy
-        // so when `totalSize` is zero, use `rawDataSize` instead
-        // if the size is still less than zero, we use default size
-        Option(totalSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(sqlContext.conf.defaultSizeInBytes)))
-    }
-  )
-
-  /** Only compare database and tablename, not alias. */
-  override def sameResult(plan: LogicalPlan): Boolean = {
-    plan match {
-      case mr: MetastoreRelation =>
-        mr.databaseName == databaseName && mr.tableName == tableName
-      case _ => false
-    }
-  }
-
-  val tableDesc = new TableDesc(
-    hiveQlTable.getInputFormatClass,
-    // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
-    // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
-    // substitute some output formats, e.g. substituting SequenceFileOutputFormat to
-    // HiveSequenceFileOutputFormat.
-    hiveQlTable.getOutputFormatClass,
-    hiveQlTable.getMetadata
-  )
-
-  implicit class SchemaAttribute(f: HiveColumn) {
-    def toAttribute: AttributeReference = AttributeReference(
-      f.name,
-      HiveMetastoreTypes.toDataType(f.hiveType),
-      // Since data can be dumped in randomly with no validation, everything is nullable.
-      nullable = true
-    )(qualifiers = Seq(alias.getOrElse(tableName)))
-  }
-
-  /** PartitionKey attributes */
-  val partitionKeys = table.partitionColumns.map(_.toAttribute)
-
-  /** Non-partitionKey attributes */
-  val attributes = table.schema.map(_.toAttribute)
-
-  val output = attributes ++ partitionKeys
-
-  /** An attribute map that can be used to lookup original attributes based on expression id. */
-  val attributeMap = AttributeMap(output.map(o => (o, o)))
-
-  /** An attribute map for determining the ordinal for non-partition columns. */
-  val columnOrdinals = AttributeMap(attributes.zipWithIndex)
-
-  override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias)(table)(sqlContext)
-  }
-}
-
-
-private[hive] object HiveMetastoreTypes {
-  def toDataType(metastoreType: String): DataType = DataTypeParser.parse(metastoreType)
-
-  def decimalMetastoreString(decimalType: DecimalType): String = decimalType match {
-    case DecimalType.Fixed(precision, scale) => s"decimal($precision,$scale)"
-    case _ => s"decimal($HiveShim.UNLIMITED_DECIMAL_PRECISION,$HiveShim.UNLIMITED_DECIMAL_SCALE)"
-  }
-
-  def toMetastoreType(dt: DataType): String = dt match {
-    case ArrayType(elementType, _) => s"array<${toMetastoreType(elementType)}>"
-    case StructType(fields) =>
-      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
-    case MapType(keyType, valueType, _) =>
-      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
-    case StringType => "string"
-    case FloatType => "float"
-    case IntegerType => "int"
-    case ByteType => "tinyint"
-    case ShortType => "smallint"
-    case DoubleType => "double"
-    case LongType => "bigint"
-    case BinaryType => "binary"
-    case BooleanType => "boolean"
-    case DateType => "date"
-    case d: DecimalType => decimalMetastoreString(d)
-    case TimestampType => "timestamp"
-    case NullType => "void"
-    case udt: UserDefinedType[_] => toMetastoreType(udt.sqlType)
   }
 }

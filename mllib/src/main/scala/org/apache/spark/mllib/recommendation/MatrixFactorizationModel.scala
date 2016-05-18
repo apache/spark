@@ -22,14 +22,17 @@ import java.lang.{Integer => JavaInteger}
 
 import scala.collection.mutable
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLogPlus
 import com.github.fommil.netlib.BLAS.{getInstance => blas}
 import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.Since
 import org.apache.spark.api.java.{JavaPairRDD, JavaRDD}
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.rdd.MLPairRDDFunctions._
 import org.apache.spark.mllib.util.{Loader, Saveable}
@@ -49,10 +52,11 @@ import org.apache.spark.storage.StorageLevel
  * @param productFeatures RDD of tuples where each tuple represents the productId
  *                        and the features computed for this product.
  */
-class MatrixFactorizationModel(
-    val rank: Int,
-    val userFeatures: RDD[(Int, Array[Double])],
-    val productFeatures: RDD[(Int, Array[Double])])
+@Since("0.8.0")
+class MatrixFactorizationModel @Since("0.8.0") (
+    @Since("0.8.0") val rank: Int,
+    @Since("0.8.0") val userFeatures: RDD[(Int, Array[Double])],
+    @Since("0.8.0") val productFeatures: RDD[(Int, Array[Double])])
   extends Saveable with Serializable with Logging {
 
   require(rank > 0)
@@ -73,10 +77,35 @@ class MatrixFactorizationModel(
   }
 
   /** Predict the rating of one user for one product. */
+  @Since("0.8.0")
   def predict(user: Int, product: Int): Double = {
     val userVector = userFeatures.lookup(user).head
     val productVector = productFeatures.lookup(product).head
     blas.ddot(rank, userVector, 1, productVector, 1)
+  }
+
+  /**
+   * Return approximate numbers of users and products in the given usersProducts tuples.
+   * This method is based on `countApproxDistinct` in class `RDD`.
+   *
+   * @param usersProducts  RDD of (user, product) pairs.
+   * @return approximate numbers of users and products.
+   */
+  private[this] def countApproxDistinctUserProduct(usersProducts: RDD[(Int, Int)]): (Long, Long) = {
+    val zeroCounterUser = new HyperLogLogPlus(4, 0)
+    val zeroCounterProduct = new HyperLogLogPlus(4, 0)
+    val aggregated = usersProducts.aggregate((zeroCounterUser, zeroCounterProduct))(
+      (hllTuple: (HyperLogLogPlus, HyperLogLogPlus), v: (Int, Int)) => {
+        hllTuple._1.offer(v._1)
+        hllTuple._2.offer(v._2)
+        hllTuple
+      },
+      (h1: (HyperLogLogPlus, HyperLogLogPlus), h2: (HyperLogLogPlus, HyperLogLogPlus)) => {
+        h1._1.addAll(h2._1)
+        h1._2.addAll(h2._2)
+        h1
+      })
+    (aggregated._1.cardinality(), aggregated._2.cardinality())
   }
 
   /**
@@ -87,19 +116,39 @@ class MatrixFactorizationModel(
    * @param usersProducts  RDD of (user, product) pairs.
    * @return RDD of Ratings.
    */
+  @Since("0.9.0")
   def predict(usersProducts: RDD[(Int, Int)]): RDD[Rating] = {
-    val users = userFeatures.join(usersProducts).map {
-      case (user, (uFeatures, product)) => (product, (user, uFeatures))
-    }
-    users.join(productFeatures).map {
-      case (product, ((user, uFeatures), pFeatures)) =>
-        Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+    // Previously the partitions of ratings are only based on the given products.
+    // So if the usersProducts given for prediction contains only few products or
+    // even one product, the generated ratings will be pushed into few or single partition
+    // and can't use high parallelism.
+    // Here we calculate approximate numbers of users and products. Then we decide the
+    // partitions should be based on users or products.
+    val (usersCount, productsCount) = countApproxDistinctUserProduct(usersProducts)
+
+    if (usersCount < productsCount) {
+      val users = userFeatures.join(usersProducts).map {
+        case (user, (uFeatures, product)) => (product, (user, uFeatures))
+      }
+      users.join(productFeatures).map {
+        case (product, ((user, uFeatures), pFeatures)) =>
+          Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+      }
+    } else {
+      val products = productFeatures.join(usersProducts.map(_.swap)).map {
+        case (product, (pFeatures, user)) => (user, (product, pFeatures))
+      }
+      products.join(userFeatures).map {
+        case (user, ((product, pFeatures), uFeatures)) =>
+          Rating(user, product, blas.ddot(uFeatures.length, uFeatures, 1, pFeatures, 1))
+      }
     }
   }
 
   /**
    * Java-friendly version of [[MatrixFactorizationModel.predict]].
    */
+  @Since("1.2.0")
   def predict(usersProducts: JavaPairRDD[JavaInteger, JavaInteger]): JavaRDD[Rating] = {
     predict(usersProducts.rdd.asInstanceOf[RDD[(Int, Int)]]).toJavaRDD()
   }
@@ -115,6 +164,7 @@ class MatrixFactorizationModel(
    *  recommended to the user. The score is an opaque value that indicates how strongly
    *  recommended the product is.
    */
+  @Since("1.1.0")
   def recommendProducts(user: Int, num: Int): Array[Rating] =
     MatrixFactorizationModel.recommend(userFeatures.lookup(user).head, productFeatures, num)
       .map(t => Rating(user, t._1, t._2))
@@ -131,24 +181,40 @@ class MatrixFactorizationModel(
    *  recommended to the product. The score is an opaque value that indicates how strongly
    *  recommended the user is.
    */
+  @Since("1.1.0")
   def recommendUsers(product: Int, num: Int): Array[Rating] =
     MatrixFactorizationModel.recommend(productFeatures.lookup(product).head, userFeatures, num)
       .map(t => Rating(t._1, product, t._2))
 
   protected override val formatVersion: String = "1.0"
 
+  /**
+   * Save this model to the given path.
+   *
+   * This saves:
+   *  - human-readable (JSON) model metadata to path/metadata/
+   *  - Parquet formatted data to path/data/
+   *
+   * The model may be loaded using [[Loader.load]].
+   *
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     MatrixFactorizationModel.SaveLoadV1_0.save(this, path)
   }
 
   /**
-   * Recommends topK products for all users.
+   * Recommends top products for all users.
    *
    * @param num how many products to return for every user.
    * @return [(Int, Array[Rating])] objects, where every tuple contains a userID and an array of
    * rating objects which contains the same userId, recommended productID and a "score" in the
    * rating field. Semantics of score is same as recommendProducts API
    */
+  @Since("1.4.0")
   def recommendProductsForUsers(num: Int): RDD[(Int, Array[Rating])] = {
     MatrixFactorizationModel.recommendForAll(rank, userFeatures, productFeatures, num).map {
       case (user, top) =>
@@ -159,13 +225,14 @@ class MatrixFactorizationModel(
 
 
   /**
-   * Recommends topK users for all products.
+   * Recommends top users for all products.
    *
    * @param num how many users to return for every product.
    * @return [(Int, Array[Rating])] objects, where every tuple contains a productID and an array
    * of rating objects which contains the recommended userId, same productID and a "score" in the
    * rating field. Semantics of score is same as recommendUsers API
    */
+  @Since("1.4.0")
   def recommendUsersForProducts(num: Int): RDD[(Int, Array[Rating])] = {
     MatrixFactorizationModel.recommendForAll(rank, productFeatures, userFeatures, num).map {
       case (product, top) =>
@@ -175,6 +242,7 @@ class MatrixFactorizationModel(
   }
 }
 
+@Since("1.3.0")
 object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
   import org.apache.spark.mllib.util.Loader._
@@ -249,6 +317,16 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
     }
   }
 
+  /**
+   * Load a model from the given path.
+   *
+   * The model should have been saved by [[Saveable.save]].
+   *
+   * @param sc  Spark context used for loading model files.
+   * @param path  Path specifying the directory to which the model was saved.
+   * @return  Model instance
+   */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
     val (loadedClassName, formatVersion, _) = loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
@@ -276,7 +354,7 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
      */
     def save(model: MatrixFactorizationModel, path: String): Unit = {
       val sc = model.userFeatures.sparkContext
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       import sqlContext.implicits._
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~ ("rank" -> model.rank)))
@@ -287,18 +365,18 @@ object MatrixFactorizationModel extends Loader[MatrixFactorizationModel] {
 
     def load(sc: SparkContext, path: String): MatrixFactorizationModel = {
       implicit val formats = DefaultFormats
-      val sqlContext = new SQLContext(sc)
+      val sqlContext = SQLContext.getOrCreate(sc)
       val (className, formatVersion, metadata) = loadMetadata(sc, path)
       assert(className == thisClassName)
       assert(formatVersion == thisFormatVersion)
       val rank = (metadata \ "rank").extract[Int]
-      val userFeatures = sqlContext.read.parquet(userPath(path))
-        .map { case Row(id: Int, features: Seq[_]) =>
+      val userFeatures = sqlContext.read.parquet(userPath(path)).rdd.map {
+        case Row(id: Int, features: Seq[_]) =>
           (id, features.asInstanceOf[Seq[Double]].toArray)
-        }
-      val productFeatures = sqlContext.read.parquet(productPath(path))
-        .map { case Row(id: Int, features: Seq[_]) =>
-        (id, features.asInstanceOf[Seq[Double]].toArray)
+      }
+      val productFeatures = sqlContext.read.parquet(productPath(path)).rdd.map {
+        case Row(id: Int, features: Seq[_]) =>
+          (id, features.asInstanceOf[Seq[Double]].toArray)
       }
       new MatrixFactorizationModel(rank, userFeatures, productFeatures)
     }

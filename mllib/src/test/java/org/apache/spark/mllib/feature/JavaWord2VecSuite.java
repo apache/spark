@@ -18,12 +18,13 @@
 package org.apache.spark.mllib.feature;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
+
+import com.google.common.base.Strings;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
-import com.google.common.base.Strings;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -31,19 +32,25 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaWord2VecSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaWord2VecSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaPCASuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -51,9 +58,9 @@ public class JavaWord2VecSuite implements Serializable {
   public void word2Vec() {
     // The tests are to check Java compatibility.
     String sentence = Strings.repeat("a b ", 100) + Strings.repeat("a c ", 10);
-    List<String> words = Lists.newArrayList(sentence.split(" "));
-    List<List<String>> localDoc = Lists.newArrayList(words, words);
-    JavaRDD<List<String>> doc = sc.parallelize(localDoc);
+    List<String> words = Arrays.asList(sentence.split(" "));
+    List<List<String>> localDoc = Arrays.asList(words, words);
+    JavaRDD<List<String>> doc = jsc.parallelize(localDoc);
     Word2Vec word2vec = new Word2Vec()
       .setVectorSize(10)
       .setSeed(42L);

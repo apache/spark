@@ -29,8 +29,6 @@ import org.apache.spark.sql.catalyst.util.TypeUtils
  * :: DeveloperApi ::
  * The data type representing `Array[Byte]` values.
  * Please use the singleton [[DataTypes.BinaryType]].
- *
- * @group dataType
  */
 @DeveloperApi
 class BinaryType private() extends AtomicType {
@@ -49,9 +47,9 @@ class BinaryType private() extends AtomicType {
   }
 
   /**
-   * The default size of a value of the BinaryType is 4096 bytes.
+   * The default size of a value of the BinaryType is 100 bytes.
    */
-  override def defaultSize: Int = 4096
+  override def defaultSize: Int = 100
 
   private[spark] override def asNullable: BinaryType = this
 }

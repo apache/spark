@@ -17,24 +17,28 @@
 
 package org.apache.spark.sql.hive.thriftserver
 
+import java.util.Locale
+import java.util.concurrent.atomic.AtomicBoolean
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.commons.logging.LogFactory
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
-import org.apache.hive.service.cli.thrift.{ThriftBinaryCLIService, ThriftHttpCLIService}
-import org.apache.hive.service.server.{HiveServer2, ServerOptionsProcessor}
+import org.apache.hive.service.cli.thrift.ThriftHttpCLIService
+import org.apache.hive.service.server.HiveServer2
 
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerJobStart}
-import org.apache.spark.sql.SQLConf
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.ui.ThriftServerTab
-import org.apache.spark.util.Utils
-import org.apache.spark.{Logging, SparkContext}
-
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.util.{ShutdownHookManager, Utils}
 
 /**
  * The main entry point for the Spark SQL port of HiveServer2.  Starts up a `SparkSQLContext` and a
@@ -50,10 +54,14 @@ object HiveThriftServer2 extends Logging {
    * Starts a new thrift server with the given context.
    */
   @DeveloperApi
-  def startWithContext(sqlContext: HiveContext): Unit = {
+  def startWithContext(sqlContext: SQLContext): Unit = {
     val server = new HiveThriftServer2(sqlContext)
-    sqlContext.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
-    server.init(sqlContext.hiveconf)
+
+    val executionHive = HiveUtils.newClientForExecution(
+      sqlContext.sparkContext.conf,
+      sqlContext.sessionState.newHadoopConf())
+
+    server.init(executionHive.conf)
     server.start()
     listener = new HiveThriftServer2Listener(server, sqlContext.conf)
     sqlContext.sparkContext.addSparkListener(listener)
@@ -65,30 +73,39 @@ object HiveThriftServer2 extends Logging {
   }
 
   def main(args: Array[String]) {
-    val optionsProcessor = new ServerOptionsProcessor("HiveThriftServer2")
-    if (!optionsProcessor.process(args)) {
-      System.exit(-1)
-    }
+    Utils.initDaemon(log)
+    val optionsProcessor = new HiveServer2.ServerOptionsProcessor("HiveThriftServer2")
+    optionsProcessor.parse(args)
 
     logInfo("Starting SparkContext")
     SparkSQLEnv.init()
 
-    Utils.addShutdownHook { () =>
+    ShutdownHookManager.addShutdownHook { () =>
       SparkSQLEnv.stop()
       uiTab.foreach(_.detach())
     }
 
+    val executionHive = HiveUtils.newClientForExecution(
+      SparkSQLEnv.sqlContext.sparkContext.conf,
+      SparkSQLEnv.sqlContext.sessionState.newHadoopConf())
+
     try {
-      val server = new HiveThriftServer2(SparkSQLEnv.hiveContext)
-      server.init(SparkSQLEnv.hiveContext.hiveconf)
+      val server = new HiveThriftServer2(SparkSQLEnv.sqlContext)
+      server.init(executionHive.conf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.hiveContext.conf)
+      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
       uiTab = if (SparkSQLEnv.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
       } else {
         None
+      }
+      // If application was killed before HiveThriftServer2 start successfully then SparkSubmit
+      // process can not exit, so check whether if SparkContext was stopped.
+      if (SparkSQLEnv.sparkContext.stopped.get()) {
+        logError("SparkContext has stopped even if HiveServer2 has started, so exit")
+        System.exit(-1)
       }
     } catch {
       case e: Exception =>
@@ -149,16 +166,26 @@ object HiveThriftServer2 extends Logging {
     override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
       server.stop()
     }
-    var onlineSessionNum: Int = 0
-    val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
-    val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
-    val retainedStatements =
-      conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
-    val retainedSessions =
-      conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
-    var totalRunning = 0
+    private var onlineSessionNum: Int = 0
+    private val sessionList = new mutable.LinkedHashMap[String, SessionInfo]
+    private val executionList = new mutable.LinkedHashMap[String, ExecutionInfo]
+    private val retainedStatements = conf.getConf(SQLConf.THRIFTSERVER_UI_STATEMENT_LIMIT)
+    private val retainedSessions = conf.getConf(SQLConf.THRIFTSERVER_UI_SESSION_LIMIT)
+    private var totalRunning = 0
 
-    override def onJobStart(jobStart: SparkListenerJobStart): Unit = {
+    def getOnlineSessionNum: Int = synchronized { onlineSessionNum }
+
+    def getTotalRunning: Int = synchronized { totalRunning }
+
+    def getSessionList: Seq[SessionInfo] = synchronized { sessionList.values.toSeq }
+
+    def getSession(sessionId: String): Option[SessionInfo] = synchronized {
+      sessionList.get(sessionId)
+    }
+
+    def getExecutionList: Seq[ExecutionInfo] = synchronized { executionList.values.toSeq }
+
+    override def onJobStart(jobStart: SparkListenerJobStart): Unit = synchronized {
       for {
         props <- Option(jobStart.properties)
         groupId <- Option(props.getProperty(SparkContext.SPARK_JOB_GROUP_ID))
@@ -170,15 +197,18 @@ object HiveThriftServer2 extends Logging {
     }
 
     def onSessionCreated(ip: String, sessionId: String, userName: String = "UNKNOWN"): Unit = {
-      val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
-      sessionList.put(sessionId, info)
-      onlineSessionNum += 1
-      trimSessionIfNecessary()
+      synchronized {
+        val info = new SessionInfo(sessionId, System.currentTimeMillis, ip, userName)
+        sessionList.put(sessionId, info)
+        onlineSessionNum += 1
+        trimSessionIfNecessary()
+      }
     }
 
-    def onSessionClosed(sessionId: String): Unit = {
+    def onSessionClosed(sessionId: String): Unit = synchronized {
       sessionList(sessionId).finishTimestamp = System.currentTimeMillis
       onlineSessionNum -= 1
+      trimSessionIfNecessary()
     }
 
     def onStatementStart(
@@ -186,7 +216,7 @@ object HiveThriftServer2 extends Logging {
         sessionId: String,
         statement: String,
         groupId: String,
-        userName: String = "UNKNOWN"): Unit = {
+        userName: String = "UNKNOWN"): Unit = synchronized {
       val info = new ExecutionInfo(statement, sessionId, System.currentTimeMillis, userName)
       info.state = ExecutionState.STARTED
       executionList.put(id, info)
@@ -196,37 +226,41 @@ object HiveThriftServer2 extends Logging {
       totalRunning += 1
     }
 
-    def onStatementParsed(id: String, executionPlan: String): Unit = {
+    def onStatementParsed(id: String, executionPlan: String): Unit = synchronized {
       executionList(id).executePlan = executionPlan
       executionList(id).state = ExecutionState.COMPILED
     }
 
     def onStatementError(id: String, errorMessage: String, errorTrace: String): Unit = {
-      executionList(id).finishTimestamp = System.currentTimeMillis
-      executionList(id).detail = errorMessage
-      executionList(id).state = ExecutionState.FAILED
-      totalRunning -= 1
+      synchronized {
+        executionList(id).finishTimestamp = System.currentTimeMillis
+        executionList(id).detail = errorMessage
+        executionList(id).state = ExecutionState.FAILED
+        totalRunning -= 1
+        trimExecutionIfNecessary()
+      }
     }
 
-    def onStatementFinish(id: String): Unit = {
+    def onStatementFinish(id: String): Unit = synchronized {
       executionList(id).finishTimestamp = System.currentTimeMillis
       executionList(id).state = ExecutionState.FINISHED
       totalRunning -= 1
+      trimExecutionIfNecessary()
     }
 
-    private def trimExecutionIfNecessary() = synchronized {
+    private def trimExecutionIfNecessary() = {
       if (executionList.size > retainedStatements) {
         val toRemove = math.max(retainedStatements / 10, 1)
-        executionList.take(toRemove).foreach { s =>
+        executionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
           executionList.remove(s._1)
         }
       }
     }
 
-    private def trimSessionIfNecessary() = synchronized {
+    private def trimSessionIfNecessary() = {
       if (sessionList.size > retainedSessions) {
         val toRemove = math.max(retainedSessions / 10, 1)
-        sessionList.take(toRemove).foreach { s =>
+        sessionList.filter(_._2.finishTimestamp != 0).take(toRemove).foreach { s =>
           sessionList.remove(s._1)
         }
       }
@@ -235,29 +269,41 @@ object HiveThriftServer2 extends Logging {
   }
 }
 
-private[hive] class HiveThriftServer2(hiveContext: HiveContext)
+private[hive] class HiveThriftServer2(sqlContext: SQLContext)
   extends HiveServer2
-  with ReflectedCompositeService {
+  with ReflectedCompositeService with Logging {
+  // state is tracked internally so that the server only attempts to shut down if it successfully
+  // started, and then once only.
+  private val started = new AtomicBoolean(false)
 
   override def init(hiveConf: HiveConf) {
-    val sparkSqlCliService = new SparkSQLCLIService(hiveContext)
+    val sparkSqlCliService = new SparkSQLCLIService(this, sqlContext)
     setSuperField(this, "cliService", sparkSqlCliService)
     addService(sparkSqlCliService)
 
-    val thriftCliService = if (isHTTPTransportMode(hiveConf)) {
-      new ThriftHttpCLIService(sparkSqlCliService)
-    } else {
-      new ThriftBinaryCLIService(sparkSqlCliService)
+    if (isBinaryTransportMode(hiveConf)) {
+      logWarning("Binary mode is not supported, use HTTP mode instead")
     }
-
+    val thriftCliService = new ThriftHttpCLIService(sparkSqlCliService)
     setSuperField(this, "thriftCLIService", thriftCliService)
     addService(thriftCliService)
     initCompositeService(hiveConf)
   }
 
-  private def isHTTPTransportMode(hiveConf: HiveConf): Boolean = {
-    val transportMode: String = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
-    transportMode.equalsIgnoreCase("http")
+  private def isBinaryTransportMode(hiveConf: HiveConf): Boolean = {
+    val transportMode = hiveConf.getVar(ConfVars.HIVE_SERVER2_TRANSPORT_MODE)
+    transportMode.toLowerCase(Locale.ENGLISH).equals("binary")
   }
 
+
+  override def start(): Unit = {
+    super.start()
+    started.set(true)
+  }
+
+  override def stop(): Unit = {
+    if (started.getAndSet(false)) {
+       super.stop()
+    }
+  }
 }

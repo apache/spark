@@ -278,6 +278,28 @@ class KMeansSuite extends SparkFunSuite with MLlibTestSparkContext {
       }
     }
   }
+
+  test("Initialize using given cluster centers") {
+    val points = Seq(
+      Vectors.dense(0.0, 0.0),
+      Vectors.dense(1.0, 0.0),
+      Vectors.dense(0.0, 1.0),
+      Vectors.dense(1.0, 1.0)
+    )
+    val rdd = sc.parallelize(points, 3)
+    // creating an initial model
+    val initialModel = new KMeansModel(Array(points(0), points(2)))
+
+    val returnModel = new KMeans()
+      .setK(2)
+      .setMaxIterations(0)
+      .setInitialModel(initialModel)
+      .run(rdd)
+   // comparing the returned model and the initial model
+    assert(returnModel.clusterCenters(0) === initialModel.clusterCenters(0))
+    assert(returnModel.clusterCenters(1) === initialModel.clusterCenters(1))
+  }
+
 }
 
 object KMeansSuite extends SparkFunSuite {

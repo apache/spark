@@ -17,9 +17,8 @@
 
 package org.apache.spark.ml.param;
 
+import java.util.Arrays;
 import java.util.List;
-
-import com.google.common.collect.Lists;
 
 import org.apache.spark.ml.util.Identifiable$;
 
@@ -46,9 +45,14 @@ public class JavaTestParams extends JavaParams {
   }
 
   private IntParam myIntParam_;
-  public IntParam myIntParam() { return myIntParam_; }
 
-  public int getMyIntParam() { return (Integer)getOrDefault(myIntParam_); }
+  public IntParam myIntParam() {
+    return myIntParam_;
+  }
+
+  public int getMyIntParam() {
+    return (Integer) getOrDefault(myIntParam_);
+  }
 
   public JavaTestParams setMyIntParam(int value) {
     set(myIntParam_, value);
@@ -56,9 +60,14 @@ public class JavaTestParams extends JavaParams {
   }
 
   private DoubleParam myDoubleParam_;
-  public DoubleParam myDoubleParam() { return myDoubleParam_; }
 
-  public double getMyDoubleParam() { return (Double)getOrDefault(myDoubleParam_); }
+  public DoubleParam myDoubleParam() {
+    return myDoubleParam_;
+  }
+
+  public double getMyDoubleParam() {
+    return (Double) getOrDefault(myDoubleParam_);
+  }
 
   public JavaTestParams setMyDoubleParam(double value) {
     set(myDoubleParam_, value);
@@ -66,9 +75,14 @@ public class JavaTestParams extends JavaParams {
   }
 
   private Param<String> myStringParam_;
-  public Param<String> myStringParam() { return myStringParam_; }
 
-  public String getMyStringParam() { return getOrDefault(myStringParam_); }
+  public Param<String> myStringParam() {
+    return myStringParam_;
+  }
+
+  public String getMyStringParam() {
+    return getOrDefault(myStringParam_);
+  }
 
   public JavaTestParams setMyStringParam(String value) {
     set(myStringParam_, value);
@@ -76,9 +90,14 @@ public class JavaTestParams extends JavaParams {
   }
 
   private DoubleArrayParam myDoubleArrayParam_;
-  public DoubleArrayParam myDoubleArrayParam() { return myDoubleArrayParam_; }
 
-  public double[] getMyDoubleArrayParam() { return getOrDefault(myDoubleArrayParam_); }
+  public DoubleArrayParam myDoubleArrayParam() {
+    return myDoubleArrayParam_;
+  }
+
+  public double[] getMyDoubleArrayParam() {
+    return getOrDefault(myDoubleArrayParam_);
+  }
 
   public JavaTestParams setMyDoubleArrayParam(double[] value) {
     set(myDoubleArrayParam_, value);
@@ -89,18 +108,15 @@ public class JavaTestParams extends JavaParams {
     myIntParam_ = new IntParam(this, "myIntParam", "this is an int param", ParamValidators.gt(0));
     myDoubleParam_ = new DoubleParam(this, "myDoubleParam", "this is a double param",
       ParamValidators.inRange(0.0, 1.0));
-    List<String> validStrings = Lists.newArrayList("a", "b");
-    myStringParam_ = new Param<String>(this, "myStringParam", "this is a string param",
+    List<String> validStrings = Arrays.asList("a", "b");
+    myStringParam_ = new Param<>(this, "myStringParam", "this is a string param",
       ParamValidators.inArray(validStrings));
     myDoubleArrayParam_ =
       new DoubleArrayParam(this, "myDoubleArrayParam", "this is a double param");
 
     setDefault(myIntParam(), 1);
-    setDefault(myIntParam().w(1));
     setDefault(myDoubleParam(), 0.5);
-    setDefault(myIntParam().w(1), myDoubleParam().w(0.5));
-    setDefault(myDoubleArrayParam(), new double[] {1.0, 2.0});
-    setDefault(myDoubleArrayParam().w(new double[] {1.0, 2.0}));
+    setDefault(myDoubleArrayParam(), new double[]{1.0, 2.0});
   }
 
   @Override

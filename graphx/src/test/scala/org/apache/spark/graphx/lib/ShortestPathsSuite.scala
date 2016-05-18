@@ -17,12 +17,8 @@
 
 package org.apache.spark.graphx.lib
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.SparkContext._
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.lib._
-import org.apache.spark.graphx.util.GraphGenerators
-import org.apache.spark.rdd._
 
 class ShortestPathsSuite extends SparkFunSuite with LocalSparkContext {
 

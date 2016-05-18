@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples
 
 import java.util.Random
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.SparkContext._
 
 /**
-  * Usage: GroupByTest [numMappers] [numKVPairs] [KeySize] [numReducers]
-  */
+ * Usage: GroupByTest [numMappers] [numKVPairs] [KeySize] [numReducers]
+ */
 object SkewedGroupByTest {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("GroupBy Test")
@@ -38,7 +38,7 @@ object SkewedGroupByTest {
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random
 
-      // map output sizes lineraly increase from the 1st to the last
+      // map output sizes linearly increase from the 1st to the last
       numKVPairs = (1.0 * (p + 1) / numMappers * numKVPairs).toInt
 
       var arr1 = new Array[(Int, Array[Byte])](numKVPairs)
@@ -57,3 +57,4 @@ object SkewedGroupByTest {
     sc.stop()
   }
 }
+// scalastyle:on println

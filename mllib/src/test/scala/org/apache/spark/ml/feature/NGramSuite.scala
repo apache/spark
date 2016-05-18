@@ -20,20 +20,21 @@ package org.apache.spark.ml.feature
 import scala.beans.BeanInfo
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 @BeanInfo
 case class NGramTestData(inputTokens: Array[String], wantedNGrams: Array[String])
 
-class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
+class NGramSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   import org.apache.spark.ml.feature.NGramSuite._
 
   test("default behavior yields bigram features") {
     val nGram = new NGram()
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array("Test", "for", "ngram", "."),
         Array("Test for", "for ngram", "ngram .")
@@ -46,7 +47,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array("a", "b", "c", "d", "e"),
         Array("a b c d", "b c d e")
@@ -59,7 +60,7 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(4)
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array(),
         Array()
@@ -72,18 +73,26 @@ class NGramSuite extends SparkFunSuite with MLlibTestSparkContext {
       .setInputCol("inputTokens")
       .setOutputCol("nGrams")
       .setN(6)
-    val dataset = sqlContext.createDataFrame(Seq(
+    val dataset = spark.createDataFrame(Seq(
       NGramTestData(
         Array("a", "b", "c", "d", "e"),
         Array()
       )))
     testNGram(nGram, dataset)
   }
+
+  test("read/write") {
+    val t = new NGram()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setN(3)
+    testDefaultReadWrite(t)
+  }
 }
 
 object NGramSuite extends SparkFunSuite {
 
-  def testNGram(t: NGram, dataset: DataFrame): Unit = {
+  def testNGram(t: NGram, dataset: Dataset[_]): Unit = {
     t.transform(dataset)
       .select("nGrams", "wantedNGrams")
       .collect()

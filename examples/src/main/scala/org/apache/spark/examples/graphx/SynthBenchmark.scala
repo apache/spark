@@ -15,13 +15,14 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package org.apache.spark.examples.graphx
 
-import org.apache.spark.SparkContext._
+import java.io.{FileOutputStream, PrintWriter}
+
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.graphx.{GraphXUtils, PartitionStrategy}
-import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.graphx.util.GraphGenerators
-import java.io.{PrintWriter, FileOutputStream}
 
 /**
  * The SynthBenchmark application can be used to run various GraphX algorithms on
@@ -128,3 +129,4 @@ object SynthBenchmark {
     sc.stop()
   }
 }
+// scalastyle:on println

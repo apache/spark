@@ -17,12 +17,14 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.UnaryTransformer
-import org.apache.spark.ml.param.{ParamMap, Param}
-import org.apache.spark.ml.util.Identifiable
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.param.Param
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.sql.types.DataType
 
 /**
@@ -33,14 +35,14 @@ import org.apache.spark.sql.types.DataType
  */
 @Experimental
 class ElementwiseProduct(override val uid: String)
-  extends UnaryTransformer[Vector, Vector, ElementwiseProduct] {
+  extends UnaryTransformer[Vector, Vector, ElementwiseProduct] with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("elemProd"))
 
   /**
-    * the vector to multiply with input vectors
-    * @group param
-    */
+   * the vector to multiply with input vectors
+   * @group param
+   */
   val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */
@@ -52,8 +54,15 @@ class ElementwiseProduct(override val uid: String)
   override protected def createTransformFunc: Vector => Vector = {
     require(params.contains(scalingVec), s"transformation requires a weight vector")
     val elemScaler = new feature.ElementwiseProduct($(scalingVec))
-    elemScaler.transform
+    v => elemScaler.transform(v)
   }
 
   override protected def outputDataType: DataType = new VectorUDT()
+}
+
+@Since("2.0.0")
+object ElementwiseProduct extends DefaultParamsReadable[ElementwiseProduct] {
+
+  @Since("2.0.0")
+  override def load(path: String): ElementwiseProduct = super.load(path)
 }
