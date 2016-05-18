@@ -20,11 +20,11 @@ package org.apache.spark.ml.feature
 import scala.util.Random
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
 class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -39,7 +39,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val validData = Array(-0.5, -0.3, 0.0, 0.2)
     val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0)
     val dataFrame: DataFrame =
-      sqlContext.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
+      spark.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
 
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
@@ -55,13 +55,13 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     // Check for exceptions when using a set of invalid feature values.
     val invalidData1: Array[Double] = Array(-0.9) ++ validData
     val invalidData2 = Array(0.51) ++ validData
-    val badDF1 = sqlContext.createDataFrame(invalidData1.zipWithIndex).toDF("feature", "idx")
+    val badDF1 = spark.createDataFrame(invalidData1.zipWithIndex).toDF("feature", "idx")
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
         bucketizer.transform(badDF1).collect()
       }
     }
-    val badDF2 = sqlContext.createDataFrame(invalidData2.zipWithIndex).toDF("feature", "idx")
+    val badDF2 = spark.createDataFrame(invalidData2.zipWithIndex).toDF("feature", "idx")
     withClue("Invalid feature value 0.51 was not caught as an invalid feature!") {
       intercept[SparkException] {
         bucketizer.transform(badDF2).collect()
@@ -74,7 +74,7 @@ class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val validData = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9)
     val expectedBuckets = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0)
     val dataFrame: DataFrame =
-      sqlContext.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
+      spark.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
 
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")

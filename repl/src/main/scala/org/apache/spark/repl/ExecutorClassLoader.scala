@@ -70,26 +70,24 @@ class ExecutorClassLoader(
   }
 
   override def findClass(name: String): Class[_] = {
-    userClassPathFirst match {
-      case true => findClassLocally(name).getOrElse(parentLoader.loadClass(name))
-      case false => {
-        try {
-          parentLoader.loadClass(name)
-        } catch {
-          case e: ClassNotFoundException => {
-            val classOption = findClassLocally(name)
-            classOption match {
-              case None =>
-                // If this class has a cause, it will break the internal assumption of Janino
-                // (the compiler used for Spark SQL code-gen).
-                // See org.codehaus.janino.ClassLoaderIClassLoader's findIClass, you will see
-                // its behavior will be changed if there is a cause and the compilation
-                // of generated class will fail.
-                throw new ClassNotFoundException(name)
-              case Some(a) => a
-            }
+    if (userClassPathFirst) {
+      findClassLocally(name).getOrElse(parentLoader.loadClass(name))
+    } else {
+      try {
+        parentLoader.loadClass(name)
+      } catch {
+        case e: ClassNotFoundException =>
+          val classOption = findClassLocally(name)
+          classOption match {
+            case None =>
+              // If this class has a cause, it will break the internal assumption of Janino
+              // (the compiler used for Spark SQL code-gen).
+              // See org.codehaus.janino.ClassLoaderIClassLoader's findIClass, you will see
+              // its behavior will be changed if there is a cause and the compilation
+              // of generated class will fail.
+              throw new ClassNotFoundException(name)
+            case Some(a) => a
           }
-        }
       }
     }
   }

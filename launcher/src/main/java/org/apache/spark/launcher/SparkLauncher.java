@@ -67,6 +67,13 @@ public class SparkLauncher {
   public static final String CHILD_PROCESS_LOGGER_NAME = "spark.launcher.childProcLoggerName";
 
   /**
+   * A special value for the resource that tells Spark to not try to process the app resource as a
+   * file. This is useful when the class being executed is added to the application using other
+   * means - for example, by adding jars using the package download feature.
+   */
+  public static final String NO_RESOURCE = "spark-internal";
+
+  /**
    * Maximum time (in ms) to wait for a child process to connect back to the launcher server
    * when using @link{#start()}.
    */
@@ -477,6 +484,6 @@ public class SparkLauncher {
       // No op.
     }
 
-  };
+  }
 
 }

@@ -20,8 +20,7 @@
 # The data set is made up of 227,496 rows x 14 columns. 
 
 # To run this example use
-# ./bin/sparkR --packages com.databricks:spark-csv_2.10:1.0.3
-#     examples/src/main/r/data-manipulation.R <path_to_csv>
+# ./bin/spark-submit examples/src/main/r/data-manipulation.R <path_to_csv>
 
 # Load SparkR library into your R session
 library(SparkR)
@@ -29,8 +28,8 @@ library(SparkR)
 args <- commandArgs(trailing = TRUE)
 
 if (length(args) != 1) {
-  print("Usage: data-manipulation.R <path-to-flights.csv")
-  print("The data can be downloaded from: http://s3-us-west-2.amazonaws.com/sparkr-data/flights.csv ")
+  print("Usage: data-manipulation.R <path-to-flights.csv>")
+  print("The data can be downloaded from: http://s3-us-west-2.amazonaws.com/sparkr-data/flights.csv")
   q("no")
 }
 
@@ -49,33 +48,33 @@ flights_df$date <- as.Date(flights_df$date)
 ## Filter flights whose destination is San Francisco and write to a local data frame
 SFO_df <- flights_df[flights_df$dest == "SFO", ] 
 
-# Convert the local data frame into a SparkR DataFrame
+# Convert the local data frame into a SparkDataFrame
 SFO_DF <- createDataFrame(sqlContext, SFO_df)
 
-#  Directly create a SparkR DataFrame from the source data
-flightsDF <- read.df(sqlContext, flightsCsvPath, source = "com.databricks.spark.csv", header = "true")
+#  Directly create a SparkDataFrame from the source data
+flightsDF <- read.df(sqlContext, flightsCsvPath, source = "csv", header = "true")
 
-# Print the schema of this Spark DataFrame
+# Print the schema of this SparkDataFrame
 printSchema(flightsDF)
 
-# Cache the DataFrame
+# Cache the SparkDataFrame
 cache(flightsDF)
 
-# Print the first 6 rows of the DataFrame
+# Print the first 6 rows of the SparkDataFrame
 showDF(flightsDF, numRows = 6) ## Or
 head(flightsDF)
 
-# Show the column names in the DataFrame
+# Show the column names in the SparkDataFrame
 columns(flightsDF)
 
-# Show the number of rows in the DataFrame
+# Show the number of rows in the SparkDataFrame
 count(flightsDF)
 
 # Select specific columns
 destDF <- select(flightsDF, "dest", "cancelled")
 
 # Using SQL to select columns of data
-# First, register the flights DataFrame as a table
+# First, register the flights SparkDataFrame as a table
 registerTempTable(flightsDF, "flightsTable")
 destDF <- sql(sqlContext, "SELECT dest, cancelled FROM flightsTable")
 
@@ -95,11 +94,11 @@ if("magrittr" %in% rownames(installed.packages())) {
   library(magrittr)
 
   # Group the flights by date and then find the average daily delay
-  # Write the result into a DataFrame
+  # Write the result into a SparkDataFrame
   groupBy(flightsDF, flightsDF$date) %>%
     summarize(avg(flightsDF$dep_delay), avg(flightsDF$arr_delay)) -> dailyDelayDF
 
-  # Print the computed data frame
+  # Print the computed SparkDataFrame
   head(dailyDelayDF)
 }
 

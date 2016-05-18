@@ -18,7 +18,7 @@
 package org.apache.spark.ml.tree
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{ImpurityStats,
   InformationGainStats => OldInformationGainStats, Node => OldNode, Predict => OldPredict}
@@ -115,7 +115,7 @@ private[ml] object Node {
  * @param impurity  Impurity measure at this node (for training data)
  */
 @DeveloperApi
-final class LeafNode private[ml] (
+class LeafNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     override private[ml] val impurityStats: ImpurityCalculator) extends Node {
@@ -158,7 +158,7 @@ final class LeafNode private[ml] (
  * @param split  Information about the test used to split to the left or right child.
  */
 @DeveloperApi
-final class InternalNode private[ml] (
+class InternalNode private[ml] (
     override val prediction: Double,
     override val impurity: Double,
     val gain: Double,

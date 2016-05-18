@@ -115,6 +115,20 @@ class CodeFormatterSuite extends SparkFunSuite {
     """.stripMargin
   }
 
+  testCase("single line comments /* */ ") {
+    """/** This is a comment about class A { { { ( ( */
+      |class A {
+      |class body;
+      |}""".stripMargin
+  }{
+    """
+      |/* 001 */ /** This is a comment about class A { { { ( ( */
+      |/* 002 */ class A {
+      |/* 003 */   class body;
+      |/* 004 */ }
+    """.stripMargin
+  }
+
   testCase("multi-line comments") {
     """  /* This is a comment about
       |class A {

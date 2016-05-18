@@ -55,7 +55,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -70,10 +70,6 @@
     <dependency>
       <groupId>org.codehaus.janino</groupId>
       <artifactId>janino</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.antlr</groupId>
-      <artifactId>antlr-runtime</artifactId>
     </dependency>
     <dependency>
       <groupId>org.antlr</groupId>
@@ -114,24 +110,6 @@
             </goals>
           </execution>
         </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.antlr</groupId>
-        <artifactId>antlr3-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <goals>
-              <goal>antlr</goal>
-            </goals>
-          </execution>
-        </executions>
-        <configuration>
-          <sourceDirectory>../catalyst/src/main/antlr3</sourceDirectory>
-          <includes>
-            <include>**/SparkSqlLexer.g</include>
-            <include>**/SparkSqlParser.g</include>
-          </includes>
-        </configuration>
       </plugin>
       <plugin>
         <groupId>org.antlr</groupId>

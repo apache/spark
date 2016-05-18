@@ -18,18 +18,60 @@ This section covers algorithms for working with features, roughly divided into t
 
 # Feature Extractors
 
-## TF-IDF (HashingTF and IDF)
+## TF-IDF
 
-[Term Frequency-Inverse Document Frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a common text pre-processing step.  In Spark ML, TF-IDF is separate into two parts: TF (+hashing) and IDF.
+[Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) 
+is a feature vectorization method widely used in text mining to reflect the importance of a term 
+to a document in the corpus. Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
+Term frequency `$TF(t, d)$` is the number of times that term `$t$` appears in document `$d$`, while 
+document frequency `$DF(t, D)$` is the number of documents that contains term `$t$`. If we only use 
+term frequency to measure the importance, it is very easy to over-emphasize terms that appear very 
+often but carry little information about the document, e.g., "a", "the", and "of". If a term appears 
+very often across the corpus, it means it doesn't carry special information about a particular document.
+Inverse document frequency is a numerical measure of how much information a term provides:
+`\[
+IDF(t, D) = \log \frac{|D| + 1}{DF(t, D) + 1},
+\]`
+where `$|D|$` is the total number of documents in the corpus. Since logarithm is used, if a term 
+appears in all documents, its IDF value becomes 0. Note that a smoothing term is applied to avoid 
+dividing by zero for terms outside the corpus. The TF-IDF measure is simply the product of TF and IDF:
+`\[
+TFIDF(t, d, D) = TF(t, d) \cdot IDF(t, D).
+\]`
+There are several variants on the definition of term frequency and document frequency.
+In MLlib, we separate TF and IDF to make them flexible.
 
-**TF**: `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
-The algorithm combines Term Frequency (TF) counts with the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing) for dimensionality reduction.
+**TF**: Both `HashingTF` and `CountVectorizer` can be used to generate the term frequency vectors. 
 
-**IDF**: `IDF` is an `Estimator` which fits on a dataset and produces an `IDFModel`.  The `IDFModel` takes feature vectors (generally created from `HashingTF`) and scales each column.  Intuitively, it down-weights columns which appear frequently in a corpus.
+`HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
+fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
+`HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
+A raw feature is mapped into an index (term) by applying a hash function. Then term frequencies 
+are calculated based on the mapped indices. This approach avoids the need to compute a global 
+term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
+collisions, where different raw features may become the same term after hashing. To reduce the 
+chance of collision, we can increase the target feature dimension, i.e., the number of buckets 
+of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
+it is advisable to use a power of two as the feature dimension, otherwise the features will 
+not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`. 
 
-Please refer to the [MLlib user guide on TF-IDF](mllib-feature-extraction.html#tf-idf) for more details on Term Frequency and Inverse Document Frequency.
+`CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
+](ml-features.html#countvectorizer) for more details.
 
-In the following code segment, we start with a set of sentences.  We split each sentence into words using `Tokenizer`.  For each sentence (bag of words), we use `HashingTF` to hash the sentence into a feature vector.  We use `IDF` to rescale the feature vectors; this generally improves performance when using text as features.  Our feature vectors could then be passed to a learning algorithm.
+**IDF**: `IDF` is an `Estimator` which is fit on a dataset and produces an `IDFModel`.  The 
+`IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and 
+scales each column. Intuitively, it down-weights columns which appear frequently in a corpus.
+
+**Note:** `spark.ml` doesn't provide tools for text segmentation.
+We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
+[scalanlp/chalk](https://github.com/scalanlp/chalk).
+
+**Examples**
+
+In the following code segment, we start with a set of sentences.  We split each sentence into words 
+using `Tokenizer`.  For each sentence (bag of words), we use `HashingTF` to hash the sentence into 
+a feature vector.  We use `IDF` to rescale the feature vectors; this generally improves performance 
+when using text as features.  Our feature vectors could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -118,7 +160,7 @@ Assume that we have the following DataFrame with columns `id` and `texts`:
  1  | Array("a", "b", "b", "c", "a")
 ~~~~
 
-each row in`texts` is a document of type Array[String].
+each row in `texts` is a document of type Array[String].
 Invoking fit of `CountVectorizer` produces a `CountVectorizerModel` with vocabulary (a, b, c),
 then the output column "vector" after transformation contains:
 
@@ -149,6 +191,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaCountVectorizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [CountVectorizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizer)
+and the [CountVectorizerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.CountVectorizerModel)
+for more details on the API.
+
+{% include_example python/ml/count_vectorizer_example.py %}
+</div>
 </div>
 
 # Feature Transformers
@@ -167,7 +218,7 @@ for more details on the API.
 <div data-lang="scala" markdown="1">
 
 Refer to the [Tokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
-and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
+and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/TokenizerExample.scala %}
@@ -412,6 +463,14 @@ Refer to the [DCT Java docs](api/java/org/apache/spark/ml/feature/DCT.html)
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaDCTExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [DCT Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.DCT)
+for more details on the API.
+
+{% include_example python/ml/dct_example.py %}
 </div>
 </div>
 
@@ -749,7 +808,7 @@ The rescaled value for a feature E is calculated as,
 \end{equation}`
 For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
 
-Note that since zero values will probably be transformed to non-zero values, output of the transformer will be DenseVector even for sparse input.
+Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
@@ -770,6 +829,15 @@ and the [MinMaxScalerModel Java docs](api/java/org/apache/spark/ml/feature/MinMa
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMinMaxScalerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MinMaxScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScaler)
+and the [MinMaxScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScalerModel)
+for more details on the API.
+
+{% include_example python/ml/min_max_scaler_example.py %}
 </div>
 </div>
 
@@ -802,6 +870,15 @@ and the [MaxAbsScalerModel Java docs](api/java/org/apache/spark/ml/feature/MaxAb
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaMaxAbsScalerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [MaxAbsScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScaler)
+and the [MaxAbsScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScalerModel)
+for more details on the API.
+
+{% include_example python/ml/max_abs_scaler_example.py %}
 </div>
 </div>
 
@@ -1076,6 +1153,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [QuantileDiscretizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example python/ml/quantile_discretizer_example.py %}
+</div>
+
 </div>
 
 # Feature Selectors
@@ -1148,6 +1234,14 @@ Refer to the [VectorSlicer Java docs](api/java/org/apache/spark/ml/feature/Vecto
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaVectorSlicerExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [VectorSlicer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.VectorSlicer)
+for more details on the API.
+
+{% include_example python/ml/vector_slicer_example.py %}
 </div>
 </div>
 
@@ -1269,5 +1363,13 @@ Refer to the [ChiSqSelector Java docs](api/java/org/apache/spark/ml/feature/ChiS
 for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaChiSqSelectorExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [ChiSqSelector Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.ChiSqSelector)
+for more details on the API.
+
+{% include_example python/ml/chisq_selector_example.py %}
 </div>
 </div>

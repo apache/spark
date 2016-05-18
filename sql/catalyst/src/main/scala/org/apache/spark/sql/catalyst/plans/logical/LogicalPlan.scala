@@ -42,6 +42,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def analyzed: Boolean = _analyzed
 
+  /** Returns true if this subtree contains any streaming data sources. */
+  def isStreaming: Boolean = children.exists(_.isStreaming == true)
+
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
@@ -79,13 +82,13 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
 
   /**
    * Computes [[Statistics]] for this plan. The default implementation assumes the output
-   * cardinality is the product of of all child plan's cardinality, i.e. applies in the case
+   * cardinality is the product of all child plan's cardinality, i.e. applies in the case
    * of cartesian joins.
    *
    * [[LeafNode]]s must override this.
    */
   def statistics: Statistics = {
-    if (children.size == 0) {
+    if (children.isEmpty) {
       throw new UnsupportedOperationException(s"LeafNode $nodeName must implement statistics.")
     }
     Statistics(sizeInBytes = children.map(_.statistics.sizeInBytes).product)

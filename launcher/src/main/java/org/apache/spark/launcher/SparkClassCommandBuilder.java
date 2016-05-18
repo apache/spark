@@ -41,7 +41,8 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
   }
 
   @Override
-  public List<String> buildCommand(Map<String, String> env) throws IOException {
+  public List<String> buildCommand(Map<String, String> env)
+      throws IOException, IllegalArgumentException {
     List<String> javaOptsKeys = new ArrayList<>();
     String memKey = null;
     String extraClassPath = null;
@@ -80,12 +81,18 @@ class SparkClassCommandBuilder extends AbstractCommandBuilder {
     }
 
     List<String> cmd = buildJavaCommand(extraClassPath);
+
     for (String key : javaOptsKeys) {
-      addOptionString(cmd, System.getenv(key));
+      String envValue = System.getenv(key);
+      if (!isEmpty(envValue) && envValue.contains("Xmx")) {
+        String msg = String.format("%s is not allowed to specify max heap(Xmx) memory settings " +
+                "(was %s). Use the corresponding configuration instead.", key, envValue);
+        throw new IllegalArgumentException(msg);
+      }
+      addOptionString(cmd, envValue);
     }
 
     String mem = firstNonEmpty(memKey != null ? System.getenv(memKey) : null, DEFAULT_MEM);
-    cmd.add("-Xms" + mem);
     cmd.add("-Xmx" + mem);
     addPermGenSizeOpt(cmd);
     cmd.add(className);

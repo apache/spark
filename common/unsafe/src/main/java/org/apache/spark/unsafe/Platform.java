@@ -17,9 +17,12 @@
 
 package org.apache.spark.unsafe;
 
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 
+import sun.misc.Cleaner;
 import sun.misc.Unsafe;
 
 public final class Platform {
@@ -142,6 +145,35 @@ public final class Platform {
     copyMemory(null, address, null, newMemory, oldSize);
     freeMemory(address);
     return newMemory;
+  }
+
+  /**
+   * Uses internal JDK APIs to allocate a DirectByteBuffer while ignoring the JVM's
+   * MaxDirectMemorySize limit (the default limit is too low and we do not want to require users
+   * to increase it).
+   */
+  @SuppressWarnings("unchecked")
+  public static ByteBuffer allocateDirectBuffer(int size) {
+    try {
+      Class cls = Class.forName("java.nio.DirectByteBuffer");
+      Constructor constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
+      constructor.setAccessible(true);
+      Field cleanerField = cls.getDeclaredField("cleaner");
+      cleanerField.setAccessible(true);
+      final long memory = allocateMemory(size);
+      ByteBuffer buffer = (ByteBuffer) constructor.newInstance(memory, size);
+      Cleaner cleaner = Cleaner.create(buffer, new Runnable() {
+        @Override
+        public void run() {
+          freeMemory(memory);
+        }
+      });
+      cleanerField.set(buffer, cleaner);
+      return buffer;
+    } catch (Exception e) {
+      throwException(e);
+    }
+    throw new IllegalStateException("unreachable");
   }
 
   public static void setMemory(long address, byte value, long size) {

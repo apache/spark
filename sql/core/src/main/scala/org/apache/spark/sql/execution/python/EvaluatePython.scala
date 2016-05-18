@@ -29,32 +29,11 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, GenericArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-/**
- * Evaluates a [[PythonUDF]], appending the result to the end of the input tuple.
- */
-case class EvaluatePython(
-    udf: PythonUDF,
-    child: LogicalPlan,
-    resultAttribute: AttributeReference)
-  extends logical.UnaryNode {
-
-  def output: Seq[Attribute] = child.output :+ resultAttribute
-
-  // References should not include the produced attribute.
-  override def references: AttributeSet = udf.references
-}
-
-
 object EvaluatePython {
-  def apply(udf: PythonUDF, child: LogicalPlan): EvaluatePython =
-    new EvaluatePython(udf, child, AttributeReference("pythonUDF", udf.dataType)())
-
   def takeAndServe(df: DataFrame, n: Int): Int = {
     registerPicklers()
     df.withNewExecutionId {
@@ -64,6 +43,16 @@ object EvaluatePython {
         })
       PythonRDD.serveIterator(iter, s"serve-DataFrame")
     }
+  }
+
+  def needConversionInPython(dt: DataType): Boolean = dt match {
+    case DateType | TimestampType => true
+    case _: StructType => true
+    case _: UserDefinedType[_] => true
+    case ArrayType(elementType, _) => needConversionInPython(elementType)
+    case MapType(keyType, valueType, _) =>
+      needConversionInPython(keyType) || needConversionInPython(valueType)
+    case _ => false
   }
 
   /**

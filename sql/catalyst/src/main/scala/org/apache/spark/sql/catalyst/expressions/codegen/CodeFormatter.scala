@@ -74,7 +74,8 @@ private class CodeFormatter {
         // Handle single line comments
         newIndentLevel = indentLevel
       }
-    } else {
+    }
+    if (inCommentBlock) {
       if (line.endsWith("*/")) {
         inCommentBlock = false
         newIndentLevel = indentLevelOutsideCommentBlock

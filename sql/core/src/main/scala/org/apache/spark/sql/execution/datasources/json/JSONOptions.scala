@@ -35,8 +35,8 @@ private[sql] class JSONOptions(
     parameters.get("samplingRatio").map(_.toDouble).getOrElse(1.0)
   val primitivesAsString =
     parameters.get("primitivesAsString").map(_.toBoolean).getOrElse(false)
-  val floatAsBigDecimal =
-    parameters.get("floatAsBigDecimal").map(_.toBoolean).getOrElse(false)
+  val prefersDecimal =
+    parameters.get("prefersDecimal").map(_.toBoolean).getOrElse(false)
   val allowComments =
     parameters.get("allowComments").map(_.toBoolean).getOrElse(false)
   val allowUnquotedFieldNames =

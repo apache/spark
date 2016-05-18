@@ -38,17 +38,18 @@ object PageView extends Serializable {
 }
 
 // scalastyle:off
-/** Generates streaming events to simulate page views on a website.
-  *
-  * This should be used in tandem with PageViewStream.scala. Example:
-  *
-  * To run the generator
-  * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
-  * To process the generated stream
-  * `$ bin/run-example \
-  *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
-  *
-  */
+/**
+ * Generates streaming events to simulate page views on a website.
+ *
+ * This should be used in tandem with PageViewStream.scala. Example:
+ *
+ * To run the generator
+ * `$ bin/run-example org.apache.spark.examples.streaming.clickstream.PageViewGenerator 44444 10`
+ * To process the generated stream
+ * `$ bin/run-example \
+ *    org.apache.spark.examples.streaming.clickstream.PageViewStream errorRatePerZipCode localhost 44444`
+ *
+ */
 // scalastyle:on
 object PageViewGenerator {
   val pages = Map("http://foo.com/" -> .7,

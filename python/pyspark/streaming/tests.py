@@ -1357,7 +1357,7 @@ class FlumePollingStreamTests(PySparkStreamingTestCase):
 
             dstream.foreachRDD(get_output)
             ssc.start()
-            self._utils.sendDatAndEnsureAllDataHasBeenReceived()
+            self._utils.sendDataAndEnsureAllDataHasBeenReceived()
 
             self.wait_for(outputBuffer, self._utils.getTotalEvents())
             outputHeaders = [event[0] for event in outputBuffer]
@@ -1476,13 +1476,13 @@ def search_jar(dir, name_prefix):
 
 def search_kafka_assembly_jar():
     SPARK_HOME = os.environ["SPARK_HOME"]
-    kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-assembly")
-    jars = search_jar(kafka_assembly_dir, "spark-streaming-kafka-assembly")
+    kafka_assembly_dir = os.path.join(SPARK_HOME, "external/kafka-0-8-assembly")
+    jars = search_jar(kafka_assembly_dir, "spark-streaming-kafka-0-8-assembly")
     if not jars:
         raise Exception(
             ("Failed to find Spark Streaming kafka assembly jar in %s. " % kafka_assembly_dir) +
             "You need to build Spark with "
-            "'build/sbt assembly/assembly streaming-kafka-assembly/assembly' or "
+            "'build/sbt assembly/package streaming-kafka-0-8-assembly/assembly' or "
             "'build/mvn package' before running this test.")
     elif len(jars) > 1:
         raise Exception(("Found multiple Spark Streaming Kafka assembly JARs: %s; please "
@@ -1548,7 +1548,7 @@ if __name__ == "__main__":
     elif are_kinesis_tests_enabled is False:
         sys.stderr.write("Skipping all Kinesis Python tests as the optional Kinesis project was "
                          "not compiled into a JAR. To run these tests, "
-                         "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/assembly "
+                         "you need to build Spark with 'build/sbt -Pkinesis-asl assembly/package "
                          "streaming-kinesis-asl-assembly/assembly' or "
                          "'build/mvn -Pkinesis-asl package' before running this test.")
     else:
@@ -1556,7 +1556,7 @@ if __name__ == "__main__":
             ("Failed to find Spark Streaming Kinesis assembly jar in %s. "
              % kinesis_asl_assembly_dir) +
             "You need to build Spark with 'build/sbt -Pkinesis-asl "
-            "assembly/assembly streaming-kinesis-asl-assembly/assembly'"
+            "assembly/package streaming-kinesis-asl-assembly/assembly'"
             "or 'build/mvn -Pkinesis-asl package' before running this test.")
 
     sys.stderr.write("Running tests: %s \n" % (str(testcases)))

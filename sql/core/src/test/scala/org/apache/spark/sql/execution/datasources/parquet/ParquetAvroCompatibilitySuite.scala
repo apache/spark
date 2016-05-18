@@ -67,7 +67,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(sqlContext.read.parquet(path), (0 until 10).map { i =>
+      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         Row(
           i % 2 == 0,
           i,
@@ -114,7 +114,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(sqlContext.read.parquet(path), (0 until 10).map { i =>
+      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         if (i % 3 == 0) {
           Row.apply(Seq.fill(7)(null): _*)
         } else {
@@ -155,7 +155,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(sqlContext.read.parquet(path), (0 until 10).map { i =>
+      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         Row(
           Seq.tabulate(3)(i => s"val_$i"),
           if (i % 3 == 0) null else Seq.tabulate(3)(identity))
@@ -182,7 +182,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(sqlContext.read.parquet(path), (0 until 10).map { i =>
+      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         Row(Seq.tabulate(3, 3)((i, j) => i * 3 + j))
       })
     }
@@ -205,7 +205,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(sqlContext.read.parquet(path), (0 until 10).map { i =>
+      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         Row(Seq.tabulate(3)(i => i.toString -> Seq.tabulate(3)(j => i + j)).toMap)
       })
     }
@@ -221,7 +221,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
 
       logParquetSchema(path)
 
-      checkAnswer(sqlContext.read.parquet(path), (0 until 10).map { i =>
+      checkAnswer(spark.read.parquet(path), (0 until 10).map { i =>
         Row(
           Seq.tabulate(3)(n => s"arr_${i + n}"),
           Seq.tabulate(3)(n => n.toString -> (i + n: Integer)).toMap,
@@ -267,7 +267,7 @@ class ParquetAvroCompatibilitySuite extends ParquetCompatibilityTest with Shared
         }
       }
 
-      checkAnswer(sqlContext.read.parquet(path).filter('suit === "SPADES"), Row("SPADES"))
+      checkAnswer(spark.read.parquet(path).filter('suit === "SPADES"), Row("SPADES"))
     }
   }
 }

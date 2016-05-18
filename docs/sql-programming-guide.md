@@ -173,7 +173,7 @@ df.show()
 {% highlight r %}
 sqlContext <- SQLContext(sc)
 
-df <- jsonFile(sqlContext, "examples/src/main/resources/people.json")
+df <- read.json(sqlContext, "examples/src/main/resources/people.json")
 
 # Displays the content of the DataFrame to stdout
 showDF(df)
@@ -366,7 +366,7 @@ In addition to simple column references and expressions, DataFrames also have a 
 sqlContext <- sparkRSQL.init(sc)
 
 # Create the DataFrame
-df <- jsonFile(sqlContext, "examples/src/main/resources/people.json")
+df <- read.json(sqlContext, "examples/src/main/resources/people.json")
 
 # Show the content of the DataFrame
 showDF(df)
@@ -529,7 +529,7 @@ case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
 val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt)).toDF()
-people.registerTempTable("people")
+people.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name, age FROM people WHERE age >= 13 AND age <= 19")
@@ -605,7 +605,7 @@ JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").m
 
 // Apply a schema to an RDD of JavaBeans and register it as a table.
 DataFrame schemaPeople = sqlContext.createDataFrame(people, Person.class);
-schemaPeople.registerTempTable("people");
+schemaPeople.createOrReplaceTempView("people");
 
 // SQL can be run over RDDs that have been registered as tables.
 DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -643,7 +643,7 @@ people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
 
 # Infer the schema, and register the DataFrame as a table.
 schemaPeople = sqlContext.createDataFrame(people)
-schemaPeople.registerTempTable("people")
+schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -703,8 +703,8 @@ val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
 // Apply the schema to the RDD.
 val peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema)
 
-// Register the DataFrames as a table.
-peopleDataFrame.registerTempTable("people")
+// Creates a temporary view using the DataFrame.
+peopleDataFrame.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val results = sqlContext.sql("SELECT name FROM people")
@@ -771,10 +771,10 @@ JavaRDD<Row> rowRDD = people.map(
 // Apply the schema to the RDD.
 DataFrame peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema);
 
-// Register the DataFrame as a table.
-peopleDataFrame.registerTempTable("people");
+// Creates a temporary view using the DataFrame.
+peopleDataFrame.createOrReplaceTempView("people");
 
-// SQL can be run over RDDs that have been registered as tables.
+// SQL can be run over a temporary view created using DataFrames.
 DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
@@ -824,8 +824,8 @@ schema = StructType(fields)
 # Apply the schema to the RDD.
 schemaPeople = sqlContext.createDataFrame(people, schema)
 
-# Register the DataFrame as a table.
-schemaPeople.registerTempTable("people")
+# Creates a temporary view using the DataFrame
+schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
 results = sqlContext.sql("SELECT name FROM people")
@@ -844,7 +844,7 @@ for name in names.collect():
 # Data Sources
 
 Spark SQL supports operating on a variety of data sources through the `DataFrame` interface.
-A DataFrame can be operated on as normal RDDs and can also be registered as a temporary table.
+A DataFrame can be operated on as normal RDDs and can also be used to create a temporary view.
 Registering a DataFrame as a table allows you to run SQL queries over its data. This section
 describes the general methods for loading and saving data using the Spark Data Sources and then
 goes into specific options that are available for the built-in data sources.
@@ -889,8 +889,8 @@ df.select("name", "favorite_color").write.save("namesAndFavColors.parquet")
 <div data-lang="r"  markdown="1">
 
 {% highlight r %}
-df <- loadDF(sqlContext, "people.parquet")
-saveDF(select(df, "name", "age"), "namesAndAges.parquet")
+df <- read.df(sqlContext, "examples/src/main/resources/users.parquet")
+write.df(select(df, "name", "favorite_color"), "namesAndFavColors.parquet")
 {% endhighlight %}
 
 </div>
@@ -939,8 +939,8 @@ df.select("name", "age").write.save("namesAndAges.parquet", format="parquet")
 
 {% highlight r %}
 
-df <- loadDF(sqlContext, "people.json", "json")
-saveDF(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
+df <- read.df(sqlContext, "examples/src/main/resources/people.json", "json")
+write.df(select(df, "name", "age"), "namesAndAges.parquet", "parquet")
 
 {% endhighlight %}
 
@@ -1072,8 +1072,8 @@ people.write.parquet("people.parquet")
 // The result of loading a Parquet file is also a DataFrame.
 val parquetFile = sqlContext.read.parquet("people.parquet")
 
-//Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile")
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile")
 val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
@@ -1094,8 +1094,8 @@ schemaPeople.write().parquet("people.parquet");
 // The result of loading a parquet file is also a DataFrame.
 DataFrame parquetFile = sqlContext.read().parquet("people.parquet");
 
-// Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile");
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile");
 DataFrame teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
@@ -1120,8 +1120,8 @@ schemaPeople.write.parquet("people.parquet")
 # The result of loading a parquet file is also a DataFrame.
 parquetFile = sqlContext.read.parquet("people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile");
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile");
 teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
@@ -1138,17 +1138,18 @@ for teenName in teenNames.collect():
 schemaPeople # The DataFrame from the previous example.
 
 # DataFrames can be saved as Parquet files, maintaining the schema information.
-saveAsParquetFile(schemaPeople, "people.parquet")
+write.parquet(schemaPeople, "people.parquet")
 
 # Read in the Parquet file created above. Parquet files are self-describing so the schema is preserved.
 # The result of loading a parquet file is also a DataFrame.
-parquetFile <- parquetFile(sqlContext, "people.parquet")
+parquetFile <- read.parquet(sqlContext, "people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
-registerTempTable(parquetFile, "parquetFile");
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
+registerTempTable(parquetFile, "parquetFile")
 teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
-teenNames <- map(teenagers, function(p) { paste("Name:", p$name)})
-for (teenName in collect(teenNames)) {
+schema <- structType(structField("name", "string"))
+teenNames <- dapply(df, function(p) { cbind(paste("Name:", p$name)) }, schema)
+for (teenName in collect(teenNames)$name) {
   cat(teenName, "\n")
 }
 {% endhighlight %}
@@ -1318,14 +1319,14 @@ df3.printSchema()
 # sqlContext from the previous example is used in this example.
 
 # Create a simple DataFrame, stored into a partition directory
-saveDF(df1, "data/test_table/key=1", "parquet", "overwrite")
+write.df(df1, "data/test_table/key=1", "parquet", "overwrite")
 
 # Create another DataFrame in a new partition directory,
 # adding a new column and dropping an existing column
-saveDF(df2, "data/test_table/key=2", "parquet", "overwrite")
+write.df(df2, "data/test_table/key=2", "parquet", "overwrite")
 
 # Read the partitioned table
-df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema="true")
+df3 <- read.df(sqlContext, "data/test_table", "parquet", mergeSchema="true")
 printSchema(df3)
 
 # The final schema consists of all 3 columns in the Parquet files together
@@ -1467,37 +1468,6 @@ Configuration of Parquet can be done using the `setConf` method on `SQLContext` 
   </td>
 </tr>
 <tr>
-  <td><code>spark.sql.parquet.output.committer.class</code></td>
-  <td><code>org.apache.parquet.hadoop.<br />ParquetOutputCommitter</code></td>
-  <td>
-    <p>
-      The output committer class used by Parquet. The specified class needs to be a subclass of
-      <code>org.apache.hadoop.<br />mapreduce.OutputCommitter</code>. Typically, it's also a
-      subclass of <code>org.apache.parquet.hadoop.ParquetOutputCommitter</code>.
-    </p>
-    <p>
-      <b>Note:</b>
-      <ul>
-        <li>
-          This option is automatically ignored if <code>spark.speculation</code> is turned on.
-        </li>
-        <li>
-          This option must be set via Hadoop <code>Configuration</code> rather than Spark
-          <code>SQLConf</code>.
-        </li>
-        <li>
-          This option overrides <code>spark.sql.sources.<br />outputCommitterClass</code>.
-        </li>
-      </ul>
-    </p>
-    <p>
-      Spark SQL comes with a builtin
-      <code>org.apache.spark.sql.<br />parquet.DirectParquetOutputCommitter</code>, which can be more
-      efficient then the default Parquet output committer when writing data to S3.
-    </p>
-  </td>
-</tr>
-<tr>
   <td><code>spark.sql.parquet.mergeSchema</code></td>
   <td><code>false</code></td>
   <td>
@@ -1533,11 +1503,11 @@ val people = sqlContext.read.json(path)
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 // root
-//  |-- age: integer (nullable = true)
+//  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
-people.registerTempTable("people")
+// Creates a temporary view using the DataFrame
+people.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -1571,11 +1541,11 @@ DataFrame people = sqlContext.read().json("examples/src/main/resources/people.js
 // The inferred schema can be visualized using the printSchema() method.
 people.printSchema();
 // root
-//  |-- age: integer (nullable = true)
+//  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
-people.registerTempTable("people");
+// Creates a temporary view using the DataFrame
+people.createOrReplaceTempView("people");
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -1609,11 +1579,11 @@ people = sqlContext.read.json("examples/src/main/resources/people.json")
 # The inferred schema can be visualized using the printSchema() method.
 people.printSchema()
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
-# Register this DataFrame as a table.
-people.registerTempTable("people")
+# Creates a temporary view using the DataFrame.
+people.createOrReplaceTempView("people")
 
 # SQL statements can be run by using the sql methods provided by `sqlContext`.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -1643,12 +1613,12 @@ sqlContext <- sparkRSQL.init(sc)
 # The path can be either a single text file or a directory storing text files.
 path <- "examples/src/main/resources/people.json"
 # Create a DataFrame from the file(s) pointed to by path
-people <- jsonFile(sqlContext, path)
+people <- read.json(sqlContext, path)
 
 # The inferred schema can be visualized using the printSchema() method.
 printSchema(people)
 # root
-#  |-- age: integer (nullable = true)
+#  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
 # Register this DataFrame as a table.
@@ -1682,17 +1652,12 @@ SELECT * FROM jsonTable
 Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
 However, since Hive has a large number of dependencies, it is not included in the default Spark assembly.
 Hive support is enabled by adding the `-Phive` and `-Phive-thriftserver` flags to Spark's build.
-This command builds a new assembly jar that includes Hive. Note that this Hive assembly jar must also be present
+This command builds a new assembly directory that includes Hive. Note that this Hive assembly directory must also be present
 on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to access data stored in Hive.
 
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
- `hdfs-site.xml` (for HDFS configuration) file in `conf/`. Please note when running
-the query on a YARN cluster (`cluster` mode), the `datanucleus` jars under the `lib` directory
-and `hive-site.xml` under `conf/` directory need to be available on the driver and all executors launched by the
-YARN cluster. The convenient way to do this is adding them through the `--jars` option and `--file` option of the
-`spark-submit` command.
-
+`hdfs-site.xml` (for HDFS configuration) file in `conf/`.
 
 <div class="codetabs">
 
@@ -1806,7 +1771,7 @@ The following options can be used to configure the version of Hive that is used 
       property can be one of three options:
       <ol>
         <li><code>builtin</code></li>
-        Use Hive 1.2.1, which is bundled with the Spark assembly jar when <code>-Phive</code> is
+        Use Hive 1.2.1, which is bundled with the Spark assembly when <code>-Phive</code> is
         enabled. When this option is chosen, <code>spark.sql.hive.metastore.version</code> must be
         either <code>1.2.1</code> or not defined.
         <li><code>maven</code></li>
@@ -2170,8 +2135,6 @@ options.
  - In the `sql` dialect, floating point numbers are now parsed as decimal. HiveQL parsing remains
    unchanged.
  - The canonical name of SQL/DataFrame functions are now lower case (e.g. sum vs SUM).
- - It has been determined that using the DirectOutputCommitter when speculation is enabled is unsafe
-   and thus this output committer will not be used when speculation is on, independent of configuration.
  - JSON data source will not automatically load new files that are created by other applications
    (i.e. files that are not inserted to the dataset through Spark SQL).
    For a JSON persistent table (i.e. the metadata of the table is stored in Hive Metastore),

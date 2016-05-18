@@ -416,7 +416,7 @@ some of the common ones are as follows.
 
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
-<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Kafka </td><td> spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
 <tr><td></td><td></td></tr>
@@ -1553,8 +1553,8 @@ words.foreachRDD { rdd =>
   // Convert RDD[String] to DataFrame
   val wordsDataFrame = rdd.toDF("word")
 
-  // Register as table
-  wordsDataFrame.registerTempTable("words")
+  // Create a temporary view
+  wordsDataFrame.createOrReplaceTempView("words")
 
   // Do word count on DataFrame using SQL and print it
   val wordCountsDataFrame = 
@@ -1606,8 +1606,8 @@ words.foreachRDD(
       });
       DataFrame wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRow.class);
 
-      // Register as table
-      wordsDataFrame.registerTempTable("words");
+      // Creates a temporary view using the DataFrame
+      wordsDataFrame.createOrReplaceTempView("words");
 
       // Do word count on table using SQL and print it
       DataFrame wordCountsDataFrame =
@@ -1646,8 +1646,8 @@ def process(time, rdd):
         rowRdd = rdd.map(lambda w: Row(word=w))
         wordsDataFrame = sqlContext.createDataFrame(rowRdd)
 
-        # Register as table
-        wordsDataFrame.registerTempTable("words")
+        # Creates a temporary view using the DataFrame
+        wordsDataFrame.createOrReplaceTempView("words")
 
         # Do word count on table using SQL and print it
         wordCountsDataFrame = sqlContext.sql("select word, count(*) as total from words group by word")
@@ -1892,7 +1892,7 @@ To run a Spark Streaming applications, you need to have the following.
   if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume),
   then you will have to package the extra artifact they link to, along with their dependencies,
   in the JAR that is used to deploy the application. For example, an application using `KafkaUtils`
-  will have to include `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` and all its
+  will have to include `spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}` and all its
   transitive dependencies in the application JAR.
 
 - *Configuring sufficient memory for the executors* - Since the received data must be stored in
@@ -2178,7 +2178,7 @@ overall processing throughput of the system, its use is still recommended to ach
 consistent batch processing times. Make sure you set the CMS GC on both the driver (using `--driver-java-options` in `spark-submit`) and the executors (using [Spark configuration](configuration.html#runtime-environment) `spark.executor.extraJavaOptions`).
 
 * **Other tips**: To further reduce GC overheads, here are some more tips to try.
-    - Use Tachyon for off-heap storage of persisted RDDs. See more detail in the [Spark Programming Guide](programming-guide.html#rdd-persistence).
+    - Persist RDDs using the `OFF_HEAP` storage level. See more detail in the [Spark Programming Guide](programming-guide.html#rdd-persistence).
     - Use more executors with smaller heap sizes. This will reduce the GC pressure within each JVM heap.
 
 

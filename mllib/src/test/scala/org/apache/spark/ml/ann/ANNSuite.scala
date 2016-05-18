@@ -18,10 +18,9 @@
 package org.apache.spark.ml.ann
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-
 
 class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -42,7 +41,7 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val dataSample = rddData.first()
     val layerSizes = dataSample._1.size +: hiddenLayersTopology :+ dataSample._2.size
     val topology = FeedForwardTopology.multiLayerPerceptron(layerSizes, false)
-    val initialWeights = FeedForwardModel(topology, 23124).weights()
+    val initialWeights = FeedForwardModel(topology, 23124).weights
     val trainer = new FeedForwardTrainer(topology, 2, 1)
     trainer.setWeights(initialWeights)
     trainer.LBFGSOptimizer.setNumIterations(20)
@@ -76,10 +75,11 @@ class ANNSuite extends SparkFunSuite with MLlibTestSparkContext {
     val dataSample = rddData.first()
     val layerSizes = dataSample._1.size +: hiddenLayersTopology :+ dataSample._2.size
     val topology = FeedForwardTopology.multiLayerPerceptron(layerSizes, false)
-    val initialWeights = FeedForwardModel(topology, 23124).weights()
+    val initialWeights = FeedForwardModel(topology, 23124).weights
     val trainer = new FeedForwardTrainer(topology, 2, 2)
-    trainer.SGDOptimizer.setNumIterations(2000)
-    trainer.setWeights(initialWeights)
+    // TODO: add a test for SGD
+    trainer.LBFGSOptimizer.setConvergenceTol(1e-4).setNumIterations(20)
+    trainer.setWeights(initialWeights).setStackSize(1)
     val model = trainer.train(rddData)
     val predictionAndLabels = rddData.map { case (input, label) =>
       (model.predict(input), label)

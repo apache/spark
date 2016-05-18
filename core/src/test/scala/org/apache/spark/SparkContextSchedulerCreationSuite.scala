@@ -129,26 +129,6 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
-  def testYarn(master: String, deployMode: String, expectedClassName: String) {
-    try {
-      val sched = createTaskScheduler(master, deployMode)
-      assert(sched.getClass === Utils.classForName(expectedClassName))
-    } catch {
-      case e: SparkException =>
-        assert(e.getMessage.contains("YARN mode not available"))
-        logWarning("YARN not available, could not test actual YARN scheduler creation")
-      case e: Throwable => fail(e)
-    }
-  }
-
-  test("yarn-cluster") {
-    testYarn("yarn", "cluster", "org.apache.spark.scheduler.cluster.YarnClusterScheduler")
-  }
-
-  test("yarn-client") {
-    testYarn("yarn", "client", "org.apache.spark.scheduler.cluster.YarnScheduler")
-  }
-
   def testMesos(master: String, expectedClass: Class[_], coarse: Boolean) {
     val conf = new SparkConf().set("spark.mesos.coarse", coarse.toString)
     try {

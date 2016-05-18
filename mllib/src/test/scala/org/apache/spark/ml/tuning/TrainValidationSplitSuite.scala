@@ -20,21 +20,21 @@ package org.apache.spark.ml.tuning
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.classification.{LogisticRegression, LogisticRegressionModel}
+import org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInput
 import org.apache.spark.ml.evaluation.{BinaryClassificationEvaluator, Evaluator, RegressionEvaluator}
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasInputCol
 import org.apache.spark.ml.regression.LinearRegression
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.classification.LogisticRegressionSuite.generateLogisticInput
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.{LinearDataGenerator, MLlibTestSparkContext}
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.StructType
 
 class TrainValidationSplitSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
   test("train validation with logistic regression") {
-    val dataset = sqlContext.createDataFrame(
+    val dataset = spark.createDataFrame(
       sc.parallelize(generateLogisticInput(1.0, 1.0, 100, 42), 2))
 
     val lr = new LogisticRegression
@@ -48,6 +48,7 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
+      .setSeed(42L)
     val cvModel = cv.fit(dataset)
     val parent = cvModel.bestModel.parent.asInstanceOf[LogisticRegression]
     assert(cv.getTrainRatio === 0.5)
@@ -57,9 +58,9 @@ class TrainValidationSplitSuite
   }
 
   test("train validation with linear regression") {
-    val dataset = sqlContext.createDataFrame(
+    val dataset = spark.createDataFrame(
         sc.parallelize(LinearDataGenerator.generateLinearInput(
-            6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2))
+            6.3, Array(4.7, 7.2), Array(0.9, -1.3), Array(0.7, 1.2), 100, 42, 0.1), 2).map(_.asML))
 
     val trainer = new LinearRegression().setSolver("l-bfgs")
     val lrParamMaps = new ParamGridBuilder()
@@ -72,6 +73,7 @@ class TrainValidationSplitSuite
       .setEstimatorParamMaps(lrParamMaps)
       .setEvaluator(eval)
       .setTrainRatio(0.5)
+      .setSeed(42L)
     val cvModel = cv.fit(dataset)
     val parent = cvModel.bestModel.parent.asInstanceOf[LinearRegression]
     assert(parent.getRegParam === 0.001)
@@ -120,10 +122,12 @@ class TrainValidationSplitSuite
       .setEvaluator(evaluator)
       .setTrainRatio(0.5)
       .setEstimatorParamMaps(paramMaps)
+      .setSeed(42L)
 
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
+    assert(tvs.getSeed === tvs2.getSeed)
   }
 
   test("read/write: TrainValidationSplitModel") {
@@ -140,11 +144,13 @@ class TrainValidationSplitSuite
       .set(tvs.evaluator, evaluator)
       .set(tvs.trainRatio, 0.5)
       .set(tvs.estimatorParamMaps, paramMaps)
+      .set(tvs.seed, 42L)
 
     val tvs2 = testDefaultReadWrite(tvs, testParams = false)
 
     assert(tvs.getTrainRatio === tvs2.getTrainRatio)
     assert(tvs.validationMetrics === tvs2.validationMetrics)
+    assert(tvs.getSeed === tvs2.getSeed)
   }
 }
 
@@ -154,7 +160,7 @@ object TrainValidationSplitSuite {
 
   class MyEstimator(override val uid: String) extends Estimator[MyModel] with HasInputCol {
 
-    override def fit(dataset: DataFrame): MyModel = {
+    override def fit(dataset: Dataset[_]): MyModel = {
       throw new UnsupportedOperationException
     }
 
@@ -168,7 +174,7 @@ object TrainValidationSplitSuite {
 
   class MyEvaluator extends Evaluator {
 
-    override def evaluate(dataset: DataFrame): Double = {
+    override def evaluate(dataset: Dataset[_]): Double = {
       throw new UnsupportedOperationException
     }
 

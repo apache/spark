@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.plans
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, OneRowRelation, Sample}
 import org.apache.spark.sql.catalyst.util._
 
@@ -33,11 +34,19 @@ abstract class PlanTest extends SparkFunSuite with PredicateHelper {
   protected def normalizeExprIds(plan: LogicalPlan) = {
     plan transformAllExpressions {
       case s: ScalarSubquery =>
-        ScalarSubquery(s.query, ExprId(0))
+        s.copy(exprId = ExprId(0))
+      case e: Exists =>
+        e.copy(exprId = ExprId(0))
+      case l: ListQuery =>
+        l.copy(exprId = ExprId(0))
+      case p: PredicateSubquery =>
+        p.copy(exprId = ExprId(0))
       case a: AttributeReference =>
         AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(0))
       case a: Alias =>
         Alias(a.child, a.name)(exprId = ExprId(0))
+      case ae: AggregateExpression =>
+        ae.copy(resultId = ExprId(0))
     }
   }
 

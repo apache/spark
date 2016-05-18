@@ -22,10 +22,10 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.BinaryAttribute
+import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg._
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
@@ -64,7 +64,8 @@ final class Binarizer(override val uid: String)
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
     val schema = dataset.schema
     val inputType = schema($(inputCol)).dataType
@@ -103,9 +104,9 @@ final class Binarizer(override val uid: String)
       case DoubleType =>
         BinaryAttribute.defaultAttr.withName(outputColName).toStructField()
       case _: VectorUDT =>
-        new StructField(outputColName, new VectorUDT, true)
-      case other =>
-        throw new IllegalArgumentException(s"Data type $other is not supported.")
+        StructField(outputColName, new VectorUDT)
+      case _ =>
+        throw new IllegalArgumentException(s"Data type $inputType is not supported.")
     }
 
     if (schema.fieldNames.contains(outputColName)) {

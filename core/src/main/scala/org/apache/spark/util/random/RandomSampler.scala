@@ -186,7 +186,7 @@ class BernoulliSampler[T: ClassTag](fraction: Double) extends RandomSampler[T, T
  * @tparam T item type
  */
 @DeveloperApi
-class PoissonSampler[T: ClassTag](
+class PoissonSampler[T](
     fraction: Double,
     useGapSamplingIfPossible: Boolean) extends RandomSampler[T, T] {
 
@@ -326,7 +326,7 @@ class GapSamplingReplacement(
   /**
    * Skip elements with replication factor zero (i.e. elements that won't be sampled).
    * Samples 'k' from geometric distribution  P(k) = (1-q)(q)^k, where q = e^(-f), that is
-   * q is the probabililty of Poisson(0; f)
+   * q is the probability of Poisson(0; f)
    */
   private def advance(): Unit = {
     val u = math.max(rng.nextDouble(), epsilon)

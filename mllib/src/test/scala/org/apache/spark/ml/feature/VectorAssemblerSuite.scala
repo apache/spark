@@ -19,9 +19,9 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.attribute.{AttributeGroup, NominalAttribute, NumericAttribute}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.functions.col
@@ -57,7 +57,7 @@ class VectorAssemblerSuite
   }
 
   test("VectorAssembler") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, 0.0, Vectors.dense(1.0, 2.0), "a", Vectors.sparse(2, Array(1), Array(3.0)), 10L)
     )).toDF("id", "x", "y", "name", "z", "n")
     val assembler = new VectorAssembler()
@@ -70,7 +70,7 @@ class VectorAssemblerSuite
   }
 
   test("transform should throw an exception in case of unsupported type") {
-    val df = sqlContext.createDataFrame(Seq(("a", "b", "c"))).toDF("a", "b", "c")
+    val df = spark.createDataFrame(Seq(("a", "b", "c"))).toDF("a", "b", "c")
     val assembler = new VectorAssembler()
       .setInputCols(Array("a", "b", "c"))
       .setOutputCol("features")
@@ -87,7 +87,7 @@ class VectorAssemblerSuite
       NominalAttribute.defaultAttr.withName("gender").withValues("male", "female"),
       NumericAttribute.defaultAttr.withName("salary")))
     val row = (1.0, 0.5, 1, Vectors.dense(1.0, 1000.0), Vectors.sparse(2, Array(1), Array(2.0)))
-    val df = sqlContext.createDataFrame(Seq(row)).toDF("browser", "hour", "count", "user", "ad")
+    val df = spark.createDataFrame(Seq(row)).toDF("browser", "hour", "count", "user", "ad")
       .select(
         col("browser").as("browser", browser.toMetadata()),
         col("hour").as("hour", hour.toMetadata()),

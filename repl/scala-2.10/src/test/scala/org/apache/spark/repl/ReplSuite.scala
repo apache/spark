@@ -285,7 +285,7 @@ class ReplSuite extends SparkFunSuite {
     val output = runInterpreter("local",
       """
         |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.Encoder
+        |import org.apache.spark.sql.{Encoder, Encoders}
         |import org.apache.spark.sql.expressions.Aggregator
         |import org.apache.spark.sql.TypedColumn
         |val simpleSum = new Aggregator[Int, Int, Int] {
@@ -293,6 +293,8 @@ class ReplSuite extends SparkFunSuite {
         |  def reduce(b: Int, a: Int) = b + a    // Add an element to the running total
         |  def merge(b1: Int, b2: Int) = b1 + b2 // Merge intermediate values.
         |  def finish(b: Int) = b                // Return the final result.
+        |  def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+        |  def outputEncoder: Encoder[Int] = Encoders.scalaInt
         |}.toColumn
         |
         |val ds = Seq(1, 2, 3, 4).toDS()
@@ -337,30 +339,6 @@ class ReplSuite extends SparkFunSuite {
       assertContains("res2: Array[Int] = Array(0, 0, 0, 0, 0)", output)
       assertContains("res4: Array[Int] = Array(0, 0, 0, 0, 0)", output)
     }
-  }
-
-  test("Datasets agg type-inference") {
-    val output = runInterpreter("local",
-      """
-        |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.Encoder
-        |import org.apache.spark.sql.expressions.Aggregator
-        |import org.apache.spark.sql.TypedColumn
-        |/** An `Aggregator` that adds up any numeric type returned by the given function. */
-        |class SumOf[I, N : Numeric](f: I => N) extends Aggregator[I, N, N] {
-        |  val numeric = implicitly[Numeric[N]]
-        |  override def zero: N = numeric.zero
-        |  override def reduce(b: N, a: I): N = numeric.plus(b, f(a))
-        |  override def merge(b1: N,b2: N): N = numeric.plus(b1, b2)
-        |  override def finish(reduction: N): N = reduction
-        |}
-        |
-        |def sum[I, N : Numeric : Encoder](f: I => N): TypedColumn[I, N] = new SumOf(f).toColumn
-        |val ds = Seq((1, 1, 2L), (1, 2, 3L), (1, 3, 4L), (2, 1, 5L)).toDS()
-        |ds.groupBy(_._1).agg(sum(_._2), sum(_._3)).collect()
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
   }
 
   test("collecting objects of class defined in repl") {

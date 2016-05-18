@@ -249,10 +249,11 @@ class ReplSuite extends SparkFunSuite {
     assertDoesNotContain("Exception", output)
   }
 
-  test("SPARK-2576 importing SQLContext.createDataFrame.") {
+  test("SPARK-2576 importing implicits") {
     // We need to use local-cluster to test this case.
     val output = runInterpreter("local-cluster[1,1,1024]",
       """
+        |import spark.implicits._
         |case class TestCaseClass(value: Int)
         |sc.parallelize(1 to 10).map(x => TestCaseClass(x)).toDF().collect()
         |
@@ -267,7 +268,7 @@ class ReplSuite extends SparkFunSuite {
     val output = runInterpreter("local",
       """
         |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.Encoder
+        |import org.apache.spark.sql.{Encoder, Encoders}
         |import org.apache.spark.sql.expressions.Aggregator
         |import org.apache.spark.sql.TypedColumn
         |val simpleSum = new Aggregator[Int, Int, Int] {
@@ -275,6 +276,8 @@ class ReplSuite extends SparkFunSuite {
         |  def reduce(b: Int, a: Int) = b + a    // Add an element to the running total
         |  def merge(b1: Int, b2: Int) = b1 + b2 // Merge intermediate values.
         |  def finish(b: Int) = b                // Return the final result.
+        |  def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+        |  def outputEncoder: Encoder[Int] = Encoders.scalaInt
         |}.toColumn
         |
         |val ds = Seq(1, 2, 3, 4).toDS()
@@ -321,31 +324,6 @@ class ReplSuite extends SparkFunSuite {
     }
   }
 
-  test("Datasets agg type-inference") {
-    val output = runInterpreter("local",
-      """
-        |import org.apache.spark.sql.functions._
-        |import org.apache.spark.sql.Encoder
-        |import org.apache.spark.sql.expressions.Aggregator
-        |import org.apache.spark.sql.TypedColumn
-        |/** An `Aggregator` that adds up any numeric type returned by the given function. */
-        |class SumOf[I, N : Numeric](f: I => N) extends
-        |  org.apache.spark.sql.expressions.Aggregator[I, N, N] {
-        |  val numeric = implicitly[Numeric[N]]
-        |  override def zero: N = numeric.zero
-        |  override def reduce(b: N, a: I): N = numeric.plus(b, f(a))
-        |  override def merge(b1: N,b2: N): N = numeric.plus(b1, b2)
-        |  override def finish(reduction: N): N = reduction
-        |}
-        |
-        |def sum[I, N : Numeric : Encoder](f: I => N): TypedColumn[I, N] = new SumOf(f).toColumn
-        |val ds = Seq((1, 1, 2L), (1, 2, 3L), (1, 3, 4L), (2, 1, 5L)).toDS()
-        |ds.groupByKey(_._1).agg(sum(_._2), sum(_._3)).collect()
-      """.stripMargin)
-    assertDoesNotContain("error:", output)
-    assertDoesNotContain("Exception", output)
-  }
-
   test("collecting objects of class defined in repl") {
     val output = runInterpreter("local[2]",
       """
@@ -389,11 +367,38 @@ class ReplSuite extends SparkFunSuite {
   test("define case class and create Dataset together with paste mode") {
     val output = runInterpreterInPasteMode("local-cluster[1,1,1024]",
       """
-        |import sqlContext.implicits._
+        |import spark.implicits._
         |case class TestClass(value: Int)
         |Seq(TestClass(1)).toDS()
       """.stripMargin)
     assertDoesNotContain("error:", output)
+    assertDoesNotContain("Exception", output)
+  }
+
+  test("should clone and clean line object in ClosureCleaner") {
+    val output = runInterpreterInPasteMode("local-cluster[1,4,4096]",
+      """
+        |import org.apache.spark.rdd.RDD
+        |
+        |val lines = sc.textFile("pom.xml")
+        |case class Data(s: String)
+        |val dataRDD = lines.map(line => Data(line.take(3)))
+        |dataRDD.cache.count
+        |val repartitioned = dataRDD.repartition(dataRDD.partitions.size)
+        |repartitioned.cache.count
+        |
+        |def getCacheSize(rdd: RDD[_]) = {
+        |  sc.getRDDStorageInfo.filter(_.id == rdd.id).map(_.memSize).sum
+        |}
+        |val cacheSize1 = getCacheSize(dataRDD)
+        |val cacheSize2 = getCacheSize(repartitioned)
+        |
+        |// The cache size of dataRDD and the repartitioned one should be similar.
+        |val deviation = math.abs(cacheSize2 - cacheSize1).toDouble / cacheSize1
+        |assert(deviation < 0.2,
+        |  s"deviation too large: $deviation, first size: $cacheSize1, second size: $cacheSize2")
+      """.stripMargin)
+    assertDoesNotContain("AssertionError", output)
     assertDoesNotContain("Exception", output)
   }
 }

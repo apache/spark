@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
-import org.apache.spark.rpc.{RpcCallContext, RpcEndpoint, RpcEndpointRef, RpcEnv}
+import org.apache.spark.rpc.{RpcCallContext, RpcEndpointRef, RpcEnv, ThreadSafeRpcEndpoint}
 import org.apache.spark.scheduler.ExecutorCacheTaskLocation
 import org.apache.spark.util.RpcUtils
 
@@ -50,8 +50,7 @@ private[sql] object StateStoreCoordinatorRef extends Logging {
   private val endpointName = "StateStoreCoordinator"
 
   /**
-   * Create a reference to a [[StateStoreCoordinator]], This can be called from driver as well as
-   * executors.
+   * Create a reference to a [[StateStoreCoordinator]]
    */
   def forDriver(env: SparkEnv): StateStoreCoordinatorRef = synchronized {
     try {
@@ -75,7 +74,7 @@ private[sql] object StateStoreCoordinatorRef extends Logging {
 }
 
 /**
- * Reference to a [[StateStoreCoordinator]] that can be used to coordinator instances of
+ * Reference to a [[StateStoreCoordinator]] that can be used to coordinate instances of
  * [[StateStore]]s across all the executors, and get their locations for job scheduling.
  */
 private[sql] class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointRef) {
@@ -112,7 +111,7 @@ private[sql] class StateStoreCoordinatorRef private(rpcEndpointRef: RpcEndpointR
  * Class for coordinating instances of [[StateStore]]s loaded in executors across the cluster,
  * and get their locations for job scheduling.
  */
-private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends RpcEndpoint {
+private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends ThreadSafeRpcEndpoint {
   private val instances = new mutable.HashMap[StateStoreId, ExecutorCacheTaskLocation]
 
   override def receive: PartialFunction[Any, Unit] = {
@@ -142,5 +141,3 @@ private class StateStoreCoordinator(override val rpcEnv: RpcEnv) extends RpcEndp
       context.reply(true)
   }
 }
-
-
