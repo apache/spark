@@ -84,7 +84,7 @@ class HiveTableScanSuite extends HiveComparisonTest {
     sql("""insert into table spark_4959 select "hi" from src limit 1""")
     table("spark_4959").select(
       'col1.as("CaseSensitiveColName"),
-      'col1.as("CaseSensitiveColName2")).registerTempTable("spark_4959_2")
+      'col1.as("CaseSensitiveColName2")).createOrReplaceTempView("spark_4959_2")
 
     assert(sql("select CaseSensitiveColName from spark_4959_2").head() === Row("hi"))
     assert(sql("select casesensitivecolname from spark_4959_2").head() === Row("hi"))
