@@ -134,7 +134,8 @@ class AggregateBenchmark extends BenchmarkBase {
     val N = 20 << 22
 
     val benchmark = new Benchmark("Aggregate w keys", N)
-    sparkSession.range(N).selectExpr("id", "floor(rand() * 10000) as k").registerTempTable("test")
+    sparkSession.range(N).selectExpr("id", "floor(rand() * 10000) as k")
+      .createOrReplaceTempView("test")
 
     def f(): Unit = sparkSession.sql("select k, k, sum(id) from test group by k, k").collect()
 
