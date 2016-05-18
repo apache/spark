@@ -346,7 +346,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Refresh the cache entry for a metastore table, if any.
+   * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
+   * is refreshed.
    *
    * @group cachemgmt
    * @since 2.0.0
