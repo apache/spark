@@ -144,8 +144,7 @@ class DataFrame(object):
         >>> df.createTempView("people")  # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
         ...
-        Py4JJavaError: ...
-        : org.apache.spark.sql.catalyst.analysis.TempTableAlreadyExistsException...
+        AnalysisException: u"Temporary table 'people' already exists;"
         >>> spark.catalog.dropTempView("people")
 
         """
