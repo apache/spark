@@ -20,17 +20,12 @@ package org.apache.spark.sql.hive
 import org.scalatest.BeforeAndAfterEach
 
 import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.test.SQLTestUtils
-import org.apache.spark.util.Utils
 
 
-class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEach
-    with SQLTestUtils {
+class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private var sc: SparkContext = null
   private var hc: HiveContext = null
-  protected var spark: SparkSession = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -39,7 +34,6 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
       sc.hadoopConfiguration.set(k, v)
     }
     hc = new HiveContext(sc)
-    spark = hc.sparkSession
   }
 
   override def afterEach(): Unit = {
@@ -103,43 +97,6 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
     hc.sql("DROP DATABASE mee_db CASCADE")
     val databases3 = hc.sql("SHOW DATABASES").collect().map(_.getString(0))
     assert(databases3.toSeq == Seq("default"))
-  }
-
-  test("check change after refresh") {
-    val _hc = hc
-    import _hc.implicits._
-
-    withTempPath { tempDir =>
-      withTable("jsonTable") {
-        (("a", "b") :: Nil).toDF().toJSON.rdd.saveAsTextFile(tempDir.getCanonicalPath)
-
-        hc.sql(
-          s"""
-             |CREATE TABLE jsonTable
-             |USING org.apache.spark.sql.json
-             |OPTIONS (
-             |  path '${tempDir.getCanonicalPath}'
-             |)
-           """.stripMargin)
-
-        assert(
-          hc.sql("SELECT * FROM jsonTable").collect().toSeq == Row("a", "b") :: Nil)
-
-        Utils.deleteRecursively(tempDir)
-        (("a1", "b1", "c1") :: Nil).toDF().toJSON.rdd.saveAsTextFile(tempDir.getCanonicalPath)
-
-        // Schema is cached so the new column does not show. The updated values in existing columns
-        // will show.
-        assert(
-          hc.sql("SELECT * FROM jsonTable").collect().toSeq == Row("a1", "b1") :: Nil)
-
-        hc.refreshTable("jsonTable")
-
-        // Check that the refresh worked
-        assert(
-          hc.sql("SELECT * FROM jsonTable").collect().toSeq == Row("a1", "b1", "c1") :: Nil)
-      }
-    }
   }
 
 }
