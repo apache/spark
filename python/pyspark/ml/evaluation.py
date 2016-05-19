@@ -193,7 +193,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 
     .. versionadded:: 1.4.0
     """
-    
     metricName = Param(Params._dummy(), "metricName",
                        """metric name in evaluation - one of:
                        rmse - root mean squared error (default)
