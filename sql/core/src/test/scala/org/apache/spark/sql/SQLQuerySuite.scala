@@ -2499,6 +2499,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("Eliminate noop ordinal ORDER BY") {
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "true") {
+      val plan1 = sql("SELECT 1.0, 'abc', year(current_date()) ORDER BY 1, 2, 3")
+      val plan2 = sql("SELECT 1.0, 'abc', year(current_date())")
+      comparePlans(plan1.queryExecution.optimizedPlan, plan2.queryExecution.optimizedPlan)
+    }
+  }
+
   test("check code injection is prevented") {
     // The end of comment (*/) should be escaped.
     var literal =
