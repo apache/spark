@@ -156,7 +156,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
-    if (!allowsMixedArguments &!printInfo) {
+    if (!allowsMixedArguments && !printInfo) {
       checkArgument(appResource != null, "Missing application resource.");
     }
 
