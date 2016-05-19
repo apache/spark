@@ -170,7 +170,7 @@ public class JavaDataFrameSuite {
       schema.apply("d"));
     Assert.assertEquals(new StructField("e", DataTypes.createDecimalType(38,0), true, Metadata.empty()),
       schema.apply("e"));
-    Row first = df.select("a", "b", "c", "d","e").first();
+    Row first = df.select("a", "b", "c", "d", "e").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -190,7 +190,7 @@ public class JavaDataFrameSuite {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
       // Java.math.BigInteger is equavient to Spark Decimal(38,0)
-    Assert.assertEquals(new BigDecimal(bean.getE()), first.getDecimal(4).setScale(0));
+    Assert.assertEquals(new BigDecimal(bean.getE()), first.getDecimal(4));
   }
 
   @Test
