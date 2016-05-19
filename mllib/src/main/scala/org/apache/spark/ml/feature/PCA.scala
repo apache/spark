@@ -53,7 +53,8 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
 
 /**
  * :: Experimental ::
- * PCA trains a model to project vectors to a low-dimensional space using PCA.
+ * PCA trains a model to project vectors to a lower dimensional space of the top [[PCA!.k]]
+ * principal components.
  */
 @Experimental
 class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
@@ -106,7 +107,7 @@ object PCA extends DefaultParamsReadable[PCA] {
 
 /**
  * :: Experimental ::
- * Model fitted by [[PCA]].
+ * Model fitted by [[PCA]]. Transforms vectors to a lower dimensional space.
  *
  * @param pc A principal components Matrix. Each column is one principal component.
  * @param explainedVariance A vector of proportions of variance explained by
