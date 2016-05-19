@@ -59,6 +59,16 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testCliHelpAndNoArg() throws Exception {
+    List<String> sparkSubmitArgs = Arrays.asList(parser.HELP);
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+
+    List<String> sparkEmptyArgs = Arrays.asList("");
+    cmd = buildCommand(sparkSubmitArgs, env);
+  }
+
+  @Test
   public void testCliParser() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.MASTER,
