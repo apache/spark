@@ -54,18 +54,18 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   private val fakeSchema = StructType(StructField("a", IntegerType) :: Nil)
 
   override def sourceSchema(
-      sqlContext: SQLContext,
+      spark: SQLContext,
       schema: Option[StructType],
       providerName: String,
       parameters: Map[String, String]): (String, StructType) = {
     LastOptions.parameters = parameters
     LastOptions.schema = schema
-    LastOptions.mockStreamSourceProvider.sourceSchema(sqlContext, schema, providerName, parameters)
+    LastOptions.mockStreamSourceProvider.sourceSchema(spark, schema, providerName, parameters)
     ("dummySource", fakeSchema)
   }
 
   override def createSource(
-      sqlContext: SQLContext,
+      spark: SQLContext,
       metadataPath: String,
       schema: Option[StructType],
       providerName: String,
@@ -73,14 +73,14 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
     LastOptions.parameters = parameters
     LastOptions.schema = schema
     LastOptions.mockStreamSourceProvider.createSource(
-      sqlContext, metadataPath, schema, providerName, parameters)
+      spark, metadataPath, schema, providerName, parameters)
     new Source {
       override def schema: StructType = fakeSchema
 
       override def getOffset: Option[Offset] = Some(new LongOffset(0))
 
       override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
-        import sqlContext.implicits._
+        import spark.implicits._
 
         Seq[Int]().toDS().toDF()
       }
@@ -88,12 +88,12 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 
   override def createSink(
-      sqlContext: SQLContext,
+      spark: SQLContext,
       parameters: Map[String, String],
       partitionColumns: Seq[String]): Sink = {
     LastOptions.parameters = parameters
     LastOptions.partitionColumns = partitionColumns
-    LastOptions.mockStreamSinkProvider.createSink(sqlContext, parameters, partitionColumns)
+    LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns)
     new Sink {
       override def addBatch(batchId: Long, data: DataFrame): Unit = {}
     }
@@ -107,11 +107,11 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
 
   after {
-    sqlContext.streams.active.foreach(_.stop())
+    spark.streams.active.foreach(_.stop())
   }
 
   test("resolve default source") {
-    sqlContext.read
+    spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
       .write
@@ -122,7 +122,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
   }
 
   test("resolve full class") {
-    sqlContext.read
+    spark.read
       .format("org.apache.spark.sql.streaming.test.DefaultSource")
       .stream()
       .write
@@ -136,7 +136,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     val map = new java.util.HashMap[String, String]
     map.put("opt3", "3")
 
-    val df = sqlContext.read
+    val df = spark.read
         .format("org.apache.spark.sql.streaming.test")
         .option("opt1", "1")
         .options(Map("opt2" -> "2"))
@@ -164,7 +164,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
   }
 
   test("partitioning") {
-    val df = sqlContext.read
+    val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
 
@@ -204,7 +204,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
   }
 
   test("stream paths") {
-    val df = sqlContext.read
+    val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .stream("/test")
@@ -223,7 +223,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
   }
 
   test("test different data types for options") {
-    val df = sqlContext.read
+    val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .option("intOpt", 56)
       .option("boolOpt", false)
@@ -253,7 +253,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     /** Start a query with a specific name */
     def startQueryWithName(name: String = ""): ContinuousQuery = {
-      sqlContext.read
+      spark.read
         .format("org.apache.spark.sql.streaming.test")
         .stream("/test")
         .write
@@ -265,7 +265,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     /** Start a query without specifying a name */
     def startQueryWithoutName(): ContinuousQuery = {
-      sqlContext.read
+      spark.read
         .format("org.apache.spark.sql.streaming.test")
         .stream("/test")
         .write
@@ -276,7 +276,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     /** Get the names of active streams */
     def activeStreamNames: Set[String] = {
-      val streams = sqlContext.streams.active
+      val streams = spark.streams.active
       val names = streams.map(_.name).toSet
       assert(streams.length === names.size, s"names of active queries are not unique: $names")
       names
@@ -307,11 +307,11 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     q1.stop()
     val q5 = startQueryWithName("name")
     assert(activeStreamNames.contains("name"))
-    sqlContext.streams.active.foreach(_.stop())
+    spark.streams.active.foreach(_.stop())
   }
 
   test("trigger") {
-    val df = sqlContext.read
+    val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream("/test")
 
@@ -339,11 +339,11 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     val checkpointLocation = newMetadataDir
 
-    val df1 = sqlContext.read
+    val df1 = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
 
-    val df2 = sqlContext.read
+    val df2 = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
 
@@ -355,17 +355,173 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      sqlContext,
+      spark.wrapped,
       checkpointLocation + "/sources/0",
       None,
       "org.apache.spark.sql.streaming.test",
       Map.empty)
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      sqlContext,
+      spark.wrapped,
       checkpointLocation + "/sources/1",
       None,
       "org.apache.spark.sql.streaming.test",
       Map.empty)
+  }
+
+  private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
+
+  test("check trigger() can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.trigger(ProcessingTime("10 seconds")))
+    assert(e.getMessage == "trigger() can only be called on continuous queries;")
+  }
+
+  test("check queryName() can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.queryName("queryName"))
+    assert(e.getMessage == "queryName() can only be called on continuous queries;")
+  }
+
+  test("check startStream() can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.startStream())
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
+  }
+
+  test("check startStream(path) can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.startStream("non_exist_path"))
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
+  }
+
+  test("check mode(SaveMode) can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.mode(SaveMode.Append))
+    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
+  }
+
+  test("check mode(string) can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.mode("append"))
+    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
+  }
+
+  test("check bucketBy() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[IllegalArgumentException](w.bucketBy(1, "text").startStream())
+    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+  }
+
+  test("check sortBy() can only be called on non-continuous queries;") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[IllegalArgumentException](w.sortBy("text").startStream())
+    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+  }
+
+  test("check save(path) can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.save("non_exist_path"))
+    assert(e.getMessage == "save() can only be called on non-continuous queries;")
+  }
+
+  test("check save() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.save())
+    assert(e.getMessage == "save() can only be called on non-continuous queries;")
+  }
+
+  test("check insertInto() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.insertInto("non_exsit_table"))
+    assert(e.getMessage == "insertInto() can only be called on non-continuous queries;")
+  }
+
+  test("check saveAsTable() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.saveAsTable("non_exsit_table"))
+    assert(e.getMessage == "saveAsTable() can only be called on non-continuous queries;")
+  }
+
+  test("check jdbc() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.jdbc(null, null, null))
+    assert(e.getMessage == "jdbc() can only be called on non-continuous queries;")
+  }
+
+  test("check json() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.json("non_exist_path"))
+    assert(e.getMessage == "json() can only be called on non-continuous queries;")
+  }
+
+  test("check parquet() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.parquet("non_exist_path"))
+    assert(e.getMessage == "parquet() can only be called on non-continuous queries;")
+  }
+
+  test("check orc() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.orc("non_exist_path"))
+    assert(e.getMessage == "orc() can only be called on non-continuous queries;")
+  }
+
+  test("check text() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.text("non_exist_path"))
+    assert(e.getMessage == "text() can only be called on non-continuous queries;")
+  }
+
+  test("check csv() can only be called on non-continuous queries") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[AnalysisException](w.csv("non_exist_path"))
+    assert(e.getMessage == "csv() can only be called on non-continuous queries;")
   }
 }

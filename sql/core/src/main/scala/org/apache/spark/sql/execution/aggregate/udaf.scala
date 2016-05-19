@@ -361,7 +361,7 @@ private[sql] case class ScalaUDAF(
     val inputAttributes = childrenSchema.toAttributes
     log.debug(
       s"Creating MutableProj: $children, inputSchema: $inputAttributes.")
-    GenerateMutableProjection.generate(children, inputAttributes)()
+    GenerateMutableProjection.generate(children, inputAttributes)
   }
 
   private[this] lazy val inputToScalaConverters: Any => Any =

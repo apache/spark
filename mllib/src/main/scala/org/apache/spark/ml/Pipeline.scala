@@ -103,7 +103,10 @@ class Pipeline @Since("1.4.0") (
 
   /** @group setParam */
   @Since("1.2.0")
-  def setStages(value: Array[PipelineStage]): this.type = { set(stages, value); this }
+  def setStages(value: Array[_ <: PipelineStage]): this.type = {
+    set(stages, value.asInstanceOf[Array[PipelineStage]])
+    this
+  }
 
   // Below, we clone stages so that modifications to the list of stages will not change
   // the Param value in the Pipeline.

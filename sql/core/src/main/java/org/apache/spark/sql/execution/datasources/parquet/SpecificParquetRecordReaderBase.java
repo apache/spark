@@ -38,7 +38,6 @@ import static org.apache.parquet.hadoop.ParquetFileReader.readFooter;
 import static org.apache.parquet.hadoop.ParquetInputFormat.getFilter;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
@@ -178,7 +177,7 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     config.set("spark.sql.parquet.writeLegacyFormat", "false");
 
     this.file = new Path(path);
-    long length = FileSystem.get(config).getFileStatus(this.file).getLen();
+    long length = this.file.getFileSystem(config).getFileStatus(this.file).getLen();
     ParquetMetadata footer = readFooter(config, file, range(0, length));
 
     List<BlockMetaData> blocks = footer.getBlocks();

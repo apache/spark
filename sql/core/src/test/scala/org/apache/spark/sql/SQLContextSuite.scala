@@ -60,7 +60,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
     // temporary table should not be shared
     val df = session1.range(10)
-    df.registerTempTable("test1")
+    df.createOrReplaceTempView("test1")
     assert(session1.tableNames().contains("test1"))
     assert(!session2.tableNames().contains("test1"))
 
@@ -77,12 +77,6 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     val sqlContext = SQLContext.getOrCreate(sc)
     sqlContext.experimental.extraOptimizations = Seq(DummyRule)
     assert(sqlContext.sessionState.optimizer.batches.flatMap(_.rules).contains(DummyRule))
-  }
-
-  test("SQLContext can access `spark.sql.*` configs") {
-    sc.conf.set("spark.sql.with.or.without.you", "my love")
-    val sqlContext = new SQLContext(sc)
-    assert(sqlContext.getConf("spark.sql.with.or.without.you") == "my love")
   }
 
 }

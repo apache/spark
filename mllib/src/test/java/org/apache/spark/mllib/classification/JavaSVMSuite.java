@@ -28,24 +28,30 @@ import org.junit.Test;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaSVMSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaSVMSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaSVMSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   int validatePrediction(List<LabeledPoint> validationData, SVMModel model) {
     int numAccurate = 0;
-    for (LabeledPoint point: validationData) {
+    for (LabeledPoint point : validationData) {
       Double prediction = model.predict(point.features());
       if (prediction == point.label()) {
         numAccurate++;
@@ -60,16 +66,16 @@ public class JavaSVMSuite implements Serializable {
     double A = 2.0;
     double[] weights = {-1.5, 1.0};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(SVMSuite.generateSVMInputAsList(A,
-        weights, nPoints, 42), 2).cache();
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(SVMSuite.generateSVMInputAsList(A,
+      weights, nPoints, 42), 2).cache();
     List<LabeledPoint> validationData =
-        SVMSuite.generateSVMInputAsList(A, weights, nPoints, 17);
+      SVMSuite.generateSVMInputAsList(A, weights, nPoints, 17);
 
     SVMWithSGD svmSGDImpl = new SVMWithSGD();
     svmSGDImpl.setIntercept(true);
     svmSGDImpl.optimizer().setStepSize(1.0)
-                          .setRegParam(1.0)
-                          .setNumIterations(100);
+      .setRegParam(1.0)
+      .setNumIterations(100);
     SVMModel model = svmSGDImpl.run(testRDD.rdd());
 
     int numAccurate = validatePrediction(validationData, model);
@@ -82,10 +88,10 @@ public class JavaSVMSuite implements Serializable {
     double A = 0.0;
     double[] weights = {-1.5, 1.0};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(SVMSuite.generateSVMInputAsList(A,
-        weights, nPoints, 42), 2).cache();
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(SVMSuite.generateSVMInputAsList(A,
+      weights, nPoints, 42), 2).cache();
     List<LabeledPoint> validationData =
-        SVMSuite.generateSVMInputAsList(A, weights, nPoints, 17);
+      SVMSuite.generateSVMInputAsList(A, weights, nPoints, 17);
 
     SVMModel model = SVMWithSGD.train(testRDD.rdd(), 100, 1.0, 1.0, 1.0);
 

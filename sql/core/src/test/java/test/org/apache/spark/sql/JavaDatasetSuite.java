@@ -23,46 +23,43 @@ import java.sql.Date;
 import java.sql.Timestamp;
 import java.util.*;
 
-import com.google.common.base.Objects;
-import org.junit.rules.ExpectedException;
 import scala.Tuple2;
 import scala.Tuple3;
 import scala.Tuple4;
 import scala.Tuple5;
 
+import com.google.common.base.Objects;
 import org.junit.*;
+import org.junit.rules.ExpectedException;
 
 import org.apache.spark.Accumulator;
-import org.apache.spark.SparkContext;
-import org.apache.spark.api.java.function.*;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.*;
 import org.apache.spark.sql.*;
-import org.apache.spark.sql.test.TestSQLContext;
 import org.apache.spark.sql.catalyst.encoders.OuterScopes;
 import org.apache.spark.sql.catalyst.expressions.GenericRow;
+import org.apache.spark.sql.test.TestSparkSession;
 import org.apache.spark.sql.types.StructType;
-
-import static org.apache.spark.sql.functions.*;
+import static org.apache.spark.sql.functions.col;
+import static org.apache.spark.sql.functions.expr;
 import static org.apache.spark.sql.types.DataTypes.*;
 
 public class JavaDatasetSuite implements Serializable {
+  private transient TestSparkSession spark;
   private transient JavaSparkContext jsc;
-  private transient TestSQLContext context;
 
   @Before
   public void setUp() {
     // Trigger static initializer of TestData
-    SparkContext sc = new SparkContext("local[*]", "testing");
-    jsc = new JavaSparkContext(sc);
-    context = new TestSQLContext(sc);
-    context.loadTestData();
+    spark = new TestSparkSession();
+    jsc = new JavaSparkContext(spark.sparkContext());
+    spark.loadTestData();
   }
 
   @After
   public void tearDown() {
-    context.sparkContext().stop();
-    context = null;
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   private <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
@@ -72,7 +69,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testCollect() {
     List<String> data = Arrays.asList("hello", "world");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     List<String> collected = ds.collectAsList();
     Assert.assertEquals(Arrays.asList("hello", "world"), collected);
   }
@@ -80,7 +77,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testTake() {
     List<String> data = Arrays.asList("hello", "world");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     List<String> collected = ds.takeAsList(1);
     Assert.assertEquals(Arrays.asList("hello"), collected);
   }
@@ -88,7 +85,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testToLocalIterator() {
     List<String> data = Arrays.asList("hello", "world");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     Iterator<String> iter = ds.toLocalIterator();
     Assert.assertEquals("hello", iter.next());
     Assert.assertEquals("world", iter.next());
@@ -98,7 +95,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testCommonOperation() {
     List<String> data = Arrays.asList("hello", "world");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     Assert.assertEquals("hello", ds.first());
 
     Dataset<String> filtered = ds.filter(new FilterFunction<String>() {
@@ -149,7 +146,7 @@ public class JavaDatasetSuite implements Serializable {
   public void testForeach() {
     final Accumulator<Integer> accum = jsc.accumulator(0);
     List<String> data = Arrays.asList("a", "b", "c");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
 
     ds.foreach(new ForeachFunction<String>() {
       @Override
@@ -163,7 +160,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testReduce() {
     List<Integer> data = Arrays.asList(1, 2, 3);
-    Dataset<Integer> ds = context.createDataset(data, Encoders.INT());
+    Dataset<Integer> ds = spark.createDataset(data, Encoders.INT());
 
     int reduced = ds.reduce(new ReduceFunction<Integer>() {
       @Override
@@ -177,7 +174,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testGroupBy() {
     List<String> data = Arrays.asList("a", "foo", "bar");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     KeyValueGroupedDataset<Integer, String> grouped = ds.groupByKey(
       new MapFunction<String, Integer>() {
         @Override
@@ -227,7 +224,7 @@ public class JavaDatasetSuite implements Serializable {
       toSet(reduced.collectAsList()));
 
     List<Integer> data2 = Arrays.asList(2, 6, 10);
-    Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT());
+    Dataset<Integer> ds2 = spark.createDataset(data2, Encoders.INT());
     KeyValueGroupedDataset<Integer, Integer> grouped2 = ds2.groupByKey(
       new MapFunction<Integer, Integer>() {
         @Override
@@ -261,7 +258,7 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testSelect() {
     List<Integer> data = Arrays.asList(2, 6);
-    Dataset<Integer> ds = context.createDataset(data, Encoders.INT());
+    Dataset<Integer> ds = spark.createDataset(data, Encoders.INT());
 
     Dataset<Tuple2<Integer, String>> selected = ds.select(
       expr("value + 1"),
@@ -275,12 +272,12 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testSetOperation() {
     List<String> data = Arrays.asList("abc", "abc", "xyz");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
 
     Assert.assertEquals(asSet("abc", "xyz"), toSet(ds.distinct().collectAsList()));
 
     List<String> data2 = Arrays.asList("xyz", "foo", "foo");
-    Dataset<String> ds2 = context.createDataset(data2, Encoders.STRING());
+    Dataset<String> ds2 = spark.createDataset(data2, Encoders.STRING());
 
     Dataset<String> intersected = ds.intersect(ds2);
     Assert.assertEquals(Arrays.asList("xyz"), intersected.collectAsList());
@@ -291,7 +288,7 @@ public class JavaDatasetSuite implements Serializable {
       unioned.collectAsList());
 
     Dataset<String> subtracted = ds.except(ds2);
-    Assert.assertEquals(Arrays.asList("abc", "abc"), subtracted.collectAsList());
+    Assert.assertEquals(Arrays.asList("abc"), subtracted.collectAsList());
   }
 
   private static <T> Set<T> toSet(List<T> records) {
@@ -307,9 +304,9 @@ public class JavaDatasetSuite implements Serializable {
   @Test
   public void testJoin() {
     List<Integer> data = Arrays.asList(1, 2, 3);
-    Dataset<Integer> ds = context.createDataset(data, Encoders.INT()).as("a");
+    Dataset<Integer> ds = spark.createDataset(data, Encoders.INT()).as("a");
     List<Integer> data2 = Arrays.asList(2, 3, 4);
-    Dataset<Integer> ds2 = context.createDataset(data2, Encoders.INT()).as("b");
+    Dataset<Integer> ds2 = spark.createDataset(data2, Encoders.INT()).as("b");
 
     Dataset<Tuple2<Integer, Integer>> joined =
       ds.joinWith(ds2, col("a.value").equalTo(col("b.value")));
@@ -322,21 +319,21 @@ public class JavaDatasetSuite implements Serializable {
   public void testTupleEncoder() {
     Encoder<Tuple2<Integer, String>> encoder2 = Encoders.tuple(Encoders.INT(), Encoders.STRING());
     List<Tuple2<Integer, String>> data2 = Arrays.asList(tuple2(1, "a"), tuple2(2, "b"));
-    Dataset<Tuple2<Integer, String>> ds2 = context.createDataset(data2, encoder2);
+    Dataset<Tuple2<Integer, String>> ds2 = spark.createDataset(data2, encoder2);
     Assert.assertEquals(data2, ds2.collectAsList());
 
     Encoder<Tuple3<Integer, Long, String>> encoder3 =
       Encoders.tuple(Encoders.INT(), Encoders.LONG(), Encoders.STRING());
     List<Tuple3<Integer, Long, String>> data3 =
       Arrays.asList(new Tuple3<>(1, 2L, "a"));
-    Dataset<Tuple3<Integer, Long, String>> ds3 = context.createDataset(data3, encoder3);
+    Dataset<Tuple3<Integer, Long, String>> ds3 = spark.createDataset(data3, encoder3);
     Assert.assertEquals(data3, ds3.collectAsList());
 
     Encoder<Tuple4<Integer, String, Long, String>> encoder4 =
       Encoders.tuple(Encoders.INT(), Encoders.STRING(), Encoders.LONG(), Encoders.STRING());
     List<Tuple4<Integer, String, Long, String>> data4 =
       Arrays.asList(new Tuple4<>(1, "b", 2L, "a"));
-    Dataset<Tuple4<Integer, String, Long, String>> ds4 = context.createDataset(data4, encoder4);
+    Dataset<Tuple4<Integer, String, Long, String>> ds4 = spark.createDataset(data4, encoder4);
     Assert.assertEquals(data4, ds4.collectAsList());
 
     Encoder<Tuple5<Integer, String, Long, String, Boolean>> encoder5 =
@@ -345,7 +342,7 @@ public class JavaDatasetSuite implements Serializable {
     List<Tuple5<Integer, String, Long, String, Boolean>> data5 =
       Arrays.asList(new Tuple5<>(1, "b", 2L, "a", true));
     Dataset<Tuple5<Integer, String, Long, String, Boolean>> ds5 =
-      context.createDataset(data5, encoder5);
+      spark.createDataset(data5, encoder5);
     Assert.assertEquals(data5, ds5.collectAsList());
   }
 
@@ -356,7 +353,7 @@ public class JavaDatasetSuite implements Serializable {
       Encoders.tuple(Encoders.tuple(Encoders.INT(), Encoders.STRING()), Encoders.STRING());
     List<Tuple2<Tuple2<Integer, String>, String>> data =
       Arrays.asList(tuple2(tuple2(1, "a"), "a"), tuple2(tuple2(2, "b"), "b"));
-    Dataset<Tuple2<Tuple2<Integer, String>, String>> ds = context.createDataset(data, encoder);
+    Dataset<Tuple2<Tuple2<Integer, String>, String>> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
 
     // test (int, (string, string, long))
@@ -366,7 +363,7 @@ public class JavaDatasetSuite implements Serializable {
     List<Tuple2<Integer, Tuple3<String, String, Long>>> data2 =
       Arrays.asList(tuple2(1, new Tuple3<>("a", "b", 3L)));
     Dataset<Tuple2<Integer, Tuple3<String, String, Long>>> ds2 =
-      context.createDataset(data2, encoder2);
+      spark.createDataset(data2, encoder2);
     Assert.assertEquals(data2, ds2.collectAsList());
 
     // test (int, ((string, long), string))
@@ -376,7 +373,7 @@ public class JavaDatasetSuite implements Serializable {
     List<Tuple2<Integer, Tuple2<Tuple2<String, Long>, String>>> data3 =
       Arrays.asList(tuple2(1, tuple2(tuple2("a", 2L), "b")));
     Dataset<Tuple2<Integer, Tuple2<Tuple2<String, Long>, String>>> ds3 =
-      context.createDataset(data3, encoder3);
+      spark.createDataset(data3, encoder3);
     Assert.assertEquals(data3, ds3.collectAsList());
   }
 
@@ -390,7 +387,7 @@ public class JavaDatasetSuite implements Serializable {
         1.7976931348623157E308, new BigDecimal("0.922337203685477589"),
           Date.valueOf("1970-01-01"), new Timestamp(System.currentTimeMillis()), Float.MAX_VALUE));
     Dataset<Tuple5<Double, BigDecimal, Date, Timestamp, Float>> ds =
-      context.createDataset(data, encoder);
+      spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 
@@ -441,7 +438,7 @@ public class JavaDatasetSuite implements Serializable {
     Encoder<KryoSerializable> encoder = Encoders.kryo(KryoSerializable.class);
     List<KryoSerializable> data = Arrays.asList(
       new KryoSerializable("hello"), new KryoSerializable("world"));
-    Dataset<KryoSerializable> ds = context.createDataset(data, encoder);
+    Dataset<KryoSerializable> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 
@@ -450,14 +447,14 @@ public class JavaDatasetSuite implements Serializable {
     Encoder<JavaSerializable> encoder = Encoders.javaSerialization(JavaSerializable.class);
     List<JavaSerializable> data = Arrays.asList(
       new JavaSerializable("hello"), new JavaSerializable("world"));
-    Dataset<JavaSerializable> ds = context.createDataset(data, encoder);
+    Dataset<JavaSerializable> ds = spark.createDataset(data, encoder);
     Assert.assertEquals(data, ds.collectAsList());
   }
 
   @Test
   public void testRandomSplit() {
     List<String> data = Arrays.asList("hello", "world", "from", "spark");
-    Dataset<String> ds = context.createDataset(data, Encoders.STRING());
+    Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
     double[] arraySplit = {1, 2, 3};
 
     List<Dataset<String>> randomSplit =  ds.randomSplitAsList(arraySplit, 1);
@@ -647,14 +644,14 @@ public class JavaDatasetSuite implements Serializable {
     obj2.setF(Arrays.asList(300L, null, 400L));
 
     List<SimpleJavaBean> data = Arrays.asList(obj1, obj2);
-    Dataset<SimpleJavaBean> ds = context.createDataset(data, Encoders.bean(SimpleJavaBean.class));
+    Dataset<SimpleJavaBean> ds = spark.createDataset(data, Encoders.bean(SimpleJavaBean.class));
     Assert.assertEquals(data, ds.collectAsList());
 
     NestedJavaBean obj3 = new NestedJavaBean();
     obj3.setA(obj1);
 
     List<NestedJavaBean> data2 = Arrays.asList(obj3);
-    Dataset<NestedJavaBean> ds2 = context.createDataset(data2, Encoders.bean(NestedJavaBean.class));
+    Dataset<NestedJavaBean> ds2 = spark.createDataset(data2, Encoders.bean(NestedJavaBean.class));
     Assert.assertEquals(data2, ds2.collectAsList());
 
     Row row1 = new GenericRow(new Object[]{
@@ -678,7 +675,7 @@ public class JavaDatasetSuite implements Serializable {
       .add("d", createArrayType(StringType))
       .add("e", createArrayType(StringType))
       .add("f", createArrayType(LongType));
-    Dataset<SimpleJavaBean> ds3 = context.createDataFrame(Arrays.asList(row1, row2), schema)
+    Dataset<SimpleJavaBean> ds3 = spark.createDataFrame(Arrays.asList(row1, row2), schema)
       .as(Encoders.bean(SimpleJavaBean.class));
     Assert.assertEquals(data, ds3.collectAsList());
   }
@@ -692,7 +689,7 @@ public class JavaDatasetSuite implements Serializable {
     obj.setB(new Date(0));
     obj.setC(java.math.BigDecimal.valueOf(1));
     Dataset<SimpleJavaBean2> ds =
-      context.createDataset(Arrays.asList(obj), Encoders.bean(SimpleJavaBean2.class));
+      spark.createDataset(Arrays.asList(obj), Encoders.bean(SimpleJavaBean2.class));
     ds.collect();
   }
 
@@ -776,7 +773,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = spark.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       SmallBean smallBean = new SmallBean();
@@ -793,7 +790,7 @@ public class JavaDatasetSuite implements Serializable {
     {
       Row row = new GenericRow(new Object[] { null });
 
-      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = spark.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       NestedSmallBean nestedSmallBean = new NestedSmallBean();
@@ -810,7 +807,7 @@ public class JavaDatasetSuite implements Serializable {
           })
       });
 
-      Dataset<Row> df = context.createDataFrame(Collections.singletonList(row), schema);
+      Dataset<Row> df = spark.createDataFrame(Collections.singletonList(row), schema);
       Dataset<NestedSmallBean> ds = df.as(Encoders.bean(NestedSmallBean.class));
 
       ds.collect();

@@ -35,6 +35,9 @@ import org.apache.spark.sql.types.{ArrayType, Decimal, ObjectType, StructType}
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
 case class NestedArray(a: Array[Array[Int]]) {
+  override def hashCode(): Int =
+    java.util.Arrays.deepHashCode(a.asInstanceOf[Array[AnyRef]])
+
   override def equals(other: Any): Boolean = other match {
     case NestedArray(otherArray) =>
       java.util.Arrays.deepEquals(
@@ -64,15 +67,21 @@ case class SpecificCollection(l: List[Int])
 
 /** For testing Kryo serialization based encoder. */
 class KryoSerializable(val value: Int) {
-  override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[KryoSerializable].value
+  override def hashCode(): Int = value
+
+  override def equals(other: Any): Boolean = other match {
+    case that: KryoSerializable => this.value == that.value
+    case _ => false
   }
 }
 
 /** For testing Java serialization based encoder. */
 class JavaSerializable(val value: Int) extends Serializable {
-  override def equals(other: Any): Boolean = {
-    this.value == other.asInstanceOf[JavaSerializable].value
+  override def hashCode(): Int = value
+
+  override def equals(other: Any): Boolean = other match {
+    case that: JavaSerializable => this.value == that.value
+    case _ => false
   }
 }
 
@@ -99,7 +108,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
   encodeDecodeTest(new java.lang.Double(-3.7), "boxed double")
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
-  // encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
+  encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
 
   encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
@@ -327,6 +336,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
           Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
           Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
+        case (left: Comparable[Any], right: Comparable[Any]) => left.compareTo(right) == 0
         case _ => input == convertedBack
       }
 

@@ -25,34 +25,40 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.util.LinearDataGenerator;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaLinearRegressionSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaLinearRegressionSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaLinearRegressionSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   int validatePrediction(List<LabeledPoint> validationData, LinearRegressionModel model) {
     int numAccurate = 0;
-    for (LabeledPoint point: validationData) {
-        Double prediction = model.predict(point.features());
-        // A prediction is off if the prediction is more than 0.5 away from expected value.
-        if (Math.abs(prediction - point.label()) <= 0.5) {
-            numAccurate++;
-        }
+    for (LabeledPoint point : validationData) {
+      Double prediction = model.predict(point.features());
+      // A prediction is off if the prediction is more than 0.5 away from expected value.
+      if (Math.abs(prediction - point.label()) <= 0.5) {
+        numAccurate++;
+      }
     }
     return numAccurate;
   }
@@ -63,10 +69,10 @@ public class JavaLinearRegressionSuite implements Serializable {
     double A = 3.0;
     double[] weights = {10, 10};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(
-        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(
+      LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
     List<LabeledPoint> validationData =
-            LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
+      LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
     LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD();
     linSGDImpl.setIntercept(true);
@@ -82,10 +88,10 @@ public class JavaLinearRegressionSuite implements Serializable {
     double A = 0.0;
     double[] weights = {10, 10};
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(
-        LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(
+      LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
     List<LabeledPoint> validationData =
-            LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
+      LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 17, 0.1);
 
     LinearRegressionModel model = LinearRegressionWithSGD.train(testRDD.rdd(), 100);
 
@@ -98,7 +104,7 @@ public class JavaLinearRegressionSuite implements Serializable {
     int nPoints = 100;
     double A = 0.0;
     double[] weights = {10, 10};
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(
       LinearDataGenerator.generateLinearInputAsList(A, weights, nPoints, 42, 0.1), 2).cache();
     LinearRegressionWithSGD linSGDImpl = new LinearRegressionWithSGD();
     LinearRegressionModel model = linSGDImpl.run(testRDD.rdd());

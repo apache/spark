@@ -99,13 +99,13 @@ abstract class Receiver[T](val storageLevel: StorageLevel) extends Serializable 
    * (iii) `restart(...)` can be called to restart the receiver. This will call `onStop()`
    * immediately, and then `onStart()` after a delay.
    */
-  def onStart()
+  def onStart(): Unit
 
   /**
    * This method is called by the system when the receiver is stopped. All resources
    * (threads, buffers, etc.) set up in `onStart()` must be cleaned up in this method.
    */
-  def onStop()
+  def onStop(): Unit
 
   /** Override this to specify a preferred location (hostname). */
   def preferredLocation: Option[String] = None

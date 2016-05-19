@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-# stats.R - Statistic functions for DataFrames.
+# stats.R - Statistic functions for SparkDataFrames.
 
 setOldClass("jobj")
 
@@ -41,7 +41,7 @@ setOldClass("jobj")
 #' ct <- crosstab(df, "title", "gender")
 #' }
 setMethod("crosstab",
-          signature(x = "DataFrame", col1 = "character", col2 = "character"),
+          signature(x = "SparkDataFrame", col1 = "character", col2 = "character"),
           function(x, col1, col2) {
             statFunctions <- callJMethod(x@sdf, "stat")
             sct <- callJMethod(statFunctions, "crosstab", col1, col2)
@@ -50,9 +50,9 @@ setMethod("crosstab",
 
 #' cov
 #'
-#' Calculate the sample covariance of two numerical columns of a DataFrame.
+#' Calculate the sample covariance of two numerical columns of a SparkDataFrame.
 #'
-#' @param x A SparkSQL DataFrame
+#' @param x A SparkDataFrame
 #' @param col1 the name of the first column
 #' @param col2 the name of the second column
 #' @return the covariance of the two columns.
@@ -66,7 +66,7 @@ setMethod("crosstab",
 #' cov <- cov(df, "title", "gender")
 #' }
 setMethod("cov",
-          signature(x = "DataFrame"),
+          signature(x = "SparkDataFrame"),
           function(x, col1, col2) {
             stopifnot(class(col1) == "character" && class(col2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
@@ -75,11 +75,11 @@ setMethod("cov",
 
 #' corr
 #'
-#' Calculates the correlation of two columns of a DataFrame.
+#' Calculates the correlation of two columns of a SparkDataFrame.
 #' Currently only supports the Pearson Correlation Coefficient.
 #' For Spearman Correlation, consider using RDD methods found in MLlib's Statistics.
 #'
-#' @param x A SparkSQL DataFrame
+#' @param x A SparkDataFrame
 #' @param col1 the name of the first column
 #' @param col2 the name of the second column
 #' @param method Optional. A character specifying the method for calculating the correlation.
@@ -96,7 +96,7 @@ setMethod("cov",
 #' corr <- corr(df, "title", "gender", method = "pearson")
 #' }
 setMethod("corr",
-          signature(x = "DataFrame"),
+          signature(x = "SparkDataFrame"),
           function(x, col1, col2, method = "pearson") {
             stopifnot(class(col1) == "character" && class(col2) == "character")
             statFunctions <- callJMethod(x@sdf, "stat")
@@ -109,7 +109,7 @@ setMethod("corr",
 #' Using the frequent element count algorithm described in
 #' \url{http://dx.doi.org/10.1145/762471.762473}, proposed by Karp, Schenker, and Papadimitriou.
 #'
-#' @param x A SparkSQL DataFrame.
+#' @param x A SparkDataFrame.
 #' @param cols A vector column names to search frequent items in.
 #' @param support (Optional) The minimum frequency for an item to be considered `frequent`.
 #'                Should be greater than 1e-4. Default support = 0.01.
@@ -123,7 +123,7 @@ setMethod("corr",
 #' df <- jsonFile(sqlContext, "/path/to/file.json")
 #' fi = freqItems(df, c("title", "gender"))
 #' }
-setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
+setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
           function(x, cols, support = 0.01) {
             statFunctions <- callJMethod(x@sdf, "stat")
             sct <- callJMethod(statFunctions, "freqItems", as.list(cols), support)
@@ -132,18 +132,18 @@ setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
 
 #' approxQuantile
 #'
-#' Calculates the approximate quantiles of a numerical column of a DataFrame.
+#' Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
 #'
 #' The result of this algorithm has the following deterministic bound:
-#' If the DataFrame has N elements and if we request the quantile at probability `p` up to error
-#' `err`, then the algorithm will return a sample `x` from the DataFrame so that the *exact* rank
-#' of `x` is close to (p * N). More precisely,
+#' If the SparkDataFrame has N elements and if we request the quantile at probability `p` up to
+#' error `err`, then the algorithm will return a sample `x` from the SparkDataFrame so that the
+#' *exact* rank of `x` is close to (p * N). More precisely,
 #'   floor((p - err) * N) <= rank(x) <= ceil((p + err) * N).
 #' This method implements a variation of the Greenwald-Khanna algorithm (with some speed
 #' optimizations). The algorithm was first present in [[http://dx.doi.org/10.1145/375663.375670
 #' Space-efficient Online Computation of Quantile Summaries]] by Greenwald and Khanna.
 #'
-#' @param x A SparkSQL DataFrame.
+#' @param x A SparkDataFrame.
 #' @param col The name of the numerical column.
 #' @param probabilities A list of quantile probabilities. Each number must belong to [0, 1].
 #'                      For example 0 is the minimum, 0.5 is the median, 1 is the maximum.
@@ -161,7 +161,7 @@ setMethod("freqItems", signature(x = "DataFrame", cols = "character"),
 #' quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
 #' }
 setMethod("approxQuantile",
-          signature(x = "DataFrame", col = "character",
+          signature(x = "SparkDataFrame", col = "character",
                     probabilities = "numeric", relativeError = "numeric"),
           function(x, col, probabilities, relativeError) {
             statFunctions <- callJMethod(x@sdf, "stat")
@@ -173,12 +173,12 @@ setMethod("approxQuantile",
 #'
 #' Returns a stratified sample without replacement based on the fraction given on each stratum.
 #'
-#' @param x A SparkSQL DataFrame
+#' @param x A SparkDataFrame
 #' @param col column that defines strata
 #' @param fractions A named list giving sampling fraction for each stratum. If a stratum is
 #'                  not specified, we treat its fraction as zero.
 #' @param seed random seed
-#' @return A new DataFrame that represents the stratified sample
+#' @return A new SparkDataFrame that represents the stratified sample
 #'
 #' @rdname statfunctions
 #' @name sampleBy
@@ -189,7 +189,7 @@ setMethod("approxQuantile",
 #' sample <- sampleBy(df, "key", fractions, 36)
 #' }
 setMethod("sampleBy",
-          signature(x = "DataFrame", col = "character",
+          signature(x = "SparkDataFrame", col = "character",
                     fractions = "list", seed = "numeric"),
           function(x, col, fractions, seed) {
             fractionsEnv <- convertNamedListToEnv(fractions)

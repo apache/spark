@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
@@ -29,6 +30,7 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
     val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
+      case Some(null) => default
       case Some(value) if value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
       case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
@@ -39,6 +41,7 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
     val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
+      case Some(null) => default
       case Some(value) => try {
         value.toInt
       } catch {
@@ -50,7 +53,9 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
     val param = parameters.getOrElse(paramName, default.toString)
-    if (param.toLowerCase == "true") {
+    if (param == null) {
+      default
+    } else if (param.toLowerCase == "true") {
       true
     } else if (param.toLowerCase == "false") {
       false
@@ -85,9 +90,21 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
+  val nanValue = parameters.getOrElse("nanValue", "NaN")
+
+  val positiveInf = parameters.getOrElse("positiveInf", "Inf")
+  val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
+
+
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
+  }
+
+  // Share date format object as it is expensive to parse date pattern.
+  val dateFormat: SimpleDateFormat = {
+    val dateFormat = parameters.get("dateFormat")
+    dateFormat.map(new SimpleDateFormat(_)).orNull
   }
 
   val maxColumns = getInt("maxColumns", 20480)
@@ -99,4 +116,13 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
   val isCommentSet = this.comment != '\u0000'
 
   val rowSeparator = "\n"
+}
+
+object CSVOptions {
+
+  def apply(): CSVOptions = new CSVOptions(Map.empty)
+
+  def apply(paramName: String, paramValue: String): CSVOptions = {
+    new CSVOptions(Map(paramName -> paramValue))
+  }
 }

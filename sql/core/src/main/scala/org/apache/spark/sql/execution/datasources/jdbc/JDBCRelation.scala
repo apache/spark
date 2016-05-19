@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.Partition
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
+import org.apache.spark.sql.{DataFrame, Row, SaveMode, SparkSession, SQLContext}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 
@@ -87,10 +87,12 @@ private[sql] case class JDBCRelation(
     url: String,
     table: String,
     parts: Array[Partition],
-    properties: Properties = new Properties())(@transient val sqlContext: SQLContext)
+    properties: Properties = new Properties())(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   override val needConversion: Boolean = false
 
@@ -104,7 +106,7 @@ private[sql] case class JDBCRelation(
   override def buildScan(requiredColumns: Array[String], filters: Array[Filter]): RDD[Row] = {
     // Rely on a type erasure hack to pass RDD[InternalRow] back as RDD[Row]
     JDBCRDD.scanTable(
-      sqlContext.sparkContext,
+      sparkSession.sparkContext,
       schema,
       url,
       properties,

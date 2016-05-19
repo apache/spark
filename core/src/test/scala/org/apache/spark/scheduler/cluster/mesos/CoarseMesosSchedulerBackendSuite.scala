@@ -147,6 +147,19 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     verifyDeclinedOffer(driver, createOfferId("o1"), true)
   }
 
+  test("mesos declines offers with a filter when reached spark.cores.max") {
+    val maxCores = 3
+    setBackend(Map("spark.cores.max" -> maxCores.toString))
+
+    val executorMemory = backend.executorMemory(sc)
+    offerResources(List(
+      (executorMemory, maxCores + 1),
+      (executorMemory, maxCores + 1)))
+
+    verifyTaskLaunched("o1")
+    verifyDeclinedOffer(driver, createOfferId("o2"), true)
+  }
+
   test("mesos assigns tasks round-robin on offers") {
     val executorCores = 4
     val maxCores = executorCores * 2

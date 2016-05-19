@@ -49,7 +49,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
 
   test("lead") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
 
     checkAnswer(
       df.select(
@@ -59,7 +59,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
 
   test("lag") {
     val df = Seq((1, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
 
     checkAnswer(
       df.select(
@@ -70,7 +70,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
   test("lead with default value") {
     val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
     checkAnswer(
       df.select(
         lead("value", 2, "n/a").over(Window.partitionBy("key").orderBy("value"))),
@@ -80,7 +80,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
   test("lag with default value") {
     val df = Seq((1, "1"), (1, "1"), (2, "2"), (1, "1"),
                  (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
     checkAnswer(
       df.select(
         lag("value", 2, "n/a").over(Window.partitionBy($"key").orderBy($"value"))),
@@ -89,7 +89,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
 
   test("rank functions in unspecific window") {
     val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
     checkAnswer(
       df.select(
         $"key",
@@ -112,7 +112,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
 
   test("aggregation and rows between") {
     val df = Seq((1, "1"), (2, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
     checkAnswer(
       df.select(
         avg("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 2))),
@@ -121,7 +121,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
 
   test("aggregation and range between") {
     val df = Seq((1, "1"), (1, "1"), (3, "1"), (2, "2"), (2, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
     checkAnswer(
       df.select(
         avg("key").over(Window.partitionBy($"value").orderBy($"key").rangeBetween(-1, 1))),
@@ -131,7 +131,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
 
   test("aggregation and rows between with unbounded") {
     val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
     checkAnswer(
       df.select(
         $"key",
@@ -146,7 +146,7 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
 
   test("aggregation and range between with unbounded") {
     val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
-    df.registerTempTable("window_table")
+    df.createOrReplaceTempView("window_table")
     checkAnswer(
       df.select(
         $"key",
@@ -353,5 +353,39 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
     val winSpec = Window.partitionBy("Data.a", "Data.b").orderBy($"c".desc)
     val df = src.select($"*", max("c").over(winSpec) as "max")
     checkAnswer(df, Row(5, Row(0, 3), 5))
+  }
+
+  test("aggregation and rows between with unbounded + predicate pushdown") {
+    val df = Seq((1, "1"), (2, "2"), (2, "3"), (1, "3"), (3, "2"), (4, "3")).toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    val selectList = Seq($"key", $"value",
+      last("key").over(
+        Window.partitionBy($"value").orderBy($"key").rowsBetween(0, Long.MaxValue)),
+      last("key").over(
+        Window.partitionBy($"value").orderBy($"key").rowsBetween(Long.MinValue, 0)),
+      last("key").over(Window.partitionBy($"value").orderBy($"key").rowsBetween(-1, 1)))
+
+    checkAnswer(
+      df.select(selectList: _*).where($"value" < "3"),
+      Seq(Row(1, "1", 1, 1, 1), Row(2, "2", 3, 2, 3), Row(3, "2", 3, 3, 3)))
+  }
+
+  test("aggregation and range between with unbounded + predicate pushdown") {
+    val df = Seq((5, "1"), (5, "2"), (4, "2"), (6, "2"), (3, "1"), (2, "2")).toDF("key", "value")
+    df.createOrReplaceTempView("window_table")
+    val selectList = Seq($"key", $"value",
+      last("value").over(
+        Window.partitionBy($"value").orderBy($"key").rangeBetween(-2, -1)).equalTo("2")
+        .as("last_v"),
+      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(Long.MinValue, 1))
+        .as("avg_key1"),
+      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(0, Long.MaxValue))
+        .as("avg_key2"),
+      avg("key").over(Window.partitionBy("value").orderBy("key").rangeBetween(-1, 1))
+        .as("avg_key3"))
+
+    checkAnswer(
+      df.select(selectList: _*).where($"value" < 2),
+      Seq(Row(3, "1", null, 3.0, 4.0, 3.0), Row(5, "1", false, 4.0, 5.0, 5.0)))
   }
 }

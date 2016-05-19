@@ -1598,6 +1598,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Timing method based on iterations that permit JVM JIT optimization.
+   *
    * @param numIters number of iterations
    * @param f function to be executed. If prepare is not None, the running time of each call to f
    *          must be an order of magnitude longer than one millisecond for accurate timing.
@@ -1639,6 +1640,7 @@ private[spark] object Utils extends Logging {
 
   /**
    * Creates a symlink.
+   *
    * @param src absolute path to the source
    * @param dst relative path for the destination
    */
@@ -2179,6 +2181,25 @@ private[spark] object Utils extends Logging {
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
   }
 
+  val EMPTY_USER_GROUPS = Set[String]()
+
+  // Returns the groups to which the current user belongs.
+  def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
+    val groupProviderClassName = sparkConf.get("spark.user.groups.mapping",
+      "org.apache.spark.security.ShellBasedGroupsMappingProvider")
+    if (groupProviderClassName != "") {
+      try {
+        val groupMappingServiceProvider = classForName(groupProviderClassName).newInstance.
+          asInstanceOf[org.apache.spark.security.GroupMappingServiceProvider]
+        val currentUserGroups = groupMappingServiceProvider.getGroups(username)
+        return currentUserGroups
+      } catch {
+        case e: Exception => logError(s"Error getting groups for user=$username", e)
+      }
+    }
+    EMPTY_USER_GROUPS
+  }
+
   /**
    * Split the comma delimited string of master URLs into a list.
    * For instance, "spark://abc,def" becomes [spark://abc, spark://def].
@@ -2282,7 +2303,7 @@ private[spark] object Utils extends Logging {
    */
   def initDaemon(log: Logger): Unit = {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
-    SignalLogger.register(log)
+    SignalUtils.registerLogger(log)
   }
 }
 

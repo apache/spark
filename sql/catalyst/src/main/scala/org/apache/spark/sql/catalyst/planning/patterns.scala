@@ -69,6 +69,9 @@ object PhysicalOperation extends PredicateHelper {
         val substitutedCondition = substitute(aliases)(condition)
         (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
 
+      case BroadcastHint(child) =>
+        collectProjectsAndFilters(child)
+
       case other =>
         (None, Nil, other, Map.empty)
     }

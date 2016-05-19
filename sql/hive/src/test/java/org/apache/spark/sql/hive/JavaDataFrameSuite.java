@@ -36,7 +36,7 @@ import org.apache.spark.sql.hive.aggregate.MyDoubleSum;
 
 public class JavaDataFrameSuite {
   private transient JavaSparkContext sc;
-  private transient HiveContext hc;
+  private transient SQLContext hc;
 
   Dataset<Row> df;
 
@@ -57,7 +57,7 @@ public class JavaDataFrameSuite {
       jsonObjects.add("{\"key\":" + i + ", \"value\":\"str" + i + "\"}");
     }
     df = hc.read().json(sc.parallelize(jsonObjects));
-    df.registerTempTable("window_table");
+    df.createOrReplaceTempView("window_table");
   }
 
   @After

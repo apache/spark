@@ -18,9 +18,16 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
+import org.apache.spark.sql.internal.SQLConf
 
-class SparkOptimizer(experimentalMethods: ExperimentalMethods) extends Optimizer {
+class SparkOptimizer(
+    catalog: SessionCatalog,
+    conf: SQLConf,
+    experimentalMethods: ExperimentalMethods)
+  extends Optimizer(catalog, conf) {
+
   override def batches: Seq[Batch] = super.batches :+ Batch(
-    "User Provided Optimizers", FixedPoint(100), experimentalMethods.extraOptimizations: _*)
+    "User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 }

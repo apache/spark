@@ -496,7 +496,7 @@ private[deploy] class Worker(
 
     case KillExecutor(masterUrl, appId, execId) =>
       if (masterUrl != activeMasterUrl) {
-        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor " + execId)
+        logWarning("Invalid Master (" + masterUrl + ") attempted to kill executor " + execId)
       } else {
         val fullId = appId + "/" + execId
         executors.get(fullId) match {

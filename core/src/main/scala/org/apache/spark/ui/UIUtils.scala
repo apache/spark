@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import java.net.URLDecoder
 import java.text.SimpleDateFormat
-import java.util.{Date, Locale}
+import java.util.{Date, Locale, TimeZone}
 
 import scala.util.control.NonFatal
 import scala.xml._
@@ -168,6 +168,7 @@ private[spark] object UIUtils extends Logging {
     <script src={prependBaseUri("/static/table.js")}></script>
     <script src={prependBaseUri("/static/additional-metrics.js")}></script>
     <script src={prependBaseUri("/static/timeline-view.js")}></script>
+    <script src={prependBaseUri("/static/log-view.js")}></script>
   }
 
   def vizHeaderNodes: Seq[Node] = {
@@ -501,4 +502,7 @@ private[spark] object UIUtils extends Logging {
     }
     param
   }
+
+  def getTimeZoneOffset() : Int =
+    TimeZone.getDefault().getOffset(System.currentTimeMillis()) / 1000 / 60
 }

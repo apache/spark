@@ -115,10 +115,10 @@ class RowMatrix @Since("1.0.0") (
     checkNumColumns(n)
     // Computes n*(n+1)/2, avoiding overflow in the multiplication.
     // This succeeds when n <= 65535, which is checked above
-    val nt: Int = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
+    val nt = if (n % 2 == 0) ((n / 2) * (n + 1)) else (n * ((n + 1) / 2))
 
     // Compute the upper triangular part of the gram matrix.
-    val GU = rows.treeAggregate(new BDV[Double](new Array[Double](nt)))(
+    val GU = rows.treeAggregate(new BDV[Double](nt))(
       seqOp = (U, v) => {
         BLAS.spr(1.0, v, U.data)
         U
@@ -328,25 +328,17 @@ class RowMatrix @Since("1.0.0") (
     val n = numCols().toInt
     checkNumColumns(n)
 
-    val (m, mean) = rows.treeAggregate[(Long, BDV[Double])]((0L, BDV.zeros[Double](n)))(
-      seqOp = (s: (Long, BDV[Double]), v: Vector) => (s._1 + 1L, s._2 += v.toBreeze),
-      combOp = (s1: (Long, BDV[Double]), s2: (Long, BDV[Double])) =>
-        (s1._1 + s2._1, s1._2 += s2._2)
-    )
-
-    if (m <= 1) {
-      sys.error(s"RowMatrix.computeCovariance called on matrix with only $m rows." +
-        "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
-    }
-    updateNumRows(m)
-
-    mean :/= m.toDouble
+    val summary = computeColumnSummaryStatistics()
+    val m = summary.count
+    require(m > 1, s"RowMatrix.computeCovariance called on matrix with only $m rows." +
+      "  Cannot compute the covariance of a RowMatrix with <= 1 row.")
+    val mean = summary.mean
 
     // We use the formula Cov(X, Y) = E[X * Y] - E[X] E[Y], which is not accurate if E[X * Y] is
     // large but Cov(X, Y) is small, but it is good for sparse computation.
     // TODO: find a fast and stable way for sparse data.
 
-    val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
+    val G = computeGramianMatrix().toBreeze
 
     var i = 0
     var j = 0

@@ -206,6 +206,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 class LogisticRegressionWithSGD private[mllib] (
     private var stepSize: Double,
     private var numIterations: Int,
@@ -240,6 +241,7 @@ class LogisticRegressionWithSGD private[mllib] (
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 object LogisticRegressionWithSGD {
   // NOTE(shivaram): We use multiple train methods instead of default arguments to support
   // Java programs.
@@ -429,7 +431,7 @@ class LogisticRegressionWithLBFGS
         if (userSuppliedWeights) {
           val uid = Identifiable.randomUID("logreg-static")
           lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(
-            uid, initialWeights, 1.0))
+            uid, initialWeights.asML, 1.0))
         }
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())
@@ -437,7 +439,7 @@ class LogisticRegressionWithLBFGS
         // Convert our input into a DataFrame
         val sqlContext = new SQLContext(input.context)
         import sqlContext.implicits._
-        val df = input.toDF()
+        val df = input.map(_.asML).toDF()
         // Determine if we should cache the DF
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model

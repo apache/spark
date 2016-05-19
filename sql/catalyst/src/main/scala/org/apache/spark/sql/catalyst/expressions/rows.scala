@@ -164,7 +164,7 @@ trait BaseGenericInternalRow extends InternalRow {
 abstract class MutableRow extends InternalRow {
   def setNullAt(i: Int): Unit
 
-  def update(i: Int, value: Any)
+  def update(i: Int, value: Any): Unit
 
   // default implementation (slow)
   def setBoolean(i: Int, value: Boolean): Unit = { update(i, value) }

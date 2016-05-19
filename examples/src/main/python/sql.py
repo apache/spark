@@ -20,33 +20,31 @@ from __future__ import print_function
 import os
 import sys
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 from pyspark.sql.types import Row, StructField, StructType, StringType, IntegerType
 
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="PythonSQL")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("PythonSQL")\
+        .getOrCreate()
 
-    # RDD is created from a list of rows
-    some_rdd = sc.parallelize([Row(name="John", age=19),
-                              Row(name="Smith", age=23),
-                              Row(name="Sarah", age=18)])
-    # Infer schema from the first row, create a DataFrame and print the schema
-    some_df = sqlContext.createDataFrame(some_rdd)
+    # A list of Rows. Infer schema from the first row, create a DataFrame and print the schema
+    rows = [Row(name="John", age=19), Row(name="Smith", age=23), Row(name="Sarah", age=18)]
+    some_df = spark.createDataFrame(rows)
     some_df.printSchema()
 
-    # Another RDD is created from a list of tuples
-    another_rdd = sc.parallelize([("John", 19), ("Smith", 23), ("Sarah", 18)])
+    # A list of tuples
+    tuples = [("John", 19), ("Smith", 23), ("Sarah", 18)]
     # Schema with two fields - person_name and person_age
     schema = StructType([StructField("person_name", StringType(), False),
                         StructField("person_age", IntegerType(), False)])
     # Create a DataFrame by applying the schema to the RDD and print the schema
-    another_df = sqlContext.createDataFrame(another_rdd, schema)
+    another_df = spark.createDataFrame(tuples, schema)
     another_df.printSchema()
     # root
-    #  |-- age: integer (nullable = true)
+    #  |-- age: long (nullable = true)
     #  |-- name: string (nullable = true)
 
     # A JSON dataset is pointed to by path.
@@ -57,7 +55,7 @@ if __name__ == "__main__":
     else:
         path = sys.argv[1]
     # Create a DataFrame from the file(s) pointed to by path
-    people = sqlContext.jsonFile(path)
+    people = spark.read.json(path)
     # root
     #  |-- person_name: string (nullable = false)
     #  |-- person_age: integer (nullable = false)
@@ -65,16 +63,16 @@ if __name__ == "__main__":
     # The inferred schema can be visualized using the printSchema() method.
     people.printSchema()
     # root
-    #  |-- age: IntegerType
-    #  |-- name: StringType
+    #  |-- age: long (nullable = true)
+    #  |-- name: string (nullable = true)
 
-    # Register this DataFrame as a table.
-    people.registerAsTable("people")
+    # Creates a temporary view using the DataFrame.
+    people.createOrReplaceTempView("people")
 
-    # SQL statements can be run by using the sql methods provided by sqlContext
-    teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
+    # SQL statements can be run by using the sql methods provided by `spark`
+    teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
 
     for each in teenagers.collect():
         print(each[0])
 
-    sc.stop()
+    spark.stop()

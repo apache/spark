@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.csv
 import java.io.{ByteArrayOutputStream, OutputStreamWriter, StringReader}
 import java.nio.charset.StandardCharsets
 
-import com.univocity.parsers.csv.{CsvParser, CsvParserSettings, CsvWriter, CsvWriterSettings}
+import com.univocity.parsers.csv._
 
 import org.apache.spark.internal.Logging
 
@@ -47,7 +47,7 @@ private[sql] abstract class CsvReader(params: CSVOptions, headers: Seq[String]) 
     settings.setMaxColumns(params.maxColumns)
     settings.setNullValue(params.nullValue)
     settings.setMaxCharsPerColumn(params.maxCharsPerColumn)
-    settings.setParseUnescapedQuotesUntilDelimiter(true)
+    settings.setUnescapedQuoteHandling(UnescapedQuoteHandling.STOP_AT_DELIMITER)
     if (headers != null) settings.setHeaders(headers: _*)
 
     new CsvParser(settings)

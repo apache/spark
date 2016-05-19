@@ -24,7 +24,7 @@ import org.scalatest.prop.GeneratorDrivenPropertyChecks
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.optimizer.DefaultOptimizer
+import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.Utils
@@ -110,7 +110,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       inputRow: InternalRow = EmptyRow): Unit = {
 
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
 
     val actual = plan(inputRow).get(0, expression.dataType)
@@ -153,7 +153,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
       expected: Any,
       inputRow: InternalRow = EmptyRow): Unit = {
     val plan = Project(Alias(expression, s"Optimized($expression)")() :: Nil, OneRowRelation)
-    val optimizedPlan = DefaultOptimizer.execute(plan)
+    val optimizedPlan = SimpleTestOptimizer.execute(plan)
     checkEvaluationWithoutCodegen(optimizedPlan.expressions.head, expected, inputRow)
   }
 
@@ -166,7 +166,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     checkEvaluationWithOptimization(expression, expected)
 
     var plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expression, s"Optimized($expression)")() :: Nil),
       expression)
     var actual = plan(inputRow).get(0, expression.dataType)
     assert(checkResult(actual, expected))
@@ -259,7 +259,7 @@ trait ExpressionEvalHelper extends GeneratorDrivenPropertyChecks {
     }
 
     val plan = generateProject(
-      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil)(),
+      GenerateMutableProjection.generate(Alias(expr, s"Optimized($expr)")() :: Nil),
       expr)
     val codegen = plan(inputRow).get(0, expr.dataType)
 

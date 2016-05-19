@@ -62,8 +62,7 @@ class DecisionTree private[spark] (private val strategy: Strategy, private val s
    */
   @Since("1.2.0")
   def run(input: RDD[LabeledPoint]): DecisionTreeModel = {
-    val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = seed)
+    val rf = new RandomForest(strategy, numTrees = 1, featureSubsetStrategy = "all", seed = seed)
     val rfModel = rf.run(input)
     rfModel.trees(0)
   }
@@ -88,7 +87,7 @@ object DecisionTree extends Serializable with Logging {
    *                 categorical), depth of the tree, quantile calculation strategy, etc.
    * @return DecisionTreeModel that can be used for prediction.
    */
- @Since("1.0.0")
+  @Since("1.0.0")
   def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
     new DecisionTree(strategy).run(input)
   }

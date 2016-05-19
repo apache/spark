@@ -17,18 +17,19 @@
 
 from __future__ import print_function
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
 # $example on$
 from pyspark.ml.feature import Normalizer
 # $example off$
+from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    sc = SparkContext(appName="NormalizerExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("NormalizerExample")\
+        .getOrCreate()
 
     # $example on$
-    dataFrame = sqlContext.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
 
     # Normalize each Vector using $L^1$ norm.
     normalizer = Normalizer(inputCol="features", outputCol="normFeatures", p=1.0)
@@ -40,4 +41,4 @@ if __name__ == "__main__":
     lInfNormData.show()
     # $example off$
 
-    sc.stop()
+    spark.stop()

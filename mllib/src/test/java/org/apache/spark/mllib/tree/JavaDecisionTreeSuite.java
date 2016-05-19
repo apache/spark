@@ -28,30 +28,38 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.mllib.tree.configuration.Algo;
 import org.apache.spark.mllib.tree.configuration.Strategy;
 import org.apache.spark.mllib.tree.impurity.Gini;
 import org.apache.spark.mllib.tree.model.DecisionTreeModel;
+import org.apache.spark.sql.SparkSession;
 
 
 public class JavaDecisionTreeSuite implements Serializable {
-  private transient JavaSparkContext sc;
+  private transient SparkSession spark;
+  private transient JavaSparkContext jsc;
 
   @Before
   public void setUp() {
-    sc = new JavaSparkContext("local", "JavaDecisionTreeSuite");
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaDecisionTreeSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    sc.stop();
-    sc = null;
+    spark.stop();
+    spark = null;
   }
 
   int validatePrediction(List<LabeledPoint> validationData, DecisionTreeModel model) {
     int numCorrect = 0;
-    for (LabeledPoint point: validationData) {
+    for (LabeledPoint point : validationData) {
       Double prediction = model.predict(point.features());
       if (prediction == point.label()) {
         numCorrect++;
@@ -63,7 +71,7 @@ public class JavaDecisionTreeSuite implements Serializable {
   @Test
   public void runDTUsingConstructor() {
     List<LabeledPoint> arr = DecisionTreeSuite.generateCategoricalDataPointsAsJavaList();
-    JavaRDD<LabeledPoint> rdd = sc.parallelize(arr);
+    JavaRDD<LabeledPoint> rdd = jsc.parallelize(arr);
     HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     categoricalFeaturesInfo.put(1, 2); // feature 1 has 2 categories
 
@@ -71,7 +79,7 @@ public class JavaDecisionTreeSuite implements Serializable {
     int numClasses = 2;
     int maxBins = 100;
     Strategy strategy = new Strategy(Algo.Classification(), Gini.instance(), maxDepth, numClasses,
-        maxBins, categoricalFeaturesInfo);
+      maxBins, categoricalFeaturesInfo);
 
     DecisionTree learner = new DecisionTree(strategy);
     DecisionTreeModel model = learner.run(rdd.rdd());
@@ -83,7 +91,7 @@ public class JavaDecisionTreeSuite implements Serializable {
   @Test
   public void runDTUsingStaticMethods() {
     List<LabeledPoint> arr = DecisionTreeSuite.generateCategoricalDataPointsAsJavaList();
-    JavaRDD<LabeledPoint> rdd = sc.parallelize(arr);
+    JavaRDD<LabeledPoint> rdd = jsc.parallelize(arr);
     HashMap<Integer, Integer> categoricalFeaturesInfo = new HashMap<>();
     categoricalFeaturesInfo.put(1, 2); // feature 1 has 2 categories
 
@@ -91,9 +99,17 @@ public class JavaDecisionTreeSuite implements Serializable {
     int numClasses = 2;
     int maxBins = 100;
     Strategy strategy = new Strategy(Algo.Classification(), Gini.instance(), maxDepth, numClasses,
-        maxBins, categoricalFeaturesInfo);
+      maxBins, categoricalFeaturesInfo);
 
     DecisionTreeModel model = DecisionTree$.MODULE$.train(rdd.rdd(), strategy);
+
+    // java compatibility test
+    JavaRDD<Double> predictions = model.predict(rdd.map(new Function<LabeledPoint, Vector>() {
+      @Override
+      public Vector call(LabeledPoint v1) {
+        return v1.features();
+      }
+    }));
 
     int numCorrect = validatePrediction(arr, model);
     Assert.assertTrue(numCorrect == rdd.count());

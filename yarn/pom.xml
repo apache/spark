@@ -30,6 +30,7 @@
   <name>Spark Project YARN</name>
   <properties>
     <sbt.project.name>yarn</sbt.project.name>
+    <jersey-1.version>1.9</jersey-1.version>
   </properties>
 
   <dependencies>
@@ -53,7 +54,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -101,6 +102,10 @@
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlet</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlets</artifactId>
+    </dependency>
     <!-- End of shaded deps. -->
 
     <!--
@@ -147,20 +152,34 @@
       </exclusions>
       <scope>test</scope>
      </dependency>
+
+     <!--
+       Jersey 1 dependencies only required for YARN integration testing. Creating a YARN cluster
+       in the JVM requires starting a Jersey 1-based web application.
+     -->
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-core</artifactId>
        <scope>test</scope>
+       <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-json</artifactId>
        <scope>test</scope>
+       <version>${jersey-1.version}</version>
      </dependency>
      <dependency>
        <groupId>com.sun.jersey</groupId>
        <artifactId>jersey-server</artifactId>
        <scope>test</scope>
+       <version>${jersey-1.version}</version>
+     </dependency>
+     <dependency>
+       <groupId>com.sun.jersey.contribs</groupId>
+       <artifactId>jersey-guice</artifactId>
+       <scope>test</scope>
+       <version>${jersey-1.version}</version>
      </dependency>
 
     <!--

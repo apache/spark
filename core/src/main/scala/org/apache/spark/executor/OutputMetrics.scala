@@ -17,8 +17,8 @@
 
 package org.apache.spark.executor
 
-import org.apache.spark.{Accumulator, InternalAccumulator}
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.util.LongAccumulator
 
 
 /**
@@ -38,67 +38,20 @@ object DataWriteMethod extends Enumeration with Serializable {
  * A collection of accumulators that represents metrics about writing data to external systems.
  */
 @DeveloperApi
-class OutputMetrics private (
-    _bytesWritten: Accumulator[Long],
-    _recordsWritten: Accumulator[Long],
-    _writeMethod: Accumulator[String])
-  extends Serializable {
-
-  private[executor] def this(accumMap: Map[String, Accumulator[_]]) {
-    this(
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.BYTES_WRITTEN),
-      TaskMetrics.getAccum[Long](accumMap, InternalAccumulator.output.RECORDS_WRITTEN),
-      TaskMetrics.getAccum[String](accumMap, InternalAccumulator.output.WRITE_METHOD))
-  }
-
-  /**
-   * Create a new [[OutputMetrics]] that is not associated with any particular task.
-   *
-   * This is only used for preserving matching behavior on [[OutputMetrics]], which used to be
-   * a case class before Spark 2.0. Once we remove support for matching on [[OutputMetrics]]
-   * we can remove this constructor as well.
-   */
-  private[executor] def this() {
-    this(InternalAccumulator.createOutputAccums()
-      .map { a => (a.name.get, a) }.toMap[String, Accumulator[_]])
-  }
+class OutputMetrics private[spark] () extends Serializable {
+  private[executor] val _bytesWritten = new LongAccumulator
+  private[executor] val _recordsWritten = new LongAccumulator
 
   /**
    * Total number of bytes written.
    */
-  def bytesWritten: Long = _bytesWritten.localValue
+  def bytesWritten: Long = _bytesWritten.sum
 
   /**
    * Total number of records written.
    */
-  def recordsWritten: Long = _recordsWritten.localValue
-
-  /**
-   * The source to which this task writes its output.
-   */
-  def writeMethod: DataWriteMethod.Value = DataWriteMethod.withName(_writeMethod.localValue)
+  def recordsWritten: Long = _recordsWritten.sum
 
   private[spark] def setBytesWritten(v: Long): Unit = _bytesWritten.setValue(v)
   private[spark] def setRecordsWritten(v: Long): Unit = _recordsWritten.setValue(v)
-  private[spark] def setWriteMethod(v: DataWriteMethod.Value): Unit =
-    _writeMethod.setValue(v.toString)
-
-}
-
-/**
- * Deprecated methods to preserve case class matching behavior before Spark 2.0.
- */
-object OutputMetrics {
-
-  @deprecated("matching on OutputMetrics will not be supported in the future", "2.0.0")
-  def apply(writeMethod: DataWriteMethod.Value): OutputMetrics = {
-    val om = new OutputMetrics
-    om.setWriteMethod(writeMethod)
-    om
-  }
-
-  @deprecated("matching on OutputMetrics will not be supported in the future", "2.0.0")
-  def unapply(output: OutputMetrics): Option[DataWriteMethod.Value] = {
-    Some(output.writeMethod)
-  }
 }

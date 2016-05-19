@@ -345,7 +345,7 @@ object YarnSparkHadoopUtil {
   val RM_REQUEST_PRIORITY = Priority.newInstance(1)
 
   def get: YarnSparkHadoopUtil = {
-    val yarnMode = java.lang.Boolean.valueOf(
+    val yarnMode = java.lang.Boolean.parseBoolean(
       System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (!yarnMode) {
       throw new SparkException("YarnSparkHadoopUtil is not available in non-YARN mode!")
@@ -464,11 +464,15 @@ object YarnSparkHadoopUtil {
     }
   }
 
+  // YARN/Hadoop acls are specified as user1,user2 group1,group2
+  // Users and groups are separated by a space and hence we need to pass the acls in same format
   def getApplicationAclsForYarn(securityMgr: SecurityManager)
       : Map[ApplicationAccessType, String] = {
     Map[ApplicationAccessType, String] (
-      ApplicationAccessType.VIEW_APP -> securityMgr.getViewAcls,
-      ApplicationAccessType.MODIFY_APP -> securityMgr.getModifyAcls
+      ApplicationAccessType.VIEW_APP -> (securityMgr.getViewAcls + " " +
+        securityMgr.getViewAclsGroups),
+      ApplicationAccessType.MODIFY_APP -> (securityMgr.getModifyAcls + " " +
+        securityMgr.getModifyAclsGroups)
     )
   }
 

@@ -148,6 +148,20 @@ class ConstraintPropagationSuite extends SparkFunSuite {
       .analyze.constraints,
       ExpressionSet(Seq(resolveColumn(tr1, "a") > 10,
         IsNotNull(resolveColumn(tr1, "a")))))
+
+    val a = resolveColumn(tr1, "a")
+    verifyConstraints(tr1
+      .where('a.attr > 10)
+      .union(tr2.where('d.attr > 11))
+      .analyze.constraints,
+      ExpressionSet(Seq(a > 10 || a > 11, IsNotNull(a))))
+
+    val b = resolveColumn(tr1, "b")
+    verifyConstraints(tr1
+      .where('a.attr > 10 && 'b.attr < 10)
+      .union(tr2.where('d.attr > 11 && 'e.attr < 11))
+      .analyze.constraints,
+      ExpressionSet(Seq(a > 10 || a > 11, b < 10 || b < 11, IsNotNull(a), IsNotNull(b))))
   }
 
   test("propagating constraints in intersect") {

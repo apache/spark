@@ -69,6 +69,23 @@ class MiscFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
   }
 
+  test("assert_true") {
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(false, BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Cast(Literal(0), BooleanType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, NullType)), null)
+    }
+    intercept[RuntimeException] {
+      checkEvaluation(AssertTrue(Literal.create(null, BooleanType)), null)
+    }
+    checkEvaluation(AssertTrue(Literal.create(true, BooleanType)), null)
+    checkEvaluation(AssertTrue(Cast(Literal(1), BooleanType)), null)
+  }
+
   private val structOfString = new StructType().add("str", StringType)
   private val structOfUDT = new StructType().add("udt", new ExamplePointUDT, false)
   private val arrayOfString = ArrayType(StringType)

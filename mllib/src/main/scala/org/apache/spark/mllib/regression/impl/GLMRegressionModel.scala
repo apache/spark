@@ -48,7 +48,6 @@ private[regression] object GLMRegressionModel {
         weights: Vector,
         intercept: Double): Unit = {
       val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -58,9 +57,7 @@ private[regression] object GLMRegressionModel {
 
       // Create Parquet data.
       val data = Data(weights, intercept)
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      // TODO: repartition with 1 partition after SPARK-5532 gets fixed
-      dataRDD.write.parquet(Loader.dataPath(path))
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     /**

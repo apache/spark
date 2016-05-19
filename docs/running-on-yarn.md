@@ -342,7 +342,9 @@ If you need a reference to the proper location to put log files in the YARN so t
   <td>(none)</td>
   <td>
   A string of extra JVM options to pass to the YARN Application Master in client mode.
-  In cluster mode, use <code>spark.driver.extraJavaOptions</code> instead.
+  In cluster mode, use <code>spark.driver.extraJavaOptions</code> instead. Note that it is illegal
+  to set maximum heap size (-Xmx) settings with this option. Maximum heap size settings can be set
+  with <code>spark.yarn.am.memory</code>
   </td>
 </tr>
 <tr>
@@ -367,6 +369,14 @@ If you need a reference to the proper location to put log files in the YARN so t
   Defines the validity interval for AM failure tracking.
   If the AM has been running for at least the defined interval, the AM failure count will be reset.
   This feature is not enabled if not configured, and only supported in Hadoop 2.6+.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.yarn.executor.failuresValidityInterval</code></td>
+  <td>(none)</td>
+  <td>
+  Defines the validity interval for executor failure tracking.
+  Executor failures which are older than the validity interval will be ignored.
   </td>
 </tr>
 <tr>

@@ -540,14 +540,16 @@ class Word2VecModel private[spark] (
     val cosineVec = Array.fill[Float](numWords)(0)
     val alpha: Float = 1
     val beta: Float = 0
-
+    // Normalize input vector before blas.sgemv to avoid Inf value
+    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
+    if (vecNorm != 0.0f) {
+      blas.sscal(vectorSize, 1 / vecNorm, fVector, 0, 1)
+    }
     blas.sgemv(
       "T", vectorSize, numWords, alpha, wordVectors, vectorSize, fVector, 1, beta, cosineVec, 1)
 
-    // Need not divide with the norm of the given vector since it is constant.
     val cosVec = cosineVec.map(_.toDouble)
     var ind = 0
-    val vecNorm = blas.snrm2(vectorSize, fVector, 1)
     while (ind < numWords) {
       val norm = wordVecNorms(ind)
       if (norm == 0.0) {
@@ -557,17 +559,13 @@ class Word2VecModel private[spark] (
       }
       ind += 1
     }
-    var topResults = wordList.zip(cosVec)
+
+    wordList.zip(cosVec)
       .toSeq
       .sortBy(-_._2)
       .take(num + 1)
       .tail
-    if (vecNorm != 0.0f) {
-      topResults = topResults.map { case (word, cosVal) =>
-        (word, cosVal / vecNorm)
-      }
-    }
-    topResults.toArray
+      .toArray
   }
 
   /**

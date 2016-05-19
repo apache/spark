@@ -71,7 +71,9 @@ object CurrentOrigin {
   }
 }
 
+// scalastyle:off
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+// scalastyle:on
   self: BaseType =>
 
   val origin: Origin = CurrentOrigin.get
@@ -83,6 +85,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def children: Seq[BaseType]
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
+
+  private lazy val _hashCode: Int = scala.util.hashing.MurmurHash3.productHash(this)
+  override def hashCode(): Int = _hashCode
 
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
@@ -408,8 +413,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
-  /** Returns the name of this type of TreeNode.  Defaults to the class name. */
-  def nodeName: String = getClass.getSimpleName
+  /**
+   * Returns the name of this type of TreeNode.  Defaults to the class name.
+   * Note that we remove the "Exec" suffix for physical operators here.
+   */
+  def nodeName: String = getClass.getSimpleName.replaceAll("Exec$", "")
 
   /**
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
@@ -426,7 +434,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case other => other :: Nil
   }.mkString(", ")
 
-  /** String representation of this node without any children */
+  /** String representation of this node without any children. */
   def simpleString: String = s"$nodeName $argString".trim
 
   override def toString: String = treeString

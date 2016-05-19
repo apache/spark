@@ -107,8 +107,8 @@ abstract class InputDStream[T: ClassTag](_ssc: StreamingContext)
   }
 
   /** Method called to start receiving data. Subclasses must implement this method. */
-  def start()
+  def start(): Unit
 
   /** Method called to stop receiving data. Subclasses must implement this method. */
-  def stop()
+  def stop(): Unit
 }

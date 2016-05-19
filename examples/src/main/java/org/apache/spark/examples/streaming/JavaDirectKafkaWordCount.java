@@ -21,6 +21,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.Map;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 import scala.Tuple2;
@@ -47,7 +49,7 @@ import org.apache.spark.streaming.Durations;
 public final class JavaDirectKafkaWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length < 2) {
       System.err.println("Usage: JavaDirectKafkaWordCount <brokers> <topics>\n" +
           "  <brokers> is a list of one or more Kafka brokers\n" +
@@ -64,8 +66,8 @@ public final class JavaDirectKafkaWordCount {
     SparkConf sparkConf = new SparkConf().setAppName("JavaDirectKafkaWordCount");
     JavaStreamingContext jssc = new JavaStreamingContext(sparkConf, Durations.seconds(2));
 
-    HashSet<String> topicsSet = new HashSet<>(Arrays.asList(topics.split(",")));
-    HashMap<String, String> kafkaParams = new HashMap<>();
+    Set<String> topicsSet = new HashSet<>(Arrays.asList(topics.split(",")));
+    Map<String, String> kafkaParams = new HashMap<>();
     kafkaParams.put("metadata.broker.list", brokers);
 
     // Create direct kafka stream with brokers and topics

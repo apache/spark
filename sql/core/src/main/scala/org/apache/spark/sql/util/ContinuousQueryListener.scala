@@ -37,7 +37,7 @@ abstract class ContinuousQueryListener {
    *       `DataFrameWriter.startStream()` returns the corresponding [[ContinuousQuery]]. Please
    *       don't block this method as it will block your query.
    */
-  def onQueryStarted(queryStarted: QueryStarted)
+  def onQueryStarted(queryStarted: QueryStarted): Unit
 
   /**
    * Called when there is some status update (ingestion rate updated, etc.)
@@ -47,10 +47,10 @@ abstract class ContinuousQueryListener {
    *       may be changed before/when you process the event. E.g., you may find [[ContinuousQuery]]
    *       is terminated when you are processing [[QueryProgress]].
    */
-  def onQueryProgress(queryProgress: QueryProgress)
+  def onQueryProgress(queryProgress: QueryProgress): Unit
 
   /** Called when a query is stopped, with or without error */
-  def onQueryTerminated(queryTerminated: QueryTerminated)
+  def onQueryTerminated(queryTerminated: QueryTerminated): Unit
 }
 
 

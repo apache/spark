@@ -26,16 +26,17 @@ import sys
 import tempfile
 import shutil
 
-from pyspark import SparkContext
-from pyspark.sql import SQLContext
+from pyspark.sql import SparkSession
 from pyspark.mllib.stat import Statistics
 
 if __name__ == "__main__":
     if len(sys.argv) > 2:
         print("Usage: dataframe_example.py <libsvm file>", file=sys.stderr)
         exit(-1)
-    sc = SparkContext(appName="DataFrameExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession\
+        .builder\
+        .appName("DataFrameExample")\
+        .getOrCreate()
     if len(sys.argv) == 2:
         input = sys.argv[1]
     else:
@@ -43,7 +44,7 @@ if __name__ == "__main__":
 
     # Load input data
     print("Loading LIBSVM file with UDT from " + input + ".")
-    df = sqlContext.read.format("libsvm").load(input).cache()
+    df = spark.read.format("libsvm").load(input).cache()
     print("Schema from LIBSVM:")
     df.printSchema()
     print("Loaded training data as a DataFrame with " +
@@ -54,7 +55,7 @@ if __name__ == "__main__":
     labelSummary.show()
 
     # Convert features column to an RDD of vectors.
-    features = df.select("features").map(lambda r: r.features)
+    features = df.select("features").rdd.map(lambda r: r.features)
     summary = Statistics.colStats(features)
     print("Selected features column with average values:\n" +
           str(summary.mean()))
@@ -67,9 +68,9 @@ if __name__ == "__main__":
 
     # Load the records back.
     print("Loading Parquet file with UDT from " + tempdir)
-    newDF = sqlContext.read.parquet(tempdir)
+    newDF = spark.read.parquet(tempdir)
     print("Schema from Parquet:")
     newDF.printSchema()
     shutil.rmtree(tempdir)
 
-    sc.stop()
+    spark.stop()

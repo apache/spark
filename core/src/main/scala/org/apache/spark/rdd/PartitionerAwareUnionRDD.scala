@@ -31,12 +31,13 @@ import org.apache.spark.util.Utils
 private[spark]
 class PartitionerAwareUnionRDDPartition(
     @transient val rdds: Seq[RDD[_]],
-    val idx: Int
+    override val index: Int
   ) extends Partition {
-  var parents = rdds.map(_.partitions(idx)).toArray
+  var parents = rdds.map(_.partitions(index)).toArray
 
-  override val index = idx
-  override def hashCode(): Int = idx
+  override def hashCode(): Int = index
+
+  override def equals(other: Any): Boolean = super.equals(other)
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {
@@ -68,9 +69,9 @@ class PartitionerAwareUnionRDD[T: ClassTag](
 
   override def getPartitions: Array[Partition] = {
     val numPartitions = partitioner.get.numPartitions
-    (0 until numPartitions).map(index => {
+    (0 until numPartitions).map { index =>
       new PartitionerAwareUnionRDDPartition(rdds, index)
-    }).toArray
+    }.toArray
   }
 
   // Get the location where most of the partitions of parent RDDs are located

@@ -139,8 +139,6 @@ class Column(object):
         df.colName + 1
         1 / df.colName
 
-    .. note:: Experimental
-
     .. versionadded:: 1.3
     """
 
@@ -418,8 +416,6 @@ class Column(object):
         >>> window = Window.partitionBy("name").orderBy("age").rowsBetween(-1, 1)
         >>> from pyspark.sql.functions import rank, min
         >>> # df.select(rank().over(window), min('age').over(window))
-
-        .. note:: Window functions is only supported with HiveContext in 1.4
         """
         from pyspark.sql.window import WindowSpec
         if not isinstance(window, WindowSpec):

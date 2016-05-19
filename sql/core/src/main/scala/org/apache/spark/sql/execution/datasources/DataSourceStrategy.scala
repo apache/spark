@@ -19,14 +19,13 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.TaskContext
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
-import org.apache.spark.rdd.{MapPartitionsRDD, RDD, UnionRDD}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters.convertToScala
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, SimpleCatalogRelation}
 import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -34,15 +33,11 @@ import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.DataSourceScan.{INPUT_PATHS, PUSHED_FILTERS}
-import org.apache.spark.sql.execution.SparkPlan
-import org.apache.spark.sql.execution.command.ExecutedCommand
-import org.apache.spark.sql.execution.vectorized.{ColumnarBatch, ColumnVectorUtils}
+import org.apache.spark.sql.execution.DataSourceScanExec.PUSHED_FILTERS
+import org.apache.spark.sql.execution.command.{CreateDataSourceTableUtils, DDLUtils, ExecutedCommandExec}
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
-import org.apache.spark.util.{SerializableConfiguration, Utils}
-import org.apache.spark.util.collection.BitSet
 
 /**
  * Replaces generic operations with specific variants that are designed to work with Spark
@@ -83,6 +78,48 @@ private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
   }
 }
 
+
+/**
+ * Replaces [[SimpleCatalogRelation]] with data source table if its table property contains data
+ * source information.
+ */
+private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[LogicalPlan] {
+  private def readDataSourceTable(sparkSession: SparkSession, table: CatalogTable): LogicalPlan = {
+    val userSpecifiedSchema = DDLUtils.getSchemaFromTableProperties(table)
+
+    // We only need names at here since userSpecifiedSchema we loaded from the metastore
+    // contains partition columns. We can always get datatypes of partitioning columns
+    // from userSpecifiedSchema.
+    val partitionColumns = DDLUtils.getPartitionColumnsFromTableProperties(table)
+
+    val bucketSpec = DDLUtils.getBucketSpecFromTableProperties(table)
+
+    val options = table.storage.serdeProperties
+    val dataSource =
+      DataSource(
+        sparkSession,
+        userSpecifiedSchema = userSpecifiedSchema,
+        partitionColumns = partitionColumns,
+        bucketSpec = bucketSpec,
+        className = table.properties("spark.sql.sources.provider"),
+        options = options)
+
+    LogicalRelation(
+      dataSource.resolveRelation(),
+      metastoreTableIdentifier = Some(table.identifier))
+  }
+
+  override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
+        if DDLUtils.isDatasourceTable(s.metadata) =>
+      i.copy(table = readDataSourceTable(sparkSession, s.metadata))
+
+    case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
+      readDataSourceTable(sparkSession, s.metadata)
+  }
+}
+
+
 /**
  * A Strategy for planning scans over data sources defined using the sources API.
  */
@@ -111,12 +148,12 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         (a, _) => toCatalystRDD(l, a, t.buildScan(a.map(_.name).toArray))) :: Nil
 
     case l @ LogicalRelation(baseRelation: TableScan, _, _) =>
-      execution.DataSourceScan.create(
+      execution.DataSourceScanExec.create(
         l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
-      ExecutedCommand(InsertIntoDataSource(l, query, overwrite)) :: Nil
+      ExecutedCommandExec(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil
   }
@@ -198,11 +235,6 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         pairs += (PUSHED_FILTERS -> pushedFilters.mkString("[", ", ", "]"))
       }
 
-      relation.relation match {
-        case r: HadoopFsRelation => pairs += INPUT_PATHS -> r.location.paths.mkString(", ")
-        case _ =>
-      }
-
       pairs.toMap
     }
 
@@ -220,22 +252,22 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         // Don't request columns that are only referenced by pushed filters.
         .filterNot(handledSet.contains)
 
-      val scan = execution.DataSourceScan.create(
+      val scan = execution.DataSourceScanExec.create(
         projects.map(_.toAttribute),
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata)
-      filterCondition.map(execution.Filter(_, scan)).getOrElse(scan)
+        relation.relation, metadata, relation.metastoreTableIdentifier)
+      filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan)
     } else {
       // Don't request columns that are only referenced by pushed filters.
       val requestedColumns =
         (projectSet ++ filterSet -- handledSet).map(relation.attributeMap).toSeq
 
-      val scan = execution.DataSourceScan.create(
+      val scan = execution.DataSourceScanExec.create(
         requestedColumns,
         scanBuilder(requestedColumns, candidatePredicates, pushedFilters),
-        relation.relation, metadata)
-      execution.Project(
-        projects, filterCondition.map(execution.Filter(_, scan)).getOrElse(scan))
+        relation.relation, metadata, relation.metastoreTableIdentifier)
+      execution.ProjectExec(
+        projects, filterCondition.map(execution.FilterExec(_, scan)).getOrElse(scan))
     }
   }
 

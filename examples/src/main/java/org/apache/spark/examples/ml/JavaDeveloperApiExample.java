@@ -21,21 +21,19 @@ import java.util.List;
 
 import com.google.common.collect.Lists;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.Classifier;
 import org.apache.spark.ml.classification.ClassificationModel;
+import org.apache.spark.ml.feature.LabeledPoint;
+import org.apache.spark.ml.linalg.BLAS;
+import org.apache.spark.ml.linalg.Vector;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.ml.param.IntParam;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.ml.util.Identifiable$;
-import org.apache.spark.mllib.linalg.BLAS;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.mllib.regression.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 
 /**
@@ -51,9 +49,10 @@ import org.apache.spark.sql.SQLContext;
 public class JavaDeveloperApiExample {
 
   public static void main(String[] args) throws Exception {
-    SparkConf conf = new SparkConf().setAppName("JavaDeveloperApiExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaDeveloperApiExample")
+      .getOrCreate();
 
     // Prepare training data.
     List<LabeledPoint> localTraining = Lists.newArrayList(
@@ -61,10 +60,9 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(0.0, Vectors.dense(2.0, 1.0, -1.0)),
         new LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5)));
-    Dataset<Row> training = jsql.createDataFrame(
-        jsc.parallelize(localTraining), LabeledPoint.class);
+    Dataset<Row> training = spark.createDataFrame(localTraining, LabeledPoint.class);
 
-    // Create a LogisticRegression instance.  This instance is an Estimator.
+    // Create a LogisticRegression instance. This instance is an Estimator.
     MyJavaLogisticRegression lr = new MyJavaLogisticRegression();
     // Print out the parameters, documentation, and any default values.
     System.out.println("MyJavaLogisticRegression parameters:\n" + lr.explainParams() + "\n");
@@ -72,7 +70,7 @@ public class JavaDeveloperApiExample {
     // We may set parameters using setter methods.
     lr.setMaxIter(10);
 
-    // Learn a LogisticRegression model.  This uses the parameters stored in lr.
+    // Learn a LogisticRegression model. This uses the parameters stored in lr.
     MyJavaLogisticRegressionModel model = lr.fit(training);
 
     // Prepare test data.
@@ -80,7 +78,7 @@ public class JavaDeveloperApiExample {
         new LabeledPoint(1.0, Vectors.dense(-1.0, 1.5, 1.3)),
         new LabeledPoint(0.0, Vectors.dense(3.0, 2.0, -0.1)),
         new LabeledPoint(1.0, Vectors.dense(0.0, 2.2, -1.5)));
-    Dataset<Row> test = jsql.createDataFrame(jsc.parallelize(localTest), LabeledPoint.class);
+    Dataset<Row> test = spark.createDataFrame(localTest, LabeledPoint.class);
 
     // Make predictions on test documents. cvModel uses the best model found (lrModel).
     Dataset<Row> results = model.transform(test);
@@ -93,7 +91,7 @@ public class JavaDeveloperApiExample {
           " even though all coefficients are 0!");
     }
 
-    jsc.stop();
+    spark.stop();
   }
 }
 
@@ -216,7 +214,7 @@ class MyJavaLogisticRegressionModel
   }
 
   /**
-   * Number of classes the label can take.  2 indicates binary classification.
+   * Number of classes the label can take. 2 indicates binary classification.
    */
   public int numClasses() { return 2; }
 

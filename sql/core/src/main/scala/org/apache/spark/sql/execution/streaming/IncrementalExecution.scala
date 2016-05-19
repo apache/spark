@@ -17,51 +17,54 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.SQLContext
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.analysis.OutputMode
+import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryNode}
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
  * plan incrementally. Possibly preserving state in between each execution.
  */
-class IncrementalExecution(
-    ctx: SQLContext,
+class IncrementalExecution private[sql](
+    sparkSession: SparkSession,
     logicalPlan: LogicalPlan,
+    outputMode: OutputMode,
     checkpointLocation: String,
-    currentBatchId: Long) extends QueryExecution(ctx, logicalPlan) {
+    val currentBatchId: Long)
+  extends QueryExecution(sparkSession, logicalPlan) {
 
   // TODO: make this always part of planning.
-  val stateStrategy = sqlContext.sessionState.planner.StatefulAggregationStrategy :: Nil
+  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy :: Nil
 
   // Modified planner with stateful operations.
   override def planner: SparkPlanner =
     new SparkPlanner(
-      sqlContext.sparkContext,
-      sqlContext.conf,
+      sparkSession.sparkContext,
+      sparkSession.sessionState.conf,
       stateStrategy)
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`
-   * preperation walks the query plan.
+   * preparation walks the query plan.
    */
   private var operatorId = 0
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSave(keys, None,
-             UnaryNode(agg,
-               StateStoreRestore(keys2, None, child))) =>
-        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId - 1)
+      case StateStoreSaveExec(keys, None,
+             UnaryExecNode(agg,
+               StateStoreRestoreExec(keys2, None, child))) =>
+        val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
         operatorId += 1
 
-        StateStoreSave(
+        StateStoreSaveExec(
           keys,
           Some(stateId),
           agg.withNewChildren(
-            StateStoreRestore(
+            StateStoreRestoreExec(
               keys,
               Some(stateId),
               child) :: Nil))
@@ -69,4 +72,7 @@ class IncrementalExecution(
   }
 
   override def preparations: Seq[Rule[SparkPlan]] = state +: super.preparations
+
+  /** No need assert supported, as this check has already been done */
+  override def assertSupported(): Unit = { }
 }

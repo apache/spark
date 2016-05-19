@@ -44,7 +44,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.base.Throwables;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
@@ -1644,7 +1643,7 @@ public class JavaAPISuite implements Serializable {
           return new Tuple2<>(i % 2, 1);
         }
       });
-    Map<Integer, Object> fractions = Maps.newHashMap();
+    Map<Integer, Double> fractions = new HashMap<>();
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wr = rdd2.sampleByKey(true, fractions, 1L);
@@ -1670,7 +1669,7 @@ public class JavaAPISuite implements Serializable {
               return new Tuple2<>(i % 2, 1);
           }
       });
-    Map<Integer, Object> fractions = Maps.newHashMap();
+    Map<Integer, Double> fractions = new HashMap<>();
     fractions.put(0, 0.5);
     fractions.put(1, 1.0);
     JavaPairRDD<Integer, Integer> wrExact = rdd2.sampleByKeyExact(true, fractions, 1L);
