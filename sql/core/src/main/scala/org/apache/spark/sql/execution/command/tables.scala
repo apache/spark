@@ -302,11 +302,12 @@ case class TruncateTable(
           Seq(table.storage.locationUri)
         }
       }
+      val hadoopConf = sparkSession.sessionState.newHadoopConf()
       locations.foreach { location =>
         if (location.isDefined) {
           val path = new Path(location.get)
           try {
-            val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+            val fs = path.getFileSystem(hadoopConf)
             fs.delete(path, true)
             fs.mkdirs(path)
           } catch {
