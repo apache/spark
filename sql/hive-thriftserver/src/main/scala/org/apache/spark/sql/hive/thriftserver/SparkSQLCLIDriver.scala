@@ -383,6 +383,7 @@ private[hive] class SparkSQLCLIDriver extends CliDriver with Logging {
             }
             ret = proc.run(cmd_1).getResponseCode
         // scalastyle:on println
+        }
       }
       ret
     }

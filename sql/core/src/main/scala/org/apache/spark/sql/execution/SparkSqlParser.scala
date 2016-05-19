@@ -715,7 +715,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   /**
    * Create an [[AddJar]] or [[AddFile]] command depending on the requested resource.
    */
-  override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
+  override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.DELETE != null || ctx.LIST != null) {
+      throw operationNotAllowed(s"LIST/DELETE resources", ctx)
+    }
     ctx.identifier.getText.toLowerCase match {
       case "file" => AddFile(remainder(ctx.identifier).trim)
       case "jar" => AddJar(remainder(ctx.identifier).trim)

@@ -239,6 +239,26 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       errorResponses = Seq("ParseException"))(
       "reload function;" -> "Error in query:"
     )
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("ParseException"))(
+      "list file;" -> "Error in query:"
+    )
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("ParseException"))(
+      "delete file /root/dummy;" -> "Error in query:"
+    )
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("ParseException"))(
+      "source /root/test.sql;" -> "Error in query:"
+    )
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("ParseException"))(
+      "dfs -ls;" -> "Error in query:"
+    )
+    runCliWithin(timeout = 2.minute,
+      errorResponses = Seq("ParseException"))(
+      "reset;" -> "Error in query:"
+    )
   }
 
   test("SPARK-11624 Spark SQL CLI should set sessionState only once") {

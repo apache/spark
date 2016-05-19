@@ -117,7 +117,7 @@ statement
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?                                      #truncateTable
-    | ADD identifier .*?                                               #addResource
+    | (ADD | DELETE | LIST) identifier .*?                             #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
@@ -173,8 +173,6 @@ unsupportedHiveNativeCommands
     | kw1=DFS
     | kw1=DELETE kw2=FROM
     | kw1=RELOAD kw2=FUNCTION
-    | kw1=DELETE kw2=(FILE | FILES | JAR | JARS | ARCHIVE | ARCHIVES)
-    | kw1=LIST kw2=(FILE | FILES | JAR | JARS | ARCHIVE | ARCHIVES)
     | kw1=SOURCE
     ;
 
@@ -643,9 +641,9 @@ nonReserved
     | NO | DATA
     | START | TRANSACTION | COMMIT | ROLLBACK
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
-    | EXCHANGE | ARCHIVE | UNARCHIVE | JAR | JARS | FILE | FILES | FILEFORMAT | TOUCH | COMPACT
-    | CONCATENATE | CHANGE | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT
-    | OUTPUTFORMAT | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | SOURCE | LIST
+    | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
+    | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
+    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | SOURCE | LIST
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | RELOAD | VALUES | COMMENT
     | ROLE | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL
@@ -826,12 +824,7 @@ DIRECTORIES: 'DIRECTORIES';
 LOCATION: 'LOCATION';
 EXCHANGE: 'EXCHANGE';
 ARCHIVE: 'ARCHIVE';
-ARCHIVES: 'ARCHIVES';
 UNARCHIVE: 'UNARCHIVE';
-JAR: 'JAR';
-JARS: 'JARS';
-FILE: 'FILE';
-FILES: 'FILES';
 FILEFORMAT: 'FILEFORMAT';
 TOUCH: 'TOUCH';
 COMPACT: 'COMPACT';
