@@ -29,7 +29,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 // TODO: merge this with DDLSuite (SPARK-14441)
-class DDLCommandSuite extends PlanTest {
+class PlanParserSuite extends PlanTest {
   private val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {

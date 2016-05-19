@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformati
 import org.apache.spark.sql.execution.command.{CreateTable, CreateTableAsSelectLogicalPlan, CreateTableLike, CreateViewCommand, LoadData}
 import org.apache.spark.sql.hive.test.TestHive
 
-class HiveDDLCommandSuite extends PlanTest {
+class HivePlanParserSuite extends PlanTest {
   val parser = TestHive.sessionState.sqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
