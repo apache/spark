@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
- * Evaluator for multiclass classification, which expects two input columns: score and label.
+ * Evaluator for multiclass classification, which expects two input columns: prediction and label.
  */
 @Since("1.5.0")
 @Experimental
