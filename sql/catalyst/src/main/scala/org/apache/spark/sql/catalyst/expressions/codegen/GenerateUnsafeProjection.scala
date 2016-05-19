@@ -390,9 +390,8 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       }
       """
 
-    val code = new CodeAndComment(codeBody, ctx.copyPlaceHolderToCommentMap())
-    lazy val formatted = CodeFormatter.format(code)
-    logDebug(s"code for ${expressions.mkString(",")}:\n$formatted")
+    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
+    logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
     c.generate(ctx.references.toArray).asInstanceOf[UnsafeProjection]

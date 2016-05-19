@@ -61,9 +61,8 @@ object GeneratePredicate extends CodeGenerator[Expression, (InternalRow) => Bool
         }
       }"""
 
-    val code = new CodeAndComment(codeBody, ctx.copyPlaceHolderToCommentMap())
-    lazy val formatted = CodeFormatter.format(code)
-    logDebug(s"Generated predicate '$predicate':\n$formatted")
+    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
+    logDebug(s"Generated predicate '$predicate':\n${CodeFormatter.format(code)}")
 
     val p = CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[Predicate]
     (r: InternalRow) => p.eval(r)

@@ -24,7 +24,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -78,8 +77,9 @@ trait CodegenSupport extends SparkPlan {
   final def produce(ctx: CodegenContext, parent: CodegenSupport): String = executeQuery {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
+    val placeHolder = ctx.registerComment(s"PRODUCE: ${this.simpleString}")
     s"""
-       |/*** PRODUCE: ${toCommentSafeString(this.simpleString)} */
+       |$placeHolder
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -146,9 +146,10 @@ trait CodegenSupport extends SparkPlan {
 
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
+    val placeHolder = ctx.registerComment(s"CONSUME: ${parent.simpleString}")
     s"""
        |
-       |/*** CONSUME: ${toCommentSafeString(parent.simpleString)} */
+       |$placeHolder
        |$evaluated
        |${parent.doConsume(ctx, inputVars, rowVar)}
      """.stripMargin
@@ -302,14 +303,14 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
+    val placeHolder =
+      ctx.registerMultilineComment(s"""Codegend pipeline for:\n${child.treeString.trim}""")
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
       }
 
-      /** Codegened pipeline for:
-       * ${toCommentSafeString(child.treeString.trim)}
-       */
+      $placeHolder
       final class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
@@ -336,7 +337,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     val cleanedSource =
       new CodeAndComment(
         CodeFormatter.stripExtraNewLines(source),
-        ctx.copyPlaceHolderToCommentMap())
+        ctx.getPlaceHolderToComments())
 
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)

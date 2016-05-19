@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -97,9 +96,7 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      val placeHolder = s"/*{${ctx.freshName("comment_placeholder")}}*/"
-      val comment = s"/* ${toCommentSafeString(this.toString)} */"
-      ctx.addCommentEntry(placeHolder, comment)
+      val placeHolder = ctx.registerComment(this.toString)
       ExprCode(placeHolder, subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
@@ -107,9 +104,7 @@ abstract class Expression extends TreeNode[Expression] {
       val ve = doGenCode(ctx, ExprCode("", isNull, value))
       if (ve.code.nonEmpty) {
         // Add `this` in the comment.
-        val placeHolder = s"/*{${ctx.freshName("comment_placeholder")}}*/"
-        val comment = s"/* ${toCommentSafeString(this.toString)} */"
-        ctx.addCommentEntry(placeHolder, comment)
+        val placeHolder = ctx.registerComment(this.toString)
         ve.copy(code = s"$placeHolder\n" + ve.code.trim)
       } else {
         ve

@@ -136,9 +136,8 @@ object GenerateOrdering extends CodeGenerator[Seq[SortOrder], Ordering[InternalR
         }
       }"""
 
-    val code = new CodeAndComment(codeBody, ctx.copyPlaceHolderToCommentMap())
-    lazy val formatted = CodeFormatter.format(code)
-    logDebug(s"Generated Ordering by ${ordering.mkString(",")}:\n$formatted")
+    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
+    logDebug(s"Generated Ordering by ${ordering.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     CodeGenerator.compile(code).generate(ctx.references.toArray).asInstanceOf[BaseOrdering]
   }

@@ -27,10 +27,12 @@ import org.apache.commons.lang3.StringUtils
  */
 object CodeFormatter {
   def format(code: CodeAndComment): String = {
-    StringUtils.replaceEach(
-      new CodeFormatter().addLines(code.body).result(),
-      code.comment.keys.toArray,
-      code.comment.values.toArray)
+    new CodeFormatter().addLines(
+      StringUtils.replaceEach(
+        code.body,
+        code.comment.keys.toArray,
+        code.comment.values.toArray)
+    ).result
   }
 
   def stripExtraNewLines(input: String): String = {
@@ -57,6 +59,7 @@ private class CodeFormatter {
   private var indentLevel = 0
   private var indentString = ""
   private var currentLine = 1
+  private var extraIndentSize = 0
 
   // Tracks the level of indentation in multi-line comment blocks.
   private var inCommentBlock = false
@@ -78,6 +81,7 @@ private class CodeFormatter {
         // Handle multi-line comments
         inCommentBlock = true
         indentLevelOutsideCommentBlock = indentLevel
+        extraIndentSize = 1
       } else if (line.startsWith("//")) {
         // Handle single line comments
         newIndentLevel = indentLevel
@@ -87,12 +91,15 @@ private class CodeFormatter {
       if (line.endsWith("*/")) {
         inCommentBlock = false
         newIndentLevel = indentLevelOutsideCommentBlock
+        extraIndentSize = 0
       }
     }
 
     // Lines starting with '}' should be de-indented even if they contain '{' after;
     // in addition, lines ending with ':' are typically labels
-    val thisLineIndent = if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {
+    val thisLineIndent =
+      if (!inCommentBlock &&
+          (line.startsWith("}") || line.startsWith(")") || line.endsWith(":"))) {
       " " * (indentSize * (indentLevel - 1))
     } else {
       indentString
@@ -102,7 +109,7 @@ private class CodeFormatter {
     code.append(line)
     code.append("\n")
     indentLevel = newIndentLevel
-    indentString = " " * (indentSize * newIndentLevel)
+    indentString = " " * (indentSize * newIndentLevel + extraIndentSize)
     currentLine += 1
   }
 

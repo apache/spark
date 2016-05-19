@@ -224,7 +224,7 @@ object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarItera
         }
       }"""
 
-    val code = new CodeAndComment(codeBody, ctx.copyPlaceHolderToCommentMap())
+    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
     lazy val formatted = CodeFormatter.format(code)
     logDebug(s"Generated ColumnarIterator:\n$formatted")
 
