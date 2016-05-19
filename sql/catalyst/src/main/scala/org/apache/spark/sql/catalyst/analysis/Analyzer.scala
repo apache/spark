@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogRelation, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -45,7 +45,9 @@ object SimpleAnalyzer extends Analyzer(
     new SessionCatalog(
       new InMemoryCatalog,
       EmptyFunctionRegistry,
-      new SimpleCatalystConf(caseSensitiveAnalysis = true)),
+      new SimpleCatalystConf(caseSensitiveAnalysis = true)) {
+      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
+    },
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
