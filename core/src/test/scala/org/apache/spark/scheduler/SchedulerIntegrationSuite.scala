@@ -17,9 +17,11 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.reflect.ClassTag
@@ -118,10 +120,6 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
 
   protected def assertDataStructuresEmpty(noFailure: Boolean = true): Unit = {
     if (noFailure) {
-      // When a job fails, we terminate before waiting for all the task end events to come in,
-      // so there might still be a running task set
-      assert(taskScheduler.runningTaskSets.isEmpty)
-      assert(!backend.hasTasks)
       if (failure != null) {
         // if there is a job failure, it can be a bit hard to tease the job failure msg apart
         // from the test failure msg, so we do a little extra formatting
@@ -135,6 +133,11 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
           stripMargin
         fail(msg)
       }
+      // When a job fails, we terminate before waiting for all the task end events to come in,
+      // so there might still be a running task set.  That is why we only check these conditions
+      // when the job succeeds
+      assert(taskScheduler.runningTaskSets.isEmpty)
+      assert(!backend.hasTasks)
     }
     assert(scheduler.activeJobs.isEmpty)
   }
@@ -182,7 +185,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
    * in particular, your `backendFunc` has to return quickly, it can't throw errors, (instead
    * it should send back the right TaskEndReason
    */
-  def withBackend(backendFunc: () => Unit)(testBody: => Unit): Unit = {
+  def withBackend[T](backendFunc: () => Unit)(testBody: => T): T = {
     val backendContinue = new AtomicBoolean(true)
     val backendThread = new Thread("mock backend thread") {
       override def run(): Unit = {
@@ -219,8 +222,8 @@ private[spark] abstract class MockBackend(
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
    */
-  def beginTask(): TaskDescription = synchronized {
-    val toRun = assignedTasksWaitingToRun.remove(assignedTasksWaitingToRun.size - 1)
+  def beginTask(): TaskDescription = {
+    val toRun = assignedTasksWaitingToRun.take()
     runningTasks += toRun
     toRun
   }
@@ -240,9 +243,12 @@ private[spark] abstract class MockBackend(
     synchronized {
       executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
       freeCores += taskScheduler.CPUS_PER_TASK
-      assignedTasksWaitingToRun -= task
     }
     reviveOffers()
+  }
+
+  def taskFailedWithException(task: TaskDescription, state: TaskState, exc: Exception): Unit = {
+    taskFailed(task, state, new ExceptionFailure(exc, Seq()))
   }
 
   /**
@@ -258,13 +264,12 @@ private[spark] abstract class MockBackend(
       synchronized {
         executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
         freeCores += taskScheduler.CPUS_PER_TASK
-        assignedTasksWaitingToRun -= task
       }
       reviveOffers()
     }
   }
 
-  private val assignedTasksWaitingToRun = ArrayBuffer[TaskDescription]()
+  private val assignedTasksWaitingToRun = new ArrayBlockingQueue[TaskDescription](10000)
   private val runningTasks = ArrayBuffer[TaskDescription]()
 
   def endTask(task: TaskDescription): Unit = synchronized {
@@ -272,11 +277,11 @@ private[spark] abstract class MockBackend(
   }
 
   def hasTasks: Boolean = synchronized {
-    assignedTasksWaitingToRun.nonEmpty || runningTasks.nonEmpty
+    !assignedTasksWaitingToRun.isEmpty() || runningTasks.nonEmpty
   }
 
-  def hasTasksWaitingToRun: Boolean = synchronized {
-    assignedTasksWaitingToRun.nonEmpty
+  def hasTasksWaitingToRun: Boolean = {
+    !assignedTasksWaitingToRun.isEmpty()
   }
 
   override def start(): Unit = {}
@@ -289,7 +294,9 @@ private[spark] abstract class MockBackend(
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
 
   def generateOffers(): Seq[WorkerOffer] = {
-    executorIdToExecutor.values.map { exec =>
+    executorIdToExecutor.values.filter { exec =>
+      exec.freeCores > 0
+    }.map { exec =>
       WorkerOffer(executorId = exec.executorId, host = exec.host,
         cores = exec.freeCores)
     }.toSeq
@@ -306,7 +313,7 @@ private[spark] abstract class MockBackend(
         executorIdToExecutor(task.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
       freeCores -= newTasks.size * taskScheduler.CPUS_PER_TASK
-      assignedTasksWaitingToRun ++= newTasks
+      assignedTasksWaitingToRun.addAll(newTasks.asJava)
     }
   }
 
