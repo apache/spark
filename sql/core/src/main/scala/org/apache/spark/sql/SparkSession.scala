@@ -646,6 +646,7 @@ object SparkSession {
 
     /**
      * Sets a name for the application, which will be shown in the Spark web UI.
+     * If no application name is set, a randomly generated name will be used.
      *
      * @since 2.0.0
      */
@@ -658,7 +659,7 @@ object SparkSession {
      * @since 2.0.0
      */
     def config(key: String, value: String): Builder = synchronized {
-      options += key -> value
+      options += (key -> value)
       this
     }
 
@@ -738,6 +739,9 @@ object SparkSession {
      * and if yes, return that one. If no valid global default SparkSession exists, the method
      * creates a new SparkSession and assigns the newly created SparkSession as the global default.
      *
+     * In case an existing SparkSession is returned, the config options specified in this builder
+     * will be applied to the existing SparkSession.
+     *
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
@@ -759,11 +763,17 @@ object SparkSession {
 
         // No active nor global default session. Create a new one.
         val sparkContext = userSuppliedContext.getOrElse {
+          // set app name if not given
+          if (!options.contains("spark.app.name")) {
+            options += "spark.app.name" -> java.util.UUID.randomUUID().toString
+          }
+
           val sparkConf = new SparkConf()
           options.foreach { case (k, v) => sparkConf.set(k, v) }
           SparkContext.getOrCreate(sparkConf)
         }
         session = new SparkSession(sparkContext)
+        options.foreach { case (k, v) => session.conf.set(k, v) }
         defaultSession.set(session)
 
         // Register a successfully instantiated context to the singleton. This should be at the
