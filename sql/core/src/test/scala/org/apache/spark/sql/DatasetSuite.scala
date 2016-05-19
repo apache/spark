@@ -507,7 +507,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val schema = StructType(Seq(
       StructField("f", StructType(Seq(
         StructField("a", StringType, nullable = true),
-        StructField("b", IntegerType, nullable = false)
+        StructField("b", IntegerType, nullable = true)
       )), nullable = true)
     ))
 
@@ -684,7 +684,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val message = intercept[Exception] {
       df.collect()
     }.getMessage
-    assert(message.contains("The 0th field of input row cannot be null"))
+    assert(message.contains("The 0th field 'i' of input row cannot be null"))
+  }
+
+  test("row nullability mismatch") {
+    val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
+    val rdd = sqlContext.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
+    val message = intercept[Exception] {
+      sqlContext.createDataFrame(rdd, schema).collect()
+    }.getMessage
+    assert(message.contains("The 1th field 'b' of input row cannot be null"))
   }
 
   test("createTempView") {

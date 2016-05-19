@@ -286,6 +286,9 @@ class DataFrameReader(object):
     @since(1.6)
     def text(self, paths):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+        If the directory structure of the text files contains partitioning information,
+        those are ignored in the resulting DataFrame. To include partitioning information as
+        columns, use ``read.format('text').load(...)``.
 
         Each line in the text file is a new row in the resulting DataFrame.
 
