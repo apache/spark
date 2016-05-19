@@ -94,7 +94,7 @@ case class DeserializeToObjectExec(
  */
 case class SerializeFromObjectExec(
     serializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryExecNode with ObjectConsumerExec with CodegenSupport {
+    child: SparkPlan) extends ObjectConsumerExec with CodegenSupport {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 
@@ -165,7 +165,7 @@ case class MapPartitionsExec(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
     child: SparkPlan)
-  extends UnaryExecNode with ObjectProducerExec with ObjectConsumerExec {
+  extends ObjectConsumerExec with ObjectProducerExec {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsInternal { iter =>
@@ -187,7 +187,7 @@ case class MapElementsExec(
     func: AnyRef,
     outputObjAttr: Attribute,
     child: SparkPlan)
-  extends UnaryExecNode with ObjectProducerExec with ObjectConsumerExec with CodegenSupport {
+  extends ObjectConsumerExec with ObjectProducerExec with CodegenSupport {
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
     child.asInstanceOf[CodegenSupport].inputRDDs()
@@ -264,7 +264,7 @@ case class AppendColumnsWithObjectExec(
     func: Any => Any,
     inputSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: SparkPlan) extends UnaryExecNode with ObjectConsumerExec {
+    child: SparkPlan) extends ObjectConsumerExec {
 
   override def output: Seq[Attribute] = (inputSerializer ++ newColumnsSerializer).map(_.toAttribute)
 
