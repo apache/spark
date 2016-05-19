@@ -164,8 +164,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
   }
 
   test("add and list jar files") {
-    val jarPath =
-      Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     try{
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
