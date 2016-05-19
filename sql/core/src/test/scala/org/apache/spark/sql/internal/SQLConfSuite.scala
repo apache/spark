@@ -76,7 +76,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("set command for display") {
-    spark.wrapped.conf.clear()
+    spark.sessionState.conf.clear()
     checkAnswer(
       sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
       Nil)
