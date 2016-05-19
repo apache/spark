@@ -126,8 +126,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     >>> bce_path = temp_path + "/bce"
     >>> evaluator.save(bce_path)
     >>> evaluator2 = BinaryClassificationEvaluator.load(bce_path)
-    >>> evaluator2.getRawPredictionCol()
-    u'raw'
+    >>> str(evaluator2.getRawPredictionCol())
+    'raw'
 
     .. versionadded:: 1.4.0
     """
@@ -201,8 +201,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
     >>> re_path = temp_path + "/re"
     >>> evaluator.save(re_path)
     >>> evaluator2 = RegressionEvaluator.load(re_path)
-    >>> evaluator2.getPredictionCol()
-    u'raw'
+    >>> str(evaluator2.getPredictionCol())
+    'raw'
 
     .. versionadded:: 1.4.0
     """
@@ -277,8 +277,8 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> mce_path = temp_path + "/mce"
     >>> evaluator.save(mce_path)
     >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
-    >>> evaluator2.getPredictionCol()
-    u'prediction'
+    >>> str(evaluator2.getPredictionCol())
+    'prediction'
 
     .. versionadded:: 1.5.0
     """
