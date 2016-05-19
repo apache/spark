@@ -21,7 +21,8 @@ from pyspark import since, keyword_only
 from pyspark.ml.wrapper import JavaParams
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasLabelCol, HasPredictionCol, HasRawPredictionCol
-from pyspark.ml.common import inherit_doc
+from pyspark.ml.util import JavaMLReadable, JavaMLWritable
+from pyspark.mllib.common import inherit_doc
 
 __all__ = ['Evaluator', 'BinaryClassificationEvaluator', 'RegressionEvaluator',
            'MulticlassClassificationEvaluator']
@@ -103,7 +104,8 @@ class JavaEvaluator(JavaParams, Evaluator):
 
 
 @inherit_doc
-class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol):
+class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPredictionCol,
+                                    JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -121,6 +123,11 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     0.70...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "areaUnderPR"})
     0.83...
+    >>> bce_path = temp_path + "/bce"
+    >>> evaluator.save(bce_path)
+    >>> evaluator2 = BinaryClassificationEvaluator.load(bce_path)
+    >>> evaluator2.getRawPredictionCol()
+    u'raw'
 
     .. versionadded:: 1.4.0
     """
@@ -172,7 +179,8 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
 
 
 @inherit_doc
-class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
+class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+                          JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -190,6 +198,11 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
     0.993...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "mae"})
     2.649...
+    >>> re_path = temp_path + "/re"
+    >>> evaluator.save(re_path)
+    >>> evaluator2 = RegressionEvaluator.load(re_path)
+    >>> evaluator2.getPredictionCol()
+    u'raw'
 
     .. versionadded:: 1.4.0
     """
@@ -244,7 +257,8 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 
 
 @inherit_doc
-class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
+class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol,
+                                        JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
@@ -260,6 +274,11 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     0.66...
     >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
     0.66...
+    >>> mce_path = temp_path + "/mce"
+    >>> evaluator.save(mce_path)
+    >>> evaluator2 = MulticlassClassificationEvaluator.load(mce_path)
+    >>> evaluator2.getPredictionCol()
+    u'prediction'
 
     .. versionadded:: 1.5.0
     """
@@ -311,19 +330,25 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
 
 if __name__ == "__main__":
     import doctest
+    import tempfile
+    import pyspark.ml.evaluation
     from pyspark.sql import SparkSession
-    globs = globals().copy()
+    globs = pyspark.ml.evaluation.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
     spark = SparkSession.builder\
         .master("local[2]")\
         .appName("ml.evaluation tests")\
         .getOrCreate()
-    sc = spark.sparkContext
-    globs['sc'] = sc
     globs['spark'] = spark
-    (failure_count, test_count) = doctest.testmod(
-        globs=globs, optionflags=doctest.ELLIPSIS)
-    spark.stop()
-    if failure_count:
-        exit(-1)
+    temp_path = tempfile.mkdtemp()
+    globs['temp_path'] = temp_path
+    try:
+        (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
+        spark.stop()
+    finally:
+        from shutil import rmtree
+        try:
+            rmtree(temp_path)
+        except OSError:
+            pass
