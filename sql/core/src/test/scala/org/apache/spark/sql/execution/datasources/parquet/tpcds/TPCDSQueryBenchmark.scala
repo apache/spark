@@ -19,8 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet.tpcds
 
 import java.io.File
 
-import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.util._
@@ -33,17 +33,17 @@ import org.apache.spark.util.Benchmark
  *  spark-submit --class <this class> --jars <spark sql test jar>
  */
 object TPCDSQueryBenchmark {
-  val conf = new SparkConf()
-  conf.set("spark.sql.parquet.compression.codec", "snappy")
-  conf.set("spark.sql.shuffle.partitions", "4")
-  conf.set("spark.driver.memory", "3g")
-  conf.set("spark.executor.memory", "3g")
-  conf.set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
+  val conf =
+    new SparkConf()
+      .setMaster("local[1]")
+      .setAppName("test-sql-context")
+      .set("spark.sql.parquet.compression.codec", "snappy")
+      .set("spark.sql.shuffle.partitions", "4")
+      .set("spark.driver.memory", "3g")
+      .set("spark.executor.memory", "3g")
+      .set("spark.sql.autoBroadcastJoinThreshold", (20 * 1024 * 1024).toString)
 
-  val sc = new SparkContext("local[1]", "test-sql-context", conf)
-  val sqlContext = new SQLContext(sc)
-
-  // modified q9
+  val spark = SparkSession.builder.config(conf).getOrCreate()
 
   val queries = Seq(
     "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11",
@@ -56,7 +56,6 @@ object TPCDSQueryBenchmark {
     "q71", "q72", "q73", "q74", "q75", "q76", "q77", "q78", "q79", "q80",
     "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
     "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99", "ss_max")
-    .filter(_ != "q41") // Exclude 41; 72 is long!
 
   val tables = Seq("catalog_page", "catalog_returns", "customer", "customer_address",
     "customer_demographics", "date_dim", "household_demographics", "inventory", "item",
@@ -66,8 +65,8 @@ object TPCDSQueryBenchmark {
 
   def setupTables(dataLocation: String): Map[String, Long] = {
     tables.map { tableName =>
-      sqlContext.read.parquet(s"$dataLocation/$tableName").registerTempTable(tableName)
-      tableName -> sqlContext.table(tableName).count()
+      spark.read.parquet(s"$dataLocation/$tableName").registerTempTable(tableName)
+      tableName -> spark.table(tableName).count()
     }.toMap
   }
 
@@ -75,19 +74,19 @@ object TPCDSQueryBenchmark {
     require(dataLocation.nonEmpty,
       "please modify the value of dataLocation to point to your local TPCDS data")
     val tableSizes = setupTables(dataLocation)
-    sqlContext.conf.setConfString(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
-    sqlContext.conf.setConfString(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
+    spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
+    spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
     queries.foreach { name =>
       val queriesString = fileToString(new File(s"sql/core/src/test/scala/org/apache/spark/sql/" +
         s"execution/datasources/parquet/tpcds/queries/$name.sql"))
-      val numRows = sqlContext.sql(queriesString).queryExecution.logical.map {
+      val numRows = spark.sql(queriesString).queryExecution.logical.map {
         case ur@UnresolvedRelation(t: TableIdentifier, _) =>
           tableSizes.getOrElse(t.table, 0L)
         case _ => 0L
       }.sum
       val benchmark = new Benchmark("TPCDS Snappy (scale = 5)", numRows, 1)
       benchmark.addCase(name) { i =>
-        sqlContext.sql(queriesString).collect()
+        spark.sql(queriesString).collect()
       }
       benchmark.run()
     }
