@@ -479,9 +479,20 @@ others.
 The `spark.ml` GLM implements the method of 
 [iteratively reweighted least squares](https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares) (IRLS) for finding
 the optimal regression coefficients. GLMs seek to find a maximum likelihood estimate of the
-regression coefficients by finding zeros of the [score equation](https://en.wikipedia.org/wiki/Score_(statistics)). 
-The IRLS solver casts a first-order Taylor approximation of the score equation to a weighted least squares regression and solves it
-iteratively until convergence.
+regression coefficients by finding zeros of the [score equation](https://en.wikipedia.org/wiki/Score_(statistics)). The
+The method of IRLS uses a first-order approximation of the score equation in the vicinity of an initial guess for the 
+ $\vec{\mu}$ vector. This approximation can be manipulated to the form of a weighted least squares regression which can
+ be solved easily using a normal equation solver. Solving this weighted least squares problem yields a (likely poor) approximation
+ to the regression coefficients $\vec{\beta}$. However, this approximation can be used to find an improved guess for $\vec{\mu}$
+ using the fact that $\vec{\mu} = g^{-1}(X\vec{\beta})$, which can, in turn, generate a better approximation to $\vec{\beta}$ by
+ solving the weighted least squares problem again. The true value of $\vec{\beta}$ is found by repeatedly solving weighted least
+ squares problems in this manner (hence the name, iteratively weighted least squares).
+
+ Solving the normal equations for a linear system $A\vec{x} = \vec{b}$ involves 
+ inverting the covariance matrix $A^TA$. If $A$ is an $MxN$ matrix, then $A^TA$ has dimension $NxN$. When N is relatively
+ small (<4096) then the covariance matrix can (generally) fit into main memory on the driver node and the linear system can
+ then be solved using well-established linear subroutines like the Cholesky decomposition. For this reason, it is important
+ to note that the `spark.ml` generalized linear regression module currently does not accept more than 4096 feature columns.
 
 ### Input Columns
 
