@@ -1359,7 +1359,7 @@ def levenshtein(left, right):
 
 
 @since(1.5)
-def locate(substr, str, pos=0):
+def locate(substr, str, pos=1):
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
 
