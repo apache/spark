@@ -656,7 +656,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
-
+  override def foldable: Boolean = false
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any =
