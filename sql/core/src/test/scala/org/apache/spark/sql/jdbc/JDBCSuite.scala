@@ -441,7 +441,7 @@ class JDBCSuite extends SparkFunSuite
   test("test DATE types in cache") {
     val rows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties).collect()
     spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties)
-      .cache().registerTempTable("mycached_date")
+      .cache().createOrReplaceTempView("mycached_date")
     val cachedRows = sql("select * from mycached_date").collect()
     assert(rows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))
     assert(cachedRows(0).getAs[java.sql.Date](1) === java.sql.Date.valueOf("1996-01-01"))

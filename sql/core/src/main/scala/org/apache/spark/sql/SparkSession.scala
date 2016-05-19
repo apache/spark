@@ -39,7 +39,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -68,6 +68,7 @@ class SparkSession private(
     this(sc, None)
   }
 
+  sparkContext.assertNotStopped()
 
   /* ----------------------- *
    |  Session-related state  |
@@ -477,8 +478,8 @@ class SparkSession private(
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[InternalRow])
+      val encoder = RowEncoder(schema)
+      rowRDD.map(encoder.toRow)
     } else {
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
@@ -755,7 +756,7 @@ object SparkSession {
    * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
    * @since 2.0.0
    */
-  def builder: Builder = new Builder
+  def builder(): Builder = new Builder
 
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"

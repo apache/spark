@@ -70,7 +70,7 @@ if __name__ == "__main__":
             rowRdd = rdd.map(lambda w: Row(word=w))
             wordsDataFrame = spark.createDataFrame(rowRdd)
 
-            # Register as table
+            # Creates a temporary view using the DataFrame.
             wordsDataFrame.createOrReplaceTempView("words")
 
             # Do word count on table using SQL and print it

@@ -22,11 +22,14 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -127,7 +130,7 @@ class KMeansModel private[ml] (
   private[clustering] def predict(features: Vector): Int = parentModel.predict(features)
 
   @Since("1.5.0")
-  def clusterCenters: Array[Vector] = parentModel.clusterCenters
+  def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
 
   /**
    * Return the K-means cost (sum of squared distances of points to their nearest center) for this
@@ -137,7 +140,9 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   def computeCost(dataset: Dataset[_]): Double = {
     SchemaUtils.checkColumnType(dataset.schema, $(featuresCol), new VectorUDT)
-    val data = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    val data: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
+    }
     parentModel.computeCost(data)
   }
 
@@ -180,6 +185,12 @@ object KMeansModel extends MLReadable[KMeansModel] {
   /** Helper class for storing model data */
   private case class Data(clusterIdx: Int, clusterCenter: Vector)
 
+  /**
+   * We store all cluster centers in a single row and use this class to store model data by
+   * Spark 1.6 and earlier. A model can be loaded from such older data for backward compatibility.
+   */
+  private case class OldData(clusterCenters: Array[OldVector])
+
   /** [[MLWriter]] instance for [[KMeansModel]] */
   private[KMeansModel] class KMeansModelWriter(instance: KMeansModel) extends MLWriter {
 
@@ -206,12 +217,19 @@ object KMeansModel extends MLReadable[KMeansModel] {
       import sqlContext.implicits._
 
       val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
-
       val dataPath = new Path(path, "data").toString
-      val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
-      val clusterCenters = data.collect().sortBy(_.clusterIdx).map(_.clusterCenter)
-      val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
 
+      val versionRegex = "([0-9]+)\\.(.+)".r
+      val versionRegex(major, _) = metadata.sparkVersion
+
+      val clusterCenters = if (major.toInt >= 2) {
+        val data: Dataset[Data] = sqlContext.read.parquet(dataPath).as[Data]
+        data.collect().sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
+      } else {
+        // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.
+        sqlContext.read.parquet(dataPath).as[OldData].head().clusterCenters
+      }
+      val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
       DefaultParamsReader.getAndSetParams(model, metadata)
       model
     }
@@ -277,7 +295,9 @@ class KMeans @Since("1.5.0") (
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): KMeansModel = {
-    val rdd = dataset.select(col($(featuresCol))).rdd.map { case Row(point: Vector) => point }
+    val rdd: RDD[OldVector] = dataset.select(col($(featuresCol))).rdd.map {
+      case Row(point: Vector) => OldVectors.fromML(point)
+    }
 
     val instr = Instrumentation.create(this, rdd)
     instr.logParams(featuresCol, predictionCol, k, initMode, initSteps, maxIter, seed, tol)
