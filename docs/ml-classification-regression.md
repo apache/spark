@@ -440,33 +440,28 @@ others.
 <table class="table">
   <thead>
     <tr>
-      <th></th>
-      <th>PDF</th>
+      <th>Family</th>
       <th>Response Type</th>
       <th>Supported Links</th></tr>
   </thead>
   <tbody>
     <tr>
       <td>Gaussian</td>
-      <td>$\frac{1}{\sigma \sqrt{2\pi}} \exp \left( -\frac{(x - \mu)^2}{2\sigma^2}\right)$</td>
       <td>Continuous</td>
       <td>Identity*, Log, Inverse</td>
     </tr>
     <tr>
       <td>Binomial</td>
-      <td>$\binom{n}{k}p^k (1-p)^{n-k}$</td>
       <td>Binary</td>
       <td>Logit*, Probit, CLogLog</td>
     </tr>
     <tr>
       <td>Poisson</td>
-      <td>$\frac{\lambda^k e^{-\lambda}}{k!}$</td>
       <td>Count</td>
       <td>Log*, Identity, Sqrt</td>
     </tr>
     <tr>
       <td>Gamma</td>
-      <td>$\frac{\beta^{\alpha}}{\Gamma(\alpha)} x^{\alpha - 1} e^{-\beta x}$</td>
       <td>Continuous</td>
       <td>Inverse*, Idenity, Log</td>
     </tr>
@@ -483,77 +478,16 @@ regression coefficients by finding zeros of the [score equation](https://en.wiki
 The method of IRLS uses a first-order Taylor approximation of the score equation in the vicinity of an initial guess for the expected response
  $\vec{\mu}$. This approximation can be manipulated to the form of a simple weighted least squares regression, which is straightforward
  to solve using a normal equation solver. Solving this initial weighted least squares problem yields a (likely poor) approximation
- to the regression coefficients $\vec{\beta}$. This approximation of $\vec{\beta}$ generates an improved approximation for $\vec{\mu}$
+ to the regression coefficients $\vec{\beta}$. However, this approximation of $\vec{\beta}$ generates an improved approximation for $\vec{\mu}$
  using the fact that $\vec{\mu} = g^{-1}(X\vec{\beta})$. In turn, an even more improved approximation to $\vec{\beta}$ can be found
  solving the weighted least squares problem again. The true value of $\vec{\beta}$ is converged upon by repeatedly solving weighted least
  squares problems in this manner (hence the name, iteratively weighted least squares).
 
  Note that solving the normal equations, as in a weighted least squares, for a linear system $A\vec{x} = \vec{b}$ involves 
  inverting the covariance matrix $A^TA$. If $A$ is an $MxN$ matrix, then $A^TA$ has dimension $NxN$. When N is relatively
- small (<4096) then the covariance matrix can (generally) fit into main memory on the driver node and the linear system can
+ small (< 4096) then the covariance matrix can (generally) fit into main memory on the driver node and the linear system can
  then be solved using well-established linear subroutines like the Cholesky decomposition. For this reason, it is important
  to note that the `spark.ml` generalized linear regression module currently does not accept more than 4096 feature columns.
-
-### Input Columns
-
-<table class="table">
-  <thead>
-    <tr>
-      <th align="left">Param name</th>
-      <th align="left">Type(s)</th>
-      <th align="left">Default</th>
-      <th align="left">Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>labelCol</td>
-      <td>Double</td>
-      <td>"label"</td>
-      <td>Label to predict</td>
-    </tr>
-    <tr>
-      <td>featuresCol</td>
-      <td>Vector</td>
-      <td>"features"</td>
-      <td>Feature vector</td>
-    </tr>
-    <tr>
-      <td>weightCol</td>
-      <td>Double</td>
-      <td>""</td>
-      <td>Sample weights</td>
-    </tr>
-  </tbody>
-</table>
-
-### Output Columns
-
-<table class="table">
-  <thead>
-    <tr>
-      <th align="left">Param name</th>
-      <th align="left">Type(s)</th>
-      <th align="left">Default</th>
-      <th align="left">Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>predictionCol</td>
-      <td>Double</td>
-      <td>"prediction"</td>
-      <td>Predicted label</td>
-    </tr>
-    <tr>
-      <td>linkPredictionCol</td>
-      <td>Double</td>
-      <td>""</td>
-      <td>Linear predicted response</td>
-    </tr>
-  </tbody>
-</table>
-
 
 **Example**
 
@@ -563,14 +497,20 @@ function and extracting model summary statistics.
 <div class="codetabs">
 
 <div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression) for more details.
+
 {% include_example scala/org/apache/spark/examples/ml/GeneralizedLinearRegressionExample.scala %}
 </div>
 
 <div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GeneralizedLinearRegression.html) for more details.
+
 {% include_example java/org/apache/spark/examples/ml/JavaGeneralizedLinearRegressionExample.java %}
 </div>
 
 <div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
+
 {% include_example python/ml/generalized_linear_regression_example.py %}
 </div>
 
