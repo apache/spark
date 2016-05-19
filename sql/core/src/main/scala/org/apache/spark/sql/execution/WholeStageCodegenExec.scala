@@ -247,9 +247,7 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
      """.stripMargin
   }
 
-  override def simpleString: String = "INPUT"
-
-  override def treeChildren: Seq[SparkPlan] = Nil
+  override def simpleString: String = "CodegenInput"
 }
 
 object WholeStageCodegenExec {
@@ -398,19 +396,6 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       |${row.code}
       |append(${row.value}$doCopy);
      """.stripMargin.trim
-  }
-
-  override def innerChildren: Seq[SparkPlan] = {
-    child :: Nil
-  }
-
-  private def collectInputs(plan: SparkPlan): Seq[SparkPlan] = plan match {
-    case InputAdapter(c) => c :: Nil
-    case other => other.children.flatMap(collectInputs)
-  }
-
-  override def treeChildren: Seq[SparkPlan] = {
-    collectInputs(child)
   }
 
   override def simpleString: String = "WholeStageCodegen"
