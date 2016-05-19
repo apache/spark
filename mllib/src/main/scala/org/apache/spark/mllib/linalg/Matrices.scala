@@ -440,7 +440,6 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of zeros.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
@@ -454,7 +453,6 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of ones.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
@@ -468,7 +466,6 @@ object DenseMatrix {
 
   /**
    * Generate an Identity Matrix in `DenseMatrix` format.
-   *
    * @param n number of rows and columns of the matrix
    * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -485,7 +482,6 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` uniform random numbers.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -500,7 +496,6 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` gaussian random numbers.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -515,7 +510,6 @@ object DenseMatrix {
 
   /**
    * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
-   *
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
@@ -761,7 +755,6 @@ object SparseMatrix {
    * Generate a `SparseMatrix` from Coordinate List (COO) format. Input must be an array of
    * (i, j, value) tuples. Entries that have duplicate values of i and j are
    * added together. Tuples where value is equal to zero will be omitted.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param entries Array of (i, j, value) tuples
@@ -813,7 +806,6 @@ object SparseMatrix {
 
   /**
    * Generate an Identity Matrix in `SparseMatrix` format.
-   *
    * @param n number of rows and columns of the matrix
    * @return `SparseMatrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -895,7 +887,6 @@ object SparseMatrix {
 
   /**
    * Generate a `SparseMatrix` consisting of `i.i.d`. gaussian random numbers.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -910,7 +901,6 @@ object SparseMatrix {
 
   /**
    * Generate a diagonal matrix in `SparseMatrix` format from the supplied values.
-   *
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero
    *         `values` on the diagonal
@@ -973,7 +963,6 @@ object Matrices {
 
   /**
    * Creates a Matrix instance from a breeze matrix.
-   *
    * @param breeze a breeze matrix
    * @return a Matrix instance
    */
@@ -1000,7 +989,6 @@ object Matrices {
 
   /**
    * Generate a `Matrix` consisting of zeros.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of zeros
@@ -1010,7 +998,6 @@ object Matrices {
 
   /**
    * Generate a `DenseMatrix` consisting of ones.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of ones
@@ -1020,7 +1007,6 @@ object Matrices {
 
   /**
    * Generate a dense Identity Matrix in `Matrix` format.
-   *
    * @param n number of rows and columns of the matrix
    * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -1029,7 +1015,6 @@ object Matrices {
 
   /**
    * Generate a sparse Identity Matrix in `Matrix` format.
-   *
    * @param n number of rows and columns of the matrix
    * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -1038,7 +1023,6 @@ object Matrices {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` uniform random numbers.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -1050,7 +1034,6 @@ object Matrices {
 
   /**
    * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1063,7 +1046,6 @@ object Matrices {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` gaussian random numbers.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -1075,7 +1057,6 @@ object Matrices {
 
   /**
    * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
-   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1088,7 +1069,6 @@ object Matrices {
 
   /**
    * Generate a diagonal matrix in `Matrix` format from the supplied values.
-   *
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `Matrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal

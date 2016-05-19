@@ -175,6 +175,7 @@ object LBFGS extends Logging {
    *                         cause more iterations to be run.
    * @param maxNumIterations - Maximal number of iterations that L-BFGS can be run.
    * @param regParam - Regularization parameter
+   *
    * @return A tuple containing two elements. The first element is a column matrix containing
    *         weights for every feature, and the second element is an array containing the loss
    *         computed for every iteration.

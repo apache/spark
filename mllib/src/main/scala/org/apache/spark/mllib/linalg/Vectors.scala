@@ -107,7 +107,6 @@ sealed trait Vector extends Serializable {
 
   /**
    * Gets the value of the ith element.
- *
    * @param i index
    */
   @Since("1.1.0")
@@ -412,7 +411,6 @@ object Vectors {
 
   /**
    * Returns the p-norm of this vector.
- *
    * @param vector input vector.
    * @param p norm.
    * @return norm in L^p^ space.
@@ -466,7 +464,6 @@ object Vectors {
 
   /**
    * Returns the squared distance between two Vectors.
- *
    * @param v1 first Vector.
    * @param v2 second Vector.
    * @return squared distance between two Vectors.
@@ -883,7 +880,6 @@ class SparseVector @Since("1.0.0") (
 
   /**
    * Create a slice of this vector based on the given indices.
- *
    * @param selectedIndices Unsorted list of indices into the vector.
    *                        This does NOT do bound checking.
    * @return  New SparseVector with values in the order specified by the given indices.

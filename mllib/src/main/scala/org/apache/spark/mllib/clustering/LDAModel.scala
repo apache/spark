@@ -274,8 +274,7 @@ class LocalLDAModel private[spark] (
    *
    * See Equation (16) in original Online LDA paper, as well as Appendix A.3 in the JMLR version of
    * the original LDA paper.
-    *
-    * @param documents a subset of the test corpus
+   * @param documents a subset of the test corpus
    * @param alpha document-topic Dirichlet prior parameters
    * @param eta topic-word Dirichlet prior parameter
    * @param lambda parameters for variational q(beta | lambda) topic-word distributions
@@ -337,8 +336,7 @@ class LocalLDAModel private[spark] (
    * This uses a variational approximation following Hoffman et al. (2010), where the approximate
    * distribution is called "gamma."  Technically, this method returns this approximation "gamma"
    * for each document.
-    *
-    * @param documents documents to predict topic mixture distributions for
+   * @param documents documents to predict topic mixture distributions for
    * @return An RDD of (document ID, topic mixture distribution for document)
    */
   @Since("1.3.0")
@@ -779,8 +777,7 @@ class DistributedLDAModel private[clustering] (
 
   /**
    * For each document, return the top k weighted topics for that document and their weights.
-    *
-    * @return RDD of (doc ID, topic indices, topic weights)
+   * @return RDD of (doc ID, topic indices, topic weights)
    */
   @Since("1.5.0")
   def topTopicsPerDocument(k: Int): RDD[(Long, Array[Int], Array[Double])] = {

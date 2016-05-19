@@ -501,7 +501,6 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   /**
    * Update alpha based on `gammat`, the inferred topic distributions for documents in the
    * current mini-batch. Uses Newton-Rhapson method.
- *
    * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    */
@@ -559,8 +558,8 @@ private[clustering] object OnlineLDAOptimizer {
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
- *
    * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
+   *
    * @return Returns a tuple of `gammad` - estimate of gamma, the topic distribution, `sstatsd` -
    *         statistics for updating lambda and `ids` - list of termCounts vector indices.
    */

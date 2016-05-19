@@ -170,7 +170,8 @@ class RowMatrix @Since("1.0.0") (
    *
    * @note The conditions that decide which method to use internally and the default parameters are
    *       subject to change.
-    * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
+   *
+   * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
    *          It might return less than k if
    *          there are numerically zero singular values or there are not enough Ritz values
    *          converged before the maximum number of Arnoldi update iterations is reached (in case
@@ -320,8 +321,7 @@ class RowMatrix @Since("1.0.0") (
   /**
    * Computes the covariance matrix, treating each row as an observation. Note that this cannot
    * be computed on matrices with more than 65535 columns.
-    *
-    * @return a local dense matrix of size n x n
+   * @return a local dense matrix of size n x n
    */
   @Since("1.0.0")
   def computeCovariance(): Matrix = {
