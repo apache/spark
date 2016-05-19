@@ -139,8 +139,6 @@ class Column(object):
         df.colName + 1
         1 / df.colName
 
-    .. note:: Experimental
-
     .. versionadded:: 1.3
     """
 

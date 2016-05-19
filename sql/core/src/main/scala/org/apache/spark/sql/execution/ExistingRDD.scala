@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.commons.lang.StringUtils
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
@@ -127,8 +129,11 @@ private[sql] case class RDDScanExec(
 private[sql] trait DataSourceScanExec extends LeafExecNode {
   val rdd: RDD[InternalRow]
   val relation: BaseRelation
+  val metastoreTableIdentifier: Option[TableIdentifier]
 
-  override val nodeName: String = relation.toString
+  override val nodeName: String = {
+    s"Scan $relation ${metastoreTableIdentifier.map(_.unquotedString).getOrElse("")}"
+  }
 
   // Ignore rdd when checking results
   override def sameResult(plan: SparkPlan): Boolean = plan match {
@@ -143,7 +148,8 @@ private[sql] case class RowDataSourceScanExec(
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
-    override val metadata: Map[String, String] = Map.empty)
+    override val metadata: Map[String, String],
+    override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
@@ -174,8 +180,11 @@ private[sql] case class RowDataSourceScanExec(
   }
 
   override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
-    s"Scan $nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
+      key + ": " + StringUtils.abbreviate(value, 100)
+    }
+
+    s"$nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -212,7 +221,8 @@ private[sql] case class BatchedDataSourceScanExec(
     rdd: RDD[InternalRow],
     @transient relation: BaseRelation,
     override val outputPartitioning: Partitioning,
-    override val metadata: Map[String, String] = Map.empty)
+    override val metadata: Map[String, String],
+    override val metastoreTableIdentifier: Option[TableIdentifier])
   extends DataSourceScanExec with CodegenSupport {
 
   private[sql] override lazy val metrics =
@@ -224,9 +234,11 @@ private[sql] case class BatchedDataSourceScanExec(
   }
 
   override def simpleString: String = {
-    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield s"$key: $value"
+    val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
+      key + ": " + StringUtils.abbreviate(value, 100)
+    }
     val metadataStr = metadataEntries.mkString(" ", ", ", "")
-    s"BatchedScan $nodeName${output.mkString("[", ",", "]")}$metadataStr"
+    s"Batched$nodeName${output.mkString("[", ",", "]")}$metadataStr"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -325,7 +337,8 @@ private[sql] object DataSourceScanExec {
       output: Seq[Attribute],
       rdd: RDD[InternalRow],
       relation: BaseRelation,
-      metadata: Map[String, String] = Map.empty): DataSourceScanExec = {
+      metadata: Map[String, String] = Map.empty,
+      metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
@@ -351,9 +364,11 @@ private[sql] object DataSourceScanExec {
     relation match {
       case r: HadoopFsRelation
         if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
-        BatchedDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
+        BatchedDataSourceScanExec(
+          output, rdd, relation, outputPartitioning, metadata, metastoreTableIdentifier)
       case _ =>
-        RowDataSourceScanExec(output, rdd, relation, outputPartitioning, metadata)
+        RowDataSourceScanExec(
+          output, rdd, relation, outputPartitioning, metadata, metastoreTableIdentifier)
     }
   }
 }

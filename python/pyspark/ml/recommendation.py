@@ -110,10 +110,10 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
                           typeConverter=TypeConverters.toBoolean)
     alpha = Param(Params._dummy(), "alpha", "alpha for implicit preference",
                   typeConverter=TypeConverters.toFloat)
-    userCol = Param(Params._dummy(), "userCol", "column name for user ids",
-                    typeConverter=TypeConverters.toString)
-    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids",
-                    typeConverter=TypeConverters.toString)
+    userCol = Param(Params._dummy(), "userCol", "column name for user ids. Ids must be within " +
+                    "the integer value range.", typeConverter=TypeConverters.toString)
+    itemCol = Param(Params._dummy(), "itemCol", "column name for item ids. Ids must be within " +
+                    "the integer value range.", typeConverter=TypeConverters.toString)
     ratingCol = Param(Params._dummy(), "ratingCol", "column name for ratings",
                       typeConverter=TypeConverters.toString)
     nonnegative = Param(Params._dummy(), "nonnegative",

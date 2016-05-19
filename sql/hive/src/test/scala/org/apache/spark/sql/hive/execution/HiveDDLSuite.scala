@@ -72,7 +72,7 @@ class HiveDDLSuite
     }
   }
 
-  test("drop managed tables in default database") {
+  test("drop external tables in default database") {
     withTempDir { tmpDir =>
       val tabName = "tab1"
       withTable(tabName) {
@@ -88,13 +88,11 @@ class HiveDDLSuite
         val hiveTable =
           hiveContext.sessionState.catalog
             .getTableMetadata(TableIdentifier(tabName, Some("default")))
-        // It is a managed table, although it uses external in SQL
-        assert(hiveTable.tableType == CatalogTableType.MANAGED)
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
-        // The data are deleted since the table type is not EXTERNAL
-        assert(tmpDir.listFiles == null)
+        assert(tmpDir.listFiles.nonEmpty)
       }
     }
   }
@@ -186,10 +184,17 @@ class HiveDDLSuite
         // After data insertion, all the directory are not empty
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
+        val message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
+        }
+        assert(message.getMessage.contains(
+          "Partition spec is invalid. The spec (ds, unknowncol) must be contained within the " +
+            "partition spec (ds, hr) defined in table '`default`.`exttable_with_partitions`'"))
+
         sql(
           s"""
              |ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08'),
-             |PARTITION (ds='2008-04-09', hr='12')
+             |PARTITION (hr='12')
           """.stripMargin)
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
           Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
@@ -536,7 +541,7 @@ class HiveDDLSuite
     withTable("t1") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        sqlContext.range(1).write.parquet(path)
+        spark.range(1).write.parquet(path)
         sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
 
         val desc = sql("DESC FORMATTED t1").collect().toSeq
@@ -548,7 +553,7 @@ class HiveDDLSuite
 
   test("desc table for data source table - partitioned bucketed table") {
     withTable("t1") {
-      sqlContext
+      spark
         .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
         .bucketBy(2, "b").sortBy("c").partitionBy("d")
         .saveAsTable("t1")

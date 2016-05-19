@@ -29,8 +29,8 @@ class HiveOperatorQueryableSuite extends QueryTest with TestHiveSingleton {
   test("SPARK-5324 query result of describe command") {
     hiveContext.loadTestTable("src")
 
-    // register a describe command to be a temp table
-    sql("desc src").registerTempTable("mydesc")
+    // Creates a temporary view with the output of a describe command
+    sql("desc src").createOrReplaceTempView("mydesc")
     checkAnswer(
       sql("desc mydesc"),
       Seq(

@@ -80,7 +80,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
          """.stripMargin)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
         checkAnswer(
           sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
           sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable"))
@@ -110,7 +110,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       assert(expectedSchema === table("jsonTable").schema)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
         checkAnswer(
           sql("SELECT b, `<d>`.`=` FROM jsonTable"),
           sql("SELECT b, `<d>`.`=` FROM expectedJsonTable"))
@@ -248,7 +248,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
          """.stripMargin)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
 
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
@@ -554,7 +554,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("scan a parquet table created through a CTAS statement") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempTable("jt") {
-        (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
+        (1 to 10).map(i => i -> s"str$i").toDF("a", "b").createOrReplaceTempView("jt")
 
         withTable("test_parquet_ctas") {
           sql(
@@ -746,6 +746,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       sessionState.invalidateTable(tableName)
       val actualSchema = table(tableName).schema
       assert(schema === actualSchema)
+
+      // Checks the DESCRIBE output.
+      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", "") :: Nil)
     }
   }
 
@@ -1035,6 +1038,49 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
         checkAnswer(table("t"), Row(2, 3, 1))
       }
+    }
+  }
+
+  test("saveAsTable[append]: the column order doesn't matter") {
+    withTable("saveAsTable_column_order") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_column_order")
+      Seq((3, 4)).toDF("j", "i").write.mode("append").saveAsTable("saveAsTable_column_order")
+      checkAnswer(
+        table("saveAsTable_column_order"),
+        Seq((1, 2), (4, 3)).toDF("i", "j"))
+    }
+  }
+
+  test("saveAsTable[append]: mismatch column names") {
+    withTable("saveAsTable_mismatch_column_names") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_mismatch_column_names")
+      val e = intercept[AnalysisException] {
+        Seq((3, 4)).toDF("i", "k")
+          .write.mode("append").saveAsTable("saveAsTable_mismatch_column_names")
+      }
+      assert(e.getMessage.contains("cannot resolve"))
+    }
+  }
+
+  test("saveAsTable[append]: too many columns") {
+    withTable("saveAsTable_too_many_columns") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_too_many_columns")
+      val e = intercept[AnalysisException] {
+        Seq((3, 4, 5)).toDF("i", "j", "k")
+          .write.mode("append").saveAsTable("saveAsTable_too_many_columns")
+      }
+      assert(e.getMessage.contains("doesn't match"))
+    }
+  }
+
+  test("saveAsTable[append]: less columns") {
+    withTable("saveAsTable_less_columns") {
+      Seq((1, 2)).toDF("i", "j").write.saveAsTable("saveAsTable_less_columns")
+      val e = intercept[AnalysisException] {
+        Seq((4)).toDF("j")
+          .write.mode("append").saveAsTable("saveAsTable_less_columns")
+      }
+      assert(e.getMessage.contains("doesn't match"))
     }
   }
 

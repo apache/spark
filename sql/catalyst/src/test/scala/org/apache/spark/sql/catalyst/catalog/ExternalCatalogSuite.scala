@@ -466,7 +466,7 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
     val catalog = newBasicCatalog()
     assert(catalog.getFunction("db2", "func1") ==
       CatalogFunction(FunctionIdentifier("func1", Some("db2")), funcClass,
-        Seq.empty[(String, String)]))
+        Seq.empty[FunctionResource]))
     intercept[AnalysisException] {
       catalog.getFunction("db2", "does_not_exist")
     }
@@ -627,6 +627,12 @@ abstract class CatalogTestUtils {
   lazy val part1 = CatalogTablePartition(Map("a" -> "1", "b" -> "2"), storageFormat)
   lazy val part2 = CatalogTablePartition(Map("a" -> "3", "b" -> "4"), storageFormat)
   lazy val part3 = CatalogTablePartition(Map("a" -> "5", "b" -> "6"), storageFormat)
+  lazy val partWithMixedOrder = CatalogTablePartition(Map("b" -> "6", "a" -> "6"), storageFormat)
+  lazy val partWithLessColumns = CatalogTablePartition(Map("a" -> "1"), storageFormat)
+  lazy val partWithMoreColumns =
+    CatalogTablePartition(Map("a" -> "5", "b" -> "6", "c" -> "7"), storageFormat)
+  lazy val partWithUnknownColumns =
+    CatalogTablePartition(Map("a" -> "5", "unknown" -> "6"), storageFormat)
   lazy val funcClass = "org.apache.spark.myFunc"
 
   /**
@@ -679,7 +685,7 @@ abstract class CatalogTestUtils {
   }
 
   def newFunc(name: String, database: Option[String] = None): CatalogFunction = {
-    CatalogFunction(FunctionIdentifier(name, database), funcClass, Seq.empty[(String, String)])
+    CatalogFunction(FunctionIdentifier(name, database), funcClass, Seq.empty[FunctionResource])
   }
 
   /**

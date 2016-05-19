@@ -27,10 +27,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
 import org.apache.spark.sql.functions.udf
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -240,7 +240,8 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
 
 /**
  * :: Experimental ::
- * Transform categorical features to use 0-based indices instead of their original values.
+ * Model fitted by [[VectorIndexer]]. Transform categorical features to use 0-based indices
+ * instead of their original values.
  *  - Categorical features are mapped to indices.
  *  - Continuous features (columns) are left unchanged.
  * This also appends metadata to the output column, marking features as Numeric (continuous),

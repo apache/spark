@@ -303,7 +303,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           "logical except operator should have been replaced by anti-join in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
-        execution.DeserializeToObject(deserializer, objAttr, planLater(child)) :: Nil
+        execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
         execution.SerializeFromObjectExec(serializer, planLater(child)) :: Nil
       case logical.MapPartitions(f, objAttr, child) =>
@@ -372,10 +372,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableIdent, userSpecifiedSchema, provider, true, opts, false, _) =>
+      case c: CreateTableUsing if c.temporary && !c.allowExisting =>
         ExecutedCommandExec(
           CreateTempTableUsing(
-            tableIdent, userSpecifiedSchema, provider, opts)) :: Nil
+            c.tableIdent, c.userSpecifiedSchema, c.provider, c.options)) :: Nil
 
       case c: CreateTableUsing if !c.temporary =>
         val cmd =
@@ -384,6 +384,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             c.userSpecifiedSchema,
             c.provider,
             c.options,
+            c.partitionColumns,
+            c.bucketSpec,
             c.allowExisting,
             c.managedIfNoPath)
         ExecutedCommandExec(cmd) :: Nil

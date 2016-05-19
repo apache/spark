@@ -348,13 +348,14 @@ class HiveDDLCommandSuite extends PlanTest {
   test("create table - temporary") {
     val query = "CREATE TEMPORARY TABLE tab1 (id int, name string)"
     val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.message.contains("registerTempTable"))
+    assert(e.message.contains("CREATE TEMPORARY TABLE is not supported yet"))
   }
 
   test("create table - external") {
-    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string)"
+    val query = "CREATE EXTERNAL TABLE tab1 (id int, name string) LOCATION '/path/to/nowhere'"
     val (desc, _) = extractTableDesc(query)
     assert(desc.tableType == CatalogTableType.EXTERNAL)
+    assert(desc.storage.locationUri == Some("/path/to/nowhere"))
   }
 
   test("create table - if not exists") {
@@ -452,12 +453,6 @@ class HiveDDLCommandSuite extends PlanTest {
     val e2 = intercept[ParseException] { parser.parsePlan(query2) }
     assert(e1.getMessage.contains("Operation not allowed"))
     assert(e2.getMessage.contains("Operation not allowed"))
-  }
-
-  test("create table - location") {
-    val query = "CREATE TABLE my_table (id int, name string) LOCATION '/path/to/mars'"
-    val (desc, _) = extractTableDesc(query)
-    assert(desc.storage.locationUri == Some("/path/to/mars"))
   }
 
   test("create table - properties") {

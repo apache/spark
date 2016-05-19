@@ -43,7 +43,9 @@ public class JavaSimpleTextClassificationPipeline {
 
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaSimpleTextClassificationPipeline").getOrCreate();
+      .builder()
+      .appName("JavaSimpleTextClassificationPipeline")
+      .getOrCreate();
 
     // Prepare training documents, which are labeled.
     List<LabeledDocument> localTraining = Lists.newArrayList(

@@ -18,9 +18,10 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
 import org.apache.spark.mllib.tree.{EnsembleTestHelper, RandomForest => OldRandomForest}
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -40,7 +41,8 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
   override def beforeAll() {
     super.beforeAll()
     orderedLabeledPoints50_1000 =
-      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000))
+      sc.parallelize(EnsembleTestHelper.generateOrderedLabeledPoints(numFeatures = 50, 1000)
+        .map(_.asML))
   }
 
   /////////////////////////////////////////////////////////////////////////////
@@ -98,7 +100,7 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
   test("should support all NumericType labels and not support other types") {
     val rf = new RandomForestRegressor().setMaxDepth(1)
     MLTestingUtils.checkNumericTypes[RandomForestRegressionModel, RandomForestRegressor](
-      rf, isClassification = false, spark) { (expected, actual) =>
+      rf, spark, isClassification = false) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
   }
@@ -139,8 +141,8 @@ private object RandomForestRegressorSuite extends SparkFunSuite {
     val numFeatures = data.first().features.size
     val oldStrategy =
       rf.getOldStrategy(categoricalFeatures, numClasses = 0, OldAlgo.Regression, rf.getOldImpurity)
-    val oldModel = OldRandomForest.trainRegressor(
-      data, oldStrategy, rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
+    val oldModel = OldRandomForest.trainRegressor(data.map(OldLabeledPoint.fromML), oldStrategy,
+      rf.getNumTrees, rf.getFeatureSubsetStrategy, rf.getSeed.toInt)
     val newData: DataFrame = TreeTests.setMetadata(data, categoricalFeatures, numClasses = 0)
     val newModel = rf.fit(newData)
     // Use parent from newTree since this is not checked anyways.

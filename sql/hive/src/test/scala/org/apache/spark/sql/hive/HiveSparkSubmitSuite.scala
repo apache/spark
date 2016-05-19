@@ -33,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, JarResource}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
@@ -355,7 +355,7 @@ object TemporaryHiveUDFTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -393,7 +393,7 @@ object PermanentHiveUDFTest1 extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -425,11 +425,11 @@ object PermanentHiveUDFTest2 extends Logging {
     val function = CatalogFunction(
       FunctionIdentifier("example_max"),
       "org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax",
-      ("JAR" -> jar) :: Nil)
+      FunctionResource(JarResource, jar) :: Nil)
     hiveContext.sessionState.catalog.createFunction(function, ignoreIfExists = false)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -491,7 +491,7 @@ object SparkSubmitClassLoaderTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Load a Hive SerDe from the jar.
     logInfo("Creating a Hive table with a SerDe provided in a jar.")
     hiveContext.sql(

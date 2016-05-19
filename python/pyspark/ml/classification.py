@@ -55,7 +55,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Currently, this class only supports binary classification.
 
     >>> from pyspark.sql import Row
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sc.parallelize([
     ...     Row(label=1.0, weight=2.0, features=Vectors.dense(1.0)),
     ...     Row(label=0.0, weight=2.0, features=Vectors.sparse(1, [], []))]).toDF()
@@ -506,7 +506,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     It supports both binary and multiclass labels, as well as both continuous and categorical
     features.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
@@ -639,7 +639,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     >>> import numpy
     >>> from numpy import allclose
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
@@ -770,7 +770,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     `SPARK-4240 <https://issues.apache.org/jira/browse/SPARK-4240>`_
 
     >>> from numpy import allclose
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
     >>> df = sqlContext.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
@@ -892,7 +892,7 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
 
 @inherit_doc
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
-                 HasRawPredictionCol, JavaMLWritable, JavaMLReadable):
+                 HasRawPredictionCol, HasThresholds, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -906,7 +906,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     The input feature values must be nonnegative.
 
     >>> from pyspark.sql import Row
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
     ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
     ...     Row(label=0.0, features=Vectors.dense([0.0, 1.0])),
@@ -940,6 +940,11 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     True
     >>> model.theta == model2.theta
     True
+    >>> nb = nb.setThresholds([0.01, 10.00])
+    >>> model3 = nb.fit(df)
+    >>> result = model3.transform(test0).head()
+    >>> result.prediction
+    0.0
 
     .. versionadded:: 1.5.0
     """
@@ -953,11 +958,11 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0,
-                 modelType="multinomial"):
+                 modelType="multinomial", thresholds=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
-                 modelType="multinomial")
+                 modelType="multinomial", thresholds=None)
         """
         super(NaiveBayes, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -970,11 +975,11 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
     @since("1.5.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0,
-                  modelType="multinomial"):
+                  modelType="multinomial", thresholds=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   probabilityCol="probability", rawPredictionCol="rawPrediction", smoothing=1.0, \
-                  modelType="multinomial")
+                  modelType="multinomial", thresholds=None)
         Sets params for Naive Bayes.
         """
         kwargs = self.setParams._input_kwargs
@@ -1050,7 +1055,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     Number of inputs has to be equal to the size of feature vectors.
     Number of outputs has to be equal to the total number of labels.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
     ...     (0.0, Vectors.dense([0.0, 0.0])),
     ...     (1.0, Vectors.dense([0.0, 1.0])),
@@ -1286,7 +1291,7 @@ class OneVsRest(Estimator, OneVsRestParams, MLReadable, MLWritable):
     is picked to label the example.
 
     >>> from pyspark.sql import Row
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sc.parallelize([
     ...     Row(label=0.0, features=Vectors.dense(1.0, 0.8)),
     ...     Row(label=1.0, features=Vectors.sparse(2, [], [])),

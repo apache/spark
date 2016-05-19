@@ -300,6 +300,13 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 {% include_example java/org/apache/spark/examples/ml/JavaOneVsRestExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.OneVsRest) for more details.
+
+{% include_example python/ml/one_vs_rest_example.py %}
+</div>
 </div>
 
 ## Naive Bayes

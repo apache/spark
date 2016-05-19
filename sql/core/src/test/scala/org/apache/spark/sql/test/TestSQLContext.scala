@@ -31,17 +31,7 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
   }
 
   def this() {
-    this {
-      val conf = new SparkConf()
-      conf.set("spark.sql.testkey", "true")
-
-      val spark = SparkSession.builder
-        .master("local[2]")
-        .appName("test-sql-context")
-        .config(conf)
-        .getOrCreate()
-      spark.sparkContext
-    }
+    this(new SparkConf)
   }
 
   @transient
