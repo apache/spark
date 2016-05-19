@@ -21,8 +21,9 @@ import scala.annotation.tailrec
 import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -1571,7 +1572,18 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
         val newCondition = condition transform {
           case a: Attribute if a == d.output.head => d.deserializer
         }
-        Filter(newCondition, d.child)
+
+        val newFilter = Filter(newCondition, d.child)
+
+        // SPARK-15112: Column order of input query plan may differ from output column order of the
+        // top-most `SerializeFromObject` operator. Here we add a projection to adjust column order
+        // when necessary.
+        if (s.schema == d.child.schema) {
+          newFilter
+        } else {
+          val output = d.child.resolve(StructType.fromAttributes(s.output), caseSensitiveResolution)
+          Project(output, newFilter)
+        }
       }
   }
 }
