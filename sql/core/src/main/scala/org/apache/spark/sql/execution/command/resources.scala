@@ -50,14 +50,14 @@ case class AddFileCommand(path: String) extends RunnableCommand {
 /**
  * List files
  */
-case class ListFiles() extends RunnableCommand {
+case class ListFiles(files: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     val schema = StructType(
       StructField("result", StringType, nullable = false) :: Nil)
     schema.toAttributes
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sparkContext.listFiles().map(Row(_))
+    sparkSession.sparkContext.listFiles(files).map(Row(_))
   }
 }
 

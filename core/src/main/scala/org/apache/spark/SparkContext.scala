@@ -1389,8 +1389,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * List the file resources that were added.
    */
-  def listFiles(): Seq[String] = {
-    addedFiles.keySet.toSeq
+  def listFiles(files: Seq[String] = Seq.empty[String]): Seq[String] = {
+    if (files.size > 0) {
+      files.map { f =>
+        val uri = new URI(f)
+        val schemeCorrectedPath = uri.getScheme match {
+          case null | "local" => new File(f).getCanonicalFile.toURI.toString
+          case _ => f
+        }
+        new Path(schemeCorrectedPath).toUri.toString
+      }.collect {
+        case f if addedFiles.keySet.toSeq.contains(f) => f
+      }
+    } else {
+      addedFiles.keySet.toSeq
+    }
   }
 
   /**

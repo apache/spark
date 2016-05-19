@@ -789,7 +789,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitListResources(ctx: ListResourcesContext): LogicalPlan = withOrigin(ctx) {
     ctx.identifier.getText.toLowerCase match {
-      case "files" | "file" => ListFiles()
+      case "files" | "file" =>
+        if (remainder(ctx.identifier).trim.length > 0) {
+          ListFiles(remainder(ctx.identifier).trim.split("\\s+"))
+        } else {
+          ListFiles()
+        }
       case "jars" | "jar" => ListJars()
       case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
     }
