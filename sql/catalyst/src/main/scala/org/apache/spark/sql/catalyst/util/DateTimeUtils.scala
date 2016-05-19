@@ -58,7 +58,7 @@ object DateTimeUtils {
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
-  final val MonthOf31Days = Set(1,3,5,7,8,10,12)
+  final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
 
