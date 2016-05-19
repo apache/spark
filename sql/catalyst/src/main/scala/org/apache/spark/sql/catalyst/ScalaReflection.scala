@@ -601,14 +601,14 @@ object ScalaReflection extends ScalaReflection {
         case t if t <:< localTypeOf[java.math.BigInteger] =>
           StaticInvoke(
             Decimal.getClass,
-            DecimalType.BIGINT_DEFAULT,
+            DecimalType.BigIntDecimal,
             "apply",
             inputObject :: Nil)
 
         case t if t <:< localTypeOf[scala.math.BigInt] =>
           StaticInvoke(
             Decimal.getClass,
-            DecimalType.BIGINT_DEFAULT,
+            DecimalType.BigIntDecimal,
             "apply",
             inputObject :: Nil)
 
@@ -757,9 +757,9 @@ object ScalaReflection extends ScalaReflection {
       case t if t <:< localTypeOf[java.math.BigDecimal] =>
         Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.math.BigInteger] =>
-        Schema(DecimalType.BIGINT_DEFAULT, nullable = true)
+        Schema(DecimalType.BigIntDecimal, nullable = true)
       case t if t <:< localTypeOf[scala.math.BigInt] =>
-        Schema(DecimalType.BIGINT_DEFAULT, nullable = true)
+        Schema(DecimalType.BigIntDecimal, nullable = true)
       case t if t <:< localTypeOf[Decimal] => Schema(DecimalType.SYSTEM_DEFAULT, nullable = true)
       case t if t <:< localTypeOf[java.lang.Integer] => Schema(IntegerType, nullable = true)
       case t if t <:< localTypeOf[java.lang.Long] => Schema(LongType, nullable = true)
