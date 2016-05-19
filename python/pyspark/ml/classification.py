@@ -1177,14 +1177,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         """
         return self.getOrDefault(self.solver)
 
-    @property
-    @since("2.0.0")
-    def getOptimizer(self):
-        """
-        Gets the optimizer used.
-        """
-        return self.getSolver()
-
     @since("2.0.0")
     def setWeights(self, value):
         """
