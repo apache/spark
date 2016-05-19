@@ -151,7 +151,7 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder]) extends Ordering[Int
     this(ordering.map(BindReferences.bindReference(_, inputSchema)))
 
   @transient
-  private[this] var generatedOrdering = GenerateOrdering.generate(ordering)
+  private[this] lazy val generatedOrdering = GenerateOrdering.generate(ordering)
 
   def compare(a: InternalRow, b: InternalRow): Int = {
     generatedOrdering.compare(a, b)
@@ -159,7 +159,6 @@ class LazilyGeneratedOrdering(val ordering: Seq[SortOrder]) extends Ordering[Int
 
   private def readObject(in: ObjectInputStream): Unit = Utils.tryOrIOException {
     in.defaultReadObject()
-    generatedOrdering = GenerateOrdering.generate(ordering)
   }
 }
 
