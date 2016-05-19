@@ -72,7 +72,7 @@ case class BroadcastExchangeExec(
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val input: Array[InternalRow] = child.executeCollect()
-        if (input.length >= (512 << 20)) {
+        if (input.length >= 512000000) {
           throw new SparkException(
             s"Cannot broadcast the table with more than 512 millions rows: ${input.length} rows")
         }
