@@ -26,6 +26,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric._
 import org.apache.spark.ui.SparkUI
+import org.apache.spark.util.AccumulatorContext
 
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
@@ -177,8 +178,10 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
       taskId: Long,
       stageId: Int,
       stageAttemptID: Int,
-      accumulatorUpdates: Seq[AccumulableInfo],
+      _accumulatorUpdates: Seq[AccumulableInfo],
       finishTask: Boolean): Unit = {
+    val accumulatorUpdates =
+      _accumulatorUpdates.filter(_.update.isDefined).map(accum => (accum.id, accum.update.get))
 
     _stageIdToStageMetrics.get(stageId) match {
       case Some(stageMetrics) =>
@@ -290,9 +293,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
                stageMetrics <- _stageIdToStageMetrics.get(stageId).toIterable;
                taskMetrics <- stageMetrics.taskIdToMetricUpdates.values;
                accumulatorUpdate <- taskMetrics.accumulatorUpdates) yield {
-            assert(accumulatorUpdate.update.isDefined, s"accumulator update from " +
-              s"task did not have a partial value: ${accumulatorUpdate.name}")
-            (accumulatorUpdate.id, accumulatorUpdate.update.get)
+            (accumulatorUpdate._1, accumulatorUpdate._2)
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
@@ -336,7 +337,7 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
       taskEnd.taskInfo.accumulables.flatMap { a =>
         // Filter out accumulators that are not SQL metrics
         // For now we assume all SQL metrics are Long's that have been JSON serialized as String's
-        if (a.metadata == Some(SQLMetrics.ACCUM_IDENTIFIER)) {
+        if (a.metadata == Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER)) {
           val newValue = a.update.map(_.toString.toLong).getOrElse(0L)
           Some(a.copy(update = Some(newValue)))
         } else {
@@ -418,4 +419,4 @@ private[ui] class SQLStageMetrics(
 private[ui] class SQLTaskMetrics(
     val attemptId: Long, // TODO not used yet
     var finished: Boolean,
-    var accumulatorUpdates: Seq[AccumulableInfo])
+    var accumulatorUpdates: Seq[(Long, Any)])

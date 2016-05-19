@@ -25,7 +25,7 @@ import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.impl.Utils.EPSILON
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.param.{IntParam, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.stat.distribution.MultivariateGaussian
 import org.apache.spark.ml.util._
@@ -45,11 +45,12 @@ private[clustering] trait GaussianMixtureParams extends Params with HasMaxIter w
   with HasSeed with HasPredictionCol with HasProbabilityCol with HasTol {
 
   /**
-   * Set the number of clusters to create (k). Must be > 1. Default: 2.
+   * Number of independent Gaussians in the mixture model. Must be > 1. Default: 2.
    * @group param
    */
   @Since("2.0.0")
-  final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
+  final val k = new IntParam(this, "k", "Number of independent Gaussians in the mixture model. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("2.0.0")
@@ -249,6 +250,21 @@ object GaussianMixtureModel extends MLReadable[GaussianMixtureModel] {
 /**
  * :: Experimental ::
  * Gaussian Mixture clustering.
+ *
+ * This class performs expectation maximization for multivariate Gaussian
+ * Mixture Models (GMMs).  A GMM represents a composite distribution of
+ * independent Gaussian distributions with associated "mixing" weights
+ * specifying each's contribution to the composite.
+ *
+ * Given a set of sample points, this class will maximize the log-likelihood
+ * for a mixture of k Gaussians, iterating until the log-likelihood changes by
+ * less than convergenceTol, or until it has reached the max number of iterations.
+ * While this process is generally guaranteed to converge, it is not guaranteed
+ * to find a global optimum.
+ *
+ * Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+ *       This is due to high-dimensional data (a) making it difficult to cluster at all (based
+ *       on statistical/theoretical arguments) and (b) numerical issues with Gaussian distributions.
  */
 @Since("2.0.0")
 @Experimental

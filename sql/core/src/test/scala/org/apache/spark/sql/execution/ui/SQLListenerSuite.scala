@@ -383,7 +383,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     }
     // Listener tracks only SQL metrics, not other accumulators
     assert(trackedAccums.size === 1)
-    assert(trackedAccums.head === sqlMetricInfo)
+    assert(trackedAccums.head === (sqlMetricInfo.id, sqlMetricInfo.update.get))
   }
 
 }

@@ -410,9 +410,10 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
 
   private def init(): Unit = {
     if (mm != null) {
+      require(capacity < 512000000, "Cannot broadcast more than 512 millions rows")
       var n = 1
       while (n < capacity) n *= 2
-      ensureAcquireMemory(n * 2 * 8 + (1 << 20))
+      ensureAcquireMemory(n * 2L * 8 + (1 << 20))
       array = new Array[Long](n * 2)
       mask = n * 2 - 2
       page = new Array[Long](1 << 17)  // 1M bytes
@@ -788,7 +789,7 @@ private[joins] object LongHashedRelation {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager): LongHashedRelation = {
 
-    val map: LongToUnsafeRowMap = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
+    val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
 
     // Create a mapping of key -> rows

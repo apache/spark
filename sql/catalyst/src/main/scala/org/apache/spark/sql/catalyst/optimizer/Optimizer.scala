@@ -22,7 +22,7 @@ import scala.collection.immutable.HashSet
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.{CatalystConf, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.analysis.{CleanupAliases, DistinctAggregationRewriter, EliminateSubqueryAliases, EmptyFunctionRegistry}
+import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -91,6 +91,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       CombineUnions,
       // Constant folding and strength reduction
       NullPropagation,
+      FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
       LikeSimplification,
@@ -653,6 +654,45 @@ object NullPropagation extends Rule[LogicalPlan] {
       // Literal(null)
       case In(Literal(null, _), list) => Literal.create(null, BooleanType)
 
+    }
+  }
+}
+
+/**
+ * Propagate foldable expressions:
+ * Replace attributes with aliases of the original foldable expressions if possible.
+ * Other optimizations will take advantage of the propagated foldable expressions.
+ *
+ * {{{
+ *   SELECT 1.0 x, 'abc' y, Now() z ORDER BY x, y, 3
+ *   ==>  SELECT 1.0 x, 'abc' y, Now() z ORDER BY 1.0, 'abc', Now()
+ * }}}
+ */
+object FoldablePropagation extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    val foldableMap = AttributeMap(plan.flatMap {
+      case Project(projectList, _) => projectList.collect {
+        case a: Alias if a.resolved && a.child.foldable => (a.toAttribute, a)
+      }
+      case _ => Nil
+    })
+
+    if (foldableMap.isEmpty) {
+      plan
+    } else {
+      var stop = false
+      CleanupAliases(plan.transformUp {
+        case u: Union =>
+          stop = true
+          u
+        case c: Command =>
+          stop = true
+          c
+        case p: LogicalPlan if !stop => p.transformExpressions {
+          case a: AttributeReference if foldableMap.contains(a) =>
+            foldableMap(a)
+        }
+      })
     }
   }
 }
