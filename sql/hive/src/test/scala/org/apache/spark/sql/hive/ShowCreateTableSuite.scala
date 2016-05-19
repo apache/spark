@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.CatalogTable
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -247,7 +247,7 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
     }
   }
 
-  test("hive bucketing not supported") {
+  test("hive bucketing is not supported") {
     withTable("t1") {
       createRawHiveTable(
         s"""CREATE TABLE t1 (a INT, b STRING)
@@ -257,9 +257,11 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
          """.stripMargin
       )
 
-      intercept[UnsupportedOperationException] {
+      val cause = intercept[AnalysisException] {
         sql("SHOW CREATE TABLE t1")
       }
+
+      assert(cause.getMessage.contains(" - bucketing"))
     }
   }
 

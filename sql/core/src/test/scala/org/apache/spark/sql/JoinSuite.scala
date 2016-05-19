@@ -438,7 +438,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     spark.cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[BroadcastHashJoinExec]),

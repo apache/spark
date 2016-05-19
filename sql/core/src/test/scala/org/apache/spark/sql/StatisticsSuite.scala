@@ -15,34 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.memory;
+package org.apache.spark.sql
 
-import java.io.IOException;
+import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types._
 
-public class TestMemoryConsumer extends MemoryConsumer {
-  public TestMemoryConsumer(TaskMemoryManager memoryManager, MemoryMode mode) {
-    super(memoryManager, 1024L, mode);
-  }
-  public TestMemoryConsumer(TaskMemoryManager memoryManager) {
-    this(memoryManager, MemoryMode.ON_HEAP);
-  }
+class StatisticsSuite extends QueryTest with SharedSQLContext {
 
-  @Override
-  public long spill(long size, MemoryConsumer trigger) throws IOException {
-    long used = getUsed();
-    free(used);
-    return used;
+  test("SPARK-15392: DataFrame created from RDD should not be broadcasted") {
+    val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
+    val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
+    assert(df.queryExecution.analyzed.statistics.sizeInBytes >
+      spark.wrapped.conf.autoBroadcastJoinThreshold)
+    assert(df.selectExpr("a").queryExecution.analyzed.statistics.sizeInBytes >
+      spark.wrapped.conf.autoBroadcastJoinThreshold)
   }
 
-  void use(long size) {
-    long got = taskMemoryManager.acquireExecutionMemory(size, this);
-    used += got;
-  }
-
-  void free(long size) {
-    used -= size;
-    taskMemoryManager.releaseExecutionMemory(size, this);
-  }
 }
-
-

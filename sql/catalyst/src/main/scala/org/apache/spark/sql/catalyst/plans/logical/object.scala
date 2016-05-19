@@ -94,7 +94,7 @@ case class DeserializeToObject(
  */
 case class SerializeFromObject(
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 }
@@ -118,7 +118,7 @@ object MapPartitions {
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
 
 object MapPartitionsInR {
   def apply(
@@ -152,7 +152,7 @@ case class MapPartitionsInR(
     inputSchema: StructType,
     outputSchema: StructType,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer {
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
   override lazy val schema = outputSchema
 }
 
@@ -175,7 +175,7 @@ object MapElements {
 case class MapElements(
     func: AnyRef,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
@@ -215,7 +215,7 @@ case class AppendColumnsWithObject(
     func: Any => Any,
     childSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 }

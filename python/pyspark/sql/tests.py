@@ -1044,8 +1044,15 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertRaises(TypeError, lambda: df[{}])
 
     def test_column_name_with_non_ascii(self):
-        df = self.spark.createDataFrame([(1,)], ["数量"])
-        self.assertEqual(StructType([StructField("数量", LongType(), True)]), df.schema)
+        if sys.version >= '3':
+            columnName = "数量"
+            self.assertTrue(isinstance(columnName, str))
+        else:
+            columnName = unicode("数量", "utf-8")
+            self.assertTrue(isinstance(columnName, unicode))
+        schema = StructType([StructField(columnName, LongType(), True)])
+        df = self.spark.createDataFrame([(1,)], schema)
+        self.assertEqual(schema, df.schema)
         self.assertEqual("DataFrame[数量: bigint]", str(df))
         self.assertEqual([("数量", 'bigint')], df.dtypes)
         self.assertEqual(1, df.select("数量").first()[0])
