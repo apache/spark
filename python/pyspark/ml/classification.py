@@ -1064,9 +1064,8 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     True
     >>> model.weights == model2.weights
     True
-    >>> mlp2 = mlp2.setInitialWeights([
-    ...    2, 5, 1, -7, -5, -10, 0, 0.6, -1, 2, -2, 1, 2, -7, -1, -2, 2, 1, -1, 9, -9, 3, -3, -3,
-    ...    3.0, 0, -1])
+    >>> mlp2 = mlp2.setInitialWeights([2, 5, 1, -7, -5, -10, 0, 0.6, -1, 2, -2, 1, 2, -7, -1, -2,
+    ...    2, 1, -1, 9, -9, 3, -3, -3, 3.0, 0, -1])
     >>> model3 = mlp2.fit(df)
     >>> model3.weights != model2.weights
     True
