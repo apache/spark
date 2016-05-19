@@ -66,7 +66,7 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     List<String> sparkEmptyArgs = Arrays.asList("");
     cmd = buildCommand(sparkSubmitArgs, env);
-    assertTrue("--help should be contained in the final cmd", cmd.contains(parser.HELP));
+    assertTrue("--help should be contained in the final cmd.", cmd.contains(parser.HELP));
   }
 
   @Test
