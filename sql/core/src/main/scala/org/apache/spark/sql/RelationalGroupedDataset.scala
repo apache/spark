@@ -75,7 +75,7 @@ class RelationalGroupedDataset protected[sql](
     case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
     case a: AggregateExpression if (a.aggregateFunction.isInstanceOf[TypedAggregateExpression]) =>
-      UnresolvedAlias(a, None, Some(Column.generateAlias))
+      UnresolvedAlias(a, Some(Column.generateAlias))
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
 

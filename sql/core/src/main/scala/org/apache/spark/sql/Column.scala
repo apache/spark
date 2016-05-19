@@ -154,7 +154,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
 
     case jt: JsonTuple => MultiAlias(jt, Nil)
 
-    case func: UnresolvedFunction => UnresolvedAlias(func, Some(usePrettyExpression(func).sql))
+    case func: UnresolvedFunction => UnresolvedAlias(func, Some(Column.generateAlias))
 
     // If we have a top level Cast, there is a chance to give it a better alias, if there is a
     // NamedExpression under this Cast.
@@ -166,7 +166,7 @@ class Column(protected[sql] val expr: Expression) extends Logging {
     }
 
     case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-      UnresolvedAlias(a, None, Some(Column.generateAlias))
+      UnresolvedAlias(a, Some(Column.generateAlias))
 
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
