@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.internal
 
-import org.apache.spark.sql.{QueryTest, SparkSession, SQLContext}
+import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -73,6 +73,27 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(spark.conf.get(key, "0") === "")
 
     spark.wrapped.conf.clear()
+  }
+
+  test("set command for display") {
+    spark.wrapped.conf.clear()
+    checkAnswer(
+      sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Nil)
+
+    checkAnswer(
+      sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Row("spark.sql.groupByOrdinal", "true"))
+
+    sql("SET spark.sql.groupByOrdinal=false")
+
+    checkAnswer(
+      sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Row("spark.sql.groupByOrdinal", "false"))
+
+    checkAnswer(
+      sql("SET -v").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
+      Row("spark.sql.groupByOrdinal", "false"))
   }
 
   test("deprecated property") {
