@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.datasources.parquet.tpcds
+package org.apache.spark.sql.execution.benchmark.tpcds
 
 import java.io.File
 
@@ -68,7 +68,7 @@ object TPCDSQueryBenchmark {
     spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
     queries.foreach { name =>
       val queriesString = fileToString(new File(s"sql/core/src/test/scala/org/apache/spark/sql/" +
-        s"execution/datasources/parquet/tpcds/queries/$name.sql"))
+        s"execution/benchmark/tpcds/queries/$name.sql"))
 
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan. Note that this
@@ -92,7 +92,7 @@ object TPCDSQueryBenchmark {
         case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
-      val benchmark = new Benchmark("TPCDS Snappy (scale = 5)", numRows, 1)
+      val benchmark = new Benchmark("TPCDS Snappy", numRows, 5)
       benchmark.addCase(name) { i =>
         spark.sql(queriesString).collect()
       }

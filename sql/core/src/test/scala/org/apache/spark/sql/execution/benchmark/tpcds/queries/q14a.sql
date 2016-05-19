@@ -95,8 +95,7 @@ FROM (
          AND d_year = 1999 + 2
          AND d_moy = 11
        GROUP BY i_brand_id, i_class_id, i_category_id
-       HAVING sum(cs_quantity * cs_list_price) > (SELECT average_sales
-       FROM avg_sales)
+       HAVING sum(cs_quantity * cs_list_price) > (SELECT average_sales FROM avg_sales)
        UNION ALL
        SELECT
          'web' channel,

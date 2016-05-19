@@ -6,7 +6,7 @@ WITH ss AS
   FROM store_sales, date_dim, store
   WHERE ss_sold_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-03' AS DATE) AND
-  date_add(cast('2000-08-03' AS DATE), 30)
+  (cast('2000-08-03' AS DATE) + INTERVAL 30 days)
     AND ss_store_sk = s_store_sk
   GROUP BY s_store_sk),
     sr AS
@@ -17,7 +17,7 @@ WITH ss AS
   FROM store_returns, date_dim, store
   WHERE sr_returned_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-03' AS DATE) AND
-  date_add(cast('2000-08-03' AS DATE), 30)
+  (cast('2000-08-03' AS DATE) + INTERVAL 30 days)
     AND sr_store_sk = s_store_sk
   GROUP BY s_store_sk),
     cs AS
@@ -28,7 +28,7 @@ WITH ss AS
   FROM catalog_sales, date_dim
   WHERE cs_sold_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-03' AS DATE) AND
-  date_add(cast('2000-08-03' AS DATE), 30)
+  (cast('2000-08-03' AS DATE) + INTERVAL 30 days)
   GROUP BY cs_call_center_sk),
     cr AS
   (SELECT
@@ -37,7 +37,7 @@ WITH ss AS
   FROM catalog_returns, date_dim
   WHERE cr_returned_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-03]' AS DATE) AND
-  date_add(cast('2000-08-03' AS DATE), 30)),
+  (cast('2000-08-03' AS DATE) + INTERVAL 30 days)),
     ws AS
   (SELECT
     wp_web_page_sk,
@@ -46,7 +46,7 @@ WITH ss AS
   FROM web_sales, date_dim, web_page
   WHERE ws_sold_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-03' AS DATE) AND
-  date_add(cast('2000-08-03' AS DATE), 30)
+  (cast('2000-08-03' AS DATE) + INTERVAL 30 days)
     AND ws_web_page_sk = wp_web_page_sk
   GROUP BY wp_web_page_sk),
     wr AS
@@ -57,7 +57,7 @@ WITH ss AS
   FROM web_returns, date_dim, web_page
   WHERE wr_returned_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-03' AS DATE) AND
-  date_add(cast('2000-08-03' AS DATE), 30)
+  (cast('2000-08-03' AS DATE) + INTERVAL 30 days)
     AND wr_web_page_sk = wp_web_page_sk
   GROUP BY wp_web_page_sk)
 SELECT

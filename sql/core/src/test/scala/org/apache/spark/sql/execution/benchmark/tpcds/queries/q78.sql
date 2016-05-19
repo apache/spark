@@ -52,7 +52,7 @@ FROM ss
   LEFT JOIN ws
     ON (ws_sold_year = ss_sold_year AND ws_item_sk = ss_item_sk AND ws_customer_sk = ss_customer_sk)
   LEFT JOIN cs
-    ON (cs_sold_year = ss_sold_year AND cs_item_sk = cs_item_sk AND cs_customer_sk = ss_customer_sk)
+    ON (cs_sold_year = ss_sold_year AND cs_item_sk = ss_item_sk AND cs_customer_sk = ss_customer_sk)
 WHERE coalesce(ws_qty, 0) > 0 AND coalesce(cs_qty, 0) > 0 AND ss_sold_year = 2000
 ORDER BY
   ratio,

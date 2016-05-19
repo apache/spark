@@ -14,8 +14,8 @@ FROM (
          AND i_item_sk = inv_item_sk
          AND inv_warehouse_sk = w_warehouse_sk
          AND inv_date_sk = d_date_sk
-         AND d_date BETWEEN date_sub(cast('2000-03-11' AS DATE), 30)
-       AND date_add(cast('2000-03-11' AS DATE), 30)
+         AND d_date BETWEEN (cast('2000-03-11' AS DATE) - INTERVAL 30 days)
+       AND (cast('2000-03-11' AS DATE) + INTERVAL 30 days)
        GROUP BY w_warehouse_name, i_item_id) x
 WHERE (CASE WHEN inv_before > 0
   THEN inv_after / inv_before

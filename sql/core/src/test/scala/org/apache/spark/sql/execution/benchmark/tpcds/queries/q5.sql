@@ -26,7 +26,7 @@ WITH ssr AS
     salesreturns, date_dim, store
   WHERE date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-23' AS DATE)
-  AND (date_add(cast('2000-08-23' AS DATE), 14))
+  AND ((cast('2000-08-23' AS DATE) + INTERVAL 14 days))
     AND store_sk = s_store_sk
   GROUP BY s_store_id),
     csr AS
@@ -57,7 +57,7 @@ WITH ssr AS
     ) salesreturns, date_dim, catalog_page
   WHERE date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-23' AS DATE)
-  AND (date_add(cast('2000-08-23' AS DATE), 14))
+  AND ((cast('2000-08-23' AS DATE) + INTERVAL 14 days))
     AND page_sk = cp_catalog_page_sk
   GROUP BY cp_catalog_page_id)
   ,
@@ -92,7 +92,7 @@ WITH ssr AS
     ) salesreturns, date_dim, web_site
   WHERE date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-23' AS DATE)
-  AND (date_add(cast('2000-08-23' AS DATE), 14))
+  AND ((cast('2000-08-23' AS DATE) + INTERVAL 14 days))
     AND wsr_web_site_sk = web_site_sk
   GROUP BY web_site_id)
 SELECT

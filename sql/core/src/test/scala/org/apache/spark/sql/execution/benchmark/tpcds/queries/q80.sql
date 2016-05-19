@@ -12,7 +12,7 @@ WITH ssr AS
     date_dim, store, item, promotion
   WHERE ss_sold_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-23' AS DATE)
-  AND date_add(cast('2000-08-23' AS DATE), 30)
+  AND (cast('2000-08-23' AS DATE) + INTERVAL 30 days)
     AND ss_store_sk = s_store_sk
     AND ss_item_sk = i_item_sk
     AND i_current_price > 50
@@ -33,7 +33,7 @@ WITH ssr AS
     date_dim, catalog_page, item, promotion
   WHERE cs_sold_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-23' AS DATE)
-  AND date_add(cast('2000-08-23' AS DATE), 30)
+  AND (cast('2000-08-23' AS DATE) + INTERVAL 30 days)
     AND cs_catalog_page_sk = cp_catalog_page_sk
     AND cs_item_sk = i_item_sk
     AND i_current_price > 50
@@ -53,7 +53,7 @@ WITH ssr AS
     date_dim, web_site, item, promotion
   WHERE ws_sold_date_sk = d_date_sk
     AND d_date BETWEEN cast('2000-08-23' AS DATE)
-  AND date_add(cast('2000-08-23' AS DATE), 30)
+  AND (cast('2000-08-23' AS DATE) + INTERVAL 30 days)
     AND ws_web_site_sk = web_site_sk
     AND ws_item_sk = i_item_sk
     AND i_current_price > 50

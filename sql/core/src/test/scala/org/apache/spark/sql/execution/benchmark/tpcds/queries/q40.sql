@@ -18,8 +18,8 @@ WHERE
     AND i_item_sk = cs_item_sk
     AND cs_warehouse_sk = w_warehouse_sk
     AND cs_sold_date_sk = d_date_sk
-    AND d_date BETWEEN date_sub(cast('2000-03-11' AS DATE), 30)
-  AND date_add(cast('2000-03-11' AS DATE), 30)
+    AND d_date BETWEEN (cast('2000-03-11' AS DATE) - INTERVAL 30 days)
+  AND (cast('2000-03-11' AS DATE) + INTERVAL 30 days)
 GROUP BY w_state, i_item_id
 ORDER BY w_state, i_item_id
 LIMIT 100
