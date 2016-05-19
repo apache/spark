@@ -68,6 +68,7 @@ class SparkSession private(
     this(sc, None)
   }
 
+  sparkContext.assertNotStopped()
 
   /* ----------------------- *
    |  Session-related state  |
@@ -477,8 +478,8 @@ class SparkSession private(
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[InternalRow])
+      val encoder = RowEncoder(schema)
+      rowRDD.map(encoder.toRow)
     } else {
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
