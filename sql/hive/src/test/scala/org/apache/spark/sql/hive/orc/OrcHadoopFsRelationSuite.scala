@@ -20,7 +20,6 @@ package org.apache.spark.sql.hive.orc
 import java.io.File
 
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.ql.io.orc.{CompressionKind, OrcFile}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql.Row
@@ -98,14 +97,25 @@ class OrcHadoopFsRelationSuite extends HadoopFsRelationTest {
       val fs = FileSystem.getLocal(conf)
       val maybeOrcFile = new File(path).listFiles().find(_.getName.endsWith(".zlib.orc"))
       assert(maybeOrcFile.isDefined)
-      val orcFilePath = new Path(maybeOrcFile.get.toPath.toString)
-      val orcReader = OrcFile.createReader(orcFilePath, OrcFile.readerOptions(conf))
-      assert(orcReader.getCompression == CompressionKind.ZLIB)
+      val orcFilePath = maybeOrcFile.get.toPath.toString
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(orcFilePath).get.getCompression
+      assert("ZLIB" === expectedCompressionKind.name())
 
       val copyDf = spark
         .read
         .orc(path)
       checkAnswer(df, copyDf)
+    }
+  }
+
+  test("Default compression codec is snappy for ORC compression") {
+    withTempPath { file =>
+      spark.range(0, 10).write
+        .orc(file.getCanonicalPath)
+      val expectedCompressionKind =
+        OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
+      assert("SNAPPY" === expectedCompressionKind.name())
     }
   }
 }

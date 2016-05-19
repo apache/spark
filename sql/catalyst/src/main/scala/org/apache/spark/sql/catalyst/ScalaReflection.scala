@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -112,8 +113,8 @@ object ScalaReflection extends ScalaReflection {
    * Returns true if the value of this data type is same between internal and external.
    */
   def isNativeType(dt: DataType): Boolean = dt match {
-    case BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType => true
+    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
+         FloatType | DoubleType | BinaryType | CalendarIntervalType => true
     case _ => false
   }
 

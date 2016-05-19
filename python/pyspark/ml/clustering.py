@@ -65,7 +65,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
 
     GaussianMixture clustering.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
 
     >>> data = [(Vectors.dense([-0.1, -0.05 ]),),
     ...         (Vectors.dense([-0.01, -0.1]),),
@@ -194,7 +194,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     K-means clustering with a k-means++ like initialization mode
     (the k-means|| algorithm by Bahmani et al).
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = sqlContext.createDataFrame(data, ["features"])
@@ -347,7 +347,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     If bisecting all divisible clusters on the bottom level would result more than `k` leaf
     clusters, larger clusters get higher priority.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
     >>> df = sqlContext.createDataFrame(data, ["features"])
@@ -517,7 +517,7 @@ class LDAModel(JavaModel):
     def estimatedDocConcentration(self):
         """
         Value for :py:attr:`LDA.docConcentration` estimated from data.
-        If Online LDA was used and :py:attr::`LDA.optimizeDocConcentration` was set to false,
+        If Online LDA was used and :py:attr:`LDA.optimizeDocConcentration` was set to false,
         then this returns the fixed (given) value for the :py:attr:`LDA.docConcentration` parameter.
         """
         return self._call_java("estimatedDocConcentration")
@@ -625,7 +625,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     :py:class:`pyspark.ml.feature.Tokenizer` and :py:class:`pyspark.ml.feature.CountVectorizer`
     can be useful for converting text to word count vectors.
 
-    >>> from pyspark.mllib.linalg import Vectors, SparseVector
+    >>> from pyspark.ml.linalg import Vectors, SparseVector
     >>> from pyspark.ml.clustering import LDA
     >>> df = sqlContext.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
     ...      [2, SparseVector(2, {0: 1.0})],], ["id", "features"])

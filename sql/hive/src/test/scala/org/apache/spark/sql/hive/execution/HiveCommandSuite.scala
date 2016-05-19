@@ -35,7 +35,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     sql(
       """
-        |CREATE EXTERNAL TABLE parquet_tab2 (c1 INT, c2 STRING)
+        |CREATE TABLE parquet_tab2 (c1 INT, c2 STRING)
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)

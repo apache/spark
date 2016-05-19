@@ -90,7 +90,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.orc(base.getCanonicalPath).registerTempTable("t")
+      read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -137,7 +137,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
           makePartitionDir(base, defaultPartitionName, "pi" -> pi, "ps" -> ps))
       }
 
-      read.orc(base.getCanonicalPath).registerTempTable("t")
+      read.orc(base.getCanonicalPath).createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -189,7 +189,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
       read
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
         .orc(base.getCanonicalPath)
-        .registerTempTable("t")
+        .createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(
@@ -231,7 +231,7 @@ class OrcPartitionDiscoverySuite extends QueryTest with TestHiveSingleton with B
       read
         .option(ConfVars.DEFAULTPARTITIONNAME.varname, defaultPartitionName)
         .orc(base.getCanonicalPath)
-        .registerTempTable("t")
+        .createOrReplaceTempView("t")
 
       withTempTable("t") {
         checkAnswer(

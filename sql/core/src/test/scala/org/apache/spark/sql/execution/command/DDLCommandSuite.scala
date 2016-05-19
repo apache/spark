@@ -18,13 +18,15 @@
 package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.catalog.{FunctionResource, FunctionResourceType}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTableType, FunctionResource}
+import org.apache.spark.sql.catalyst.catalog.FunctionResourceType
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsing}
 import org.apache.spark.sql.internal.SQLConf
-
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 // TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
@@ -35,7 +37,7 @@ class DDLCommandSuite extends PlanTest {
       parser.parsePlan(sql)
     }
     assert(e.getMessage.toLowerCase.contains("operation not allowed"))
-    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p)) }
+    containsThesePhrases.foreach { p => assert(e.getMessage.toLowerCase.contains(p.toLowerCase)) }
   }
 
   test("create database") {
@@ -209,6 +211,84 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
+  }
+
+  test("create external table - location must be specified") {
+    assertUnsupported(
+      sql = "CREATE EXTERNAL TABLE my_tab",
+      containsThesePhrases = Seq("create external table", "location"))
+    val query = "CREATE EXTERNAL TABLE my_tab LOCATION '/something/anything'"
+    parser.parsePlan(query) match {
+      case ct: CreateTable =>
+        assert(ct.table.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.table.storage.locationUri == Some("/something/anything"))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query")
+    }
+  }
+
+  test("create table - location implies external") {
+    val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
+    parser.parsePlan(query) match {
+      case ct: CreateTable =>
+        assert(ct.table.tableType == CatalogTableType.EXTERNAL)
+        assert(ct.table.storage.locationUri == Some("/something/anything"))
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+            s"got ${other.getClass.getName}: $query")
+    }
+  }
+
+  test("create table using - with partitioned by") {
+    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
+    val expected = CreateTableUsing(
+      TableIdentifier("my_tab"),
+      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      "parquet",
+      false,
+      Map.empty,
+      null,
+      None,
+      false,
+      true)
+
+    parser.parsePlan(query) match {
+      case ct: CreateTableUsing =>
+        // We can't compare array in `CreateTableUsing` directly, so here we compare
+        // `partitionColumns` ahead, and make `partitionColumns` null before plan comparison.
+        assert(Seq("a") == ct.partitionColumns.toSeq)
+        comparePlans(ct.copy(partitionColumns = null), expected)
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query")
+    }
+  }
+
+  test("create table using - with bucket") {
+    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
+      "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
+    val expected = CreateTableUsing(
+      TableIdentifier("my_tab"),
+      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      "parquet",
+      false,
+      Map.empty,
+      null,
+      Some(BucketSpec(5, Seq("a"), Seq("b"))),
+      false,
+      true)
+
+    parser.parsePlan(query) match {
+      case ct: CreateTableUsing =>
+        // `Array.empty == Array.empty` returns false, here we set `partitionColumns` to null before
+        // plan comparison.
+        assert(ct.partitionColumns.isEmpty)
+        comparePlans(ct.copy(partitionColumns = null), expected)
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query")
+    }
   }
 
   // ALTER TABLE table_name RENAME TO new_table_name;
