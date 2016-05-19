@@ -827,7 +827,7 @@ object SparkSession {
     defaultSession.set(null)
   }
 
-  private[sql] def getActiveSession: Option[SparkSession] = Option(getActiveSession.get)
+  private[sql] def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
 
   private[sql] def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
 
