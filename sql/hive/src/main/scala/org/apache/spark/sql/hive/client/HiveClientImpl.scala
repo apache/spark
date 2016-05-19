@@ -337,10 +337,19 @@ private[hive] class HiveClientImpl(
       val schema = h.getCols.asScala.map(fromHiveColumn) ++ partCols
 
       // Skew spec, storage handler, and bucketing info can't be mapped to CatalogTable (yet)
-      val hasUnsupportedFeatures =
-        !h.getSkewedColNames.isEmpty ||
-          h.getStorageHandler != null ||
-          !h.getBucketCols.isEmpty
+      val unsupportedFeatures = ArrayBuffer.empty[String]
+
+      if (!h.getSkewedColNames.isEmpty) {
+        unsupportedFeatures += "skewed columns"
+      }
+
+      if (h.getStorageHandler != null) {
+        unsupportedFeatures += "storage handler"
+      }
+
+      if (!h.getBucketCols.isEmpty) {
+        unsupportedFeatures += "bucketing"
+      }
 
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
@@ -369,7 +378,7 @@ private[hive] class HiveClientImpl(
         properties = h.getParameters.asScala.toMap,
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
-        hasUnsupportedFeatures = hasUnsupportedFeatures)
+        unsupportedFeatures = unsupportedFeatures)
     }
   }
 

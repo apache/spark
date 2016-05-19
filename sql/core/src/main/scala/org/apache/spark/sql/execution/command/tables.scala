@@ -633,16 +633,16 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   }
 
   private def showCreateHiveTable(metadata: CatalogTable): String = {
-    def reportUnsupportedError(): Unit = {
-      throw new UnsupportedOperationException(
+    def reportUnsupportedError(features: Seq[String]): Unit = {
+      throw new AnalysisException(
         s"Failed to execute SHOW CREATE TABLE against table ${metadata.identifier.quotedString}, " +
-          "because it contains table structure(s) (e.g. skewed columns) that Spark SQL doesn't " +
-          "support yet."
+          "which is created by Hive and uses the following unsupported feature(s)\n" +
+          features.map(" - " + _).mkString("\n")
       )
     }
 
-    if (metadata.hasUnsupportedFeatures) {
-      reportUnsupportedError()
+    if (metadata.unsupportedFeatures.nonEmpty) {
+      reportUnsupportedError(metadata.unsupportedFeatures)
     }
 
     val builder = StringBuilder.newBuilder
@@ -651,7 +651,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
       case EXTERNAL => " EXTERNAL TABLE"
       case VIEW => " VIEW"
       case MANAGED => " TABLE"
-      case INDEX => reportUnsupportedError()
+      case INDEX => reportUnsupportedError(Seq("index table"))
     }
 
     builder ++= s"CREATE$tableTypeString ${table.quotedString}"
