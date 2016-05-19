@@ -767,6 +767,12 @@ class TreeEnsembleModels(JavaModel):
         return [DecisionTreeModel(m) for m in list(self._call_java("trees"))]
 
     @property
+    @since("2.0.0")
+    def getNumTrees(self):
+        """Number of trees in ensemble."""
+        return self._call_java("getNumTrees")
+
+    @property
     @since("1.5.0")
     def treeWeights(self):
         """Return the weights for each tree"""
