@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.IOException
+
 import scala.collection.JavaConverters._
 
 import com.google.common.base.Objects
@@ -123,19 +125,21 @@ private[hive] case class MetastoreRelation(
         // so when `totalSize` is zero, use `rawDataSize` instead
         // if the size is still less than zero, we try to get the file size from HDFS.
         // given this is only needed for optimization, if the HDFS call fails we return the default.
-        Option(totalSize).map(_.toLong).filter(_ > 0)
-          .getOrElse(Option(rawDataSize).map(_.toLong).filter(_ > 0)
-              .getOrElse({
-                val hadoopConf = sparkSession.sessionState.newHadoopConf()
-                val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
-                try {
-                  fs.getContentSummary(hiveQlTable.getPath).getLength
-                } catch {
-                  case e: Exception =>
-                    log.warn("Failed to get table size from hdfs.", e)
-                    sparkSession.sessionState.conf.defaultSizeInBytes
-                }
-              })))
+        if (Option(totalSize).map(_.toLong).getOrElse(0L) > 0) {
+          totalSize.toLong
+        } else if (Option(rawDataSize).map(_.toLong).getOrElse(0L) > 0) {
+          rawDataSize.toLong
+        } else {
+          try {
+            val hadoopConf = sparkSession.sessionState.newHadoopConf()
+            val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
+            fs.getContentSummary(hiveQlTable.getPath).getLength
+          } catch {
+            case e: IOException =>
+              logWarning("Failed to get table size from hdfs.", e)
+              sparkSession.sessionState.conf.defaultSizeInBytes
+          }
+        })
     }
   )
 
