@@ -1045,8 +1045,7 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
-                                     JavaMLReadable):
+                                     HasMaxIter, HasTol, HasSeed, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
@@ -1090,14 +1089,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     True
     >>> model.weights == model2.weights
     True
-    >>> mlp2 = mlp2.setWeights([
-    ...    2, 5, 1, -7, -5, -10, 0, 0.6, -1, 2, -2, 1, 2, -7, -1, -2, 2, 1, -1, 9, -9, 3, -3, -3,
-    ...    3.0, 0, -1])
-    >>> model3 = mlp2.fit(df)
-    >>> model3.weights != model2.weights
-    True
-    >>> model3.layers == model.layers
-    True
 
     .. versionadded:: 1.6.0
     """
@@ -1111,37 +1102,28 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                       "remaining data in a partition then it is adjusted to the size of this " +
                       "data. Recommended size is between 10 and 1000, default is 128.",
                       typeConverter=TypeConverters.toInt)
-    solver = Param(Params._dummy(), "solver", "Allows setting the solver: minibatch gradient " +
-                   "descent (gd) or l-bfgs. (Default l-bfgs)",
-                   typeConverter=TypeConverters.toString)
-    weights = Param(Params._dummy(), "weights", "Weights (either initial if before training or " +
-                    "actual on model)", typeConverter=TypeConverters.toVector)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03,
-                 solver="l-bfgs", weights=None):
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                 solver="l-bfgs", weights=None)
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self._setDefault(maxIter=100, tol=1E-4, blockSize=128, stepSize=0.03, solver="l-bfgs")
+        self._setDefault(maxIter=100, tol=1E-4, blockSize=128)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03,
-                  solver="l-bfgs", weights=None):
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03, \
-                  solver="l-bfgs", weights=None)
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self.setParams._input_kwargs
@@ -1177,56 +1159,6 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         Gets the value of blockSize or its default value.
         """
         return self.getOrDefault(self.blockSize)
-
-    @since("2.0.0")
-    def setStepSize(self, value):
-        """
-        Sets the value of :py:attr:`stepSize`.
-        """
-        return self._set(stepSize=value)
-
-    @since("2.0.0")
-    def getStepSize(self):
-        """
-        Gets the value of stepSize or its default value.
-        """
-        return self.getOrDefault(self.stepSize)
-
-    @since("2.0.0")
-    def setSolver(self, value):
-        """
-        Sets the value of :py:attr:`solver`.
-        """
-        return self._set(solver=value)
-
-    @since("2.0.0")
-    def getSolver(self):
-        """
-        Gets the value of solver or its default value.
-        """
-        return self.getOrDefault(self.solver)
-
-    @property
-    @since("2.0.0")
-    def getOptimizer(self):
-        """
-        Gets the optimizer used.
-        """
-        return self.getSolver()
-
-    @since("2.0.0")
-    def setWeights(self, value):
-        """
-        Sets the value of :py:attr:`weights`.
-        """
-        return self._set(weights=value)
-
-    @since("2.0.0")
-    def getWeights(self):
-        """
-        Gets the value of weights or its default value.
-        """
-        return self.getOrDefault(self.weights)
 
 
 class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
