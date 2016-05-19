@@ -130,13 +130,14 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           submitArgs = args.subList(1, args.size());
       }
 
+      this.isExample = isExample;
       OptionParser parser = new OptionParser();
       parser.parse(submitArgs);
       this.printInfo = parser.infoRequested;
     }  else {
+      this.isExample = isExample;
       this.printInfo = true;
     }
-    this.isExample = isExample;
   }
 
   @Override
