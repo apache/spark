@@ -17,16 +17,17 @@
 
 package org.apache.spark.mllib.stat
 
-import org.scalatest.FunSuite
-
 import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation,
   SpearmanCorrelation}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
-class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
+class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Logging {
 
   // test input data
   val xData = Array(1.0, 0.0, -2.0)
@@ -42,10 +43,10 @@ class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
   test("corr(x, y) pearson, 1 value in data") {
     val x = sc.parallelize(Array(1.0))
     val y = sc.parallelize(Array(4.0))
-    intercept[RuntimeException] {
+    intercept[IllegalArgumentException] {
       Statistics.corr(x, y, "pearson")
     }
-    intercept[RuntimeException] {
+    intercept[IllegalArgumentException] {
       Statistics.corr(x, y, "spearman")
     }
   }
@@ -96,11 +97,13 @@ class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
     val X = sc.parallelize(data)
     val defaultMat = Statistics.corr(X)
     val pearsonMat = Statistics.corr(X, "pearson")
+    // scalastyle:off
     val expected = BDM(
       (1.00000000, 0.05564149, Double.NaN, 0.4004714),
       (0.05564149, 1.00000000, Double.NaN, 0.9135959),
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
-      (0.40047142, 0.91359586, Double.NaN,1.0000000))
+      (0.40047142, 0.91359586, Double.NaN, 1.0000000))
+    // scalastyle:on
     assert(matrixApproxEqual(defaultMat.toBreeze, expected))
     assert(matrixApproxEqual(pearsonMat.toBreeze, expected))
   }
@@ -108,11 +111,13 @@ class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
   test("corr(X) spearman") {
     val X = sc.parallelize(data)
     val spearmanMat = Statistics.corr(X, "spearman")
+    // scalastyle:off
     val expected = BDM(
       (1.0000000,  0.1054093,  Double.NaN, 0.4000000),
       (0.1054093,  1.0000000,  Double.NaN, 0.9486833),
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
       (0.4000000,  0.9486833,  Double.NaN, 1.0000000))
+    // scalastyle:on
     assert(matrixApproxEqual(spearmanMat.toBreeze, expected))
   }
 
@@ -123,13 +128,20 @@ class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
     assert(Correlations.getCorrelationFromName("pearson") === pearson)
     assert(Correlations.getCorrelationFromName("spearman") === spearman)
 
-    // Should throw IllegalArgumentException
-    try {
+    intercept[IllegalArgumentException] {
       Correlations.getCorrelationFromName("kendall")
-      assert(false)
-    } catch {
-      case ie: IllegalArgumentException =>
     }
+  }
+
+  ignore("Pearson correlation of very large uncorrelated values (SPARK-14533)") {
+    // The two RDDs should have 0 correlation because they're random;
+    // this should stay the same after shifting them by any amount
+    // In practice a large shift produces very large values which can reveal
+    // round-off problems
+    val a = RandomRDDs.normalRDD(sc, 100000, 10).map(_ + 1000000000.0)
+    val b = RandomRDDs.normalRDD(sc, 100000, 10).map(_ + 1000000000.0)
+    val p = Statistics.corr(a, b, method = "pearson")
+    assert(approxEqual(p, 0.0, 0.01))
   }
 
   def approxEqual(v1: Double, v2: Double, threshold: Double = 1e-6): Boolean = {
@@ -143,7 +155,7 @@ class CorrelationSuite extends FunSuite with MLlibTestSparkContext {
   def matrixApproxEqual(A: BM[Double], B: BM[Double], threshold: Double = 1e-6): Boolean = {
     for (i <- 0 until A.rows; j <- 0 until A.cols) {
       if (!approxEqual(A(i, j), B(i, j), threshold)) {
-        println("i, j = " + i + ", " + j + " actual: " + A(i, j) + " expected:" + B(i, j))
+        logInfo("i, j = " + i + ", " + j + " actual: " + A(i, j) + " expected:" + B(i, j))
         return false
       }
     }

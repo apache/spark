@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.sources
 
-import java.sql.{Timestamp, Date}
+import java.nio.charset.StandardCharsets
+import java.sql.{Date, Timestamp}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 
 class DefaultSource extends SimpleScanSource
@@ -29,17 +31,21 @@ class SimpleScanSource extends RelationProvider {
   override def createRelation(
       sqlContext: SQLContext,
       parameters: Map[String, String]): BaseRelation = {
-    SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext)
+    SimpleScan(parameters("from").toInt, parameters("TO").toInt)(sqlContext.sparkSession)
   }
 }
 
-case class SimpleScan(from: Int, to: Int)(@transient val sqlContext: SQLContext)
+case class SimpleScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
+
+  override def sqlContext: SQLContext = sparkSession.wrapped
 
   override def schema: StructType =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
 
-  override def buildScan(): RDD[Row] = sqlContext.sparkContext.parallelize(from to to).map(Row(_))
+  override def buildScan(): RDD[Row] = {
+    sparkSession.sparkContext.parallelize(from to to).map(Row(_))
+  }
 }
 
 class AllDataTypesScanSource extends SchemaRelationProvider {
@@ -47,24 +53,34 @@ class AllDataTypesScanSource extends SchemaRelationProvider {
       sqlContext: SQLContext,
       parameters: Map[String, String],
       schema: StructType): BaseRelation = {
-    AllDataTypesScan(parameters("from").toInt, parameters("TO").toInt, schema)(sqlContext)
+    // Check that weird parameters are passed correctly.
+    parameters("option_with_underscores")
+    parameters("option.with.dots")
+
+    AllDataTypesScan(
+      parameters("from").toInt,
+      parameters("TO").toInt, schema)(sqlContext.sparkSession)
   }
 }
 
 case class AllDataTypesScan(
     from: Int,
     to: Int,
-    userSpecifiedSchema: StructType)(@transient val sqlContext: SQLContext)
+    userSpecifiedSchema: StructType)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with TableScan {
 
+  override def sqlContext: SQLContext = sparkSession.wrapped
+
   override def schema: StructType = userSpecifiedSchema
 
+  override def needConversion: Boolean = true
+
   override def buildScan(): RDD[Row] = {
-    sqlContext.sparkContext.parallelize(from to to).map { i =>
+    sparkSession.sparkContext.parallelize(from to to).map { i =>
       Row(
         s"str_$i",
-        s"str_$i".getBytes(),
+        s"str_$i".getBytes(StandardCharsets.UTF_8),
         i % 2 == 0,
         i.toByte,
         i.toShort,
@@ -74,23 +90,25 @@ case class AllDataTypesScan(
         i.toDouble,
         new java.math.BigDecimal(i),
         new java.math.BigDecimal(i),
-        new Date(1970, 1, 1),
+        Date.valueOf("1970-01-01"),
         new Timestamp(20000 + i),
         s"varchar_$i",
+        s"char_$i",
         Seq(i, i + 1),
         Seq(Map(s"str_$i" -> Row(i.toLong))),
         Map(i -> i.toString),
         Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
         Row(i, i.toString),
-        Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(1970, 1, i + 1)))))
+          Row(Seq(s"str_$i", s"str_${i + 1}"),
+            Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
     }
   }
 }
 
-class TableScanSuite extends DataSourceTest {
-  import caseInsensisitiveContext._
+class TableScanSuite extends DataSourceTest with SharedSQLContext {
+  protected override lazy val sql = caseInsensitiveContext.sql _
 
-  var tableWithSchemaExpected = (1 to 10).map { i =>
+  private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
       s"str_$i",
       s"str_$i",
@@ -103,25 +121,29 @@ class TableScanSuite extends DataSourceTest {
       i.toDouble,
       new java.math.BigDecimal(i),
       new java.math.BigDecimal(i),
-      new Date(1970, 1, 1),
+      Date.valueOf("1970-01-01"),
       new Timestamp(20000 + i),
       s"varchar_$i",
+      s"char_$i",
       Seq(i, i + 1),
       Seq(Map(s"str_$i" -> Row(i.toLong))),
       Map(i -> i.toString),
       Map(Map(s"str_$i" -> i.toFloat) -> Row(i.toLong)),
       Row(i, i.toString),
-      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(new Date(1970, 1, i + 1)))))
+      Row(Seq(s"str_$i", s"str_${i + 1}"), Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))))
   }.toSeq
 
-  before {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
     sql(
       """
         |CREATE TEMPORARY TABLE oneToTen
         |USING org.apache.spark.sql.sources.SimpleScanSource
         |OPTIONS (
         |  From '1',
-        |  To '10'
+        |  To '10',
+        |  option_with_underscores 'someval',
+        |  option.with.dots 'someval'
         |)
       """.stripMargin)
 
@@ -142,6 +164,7 @@ class TableScanSuite extends DataSourceTest {
         |dateField dAte,
         |timestampField tiMestamp,
         |varcharField varchaR(12),
+        |charField ChaR(18),
         |arrayFieldSimple Array<inT>,
         |arrayFieldComplex Array<Map<String, Struct<key:bigInt>>>,
         |mapFieldSimple MAP<iNt, StRing>,
@@ -152,7 +175,9 @@ class TableScanSuite extends DataSourceTest {
         |USING org.apache.spark.sql.sources.AllDataTypesScanSource
         |OPTIONS (
         |  From '1',
-        |  To '10'
+        |  To '10',
+        |  option_with_underscores 'someval',
+        |  option.with.dots 'someval'
         |)
       """.stripMargin)
   }
@@ -188,11 +213,12 @@ class TableScanSuite extends DataSourceTest {
       StructField("longField_:,<>=+/~^", LongType, true) ::
       StructField("floatField", FloatType, true) ::
       StructField("doubleField", DoubleType, true) ::
-      StructField("decimalField1", DecimalType.Unlimited, true) ::
+      StructField("decimalField1", DecimalType.USER_DEFAULT, true) ::
       StructField("decimalField2", DecimalType(9, 2), true) ::
       StructField("dateField", DateType, true) ::
       StructField("timestampField", TimestampType, true) ::
       StructField("varcharField", StringType, true) ::
+      StructField("charField", StringType, true) ::
       StructField("arrayFieldSimple", ArrayType(IntegerType), true) ::
       StructField("arrayFieldComplex",
         ArrayType(
@@ -215,7 +241,7 @@ class TableScanSuite extends DataSourceTest {
       Nil
     )
 
-    assert(expectedSchema == table("tableWithSchema").schema)
+    assert(expectedSchema == caseInsensitiveContext.table("tableWithSchema").schema)
 
     checkAnswer(
       sql(
@@ -234,6 +260,7 @@ class TableScanSuite extends DataSourceTest {
           | dateField,
           | timestampField,
           | varcharField,
+          | charField,
           | arrayFieldSimple,
           | arrayFieldComplex,
           | mapFieldSimple,
@@ -266,11 +293,11 @@ class TableScanSuite extends DataSourceTest {
 
   sqlTest(
     "SELECT structFieldComplex.Value.`value_(2)` FROM tableWithSchema",
-    (1 to 10).map(i => Row(Seq(new Date(1970, 1, i + 1)))).toSeq)
+    (1 to 10).map(i => Row(Seq(Date.valueOf(s"1970-01-${i + 1}")))).toSeq)
 
   test("Caching")  {
     // Cached Query Execution
-    cacheTable("oneToTen")
+    caseInsensitiveContext.cacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"))
     checkAnswer(
       sql("SELECT * FROM oneToTen"),
@@ -291,13 +318,14 @@ class TableScanSuite extends DataSourceTest {
       sql("SELECT i * 2 FROM oneToTen"),
       (1 to 10).map(i => Row(i * 2)).toSeq)
 
-    assertCached(sql("SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"), 2)
-    checkAnswer(
-      sql("SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"),
+    assertCached(sql(
+      "SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"), 2)
+    checkAnswer(sql(
+      "SELECT a.i, b.i FROM oneToTen a JOIN oneToTen b ON a.i = b.i + 1"),
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Verify uncaching
-    uncacheTable("oneToTen")
+    caseInsensitiveContext.uncacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"), 0)
   }
 
@@ -319,7 +347,7 @@ class TableScanSuite extends DataSourceTest {
 
   test("exceptions") {
     // Make sure we do throw correct exception when users use a relation provider that
-    // only implements the RelationProvier or the SchemaRelationProvider.
+    // only implements the RelationProvider or the SchemaRelationProvider.
     val schemaNotAllowed = intercept[Exception] {
       sql(
         """
@@ -354,7 +382,9 @@ class TableScanSuite extends DataSourceTest {
        |USING org.apache.spark.sql.sources.AllDataTypesScanSource
        |OPTIONS (
        |  from '1',
-       |  to '10'
+       |  to '10',
+       |  option_with_underscores 'someval',
+       |  option.with.dots 'someval'
        |)
        """.stripMargin)
 

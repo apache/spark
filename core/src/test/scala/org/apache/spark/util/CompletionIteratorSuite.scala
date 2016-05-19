@@ -17,9 +17,9 @@
 
 package org.apache.spark.util
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class CompletionIteratorSuite extends FunSuite {
+class CompletionIteratorSuite extends SparkFunSuite {
   test("basic test") {
     var numTimesCompleted = 0
     val iter = List(1, 2, 3).iterator

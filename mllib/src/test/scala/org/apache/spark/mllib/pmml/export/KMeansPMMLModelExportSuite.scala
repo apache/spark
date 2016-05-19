@@ -18,12 +18,12 @@
 package org.apache.spark.mllib.pmml.export
 
 import org.dmg.pmml.ClusteringModel
-import org.scalatest.FunSuite
 
+import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.clustering.KMeansModel
 import org.apache.spark.mllib.linalg.Vectors
 
-class KMeansPMMLModelExportSuite extends FunSuite {
+class KMeansPMMLModelExportSuite extends SparkFunSuite {
 
   test("KMeansPMMLModelExport generate PMML format") {
     val clusterCenters = Array(
@@ -45,5 +45,5 @@ class KMeansPMMLModelExportSuite extends FunSuite {
     val pmmlClusteringModel = pmml.getModels.get(0).asInstanceOf[ClusteringModel]
     assert(pmmlClusteringModel.getNumberOfClusters === clusterCenters.length)
   }
-  
+
 }

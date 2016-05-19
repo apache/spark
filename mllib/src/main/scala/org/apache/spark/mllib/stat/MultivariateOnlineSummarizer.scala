@@ -17,23 +17,27 @@
 
 package org.apache.spark.mllib.stat
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * :: DeveloperApi ::
  * MultivariateOnlineSummarizer implements [[MultivariateStatisticalSummary]] to compute the mean,
- * variance, minimum, maximum, counts, and nonzero counts for samples in sparse or dense vector
+ * variance, minimum, maximum, counts, and nonzero counts for instances in sparse or dense vector
  * format in a online fashion.
  *
  * Two MultivariateOnlineSummarizer can be merged together to have a statistical summary of
  * the corresponding joint dataset.
  *
- * A numerically stable algorithm is implemented to compute sample mean and variance:
+ * A numerically stable algorithm is implemented to compute the mean and variance of instances:
  * Reference: [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance variance-wiki]]
  * Zero elements (including explicit zero values) are skipped when calling add(),
  * to have time complexity O(nnz) instead of O(n) for each column.
+ *
+ * For weighted instances, the unbiased estimation of variance is defined by the reliability
+ * weights: [[https://en.wikipedia.org/wiki/Weighted_arithmetic_mean#Reliability_weights]].
  */
+@Since("1.1.0")
 @DeveloperApi
 class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with Serializable {
 
@@ -43,6 +47,8 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
   private var currM2: Array[Double] = _
   private var currL1: Array[Double] = _
   private var totalCnt: Long = 0
+  private var weightSum: Double = 0.0
+  private var weightSquareSum: Double = 0.0
   private var nnz: Array[Double] = _
   private var currMax: Array[Double] = _
   private var currMin: Array[Double] = _
@@ -53,10 +59,16 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    * @param sample The sample in dense/sparse vector format to be added into this summarizer.
    * @return This MultivariateOnlineSummarizer object.
    */
-  def add(sample: Vector): this.type = {
+  @Since("1.1.0")
+  def add(sample: Vector): this.type = add(sample, 1.0)
+
+  private[spark] def add(instance: Vector, weight: Double): this.type = {
+    require(weight >= 0.0, s"sample weight, ${weight} has to be >= 0.0")
+    if (weight == 0.0) return this
+
     if (n == 0) {
-      require(sample.size > 0, s"Vector should have dimension larger than zero.")
-      n = sample.size
+      require(instance.size > 0, s"Vector should have dimension larger than zero.")
+      n = instance.size
 
       currMean = Array.ofDim[Double](n)
       currM2n = Array.ofDim[Double](n)
@@ -67,29 +79,38 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
       currMin = Array.fill[Double](n)(Double.MaxValue)
     }
 
-    require(n == sample.size, s"Dimensions mismatch when adding new sample." +
-      s" Expecting $n but got ${sample.size}.")
+    require(n == instance.size, s"Dimensions mismatch when adding new sample." +
+      s" Expecting $n but got ${instance.size}.")
 
-    sample.foreachActive { (index, value) =>
+    val localCurrMean = currMean
+    val localCurrM2n = currM2n
+    val localCurrM2 = currM2
+    val localCurrL1 = currL1
+    val localNnz = nnz
+    val localCurrMax = currMax
+    val localCurrMin = currMin
+    instance.foreachActive { (index, value) =>
       if (value != 0.0) {
-        if (currMax(index) < value) {
-          currMax(index) = value
+        if (localCurrMax(index) < value) {
+          localCurrMax(index) = value
         }
-        if (currMin(index) > value) {
-          currMin(index) = value
+        if (localCurrMin(index) > value) {
+          localCurrMin(index) = value
         }
 
-        val prevMean = currMean(index)
+        val prevMean = localCurrMean(index)
         val diff = value - prevMean
-        currMean(index) = prevMean + diff / (nnz(index) + 1.0)
-        currM2n(index) += (value - currMean(index)) * diff
-        currM2(index) += value * value
-        currL1(index) += math.abs(value)
+        localCurrMean(index) = prevMean + weight * diff / (localNnz(index) + weight)
+        localCurrM2n(index) += weight * (value - localCurrMean(index)) * diff
+        localCurrM2(index) += weight * value * value
+        localCurrL1(index) += weight * math.abs(value)
 
-        nnz(index) += 1.0
+        localNnz(index) += weight
       }
     }
 
+    weightSum += weight
+    weightSquareSum += weight * weight
     totalCnt += 1
     this
   }
@@ -101,11 +122,14 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
    * @param other The other MultivariateOnlineSummarizer to be merged.
    * @return This MultivariateOnlineSummarizer object.
    */
+  @Since("1.1.0")
   def merge(other: MultivariateOnlineSummarizer): this.type = {
-    if (this.totalCnt != 0 && other.totalCnt != 0) {
+    if (this.weightSum != 0.0 && other.weightSum != 0.0) {
       require(n == other.n, s"Dimensions mismatch when merging with another summarizer. " +
         s"Expecting $n but got ${other.n}.")
       totalCnt += other.totalCnt
+      weightSum += other.weightSum
+      weightSquareSum += other.weightSquareSum
       var i = 0
       while (i < n) {
         val thisNnz = nnz(i)
@@ -128,98 +152,141 @@ class MultivariateOnlineSummarizer extends MultivariateStatisticalSummary with S
         nnz(i) = totalNnz
         i += 1
       }
-    } else if (totalCnt == 0 && other.totalCnt != 0) {
+    } else if (weightSum == 0.0 && other.weightSum != 0.0) {
       this.n = other.n
-      this.currMean = other.currMean.clone
-      this.currM2n = other.currM2n.clone
-      this.currM2 = other.currM2.clone
-      this.currL1 = other.currL1.clone
+      this.currMean = other.currMean.clone()
+      this.currM2n = other.currM2n.clone()
+      this.currM2 = other.currM2.clone()
+      this.currL1 = other.currL1.clone()
       this.totalCnt = other.totalCnt
-      this.nnz = other.nnz.clone
-      this.currMax = other.currMax.clone
-      this.currMin = other.currMin.clone
+      this.weightSum = other.weightSum
+      this.weightSquareSum = other.weightSquareSum
+      this.nnz = other.nnz.clone()
+      this.currMax = other.currMax.clone()
+      this.currMin = other.currMin.clone()
     }
     this
   }
 
+  /**
+   * Sample mean of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def mean: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realMean = Array.ofDim[Double](n)
     var i = 0
     while (i < n) {
-      realMean(i) = currMean(i) * (nnz(i) / totalCnt)
+      realMean(i) = currMean(i) * (nnz(i) / weightSum)
       i += 1
     }
     Vectors.dense(realMean)
   }
 
+  /**
+   * Unbiased estimate of sample variance of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def variance: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realVariance = Array.ofDim[Double](n)
 
-    val denominator = totalCnt - 1.0
+    val denominator = weightSum - (weightSquareSum / weightSum)
 
     // Sample variance is computed, if the denominator is less than 0, the variance is just 0.
     if (denominator > 0.0) {
       val deltaMean = currMean
       var i = 0
-      while (i < currM2n.size) {
-        realVariance(i) =
-          currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) * (totalCnt - nnz(i)) / totalCnt
-        realVariance(i) /= denominator
+      val len = currM2n.length
+      while (i < len) {
+        realVariance(i) = (currM2n(i) + deltaMean(i) * deltaMean(i) * nnz(i) *
+          (weightSum - nnz(i)) / weightSum) / denominator
         i += 1
       }
     }
     Vectors.dense(realVariance)
   }
 
+  /**
+   * Sample size.
+   *
+   */
+  @Since("1.1.0")
   override def count: Long = totalCnt
 
+  /**
+   * Number of nonzero elements in each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def numNonzeros: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(nnz)
   }
 
+  /**
+   * Maximum value of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def max: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
     var i = 0
     while (i < n) {
-      if ((nnz(i) < totalCnt) && (currMax(i) < 0.0)) currMax(i) = 0.0
+      if ((nnz(i) < weightSum) && (currMax(i) < 0.0)) currMax(i) = 0.0
       i += 1
     }
     Vectors.dense(currMax)
   }
 
+  /**
+   * Minimum value of each dimension.
+   *
+   */
+  @Since("1.1.0")
   override def min: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
     var i = 0
     while (i < n) {
-      if ((nnz(i) < totalCnt) && (currMin(i) > 0.0)) currMin(i) = 0.0
+      if ((nnz(i) < weightSum) && (currMin(i) > 0.0)) currMin(i) = 0.0
       i += 1
     }
     Vectors.dense(currMin)
   }
 
+  /**
+   * L2 (Euclidian) norm of each dimension.
+   *
+   */
+  @Since("1.2.0")
   override def normL2: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
     val realMagnitude = Array.ofDim[Double](n)
 
     var i = 0
-    while (i < currM2.size) {
+    val len = currM2.length
+    while (i < len) {
       realMagnitude(i) = math.sqrt(currM2(i))
       i += 1
     }
     Vectors.dense(realMagnitude)
   }
 
+  /**
+   * L1 norm of each dimension.
+   *
+   */
+  @Since("1.2.0")
   override def normL1: Vector = {
-    require(totalCnt > 0, s"Nothing has been added to this summarizer.")
+    require(weightSum > 0, s"Nothing has been added to this summarizer.")
 
     Vectors.dense(currL1)
   }

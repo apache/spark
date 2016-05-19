@@ -17,20 +17,25 @@
 
 package org.apache.spark.mllib.evaluation
 
+import java.{lang => jl}
+
+import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.annotation.Since
+import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /**
  * ::Experimental::
  * Evaluator for ranking algorithms.
  *
+ * Java users should use [[RankingMetrics$.of]] to create a [[RankingMetrics]] instance.
+ *
  * @param predictionAndLabels an RDD of (predicted ranking, ground truth set) pairs.
  */
-@Experimental
+@Since("1.2.0")
 class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])])
   extends Logging with Serializable {
 
@@ -51,6 +56,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @param k the position to compute the truncated precision, must be positive
    * @return the average precision at the first k ranking positions
    */
+  @Since("1.2.0")
   def precisionAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab) =>
@@ -71,13 +77,13 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         logWarning("Empty ground truth set, check input data")
         0.0
       }
-    }.mean
+    }.mean()
   }
 
   /**
    * Returns the mean average precision (MAP) of all the queries.
    * If a query has an empty ground truth set, the average precision will be zero and a log
-   * warining is generated.
+   * warning is generated.
    */
   lazy val meanAveragePrecision: Double = {
     predictionAndLabels.map { case (pred, lab) =>
@@ -100,7 +106,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         logWarning("Empty ground truth set, check input data")
         0.0
       }
-    }.mean
+    }.mean()
   }
 
   /**
@@ -120,6 +126,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
    * @param k the position to compute the truncated ndcg, must be positive
    * @return the average ndcg at the first k ranking positions
    */
+  @Since("1.2.0")
   def ndcgAt(k: Int): Double = {
     require(k > 0, "ranking position k should be positive")
     predictionAndLabels.map { case (pred, lab) =>
@@ -133,7 +140,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         var i = 0
         while (i < n) {
           val gain = 1.0 / math.log(i + 2)
-          if (labSet.contains(pred(i))) {
+          if (i < pred.length && labSet.contains(pred(i))) {
             dcg += gain
           }
           if (i < labSetSize) {
@@ -146,7 +153,23 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         logWarning("Empty ground truth set, check input data")
         0.0
       }
-    }.mean
+    }.mean()
   }
 
+}
+
+object RankingMetrics {
+
+  /**
+   * Creates a [[RankingMetrics]] instance (for Java users).
+   * @param predictionAndLabels a JavaRDD of (predicted ranking, ground truth set) pairs
+   */
+  @Since("1.4.0")
+  def of[E, T <: jl.Iterable[E]](predictionAndLabels: JavaRDD[(T, T)]): RankingMetrics[E] = {
+    implicit val tag = JavaSparkContext.fakeClassTag[E]
+    val rdd = predictionAndLabels.rdd.map { case (predictions, labels) =>
+      (predictions.asScala.toArray, labels.asScala.toArray)
+    }
+    new RankingMetrics(rdd)
+  }
 }

@@ -19,23 +19,19 @@ package org.apache.spark.mllib.util
 
 import scala.reflect.ClassTag
 
-import breeze.linalg.{DenseVector => BDV, SparseVector => BSV}
-
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PartitionwiseSampledRDD
-import org.apache.spark.util.random.BernoulliCellSampler
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.linalg.{SparseVector, DenseVector, Vector, Vectors}
+import org.apache.spark.annotation.Since
+import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.dot
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingContext
-import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.util.random.BernoulliCellSampler
 
 /**
  * Helper methods to load, save and pre-process data used in ML Lib.
  */
+@Since("0.8.0")
 object MLUtils {
 
   private[mllib] lazy val EPSILON = {
@@ -65,34 +61,20 @@ object MLUtils {
    * @param minPartitions min number of partitions
    * @return labeled data stored as an RDD[LabeledPoint]
    */
+  @Since("1.0.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
       numFeatures: Int,
       minPartitions: Int): RDD[LabeledPoint] = {
-    val parsed = sc.textFile(path, minPartitions)
-      .map(_.trim)
-      .filter(line => !(line.isEmpty || line.startsWith("#")))
-      .map { line =>
-        val items = line.split(' ')
-        val label = items.head.toDouble
-        val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
-          val indexAndValue = item.split(':')
-          val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
-          val value = indexAndValue(1).toDouble
-          (index, value)
-        }.unzip
-        (label, indices.toArray, values.toArray)
-      }
+    val parsed = parseLibSVMFile(sc, path, minPartitions)
 
     // Determine number of features.
     val d = if (numFeatures > 0) {
       numFeatures
     } else {
       parsed.persist(StorageLevel.MEMORY_ONLY)
-      parsed.map { case (label, indices, values) =>
-        indices.lastOption.getOrElse(0)
-      }.reduce(math.max) + 1
+      computeNumFeatures(parsed)
     }
 
     parsed.map { case (label, indices, values) =>
@@ -100,46 +82,62 @@ object MLUtils {
     }
   }
 
-  // Convenient methods for `loadLibSVMFile`.
+  private[spark] def computeNumFeatures(rdd: RDD[(Double, Array[Int], Array[Double])]): Int = {
+    rdd.map { case (label, indices, values) =>
+      indices.lastOption.getOrElse(0)
+    }.reduce(math.max) + 1
+  }
 
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
+  private[spark] def parseLibSVMFile(
       sc: SparkContext,
       path: String,
-      multiclass: Boolean,
-      numFeatures: Int,
-      minPartitions: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, numFeatures, minPartitions)
+      minPartitions: Int): RDD[(Double, Array[Int], Array[Double])] = {
+    sc.textFile(path, minPartitions)
+      .map(_.trim)
+      .filter(line => !(line.isEmpty || line.startsWith("#")))
+      .map(parseLibSVMRecord)
+  }
+
+  private[spark] def parseLibSVMRecord(line: String): (Double, Array[Int], Array[Double]) = {
+    val items = line.split(' ')
+    val label = items.head.toDouble
+    val (indices, values) = items.tail.filter(_.nonEmpty).map { item =>
+      val indexAndValue = item.split(':')
+      val index = indexAndValue(0).toInt - 1 // Convert 1-based indices to 0-based.
+      val value = indexAndValue(1).toDouble
+      (index, value)
+    }.unzip
+
+    // check if indices are one-based and in ascending order
+    var previous = -1
+    var i = 0
+    val indicesLength = indices.length
+    while (i < indicesLength) {
+      val current = indices(i)
+      require(current > previous, s"indices should be one-based and in ascending order;"
+        + " found current=$current, previous=$previous; line=\"$line\"")
+      previous = current
+      i += 1
+    }
+    (label, indices.toArray, values.toArray)
+  }
 
   /**
    * Loads labeled data in the LIBSVM format into an RDD[LabeledPoint], with the default number of
    * partitions.
    */
+  @Since("1.0.0")
   def loadLibSVMFile(
       sc: SparkContext,
       path: String,
       numFeatures: Int): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, numFeatures, sc.defaultMinPartitions)
 
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
-      sc: SparkContext,
-      path: String,
-      multiclass: Boolean,
-      numFeatures: Int): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path, numFeatures)
-
-  @deprecated("use method without multiclass argument, which no longer has effect", "1.1.0")
-  def loadLibSVMFile(
-      sc: SparkContext,
-      path: String,
-      multiclass: Boolean): RDD[LabeledPoint] =
-    loadLibSVMFile(sc, path)
-
   /**
    * Loads binary labeled data in the LIBSVM format into an RDD[LabeledPoint], with number of
    * features determined automatically and the default number of partitions.
    */
+  @Since("1.0.0")
   def loadLibSVMFile(sc: SparkContext, path: String): RDD[LabeledPoint] =
     loadLibSVMFile(sc, path, -1)
 
@@ -150,6 +148,7 @@ object MLUtils {
    *
    * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
    */
+  @Since("1.0.0")
   def saveAsLibSVMFile(data: RDD[LabeledPoint], dir: String) {
     // TODO: allow to specify label precision and feature precision.
     val dataStr = data.map { case LabeledPoint(label, features) =>
@@ -170,12 +169,14 @@ object MLUtils {
    * @param minPartitions min number of partitions
    * @return vectors stored as an RDD[Vector]
    */
+  @Since("1.1.0")
   def loadVectors(sc: SparkContext, path: String, minPartitions: Int): RDD[Vector] =
     sc.textFile(path, minPartitions).map(Vectors.parse)
 
   /**
    * Loads vectors saved using `RDD[Vector].saveAsTextFile` with the default number of partitions.
    */
+  @Since("1.1.0")
   def loadVectors(sc: SparkContext, path: String): RDD[Vector] =
     sc.textFile(path, sc.defaultMinPartitions).map(Vectors.parse)
 
@@ -186,6 +187,7 @@ object MLUtils {
    * @param minPartitions min number of partitions
    * @return labeled points stored as an RDD[LabeledPoint]
    */
+  @Since("1.1.0")
   def loadLabeledPoints(sc: SparkContext, path: String, minPartitions: Int): RDD[LabeledPoint] =
     sc.textFile(path, minPartitions).map(LabeledPoint.parse)
 
@@ -193,57 +195,25 @@ object MLUtils {
    * Loads labeled points saved using `RDD[LabeledPoint].saveAsTextFile` with the default number of
    * partitions.
    */
+  @Since("1.1.0")
   def loadLabeledPoints(sc: SparkContext, dir: String): RDD[LabeledPoint] =
     loadLabeledPoints(sc, dir, sc.defaultMinPartitions)
 
   /**
-   * Load labeled data from a file. The data format used here is
-   * L, f1 f2 ...
-   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
-   *
-   * @param sc SparkContext
-   * @param dir Directory to the input data files.
-   * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
-   *         the label, and the second element represents the feature values (an array of Double).
-   *
-   * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
-   *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
-   */
-  @deprecated("Should use MLUtils.loadLabeledPoints instead.", "1.0.1")
-  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
-    sc.textFile(dir).map { line =>
-      val parts = line.split(',')
-      val label = parts(0).toDouble
-      val features = Vectors.dense(parts(1).trim().split(' ').map(_.toDouble))
-      LabeledPoint(label, features)
-    }
-  }
-
-  /**
-   * Save labeled data to a file. The data format used here is
-   * L, f1 f2 ...
-   * where f1, f2 are feature values in Double and L is the corresponding label as Double.
-   *
-   * @param data An RDD of LabeledPoints containing data to be saved.
-   * @param dir Directory to save the data.
-   *
-   * @deprecated Should use [[org.apache.spark.rdd.RDD#saveAsTextFile]] for saving and
-   *            [[org.apache.spark.mllib.util.MLUtils#loadLabeledPoints]] for loading.
-   */
-  @deprecated("Should use RDD[LabeledPoint].saveAsTextFile instead.", "1.0.1")
-  def saveLabeledData(data: RDD[LabeledPoint], dir: String) {
-    val dataStr = data.map(x => x.label + "," + x.features.toArray.mkString(" "))
-    dataStr.saveAsTextFile(dir)
-  }
-
-  /**
-   * :: Experimental ::
    * Return a k element array of pairs of RDDs with the first element of each pair
    * containing the training data, a complement of the validation data and the second
    * element, the validation data, containing a unique 1/kth of the data. Where k=numFolds.
    */
-  @Experimental
+  @Since("1.0.0")
   def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Int): Array[(RDD[T], RDD[T])] = {
+    kFold(rdd, numFolds, seed.toLong)
+  }
+
+  /**
+   * Version of [[kFold()]] taking a Long seed.
+   */
+  @Since("2.0.0")
+  def kFold[T: ClassTag](rdd: RDD[T], numFolds: Int, seed: Long): Array[(RDD[T], RDD[T])] = {
     val numFoldsF = numFolds.toFloat
     (1 to numFolds).map { fold =>
       val sampler = new BernoulliCellSampler[T]((fold - 1) / numFoldsF, fold / numFoldsF,
@@ -257,15 +227,32 @@ object MLUtils {
   /**
    * Returns a new vector with `1.0` (bias) appended to the input vector.
    */
+  @Since("1.0.0")
   def appendBias(vector: Vector): Vector = {
-    val vector1 = vector.toBreeze match {
-      case dv: BDV[Double] => BDV.vertcat(dv, new BDV[Double](Array(1.0)))
-      case sv: BSV[Double] => BSV.vertcat(sv, new BSV[Double](Array(0), Array(1.0), 1))
-      case v: Any => throw new IllegalArgumentException("Do not support vector type " + v.getClass)
+    vector match {
+      case dv: DenseVector =>
+        val inputValues = dv.values
+        val inputLength = inputValues.length
+        val outputValues = Array.ofDim[Double](inputLength + 1)
+        System.arraycopy(inputValues, 0, outputValues, 0, inputLength)
+        outputValues(inputLength) = 1.0
+        Vectors.dense(outputValues)
+      case sv: SparseVector =>
+        val inputValues = sv.values
+        val inputIndices = sv.indices
+        val inputValuesLength = inputValues.length
+        val dim = sv.size
+        val outputValues = Array.ofDim[Double](inputValuesLength + 1)
+        val outputIndices = Array.ofDim[Int](inputValuesLength + 1)
+        System.arraycopy(inputValues, 0, outputValues, 0, inputValuesLength)
+        System.arraycopy(inputIndices, 0, outputIndices, 0, inputValuesLength)
+        outputValues(inputValuesLength) = 1.0
+        outputIndices(inputValuesLength) = dim
+        Vectors.sparse(dim + 1, outputIndices, outputValues)
+      case _ => throw new IllegalArgumentException(s"Do not support vector type ${vector.getClass}")
     }
-    Vectors.fromBreeze(vector1)
   }
- 
+
   /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
    * if it does not introduce too much numerical error:
@@ -331,7 +318,7 @@ object MLUtils {
    * @param x a floating-point value as input.
    * @return the result of `math.log(1 + math.exp(x))`.
    */
-  private[mllib] def log1pExp(x: Double): Double = {
+  private[spark] def log1pExp(x: Double): Double = {
     if (x > 0) {
       x + math.log1p(math.exp(-x))
     } else {

@@ -17,23 +17,32 @@
 package org.apache.spark.streaming.flume.sink
 
 import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.{TimeUnit, CountDownLatch, Executors}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
-import com.google.common.util.concurrent.ThreadFactoryBuilder
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.flume.Context
 import org.apache.flume.channel.MemoryChannel
 import org.apache.flume.event.EventBuilder
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
+
+// Due to MNG-1378, there is not a way to include test dependencies transitively.
+// We cannot include Spark core tests as a dependency here because it depends on
+// Spark core main, which has too many dependencies to require here manually.
+// For this reason, we continue to use FunSuite and ignore the scalastyle checks
+// that fail if this is detected.
+// scalastyle:off
 import org.scalatest.FunSuite
 
 class SparkSinkSuite extends FunSuite {
+// scalastyle:on
+
   val eventsPerBatch = 1000
   val channelCapacity = 5000
 
@@ -158,7 +167,7 @@ class SparkSinkSuite extends FunSuite {
     channelContext.put("capacity", channelCapacity.toString)
     channelContext.put("transactionCapacity", 1000.toString)
     channelContext.put("keep-alive", 0.toString)
-    channelContext.putAll(overrides)
+    channelContext.putAll(overrides.asJava)
     channel.setName(scala.util.Random.nextString(10))
     channel.configure(channelContext)
 
@@ -176,7 +185,8 @@ class SparkSinkSuite extends FunSuite {
   private def putEvents(ch: MemoryChannel, count: Int): Unit = {
     val tx = ch.getTransaction
     tx.begin()
-    (1 to count).foreach(x => ch.put(EventBuilder.withBody(x.toString.getBytes)))
+    (1 to count).foreach(x =>
+      ch.put(EventBuilder.withBody(x.toString.getBytes(StandardCharsets.UTF_8))))
     tx.commit()
     tx.close()
   }
@@ -185,9 +195,8 @@ class SparkSinkSuite extends FunSuite {
     count: Int): Seq[(NettyTransceiver, SparkFlumeProtocol.Callback)] = {
 
     (1 to count).map(_ => {
-      lazy val channelFactoryExecutor =
-        Executors.newCachedThreadPool(new ThreadFactoryBuilder().setDaemon(true).
-          setNameFormat("Flume Receiver Channel Thread - %d").build())
+      lazy val channelFactoryExecutor = Executors.newCachedThreadPool(
+        new SparkSinkThreadFactory("Flume Receiver Channel Thread - %d"))
       lazy val channelFactory =
         new NioClientSocketChannelFactory(channelFactoryExecutor, channelFactoryExecutor)
       val transceiver = new NettyTransceiver(address, channelFactory)

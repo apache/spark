@@ -33,7 +33,7 @@ private[v1] class OneStageResource(ui: SparkUI) {
   @GET
   @Path("")
   def stageData(@PathParam("stageId") stageId: Int): Seq[StageData] = {
-    withStage(stageId){ stageAttempts =>
+    withStage(stageId) { stageAttempts =>
       stageAttempts.map { stage =>
         AllStagesResource.stageUiToStageData(stage.status, stage.info, stage.ui,
           includeDetails = true)
@@ -83,7 +83,7 @@ private[v1] class OneStageResource(ui: SparkUI) {
     withStageAttempt(stageId, stageAttemptId) { stage =>
       val tasks = stage.ui.taskData.values.map{AllStagesResource.convertTaskData}.toIndexedSeq
         .sorted(OneStageResource.ordering(sortBy))
-      tasks.slice(offset, offset + length)  
+      tasks.slice(offset, offset + length)
     }
   }
 

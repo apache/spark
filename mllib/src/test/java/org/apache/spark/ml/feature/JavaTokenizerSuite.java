@@ -17,7 +17,9 @@
 
 package org.apache.spark.ml.feature;
 
-import com.google.common.collect.Lists;
+import java.util.Arrays;
+import java.util.List;
+
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -25,24 +27,27 @@ import org.junit.Test;
 
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaTokenizerSuite {
+  private transient SparkSession spark;
   private transient JavaSparkContext jsc;
-  private transient SQLContext jsql;
 
   @Before
   public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaTokenizerSuite");
-    jsql = new SQLContext(jsc);
+    spark = SparkSession.builder()
+      .master("local")
+      .appName("JavaTokenizerSuite")
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
   }
 
   @After
   public void tearDown() {
-    jsc.stop();
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   @Test
@@ -52,17 +57,19 @@ public class JavaTokenizerSuite {
       .setOutputCol("tokens")
       .setPattern("\\s")
       .setGaps(true)
+      .setToLowercase(false)
       .setMinTokenLength(3);
 
-    JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Lists.newArrayList(
-      new TokenizerTestData("Test of tok.", new String[] {"Test", "tok."}),
-      new TokenizerTestData("Te,st.  punct", new String[] {"Te,st.", "punct"})
-    ));
-    DataFrame dataset = jsql.createDataFrame(rdd, TokenizerTestData.class);
 
-    Row[] pairs = myRegExTokenizer.transform(dataset)
+    JavaRDD<TokenizerTestData> rdd = jsc.parallelize(Arrays.asList(
+      new TokenizerTestData("Test of tok.", new String[]{"Test", "tok."}),
+      new TokenizerTestData("Te,st.  punct", new String[]{"Te,st.", "punct"})
+    ));
+    Dataset<Row> dataset = spark.createDataFrame(rdd, TokenizerTestData.class);
+
+    List<Row> pairs = myRegExTokenizer.transform(dataset)
       .select("tokens", "wantedTokens")
-      .collect();
+      .collectAsList();
 
     for (Row r : pairs) {
       Assert.assertEquals(r.get(0), r.get(1));

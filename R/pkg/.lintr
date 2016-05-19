@@ -1,0 +1,2 @@
+linters: with_defaults(line_length_linter(100), camel_case_linter = NULL, open_curly_linter(allow_single_line = TRUE), closed_curly_linter(allow_single_line = TRUE))
+exclusions: list("inst/profile/general.R" = 1, "inst/profile/shell.R")

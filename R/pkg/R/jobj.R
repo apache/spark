@@ -16,7 +16,7 @@
 #
 
 # References to objects that exist on the JVM backend
-# are maintained using the jobj. 
+# are maintained using the jobj.
 
 #' @include generics.R
 NULL

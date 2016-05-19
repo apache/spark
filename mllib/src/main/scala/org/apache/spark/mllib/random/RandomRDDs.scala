@@ -20,18 +20,18 @@ package org.apache.spark.mllib.random
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
-import org.apache.spark.annotation.{DeveloperApi, Experimental}
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.{JavaDoubleRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.rdd.{RandomRDD, RandomVectorRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
 /**
- * :: Experimental ::
  * Generator methods for creating RDDs comprised of `i.i.d.` samples from some distribution.
  */
-@Experimental
+@Since("1.1.0")
 object RandomRDDs {
 
   /**
@@ -46,18 +46,20 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Double] comprised of `i.i.d.` samples ~ `U(0.0, 1.0)`.
    */
+  @Since("1.1.0")
   def uniformRDD(
       sc: SparkContext,
       size: Long,
       numPartitions: Int = 0,
       seed: Long = Utils.random.nextLong()): RDD[Double] = {
     val uniform = new UniformGenerator()
-    randomRDD(sc, uniform,  size, numPartitionsOrDefault(sc, numPartitions), seed)
+    randomRDD(sc, uniform, size, numPartitionsOrDefault(sc, numPartitions), seed)
   }
 
   /**
    * Java-friendly version of [[RandomRDDs#uniformRDD]].
    */
+  @Since("1.1.0")
   def uniformJavaRDD(
       jsc: JavaSparkContext,
       size: Long,
@@ -69,6 +71,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#uniformJavaRDD]] with the default seed.
    */
+  @Since("1.1.0")
   def uniformJavaRDD(jsc: JavaSparkContext, size: Long, numPartitions: Int): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(uniformRDD(jsc.sc, size, numPartitions))
   }
@@ -76,6 +79,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#uniformJavaRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.1.0")
   def uniformJavaRDD(jsc: JavaSparkContext, size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(uniformRDD(jsc.sc, size))
   }
@@ -92,6 +96,7 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Double] comprised of `i.i.d.` samples ~ N(0.0, 1.0).
    */
+  @Since("1.1.0")
   def normalRDD(
       sc: SparkContext,
       size: Long,
@@ -104,6 +109,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#normalRDD]].
    */
+  @Since("1.1.0")
   def normalJavaRDD(
       jsc: JavaSparkContext,
       size: Long,
@@ -115,6 +121,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#normalJavaRDD]] with the default seed.
    */
+  @Since("1.1.0")
   def normalJavaRDD(jsc: JavaSparkContext, size: Long, numPartitions: Int): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(normalRDD(jsc.sc, size, numPartitions))
   }
@@ -122,6 +129,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#normalJavaRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.1.0")
   def normalJavaRDD(jsc: JavaSparkContext, size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(normalRDD(jsc.sc, size))
   }
@@ -137,6 +145,7 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
+  @Since("1.1.0")
   def poissonRDD(
       sc: SparkContext,
       mean: Double,
@@ -150,6 +159,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#poissonRDD]].
    */
+  @Since("1.1.0")
   def poissonJavaRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -162,6 +172,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#poissonJavaRDD]] with the default seed.
    */
+  @Since("1.1.0")
   def poissonJavaRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -173,6 +184,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#poissonJavaRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.1.0")
   def poissonJavaRDD(jsc: JavaSparkContext, mean: Double, size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(poissonRDD(jsc.sc, mean, size))
   }
@@ -188,6 +200,7 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
+  @Since("1.3.0")
   def exponentialRDD(
       sc: SparkContext,
       mean: Double,
@@ -201,6 +214,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#exponentialRDD]].
    */
+  @Since("1.3.0")
   def exponentialJavaRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -213,6 +227,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#exponentialJavaRDD]] with the default seed.
    */
+  @Since("1.3.0")
   def exponentialJavaRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -224,6 +239,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#exponentialJavaRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.3.0")
   def exponentialJavaRDD(jsc: JavaSparkContext, mean: Double, size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(exponentialRDD(jsc.sc, mean, size))
   }
@@ -234,12 +250,13 @@ object RandomRDDs {
    *
    * @param sc SparkContext used to create the RDD.
    * @param shape shape parameter (> 0) for the gamma distribution
-   * @param scale scale parameter (> 0) for the gamma distribution  
+   * @param scale scale parameter (> 0) for the gamma distribution
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
+  @Since("1.3.0")
   def gammaRDD(
       sc: SparkContext,
       shape: Double,
@@ -254,6 +271,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#gammaRDD]].
    */
+  @Since("1.3.0")
   def gammaJavaRDD(
       jsc: JavaSparkContext,
       shape: Double,
@@ -267,6 +285,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#gammaJavaRDD]] with the default seed.
    */
+  @Since("1.3.0")
   def gammaJavaRDD(
       jsc: JavaSparkContext,
       shape: Double,
@@ -279,11 +298,12 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#gammaJavaRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.3.0")
   def gammaJavaRDD(
-    jsc: JavaSparkContext,
-    shape: Double,
-    scale: Double,
-    size: Long): JavaDoubleRDD = {
+      jsc: JavaSparkContext,
+      shape: Double,
+      scale: Double,
+      size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(gammaRDD(jsc.sc, shape, scale, size))
   }
 
@@ -293,12 +313,13 @@ object RandomRDDs {
    *
    * @param sc SparkContext used to create the RDD.
    * @param mean mean for the log normal distribution
-   * @param std standard deviation for the log normal distribution  
+   * @param std standard deviation for the log normal distribution
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Double] comprised of `i.i.d.` samples ~ Pois(mean).
    */
+  @Since("1.3.0")
   def logNormalRDD(
       sc: SparkContext,
       mean: Double,
@@ -313,6 +334,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#logNormalRDD]].
    */
+  @Since("1.3.0")
   def logNormalJavaRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -326,6 +348,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#logNormalJavaRDD]] with the default seed.
    */
+  @Since("1.3.0")
   def logNormalJavaRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -338,11 +361,12 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#logNormalJavaRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.3.0")
   def logNormalJavaRDD(
-    jsc: JavaSparkContext,
-    mean: Double,
-    std: Double,
-    size: Long): JavaDoubleRDD = {
+      jsc: JavaSparkContext,
+      mean: Double,
+      std: Double,
+      size: Long): JavaDoubleRDD = {
     JavaDoubleRDD.fromRDD(logNormalRDD(jsc.sc, mean, std, size))
   }
 
@@ -356,9 +380,10 @@ object RandomRDDs {
    * @param size Size of the RDD.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
    * @param seed Random seed (default: a random long integer).
-   * @return RDD[Double] comprised of `i.i.d.` samples produced by generator.
+   * @return RDD[T] comprised of `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
+  @Since("1.1.0")
   def randomRDD[T: ClassTag](
       sc: SparkContext,
       generator: RandomDataGenerator[T],
@@ -366,6 +391,55 @@ object RandomRDDs {
       numPartitions: Int = 0,
       seed: Long = Utils.random.nextLong()): RDD[T] = {
     new RandomRDD[T](sc, size, numPartitionsOrDefault(sc, numPartitions), generator, seed)
+  }
+
+  /**
+   * :: DeveloperApi ::
+   * Generates an RDD comprised of `i.i.d.` samples produced by the input RandomDataGenerator.
+   *
+   * @param jsc JavaSparkContext used to create the RDD.
+   * @param generator RandomDataGenerator used to populate the RDD.
+   * @param size Size of the RDD.
+   * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`).
+   * @param seed Random seed (default: a random long integer).
+   * @return RDD[T] comprised of `i.i.d.` samples produced by generator.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[T],
+      size: Long,
+      numPartitions: Int,
+      seed: Long): JavaRDD[T] = {
+    implicit val ctag: ClassTag[T] = fakeClassTag
+    val rdd = randomRDD(jsc.sc, generator, size, numPartitions, seed)
+    JavaRDD.fromRDD(rdd)
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaRDD]] with the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+    jsc: JavaSparkContext,
+    generator: RandomDataGenerator[T],
+    size: Long,
+    numPartitions: Int): JavaRDD[T] = {
+    randomJavaRDD(jsc, generator, size, numPartitions, Utils.random.nextLong())
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaRDD]] with the default seed & numPartitions
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaRDD[T](
+    jsc: JavaSparkContext,
+    generator: RandomDataGenerator[T],
+    size: Long): JavaRDD[T] = {
+    randomJavaRDD(jsc, generator, size, 0);
   }
 
   // TODO Generate RDD[Vector] from multivariate distributions.
@@ -381,6 +455,7 @@ object RandomRDDs {
    * @param seed Seed for the RNG that generates the seed for the generator in each partition.
    * @return RDD[Vector] with vectors containing i.i.d samples ~ `U(0.0, 1.0)`.
    */
+  @Since("1.1.0")
   def uniformVectorRDD(
       sc: SparkContext,
       numRows: Long,
@@ -394,6 +469,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#uniformVectorRDD]].
    */
+  @Since("1.1.0")
   def uniformJavaVectorRDD(
       jsc: JavaSparkContext,
       numRows: Long,
@@ -406,6 +482,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#uniformJavaVectorRDD]] with the default seed.
    */
+  @Since("1.1.0")
   def uniformJavaVectorRDD(
       jsc: JavaSparkContext,
       numRows: Long,
@@ -417,6 +494,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#uniformJavaVectorRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.1.0")
   def uniformJavaVectorRDD(
       jsc: JavaSparkContext,
       numRows: Long,
@@ -435,6 +513,7 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ `N(0.0, 1.0)`.
    */
+  @Since("1.1.0")
   def normalVectorRDD(
       sc: SparkContext,
       numRows: Long,
@@ -448,6 +527,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#normalVectorRDD]].
    */
+  @Since("1.1.0")
   def normalJavaVectorRDD(
       jsc: JavaSparkContext,
       numRows: Long,
@@ -460,6 +540,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#normalJavaVectorRDD]] with the default seed.
    */
+  @Since("1.1.0")
   def normalJavaVectorRDD(
       jsc: JavaSparkContext,
       numRows: Long,
@@ -471,6 +552,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#normalJavaVectorRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.1.0")
   def normalJavaVectorRDD(
       jsc: JavaSparkContext,
       numRows: Long,
@@ -491,6 +573,7 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Vector] with vectors containing `i.i.d.` samples.
    */
+  @Since("1.3.0")
   def logNormalVectorRDD(
       sc: SparkContext,
       mean: Double,
@@ -507,6 +590,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#logNormalVectorRDD]].
    */
+  @Since("1.3.0")
   def logNormalJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -521,6 +605,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#logNormalJavaVectorRDD]] with the default seed.
    */
+  @Since("1.3.0")
   def logNormalJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -535,6 +620,7 @@ object RandomRDDs {
    * [[RandomRDDs#logNormalJavaVectorRDD]] with the default number of partitions and
    * the default seed.
    */
+  @Since("1.3.0")
   def logNormalJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -556,6 +642,7 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ Pois(mean).
    */
+  @Since("1.1.0")
   def poissonVectorRDD(
       sc: SparkContext,
       mean: Double,
@@ -570,6 +657,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#poissonVectorRDD]].
    */
+  @Since("1.1.0")
   def poissonJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -583,6 +671,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#poissonJavaVectorRDD]] with the default seed.
    */
+  @Since("1.1.0")
   def poissonJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -595,6 +684,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#poissonJavaVectorRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.1.0")
   def poissonJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -615,6 +705,7 @@ object RandomRDDs {
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ Exp(mean).
    */
+  @Since("1.3.0")
   def exponentialVectorRDD(
       sc: SparkContext,
       mean: Double,
@@ -630,6 +721,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#exponentialVectorRDD]].
    */
+  @Since("1.3.0")
   def exponentialJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -643,6 +735,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#exponentialJavaVectorRDD]] with the default seed.
    */
+  @Since("1.3.0")
   def exponentialJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -656,6 +749,7 @@ object RandomRDDs {
    * [[RandomRDDs#exponentialJavaVectorRDD]] with the default number of partitions
    * and the default seed.
    */
+  @Since("1.3.0")
   def exponentialJavaVectorRDD(
       jsc: JavaSparkContext,
       mean: Double,
@@ -671,13 +765,14 @@ object RandomRDDs {
    *
    * @param sc SparkContext used to create the RDD.
    * @param shape shape parameter (> 0) for the gamma distribution.
-   * @param scale scale parameter (> 0) for the gamma distribution. 
+   * @param scale scale parameter (> 0) for the gamma distribution.
    * @param numRows Number of Vectors in the RDD.
    * @param numCols Number of elements in each Vector.
    * @param numPartitions Number of partitions in the RDD (default: `sc.defaultParallelism`)
    * @param seed Random seed (default: a random long integer).
    * @return RDD[Vector] with vectors containing `i.i.d.` samples ~ Exp(mean).
    */
+  @Since("1.3.0")
   def gammaVectorRDD(
       sc: SparkContext,
       shape: Double,
@@ -693,6 +788,7 @@ object RandomRDDs {
   /**
    * Java-friendly version of [[RandomRDDs#gammaVectorRDD]].
    */
+  @Since("1.3.0")
   def gammaJavaVectorRDD(
       jsc: JavaSparkContext,
       shape: Double,
@@ -707,6 +803,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#gammaJavaVectorRDD]] with the default seed.
    */
+  @Since("1.3.0")
   def gammaJavaVectorRDD(
       jsc: JavaSparkContext,
       shape: Double,
@@ -720,6 +817,7 @@ object RandomRDDs {
   /**
    * [[RandomRDDs#gammaJavaVectorRDD]] with the default number of partitions and the default seed.
    */
+  @Since("1.3.0")
   def gammaJavaVectorRDD(
       jsc: JavaSparkContext,
       shape: Double,
@@ -744,6 +842,7 @@ object RandomRDDs {
    * @return RDD[Vector] with vectors containing `i.i.d.` samples produced by generator.
    */
   @DeveloperApi
+  @Since("1.1.0")
   def randomVectorRDD(sc: SparkContext,
       generator: RandomDataGenerator[Double],
       numRows: Long,
@@ -752,6 +851,48 @@ object RandomRDDs {
       seed: Long = Utils.random.nextLong()): RDD[Vector] = {
     new RandomVectorRDD(
       sc, numRows, numCols, numPartitionsOrDefault(sc, numPartitions), generator, seed)
+  }
+
+  /**
+   * Java-friendly version of [[RandomRDDs#randomVectorRDD]].
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int,
+      seed: Long): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols, numPartitions, seed).toJavaRDD()
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaVectorRDD]] with the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int,
+      numPartitions: Int): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols, numPartitions).toJavaRDD()
+  }
+
+  /**
+   * [[RandomRDDs#randomJavaVectorRDD]] with the default number of partitions and the default seed.
+   */
+  @DeveloperApi
+  @Since("1.6.0")
+  def randomJavaVectorRDD(
+      jsc: JavaSparkContext,
+      generator: RandomDataGenerator[Double],
+      numRows: Long,
+      numCols: Int): JavaRDD[Vector] = {
+    randomVectorRDD(jsc.sc, generator, numRows, numCols).toJavaRDD()
   }
 
   /**

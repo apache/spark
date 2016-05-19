@@ -18,6 +18,7 @@
 package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
+import java.util.Iterator;
 
 import scala.Tuple2;
 
@@ -26,5 +27,5 @@ import scala.Tuple2;
  * key-value pairs are represented as scala.Tuple2 objects.
  */
 public interface PairFlatMapFunction<T, K, V> extends Serializable {
-  public Iterable<Tuple2<K, V>> call(T t) throws Exception;
+  Iterator<Tuple2<K, V>> call(T t) throws Exception;
 }

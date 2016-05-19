@@ -18,30 +18,33 @@
 package org.apache.spark
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
-
-import com.google.common.base.Charsets._
-import com.google.common.io.Files
-
-import org.scalatest.FunSuite
-
-import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
-import org.apache.hadoop.mapred.TextInputFormat
-import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
-import org.apache.spark.util.Utils
 
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-class SparkContextSuite extends FunSuite with LocalSparkContext {
+import com.google.common.io.Files
+import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
+import org.apache.hadoop.mapred.TextInputFormat
+import org.apache.hadoop.mapreduce.lib.input.{TextInputFormat => NewTextInputFormat}
+import org.scalatest.Matchers._
+
+import org.apache.spark.util.Utils
+
+class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
 
   test("Only one SparkContext may be active at a time") {
     // Regression test for SPARK-4180
     val conf = new SparkConf().setAppName("test").setMaster("local")
       .set("spark.driver.allowMultipleContexts", "false")
     sc = new SparkContext(conf)
+    val envBefore = SparkEnv.get
     // A SparkContext is already running, so we shouldn't be able to create a second one
     intercept[SparkException] { new SparkContext(conf) }
+    val envAfter = SparkEnv.get
+    // SparkEnv and other context variables should be the same
+    assert(envBefore == envAfter)
     // After stopping the running context, we should be able to create a new one
     resetSparkContext()
     sc = new SparkContext(conf)
@@ -73,22 +76,22 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     var sc2: SparkContext = null
     SparkContext.clearActiveContext()
     val conf = new SparkConf().setAppName("test").setMaster("local")
-    
+
     sc = SparkContext.getOrCreate(conf)
-    
+
     assert(sc.getConf.get("spark.app.name").equals("test"))
     sc2 = SparkContext.getOrCreate(new SparkConf().setAppName("test2").setMaster("local"))
     assert(sc2.getConf.get("spark.app.name").equals("test"))
     assert(sc === sc2)
     assert(sc eq sc2)
-    
+
     // Try creating second context to confirm that it's still possible, if desired
     sc2 = new SparkContext(new SparkConf().setAppName("test3").setMaster("local")
         .set("spark.driver.allowMultipleContexts", "true"))
-    
+
     sc2.stop()
   }
-  
+
   test("BytesWritable implicit conversion is correct") {
     // Regression test for SPARK-3121
     val bytesWritable = new BytesWritable()
@@ -116,8 +119,8 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val absolutePath2 = file2.getAbsolutePath
 
     try {
-      Files.write("somewords1", file1, UTF_8)
-      Files.write("somewords2", file2, UTF_8)
+      Files.write("somewords1", file1, StandardCharsets.UTF_8)
+      Files.write("somewords2", file2, StandardCharsets.UTF_8)
       val length1 = file1.length()
       val length2 = file2.length()
 
@@ -222,8 +225,8 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val dir1 = Utils.createTempDir()
     val dir2 = Utils.createTempDir()
 
-    val dirpath1=dir1.getAbsolutePath
-    val dirpath2=dir2.getAbsolutePath
+    val dirpath1 = dir1.getAbsolutePath
+    val dirpath2 = dir2.getAbsolutePath
 
     // file1 and file2 are placed inside dir1, they are also used for
     // textFile, hadoopFile, and newAPIHadoopFile
@@ -235,20 +238,21 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     val file4 = new File(dir2, "part-00001")
     val file5 = new File(dir2, "part-00002")
 
-    val filepath1=file1.getAbsolutePath
-    val filepath2=file2.getAbsolutePath
-    val filepath3=file3.getAbsolutePath
-    val filepath4=file4.getAbsolutePath
-    val filepath5=file5.getAbsolutePath
+    val filepath1 = file1.getAbsolutePath
+    val filepath2 = file2.getAbsolutePath
+    val filepath3 = file3.getAbsolutePath
+    val filepath4 = file4.getAbsolutePath
+    val filepath5 = file5.getAbsolutePath
 
 
     try {
       // Create 5 text files.
-      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1, UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file2", file2, UTF_8)
-      Files.write("someline1 in file3", file3, UTF_8)
-      Files.write("someline1 in file4\nsomeline2 in file4", file4, UTF_8)
-      Files.write("someline1 in file2\nsomeline2 in file5", file5, UTF_8)
+      Files.write("someline1 in file1\nsomeline2 in file1\nsomeline3 in file1", file1,
+        StandardCharsets.UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file2", file2, StandardCharsets.UTF_8)
+      Files.write("someline1 in file3", file3, StandardCharsets.UTF_8)
+      Files.write("someline1 in file4\nsomeline2 in file4", file4, StandardCharsets.UTF_8)
+      Files.write("someline1 in file2\nsomeline2 in file5", file5, StandardCharsets.UTF_8)
 
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
 
@@ -273,5 +277,78 @@ class SparkContextSuite extends FunSuite with LocalSparkContext {
     } finally {
       sc.stop()
     }
+  }
+
+  test("Default path for file based RDDs is properly set (SPARK-12517)") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+
+    // Test filetextFile, wholeTextFiles, binaryFiles, hadoopFile and
+    // newAPIHadoopFile for setting the default path as the RDD name
+    val mockPath = "default/path/for/"
+
+    var targetPath = mockPath + "textFile"
+    assert(sc.textFile(targetPath).name === targetPath)
+
+    targetPath = mockPath + "wholeTextFiles"
+    assert(sc.wholeTextFiles(targetPath).name === targetPath)
+
+    targetPath = mockPath + "binaryFiles"
+    assert(sc.binaryFiles(targetPath).name === targetPath)
+
+    targetPath = mockPath + "hadoopFile"
+    assert(sc.hadoopFile(targetPath).name === targetPath)
+
+    targetPath = mockPath + "newAPIHadoopFile"
+    assert(sc.newAPIHadoopFile(targetPath).name === targetPath)
+
+    sc.stop()
+  }
+
+  test("calling multiple sc.stop() must not throw any exception") {
+    noException should be thrownBy {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      val cnt = sc.parallelize(1 to 4).count()
+      sc.cancelAllJobs()
+      sc.stop()
+      // call stop second time
+      sc.stop()
+    }
+  }
+
+  test("No exception when both num-executors and dynamic allocation set.") {
+    noException should be thrownBy {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local")
+        .set("spark.dynamicAllocation.enabled", "true").set("spark.executor.instances", "6"))
+      assert(sc.executorAllocationManager.isEmpty)
+      assert(sc.getConf.getInt("spark.executor.instances", 0) === 6)
+    }
+  }
+
+
+  test("localProperties are inherited by spawned threads.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    sc.setLocalProperty("testProperty", "testValue")
+    var result = "unset";
+    val thread = new Thread() { override def run() = {result = sc.getLocalProperty("testProperty")}}
+    thread.start()
+    thread.join()
+    sc.stop()
+    assert(result == "testValue")
+  }
+
+  test("localProperties do not cross-talk between threads.") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    var result = "unset";
+    val thread1 = new Thread() {
+      override def run() = {sc.setLocalProperty("testProperty", "testValue")}}
+    // testProperty should be unset and thus return null
+    val thread2 = new Thread() {
+      override def run() = {result = sc.getLocalProperty("testProperty")}}
+    thread1.start()
+    thread1.join()
+    thread2.start()
+    thread2.join()
+    sc.stop()
+    assert(result == null)
   }
 }

@@ -19,20 +19,20 @@ package org.apache.spark.ml
 
 import scala.annotation.varargs
 
-import org.apache.spark.Logging
-import org.apache.spark.annotation.AlphaComponent
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 /**
- * :: AlphaComponent ::
+ * :: DeveloperApi ::
  * Abstract class for transformers that transform one dataset into another.
  */
-@AlphaComponent
-abstract class Transformer extends PipelineStage with Params {
+@DeveloperApi
+abstract class Transformer extends PipelineStage {
 
   /**
    * Transforms the dataset with optional parameters
@@ -41,9 +41,10 @@ abstract class Transformer extends PipelineStage with Params {
    * @param otherParamPairs other param pairs, overwrite embedded params
    * @return transformed dataset
    */
+  @Since("2.0.0")
   @varargs
   def transform(
-      dataset: DataFrame,
+      dataset: Dataset[_],
       firstParamPair: ParamPair[_],
       otherParamPairs: ParamPair[_]*): DataFrame = {
     val map = new ParamMap()
@@ -58,25 +59,27 @@ abstract class Transformer extends PipelineStage with Params {
    * @param paramMap additional parameters, overwrite embedded params
    * @return transformed dataset
    */
-  def transform(dataset: DataFrame, paramMap: ParamMap): DataFrame = {
+  @Since("2.0.0")
+  def transform(dataset: Dataset[_], paramMap: ParamMap): DataFrame = {
     this.copy(paramMap).transform(dataset)
   }
 
   /**
    * Transforms the input dataset.
    */
-  def transform(dataset: DataFrame): DataFrame
+  @Since("2.0.0")
+  def transform(dataset: Dataset[_]): DataFrame
 
-  override def copy(extra: ParamMap): Transformer = {
-    super.copy(extra).asInstanceOf[Transformer]
-  }
+  override def copy(extra: ParamMap): Transformer
 }
 
 /**
+ * :: DeveloperApi ::
  * Abstract class for transformers that take one input column, apply transformation, and output the
  * result as a new column.
  */
-private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
+@DeveloperApi
+abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, OUT, T]]
   extends Transformer with HasInputCol with HasOutputCol with Logging {
 
   /** @group setParam */
@@ -113,9 +116,11 @@ private[ml] abstract class UnaryTransformer[IN, OUT, T <: UnaryTransformer[IN, O
     StructType(outputFields)
   }
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    dataset.withColumn($(outputCol),
-      callUDF(this.createTransformFunc, outputDataType, dataset($(inputCol))))
+    val transformUDF = udf(this.createTransformFunc, outputDataType)
+    dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
+
+  override def copy(extra: ParamMap): T = defaultCopy(extra)
 }

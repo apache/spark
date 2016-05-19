@@ -17,9 +17,10 @@
 
 package org.apache.spark.graphx
 
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
+import org.apache.spark.internal.Logging
+import org.apache.spark.storage.StorageLevel
 
 /**
  * Provides utilities for loading [[Graph]]s from files.

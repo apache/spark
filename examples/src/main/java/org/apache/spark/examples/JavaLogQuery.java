@@ -28,14 +28,13 @@ import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
 
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Executes a roll up-style query against Apache logs.
- *  
+ *
  * Usage: JavaLogQuery [logFile]
  */
 public final class JavaLogQuery {
@@ -83,10 +82,10 @@ public final class JavaLogQuery {
       String user = m.group(3);
       String query = m.group(5);
       if (!user.equalsIgnoreCase("-")) {
-        return new Tuple3<String, String, String>(ip, user, query);
+        return new Tuple3<>(ip, user, query);
       }
     }
-    return new Tuple3<String, String, String>(null, null, null);
+    return new Tuple3<>(null, null, null);
   }
 
   public static Stats extractStats(String line) {
@@ -109,7 +108,7 @@ public final class JavaLogQuery {
     JavaPairRDD<Tuple3<String, String, String>, Stats> extracted = dataSet.mapToPair(new PairFunction<String, Tuple3<String, String, String>, Stats>() {
       @Override
       public Tuple2<Tuple3<String, String, String>, Stats> call(String s) {
-        return new Tuple2<Tuple3<String, String, String>, Stats>(extractKey(s), extractStats(s));
+        return new Tuple2<>(extractKey(s), extractStats(s));
       }
     });
 
