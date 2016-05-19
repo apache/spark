@@ -37,7 +37,8 @@ public class JavaCrossValidatorSuite extends SharedSparkSession implements Seria
 
   private transient Dataset<Row> dataset;
 
-  @Override protected void customSetUp() {
+  @Override
+  protected void customSetUp() {
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     dataset = spark.createDataFrame(jsc.parallelize(points, 2), LabeledPoint.class);
   }

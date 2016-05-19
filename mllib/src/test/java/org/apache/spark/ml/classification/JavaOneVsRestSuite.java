@@ -37,7 +37,8 @@ public class JavaOneVsRestSuite extends SharedSparkSession implements Serializab
   private transient Dataset<Row> dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;
 
-  @Override protected void customSetUp() {
+  @Override
+  protected void customSetUp() {
     int nPoints = 3;
 
     // The following coefficients and xMean/xVariance are computed from iris dataset with

@@ -34,7 +34,8 @@ public class JavaLinearRegressionSuite extends SharedSparkSession implements Ser
   private transient Dataset<Row> dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;
 
-  @Override protected void customSetUp() {
+  @Override
+  protected void customSetUp() {
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);

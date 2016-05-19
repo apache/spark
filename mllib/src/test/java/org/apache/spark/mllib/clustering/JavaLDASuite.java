@@ -36,7 +36,8 @@ import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
 public class JavaLDASuite extends SharedSparkSession implements Serializable {
-  @Override protected void customSetUp() {
+  @Override
+  protected void customSetUp() {
     ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();
     for (int i = 0; i < LDASuite.tinyCorpus().length; i++) {
       tinyCorpus.add(new Tuple2<>((Long) LDASuite.tinyCorpus()[i]._1(),
