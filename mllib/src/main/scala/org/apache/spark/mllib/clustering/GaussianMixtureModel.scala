@@ -96,7 +96,7 @@ class GaussianMixtureModel @Since("1.3.0") (
     val bcDists = sc.broadcast(gaussians)
     val bcWeights = sc.broadcast(weights)
     points.map { x =>
-      computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
+      computeSoftAssignments(x.asBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
     }
   }
 
@@ -105,7 +105,7 @@ class GaussianMixtureModel @Since("1.3.0") (
    */
   @Since("1.4.0")
   def predictSoft(point: Vector): Array[Double] = {
-    computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
+    computeSoftAssignments(point.asBreeze.toDenseVector, gaussians, weights, k)
   }
 
   /**

@@ -92,7 +92,7 @@ class RowMatrix @Since("1.0.0") (
     val vbr = rows.context.broadcast(v)
     rows.treeAggregate(BDV.zeros[Double](n))(
       seqOp = (U, r) => {
-        val rBrz = r.toBreeze
+        val rBrz = r.asBreeze
         val a = rBrz.dot(vbr.value)
         rBrz match {
           // use specialized axpy for better performance
@@ -170,8 +170,7 @@ class RowMatrix @Since("1.0.0") (
    *
    * @note The conditions that decide which method to use internally and the default parameters are
    *       subject to change.
-   *
-   * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
+    * @param k number of leading singular values to keep (0 &lt; k &lt;= n).
    *          It might return less than k if
    *          there are numerically zero singular values or there are not enough Ritz values
    *          converged before the maximum number of Arnoldi update iterations is reached (in case
@@ -250,12 +249,12 @@ class RowMatrix @Since("1.0.0") (
     val (sigmaSquares: BDV[Double], u: BDM[Double]) = computeMode match {
       case SVDMode.LocalARPACK =>
         require(k < n, s"k must be smaller than n in local-eigs mode but got k=$k and n=$n.")
-        val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
+        val G = computeGramianMatrix().asBreeze.asInstanceOf[BDM[Double]]
         EigenValueDecomposition.symmetricEigs(v => G * v, n, k, tol, maxIter)
       case SVDMode.LocalLAPACK =>
         // breeze (v0.10) svd latent constraint, 7 * n * n + 4 * n < Int.MaxValue
         require(n < 17515, s"$n exceeds the breeze svd capability")
-        val G = computeGramianMatrix().toBreeze.asInstanceOf[BDM[Double]]
+        val G = computeGramianMatrix().asBreeze.asInstanceOf[BDM[Double]]
         val brzSvd.SVD(uFull: BDM[Double], sigmaSquaresFull: BDV[Double], _) = brzSvd(G)
         (sigmaSquaresFull, uFull)
       case SVDMode.DistARPACK =>
@@ -321,7 +320,8 @@ class RowMatrix @Since("1.0.0") (
   /**
    * Computes the covariance matrix, treating each row as an observation. Note that this cannot
    * be computed on matrices with more than 65535 columns.
-   * @return a local dense matrix of size n x n
+    *
+    * @return a local dense matrix of size n x n
    */
   @Since("1.0.0")
   def computeCovariance(): Matrix = {
@@ -338,7 +338,7 @@ class RowMatrix @Since("1.0.0") (
     // large but Cov(X, Y) is small, but it is good for sparse computation.
     // TODO: find a fast and stable way for sparse data.
 
-    val G = computeGramianMatrix().toBreeze
+    val G = computeGramianMatrix().asBreeze
 
     var i = 0
     var j = 0
@@ -381,7 +381,7 @@ class RowMatrix @Since("1.0.0") (
     val n = numCols().toInt
     require(k > 0 && k <= n, s"k = $k out of range (0, n = $n]")
 
-    val Cov = computeCovariance().toBreeze.asInstanceOf[BDM[Double]]
+    val Cov = computeCovariance().asBreeze.asInstanceOf[BDM[Double]]
 
     val brzSvd.SVD(u: BDM[Double], s: BDV[Double], _) = brzSvd(Cov)
 
@@ -436,14 +436,14 @@ class RowMatrix @Since("1.0.0") (
     require(B.isInstanceOf[DenseMatrix],
       s"Only support dense matrix at this time but found ${B.getClass.getName}.")
 
-    val Bb = rows.context.broadcast(B.toBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
+    val Bb = rows.context.broadcast(B.asBreeze.asInstanceOf[BDM[Double]].toDenseVector.toArray)
     val AB = rows.mapPartitions { iter =>
       val Bi = Bb.value
       iter.map { row =>
         val v = BDV.zeros[Double](k)
         var i = 0
         while (i < k) {
-          v(i) = row.toBreeze.dot(new BDV(Bi, i * n, 1, n))
+          v(i) = row.asBreeze.dot(new BDV(Bi, i * n, 1, n))
           i += 1
         }
         Vectors.fromBreeze(v)
@@ -541,7 +541,7 @@ class RowMatrix @Since("1.0.0") (
       val bdm = BDM.zeros[Double](partRows.length, col)
       var i = 0
       partRows.foreach { row =>
-        bdm(i, ::) := row.toBreeze.t
+        bdm(i, ::) := row.asBreeze.t
         i += 1
       }
       breeze.linalg.qr.reduced(bdm).r

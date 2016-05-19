@@ -175,7 +175,6 @@ object LBFGS extends Logging {
    *                         cause more iterations to be run.
    * @param maxNumIterations - Maximal number of iterations that L-BFGS can be run.
    * @param regParam - Regularization parameter
-   *
    * @return A tuple containing two elements. The first element is a column matrix containing
    *         weights for every feature, and the second element is an array containing the loss
    *         computed for every iteration.
@@ -200,7 +199,7 @@ object LBFGS extends Logging {
     val lbfgs = new BreezeLBFGS[BDV[Double]](maxNumIterations, numCorrections, convergenceTol)
 
     val states =
-      lbfgs.iterations(new CachedDiffFunction(costFun), initialWeights.toBreeze.toDenseVector)
+      lbfgs.iterations(new CachedDiffFunction(costFun), initialWeights.asBreeze.toDenseVector)
 
     /**
      * NOTE: lossSum and loss is computed using the weights from the previous iteration
@@ -281,7 +280,7 @@ object LBFGS extends Logging {
       // gradientTotal = gradientSum / numExamples + gradientTotal
       axpy(1.0 / numExamples, gradientSum, gradientTotal)
 
-      (loss, gradientTotal.toBreeze.asInstanceOf[BDV[Double]])
+      (loss, gradientTotal.asBreeze.asInstanceOf[BDV[Double]])
     }
   }
 }

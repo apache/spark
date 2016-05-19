@@ -92,14 +92,15 @@ sealed trait Vector extends Serializable {
   /**
    * Converts the instance to a breeze vector.
    */
-  private[spark] def toBreeze: BV[Double]
+  private[spark] def asBreeze: BV[Double]
 
   /**
    * Gets the value of the ith element.
+ *
    * @param i index
    */
   @Since("2.0.0")
-  def apply(i: Int): Double = toBreeze(i)
+  def apply(i: Int): Double = asBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
@@ -270,6 +271,7 @@ object Vectors {
 
   /**
    * Returns the p-norm of this vector.
+ *
    * @param vector input vector.
    * @param p norm.
    * @return norm in L^p^ space.
@@ -323,6 +325,7 @@ object Vectors {
 
   /**
    * Returns the squared distance between two Vectors.
+ *
    * @param v1 first Vector.
    * @param v2 second Vector.
    * @return squared distance between two Vectors.
@@ -453,7 +456,7 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
 
   override def toArray: Array[Double] = values
 
-  private[spark] override def toBreeze: BV[Double] = new BDV[Double](values)
+  private[spark] override def asBreeze: BV[Double] = new BDV[Double](values)
 
   override def apply(i: Int): Double = values(i)
 
@@ -584,7 +587,7 @@ class SparseVector @Since("2.0.0") (
     new SparseVector(size, indices.clone(), values.clone())
   }
 
-  private[spark] override def toBreeze: BV[Double] = new BSV[Double](indices, values, size)
+  private[spark] override def asBreeze: BV[Double] = new BSV[Double](indices, values, size)
 
   override def foreachActive(f: (Int, Double) => Unit): Unit = {
     var i = 0
@@ -697,6 +700,7 @@ class SparseVector @Since("2.0.0") (
 
   /**
    * Create a slice of this vector based on the given indices.
+ *
    * @param selectedIndices Unsorted list of indices into the vector.
    *                        This does NOT do bound checking.
    * @return  New SparseVector with values in the order specified by the given indices.

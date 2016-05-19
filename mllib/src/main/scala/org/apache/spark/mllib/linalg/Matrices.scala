@@ -75,7 +75,7 @@ sealed trait Matrix extends Serializable {
   def rowIter: Iterator[Vector] = this.transpose.colIter
 
   /** Converts to a breeze matrix. */
-  private[mllib] def toBreeze: BM[Double]
+  private[mllib] def asBreeze: BM[Double]
 
   /** Gets the (i, j)-th element. */
   @Since("1.3.0")
@@ -118,11 +118,11 @@ sealed trait Matrix extends Serializable {
   }
 
   /** A human readable representation of the matrix */
-  override def toString: String = toBreeze.toString()
+  override def toString: String = asBreeze.toString()
 
   /** A human readable representation of the matrix with maximum lines and width */
   @Since("1.4.0")
-  def toString(maxLines: Int, maxLineWidth: Int): String = toBreeze.toString(maxLines, maxLineWidth)
+  def toString(maxLines: Int, maxLineWidth: Int): String = asBreeze.toString(maxLines, maxLineWidth)
 
   /**
    * Map the values of this matrix using a function. Generates a new matrix. Performs the
@@ -299,7 +299,7 @@ class DenseMatrix @Since("1.3.0") (
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => toBreeze == m.toBreeze
+    case m: Matrix => asBreeze == m.asBreeze
     case _ => false
   }
 
@@ -307,7 +307,7 @@ class DenseMatrix @Since("1.3.0") (
     com.google.common.base.Objects.hashCode(numRows: Integer, numCols: Integer, toArray)
   }
 
-  private[mllib] def toBreeze: BM[Double] = {
+  private[mllib] def asBreeze: BM[Double] = {
     if (!isTransposed) {
       new BDM[Double](numRows, numCols, values)
     } else {
@@ -440,6 +440,7 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of zeros.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of zeros
@@ -453,6 +454,7 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of ones.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `DenseMatrix` with size `numRows` x `numCols` and values of ones
@@ -466,6 +468,7 @@ object DenseMatrix {
 
   /**
    * Generate an Identity Matrix in `DenseMatrix` format.
+   *
    * @param n number of rows and columns of the matrix
    * @return `DenseMatrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -482,6 +485,7 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` uniform random numbers.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -496,6 +500,7 @@ object DenseMatrix {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -510,6 +515,7 @@ object DenseMatrix {
 
   /**
    * Generate a diagonal matrix in `DenseMatrix` format from the supplied values.
+   *
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `DenseMatrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
@@ -602,13 +608,13 @@ class SparseMatrix @Since("1.3.0") (
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => toBreeze == m.toBreeze
+    case m: Matrix => asBreeze == m.asBreeze
     case _ => false
   }
 
-  override def hashCode(): Int = toBreeze.hashCode
+  override def hashCode(): Int = asBreeze.hashCode
 
-  private[mllib] def toBreeze: BM[Double] = {
+  private[mllib] def asBreeze: BM[Double] = {
      if (!isTransposed) {
        new BSM[Double](values, numRows, numCols, colPtrs, rowIndices)
      } else {
@@ -755,6 +761,7 @@ object SparseMatrix {
    * Generate a `SparseMatrix` from Coordinate List (COO) format. Input must be an array of
    * (i, j, value) tuples. Entries that have duplicate values of i and j are
    * added together. Tuples where value is equal to zero will be omitted.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param entries Array of (i, j, value) tuples
@@ -806,6 +813,7 @@ object SparseMatrix {
 
   /**
    * Generate an Identity Matrix in `SparseMatrix` format.
+   *
    * @param n number of rows and columns of the matrix
    * @return `SparseMatrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -887,6 +895,7 @@ object SparseMatrix {
 
   /**
    * Generate a `SparseMatrix` consisting of `i.i.d`. gaussian random numbers.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -901,6 +910,7 @@ object SparseMatrix {
 
   /**
    * Generate a diagonal matrix in `SparseMatrix` format from the supplied values.
+   *
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `SparseMatrix` with size `values.length` x `values.length` and non-zero
    *         `values` on the diagonal
@@ -963,6 +973,7 @@ object Matrices {
 
   /**
    * Creates a Matrix instance from a breeze matrix.
+   *
    * @param breeze a breeze matrix
    * @return a Matrix instance
    */
@@ -989,6 +1000,7 @@ object Matrices {
 
   /**
    * Generate a `Matrix` consisting of zeros.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of zeros
@@ -998,6 +1010,7 @@ object Matrices {
 
   /**
    * Generate a `DenseMatrix` consisting of ones.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @return `Matrix` with size `numRows` x `numCols` and values of ones
@@ -1007,6 +1020,7 @@ object Matrices {
 
   /**
    * Generate a dense Identity Matrix in `Matrix` format.
+   *
    * @param n number of rows and columns of the matrix
    * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -1015,6 +1029,7 @@ object Matrices {
 
   /**
    * Generate a sparse Identity Matrix in `Matrix` format.
+   *
    * @param n number of rows and columns of the matrix
    * @return `Matrix` with size `n` x `n` and values of ones on the diagonal
    */
@@ -1023,6 +1038,7 @@ object Matrices {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` uniform random numbers.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -1034,6 +1050,7 @@ object Matrices {
 
   /**
    * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1046,6 +1063,7 @@ object Matrices {
 
   /**
    * Generate a `DenseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param rng a random number generator
@@ -1057,6 +1075,7 @@ object Matrices {
 
   /**
    * Generate a `SparseMatrix` consisting of `i.i.d.` gaussian random numbers.
+   *
    * @param numRows number of rows of the matrix
    * @param numCols number of columns of the matrix
    * @param density the desired density for the matrix
@@ -1069,6 +1088,7 @@ object Matrices {
 
   /**
    * Generate a diagonal matrix in `Matrix` format from the supplied values.
+   *
    * @param vector a `Vector` that will form the values on the diagonal of the matrix
    * @return Square `Matrix` with size `values.length` x `values.length` and `values`
    *         on the diagonal
@@ -1080,6 +1100,7 @@ object Matrices {
    * Horizontally concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
+   *
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
    */
@@ -1139,6 +1160,7 @@ object Matrices {
    * Vertically concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
+   *
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were vertically concatenated
    */

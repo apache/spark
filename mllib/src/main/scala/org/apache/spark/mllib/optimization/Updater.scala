@@ -49,7 +49,6 @@ abstract class Updater extends Serializable {
    * @param stepSize - step size across iterations
    * @param iter - Iteration number
    * @param regParam - Regularization parameter
-   *
    * @return A tuple of 2 elements. The first element is a column matrix containing updated weights,
    *         and the second element is the regularization value computed using updated weights.
    */
@@ -75,8 +74,8 @@ class SimpleUpdater extends Updater {
       iter: Int,
       regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
+    brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
 
     (Vectors.fromBreeze(brzWeights), 0)
   }
@@ -87,7 +86,7 @@ class SimpleUpdater extends Updater {
  * Updater for L1 regularized problems.
  *          R(w) = ||w||_1
  * Uses a step-size decreasing with the square root of the number of iterations.
-
+ *
  * Instead of subgradient of the regularizer, the proximal operator for the
  * L1 regularization is applied after the gradient step. This is known to
  * result in better sparsity of the intermediate solution.
@@ -111,8 +110,8 @@ class L1Updater extends Updater {
       regParam: Double): (Vector, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
     // Take gradient step
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
+    brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
     // Apply proximal operator (soft thresholding)
     val shrinkageVal = regParam * thisIterStepSize
     var i = 0
@@ -132,7 +131,7 @@ class L1Updater extends Updater {
  * Updater for L2 regularized problems.
  *          R(w) = 1/2 ||w||^2
  * Uses a step-size decreasing with the square root of the number of iterations.
- */
+ **/
 @DeveloperApi
 class SquaredL2Updater extends Updater {
   override def compute(
@@ -146,9 +145,9 @@ class SquaredL2Updater extends Updater {
     // w' = w - thisIterStepSize * (gradient + regParam * w)
     // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
     brzWeights :*= (1.0 - thisIterStepSize * regParam)
-    brzAxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    brzAxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
     val norm = brzNorm(brzWeights, 2.0)
 
     (Vectors.fromBreeze(brzWeights), 0.5 * regParam * norm * norm)

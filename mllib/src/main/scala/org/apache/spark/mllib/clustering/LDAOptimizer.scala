@@ -137,7 +137,7 @@ final class EMLDAOptimizer extends LDAOptimizer {
     // For each document, create an edge (Document -> Term) for each unique term in the document.
     val edges: RDD[Edge[TokenCount]] = docs.flatMap { case (docID: Long, termCounts: Vector) =>
       // Add edges for terms with non-zero counts.
-      termCounts.toBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
+      termCounts.asBreeze.activeIterator.filter(_._2 != 0.0).map { case (term, cnt) =>
         Edge(docID, term2index(term), cnt)
       }
     }
@@ -457,7 +457,7 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
     val vocabSize = this.vocabSize
     val expElogbeta = exp(LDAUtils.dirichletExpectation(lambda)).t
     val expElogbetaBc = batch.sparkContext.broadcast(expElogbeta)
-    val alpha = this.alpha.toBreeze
+    val alpha = this.alpha.asBreeze
     val gammaShape = this.gammaShape
 
     val stats: RDD[(BDM[Double], List[BDV[Double]])] = batch.mapPartitions { docs =>
@@ -501,13 +501,14 @@ final class OnlineLDAOptimizer extends LDAOptimizer {
   /**
    * Update alpha based on `gammat`, the inferred topic distributions for documents in the
    * current mini-batch. Uses Newton-Rhapson method.
+ *
    * @see Section 3.3, Huang: Maximum Likelihood Estimation of Dirichlet Distribution Parameters
    *      (http://jonathan-huang.org/research/dirichlet/dirichlet.pdf)
    */
   private def updateAlpha(gammat: BDM[Double]): Unit = {
     val weight = rho()
     val N = gammat.rows.toDouble
-    val alpha = this.alpha.toBreeze.toDenseVector
+    val alpha = this.alpha.asBreeze.toDenseVector
     val logphat: BDM[Double] = sum(LDAUtils.dirichletExpectation(gammat)(::, breeze.linalg.*)) / N
     val gradf = N * (-LDAUtils.dirichletExpectation(alpha) + logphat.toDenseVector)
 
@@ -558,8 +559,8 @@ private[clustering] object OnlineLDAOptimizer {
    *
    * An optimization (Lee, Seung: Algorithms for non-negative matrix factorization, NIPS 2001)
    * avoids explicit computation of variational parameter `phi`.
+ *
    * @see [[http://citeseerx.ist.psu.edu/viewdoc/summary?doi=10.1.1.31.7566]]
-   *
    * @return Returns a tuple of `gammad` - estimate of gamma, the topic distribution, `sstatsd` -
    *         statistics for updating lambda and `ids` - list of termCounts vector indices.
    */
