@@ -64,13 +64,13 @@ case class ListFiles(files: Seq[String] = Seq.empty[String]) extends RunnableCom
 /**
  * List jars
  */
-case class ListJars() extends RunnableCommand {
+case class ListJars(jars: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     val schema = StructType(
       StructField("result", StringType, nullable = false) :: Nil)
     schema.toAttributes
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sparkContext.listJars().map(Row(_))
+    sparkSession.sparkContext.listJars(jars).map(Row(_))
   }
 }

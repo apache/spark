@@ -163,6 +163,19 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     }
   }
 
+  test("add and list jar files") {
+    val jarPath =
+      Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    try{
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(jarPath.toString)
+      assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size > 0)
+      assert(sc.listJars(Seq("TestUDTF.jar")).size > 0)
+    } finally {
+      sc.stop()
+    }
+  }
+
   test("addFile recursive works") {
     val pluto = Utils.createTempDir()
     val neptune = Utils.createTempDir(pluto.getAbsolutePath)

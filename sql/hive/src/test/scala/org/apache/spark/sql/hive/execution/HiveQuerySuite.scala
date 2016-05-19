@@ -880,6 +880,9 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
     assert(sql("list jar").
       filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+    val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+    sql(s"ADD JAR $testJar2")
+    assert(sql(s"list jar $testJar").count() == 1)
   }
 
   test("CREATE TEMPORARY FUNCTION") {
@@ -907,6 +910,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
     assert(sql("list file").
       filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
+    assert(sql(s"list file $testFile").count() == 1)
   }
 
   createQueryTest("dynamic_partition",

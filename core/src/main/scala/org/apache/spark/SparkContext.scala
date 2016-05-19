@@ -705,8 +705,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * `step` every element.
    *
    * @note if we need to cache this RDD, we should make sure each partition does not exceed limit.
-   *
-   * @param start the start value.
+    * @param start the start value.
    * @param end the end value.
    * @param step the incremental step
    * @param numSlices the partition number of the new RDD.
@@ -831,8 +830,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred, large file is also allowable, but may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
-   *
-   * @param path Directory to the input data files, the path can be comma separated paths as the
+    * @param path Directory to the input data files, the path can be comma separated paths as the
    *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
@@ -880,8 +878,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * @note Small files are preferred; very large files may cause bad performance.
    * @note On some filesystems, `.../path/&#42;` can be a more efficient way to read all files
    *       in a directory rather than `.../path/` or `.../path`
-   *
-   * @param path Directory to the input data files, the path can be comma separated paths as the
+    * @param path Directory to the input data files, the path can be comma separated paths as the
    *             list of inputs.
    * @param minPartitions A suggestion value of the minimal splitting number for input data.
    */
@@ -913,8 +910,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    *             list of inputs.
    * @param recordLength The length at which to split the records
    * @param conf Configuration for setting up the dataset.
-   *
-   * @return An RDD of data with values, represented as byte arrays
+    * @return An RDD of data with values, represented as byte arrays
    */
   def binaryRecords(
       path: String,
@@ -1247,7 +1243,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
    * with `+=`. Only the driver can access the accumuable's `value`.
-   * @tparam R accumulator result type
+    *
+    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
   @deprecated("use AccumulatorV2", "2.0.0")
@@ -1262,7 +1259,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
    * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
    * access the accumuable's `value`.
-   * @tparam R accumulator result type
+    *
+    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
   @deprecated("use AccumulatorV2", "2.0.0")
@@ -1478,7 +1476,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * Update the cluster manager on our scheduling needs. Three bits of information are included
    * to help it make decisions.
-   * @param numExecutors The total number of executors we'd like to have. The cluster manager
+    *
+    * @param numExecutors The total number of executors we'd like to have. The cluster manager
    *                     shouldn't kill any running executor to reach this number, but,
    *                     if all existing executors were to die, this is the number of executors
    *                     we'd want to be allocated.
@@ -1506,7 +1505,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   /**
    * :: DeveloperApi ::
    * Request an additional number of executors from the cluster manager.
-   * @return whether the request is received.
+    *
+    * @return whether the request is received.
    */
   @DeveloperApi
   override def requestExecutors(numAdditionalExecutors: Int): Boolean = {
@@ -1657,7 +1657,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Gets the locality information associated with the partition in a particular rdd
-   * @param rdd of interest
+    *
+    * @param rdd of interest
    * @param partition to be looked up for locality
    * @return list of preferred locations for the partition
    */
@@ -1745,8 +1746,16 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   // list the jar resources that were added.
-  def listJars(): Seq[String] = {
-    addedJars.keySet.toSeq
+  def listJars(jars: Seq[String] = Seq.empty[String]): Seq[String] = {
+    if (jars.size > 0) {
+      jars.map { f =>
+        new Path(f).getName
+      }.map {f =>
+        addedJars.keySet.toSeq.map(new Path(_).toUri.toString).filter(_.contains(f))
+      }.flatten
+    } else {
+      addedJars.keySet.toSeq
+    }
   }
 
   // Shut down the SparkContext.

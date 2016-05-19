@@ -774,29 +774,37 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AddJarCommand]] or [[AddFileCommand]] command depending on the requested resource.
+   * Create an resource command depending on the requested operation on resources.
+   * ADD FILE(s)|JAR(s) <filepath|jarfile>*
+   * DELETE FILE(s)|JAR(s) <filepath/jarfile>*
+   * LIST FILE(s)|JAR(s) <filepath|jarfile>*
    */
-  override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
-    ctx.identifier.getText.toLowerCase match {
-      case "file" => AddFileCommand(remainder(ctx.identifier).trim)
-      case "jar" => AddJarCommand(remainder(ctx.identifier).trim)
-      case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
-    }
-  }
-
-  /**
-   * List added file(s), jar(s), depending on the requested resource
-   */
-  override def visitListResources(ctx: ListResourcesContext): LogicalPlan = withOrigin(ctx) {
-    ctx.identifier.getText.toLowerCase match {
-      case "files" | "file" =>
-        if (remainder(ctx.identifier).trim.length > 0) {
-          ListFiles(remainder(ctx.identifier).trim.split("\\s+"))
-        } else {
-          ListFiles()
+  override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
+    ctx.op.getType match {
+      case SqlBaseParser.ADD =>
+        ctx.identifier.getText.toLowerCase match {
+          case "file" => AddFile(remainder(ctx.identifier).trim)
+          case "jar" => AddJar(remainder(ctx.identifier).trim)
+          case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
-      case "jars" | "jar" => ListJars()
-      case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
+      case SqlBaseParser.DELETE =>
+        throw operationNotAllowed(s"DELETE resources", ctx)
+      case SqlBaseParser.LIST =>
+        ctx.identifier.getText.toLowerCase match {
+          case "files" | "file" =>
+            if (remainder(ctx.identifier).trim.length > 0) {
+              ListFiles(remainder(ctx.identifier).trim.split("\\s+"))
+            } else {
+              ListFiles()
+            }
+          case "jars" | "jar" =>
+            if (remainder(ctx.identifier).trim.length > 0) {
+              ListJars(remainder(ctx.identifier).trim.split("\\s+"))
+            } else {
+              ListJars()
+            }
+          case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
+        }
     }
   }
 

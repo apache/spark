@@ -117,7 +117,7 @@ statement
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?
         (COLUMNS identifierList)?                                      #truncateTable
-    | ADD identifier .*?                                               #addResource
+    | op=(ADD | DELETE | LIST) identifier .*?                          #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -626,7 +626,7 @@ number
 
 nonReserved
     : SHOW | TABLES | COLUMNS | COLUMN | PARTITIONS | FUNCTIONS | DATABASES
-    | ADD  | LIST
+    | ADD
     | OVER | PARTITION | RANGE | ROWS | PRECEDING | FOLLOWING | CURRENT | ROW | MAP | ARRAY | STRUCT
     | LATERAL | WINDOW | REDUCE | TRANSFORM | USING | SERDE | SERDEPROPERTIES | RECORDREADER
     | DELIMITED | FIELDS | TERMINATED | COLLECTION | ITEMS | KEYS | ESCAPED | LINES | SEPARATED
@@ -634,7 +634,7 @@ nonReserved
     | GROUPING | CUBE | ROLLUP
     | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
-    | SET
+    | SET | RESET
     | VIEW | REPLACE
     | IF
     | NO | DATA
@@ -642,7 +642,7 @@ nonReserved
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
     | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
-    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE
+    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | LIST
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
     | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
     | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
@@ -749,7 +749,7 @@ MAP: 'MAP';
 STRUCT: 'STRUCT';
 COMMENT: 'COMMENT';
 SET: 'SET';
-LIST: 'LIST';
+RESET: 'RESET';
 DATA: 'DATA';
 START: 'START';
 TRANSACTION: 'TRANSACTION';
@@ -843,6 +843,7 @@ DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
 ANALYZE: 'ANALYZE';
 COMPUTE: 'COMPUTE';
+LIST: 'LIST';
 STATISTICS: 'STATISTICS';
 PARTITIONED: 'PARTITIONED';
 EXTERNAL: 'EXTERNAL';

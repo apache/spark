@@ -244,7 +244,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile" -> "",
-      s"LIST JARS" -> "TestUDTF.jar"
+      s"LIST JARS" -> "TestUDTF.jar",
+      s"List JAR $jarFile" -> "TestUDTF.jar"
     )
   }
 
@@ -253,7 +254,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
     runCliWithin(2.minute)(
       s"ADD FILE $dataFilePath" -> "",
-      s"LIST FILES" -> "small_kv.txt"
+      s"LIST FILES" -> "small_kv.txt",
+      s"LIST FILE $dataFilePath" -> "small_kv.txt"
     )
   }
 }
