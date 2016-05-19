@@ -574,7 +574,7 @@ private[netty] class NettyRpcHandler(
   private def internalReceive(client: TransportClient, message: ByteBuffer): RequestMessage = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
-    val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+    val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
     val requestMessage = nettyEnv.deserialize[RequestMessage](client, message)
     if (requestMessage.senderAddress == null) {
       // Create a new message with the socket address of the client as the sender.
@@ -595,7 +595,7 @@ private[netty] class NettyRpcHandler(
   override def exceptionCaught(cause: Throwable, client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
-      val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+      val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
       dispatcher.postToAll(RemoteProcessConnectionError(cause, clientAddr))
       // If the remove RpcEnv listens to some address, we should also fire a
       // RemoteProcessConnectionError for the remote RpcEnv listening address
@@ -614,14 +614,14 @@ private[netty] class NettyRpcHandler(
   override def channelActive(client: TransportClient): Unit = {
     val addr = client.getChannel().remoteAddress().asInstanceOf[InetSocketAddress]
     assert(addr != null)
-    val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+    val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
     dispatcher.postToAll(RemoteProcessConnected(clientAddr))
   }
 
   override def channelInactive(client: TransportClient): Unit = {
     val addr = client.getChannel.remoteAddress().asInstanceOf[InetSocketAddress]
     if (addr != null) {
-      val clientAddr = RpcAddress(addr.getHostName, addr.getPort)
+      val clientAddr = RpcAddress(addr.getHostString, addr.getPort)
       nettyEnv.removeOutbox(clientAddr)
       dispatcher.postToAll(RemoteProcessDisconnected(clientAddr))
       val remoteEnvAddress = remoteAddresses.remove(clientAddr)
