@@ -360,9 +360,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
-    val columnNamesOpt = Option(ctx.identifierList).map(visitIdentifierList)
-    if (columnNamesOpt.isDefined) {
-      throw new ParseException("TRUNCATE TABLE for COLUMNS is not supported.", ctx)
+    if (ctx.identifierList != null) {
+      throw operationNotAllowed("TRUNCATE TABLE ... COLUMNS", ctx)
     }
     TruncateTable(
       visitTableIdentifier(ctx.tableIdentifier),

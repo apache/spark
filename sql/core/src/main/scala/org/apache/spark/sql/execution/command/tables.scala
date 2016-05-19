@@ -288,12 +288,11 @@ case class TruncateTable(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
-      throw new AnalysisException(s"table in TRUNCATE TABLE does not exist: '$tableName'")
-    }
-    if (catalog.isTemporaryTable(tableName)) {
-      throw new AnalysisException(s"table in TRUNCATE TABLE cannot be temporary: '$tableName'")
-    }
-    val locations = if (partitionSpec.isDefined) {
+      logWarning(s"table '$tableName' in TRUNCATE TABLE does not exist.")
+    } else if (catalog.isTemporaryTable(tableName)) {
+      logWarning(s"table '$tableName' in TRUNCATE TABLE is a temporary table.")
+    } else {
+      val locations = if (partitionSpec.isDefined) {
         catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
       } else {
         val table = catalog.getTableMetadata(tableName)
@@ -303,17 +302,18 @@ case class TruncateTable(
           Seq(table.storage.locationUri)
         }
       }
-    locations.foreach { location =>
-      if (location.isDefined) {
-        val path = new Path(location.get)
-        try {
-          val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
-          fs.delete(path, true)
-          fs.mkdirs(path)
-        } catch {
-          case NonFatal(e) =>
-            throw new AnalysisException(
-              s"TRUNCATE TABLE: Fail to clear the input path: '$path', exception: ${e.getMessage}")
+      locations.foreach { location =>
+        if (location.isDefined) {
+          val path = new Path(location.get)
+          try {
+            val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+            fs.delete(path, true)
+            fs.mkdirs(path)
+          } catch {
+            case NonFatal(e) =>
+              throw new AnalysisException(
+                s"Failed to truncate table '$tableName' because of ${e.toString}")
+          }
         }
       }
     }
