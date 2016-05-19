@@ -25,7 +25,6 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.ml.classification.LogisticRegressionSuite;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.tree.impl.TreeTests;
 import org.apache.spark.sql.Dataset;

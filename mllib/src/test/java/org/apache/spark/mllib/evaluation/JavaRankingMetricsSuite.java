@@ -25,7 +25,6 @@ import scala.Tuple2;
 import scala.Tuple2$;
 
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;

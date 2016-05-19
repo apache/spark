@@ -75,7 +75,7 @@ public class JavaPCASuite extends SharedSparkSession implements Serializable {
               }
             }
     ).rdd());
-    
+
     Matrix pc = mat.computePrincipalComponents(3);
 
     mat.multiply(pc).rows().toJavaRDD();
