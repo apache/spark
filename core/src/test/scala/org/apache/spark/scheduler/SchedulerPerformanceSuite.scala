@@ -53,7 +53,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
       val start = System.currentTimeMillis()
       while (System.currentTimeMillis() - start < 10000 ) {
         withClue(s"failure in iteration = $itrs") {
-          val jobFuture = submit(simpleWorkload(N), new Array[Int](N))
+          val jobFuture = submit(simpleWorkload(N), (0 until N).toArray)
           // Note: Do not call Await.ready(future) because that calls `scala.concurrent.blocking`,
           // which causes concurrent SQL executions to fail if a fork-join pool is used. Note that
           // due to idiosyncrasies in Scala, `awaitPermission` is not actually used anywhere so it's
