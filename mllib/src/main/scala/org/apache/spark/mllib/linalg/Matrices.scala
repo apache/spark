@@ -1080,7 +1080,6 @@ object Matrices {
    * Horizontally concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
-   *
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were horizontally concatenated
    */
@@ -1140,7 +1139,6 @@ object Matrices {
    * Vertically concatenate a sequence of matrices. The returned matrix will be in the format
    * the matrices are supplied in. Supplying a mix of dense and sparse matrices will result in
    * a sparse matrix. If the Array is empty, an empty `DenseMatrix` will be returned.
-   *
    * @param matrices array of matrices
    * @return a single `Matrix` composed of the matrices that were vertically concatenated
    */
