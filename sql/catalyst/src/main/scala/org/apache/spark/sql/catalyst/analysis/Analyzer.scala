@@ -185,8 +185,7 @@ class Analyzer(
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
               case e: ExtractValue => Alias(e, toPrettySQL(e))()
               case e if optGenAliasFunc.isDefined =>
-                val v: String = optGenAliasFunc.get.apply(e)
-                Alias(child, s"${v}_c${i + 1}")()
+                Alias(child, s"${optGenAliasFunc.get.apply(e, i + 1)}")()
               case e => Alias(e, toPrettySQL(e))()
             }
           }
