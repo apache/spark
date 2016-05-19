@@ -715,52 +715,27 @@ class CodegenContext {
   /**
    * get a map of the pair of a place holder and a corresponding comment
    */
-  def getPlaceHolderToComments(): collection.Map[String, String] = {
-    placeHolderToComments
-  }
-
-  /**
-   * Returns the string representation of this expression that is safe to be put in
-   * code comments of generated code. The length is capped at 128 characters.
-   */
-  private[this] def toCommentSafeString(str: String): String = {
-    val len = math.min(str.length, 128)
-    val suffix = if (str.length > len) "..." else ""
-
-    // Unicode literals, like \u0022, should be escaped before
-    // they are put in code comment to avoid codegen breaking.
-    // To escape them, single "\" should be prepended to a series of "\" just before "u"
-    // only when the number of "\" is odd.
-    // For example, \u0022 should become to \\u0022
-    // but \\u0022 should not become to \\\u0022 because the first backslash escapes the second one,
-    // and \u0022 will remain, means not escaped.
-    // Otherwise, the runtime Java compiler will fail to compile or code injection can be allowed.
-    // For details, see SPARK-15165.
-    str.substring(0, len).replace("*/", "*\\/")
-      .replaceAll("(^|[^\\\\])(\\\\(\\\\\\\\)*u)", "$1\\\\$2") + suffix
-  }
+  def getPlaceHolderToComments(): collection.Map[String, String] = placeHolderToComments
 
   /**
    * Register a multi-line comment and return the corresponding place holder
    */
-  def registerMultilineComment(comment: String): String = {
+  def registerMultilineComment(text: String): String = {
     val placeHolder = s"/*${freshName("comment_placeholder")}*/"
-    val safeComment = toCommentSafeString(comment)
-      .split("(\r\n)|\r|\n")
-      .mkString("/**\n * ", "\n * ", "\n */")
-    placeHolderToComments += (placeHolder -> safeComment)
+    val comment = text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
+    placeHolderToComments += (placeHolder -> comment)
     placeHolder
   }
 
   /**
    * Register a comment and return the corresponding place holder
    */
-  def registerComment(comment: String): String = {
-    if (comment.contains("\n") || comment.contains("\r")) {
-      registerMultilineComment(comment)
+  def registerComment(text: String): String = {
+    if (text.contains("\n") || text.contains("\r")) {
+      registerMultilineComment(text)
     } else {
       val placeHolder = s"/*${freshName("comment_placeholder")}*/"
-      val safeComment = s"// ${toCommentSafeString(comment)}"
+      val safeComment = s"// $text"
       placeHolderToComments += (placeHolder -> safeComment)
       placeHolder
     }
@@ -781,7 +756,7 @@ abstract class GeneratedClass {
 class CodeAndComment(val body: String, val comment: collection.Map[String, String])
   extends Serializable {
   override def equals(that: Any): Boolean = that match {
-    case t: CodeAndComment if t eq null => false
+    case null => false
     case t: CodeAndComment if t.body == body => true
     case _ => false
   }

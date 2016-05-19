@@ -140,8 +140,8 @@ class CodeFormatterSuite extends SparkFunSuite {
   }{
     """
       |/* 001 */ /* This is a comment about
-      |/* 002 */ class A {
-      |/* 003 */   class body; ...*/
+      |/* 002 */  class A {
+      |/* 003 */    class body; ...*/
       |/* 004 */ class A {
       |/* 005 */   class body;
       |/* 006 */ }
