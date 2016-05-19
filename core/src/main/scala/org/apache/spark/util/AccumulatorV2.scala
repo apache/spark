@@ -255,6 +255,9 @@ private[spark] object AccumulatorContext {
   def clear(): Unit = {
     originals.clear()
   }
+
+  // Identifier for distinguishing SQL metrics from other accumulators
+  private[spark] val SQL_ACCUM_IDENTIFIER = "sql"
 }
 
 
