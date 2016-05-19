@@ -44,7 +44,7 @@ trait SharedSQLContext extends SQLTestUtils {
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected implicit def sqlContext: SQLContext = _spark.wrapped
+  protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   /**
    * Initialize the [[TestSparkSession]].

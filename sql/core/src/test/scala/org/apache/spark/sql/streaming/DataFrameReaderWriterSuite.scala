@@ -355,14 +355,14 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.wrapped,
+      spark.sqlContext,
       checkpointLocation + "/sources/0",
       None,
       "org.apache.spark.sql.streaming.test",
       Map.empty)
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.wrapped,
+      spark.sqlContext,
       checkpointLocation + "/sources/1",
       None,
       "org.apache.spark.sql.streaming.test",

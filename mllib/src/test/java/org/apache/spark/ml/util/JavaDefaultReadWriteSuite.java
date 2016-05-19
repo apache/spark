@@ -38,12 +38,12 @@ public class JavaDefaultReadWriteSuite {
 
   @Before
   public void setUp() {
-    SQLContext.clearActive();
+    SparkSession.clearActiveSession();
     spark = SparkSession.builder()
       .master("local[2]")
       .appName("JavaDefaultReadWriteSuite")
       .getOrCreate();
-    SQLContext.setActive(spark.wrapped());
+    SparkSession.setActiveSession(spark);
 
     tempDir = Utils.createTempDir(
       System.getProperty("java.io.tmpdir"), "JavaDefaultReadWriteSuite");
@@ -73,7 +73,7 @@ public class JavaDefaultReadWriteSuite {
     } catch (IOException e) {
       // expected
     }
-    instance.write().context(spark.wrapped()).overwrite().save(outputPath);
+    instance.write().context(spark.sqlContext()).overwrite().save(outputPath);
     MyParams newInstance = MyParams.load(outputPath);
     Assert.assertEquals("UID should match.", instance.uid(), newInstance.uid());
     Assert.assertEquals("Params should be preserved.",
