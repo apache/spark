@@ -34,8 +34,7 @@ import org.apache.spark.api.java.JavaRDD;
 public class JavaRankingMetricsSuite extends SharedSparkSession implements Serializable {
   private transient JavaRDD<Tuple2<List<Integer>, List<Integer>>> predictionAndLabels;
 
-  @Before
-  public void customSetUp() {
+  @Override protected void customSetUp() {
     predictionAndLabels = jsc.parallelize(Arrays.asList(
       Tuple2$.MODULE$.apply(
         Arrays.asList(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Arrays.asList(1, 2, 3, 4, 5)),

@@ -39,13 +39,9 @@ public class SharedSparkSession {
     jsc = new JavaSparkContext(spark.sparkContext());
 
     customSetUp();
-    customSetUpWithException();
   }
 
-  public void customSetUp() {}
-
-  // TODO: Remove this once we have a way to use customSetUp that Exception
-  public void customSetUpWithException() throws IOException {}
+  protected void customSetUp() throws IOException {}
 
   @After
   public void tearDown() {
@@ -55,5 +51,5 @@ public class SharedSparkSession {
     customTearDown();
   }
 
-  public void customTearDown() {}
+  protected void customTearDown() {}
 }

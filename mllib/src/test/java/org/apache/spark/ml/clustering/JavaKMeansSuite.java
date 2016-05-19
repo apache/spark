@@ -35,7 +35,7 @@ public class JavaKMeansSuite extends SharedSparkSession implements Serializable 
   private transient int k = 5;
   private transient Dataset<Row> dataset;
 
-  public void customSetUp() {
+  @Override protected void customSetUp() {
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k);
   }
 

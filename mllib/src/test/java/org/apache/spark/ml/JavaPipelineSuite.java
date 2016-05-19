@@ -35,7 +35,7 @@ public class JavaPipelineSuite extends SharedSparkSession {
 
   private transient Dataset<Row> dataset;
 
-  public void customSetUp() {
+  @Override protected void customSetUp() {
     JavaRDD<LabeledPoint> points =
       jsc.parallelize(generateLogisticInputAsList(1.0, 1.0, 100, 42), 2);
     dataset = spark.createDataFrame(points, LabeledPoint.class);
