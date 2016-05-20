@@ -1725,7 +1725,6 @@ Instead, use `spark.sql.warehouse.dir` to specify the default location of databa
 You may need to grant write privilege to the user who starts the spark application.
 
 {% highlight python %}
-# sc is an existing SparkContext.
 from pyspark.sql import SparkSession
 spark = SparkSession.builder.enableHiveSupport().getOrCreate()
 
