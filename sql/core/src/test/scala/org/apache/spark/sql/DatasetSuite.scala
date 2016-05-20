@@ -205,6 +205,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("b", 2))
   }
 
+  test("filter and then select") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.filter(_._1 == "b").select(expr("_1").as[String]),
+      ("b"))
+  }
+
   test("foreach") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.longAccumulator
