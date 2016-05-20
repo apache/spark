@@ -432,11 +432,10 @@ object DateTimeUtils {
     if (year < 0 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
       return true
     }
-    if(month == 2) {
-      if(isLeapYear(year) && day > 29) {
+    if (month == 2) {
+      if (isLeapYear(year) && day > 29) {
         return true
-      }
-      else if (!isLeapYear(year) && day > 28) {
+      } else if (!isLeapYear(year) && day > 28) {
         return true
       }
     } else if (!MonthOf31Days.contains(month) && day > 30) {
