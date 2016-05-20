@@ -659,7 +659,7 @@ object SparkSession {
      * @since 2.0.0
      */
     def config(key: String, value: String): Builder = synchronized {
-      options += (key -> value)
+      options += key -> value
       this
     }
 
