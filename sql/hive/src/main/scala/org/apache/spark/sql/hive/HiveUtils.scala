@@ -184,10 +184,10 @@ private[spark] object HiveUtils extends Logging {
   }
 
   /**
-    * A comma separated list of class prefixes that should explicitly be reloaded for each version
-    * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
-    * prefix that typically would be shared (i.e. org.apache.spark.*)
-    */
+   * A comma separated list of class prefixes that should explicitly be reloaded for each version
+   * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+   * prefix that typically would be shared (i.e. org.apache.spark.*)
+   */
   private def hiveMetastoreShareHadoopClasses(conf: SQLConf): Boolean = {
     conf.getConf(HIVE_METASTORE_SHARE_HADOOPCLASSES)
   }
