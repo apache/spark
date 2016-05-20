@@ -11,3 +11,15 @@ include Rtools and R in `PATH`.
 directory in Maven in `PATH`.
 4. Set `MAVEN_OPTS` as described in [Building Spark](http://spark.apache.org/docs/latest/building-spark.html).
 5. Open a command shell (`cmd`) in the Spark directory and run `mvn -DskipTests -Psparkr package`
+
+##  Unit tests
+
+To run existing unit tests in SparkR on Windows, the following setps are required (the steps below suppose you are in Spark root directory)
+
+1. Set `HADOOP_HOME`.
+2. Download `winutils.exe` and locate this in `$HADOOP_HOME/bin`. (It seems not requiring installing Hadoop but only this `winutils.exe`. It seems not included in Hadoop official binary releases so it should be built from source but it seems it is able to be downloaded from community (e.g. [steveloughran/winutils](https://github.com/steveloughran/winutils)).
+3. You can also run the unit-tests for SparkR by running (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
+ 
+    R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
+    .\bin\spark-submit2.cmd --conf spark.hadoop.fs.defualt.name="file:///" R\pkg\tests\run-all.R
+
