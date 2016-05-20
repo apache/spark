@@ -29,6 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol, Utils}
 
@@ -263,7 +264,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("CartesianProduct metrics") {
-    withSQLConf("spark.sql.join.cartesian.enabled" -> "true") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
       testDataForJoin.createOrReplaceTempView("testDataForJoin")
       withTempTable("testDataForJoin") {

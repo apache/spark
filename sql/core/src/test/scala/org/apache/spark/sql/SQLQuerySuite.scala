@@ -104,7 +104,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     ).toDF("a", "b", "c").createOrReplaceTempView("cachedData")
 
     spark.catalog.cacheTable("cachedData")
-    withSQLConf("spark.sql.join.cartesian.enabled" -> "true") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       checkAnswer(
         sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
         Row(0) :: Row(81) :: Nil)
@@ -826,7 +826,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("cartesian product join") {
-    withSQLConf("spark.sql.join.cartesian.enabled" -> "true") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       checkAnswer(
         testData3.join(testData3),
         Row(1, null, 1, null) ::

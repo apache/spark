@@ -178,12 +178,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick CartesianProduct for InnerJoin
       case logical.Join(left, right, Inner, condition) =>
-        if (conf.cartesianProductEnabled) {
-          joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
-        } else {
-          throw new AnalysisException("Cartesian products are disabled by default. To explicitly " +
-            "enable them, please set spark.sql.join.cartesian.enabled = true")
-        }
+        joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =
@@ -194,7 +189,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
+          planLater(left), planLater(right), buildSide, joinType, condition,
+          withinBroadcastThreshold = false) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 

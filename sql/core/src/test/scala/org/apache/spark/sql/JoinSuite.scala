@@ -63,7 +63,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     spark.cacheManager.clearCache()
 
     withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0",
-      "spark.sql.join.cartesian.enabled" -> "true") {
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[SortMergeJoinExec]),
@@ -206,7 +206,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("cartesian product join") {
-    withSQLConf("spark.sql.join.cartesian.enabled" -> "true") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       checkAnswer(
         testData3.join(testData3),
         Row(1, null, 1, null) ::
@@ -214,8 +214,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
           Row(2, 2, 1, null) ::
           Row(2, 2, 2, 2) :: Nil)
     }
-    withSQLConf("spark.sql.join.cartesian.enabled" -> "false") {
-      val e = intercept[AnalysisException] {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val e = intercept[Exception] {
         checkAnswer(
           testData3.join(testData3),
           Row(1, null, 1, null) ::
@@ -223,7 +223,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
             Row(2, 2, 1, null) ::
             Row(2, 2, 2, 2) :: Nil)
       }
-      assert(e.getMessage().contains("Cartesian products are disabled by default"))
+      assert(e.getMessage.contains("Cartesian joins could be prohibitively expensive and are " +
+        "disabled by default"))
     }
   }
 
