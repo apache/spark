@@ -55,7 +55,7 @@ private[feature] trait QuantileDiscretizerBase extends Params
    * @group param
    */
   val relativeError = new DoubleParam(this, "relativeError", "The relative target precision " +
-    "for the approximate quantile computation used to generate buckets. " +
+    "for the approximate quantile algorithm used to generate buckets. " +
     "Must be in the range [0, 1].", ParamValidators.inRange(0.0, 1.0))
   setDefault(relativeError -> 0.001)
 
@@ -66,8 +66,9 @@ private[feature] trait QuantileDiscretizerBase extends Params
 /**
  * :: Experimental ::
  * `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
- * categorical features. The bin ranges are chosen using an approximate algorithm (see the
- * documentation for [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]]
+ * categorical features. The number of bins can be set using the `numBuckets` parameter.
+ * The bin ranges are chosen using an approximate algorithm (see the documentation for
+ * [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]]
  * for a detailed description). The precision of the approximation can be controlled with the
  * `relativeError` parameter. The lower and upper bin bounds will be `-Infinity` and `+Infinity`,
  * covering all real values.

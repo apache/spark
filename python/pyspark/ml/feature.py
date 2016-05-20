@@ -1177,9 +1177,11 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
     .. note:: Experimental
 
     `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-    categorical features. The bin ranges are chosen using an approximate algorithm (see the
-    documentation for :py:meth:`approxQuantile` for a detailed description).
-    The precision of the approximation can be controlled with the `relativeError` parameter.
+    categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
+    The bin ranges are chosen using an approximate algorithm (see the documentation for
+    :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
+    The precision of the approximation can be controlled with the
+    :py:attr:`relativeError` parameter.
     The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
 
     >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
@@ -1187,6 +1189,8 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
     ...     inputCol="values", outputCol="buckets", seed=123)
     >>> qds.getSeed()
     123
+    >>> qds.getRelativeError()
+    0.001
     >>> bucketizer = qds.fit(df)
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
@@ -1211,7 +1215,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
                        typeConverter=TypeConverters.toInt)
 
     relativeError = Param(Params._dummy(), "relativeError", "The relative target precision for " +
-                          "the approximate quantile computation used to generate buckets. " +
+                          "the approximate quantile algorithm used to generate buckets. " +
                           "Must be in the range [0, 1].",
                           typeConverter=TypeConverters.toFloat)
 
