@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution.benchmark.tpcds
+package org.apache.spark.sql.execution.benchmark
 
 import java.io.File
 
@@ -67,15 +67,15 @@ object TPCDSQueryBenchmark {
     spark.conf.set(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key, "true")
     spark.conf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key, "true")
     queries.foreach { name =>
-      val queriesString = fileToString(new File(s"sql/core/src/test/scala/org/apache/spark/sql/" +
-        s"execution/benchmark/tpcds/queries/$name.sql"))
+      val queryString = fileToString(new File(Thread.currentThread().getContextClassLoader
+        .getResource(s"tpcds/$name.sql").getFile))
 
       // This is an indirect hack to estimate the size of each query's input by traversing the
       // logical plan and adding up the sizes of all tables that appear in the plan. Note that this
       // currently doesn't take WITH subqueries into account which might lead to fairly inaccurate
       // per-row processing time for those cases.
       val queryRelations = scala.collection.mutable.HashSet[String]()
-      spark.sql(queriesString).queryExecution.logical.map {
+      spark.sql(queryString).queryExecution.logical.map {
         case ur @ UnresolvedRelation(t: TableIdentifier, _) =>
           queryRelations.add(t.table)
         case lp: LogicalPlan =>
@@ -92,9 +92,9 @@ object TPCDSQueryBenchmark {
         case _ =>
       }
       val numRows = queryRelations.map(tableSizes.getOrElse(_, 0L)).sum
-      val benchmark = new Benchmark("TPCDS Snappy", numRows, 5)
+      val benchmark = new Benchmark(s"TPCDS Snappy", numRows, 5)
       benchmark.addCase(name) { i =>
-        spark.sql(queriesString).collect()
+        spark.sql(queryString).collect()
       }
       benchmark.run()
     }
@@ -103,7 +103,7 @@ object TPCDSQueryBenchmark {
   def main(args: Array[String]): Unit = {
 
     // List of all TPC-DS queries
-    val allQueries = Seq(
+    val tpcdsQueries = Seq(
       "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11",
       "q12", "q13", "q14a", "q14b", "q15", "q16", "q17", "q18", "q19", "q20",
       "q21", "q22", "q23a", "q23b", "q24a", "q24b", "q25", "q26", "q27", "q28", "q29", "q30",
@@ -113,13 +113,7 @@ object TPCDSQueryBenchmark {
       "q61", "q62", "q63", "q64", "q65", "q66", "q67", "q68", "q69", "q70",
       "q71", "q72", "q73", "q74", "q75", "q76", "q77", "q78", "q79", "q80",
       "q81", "q82", "q83", "q84", "q85", "q86", "q87", "q88", "q89", "q90",
-      "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99", "ss_max")
-
-    // These queries a subset of the TPCDS benchmark queries and are taken from
-    // https://github.com/databricks/spark-sql-perf/blob/master/src/main/scala/com/databricks/spark/
-    // sql/perf/tpcds/ImpalaKitQueries.scala
-    val commonQueries = Seq("q3", "q7", "q8", "q19", "q27", "q34", "q42", "q43", "q46", "q52",
-      "q53", "q55", "q59", "q63", "q65", "q68", "q73", "q79", "q82", "q89", "q98", "ss_max")
+      "q91", "q92", "q93", "q94", "q95", "q96", "q97", "q98", "q99")
 
     // In order to run this benchmark, please follow the instructions at
     // https://github.com/databricks/spark-sql-perf/blob/master/README.md to generate the TPCDS data
@@ -127,6 +121,6 @@ object TPCDSQueryBenchmark {
     // dataLocation below needs to be set to the location where the generated data is stored.
     val dataLocation = ""
 
-    tpcdsAll(dataLocation, queries = allQueries)
+    tpcdsAll(dataLocation, queries = tpcdsQueries)
   }
 }
