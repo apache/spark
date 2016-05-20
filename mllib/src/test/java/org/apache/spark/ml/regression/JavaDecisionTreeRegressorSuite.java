@@ -17,43 +17,21 @@
 
 package org.apache.spark.ml.regression;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.junit.After;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.ml.classification.LogisticRegressionSuite;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.tree.impl.TreeTests;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
 
 
-public class JavaDecisionTreeRegressorSuite implements Serializable {
-
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
-
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaDecisionTreeRegressorSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
-  }
+public class JavaDecisionTreeRegressorSuite extends SharedSparkSession {
 
   @Test
   public void runDT() {
