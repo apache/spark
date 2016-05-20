@@ -34,7 +34,7 @@ public abstract class SharedSparkSession {
   public void setUp() throws IOException {
     spark = SparkSession.builder()
       .master("local")
-      .appName("shared-spark-session")
+      .appName(getClass().getSimpleName())
       .getOrCreate();
     jsc = new JavaSparkContext(spark.sparkContext());
   }
