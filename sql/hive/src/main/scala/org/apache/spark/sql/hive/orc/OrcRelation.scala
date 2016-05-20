@@ -149,7 +149,8 @@ private[sql] class DefaultSource
   }
 }
 
-class OrcSerializer(dataSchema: StructType, conf: Configuration) extends HiveInspectors {
+private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
+  extends HiveInspectors {
 
   def serialize(row: InternalRow): Writable = {
     wrapOrcStruct(cachedOrcStruct, structOI, row)
