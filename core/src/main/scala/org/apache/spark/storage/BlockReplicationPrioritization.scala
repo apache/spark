@@ -33,19 +33,21 @@ trait BlockReplicationPrioritization {
   /**
    * Method to prioritize a bunch of candidate peers of a block
    *
+   * @param blockManagerId Id of the current BlockManager for self identification
    * @param peers A list of peers of a BlockManager
    * @param peersReplicatedTo Set of peers already replicated to
    * @param blockId BlockId of the block being replicated. This can be used as a source of
    *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  def prioritize(peers: Seq[BlockManagerId],
+  def prioritize(blockManagerId: BlockManagerId,
+    peers: Seq[BlockManagerId],
     peersReplicatedTo: Set[BlockManagerId],
     blockId: BlockId): Seq[BlockManagerId]
 }
 
 @DeveloperApi
-class DefaultBlockReplicationPrioritization(host: String)
+class DefaultBlockReplicationPrioritization
   extends BlockReplicationPrioritization
   with Logging {
 
@@ -53,13 +55,15 @@ class DefaultBlockReplicationPrioritization(host: String)
    * Method to prioritize a bunch of candidate peers of a block. This is a basic implementation,
    * that just makes sure we put blocks on different hosts, if possible
    *
+   * @param blockManagerId Id of the current BlockManager for self identification
    * @param peers A list of peers of a BlockManager
    * @param peersReplicatedTo Set of peers already replicated to
    * @param blockId BlockId of the block being replicated. This can be used as a source of
    *                randomness if needed.
    * @return A prioritized list of peers. Lower the index of a peer, higher its priority
    */
-  override def prioritize(peers: Seq[BlockManagerId],
+  override def prioritize(blockManagerId: BlockManagerId,
+    peers: Seq[BlockManagerId],
     peersReplicatedTo: Set[BlockManagerId],
     blockId: BlockId): Seq[BlockManagerId] = {
     val random = new Random(blockId.hashCode)
