@@ -345,7 +345,7 @@ private[sql] object HadoopFsRelation extends Logging {
     // because Parquet needs to find those metadata files from leaf files returned by this method.
     // We should refactor this logic to not mix metadata files with data files.
     (pathName.startsWith("_") || pathName.startsWith(".")) &&
-      !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata"))
+      !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
 
   /**
