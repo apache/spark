@@ -129,6 +129,14 @@ private[spark] object HiveUtils extends Logging {
     .toSequence
     .createWithDefault(Nil)
 
+  val HIVE_METASTORE_SHARE_HADOOPCLASSES =
+    SQLConfigBuilder("spark.sql.hive.metastore.shareHadoopClasses")
+      .doc("When set to false, the classloader used to load Hive metastore client will " +
+        "explicitly load Hadoop classes instead of using classes loaded by the classloader " +
+        "that loads Spark.")
+      .booleanConf
+      .createWithDefault(true)
+
   val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
     .booleanConf
@@ -173,6 +181,15 @@ private[spark] object HiveUtils extends Logging {
    */
   private def hiveMetastoreBarrierPrefixes(conf: SQLConf): Seq[String] = {
     conf.getConf(HIVE_METASTORE_BARRIER_PREFIXES).filterNot(_ == "")
+  }
+
+  /**
+    * A comma separated list of class prefixes that should explicitly be reloaded for each version
+    * of Hive that Spark SQL is communicating with.  For example, Hive UDFs that are declared in a
+    * prefix that typically would be shared (i.e. org.apache.spark.*)
+    */
+  private def hiveMetastoreShareHadoopClasses(conf: SQLConf): Boolean = {
+    conf.getConf(HIVE_METASTORE_SHARE_HADOOPCLASSES)
   }
 
   /**
@@ -278,6 +295,7 @@ private[spark] object HiveUtils extends Logging {
     val hiveMetastoreJars = HiveUtils.hiveMetastoreJars(sqlConf)
     val hiveMetastoreSharedPrefixes = HiveUtils.hiveMetastoreSharedPrefixes(sqlConf)
     val hiveMetastoreBarrierPrefixes = HiveUtils.hiveMetastoreBarrierPrefixes(sqlConf)
+    val hiveMetastoreShareHadoopClasses = HiveUtils.hiveMetastoreShareHadoopClasses(sqlConf)
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
@@ -315,6 +333,7 @@ private[spark] object HiveUtils extends Logging {
         execJars = jars.toSeq,
         config = configurations,
         isolationOn = true,
+        sharesHadoopClasses = hiveMetastoreShareHadoopClasses,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     } else if (hiveMetastoreJars == "maven") {
@@ -326,6 +345,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopVersion = VersionInfo.getVersion,
         sparkConf = conf,
         hadoopConf = hadoopConf,
+        sharesHadoopClasses = hiveMetastoreShareHadoopClasses,
         config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -358,6 +378,7 @@ private[spark] object HiveUtils extends Logging {
         execJars = jars.toSeq,
         config = configurations,
         isolationOn = true,
+        sharesHadoopClasses = hiveMetastoreShareHadoopClasses,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
     }
