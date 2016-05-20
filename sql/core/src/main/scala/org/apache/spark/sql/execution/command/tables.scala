@@ -288,9 +288,9 @@ case class TruncateTable(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
-      logWarning(s"table '$tableName' in TRUNCATE TABLE does not exist.")
+      logError(s"table '$tableName' in TRUNCATE TABLE does not exist.")
     } else if (catalog.isTemporaryTable(tableName)) {
-      logWarning(s"table '$tableName' in TRUNCATE TABLE is a temporary table.")
+      logError(s"table '$tableName' in TRUNCATE TABLE is a temporary table.")
     } else {
       val locations = if (partitionSpec.isDefined) {
         catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
@@ -313,7 +313,8 @@ case class TruncateTable(
           } catch {
             case NonFatal(e) =>
               throw new AnalysisException(
-                s"Failed to truncate table '$tableName' because of ${e.toString}")
+                s"Failed to truncate table '$tableName' when removing data of the path: $path " +
+                  s"because of ${e.toString}")
           }
         }
       }

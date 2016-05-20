@@ -328,6 +328,9 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
         Seq.empty[Row])
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
+        testResults)
 
       intercept[ParseException] {
         sql("TRUNCATE TABLE part_table PARTITION(c='1') COLUMNS (employeeID)")
