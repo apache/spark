@@ -60,14 +60,15 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   @Test
   public void testCliHelpAndNoArg() throws Exception {
-    List<String> sparkSubmitArgs = Arrays.asList(parser.HELP);
+    List<String> helpArgs = Arrays.asList(parser.HELP);
     Map<String, String> env = new HashMap<>();
-    List<String> cmd = buildCommand(sparkSubmitArgs, env);
+    List<String> cmd = buildCommand(helpArgs, env);
     assertTrue("--help should be contained in the final cmd.", cmd.contains(parser.HELP));
 
-    List<String> sparkEmptyArgs = Arrays.asList("");
-    cmd = buildCommand(sparkSubmitArgs, env);
-    assertTrue("--help should be contained in the final cmd of empty input.", cmd.contains(parser.HELP));
+    List<String> sparkEmptyArgs = Collections.emptyList();
+    cmd = buildCommand(sparkEmptyArgs, env);
+    assertTrue("org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
+              cmd.contains("org.apache.spark.deploy.SparkSubmit"));
   }
 
   @Test
