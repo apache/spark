@@ -137,8 +137,8 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       this.decimalVal = null
       this.longVal = {
         val isExactLong =
-          bigintval.compareTo(BigInteger.valueOf(JLong.MAX_VALUE)) < 0 &&
-          bigintval.compareTo(BigInteger.valueOf(JLong.MIN_VALUE)) > 0
+          bigintval.compareTo(BigInteger.valueOf(JLong.MAX_VALUE)) <= 0 &&
+          bigintval.compareTo(BigInteger.valueOf(JLong.MIN_VALUE)) >= 0
         if(isExactLong) {
           throw new ArithmeticException()
         } else {
