@@ -107,28 +107,37 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   SparkSubmitCommandBuilder(List<String> args) {
     this.allowsMixedArguments = false;
-
+    this.sparkArgs = new ArrayList<>();
     boolean isExample = false;
     List<String> submitArgs = args;
-    if (args.size() > 0 && args.get(0).equals(PYSPARK_SHELL)) {
-      this.allowsMixedArguments = true;
-      appResource = PYSPARK_SHELL;
-      submitArgs = args.subList(1, args.size());
-    } else if (args.size() > 0 && args.get(0).equals(SPARKR_SHELL)) {
-      this.allowsMixedArguments = true;
-      appResource = SPARKR_SHELL;
-      submitArgs = args.subList(1, args.size());
-    } else if (args.size() > 0 && args.get(0).equals(RUN_EXAMPLE)) {
-      isExample = true;
-      submitArgs = args.subList(1, args.size());
+
+    if (args.size() > 0) {
+      switch (args.get(0)) {
+        case PYSPARK_SHELL:
+          this.allowsMixedArguments = true;
+          appResource = PYSPARK_SHELL;
+          submitArgs = args.subList(1, args.size());
+          break;
+
+        case SPARKR_SHELL:
+          this.allowsMixedArguments = true;
+          appResource = SPARKR_SHELL;
+          submitArgs = args.subList(1, args.size());
+          break;
+
+        case RUN_EXAMPLE:
+          isExample = true;
+          submitArgs = args.subList(1, args.size());
+      }
+
+      this.isExample = isExample;
+      OptionParser parser = new OptionParser();
+      parser.parse(submitArgs);
+      this.printInfo = parser.infoRequested;
+    }  else {
+      this.isExample = isExample;
+      this.printInfo = true;
     }
-
-    this.sparkArgs = new ArrayList<>();
-    this.isExample = isExample;
-
-    OptionParser parser = new OptionParser();
-    parser.parse(submitArgs);
-    this.printInfo = parser.infoRequested;
   }
 
   @Override
@@ -147,7 +156,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
-    if (!allowsMixedArguments) {
+    if (!allowsMixedArguments && !printInfo) {
       checkArgument(appResource != null, "Missing application resource.");
     }
 

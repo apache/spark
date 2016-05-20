@@ -162,6 +162,16 @@ run_command() {
   esac
 
   echo "$newpid" > "$pid"
+  
+  #Poll for up to 5 seconds for the java process to start
+  for i in {1..10}
+  do
+    if [[ $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
+       break
+    fi
+    sleep 0.5
+  done
+
   sleep 2
   # Check if the process has died; in that case we'll tail the log so the user can see
   if [[ ! $(ps -p "$newpid" -o comm=) =~ "java" ]]; then
