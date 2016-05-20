@@ -59,7 +59,6 @@ private class CodeFormatter {
   private var indentLevel = 0
   private var indentString = ""
   private var currentLine = 1
-  private var extraIndentSize = 0
 
   // Tracks the level of indentation in multi-line comment blocks.
   private var inCommentBlock = false
@@ -81,7 +80,6 @@ private class CodeFormatter {
         // Handle multi-line comments
         inCommentBlock = true
         indentLevelOutsideCommentBlock = indentLevel
-        extraIndentSize = 1
       } else if (line.startsWith("//")) {
         // Handle single line comments
         newIndentLevel = indentLevel
@@ -91,26 +89,22 @@ private class CodeFormatter {
       if (line.endsWith("*/")) {
         inCommentBlock = false
         newIndentLevel = indentLevelOutsideCommentBlock
-        extraIndentSize = 0
       }
     }
 
     // Lines starting with '}' should be de-indented even if they contain '{' after;
     // in addition, lines ending with ':' are typically labels
-    val thisLineIndent =
-      if (line.isEmpty) {
-        ""
-      } else if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {
-        " " * (indentSize * (indentLevel - 1))
-      } else {
-        indentString
-      }
-    code.append(f"/* ${currentLine}%03d */${if (!line.isEmpty) " " else ""}")
+    val thisLineIndent = if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {
+      " " * (indentSize * (indentLevel - 1))
+    } else {
+      indentString
+    }
+    code.append(f"/* ${currentLine}%03d */ ")
     code.append(thisLineIndent)
     code.append(line)
     code.append("\n")
     indentLevel = newIndentLevel
-    indentString = " " * (indentSize * newIndentLevel + extraIndentSize)
+    indentString = " " * (indentSize * newIndentLevel)
     currentLine += 1
   }
 
