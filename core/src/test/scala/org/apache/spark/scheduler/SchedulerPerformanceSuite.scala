@@ -18,7 +18,6 @@ package org.apache.spark.scheduler
 
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.TaskState
 import org.apache.spark.util.Utils
 
 class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend] {
@@ -191,10 +190,10 @@ ran 3 iterations in 11.0 s (3.7 s per itr)
     val task = taskSet.tasks(taskDescription.index)
     if (badExecs(taskDescription.executorId)) {
       val exc = new RuntimeException(s"bad exec ${taskDescription.executorId}")
-      backend.taskFailedWithException(taskDescription, TaskState.FAILED, exc)
+      backend.taskFailed(taskDescription, exc)
     } else if (badHosts(host)) {
       val exc = new RuntimeException(s"bad host ${host}")
-      backend.taskFailedWithException(taskDescription, TaskState.FAILED, exc)
+      backend.taskFailed(taskDescription, exc)
     } else {
       // every 5th stage is a ResultStage -- the rest are ShuffleMapStages
       (task.stageId, task.partitionId) match {

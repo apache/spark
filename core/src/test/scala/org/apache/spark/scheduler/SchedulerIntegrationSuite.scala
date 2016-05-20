@@ -17,11 +17,9 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.reflect.ClassTag
@@ -238,10 +236,6 @@ private[spark] abstract class MockBackend(
     taskUpdate(task, TaskState.FINISHED, directResult)
   }
 
-  def taskFailedWithException(task: TaskDescription, state: TaskState, exc: Exception): Unit = {
-    taskFailed(task, state, new ExceptionFailure(exc, Seq()))
-  }
-
   /**
    * Tell the scheduler the task failed, with the given state and result (probably ExceptionFailure
    * or FetchFailed).  Also updates some internal state for this mock.
@@ -275,7 +269,7 @@ private[spark] abstract class MockBackend(
   private val runningTasks = ArrayBuffer[TaskDescription]()
 
   def hasTasks: Boolean = synchronized {
-    !assignedTasksWaitingToRun.isEmpty() || runningTasks.nonEmpty
+    assignedTasksWaitingToRun.nonEmpty || runningTasks.nonEmpty
   }
 
   def hasTasksWaitingToRun: Boolean = {
@@ -319,7 +313,7 @@ private[spark] abstract class MockBackend(
         executorIdToExecutor(task.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
       freeCores -= newTasks.size * taskScheduler.CPUS_PER_TASK
-      assignedTasksWaitingToRun.addAll(newTasks.asJava)
+      assignedTasksWaitingToRun ++= newTasks
     }
   }
 
