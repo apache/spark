@@ -252,7 +252,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
       "spark.scheduler.blacklist.advancedStrategy" -> "true"
     )
   ) {
-    runBadExecJob(3000, badExecs, badHosts)
+    runBadExecJob(50, badExecs, badHosts)
   }
 
   testScheduler(
@@ -262,6 +262,6 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
       "spark.scheduler.blacklist.advancedStrategy" -> "false"
     )
   ) {
-    runBadExecJob(3000, badExecs, badHosts)
+    runBadExecJob(50, badExecs, badHosts)
   }
 }
