@@ -26,9 +26,9 @@ class StatisticsSuite extends QueryTest with SharedSQLContext {
     val rdd = sparkContext.range(1, 100).map(i => Row(i, i))
     val df = spark.createDataFrame(rdd, new StructType().add("a", LongType).add("b", LongType))
     assert(df.queryExecution.analyzed.statistics.sizeInBytes >
-      spark.wrapped.conf.autoBroadcastJoinThreshold)
+      spark.sessionState.conf.autoBroadcastJoinThreshold)
     assert(df.selectExpr("a").queryExecution.analyzed.statistics.sizeInBytes >
-      spark.wrapped.conf.autoBroadcastJoinThreshold)
+      spark.sessionState.conf.autoBroadcastJoinThreshold)
   }
 
 }

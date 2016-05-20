@@ -66,7 +66,7 @@ private[sql] trait SQLTestUtils
    * but the implicits import is needed in the constructor.
    */
   protected object testImplicits extends SQLImplicits {
-    protected override def _sqlContext: SQLContext = self.spark.wrapped
+    protected override def _sqlContext: SQLContext = self.spark.sqlContext
   }
 
   /**
