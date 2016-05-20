@@ -133,24 +133,18 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
    */
   def set(bigintval: BigInteger): Decimal = {
-    try {
-      this.decimalVal = null
-      // TODO: Remove this once we migrate to java8 and use longValueExact() instead.
-      val isExactLong = bigintval.compareTo(LONG_MAX_BIG_INT) <= 0 &&
-        bigintval.compareTo(LONG_MIN_BIG_INT) >= 0
-      if (isExactLong) {
-        this.longVal = bigintval.longValue()
-      } else {
-        throw new ArithmeticException()
-      }
-      this._precision = DecimalType.MAX_PRECISION
-      this._scale = 0
-      this
+    this.decimalVal = null
+    // TODO: Remove this once we migrate to java8 and use longValueExact() instead.
+    val isExactLong = bigintval.compareTo(LONG_MAX_BIG_INT) <= 0 &&
+      bigintval.compareTo(LONG_MIN_BIG_INT) >= 0
+    if (isExactLong) {
+      this.longVal = bigintval.longValue()
+    } else {
+      throw new IllegalArgumentException(s"BigInteger ${bigintval} too large for decimal")
     }
-    catch {
-      case e: ArithmeticException =>
-        throw new IllegalArgumentException(s"BigInteger ${bigintval} too large for decimal")
-     }
+    this._precision = DecimalType.MAX_PRECISION
+    this._scale = 0
+    this
   }
 
   /**
