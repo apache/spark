@@ -1232,8 +1232,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       "SELECT name, salary FROM personWithMeta JOIN salary ON id = personId"))
   }
 
-  // SPARK-15282: If UDF is nondeterministic, we can not use that in GROUP BY.
-  ignore("SPARK-3371 Renaming a function expression with group by gives error") {
+  test("SPARK-3371 Renaming a function expression with group by gives error") {
     spark.udf.register("len", (s: String) => s.length)
     checkAnswer(
       sql("SELECT len(value) as temp FROM testData WHERE key = 1 group by len(value)"),
@@ -2053,7 +2052,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  // SPARK-15282: If UDF is nondeterministic, we need to call every time.
   test("Common subexpression elimination") {
     // TODO: support subexpression elimination in whole stage codegen
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
@@ -2084,31 +2082,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       }
 
       verifyCallCount(df.selectExpr("testUdf(a)"), Row(1), 1)
-      verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
-      verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a + 1)"), Row(2, 2), 2)
+      verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
+      verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a + 1)"), Row(2, 2), 1)
       verifyCallCount(df.selectExpr("testUdf(a + 1)", "testUdf(a)"), Row(2, 1), 2)
       verifyCallCount(
-        df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 3)
+        df.selectExpr("testUdf(a + 1) + testUdf(a + 1)", "testUdf(a + 1)"), Row(4, 2), 1)
 
       verifyCallCount(
-        df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 3)
+        df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
 
       val testUdf = functions.udf((x: Int) => {
         countAcc.++=(1)
         x
       })
-      // SPARK-15282: If UDF is nondeterministic, we can not use that in GROUP BY.
-      // verifyCallCount(
-      //   df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 3)
+      verifyCallCount(
+        df.groupBy().agg(sum(testUdf($"b") + testUdf($"b") + testUdf($"b"))), Row(3.0), 1)
 
       verifyCallCount(
-        df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 3)
+        df.selectExpr("testUdf(a + 1) + testUdf(1 + a)", "testUdf(a + 1)"), Row(4, 2), 1)
 
       // Try disabling it via configuration.
       spark.conf.set("spark.sql.subexpressionElimination.enabled", "false")
       verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
       spark.conf.set("spark.sql.subexpressionElimination.enabled", "true")
-      verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 2)
+      verifyCallCount(df.selectExpr("testUdf(a)", "testUdf(a)"), Row(1, 1), 1)
     }
   }
 

@@ -133,8 +133,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(result.count() === 2)
   }
 
-  // SPARK-15282: If UDF is nondeterministic, we can not use that in GROUP BY.
-  ignore("UDF in a GROUP BY") {
+  test("UDF in a GROUP BY") {
     spark.udf.register("groupFunction", (n: Int) => { n > 10 })
 
     val df = Seq(("red", 1), ("red", 2), ("blue", 10),
@@ -151,8 +150,7 @@ class UDFSuite extends QueryTest with SharedSQLContext {
     assert(result.count() === 2)
   }
 
-  // SPARK-15282: If UDF is nondeterministic, we can not use that in GROUP BY.
-  ignore("UDFs everywhere") {
+  test("UDFs everywhere") {
     spark.udf.register("groupFunction", (n: Int) => { n > 10 })
     spark.udf.register("havingFilter", (n: Long) => { n > 2000 })
     spark.udf.register("whereFilter", (n: Int) => { n < 150 })
