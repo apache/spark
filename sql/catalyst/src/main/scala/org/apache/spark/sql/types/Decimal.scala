@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -134,7 +135,16 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def set(bigintval: BigInteger): Decimal = {
     try {
       this.decimalVal = null
-      this.longVal = bigintval.longValueExact()
+      this.longVal = {
+        val isExactLong =
+          bigintval.compareTo(BigInteger.valueOf(JLong.MAX_VALUE)) < 0 &&
+          bigintval.compareTo(BigInteger.valueOf(JLong.MIN_VALUE)) > 0
+        if(isExactLong) {
+          throw new ArithmeticException()
+        } else {
+          bigintval.longValue()
+        }
+      }
       this._precision = DecimalType.MAX_PRECISION
       this._scale = 0
       this
