@@ -774,7 +774,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * A resource command depending on the requested operation on resources.
+   * Create a resource management command depending on the requested operation on resources.
    * Expected format:
    * {{{
    *   ADD (FILE[s] [filepath ...] | JAR[s] [jarpath ...])
