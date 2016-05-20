@@ -138,4 +138,47 @@ class CodeGenerationSuite extends SparkFunSuite with ExpressionEvalHelper {
       true,
       InternalRow(UTF8String.fromString("\\u")))
   }
+
+  test("check compilation error doesn't occur caused by specific literal") {
+    // The end of comment (*/) should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("*/Compilation error occurs/*", StringType) :: Nil)
+
+    // `\u002A` is `*` and `\u002F` is `/`
+    // so if the end of comment consists of those characters in queries, we need to escape them.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002A/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002a/Compilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\u002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("*\\\\002fCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\002A\\002FCompilation error occurs/*", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\002A\\\\002FCompilation error occurs/*", StringType) :: Nil)
+
+    // \ u002X is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u002X/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u002X/Compilation error occurs", StringType) :: Nil)
+
+    // \ u001 is an invalid unicode literal so it should be escaped.
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\u001/Compilation error occurs", StringType) :: Nil)
+    GenerateUnsafeProjection.generate(
+      Literal.create("\\\\u001/Compilation error occurs", StringType) :: Nil)
+  }
 }
