@@ -1387,25 +1387,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-    * Return a list of file paths that are added to resources.
-    * If file paths are provided, return the ones that are added to resources.
-    */
-  def listFiles(files: Seq[String] = Seq.empty[String]): Seq[String] = {
-    if (files.size > 0) {
-      files.map { f =>
-        val uri = new URI(f)
-        val schemeCorrectedPath = uri.getScheme match {
-          case null | "local" => new File(f).getCanonicalFile.toURI.toString
-          case _ => f
-        }
-        new Path(schemeCorrectedPath).toUri.toString
-      }.collect {
-        case f if addedFiles.keySet.contains(f) => f
-      }
-    } else {
-      addedFiles.keySet.toSeq
-    }
-  }
+   * Return a list of file paths that are added to resources.
+   */
+  def listFiles(): Seq[String] = addedFiles.keySet.toSeq
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -1746,20 +1730,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-    * Return a list of jar files that are added to resources.
-    * If jar files are provided, return the ones that are added to resources.
-    */
-  def listJars(jars: Seq[String] = Seq.empty[String]): Seq[String] = {
-    if (jars.size > 0) {
-      jars.map { f =>
-        new Path(f).getName
-      }.flatMap {f =>
-        addedJars.keySet.filter(_.contains(f))
-      }
-    } else {
-      addedJars.keySet.toSeq
-    }
-  }
+   * Return a list of jar files that are added to resources.
+   */
+  def listJars(): Seq[String] = addedJars.keySet.toSeq
 
   // Shut down the SparkContext.
   def stop() {

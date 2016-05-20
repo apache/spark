@@ -157,7 +157,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
         x
       }).count()
       assert(sc.listFiles().filter(_.contains("somesuffix1")).size > 0)
-      assert(sc.listFiles(Seq(relativePath)).size > 0)
     } finally {
       sc.stop()
     }
@@ -169,7 +168,6 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
       sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
       sc.addJar(jarPath.toString)
       assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size > 0)
-      assert(sc.listJars(Seq("TestUDTF.jar")).size > 0)
     } finally {
       sc.stop()
     }

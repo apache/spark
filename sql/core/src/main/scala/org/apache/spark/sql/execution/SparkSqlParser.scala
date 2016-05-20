@@ -796,15 +796,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         ctx.identifier.getText.toLowerCase match {
           case "files" | "file" =>
             if (remainder(ctx.identifier).trim.length > 0) {
-              ListFiles(remainder(ctx.identifier).trim.split("\\s+"))
+              ListFilesCommand(remainder(ctx.identifier).trim.split("\\s+"))
             } else {
-              ListFiles()
+              ListFilesCommand()
             }
           case "jars" | "jar" =>
             if (remainder(ctx.identifier).trim.length > 0) {
-              ListJars(remainder(ctx.identifier).trim.split("\\s+"))
+              ListJarsCommand(remainder(ctx.identifier).trim.split("\\s+"))
             } else {
-              ListJars()
+              ListJarsCommand()
             }
           case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
         }

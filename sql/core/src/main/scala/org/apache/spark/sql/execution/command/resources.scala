@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.execution.command
 
+import java.io.File
+import java.net.URI
+
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
@@ -51,14 +56,28 @@ case class AddFileCommand(path: String) extends RunnableCommand {
  * Return a list of file paths that are added to resources.
  * If file paths are provided, return the ones that are added to resources.
  */
-case class ListFiles(files: Seq[String] = Seq.empty[String]) extends RunnableCommand {
+case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     val schema = StructType(
-      StructField("result", StringType, nullable = false) :: Nil)
+      StructField("Results", StringType, nullable = false) :: Nil)
     schema.toAttributes
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sparkContext.listFiles(files).map(Row(_))
+    val fileList = sparkSession.sparkContext.listFiles()
+    if (files.size > 0) {
+      files.map { f =>
+        val uri = new URI(f)
+        val schemeCorrectedPath = uri.getScheme match {
+          case null | "local" => new File(f).getCanonicalFile.toURI.toString
+          case _ => f
+        }
+        new Path(schemeCorrectedPath).toUri.toString
+      }.collect {
+        case f if fileList.contains(f) => f
+      }.map(Row(_))
+    } else {
+      fileList.map(Row(_))
+    }
   }
 }
 
@@ -66,13 +85,22 @@ case class ListFiles(files: Seq[String] = Seq.empty[String]) extends RunnableCom
  * Return a list of jar files that are added to resources.
  * If jar files are provided, return the ones that are added to resources.
  */
-case class ListJars(jars: Seq[String] = Seq.empty[String]) extends RunnableCommand {
+case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     val schema = StructType(
-      StructField("result", StringType, nullable = false) :: Nil)
+      StructField("Results", StringType, nullable = false) :: Nil)
     schema.toAttributes
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sparkContext.listJars(jars).map(Row(_))
+    val jarList = sparkSession.sparkContext.listJars()
+    if (jars.size > 0) {
+      jars.map { f =>
+        new Path(f).getName
+      }.flatMap {f =>
+        jarList.filter(_.contains(f))
+      }.map(Row(_))
+    } else {
+      jarList.map(Row(_))
+    }
   }
 }
