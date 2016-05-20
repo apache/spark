@@ -1303,17 +1303,16 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=""):
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None):
         """
         __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol="")
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None)
         """
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.regression.GeneralizedLinearRegression", self.uid)
-        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls",
-                         linkPredictionCol="")
+        self._setDefault(family="gaussian", maxIter=25, tol=1e-6, regParam=0.0, solver="irls")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -1321,11 +1320,11 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     @since("2.0.0")
     def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=""):
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None):
         """
         setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol="")
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None)
         Sets params for generalized linear regression.
         """
         kwargs = self.setParams._input_kwargs
