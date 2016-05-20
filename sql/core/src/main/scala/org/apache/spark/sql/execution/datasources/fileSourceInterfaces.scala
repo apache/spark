@@ -341,11 +341,11 @@ private[sql] object HadoopFsRelation extends Logging {
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {
-    // TODO: We should try to filter out all files/dirs starting with "." or "_".
-    // The only reason that we are not doing it now is that Parquet needs to find those
-    // metadata files from leaf files returned by this methods. We should refactor
-    // this logic to not mix metadata files with data files.
-    pathName == "_SUCCESS" || pathName == "_temporary" || pathName.startsWith(".")
+    // We filter everything that starts with _ and ., except _common_metadata and _metadata
+    // because Parquet needs to find those metadata files from leaf files returned by this method.
+    // We should refactor this logic to not mix metadata files with data files.
+    (pathName.startsWith("_") || pathName.startsWith(".")) &&
+      !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
 
   /**
