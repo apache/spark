@@ -442,13 +442,13 @@ object SparkBuild extends PomBuild {
 
 object Core {
   lazy val settings = Seq(
-    unmanagedResourceDirectories in Compile += baseDirectory.value / "target" / "extra-resources",
     resourceGenerators in Compile += Def.task {
       val buildScript = baseDirectory.value + "/../build/spark-build-info"
       val targetDir = baseDirectory.value + "/target/extra-resources/"
       val command =  buildScript + " " + targetDir + " " + version.value
-      Process(Seq("/bin/bash", "-c", command)).!!
-      Seq()
+      Process(command).!!
+      val propsFile = baseDirectory.value / "target" / "extra-resources" / "spark-version-info.properties"
+      Seq(propsFile)
     }.taskValue
   )
 }

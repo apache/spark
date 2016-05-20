@@ -346,16 +346,15 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-antrun-plugin</artifactId>
-        <version>${maven-antrun.version}</version>
         <executions>
           <execution>
             <phase>generate-resources</phase>
             <configuration>
               <!-- Execute the shell script to generate the spark build information. -->
               <tasks>
-                <exec executable="/bin/bash">
-                  <arg value="-c"/>
-                  <arg value="${project.basedir}/../build/spark-build-info ${project.build.directory}/extra-resources ${pom.version}"/>
+                <exec executable="${project.basedir}/../build/spark-build-info">
+                  <arg value="${project.build.directory}/extra-resources"/>
+                  <arg value="${pom.version}"/>
                 </exec>
               </tasks>
             </configuration>
