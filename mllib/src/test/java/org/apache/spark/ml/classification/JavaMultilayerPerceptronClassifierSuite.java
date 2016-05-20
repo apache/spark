@@ -29,8 +29,7 @@ import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
-public class JavaMultilayerPerceptronClassifierSuite
-  extends SharedSparkSession {
+public class JavaMultilayerPerceptronClassifierSuite extends SharedSparkSession {
 
   @Test
   public void testMLPC() {
