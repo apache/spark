@@ -176,8 +176,8 @@ private[spark] class BlacklistTracker(
   private def executorsOnBlacklistedNode(
       sched: TaskSchedulerImpl,
       atomTask: StageAndPartition): Set[String] = {
-      nodeBlacklistForStage(atomTask.stageId).flatMap(sched.getExecutorsAliveOnHost(_)
-        .getOrElse(Set.empty[String])).toSet
+    nodeBlacklistForStage(atomTask.stageId).flatMap(sched.getExecutorsAliveOnHost(_)
+      .getOrElse(Set.empty[String]))
   }
 
   private def reEvaluateExecutorBlacklistAndUpdateCache(
