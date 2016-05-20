@@ -479,7 +479,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * `lastChildren` for the root node should be empty.
    */
   def generateTreeString(
-      depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      builder: StringBuilder,
+      prefix: String = ""): StringBuilder = {
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
         val prefixFragment = if (isLast) "   " else ":  "
@@ -490,6 +493,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder.append(branch)
     }
 
+    builder.append(prefix)
     builder.append(simpleString)
     builder.append("\n")
 
@@ -500,8 +504,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     if (children.nonEmpty) {
-      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
-      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder, prefix))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, prefix)
     }
 
     builder
