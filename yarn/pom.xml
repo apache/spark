@@ -54,7 +54,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.hadoop</groupId>
@@ -101,6 +101,10 @@
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-servlet</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.eclipse.jetty</groupId>
+      <artifactId>jetty-servlets</artifactId>
     </dependency>
     <!-- End of shaded deps. -->
 

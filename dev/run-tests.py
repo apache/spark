@@ -336,7 +336,7 @@ def build_spark_sbt(hadoop_version):
     # Enable all of the profiles for the build:
     build_profiles = get_hadoop_profiles(hadoop_version) + modules.root.build_profile_flags
     sbt_goals = ["package",
-                 "streaming-kafka-assembly/assembly",
+                 "streaming-kafka-0-8-assembly/assembly",
                  "streaming-flume-assembly/assembly",
                  "streaming-kinesis-asl-assembly/assembly"]
     profiles_and_goals = build_profiles + sbt_goals

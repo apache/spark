@@ -31,7 +31,9 @@ import org.apache.spark.sql.functions;
 public class JavaLogisticRegressionSummaryExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaLogisticRegressionSummaryExample").getOrCreate();
+      .builder()
+      .appName("JavaLogisticRegressionSummaryExample")
+      .getOrCreate();
 
     // Load training data
     Dataset<Row> training = spark.read().format("libsvm")

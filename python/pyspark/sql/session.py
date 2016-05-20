@@ -160,7 +160,7 @@ class SparkSession(object):
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> df = allTypes.toDF()
-        >>> df.registerTempTable("allTypes")
+        >>> df.createOrReplaceTempView("allTypes")
         >>> spark.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
@@ -182,21 +182,11 @@ class SparkSession(object):
         if SparkSession._instantiatedContext is None:
             SparkSession._instantiatedContext = self
 
-    @classmethod
-    @since(2.0)
-    def withHiveSupport(cls, sparkContext):
-        """Returns a new SparkSession with a catalog backed by Hive.
-
-        :param sparkContext: The underlying :class:`SparkContext`.
-        """
-        jsparkSession = sparkContext._jvm.SparkSession.withHiveSupport(sparkContext._jsc.sc())
-        return cls(sparkContext, jsparkSession)
-
     @since(2.0)
     def newSession(self):
         """
         Returns a new SparkSession as new session, that has separate SQLConf,
-        registered temporary tables and UDFs, but shared SparkContext and
+        registered temporary views and UDFs, but shared SparkContext and
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
@@ -475,6 +465,8 @@ class SparkSession(object):
                 return (obj, )
             schema = StructType().add("value", datatype)
         else:
+            if isinstance(schema, list):
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):
@@ -494,7 +486,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerTable(df, "table1")
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
@@ -507,7 +499,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerTable(df, "table1")
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True

@@ -166,34 +166,20 @@ class Catalog(object):
         return DataFrame(df, self._sparkSession._wrapped)
 
     @since(2.0)
-    def dropTempTable(self, tableName):
-        """Drops the temporary table with the given table name in the catalog.
-        If the table has been cached before, then it will also be uncached.
+    def dropTempView(self, viewName):
+        """Drops the temporary view with the given view name in the catalog.
+        If the view has been cached before, then it will also be uncached.
 
-        >>> spark.createDataFrame([(1, 1)]).registerTempTable("my_table")
+        >>> spark.createDataFrame([(1, 1)]).createTempView("my_table")
         >>> spark.table("my_table").collect()
         [Row(_1=1, _2=1)]
-        >>> spark.catalog.dropTempTable("my_table")
+        >>> spark.catalog.dropTempView("my_table")
         >>> spark.table("my_table") # doctest: +IGNORE_EXCEPTION_DETAIL
         Traceback (most recent call last):
             ...
         AnalysisException: ...
         """
-        self._jcatalog.dropTempTable(tableName)
-
-    @since(2.0)
-    def registerTable(self, df, tableName):
-        """Registers the given :class:`DataFrame` as a temporary table in the catalog.
-
-        >>> df = spark.createDataFrame([(2, 1), (3, 1)])
-        >>> spark.catalog.registerTable(df, "my_cool_table")
-        >>> spark.table("my_cool_table").collect()
-        [Row(_1=2, _2=1), Row(_1=3, _2=1)]
-        """
-        if isinstance(df, DataFrame):
-            self._jsparkSession.registerTable(df._jdf, tableName)
-        else:
-            raise ValueError("Can only register DataFrame as table")
+        self._jcatalog.dropTempView(viewName)
 
     @ignore_unicode_prefix
     @since(2.0)

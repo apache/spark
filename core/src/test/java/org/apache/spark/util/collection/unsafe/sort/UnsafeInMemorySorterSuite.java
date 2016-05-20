@@ -78,7 +78,7 @@ public class UnsafeInMemorySorterSuite {
     final TaskMemoryManager memoryManager = new TaskMemoryManager(
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
     final TestMemoryConsumer consumer = new TestMemoryConsumer(memoryManager);
-    final MemoryBlock dataPage = memoryManager.allocatePage(2048, null);
+    final MemoryBlock dataPage = memoryManager.allocatePage(2048, consumer);
     final Object baseObject = dataPage.getBaseObject();
     // Write the records into the data page:
     long position = dataPage.getBaseOffset();

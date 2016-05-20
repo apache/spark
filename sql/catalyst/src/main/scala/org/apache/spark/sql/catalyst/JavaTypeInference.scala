@@ -27,6 +27,7 @@ import com.google.common.reflect.TypeToken
 
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -62,6 +63,11 @@ object JavaTypeInference {
     typeToken.getRawType match {
       case c: Class[_] if c.isAnnotationPresent(classOf[SQLUserDefinedType]) =>
         (c.getAnnotation(classOf[SQLUserDefinedType]).udt().newInstance(), true)
+
+      case c: Class[_] if UDTRegistration.exists(c.getName) =>
+        val udt = UDTRegistration.getUDTFor(c.getName).get.newInstance()
+          .asInstanceOf[UserDefinedType[_ >: Null]]
+        (udt, true)
 
       case c: Class[_] if c == classOf[java.lang.String] => (StringType, true)
       case c: Class[_] if c == classOf[Array[Byte]] => (BinaryType, true)

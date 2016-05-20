@@ -33,6 +33,8 @@ __all__ = ['ParamGridBuilder', 'CrossValidator', 'CrossValidatorModel', 'TrainVa
 
 class ParamGridBuilder(object):
     r"""
+    .. note:: Experimental
+
     Builder for a param grid used in grid search-based model selection.
 
     >>> from pyspark.ml.classification import LogisticRegression
@@ -143,11 +145,13 @@ class ValidatorParams(HasSeed):
 
 class CrossValidator(Estimator, ValidatorParams):
     """
+    .. note:: Experimental
+
     K-fold cross validation.
 
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> dataset = sqlContext.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
@@ -260,6 +264,8 @@ class CrossValidator(Estimator, ValidatorParams):
 
 class CrossValidatorModel(Model, ValidatorParams):
     """
+    .. note:: Experimental
+
     Model from k-fold cross validation.
 
     .. versionadded:: 1.4.0
@@ -269,6 +275,8 @@ class CrossValidatorModel(Model, ValidatorParams):
         super(CrossValidatorModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
+        #: Average cross-validation metrics for each paramMap in
+        #: CrossValidator.estimatorParamMaps, in the corresponding order.
         self.avgMetrics = avgMetrics
 
     def _transform(self, dataset):
@@ -294,11 +302,15 @@ class CrossValidatorModel(Model, ValidatorParams):
 
 class TrainValidationSplit(Estimator, ValidatorParams):
     """
-    Train-Validation-Split.
+    .. note:: Experimental
+
+    Validation for hyper-parameter tuning. Randomly splits the input dataset into train and
+    validation sets, and uses evaluation metric on the validation set to select the best model.
+    Similar to :class:`CrossValidator`, but only splits the set once.
 
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> dataset = sqlContext.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
@@ -367,7 +379,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
         seed = self.getOrDefault(self.seed)
         randCol = self.uid + "_rand"
         df = dataset.select("*", rand(seed).alias(randCol))
-        metrics = np.zeros(numModels)
+        metrics = [0.0] * numModels
         condition = (df[randCol] >= tRatio)
         validation = df.filter(condition)
         train = df.filter(~condition)
@@ -380,7 +392,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
         else:
             bestIndex = np.argmin(metrics)
         bestModel = est.fit(dataset, epm[bestIndex])
-        return self._copyValues(TrainValidationSplitModel(bestModel))
+        return self._copyValues(TrainValidationSplitModel(bestModel, metrics))
 
     @since("2.0.0")
     def copy(self, extra=None):
@@ -405,15 +417,19 @@ class TrainValidationSplit(Estimator, ValidatorParams):
 
 class TrainValidationSplitModel(Model, ValidatorParams):
     """
+    .. note:: Experimental
+
     Model from train validation split.
 
     .. versionadded:: 2.0.0
     """
 
-    def __init__(self, bestModel):
+    def __init__(self, bestModel, validationMetrics=[]):
         super(TrainValidationSplitModel, self).__init__()
         #: best model from cross validation
         self.bestModel = bestModel
+        #: evaluated validation metrics
+        self.validationMetrics = validationMetrics
 
     def _transform(self, dataset):
         return self.bestModel.transform(dataset)
@@ -425,13 +441,16 @@ class TrainValidationSplitModel(Model, ValidatorParams):
         and some extra params. This copies the underlying bestModel,
         creates a deep copy of the embedded paramMap, and
         copies the embedded and extra parameters over.
+        And, this creates a shallow copy of the validationMetrics.
 
         :param extra: Extra parameters to copy to the new instance
         :return: Copy of this instance
         """
         if extra is None:
             extra = dict()
-        return TrainValidationSplitModel(self.bestModel.copy(extra))
+        bestModel = self.bestModel.copy(extra)
+        validationMetrics = list(self.validationMetrics)
+        return TrainValidationSplitModel(bestModel, validationMetrics)
 
 
 if __name__ == "__main__":

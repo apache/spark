@@ -19,12 +19,11 @@ package org.apache.spark.sql.execution
 
 import org.scalatest.BeforeAndAfterAll
 
-import org.apache.spark.{MapOutputStatistics, SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.{MapOutputStatistics, SparkConf, SparkFunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.exchange.{ExchangeCoordinator, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.test.TestSQLContext
 
 class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
@@ -251,7 +250,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
   }
 
   def withSQLContext(
-      f: SQLContext => Unit,
+      f: SparkSession => Unit,
       targetNumPostShufflePartitions: Int,
       minNumPostShufflePartitions: Option[Int]): Unit = {
     val sparkConf =
@@ -272,9 +271,11 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
       case None =>
         sparkConf.set(SQLConf.SHUFFLE_MIN_NUM_POSTSHUFFLE_PARTITIONS.key, "-1")
     }
-    val sparkContext = new SparkContext(sparkConf)
-    val sqlContext = new TestSQLContext(sparkContext)
-    try f(sqlContext) finally sparkContext.stop()
+
+    val spark = SparkSession.builder
+      .config(sparkConf)
+      .getOrCreate()
+    try f(spark) finally spark.stop()
   }
 
   Seq(Some(3), None).foreach { minNumPostShufflePartitions =>
@@ -284,9 +285,9 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: aggregate operator$testNameNote") {
-      val test = { sqlContext: SQLContext =>
+      val test = { spark: SparkSession =>
         val df =
-          sqlContext
+          spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 20 as key", "id as value")
         val agg = df.groupBy("key").count
@@ -294,7 +295,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
         // Check the answer first.
         checkAnswer(
           agg,
-          sqlContext.range(0, 20).selectExpr("id", "50 as cnt").collect())
+          spark.range(0, 20).selectExpr("id", "50 as cnt").collect())
 
         // Then, let's look at the number of post-shuffle partitions estimated
         // by the ExchangeCoordinator.
@@ -325,13 +326,13 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: join operator$testNameNote") {
-      val test = { sqlContext: SQLContext =>
+      val test = { spark: SparkSession =>
         val df1 =
-          sqlContext
+          spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key1", "id as value1")
         val df2 =
-          sqlContext
+          spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key2", "id as value2")
 
@@ -339,10 +340,10 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
         // Check the answer first.
         val expectedAnswer =
-          sqlContext
+          spark
             .range(0, 1000)
             .selectExpr("id % 500 as key", "id as value")
-            .union(sqlContext.range(0, 1000).selectExpr("id % 500 as key", "id as value"))
+            .union(spark.range(0, 1000).selectExpr("id % 500 as key", "id as value"))
         checkAnswer(
           join,
           expectedAnswer.collect())
@@ -376,16 +377,16 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: complex query 1$testNameNote") {
-      val test = { sqlContext: SQLContext =>
+      val test = { spark: SparkSession =>
         val df1 =
-          sqlContext
+          spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key1", "id as value1")
             .groupBy("key1")
             .count
             .toDF("key1", "cnt1")
         val df2 =
-          sqlContext
+          spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key2", "id as value2")
             .groupBy("key2")
@@ -396,7 +397,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
         // Check the answer first.
         val expectedAnswer =
-          sqlContext
+          spark
             .range(0, 500)
             .selectExpr("id", "2 as cnt")
         checkAnswer(
@@ -428,16 +429,16 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
     }
 
     test(s"determining the number of reducers: complex query 2$testNameNote") {
-      val test = { sqlContext: SQLContext =>
+      val test = { spark: SparkSession =>
         val df1 =
-          sqlContext
+          spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key1", "id as value1")
             .groupBy("key1")
             .count
             .toDF("key1", "cnt1")
         val df2 =
-          sqlContext
+          spark
             .range(0, 1000, 1, numInputPartitions)
             .selectExpr("id % 500 as key2", "id as value2")
 
@@ -448,7 +449,7 @@ class ExchangeCoordinatorSuite extends SparkFunSuite with BeforeAndAfterAll {
 
         // Check the answer first.
         val expectedAnswer =
-          sqlContext
+          spark
             .range(0, 1000)
             .selectExpr("id % 500 as key", "2 as cnt", "id as value")
         checkAnswer(

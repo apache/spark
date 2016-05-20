@@ -298,6 +298,8 @@ parquetFile <- function(sqlContext, ...) {
 #' Create a SparkDataFrame from a text file.
 #'
 #' Loads a text file and returns a SparkDataFrame with a single string column named "value".
+#' If the directory structure of the text files contains partitioning information, those are
+#' ignored in the resulting DataFrame.
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
 #' @param sqlContext SQLContext to use
