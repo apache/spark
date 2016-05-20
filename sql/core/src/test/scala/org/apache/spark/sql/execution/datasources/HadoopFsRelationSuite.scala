@@ -39,4 +39,13 @@ class HadoopFsRelationSuite extends QueryTest with SharedSQLContext {
       assert(df.queryExecution.logical.statistics.sizeInBytes === BigInt(totalSize))
     }
   }
+
+  test("file filtering") {
+    assert(HadoopFsRelation.shouldFilterOut("abcd"))
+    assert(!HadoopFsRelation.shouldFilterOut(".ab"))
+    assert(!HadoopFsRelation.shouldFilterOut("_cd"))
+
+    assert(HadoopFsRelation.shouldFilterOut("_metadata"))
+    assert(HadoopFsRelation.shouldFilterOut("_common_metadata"))
+  }
 }
