@@ -45,6 +45,7 @@ case class ReferenceToExpressions(result: Expression, children: Seq[Expression])
     var maxOrdinal = -1
     result foreach {
       case b: BoundReference if b.ordinal > maxOrdinal => maxOrdinal = b.ordinal
+      case _ =>
     }
     if (maxOrdinal > children.length) {
       return TypeCheckFailure(s"The result expression need $maxOrdinal input expressions, but " +

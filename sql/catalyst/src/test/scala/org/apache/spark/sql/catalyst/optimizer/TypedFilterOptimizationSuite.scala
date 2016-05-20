@@ -23,8 +23,9 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, ReferenceToExpressions}
 import org.apache.spark.sql.catalyst.plans.PlanTest
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{DeserializeToObject, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.BooleanType
 
@@ -34,7 +35,9 @@ class TypedFilterOptimizationSuite extends PlanTest {
       Batch("EliminateSerialization", FixedPoint(50),
         EliminateSerialization) ::
       Batch("EmbedSerializerInFilter", FixedPoint(50),
-        EmbedSerializerInFilter) :: Nil
+        EmbedSerializerInFilter,
+        RemoveAliasOnlyProject,
+        CombineFilters) :: Nil
   }
 
   implicit private def productEncoder[T <: Product : TypeTag] = ExpressionEncoder[T]()
@@ -67,6 +70,26 @@ class TypedFilterOptimizationSuite extends PlanTest {
 
     val deserializer = UnresolvedDeserializer(encoderFor[(Int, Int)].deserializer)
     val condition = callFunction(f, BooleanType, deserializer)
+    val expected = input.where(condition).analyze
+
+    comparePlans(optimized, expected)
+  }
+
+  test("embed deserializer in filter condition if there are two filter") {
+    val input = LocalRelation('_1.int, '_2.int)
+    val f1 = (i: (Int, Int)) => i._1 > 0
+    val f2 = (i: (Int, Int)) => i._2 > 0
+
+    val query = input.filter(f1).filter(f2).analyze
+
+    val optimized = Optimize.execute(query)
+
+    val deserializer = input.deserialize[(Int, Int)].analyze
+      .asInstanceOf[DeserializeToObject].deserializer
+    val boundReference = BoundReference(0, deserializer.dataType, nullable = false)
+    val callF1 = callFunction(f1, BooleanType, boundReference)
+    val callF2 = callFunction(f2, BooleanType, boundReference)
+    val condition = ReferenceToExpressions(callF2 && callF1, deserializer :: Nil)
     val expected = input.where(condition).analyze
 
     comparePlans(optimized, expected)
