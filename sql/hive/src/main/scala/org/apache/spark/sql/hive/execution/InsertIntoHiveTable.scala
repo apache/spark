@@ -34,7 +34,8 @@ import org.apache.hadoop.mapred.{FileOutputFormat, JobConf}
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, SortOrder}
+import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
@@ -218,10 +219,14 @@ case class InsertIntoHiveTable(
 
     val writerContainer = if (numDynamicPartitions > 0) {
       val dynamicPartColNames = partitionColumnNames.takeRight(numDynamicPartitions)
+      val partitionClustering = ClusteredDistribution(child.output.takeRight(numDynamicPartitions))
+      val isSorted = SortOrder.satisfies(child.outputOrdering, partitionClustering)
+
       new SparkHiveDynamicPartitionWriterContainer(
         jobConf,
         fileSinkConf,
         dynamicPartColNames,
+        isSorted,
         child.output,
         table)
     } else {

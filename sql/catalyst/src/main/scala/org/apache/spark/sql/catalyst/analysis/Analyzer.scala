@@ -103,6 +103,7 @@ class Analyzer(
       ResolveWindowOrder ::
       ResolveWindowFrame ::
       ResolveNaturalAndUsingJoin ::
+      ResolveOutputColumns ::
       ExtractWindowExpressions ::
       GlobalAggregates ::
       ResolveAggregateFunctions ::
@@ -447,7 +448,7 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _, _) if child.resolved =>
         val table = lookupTableFromCatalog(u)
         // adding the table's partitions or validate the query's partition info
         table match {
@@ -498,6 +499,120 @@ class Analyzer(
         } else {
           lookupTableFromCatalog(u)
         }
+    }
+  }
+
+  object ResolveOutputColumns extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+      case ins @ InsertIntoTable(relation: LogicalPlan, partition, _, _, _, _)
+          if ins.childrenResolved && !ins.resolved =>
+        resolveOutputColumns(ins, expectedColumns(relation, partition), relation.toString)
+    }
+
+    private def resolveOutputColumns(
+        insertInto: InsertIntoTable,
+        columns: Seq[Attribute],
+        relation: String) = {
+      val resolved = if (insertInto.isMatchByName) {
+        projectAndCastOutputColumns(columns, insertInto.child, relation)
+      } else {
+        castAndRenameOutputColumns(columns, insertInto.child, relation)
+      }
+
+      if (resolved == insertInto.child.output) {
+        insertInto
+      } else {
+        insertInto.copy(child = Project(resolved, insertInto.child))
+      }
+    }
+
+    /**
+     * Resolves output columns by input column name, adding casts if necessary.
+     */
+    private def projectAndCastOutputColumns(
+        output: Seq[Attribute],
+        data: LogicalPlan,
+        relation: String): Seq[NamedExpression] = {
+      output.map { col =>
+        data.resolveQuoted(col.name, resolver) match {
+          case Some(inCol) if col.dataType != inCol.dataType =>
+            Alias(UpCast(inCol, col.dataType, Seq()), col.name)()
+          case Some(inCol) => inCol
+          case None =>
+            throw new AnalysisException(
+              s"Cannot resolve ${col.name} in ${data.output.mkString(",")}")
+        }
+      }
+    }
+
+    private def castAndRenameOutputColumns(
+        output: Seq[Attribute],
+        data: LogicalPlan,
+        relation: String): Seq[NamedExpression] = {
+      val outputNames = output.map(_.name)
+      // incoming expressions may not have names
+      val inputNames = data.output.flatMap(col => Option(col.name))
+      if (output.size > data.output.size) {
+        // always a problem
+        throw new AnalysisException(
+          s"""Not enough data columns to write into $relation:
+             |Data columns: ${data.output.mkString(",")}
+             |Table columns: ${outputNames.mkString(",")}""".stripMargin)
+      } else if (output.size < data.output.size) {
+        if (outputNames.toSet.subsetOf(inputNames.toSet)) {
+          throw new AnalysisException(
+            s"""Table column names are a subset of the input data columns:
+               |Data columns: ${inputNames.mkString(",")}
+               |Table columns: ${outputNames.mkString(",")}
+               |To write a subset of the columns by name, use df.write.byName.insertInto(...)"""
+                .stripMargin)
+        } else {
+          // be conservative and fail if there are too many columns
+          throw new AnalysisException(
+            s"""Extra data columns to write into $relation:
+               |Data columns: ${data.output.mkString(",")}
+               |Table columns: ${outputNames.mkString(",")}""".stripMargin)
+        }
+      } else {
+        // check for reordered names and warn. this may be on purpose, so it isn't an error.
+        if (outputNames.toSet == inputNames.toSet && outputNames != inputNames) {
+          logWarning(
+            s"""Data column names match the table in a different order:
+               |Data columns: ${inputNames.mkString(",")}
+               |Table columns: ${outputNames.mkString(",")}
+               |To map columns by name, use df.write.byName.insertInto(...)""".stripMargin)
+        }
+      }
+
+      data.output.zip(output).map {
+        case (in, out) if !in.dataType.sameType(out.dataType) =>
+          Alias(Cast(in, out.dataType), out.name)()
+        case (in, out) if in.name != out.name =>
+          Alias(in, out.name)()
+        case (in, _) => in
+      }
+    }
+
+    private def expectedColumns(
+        data: LogicalPlan,
+        partitionData: Map[String, Option[String]]): Seq[Attribute] = {
+      data match {
+        case partitioned: CatalogRelation =>
+          val tablePartitionNames = partitioned.catalogTable.partitionColumns.map(_.name)
+          val (inputPartCols, dataColumns) = data.output.partition { attr =>
+            tablePartitionNames.contains(attr.name)
+          }
+          // Get the dynamic partition columns in partition order
+          val dynamicNames = tablePartitionNames.filter(
+            name => partitionData.getOrElse(name, None).isEmpty)
+          val dynamicPartCols = dynamicNames.map { name =>
+            inputPartCols.find(_.name == name).getOrElse(
+              throw new AnalysisException(s"Cannot find partition column $name"))
+          }
+
+          dataColumns ++ dynamicPartCols
+        case _ => data.output
+      }
     }
   }
 

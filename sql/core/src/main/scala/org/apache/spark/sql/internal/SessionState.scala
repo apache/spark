@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.AnalyzeTable
-import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreInsertCastAndRename, ResolveDataSource}
+import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, ResolveDataSource}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -109,7 +109,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val analyzer: Analyzer = {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
-        PreInsertCastAndRename ::
         new FindDataSourceTable(sparkSession) ::
         DataSourceAnalysis ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)

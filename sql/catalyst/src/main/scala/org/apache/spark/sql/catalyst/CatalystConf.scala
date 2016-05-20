@@ -36,6 +36,8 @@ trait CatalystConf {
 
   def warehousePath: String
 
+  def repartitionColumnarData: Boolean
+
   /**
    * Returns the [[Resolver]] for the current configuration, which can be used to determine if two
    * identifiers are equal.
@@ -55,5 +57,6 @@ case class SimpleCatalystConf(
     optimizerInSetConversionThreshold: Int = 10,
     maxCaseBranchesForCodegen: Int = 20,
     runSQLonFile: Boolean = true,
-    warehousePath: String = "/user/hive/warehouse")
+    warehousePath: String = "/user/hive/warehouse",
+    repartitionColumnarData: Boolean = false)
   extends CatalystConf

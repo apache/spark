@@ -130,9 +130,10 @@ private[sql] case class InsertIntoHadoopFsRelation(
             partitionColumns = partitionColumns,
             dataColumns = dataColumns,
             inputSchema = query.output,
-            PartitioningUtils.DEFAULT_PARTITION_NAME,
-            sparkSession.conf.get(SQLConf.PARTITION_MAX_FILES),
-            isAppend)
+            defaultPartitionName = PartitioningUtils.DEFAULT_PARTITION_NAME,
+            incomingOrder = queryExecution.sparkPlan.outputOrdering,
+            maxOpenFiles = sparkSession.conf.get(SQLConf.PARTITION_MAX_FILES),
+            isAppend = isAppend)
         }
 
         // This call shouldn't be put into the `try` block below because it only initializes and

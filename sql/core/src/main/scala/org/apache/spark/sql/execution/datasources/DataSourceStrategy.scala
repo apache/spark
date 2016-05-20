@@ -46,7 +46,7 @@ import org.apache.spark.unsafe.types.UTF8String
 private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case i @ logical.InsertIntoTable(
-           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false)
+           l @ LogicalRelation(t: HadoopFsRelation, _, _), part, query, overwrite, false, _)
         if query.resolved && t.schema.asNullable == query.schema.asNullable =>
 
       // Sanity checks
@@ -110,7 +110,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
   }
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _)
+    case i @ logical.InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _, _)
         if DDLUtils.isDatasourceTable(s.metadata) =>
       i.copy(table = readDataSourceTable(sparkSession, s.metadata))
 
@@ -152,7 +152,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
         l.output, toCatalystRDD(l, baseRelation.buildScan()), baseRelation) :: Nil
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
-      part, query, overwrite, false) if part.isEmpty =>
+      part, query, overwrite, false, _) if part.isEmpty =>
       ExecutedCommandExec(InsertIntoDataSource(l, query, overwrite)) :: Nil
 
     case _ => Nil

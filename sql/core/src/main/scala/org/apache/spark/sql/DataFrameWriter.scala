@@ -225,6 +225,20 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * Hint to distribute the output for each partition randomly across `numWriters` tasks.
+   *
+   * This is applicable for Parquet, JSON, ORC, and Hive.
+   *
+   * @param numWriters number of writers to use for each partition
+   * @return this DataFrameWriter for method chaining
+   * @since 2.0
+   */
+  def writersPerPartition(numWriters: Int): DataFrameWriter = {
+    option("writersPerPartition", numWriters)
+    this
+  }
+
+  /**
    * Saves the content of the [[DataFrame]] at the specified path.
    *
    * @since 1.4.0
@@ -241,6 +255,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   def save(): Unit = {
     assertNotBucketed()
+    assertNotSorted()
     assertNotStreaming("save() can only be called on non-continuous queries")
     val dataSource = DataSource(
       df.sparkSession,
@@ -290,6 +305,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   @Experimental
   def startStream(): ContinuousQuery = {
     assertNotBucketed()
+    assertNotSorted()
     assertStreaming("startStream() can only be called on continuous queries")
 
     if (source == "memory") {
@@ -408,7 +424,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         partitions.getOrElse(Map.empty[String, Option[String]]),
         input,
         overwrite,
-        ifNotExists = false)).toRdd
+        ifNotExists = false,
+        options = extraOptions.toMap)).toRdd
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
@@ -458,10 +475,22 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def assertNotBucketed(): Unit = {
-    if (numBuckets.isDefined || sortColumnNames.isDefined) {
+    if (bucketColumnNames.isDefined) {
       throw new IllegalArgumentException(
         "Currently we don't support writing bucketed data to this data source.")
     }
+  }
+
+  private def assertNotSorted(): Unit = {
+    if (sortColumnNames.isDefined) {
+      throw new IllegalArgumentException(
+        "Currently we don't support writing sorted data to this data source.")
+    }
+  }
+
+  def byName: DataFrameWriter = {
+    extraOptions.put("matchByName", "true")
+    this
   }
 
   /**
