@@ -1186,11 +1186,11 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
 
     >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", seed=123)
+    ...     inputCol="values", outputCol="buckets", seed=123, relativeError=0.01)
     >>> qds.getSeed()
     123
     >>> qds.getRelativeError()
-    0.001
+    0.01
     >>> bucketizer = qds.fit(df)
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
