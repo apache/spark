@@ -359,12 +359,27 @@ object CatalystTypeConverters {
     override def toScalaImpl(row: InternalRow, column: Int): Short = row.getShort(column)
   }
 
-  private object IntConverter extends PrimitiveConverter[Int] {
+  // For JYthon interop we also need to handle BigInteger
+  private object IntConverter extends CatalystTypeConverter[Any, Any, Any] {
+    final override def toScala(catalystValue: Any): Any = catalystValue
     override def toScalaImpl(row: InternalRow, column: Int): Int = row.getInt(column)
+    final override def toCatalystImpl(scalaValue: Any): Any = {
+      scalaValue match {
+        case x: Int => x
+        case x: java.math.BigInteger => x.intValue()
+      }
+    }
   }
 
-  private object LongConverter extends PrimitiveConverter[Long] {
+  private object LongConverter extends CatalystTypeConverter[Any, Any, Any] {
+    final override def toScala(catalystValue: Any): Any = catalystValue
     override def toScalaImpl(row: InternalRow, column: Int): Long = row.getLong(column)
+    final override def toCatalystImpl(scalaValue: Any): Any = {
+      scalaValue match {
+        case x: Long => x
+        case x: java.math.BigInteger => x.longValue()
+      }
+    }
   }
 
   private object FloatConverter extends PrimitiveConverter[Float] {

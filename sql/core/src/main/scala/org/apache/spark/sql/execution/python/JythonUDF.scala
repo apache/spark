@@ -51,7 +51,6 @@ private[spark] class JythonUDF(
   override def nullable: Boolean = true
 
   override protected def otherCopyArgs: Seq[AnyRef] = {
-    println("sup copying ")
     List(name, func)
   }
 }
@@ -67,8 +66,11 @@ case class JythonFunction(src: String, pythonVars: String) {
     val jython = JythonFunc.jython
     val className = s"__reservedPandaClass"
     val code = s"""
-for k, v in pickle.load(${pythonVars}):
-  exec "%s = v" % k
+import pickle
+pythonVars = pickle.loads("${pythonVars}")
+if pythonVars is not None:
+  for k, v in pythonVars:
+    exec "%s = v" % k
 class ${className}(object):
   def __init__(self):
     self.call = ${src}
@@ -95,8 +97,10 @@ class LazyJythonFunc(code: String, className: String) extends Serializable {
     jython.eval(code, ctx)
     scope.get(s"${className}_instance")
   }
-  def scalaFunc(ar: AnyRef*): AnyRef = {
-    jython.asInstanceOf[Invocable].invokeMethod(func, "call", ar : _*)
+
+  def scalaFunc(ar: AnyRef): AnyRef = {
+    val pythonRet = jython.asInstanceOf[Invocable].invokeMethod(func, "call", ar)
+    pythonRet
   }
 }
 
@@ -107,9 +111,5 @@ class LazyJythonFunc(code: String, className: String) extends Serializable {
  */
 object JythonFunc {
   lazy val mgr = new ScriptEngineManager()
-  lazy val jython = {
-    val engine = mgr.getEngineByName("python")
-    engine.eval("import pickle")
-    engine
-  }
+  lazy val jython = mgr.getEngineByName("python")
 }
