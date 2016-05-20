@@ -245,9 +245,13 @@ case class InputAdapter(child: SparkPlan) extends UnaryExecNode with CodegenSupp
      """.stripMargin
   }
 
-  override def simpleString: String = "INPUT"
-
-  override def treeChildren: Seq[SparkPlan] = Nil
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      builder: StringBuilder,
+      prefix: String = ""): StringBuilder = {
+    child.generateTreeString(depth, lastChildren, builder, "")
+  }
 }
 
 object WholeStageCodegenExec {
@@ -398,20 +402,13 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
      """.stripMargin.trim
   }
 
-  override def innerChildren: Seq[SparkPlan] = {
-    child :: Nil
+  override def generateTreeString(
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      builder: StringBuilder,
+      prefix: String = ""): StringBuilder = {
+    child.generateTreeString(depth, lastChildren, builder, "*")
   }
-
-  private def collectInputs(plan: SparkPlan): Seq[SparkPlan] = plan match {
-    case InputAdapter(c) => c :: Nil
-    case other => other.children.flatMap(collectInputs)
-  }
-
-  override def treeChildren: Seq[SparkPlan] = {
-    collectInputs(child)
-  }
-
-  override def simpleString: String = "WholeStageCodegen"
 }
 
 
