@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.ScalaReflection
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.execution.aggregate.ScalaUDAF
-import org.apache.spark.sql.execution.python.UserDefinedPythonFunction
+import org.apache.spark.sql.execution.python._
 import org.apache.spark.sql.expressions.{UserDefinedAggregateFunction, UserDefinedFunction}
 import org.apache.spark.sql.types.DataType
 
@@ -46,6 +46,17 @@ class UDFRegistration private[sql] (functionRegistry: FunctionRegistry) extends 
         | envVars: ${udf.func.envVars}
         | pythonIncludes: ${udf.func.pythonIncludes}
         | pythonExec: ${udf.func.pythonExec}
+        | dataType: ${udf.dataType}
+      """.stripMargin)
+
+    functionRegistry.registerFunction(name, udf.builder)
+  }
+
+  protected[sql] def registerJython(name: String, udf: UserDefinedJythonFunction): Unit = {
+    log.debug(
+      s"""
+        | Registering new JythonUDF:
+        | name: $name
         | dataType: ${udf.dataType}
       """.stripMargin)
 

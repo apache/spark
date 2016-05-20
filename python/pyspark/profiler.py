@@ -15,7 +15,10 @@
 # limitations under the License.
 #
 
-import cProfile
+try:
+    import cProfile as profiler
+except:
+    import profile as profiler
 import pstats
 import os
 import atexit

@@ -42,6 +42,12 @@
       <version>2.1.0</version>
       <type>jar</type>
     </dependency>
+    <!-- http://mvnrepository.com/artifact/org.python/jython -->
+    <dependency>
+      <groupId>org.python</groupId>
+      <artifactId>jython-standalone</artifactId>
+      <version>2.7.0</version>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-sketch_${scala.binary.version}</artifactId>

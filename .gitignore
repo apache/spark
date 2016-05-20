@@ -77,3 +77,6 @@ spark-warehouse/
 # For R session data
 .RData
 .RHistory
+
+# For Jython
+*py.class
