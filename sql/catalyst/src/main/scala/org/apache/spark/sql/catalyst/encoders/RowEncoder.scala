@@ -62,7 +62,7 @@ object RowEncoder {
     new ExpressionEncoder[Row](
       schema,
       flat = false,
-      serializer.asInstanceOf[CreateStruct].children,
+      serializer.asInstanceOf[CreateNamedStruct].flatten,
       deserializer,
       ClassTag(cls))
   }
@@ -70,8 +70,7 @@ object RowEncoder {
   private def serializerFor(
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | CalendarIntervalType => inputObject
+    case dt if ScalaReflection.isNativeType(dt) => inputObject
 
     case p: PythonUserDefinedType => serializerFor(inputObject, p.sqlType)
 
@@ -149,28 +148,30 @@ object RowEncoder {
         dataType = t)
 
     case StructType(fields) =>
-      val convertedFields = fields.zipWithIndex.map { case (f, i) =>
+      val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
         val fieldValue = serializerFor(
-          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType)),
-          f.dataType
+          GetExternalRowField(
+            inputObject, index, field.name, externalDataTypeForInput(field.dataType)),
+          field.dataType
         )
-        if (f.nullable) {
+        val convertedField = if (field.nullable) {
           If(
-            Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
-            Literal.create(null, f.dataType),
+            Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
+            Literal.create(null, field.dataType),
             fieldValue
           )
         } else {
           fieldValue
         }
-      }
+        Literal(field.name) :: convertedField :: Nil
+      })
 
       if (inputObject.nullable) {
         If(IsNull(inputObject),
           Literal.create(null, inputType),
-          CreateStruct(convertedFields))
+          nonNullOutput)
       } else {
-        CreateStruct(convertedFields)
+        nonNullOutput
       }
   }
 
@@ -193,7 +194,6 @@ object RowEncoder {
 
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
-    case CalendarIntervalType => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -202,7 +202,6 @@ object RowEncoder {
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
-    case _: NullType => ObjectType(classOf[java.lang.Object])
   }
 
   private def deserializerFor(schema: StructType): Expression = {
@@ -222,8 +221,7 @@ object RowEncoder {
   }
 
   private def deserializerFor(input: Expression): Expression = input.dataType match {
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | CalendarIntervalType => input
+    case dt if ScalaReflection.isNativeType(dt) => input
 
     case udt: UserDefinedType[_] =>
       val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])

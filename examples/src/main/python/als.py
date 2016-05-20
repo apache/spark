@@ -17,7 +17,7 @@
 
 """
 This is an example implementation of ALS for learning how to use Spark. Please refer to
-ALS in pyspark.mllib.recommendation for more conventional use.
+pyspark.ml.recommendation.ALS for more conventional use.
 
 This example requires numpy (http://www.numpy.org/)
 """
@@ -59,7 +59,7 @@ if __name__ == "__main__":
     """
 
     print("""WARN: This is a naive implementation of ALS and is given as an
-      example. Please use the ALS method found in pyspark.mllib.recommendation for more
+      example. Please use pyspark.ml.recommendation.ALS for more
       conventional use.""", file=sys.stderr)
 
     sc = SparkContext(appName="PythonALS")

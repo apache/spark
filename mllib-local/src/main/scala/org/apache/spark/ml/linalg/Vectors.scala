@@ -25,21 +25,26 @@ import scala.collection.JavaConverters._
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 
+import org.apache.spark.annotation.Since
+
 /**
  * Represents a numeric vector, whose index type is Int and value type is Double.
  *
  * Note: Users should not implement this interface.
  */
+@Since("2.0.0")
 sealed trait Vector extends Serializable {
 
   /**
    * Size of the vector.
    */
+  @Since("2.0.0")
   def size: Int
 
   /**
    * Converts the instance to a double array.
    */
+  @Since("2.0.0")
   def toArray: Array[Double]
 
   override def equals(other: Any): Boolean = {
@@ -93,11 +98,13 @@ sealed trait Vector extends Serializable {
    * Gets the value of the ith element.
    * @param i index
    */
+  @Since("2.0.0")
   def apply(i: Int): Double = toBreeze(i)
 
   /**
    * Makes a deep copy of this vector.
    */
+  @Since("2.0.0")
   def copy: Vector = {
     throw new NotImplementedError(s"copy is not implemented for ${this.getClass}.")
   }
@@ -109,32 +116,38 @@ sealed trait Vector extends Serializable {
    *          the vector with type `Int`, and the second parameter is the corresponding value
    *          with type `Double`.
    */
+  @Since("2.0.0")
   def foreachActive(f: (Int, Double) => Unit): Unit
 
   /**
    * Number of active entries.  An "active entry" is an element which is explicitly stored,
    * regardless of its value.  Note that inactive entries have value 0.
    */
+  @Since("2.0.0")
   def numActives: Int
 
   /**
    * Number of nonzero elements. This scans all active values and count nonzeros.
    */
+  @Since("2.0.0")
   def numNonzeros: Int
 
   /**
    * Converts this vector to a sparse vector with all explicit zeros removed.
    */
+  @Since("2.0.0")
   def toSparse: SparseVector
 
   /**
    * Converts this vector to a dense vector.
    */
+  @Since("2.0.0")
   def toDense: DenseVector = new DenseVector(this.toArray)
 
   /**
    * Returns a vector in either dense or sparse format, whichever uses less storage.
    */
+  @Since("2.0.0")
   def compressed: Vector = {
     val nnz = numNonzeros
     // A dense vector needs 8 * size + 8 bytes, while a sparse vector needs 12 * nnz + 20 bytes.
@@ -149,6 +162,7 @@ sealed trait Vector extends Serializable {
    * Find the index of a maximal element.  Returns the first maximal element in case of a tie.
    * Returns -1 if vector has length 0.
    */
+  @Since("2.0.0")
   def argmax: Int
 }
 
@@ -157,12 +171,14 @@ sealed trait Vector extends Serializable {
  * We don't use the name `Vector` because Scala imports
  * [[scala.collection.immutable.Vector]] by default.
  */
+@Since("2.0.0")
 object Vectors {
 
   /**
    * Creates a dense vector from its values.
    */
   @varargs
+  @Since("2.0.0")
   def dense(firstValue: Double, otherValues: Double*): Vector =
     new DenseVector((firstValue +: otherValues).toArray)
 
@@ -170,6 +186,7 @@ object Vectors {
   /**
    * Creates a dense vector from a double array.
    */
+  @Since("2.0.0")
   def dense(values: Array[Double]): Vector = new DenseVector(values)
 
   /**
@@ -179,6 +196,7 @@ object Vectors {
    * @param indices index array, must be strictly increasing.
    * @param values value array, must have the same length as indices.
    */
+  @Since("2.0.0")
   def sparse(size: Int, indices: Array[Int], values: Array[Double]): Vector =
     new SparseVector(size, indices, values)
 
@@ -188,6 +206,7 @@ object Vectors {
    * @param size vector size.
    * @param elements vector elements in (index, value) pairs.
    */
+  @Since("2.0.0")
   def sparse(size: Int, elements: Seq[(Int, Double)]): Vector = {
     require(size > 0, "The size of the requested sparse vector must be greater than 0.")
 
@@ -209,6 +228,7 @@ object Vectors {
    * @param size vector size.
    * @param elements vector elements in (index, value) pairs.
    */
+  @Since("2.0.0")
   def sparse(size: Int, elements: JavaIterable[(JavaInteger, JavaDouble)]): Vector = {
     sparse(size, elements.asScala.map { case (i, x) =>
       (i.intValue(), x.doubleValue())
@@ -221,6 +241,7 @@ object Vectors {
    * @param size vector size
    * @return a zero vector
    */
+  @Since("2.0.0")
   def zeros(size: Int): Vector = {
     new DenseVector(new Array[Double](size))
   }
@@ -253,6 +274,7 @@ object Vectors {
    * @param p norm.
    * @return norm in L^p^ space.
    */
+  @Since("2.0.0")
   def norm(vector: Vector, p: Double): Double = {
     require(p >= 1.0, "To compute the p-norm of the vector, we require that you specify a p>=1. " +
       s"You specified p=$p.")
@@ -305,6 +327,7 @@ object Vectors {
    * @param v2 second Vector.
    * @return squared distance between two Vectors.
    */
+  @Since("2.0.0")
   def sqdist(v1: Vector, v2: Vector): Double = {
     require(v1.size == v2.size, s"Vector dimensions do not match: Dim(v1)=${v1.size} and Dim(v2)" +
       s"=${v2.size}.")
@@ -421,7 +444,8 @@ object Vectors {
 /**
  * A dense vector represented by a value array.
  */
-class DenseVector (val values: Array[Double]) extends Vector {
+@Since("2.0.0")
+class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) extends Vector {
 
   override def size: Int = values.length
 
@@ -515,9 +539,11 @@ class DenseVector (val values: Array[Double]) extends Vector {
   }
 }
 
+@Since("2.0.0")
 object DenseVector {
 
   /** Extracts the value array from a dense vector. */
+  @Since("2.0.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 }
 
@@ -528,10 +554,11 @@ object DenseVector {
  * @param indices index array, assume to be strictly increasing.
  * @param values value array, must have the same length as the index array.
  */
-class SparseVector (
+@Since("2.0.0")
+class SparseVector @Since("2.0.0") (
     override val size: Int,
-    val indices: Array[Int],
-    val values: Array[Double]) extends Vector {
+    @Since("2.0.0") val indices: Array[Int],
+    @Since("2.0.0") val values: Array[Double]) extends Vector {
 
   require(indices.length == values.length, "Sparse vectors require that the dimension of the" +
     s" indices match the dimension of the values. You provided ${indices.length} indices and " +
@@ -693,7 +720,9 @@ class SparseVector (
   }
 }
 
+@Since("2.0.0")
 object SparseVector {
+  @Since("2.0.0")
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))
 }

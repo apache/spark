@@ -1042,7 +1042,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SET commands semantics using sql()") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
@@ -1083,17 +1083,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SET $nonexistentKey"),
       Row(nonexistentKey, "<undefined>")
     )
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
   }
 
   test("SET commands with illegal or inappropriate argument") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
   }
 
   test("apply schema") {
@@ -2496,6 +2496,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(
         sql("SELECT i, j FROM tbl"),
         Row(1, "a") :: Row(2, "b") :: Row(3, "c") :: Row(4, "d") :: Nil)
+    }
+  }
+
+  test("Eliminate noop ordinal ORDER BY") {
+    withSQLConf(SQLConf.ORDER_BY_ORDINAL.key -> "true") {
+      val plan1 = sql("SELECT 1.0, 'abc', year(current_date()) ORDER BY 1, 2, 3")
+      val plan2 = sql("SELECT 1.0, 'abc', year(current_date())")
+      comparePlans(plan1.queryExecution.optimizedPlan, plan2.queryExecution.optimizedPlan)
     }
   }
 

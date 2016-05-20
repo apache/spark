@@ -32,7 +32,7 @@ import org.apache.spark.sql.hive.MetastoreRelation
  *                      raise exception
  */
 private[hive]
-case class CreateTableAsSelect(
+case class CreateTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
     allowExisting: Boolean)

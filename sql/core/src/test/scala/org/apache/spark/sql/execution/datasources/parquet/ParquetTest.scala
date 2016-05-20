@@ -90,7 +90,7 @@ private[sql] trait ParquetTest extends SQLTestUtils {
       (data: Seq[T], tableName: String, testVectorized: Boolean = true)
       (f: => Unit): Unit = {
     withParquetDataFrame(data, testVectorized) { df =>
-      spark.wrapped.registerDataFrameAsTable(df, tableName)
+      spark.sqlContext.registerDataFrameAsTable(df, tableName)
       withTempTable(tableName)(f)
     }
   }

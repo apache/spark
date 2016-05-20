@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.JsonTuple
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
-import org.apache.spark.sql.execution.command.{CreateTable, CreateTableAsSelectLogicalPlan, CreateTableLike, CreateViewCommand, LoadData}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.TestHive
 
 class HiveDDLCommandSuite extends PlanTest {
@@ -37,7 +37,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case CreateTable(desc, allowExisting) => (desc, allowExisting)
+      case CreateTableCommand(desc, allowExisting) => (desc, allowExisting)
       case CreateTableAsSelectLogicalPlan(desc, _, allowExisting) => (desc, allowExisting)
       case CreateViewCommand(desc, _, allowExisting, _, _, _) => (desc, allowExisting)
     }.head
@@ -555,7 +555,7 @@ class HiveDDLCommandSuite extends PlanTest {
   test("create table like") {
     val v1 = "CREATE TABLE table1 LIKE table2"
     val (target, source, exists) = parser.parsePlan(v1).collect {
-      case CreateTableLike(t, s, allowExisting) => (t, s, allowExisting)
+      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
     }.head
     assert(exists == false)
     assert(target.database.isEmpty)
@@ -565,7 +565,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
     val v2 = "CREATE TABLE IF NOT EXISTS table1 LIKE table2"
     val (target2, source2, exists2) = parser.parsePlan(v2).collect {
-      case CreateTableLike(t, s, allowExisting) => (t, s, allowExisting)
+      case CreateTableLikeCommand(t, s, allowExisting) => (t, s, allowExisting)
     }.head
     assert(exists2)
     assert(target2.database.isEmpty)
@@ -577,7 +577,7 @@ class HiveDDLCommandSuite extends PlanTest {
   test("load data") {
     val v1 = "LOAD DATA INPATH 'path' INTO TABLE table1"
     val (table, path, isLocal, isOverwrite, partition) = parser.parsePlan(v1).collect {
-      case LoadData(t, path, l, o, partition) => (t, path, l, o, partition)
+      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
     }.head
     assert(table.database.isEmpty)
     assert(table.table == "table1")
@@ -588,7 +588,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
     val v2 = "LOAD DATA LOCAL INPATH 'path' OVERWRITE INTO TABLE table1 PARTITION(c='1', d='2')"
     val (table2, path2, isLocal2, isOverwrite2, partition2) = parser.parsePlan(v2).collect {
-      case LoadData(t, path, l, o, partition) => (t, path, l, o, partition)
+      case LoadDataCommand(t, path, l, o, partition) => (t, path, l, o, partition)
     }.head
     assert(table2.database.isEmpty)
     assert(table2.table == "table1")
