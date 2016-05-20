@@ -355,14 +355,14 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.wrapped,
+      spark.sqlContext,
       checkpointLocation + "/sources/0",
       None,
       "org.apache.spark.sql.streaming.test",
       Map.empty)
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
-      spark.wrapped,
+      spark.sqlContext,
       checkpointLocation + "/sources/1",
       None,
       "org.apache.spark.sql.streaming.test",
@@ -523,5 +523,20 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     val w = df.write
     val e = intercept[AnalysisException](w.csv("non_exist_path"))
     assert(e.getMessage == "csv() can only be called on non-continuous queries;")
+  }
+
+  test("ConsoleSink can be correctly loaded") {
+    LastOptions.clear()
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+
+    val cq = df.write
+      .format("console")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(ProcessingTime(2.seconds))
+      .startStream()
+
+    cq.awaitTermination(2000L)
   }
 }

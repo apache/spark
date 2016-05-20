@@ -38,10 +38,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsAltFile = "cars-alternative.csv"
   private val carsUnbalancedQuotesFile = "cars-unbalanced-quotes.csv"
   private val carsNullFile = "cars-null.csv"
+  private val carsBlankColName = "cars-blank-column-name.csv"
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
   private val boolFile = "bool.csv"
+  private val decimalFile = "decimal.csv"
   private val simpleSparseFile = "simple_sparse.csv"
   private val numbersFile = "numbers.csv"
   private val datesFile = "dates.csv"
@@ -71,14 +73,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       if (withHeader) {
         assert(df.schema.fieldNames === Array("year", "make", "model", "comment", "blank"))
       } else {
-        assert(df.schema.fieldNames === Array("C0", "C1", "C2", "C3", "C4"))
+        assert(df.schema.fieldNames === Array("_c0", "_c1", "_c2", "_c3", "_c4"))
       }
     }
 
     if (checkValues) {
       val yearValues = List("2012", "1997", "2015")
       val actualYears = if (!withHeader) "year" :: yearValues else yearValues
-      val years = if (withHeader) df.select("year").collect() else df.select("C0").collect()
+      val years = if (withHeader) df.select("year").collect() else df.select("_c0").collect()
 
       years.zipWithIndex.foreach { case (year, index) =>
         if (checkTypes) {
@@ -129,6 +131,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     val expectedSchema = StructType(List(
       StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
+  }
+
+  test("test inferring decimals") {
+    val result = sqlContext.read
+      .format("csv")
+      .option("comment", "~")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(decimalFile))
+    val expectedSchema = StructType(List(
+      StructField("decimal", DecimalType(20, 0), nullable = true),
+      StructField("long", LongType, nullable = true),
+      StructField("double", DoubleType, nullable = true)))
     assert(result.schema === expectedSchema)
   }
 
@@ -222,6 +238,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     assert(cars.select("year").collect().size === 2)
+  }
+
+  test("test for blank column names on read and select columns") {
+    val cars = spark.read
+      .format("csv")
+      .options(Map("header" -> "true", "inferSchema" -> "true"))
+      .load(testFile(carsBlankColName))
+
+    assert(cars.select("customer").collect().size == 2)
+    assert(cars.select("_c0").collect().size == 2)
+    assert(cars.select("_c1").collect().size == 2)
   }
 
   test("test for FAILFAST parsing mode") {

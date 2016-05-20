@@ -38,7 +38,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaEstimatorTransformerParamExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaEstimatorTransformerParamExample").getOrCreate();
+      .builder()
+      .appName("JavaEstimatorTransformerParamExample")
+      .getOrCreate();
 
     // $example on$
     // Prepare training data.

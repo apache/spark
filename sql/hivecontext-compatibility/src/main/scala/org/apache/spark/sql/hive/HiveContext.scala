@@ -27,7 +27,7 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
  */
-@deprecated("Use SparkSession.withHiveSupport instead", "2.0.0")
+@deprecated("Use SparkSession.builder.enableHiveSupport instead", "2.0.0")
 class HiveContext private[hive](
     _sparkSession: SparkSession,
     isRootContext: Boolean)
@@ -56,6 +56,18 @@ class HiveContext private[hive](
 
   protected[sql] override def sharedState: HiveSharedState = {
     sparkSession.sharedState.asInstanceOf[HiveSharedState]
+  }
+
+  /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
+   */
+  def refreshTable(tableName: String): Unit = {
+    sparkSession.catalog.refreshTable(tableName)
   }
 
 }

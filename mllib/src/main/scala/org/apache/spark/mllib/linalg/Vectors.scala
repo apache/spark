@@ -22,6 +22,7 @@ import java.util
 
 import scala.annotation.varargs
 import scala.collection.JavaConverters._
+import scala.language.implicitConversions
 
 import breeze.linalg.{DenseVector => BDV, SparseVector => BSV, Vector => BV}
 import org.json4s.DefaultFormats
@@ -185,7 +186,8 @@ sealed trait Vector extends Serializable {
    * Convert this vector to the new mllib-local representation.
    * This does NOT copy the data; it copies references.
    */
-  private[spark] def asML: newlinalg.Vector
+  @Since("2.0.0")
+  def asML: newlinalg.Vector
 }
 
 /**
@@ -580,8 +582,11 @@ object Vectors {
   /** Max number of nonzero entries used in computing hash code. */
   private[linalg] val MAX_HASH_NNZ = 128
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(v: newlinalg.Vector): Vector = v match {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(v: newlinalg.Vector): Vector = v match {
     case dv: newlinalg.DenseVector =>
       DenseVector.fromML(dv)
     case sv: newlinalg.SparseVector =>
@@ -703,7 +708,8 @@ class DenseVector @Since("1.0.0") (
     compact(render(jValue))
   }
 
-  private[spark] override def asML: newlinalg.DenseVector = {
+  @Since("2.0.0")
+  override def asML: newlinalg.DenseVector = {
     new newlinalg.DenseVector(values)
   }
 }
@@ -715,8 +721,11 @@ object DenseVector {
   @Since("1.3.0")
   def unapply(dv: DenseVector): Option[Array[Double]] = Some(dv.values)
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(v: newlinalg.DenseVector): DenseVector = {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(v: newlinalg.DenseVector): DenseVector = {
     new DenseVector(v.values)
   }
 }
@@ -910,7 +919,8 @@ class SparseVector @Since("1.0.0") (
     compact(render(jValue))
   }
 
-  private[spark] override def asML: newlinalg.SparseVector = {
+  @Since("2.0.0")
+  override def asML: newlinalg.SparseVector = {
     new newlinalg.SparseVector(size, indices, values)
   }
 }
@@ -921,8 +931,32 @@ object SparseVector {
   def unapply(sv: SparseVector): Option[(Int, Array[Int], Array[Double])] =
     Some((sv.size, sv.indices, sv.values))
 
-  /** Convert new linalg type to spark.mllib type.  Light copy; only copies references */
-  private[spark] def fromML(v: newlinalg.SparseVector): SparseVector = {
+  /**
+   * Convert new linalg type to spark.mllib type.  Light copy; only copies references
+   */
+  @Since("2.0.0")
+  def fromML(v: newlinalg.SparseVector): SparseVector = {
     new SparseVector(v.size, v.indices, v.values)
   }
+}
+
+/**
+ * Implicit methods available in Scala for converting [[org.apache.spark.mllib.linalg.Vector]] to
+ * [[org.apache.spark.ml.linalg.Vector]] and vice versa.
+ */
+private[spark] object VectorImplicits {
+
+  implicit def mllibVectorToMLVector(v: Vector): newlinalg.Vector = v.asML
+
+  implicit def mllibDenseVectorToMLDenseVector(v: DenseVector): newlinalg.DenseVector = v.asML
+
+  implicit def mllibSparseVectorToMLSparseVector(v: SparseVector): newlinalg.SparseVector = v.asML
+
+  implicit def mlVectorToMLlibVector(v: newlinalg.Vector): Vector = Vectors.fromML(v)
+
+  implicit def mlDenseVectorToMLlibDenseVector(v: newlinalg.DenseVector): DenseVector =
+    Vectors.fromML(v).asInstanceOf[DenseVector]
+
+  implicit def mlSparseVectorToMLlibSparseVector(v: newlinalg.SparseVector): SparseVector =
+    Vectors.fromML(v).asInstanceOf[SparseVector]
 }

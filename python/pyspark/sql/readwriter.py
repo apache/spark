@@ -266,7 +266,7 @@ class DataFrameReader(object):
         :param tableName: string, name of the table.
 
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
-        >>> df.registerTempTable('tmpTable')
+        >>> df.createOrReplaceTempView('tmpTable')
         >>> spark.read.table('tmpTable').dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
@@ -286,6 +286,9 @@ class DataFrameReader(object):
     @since(1.6)
     def text(self, paths):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+        If the directory structure of the text files contains partitioning information,
+        those are ignored in the resulting DataFrame. To include partitioning information as
+        columns, use ``read.format('text').load(...)``.
 
         Each line in the text file is a new row in the resulting DataFrame.
 
@@ -358,7 +361,7 @@ class DataFrameReader(object):
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
-        [('C0', 'string'), ('C1', 'string')]
+        [('_c0', 'string'), ('_c1', 'string')]
         """
         if schema is not None:
             self.schema(schema)
@@ -875,7 +878,7 @@ def _test():
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
     try:
-        spark = SparkSession.withHiveSupport(sc)
+        spark = SparkSession.builder.enableHiveSupport().getOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 

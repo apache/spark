@@ -31,8 +31,7 @@ import org.apache.spark._
  * Usage: SparkLR [slices]
  *
  * This is an example implementation for learning how to use Spark. For more conventional use,
- * please refer to either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
- * org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS based on your needs.
+ * please refer to org.apache.spark.ml.classification.LogisticRegression.
  */
 object SparkLR {
   val N = 10000  // Number of data points
@@ -55,8 +54,7 @@ object SparkLR {
   def showWarning() {
     System.err.println(
       """WARN: This is a naive implementation of Logistic Regression and is given as an example!
-        |Please use either org.apache.spark.mllib.classification.LogisticRegressionWithSGD or
-        |org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
+        |Please use org.apache.spark.ml.classification.LogisticRegression
         |for more conventional use.
       """.stripMargin)
   }

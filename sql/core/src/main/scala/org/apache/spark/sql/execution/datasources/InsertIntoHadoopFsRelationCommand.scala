@@ -35,11 +35,11 @@ import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A command for writing data to a [[HadoopFsRelation]].  Supports both overwriting and appending.
- * Writing to dynamic partitions is also supported.  Each [[InsertIntoHadoopFsRelation]] issues a
- * single write job, and owns a UUID that identifies this job.  Each concrete implementation of
- * [[HadoopFsRelation]] should use this UUID together with task id to generate unique file path for
- * each task output file.  This UUID is passed to executor side via a property named
- * `spark.sql.sources.writeJobUUID`.
+ * Writing to dynamic partitions is also supported.  Each [[InsertIntoHadoopFsRelationCommand]]
+ * issues a single write job, and owns a UUID that identifies this job.  Each concrete
+ * implementation of [[HadoopFsRelation]] should use this UUID together with task id to generate
+ * unique file path for each task output file.  This UUID is passed to executor side via a
+ * property named `spark.sql.sources.writeJobUUID`.
  *
  * Different writer containers, [[DefaultWriterContainer]] and [[DynamicPartitionWriterContainer]]
  * are used to write to normal tables and tables with dynamic partitions.
@@ -55,7 +55,7 @@ import org.apache.spark.sql.internal.SQLConf
  *   4. If all tasks are committed, commit the job, otherwise aborts the job;  If any exception is
  *      thrown during job commitment, also aborts the job.
  */
-private[sql] case class InsertIntoHadoopFsRelation(
+private[sql] case class InsertIntoHadoopFsRelationCommand(
     outputPath: Path,
     partitionColumns: Seq[Attribute],
     bucketSpec: Option[BucketSpec],

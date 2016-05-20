@@ -30,17 +30,17 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    if (spark.wrapped.tableNames().contains("src")) {
-      spark.catalog.dropTempTable("src")
+    if (spark.sqlContext.tableNames().contains("src")) {
+      spark.catalog.dropTempView("src")
     }
-    Seq((1, "")).toDF("key", "value").registerTempTable("src")
-    Seq((1, 1, 1)).toDF("a", "a", "b").registerTempTable("dupAttributes")
+    Seq((1, "")).toDF("key", "value").createOrReplaceTempView("src")
+    Seq((1, 1, 1)).toDF("a", "a", "b").createOrReplaceTempView("dupAttributes")
   }
 
   override protected def afterEach(): Unit = {
     try {
-      spark.catalog.dropTempTable("src")
-      spark.catalog.dropTempTable("dupAttributes")
+      spark.catalog.dropTempView("src")
+      spark.catalog.dropTempView("dupAttributes")
     } finally {
       super.afterEach()
     }

@@ -291,11 +291,19 @@ private[spark] object TaskMetrics extends Logging {
 
 private[spark] class BlockStatusesAccumulator
   extends AccumulatorV2[(BlockId, BlockStatus), Seq[(BlockId, BlockStatus)]] {
-  private[this] var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
+  private var _seq = ArrayBuffer.empty[(BlockId, BlockStatus)]
 
   override def isZero(): Boolean = _seq.isEmpty
 
   override def copyAndReset(): BlockStatusesAccumulator = new BlockStatusesAccumulator
+
+  override def copy(): BlockStatusesAccumulator = {
+    val newAcc = new BlockStatusesAccumulator
+    newAcc._seq = _seq.clone()
+    newAcc
+  }
+
+  override def reset(): Unit = _seq.clear()
 
   override def add(v: (BlockId, BlockStatus)): Unit = _seq += v
 

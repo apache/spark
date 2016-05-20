@@ -19,25 +19,22 @@ package org.apache.spark.sql
 
 import java.beans.BeanInfo
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
-import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
@@ -46,8 +43,8 @@ import org.apache.spark.sql.util.ExecutionListenerManager
 /**
  * The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
  *
- * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class here
- * for backward compatibility.
+ * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class
+ * here for backward compatibility.
  *
  * @groupname basic Basic Operations
  * @groupname ddl_ops Persistent Catalog DDL
@@ -67,6 +64,8 @@ class SQLContext private[sql](
 
   self =>
 
+  sparkSession.sparkContext.assertNotStopped()
+
   // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
   // real functionality resides. This class remains mainly for backward compatibility.
 
@@ -74,42 +73,21 @@ class SQLContext private[sql](
     this(sparkSession, true)
   }
 
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sc: SparkContext) = {
     this(new SparkSession(sc))
   }
 
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // TODO: move this logic into SparkSession
-
-  // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
-  // wants to create a new root SQLContext (a SQLContext that is not created by newSession).
-  private val allowMultipleContexts =
-    sparkContext.conf.getBoolean(
-      SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
-      SQLConf.ALLOW_MULTIPLE_CONTEXTS.defaultValue.get)
-
-  // Assert no root SQLContext is running when allowMultipleContexts is false.
-  {
-    if (!allowMultipleContexts && isRootContext) {
-      SQLContext.getInstantiatedContextOption() match {
-        case Some(rootSQLContext) =>
-          val errMsg = "Only one SQLContext/HiveContext may be running in this JVM. " +
-            s"It is recommended to use SQLContext.getOrCreate to get the instantiated " +
-            s"SQLContext/HiveContext. To ignore this error, " +
-            s"set ${SQLConf.ALLOW_MULTIPLE_CONTEXTS.key} = true in SparkConf."
-          throw new SparkException(errMsg)
-        case None => // OK
-      }
-    }
-  }
 
   protected[sql] def sessionState: SessionState = sparkSession.sessionState
   protected[sql] def sharedState: SharedState = sparkSession.sharedState
   protected[sql] def conf: SQLConf = sessionState.conf
   protected[sql] def runtimeConf: RuntimeConfig = sparkSession.conf
   protected[sql] def cacheManager: CacheManager = sparkSession.cacheManager
-  protected[sql] def listener: SQLListener = sparkSession.listener
   protected[sql] def externalCatalog: ExternalCatalog = sparkSession.externalCatalog
 
   def sparkContext: SparkContext = sparkSession.sparkContext
@@ -121,7 +99,7 @@ class SQLContext private[sql](
    *
    * @since 1.6.0
    */
-  def newSession(): SQLContext = sparkSession.newSession().wrapped
+  def newSession(): SQLContext = sparkSession.newSession().sqlContext
 
   /**
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
@@ -374,7 +352,7 @@ class SQLContext private[sql](
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *  dataFrame.registerTempTable("people")
+   *  dataFrame.createOrReplaceTempView("people")
    *  sqlContext.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -597,7 +575,7 @@ class SQLContext private[sql](
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sparkSession.registerTable(df, tableName)
+    sparkSession.createTempView(tableName, df, replaceIfExists = true)
   }
 
   /**
@@ -609,7 +587,7 @@ class SQLContext private[sql](
    * @since 1.3.0
    */
   def dropTempTable(tableName: String): Unit = {
-    sparkSession.catalog.dropTempTable(tableName)
+    sparkSession.catalog.dropTempView(tableName)
   }
 
   /**
@@ -758,21 +736,6 @@ class SQLContext private[sql](
       schema: StructType): DataFrame = {
     sparkSession.applySchemaToPythonRDD(rdd, schema)
   }
-
-  // TODO: move this logic into SparkSession
-
-  // Register a successfully instantiated context to the singleton. This should be at the end of
-  // the class definition so that the singleton is updated only if there is no exception in the
-  // construction of the instance.
-  sparkContext.addSparkListener(new SparkListener {
-    override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
-      SQLContext.clearInstantiatedContext()
-      SQLContext.clearSqlListener()
-    }
-  })
-
-  sparkSession.setWrappedContext(self)
-  SQLContext.setInstantiatedContext(self)
 }
 
 /**
@@ -786,19 +749,6 @@ class SQLContext private[sql](
 object SQLContext {
 
   /**
-   * The active SQLContext for the current thread.
-   */
-  private val activeContext: InheritableThreadLocal[SQLContext] =
-    new InheritableThreadLocal[SQLContext]
-
-  /**
-   * Reference to the created SQLContext.
-   */
-  @transient private val instantiatedContext = new AtomicReference[SQLContext]()
-
-  @transient private val sqlListener = new AtomicReference[SQLListener]()
-
-  /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
    *
    * This function can be used to create a singleton SQLContext object that can be shared across
@@ -809,41 +759,9 @@ object SQLContext {
    *
    * @since 1.5.0
    */
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
-    val ctx = activeContext.get()
-    if (ctx != null && !ctx.sparkContext.isStopped) {
-      return ctx
-    }
-
-    synchronized {
-      val ctx = instantiatedContext.get()
-      if (ctx == null || ctx.sparkContext.isStopped) {
-        new SQLContext(sparkContext)
-      } else {
-        ctx
-      }
-    }
-  }
-
-  private[sql] def clearInstantiatedContext(): Unit = {
-    instantiatedContext.set(null)
-  }
-
-  private[sql] def setInstantiatedContext(sqlContext: SQLContext): Unit = {
-    synchronized {
-      val ctx = instantiatedContext.get()
-      if (ctx == null || ctx.sparkContext.isStopped) {
-        instantiatedContext.set(sqlContext)
-      }
-    }
-  }
-
-  private[sql] def getInstantiatedContextOption(): Option[SQLContext] = {
-    Option(instantiatedContext.get())
-  }
-
-  private[sql] def clearSqlListener(): Unit = {
-    sqlListener.set(null)
+    SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
   }
 
   /**
@@ -853,8 +771,9 @@ object SQLContext {
    *
    * @since 1.6.0
    */
+  @deprecated("Use SparkSession.setActiveSession instead", "2.0.0")
   def setActive(sqlContext: SQLContext): Unit = {
-    activeContext.set(sqlContext)
+    SparkSession.setActiveSession(sqlContext.sparkSession)
   }
 
   /**
@@ -863,12 +782,9 @@ object SQLContext {
    *
    * @since 1.6.0
    */
+  @deprecated("Use SparkSession.clearActiveSession instead", "2.0.0")
   def clearActive(): Unit = {
-    activeContext.remove()
-  }
-
-  private[sql] def getActive(): Option[SQLContext] = {
-    Option(activeContext.get())
+    SparkSession.clearActiveSession()
   }
 
   /**
@@ -890,20 +806,6 @@ object SQLContext {
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
       ): InternalRow
     }
-  }
-
-  /**
-   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
-   */
-  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    if (sqlListener.get() == null) {
-      val listener = new SQLListener(sc.conf)
-      if (sqlListener.compareAndSet(null, listener)) {
-        sc.addSparkListener(listener)
-        sc.ui.foreach(new SQLTab(listener, _))
-      }
-    }
-    sqlListener.get()
   }
 
   /**

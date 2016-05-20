@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -212,7 +213,7 @@ class Dataset[T] private[sql](
   private implicit def classTag = unresolvedTEncoder.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
-  @transient lazy val sqlContext: SQLContext = sparkSession.wrapped
+  @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
@@ -2303,13 +2304,39 @@ class Dataset[T] private[sql](
 
   /**
    * Registers this [[Dataset]] as a temporary table using the given name. The lifetime of this
-   * temporary table is tied to the [[SQLContext]] that was used to create this Dataset.
+   * temporary table is tied to the [[SparkSession]] that was used to create this Dataset.
    *
    * @group basic
    * @since 1.6.0
    */
+  @deprecated("Use createOrReplaceTempView(viewName) instead.", "2.0.0")
   def registerTempTable(tableName: String): Unit = {
-    sparkSession.registerTable(toDF(), tableName)
+    createOrReplaceTempView(tableName)
+  }
+
+  /**
+   * Creates a temporary view using the given name. The lifetime of this
+   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @throws AnalysisException if the view name already exists
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @throws[AnalysisException]
+  def createTempView(viewName: String): Unit = {
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = false)
+  }
+
+  /**
+   * Creates a temporary view using the given name. The lifetime of this
+   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def createOrReplaceTempView(viewName: String): Unit = {
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = true)
   }
 
   /**
