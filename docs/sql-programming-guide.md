@@ -1657,7 +1657,11 @@ on all of the worker nodes, as they will need access to the Hive serialization a
 (SerDes) in order to access data stored in Hive.
 
 Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (for security configuration),
-`hdfs-site.xml` (for HDFS configuration) file in `conf/`. Note that 
+`hdfs-site.xml` (for HDFS configuration) file in `conf/`.
+
+<div class="codetabs">
+
+<div data-lang="scala"  markdown="1">
 
 When working with Hive, one must instantiate `SparkSession` with Hive support, including
 connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
@@ -1668,10 +1672,6 @@ creates a directory configured by `spark.sql.warehouse.dir`, which defaults to t
 the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
 Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
 You may need to grant write privilege to the user who starts the spark application.
-
-<div class="codetabs">
-
-<div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
 // warehouse_location points to the default location for managed databases and tables
@@ -1689,6 +1689,16 @@ spark.sql("FROM src SELECT key, value").collect().foreach(println)
 
 <div data-lang="java"  markdown="1">
 
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
+
 {% highlight java %}
 SparkSession spark = SparkSession.builder().appName("JavaSparkSQL").getOrCreate();
 
@@ -1703,6 +1713,16 @@ Row[] results = spark.sql("FROM src SELECT key, value").collect();
 </div>
 
 <div data-lang="python"  markdown="1">
+
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
 
 {% highlight python %}
 # sc is an existing SparkContext.
@@ -1721,6 +1741,8 @@ results = spark.sql("FROM src SELECT key, value").collect()
 
 <div data-lang="r"  markdown="1">
 
+When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
+adds support for finding tables in the MetaStore and writing queries using HiveQL.
 {% highlight r %}
 # sc is an existing SparkContext.
 sqlContext <- sparkRHive.init(sc)
