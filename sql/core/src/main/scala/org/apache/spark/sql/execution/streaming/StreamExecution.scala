@@ -34,6 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.execution.command.ExplainCommand
 import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
@@ -137,6 +138,17 @@ class StreamExecution(
   /** Returns current status of the sink. */
   override def sinkStatus: SinkStatus =
     new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources))
+
+  override def explain(extended: Boolean = false, codegen: Boolean = false): String = {
+    Option(lastExecution).map { e =>
+      val explain = ExplainCommand(lastExecution.logical, extended = extended, codegen = codegen)
+      sparkSession.executePlan(explain)
+        .executedPlan
+        .executeCollect()
+        .map(_.getString(0))
+        .mkString("\n")
+    }.getOrElse("N/A")
+  }
 
   /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
   override def exception: Option[ContinuousQueryException] = Option(streamDeathCause)
