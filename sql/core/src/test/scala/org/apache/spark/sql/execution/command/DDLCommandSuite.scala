@@ -240,25 +240,18 @@ class DDLCommandSuite extends PlanTest {
   test("create table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
     val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"
-    val fileFormatWithSerde = fileFormat + " SERDE 'myserde'"
     val query1 = s"$createTableStart SERDE 'anything' $fileFormat"
-    val query2 = s"$createTableStart SERDE 'anything' $fileFormatWithSerde"
-    val query3 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
-    val query4 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormatWithSerde"
+    val query2 = s"$createTableStart DELIMITED FIELDS TERMINATED BY ' ' $fileFormat"
 
     // No conflicting serdes here, OK
     val parsed1 = parseAs[CreateTableCommand](query1)
     assert(parsed1.table.storage.serde == Some("anything"))
     assert(parsed1.table.storage.inputFormat == Some("inputfmt"))
     assert(parsed1.table.storage.outputFormat == Some("outputfmt"))
-    val parsed3 = parseAs[CreateTableCommand](query3)
-    assert(parsed3.table.storage.serde.isEmpty)
-    assert(parsed3.table.storage.inputFormat == Some("inputfmt"))
-    assert(parsed3.table.storage.outputFormat == Some("outputfmt"))
-
-    // File format specified a SerDe, not OK
-    assertUnsupported(query2, Seq("row format", "not compatible", "stored as", "myserde"))
-    assertUnsupported(query4, Seq("row format", "not compatible", "stored as", "myserde"))
+    val parsed2 = parseAs[CreateTableCommand](query2)
+    assert(parsed2.table.storage.serde.isEmpty)
+    assert(parsed2.table.storage.inputFormat == Some("inputfmt"))
+    assert(parsed2.table.storage.outputFormat == Some("outputfmt"))
   }
 
   test("create table - row format serde and generic file format") {
@@ -615,8 +608,7 @@ class DDLCommandSuite extends PlanTest {
 
   test("alter table: set file format (not allowed)") {
     assertUnsupported(
-      "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' " +
-        "OUTPUTFORMAT 'test' SERDE 'test'")
+      "ALTER TABLE table_name SET FILEFORMAT INPUTFORMAT 'test' OUTPUTFORMAT 'test'")
     assertUnsupported(
       "ALTER TABLE table_name PARTITION (dt='2008-08-08', country='us') " +
         "SET FILEFORMAT PARQUET")
