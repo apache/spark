@@ -787,8 +787,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase match {
-          case "file" => AddFile(mayebePaths)
-          case "jar" => AddJar(mayebePaths)
+          case "file" => AddFileCommand(mayebePaths)
+          case "jar" => AddJarCommand(mayebePaths)
           case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.DELETE =>
