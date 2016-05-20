@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.linalg.{Vector, VectorUDT}
-import org.apache.spark.ml.param.{IntParam, Param, ParamMap, Params}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.clustering.{KMeans => MLlibKMeans, KMeansModel => MLlibKMeansModel}
@@ -41,11 +41,12 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
   with HasSeed with HasPredictionCol with HasTol {
 
   /**
-   * Set the number of clusters to create (k). Must be > 1. Default: 2.
+   * The number of clusters to create (k). Must be > 1. Default: 2.
    * @group param
    */
   @Since("1.5.0")
-  final val k = new IntParam(this, "k", "number of clusters to create", (x: Int) => x > 1)
+  final val k = new IntParam(this, "k", "The number of clusters to create. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("1.5.0")
@@ -58,7 +59,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @group expertParam
    */
   @Since("1.5.0")
-  final val initMode = new Param[String](this, "initMode", "initialization algorithm",
+  final val initMode = new Param[String](this, "initMode", "The initialization algorithm. " +
+    "Supported options: 'random' and 'k-means||'.",
     (value: String) => MLlibKMeans.validateInitMode(value))
 
   /** @group expertGetParam */
@@ -71,8 +73,8 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
    * @group expertParam
    */
   @Since("1.5.0")
-  final val initSteps = new IntParam(this, "initSteps", "number of steps for k-means||",
-    (value: Int) => value > 0)
+  final val initSteps = new IntParam(this, "initSteps", "The number of steps for k-means|| " +
+    "initialization mode. Must be > 0.", ParamValidators.gt(0))
 
   /** @group expertGetParam */
   @Since("1.5.0")
