@@ -142,7 +142,7 @@ case class HadoopFsRelation(
     fileFormat: FileFormat,
     options: Map[String, String]) extends BaseRelation with FileRelation {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet

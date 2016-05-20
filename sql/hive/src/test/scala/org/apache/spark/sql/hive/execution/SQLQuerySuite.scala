@@ -1417,7 +1417,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
            """.stripMargin)
 
         checkAnswer(
-          spark.wrapped.tables().select('isTemporary).filter('tableName === "t2"),
+          spark.sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
           Row(true)
         )
 

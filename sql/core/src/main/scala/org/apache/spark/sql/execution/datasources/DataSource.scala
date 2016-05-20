@@ -178,7 +178,7 @@ case class DataSource(
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
         val (name, schema) = s.sourceSchema(
-          sparkSession.wrapped, userSpecifiedSchema, className, options)
+          sparkSession.sqlContext, userSpecifiedSchema, className, options)
         SourceInfo(name, schema)
 
       case format: FileFormat =>
@@ -198,7 +198,8 @@ case class DataSource(
   def createSource(metadataPath: String): Source = {
     providingClass.newInstance() match {
       case s: StreamSourceProvider =>
-        s.createSource(sparkSession.wrapped, metadataPath, userSpecifiedSchema, className, options)
+        s.createSource(
+          sparkSession.sqlContext, metadataPath, userSpecifiedSchema, className, options)
 
       case format: FileFormat =>
         val path = new CaseInsensitiveMap(options).getOrElse("path", {
@@ -215,7 +216,7 @@ case class DataSource(
   /** Returns a sink that can be used to continually write data. */
   def createSink(): Sink = {
     providingClass.newInstance() match {
-      case s: StreamSinkProvider => s.createSink(sparkSession.wrapped, options, partitionColumns)
+      case s: StreamSinkProvider => s.createSink(sparkSession.sqlContext, options, partitionColumns)
 
       case parquet: parquet.DefaultSource =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
@@ -265,9 +266,9 @@ case class DataSource(
     val relation = (providingClass.newInstance(), userSpecifiedSchema) match {
       // TODO: Throw when too much is given.
       case (dataSource: SchemaRelationProvider, Some(schema)) =>
-        dataSource.createRelation(sparkSession.wrapped, caseInsensitiveOptions, schema)
+        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions, schema)
       case (dataSource: RelationProvider, None) =>
-        dataSource.createRelation(sparkSession.wrapped, caseInsensitiveOptions)
+        dataSource.createRelation(sparkSession.sqlContext, caseInsensitiveOptions)
       case (_: SchemaRelationProvider, None) =>
         throw new AnalysisException(s"A schema needs to be specified when using $className.")
       case (_: RelationProvider, Some(_)) =>
@@ -383,7 +384,7 @@ case class DataSource(
 
     providingClass.newInstance() match {
       case dataSource: CreatableRelationProvider =>
-        dataSource.createRelation(sparkSession.wrapped, mode, options, data)
+        dataSource.createRelation(sparkSession.sqlContext, mode, options, data)
       case format: FileFormat =>
         // Don't glob path for the write path.  The contracts here are:
         //  1. Only one output path can be specified on the write path;
