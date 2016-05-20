@@ -193,9 +193,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 
     .. versionadded:: 1.4.0
     """
-    # Because we will maximize evaluation value (ref: `CrossValidator`),
-    # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
-    # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
                        """metric name in evaluation - one of:
                        rmse - root mean squared error (default)
@@ -270,7 +267,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|precision|recall|weightedPrecision|weightedRecall)",
+                       "(f1|precision|recall|weightedPrecision|weightedRecall|accuracy)",
                        typeConverter=TypeConverters.toString)
 
     @keyword_only
