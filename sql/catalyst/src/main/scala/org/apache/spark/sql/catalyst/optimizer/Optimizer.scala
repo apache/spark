@@ -109,7 +109,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
-      EmbedSerializerInFilter) ::
+      EmbedSerializerInFilter,
+      RemoveAliasOnlyProject) ::
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation) ::
     Batch("OptimizeCodegen", Once,
@@ -1599,7 +1600,13 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
     case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject)) =>
       val bound = BindReferences.bindReference(condition, d.outputObjAttr :: Nil)
       val conditionWithSerialization = ReferenceToExpressions(bound, d.deserializer :: Nil)
-      Filter(conditionWithSerialization, d.child)
+      val filter = Filter(conditionWithSerialization, d.child)
+      // Adds an extra Project here, to preserve the output expr id of `SerializeFromObject`.
+      // We will remove it later in RemoveAliasOnlyProject rule.
+      val attrs = filter.output.zip(s.output).map { case (fout, sout) =>
+        Alias(fout, fout.name)(exprId = sout.exprId)
+      }
+      Project(attrs, filter)
   }
 }
 
