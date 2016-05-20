@@ -136,7 +136,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     // TODO: Remove this once we migrate to java8 and use longValueExact() instead.
     require(
       bigintval.compareTo(LONG_MAX_BIG_INT) <= 0 && bigintval.compareTo(LONG_MIN_BIG_INT) >= 0,
-      s"BigInteger ${bigintval} too large for decimal")
+      s"BigInteger $bigintval too large for decimal")
     this.decimalVal = null
     this.longVal = bigintval.longValue()
     this._precision = DecimalType.MAX_PRECISION
@@ -396,7 +396,7 @@ object Decimal {
 
   def apply(value: BigInteger): Decimal = new Decimal().set(value)
 
-  def apply(value: scala.math.BigInt): Decimal = new Decimal().set(value.bigInteger)
+  def apply(value: BigInt): Decimal = new Decimal().set(value.bigInteger)
 
   def apply(value: BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
@@ -414,7 +414,7 @@ object Decimal {
     value match {
       case j: java.math.BigDecimal => apply(j)
       case d: BigDecimal => apply(d)
-      case k: scala.math.BigInt => apply(k)
+      case k: BigInt => apply(k)
       case l: BigInteger => apply(l)
       case d: Decimal => d
     }
