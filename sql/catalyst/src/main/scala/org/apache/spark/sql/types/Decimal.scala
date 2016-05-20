@@ -136,9 +136,9 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     try {
       this.decimalVal = null
       // TODO: Remove this once we migrate to java8 and use longValueExact() instead.
-      val isExactLong = bigintval.compareTo(BigInteger.valueOf(JLong.MAX_VALUE)) <= 0 &&
-        bigintval.compareTo(BigInteger.valueOf(JLong.MIN_VALUE)) >= 0
-      if(isExactLong) {
+      val isExactLong = bigintval.compareTo(LONG_MAX_BIG_INT) <= 0 &&
+        bigintval.compareTo(LONG_MIN_BIG_INT) >= 0
+      if (isExactLong) {
         this.longVal = bigintval.longValue()
       } else {
         throw new ArithmeticException()
@@ -389,6 +389,9 @@ object Decimal {
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
+
+  private[types] val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
+  private[types] val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 
