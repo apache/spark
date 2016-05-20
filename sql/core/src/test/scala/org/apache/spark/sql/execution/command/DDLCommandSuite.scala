@@ -268,7 +268,7 @@ class DDLCommandSuite extends PlanTest {
         assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
         assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
-        assertUnsupported(query, Seq("row format", "not compatible", s"stored as $s"))
+        assertUnsupported(query, Seq("row format serde", "incompatible", s))
       }
     }
   }
@@ -287,7 +287,7 @@ class DDLCommandSuite extends PlanTest {
         assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
         assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
       } else {
-        assertUnsupported(query, Seq("row format", "not compatible", s"stored as $s"))
+        assertUnsupported(query, Seq("row format delimited", "only compatible with 'textfile'", s))
       }
     }
   }

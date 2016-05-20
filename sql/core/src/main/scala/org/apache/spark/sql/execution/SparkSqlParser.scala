@@ -1005,6 +1005,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   /**
    * Throw a [[ParseException]] if the user specified incompatible SerDes through ROW FORMAT
    * and STORED AS.
+   *
+   * The following are allowed. Anything else is not:
+   *   ROW FORMAT SERDE ... STORED AS [SEQUENCEFILE | RCFILE | TEXTFILE]
+   *   ROW FORMAT DELIMITED ... STORED AS TEXTFILE
+   *   ROW FORMAT ... STORED AS INPUTFORMAT ... OUTPUTFORMAT ...
    */
   private def validateRowFormatFileFormat(
       rowFormatCtx: RowFormatContext,
@@ -1013,26 +1018,30 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (rowFormatCtx == null || createFileFormatCtx == null) {
       return
     }
-    val cff = (0 until createFileFormatCtx.getChildCount)
-      .map { i => createFileFormatCtx.getChild(i).getText }
-      .mkString(" ")
     (rowFormatCtx, createFileFormatCtx.fileFormat) match {
       case (_, ffTable: TableFileFormatContext) => // OK
       case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
         ffGeneric.identifier.getText.toLowerCase match {
           case ("sequencefile" | "textfile" | "rcfile") => // OK
-          case _ => throw operationNotAllowed(
-            s"ROW FORMAT SERDE is not compatible with $cff", parentCtx)
+          case fmt =>
+            throw operationNotAllowed(
+              s"ROW FORMAT SERDE is incompatible with format '$fmt', which also specifies a serde",
+              parentCtx)
         }
       case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
         ffGeneric.identifier.getText.toLowerCase match {
           case "textfile" => // OK
-          case _ => throw operationNotAllowed(
-            s"ROW FORMAT SERDE is not compatible with $cff", parentCtx)
+          case fmt => throw operationNotAllowed(
+            s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)
         }
-      case (rf, ff) =>
+      case _ =>
         // should never happen
-        throw operationNotAllowed(s"Unexpected combination of ROW FORMAT and $cff", parentCtx)
+        def str(ctx: ParserRuleContext): String = {
+          (0 until ctx.getChildCount).map { i => ctx.getChild(i).getText }.mkString(" ")
+        }
+        throw operationNotAllowed(
+          s"Unexpected combination of ${str(rowFormatCtx)} and ${str(createFileFormatCtx)}",
+          parentCtx)
     }
   }
 
