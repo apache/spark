@@ -73,11 +73,11 @@ public class JavaSparkSQL {
         }
       });
 
-    // Apply a schema to an RDD of Java Beans and register it as a table.
+    // Apply a schema to an RDD of Java Beans and create a temporary view
     Dataset<Row> schemaPeople = spark.createDataFrame(people, Person.class);
     schemaPeople.createOrReplaceTempView("people");
 
-    // SQL can be run over RDDs that have been registered as tables.
+    // SQL can be run over RDDs which backs a temporary view.
     Dataset<Row> teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
     // The results of SQL queries are DataFrames and support all the normal RDD operations.
@@ -101,7 +101,7 @@ public class JavaSparkSQL {
     // The result of loading a parquet file is also a DataFrame.
     Dataset<Row> parquetFile = spark.read().parquet("people.parquet");
 
-    //Parquet files can also be registered as tables and then used in SQL statements.
+    // A temporary view can be created by using Parquet files and then used in SQL statements.
     parquetFile.createOrReplaceTempView("parquetFile");
     Dataset<Row> teenagers2 =
       spark.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
@@ -130,7 +130,7 @@ public class JavaSparkSQL {
     //  |-- age: IntegerType
     //  |-- name: StringType
 
-    // Register this DataFrame as a table.
+    // Creates a temporary view using the DataFrame
     peopleFromJsonFile.createOrReplaceTempView("people");
 
     // SQL statements can be run by using the sql methods provided by `spark`

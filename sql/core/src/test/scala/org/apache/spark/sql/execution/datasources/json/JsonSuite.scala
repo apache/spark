@@ -239,7 +239,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         StructField("nullstr", StringType, true):: Nil)
 
     assert(expectedSchema === jsonDF.schema)
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select nullstr, headers.Host from jsonTable"),
@@ -261,7 +261,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -302,7 +302,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     // Access elements of a primitive array.
     checkAnswer(
@@ -376,7 +376,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("GetField operation on complex data type") {
     val jsonDF = spark.read.json(complexFieldAndType1)
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
@@ -403,7 +403,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -464,7 +464,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   ignore("Type conflict in primitive field values (Ignored)") {
     val jsonDF = spark.read.json(primitiveFieldValueTypeConflict)
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     // Right now, the analyzer does not promote strings in a boolean expression.
     // Number and Boolean conflict: resolve the type as boolean in this query.
@@ -528,7 +528,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -550,7 +550,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -580,7 +580,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
   }
 
   test("Loading a JSON dataset from a text file") {
@@ -601,7 +601,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -633,7 +633,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -674,7 +674,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     // Access elements of a primitive array.
     checkAnswer(
@@ -759,7 +759,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(expectedSchema === jsonDF.schema)
 
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select * from jsonTable"),
@@ -885,7 +885,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(schema === jsonDF1.schema)
 
-    jsonDF1.registerTempTable("jsonTable1")
+    jsonDF1.createOrReplaceTempView("jsonTable1")
 
     checkAnswer(
       sql("select * from jsonTable1"),
@@ -902,7 +902,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     assert(schema === jsonDF2.schema)
 
-    jsonDF2.registerTempTable("jsonTable2")
+    jsonDF2.createOrReplaceTempView("jsonTable2")
 
     checkAnswer(
       sql("select * from jsonTable2"),
@@ -921,7 +921,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       StructField("map", MapType(StringType, IntegerType, true), false) :: Nil)
     val jsonWithSimpleMap = spark.read.schema(schemaWithSimpleMap).json(mapType1)
 
-    jsonWithSimpleMap.registerTempTable("jsonWithSimpleMap")
+    jsonWithSimpleMap.createOrReplaceTempView("jsonWithSimpleMap")
 
     checkAnswer(
       sql("select `map` from jsonWithSimpleMap"),
@@ -949,7 +949,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val jsonWithComplexMap = spark.read.schema(schemaWithComplexMap).json(mapType2)
 
-    jsonWithComplexMap.registerTempTable("jsonWithComplexMap")
+    jsonWithComplexMap.createOrReplaceTempView("jsonWithComplexMap")
 
     checkAnswer(
       sql("select `map` from jsonWithComplexMap"),
@@ -974,7 +974,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-2096 Correctly parse dot notations") {
     val jsonDF = spark.read.json(complexFieldAndType2)
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql("select arrayOfStruct[0].field1, arrayOfStruct[0].field2 from jsonTable"),
@@ -992,7 +992,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-3390 Complex arrays") {
     val jsonDF = spark.read.json(complexFieldAndType2)
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql(
@@ -1015,7 +1015,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-3308 Read top level JSON arrays") {
     val jsonDF = spark.read.json(jsonArray)
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     checkAnswer(
       sql(
@@ -1084,7 +1084,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     withSQLConf(SQLConf.COLUMN_NAME_OF_CORRUPT_RECORD.key -> "_unparsed") {
       withTempTable("jsonTable") {
         val jsonDF = spark.read.json(corruptRecords)
-        jsonDF.registerTempTable("jsonTable")
+        jsonDF.createOrReplaceTempView("jsonTable")
         val schema = StructType(
           StructField("_unparsed", StringType, true) ::
           StructField("a", StringType, true) ::
@@ -1156,7 +1156,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
   test("SPARK-4068: nulls in arrays") {
     val jsonDF = spark.read.json(nullsInArrays)
-    jsonDF.registerTempTable("jsonTable")
+    jsonDF.createOrReplaceTempView("jsonTable")
 
     val schema = StructType(
       StructField("field1",
@@ -1202,7 +1202,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     val df1 = spark.createDataFrame(rowRDD1, schema1)
-    df1.registerTempTable("applySchema1")
+    df1.createOrReplaceTempView("applySchema1")
     val df2 = df1.toDF
     val result = df2.toJSON.collect()
     // scalastyle:off
@@ -1225,7 +1225,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
     }
 
     val df3 = spark.createDataFrame(rowRDD2, schema2)
-    df3.registerTempTable("applySchema2")
+    df3.createOrReplaceTempView("applySchema2")
     val df4 = df3.toDF
     val result2 = df4.toJSON.collect()
 
@@ -1234,7 +1234,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val jsonDF = spark.read.json(primitiveFieldAndType)
     val primTable = spark.read.json(jsonDF.toJSON.rdd)
-    primTable.registerTempTable("primitiveTable")
+    primTable.createOrReplaceTempView("primitiveTable")
     checkAnswer(
         sql("select * from primitiveTable"),
       Row(new java.math.BigDecimal("92233720368547758070"),
@@ -1247,7 +1247,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
     val complexJsonDF = spark.read.json(complexFieldAndType1)
     val compTable = spark.read.json(complexJsonDF.toJSON.rdd)
-    compTable.registerTempTable("complexTable")
+    compTable.createOrReplaceTempView("complexTable")
     // Access elements of a primitive array.
     checkAnswer(
       sql("select arrayOfString[0], arrayOfString[1], arrayOfString[2] from complexTable"),
@@ -1387,7 +1387,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         "col1",
         "abd")
 
-        spark.read.json(root.getAbsolutePath).registerTempTable("test_myjson_with_part")
+        spark.read.json(root.getAbsolutePath).createOrReplaceTempView("test_myjson_with_part")
         checkAnswer(sql(
           "SELECT count(a) FROM test_myjson_with_part where d1 = 1 and col1='abc'"), Row(4))
         checkAnswer(sql(
@@ -1531,7 +1531,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
 
         {
           val jsonDF = spark.read.schema(schema).json(additionalCorruptRecords)
-          jsonDF.registerTempTable("jsonTable")
+          jsonDF.createOrReplaceTempView("jsonTable")
 
           // In HiveContext, backticks should be used to access columns starting with a underscore.
           checkAnswer(
@@ -1639,7 +1639,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
       val schema = (new StructType).add("ts", TimestampType)
       val jsonDF = spark.read.schema(schema).json(timestampAsLong)
 
-      jsonDF.registerTempTable("jsonTable")
+      jsonDF.createOrReplaceTempView("jsonTable")
 
       checkAnswer(
         sql("select ts from jsonTable"),

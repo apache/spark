@@ -186,7 +186,7 @@ class SparkSession(object):
     def newSession(self):
         """
         Returns a new SparkSession as new session, that has separate SQLConf,
-        registered temporary tables and UDFs, but shared SparkContext and
+        registered temporary views and UDFs, but shared SparkContext and
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
@@ -465,6 +465,8 @@ class SparkSession(object):
                 return (obj, )
             schema = StructType().add("value", datatype)
         else:
+            if isinstance(schema, list):
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):
