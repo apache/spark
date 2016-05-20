@@ -19,25 +19,22 @@ package org.apache.spark.sql
 
 import java.beans.BeanInfo
 import java.util.Properties
-import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
-import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
-import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types._
@@ -91,7 +88,6 @@ class SQLContext private[sql](
   protected[sql] def conf: SQLConf = sessionState.conf
   protected[sql] def runtimeConf: RuntimeConfig = sparkSession.conf
   protected[sql] def cacheManager: CacheManager = sparkSession.cacheManager
-  protected[sql] def listener: SQLListener = sparkSession.listener
   protected[sql] def externalCatalog: ExternalCatalog = sparkSession.externalCatalog
 
   def sparkContext: SparkContext = sparkSession.sparkContext
@@ -752,8 +748,6 @@ class SQLContext private[sql](
  */
 object SQLContext {
 
-  @transient private val sqlListener = new AtomicReference[SQLListener]()
-
   /**
    * Get the singleton SQLContext if it exists or create a new one using the given SparkContext.
    *
@@ -768,10 +762,6 @@ object SQLContext {
   @deprecated("Use SparkSession.builder instead", "2.0.0")
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
-  }
-
-  private[sql] def clearSqlListener(): Unit = {
-    sqlListener.set(null)
   }
 
   /**
@@ -816,20 +806,6 @@ object SQLContext {
         methodsToConverts.map { case (e, convert) => convert(e.invoke(element)) }.toArray[Any]
       ): InternalRow
     }
-  }
-
-  /**
-   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
-   */
-  private[sql] def createListenerAndUI(sc: SparkContext): SQLListener = {
-    if (sqlListener.get() == null) {
-      val listener = new SQLListener(sc.conf)
-      if (sqlListener.compareAndSet(null, listener)) {
-        sc.addSparkListener(listener)
-        sc.ui.foreach(new SQLTab(listener, _))
-      }
-    }
-    sqlListener.get()
   }
 
   /**

@@ -50,7 +50,7 @@ trait SharedSQLContext extends SQLTestUtils {
    * Initialize the [[TestSparkSession]].
    */
   protected override def beforeAll(): Unit = {
-    SQLContext.clearSqlListener()
+    SparkSession.sqlListener.set(null)
     if (_spark == null) {
       _spark = new TestSparkSession(sparkConf)
     }

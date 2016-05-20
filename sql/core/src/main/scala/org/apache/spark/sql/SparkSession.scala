@@ -782,7 +782,7 @@ object SparkSession {
         sparkContext.addSparkListener(new SparkListener {
           override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
             defaultSession.set(null)
-            // TODO(rxin): Do we need to also clear SQL listener?
+            sqlListener.set(null)
           }
         })
       }
@@ -841,18 +841,17 @@ object SparkSession {
 
   private[sql] def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
 
+  /** A global SQL listener used for the SQL UI. */
+  private[sql] val sqlListener = new AtomicReference[SQLListener]()
+
   ////////////////////////////////////////////////////////////////////////////////////////
   // Private methods from now on
   ////////////////////////////////////////////////////////////////////////////////////////
 
-  /**
-   * The active SparkSession for the current thread.
-   */
+  /** The active SparkSession for the current thread. */
   private val activeThreadSession = new InheritableThreadLocal[SparkSession]
 
-  /**
-   * Reference to the root SparkSession.
-   */
+  /** Reference to the root SparkSession. */
   private val defaultSession = new AtomicReference[SparkSession]
 
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
