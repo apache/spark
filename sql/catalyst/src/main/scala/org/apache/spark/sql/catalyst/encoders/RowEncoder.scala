@@ -149,29 +149,29 @@ object RowEncoder {
         dataType = t)
 
     case StructType(fields) =>
-      val convertedFields = fields.zipWithIndex.flatMap { case (f, i) =>
+      val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
         val fieldValue = serializerFor(
-          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType)),
-          f.dataType
+          GetExternalRowField(inputObject, index, externalDataTypeForInput(field.dataType)),
+          field.dataType
         )
-        val convertedField = if (f.nullable) {
+        val convertedField = if (field.nullable) {
           If(
-            Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
-            Literal.create(null, f.dataType),
+            Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
+            Literal.create(null, field.dataType),
             fieldValue
           )
         } else {
           fieldValue
         }
-        Array(Literal(f.name), convertedField)
-      }
+        Literal(field.name) :: convertedField :: Nil
+      })
 
       if (inputObject.nullable) {
         If(IsNull(inputObject),
           Literal.create(null, inputType),
-          CreateNamedStruct(convertedFields))
+          nonNullOutput)
       } else {
-        CreateNamedStruct(convertedFields)
+        nonNullOutput
       }
   }
 
