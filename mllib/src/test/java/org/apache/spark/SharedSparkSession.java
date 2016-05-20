@@ -14,28 +14,35 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.mllib.fpm;
 
-import java.util.Arrays;
+package org.apache.spark;
 
-import org.junit.Test;
+import java.io.IOException;
+import java.io.Serializable;
 
-import org.apache.spark.SharedSparkSession;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
+import org.junit.After;
+import org.junit.Before;
 
-public class JavaAssociationRulesSuite extends SharedSparkSession {
+import org.apache.spark.api.java.JavaSparkContext;
+import org.apache.spark.sql.SparkSession;
 
-  @Test
-  public void runAssociationRules() {
+public abstract class SharedSparkSession implements Serializable {
 
-    @SuppressWarnings("unchecked")
-    JavaRDD<FPGrowth.FreqItemset<String>> freqItemsets = jsc.parallelize(Arrays.asList(
-      new FreqItemset<String>(new String[]{"a"}, 15L),
-      new FreqItemset<String>(new String[]{"b"}, 35L),
-      new FreqItemset<String>(new String[]{"a", "b"}, 12L)
-    ));
+  protected transient SparkSession spark;
+  protected transient JavaSparkContext jsc;
 
-    JavaRDD<AssociationRules.Rule<String>> results = (new AssociationRules()).run(freqItemsets);
+  @Before
+  public void setUp() throws IOException {
+    spark = SparkSession.builder()
+      .master("local[2]")
+      .appName(getClass().getSimpleName())
+      .getOrCreate();
+    jsc = new JavaSparkContext(spark.sparkContext());
+  }
+
+  @After
+  public void tearDown() {
+    spark.stop();
+    spark = null;
   }
 }
