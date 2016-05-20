@@ -763,6 +763,7 @@ object SQLContext {
    *
    * @since 1.5.0
    */
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def getOrCreate(sparkContext: SparkContext): SQLContext = {
     SparkSession.builder().sparkContext(sparkContext).getOrCreate().sqlContext
   }
@@ -778,6 +779,7 @@ object SQLContext {
    *
    * @since 1.6.0
    */
+  @deprecated("Use SparkSession.setActiveSession instead", "2.0.0")
   def setActive(sqlContext: SQLContext): Unit = {
     SparkSession.setActiveSession(sqlContext.sparkSession)
   }
@@ -788,6 +790,7 @@ object SQLContext {
    *
    * @since 1.6.0
    */
+  @deprecated("Use SparkSession.clearActiveSession instead", "2.0.0")
   def clearActive(): Unit = {
     SparkSession.clearActiveSession()
   }
