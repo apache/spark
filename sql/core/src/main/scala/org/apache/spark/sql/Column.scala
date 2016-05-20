@@ -39,10 +39,10 @@ private[sql] object Column {
 
   def unapply(col: Column): Option[Expression] = Some(col.expr)
 
-  private[sql] def generateAlias(e: Expression, index: Int): String = {
+  private[sql] def generateAlias(e: Expression): String = {
     e match {
       case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
-        s"${a.aggregateFunction.prettyName}_c${index}"
+        a.aggregateFunction.toString
       case expr => usePrettyExpression(expr).sql
     }
   }
