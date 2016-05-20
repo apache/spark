@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, NamedExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
@@ -94,6 +95,26 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     streamRelation.groupBy("a")("count(*)"),
     outputMode = Append,
     Seq("aggregation", "append output mode"))
+
+  // Multiple streaming aggregations not supported
+  def aggExprs(name: String): Seq[NamedExpression] = Seq(Count("*").as(name))
+
+  assertSupportedInStreamingPlan(
+    "aggregate - multiple batch aggregations",
+    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), batchRelation)),
+    Update)
+
+  assertSupportedInStreamingPlan(
+    "aggregate - multiple aggregations but only one streaming aggregation",
+    Aggregate(Nil, aggExprs("c"), batchRelation).join(
+      Aggregate(Nil, aggExprs("d"), streamRelation), joinType = Inner),
+    Update)
+
+  assertNotSupportedInStreamingPlan(
+    "aggregate - multiple streaming aggregations",
+    Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), streamRelation)),
+    outputMode = Update,
+    expectedMsgs = Seq("multiple streaming aggregations"))
 
   // Inner joins: Stream-stream not supported
   testBinaryOperationInStreamingPlan(
@@ -354,17 +375,11 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       val e = intercept[AnalysisException] {
         testBody
       }
-
-      if (!expectedMsgs.map(_.toLowerCase).forall(e.getMessage.toLowerCase.contains)) {
-        fail(
-          s"""Exception message should contain the following substrings:
-              |
-          |  ${expectedMsgs.mkString("\n  ")}
-              |
-          |Actual exception message:
-              |
-          |  ${e.getMessage}
-          """.stripMargin)
+      expectedMsgs.foreach { m =>
+        if (!e.getMessage.toLowerCase.contains(m.toLowerCase)) {
+          fail(s"Exception message should contain: '$m', " +
+            s"actual exception message:\n\t'${e.getMessage}'")
+        }
       }
     }
   }
