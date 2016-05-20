@@ -87,10 +87,19 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
     runSuccessfulJob(40)
   }
 
-  testScheduler("Scheduling speed -- large job on a small cluster") {
+  testScheduler("COMPARE C Scheduling speed -- large job on a small cluster") {
     runSuccessfulJob(3000)
   }
 
+  testScheduler(
+    "COMPARE C Scheduling speed -- large job on a small cluster with advanced blacklist",
+    extraConfs = Seq(
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
+      "spark.scheduler.blacklist.advancedStrategy" -> "true"
+    )
+  ) {
+    runSuccessfulJob(3000)
+  }
 
   testScheduler(
     "Scheduling speed -- large job on a super node",
@@ -125,18 +134,22 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   Seq(200, 300, 400, 450, 500, 550).foreach { nodes =>
     /*
-ran 1 iterations in 12.9 s (12.9 s per itr)
-[info] - COMPARE A: Scheduling speed -- large job on 200 node cluster (13 seconds, 861 milliseconds)
-ran 1 iterations in 25.0 s (25.0 s per itr)
-[info] - COMPARE A: Scheduling speed -- large job on 300 node cluster (25 seconds, 50 milliseconds)
-ran 1 iterations in 34.6 s (34.6 s per itr)
-[info] - COMPARE A: Scheduling speed -- large job on 400 node cluster (34 seconds, 668 milliseconds)
-ran 1 iterations in 54.0 s (54.0 s per itr)
-[info] - COMPARE A: Scheduling speed -- large job on 450 node cluster (53 seconds, 991 milliseconds)
-ran 1 iterations in 1.8 m (1.8 m per itr)
-[info] - COMPARE A: Scheduling speed -- large job on 500 node cluster (1 minute, 48 seconds)
-ran 1 iterations in 2.3 m (2.3 m per itr)
-[info] - COMPARE A: Scheduling speed -- large job on 550 node cluster (2 minutes, 19 seconds)
+  ran 1 iterations in 12.9 s (12.9 s per itr)
+  [info] - COMPARE A: Scheduling speed -- large job on 200 node cluster (13 seconds, 861
+   milliseconds)
+  ran 1 iterations in 25.0 s (25.0 s per itr)
+  [info] - COMPARE A: Scheduling speed -- large job on 300 node cluster (25 seconds, 50
+   milliseconds)
+  ran 1 iterations in 34.6 s (34.6 s per itr)
+  [info] - COMPARE A: Scheduling speed -- large job on 400 node cluster (34 seconds,
+   668 milliseconds)
+  ran 1 iterations in 54.0 s (54.0 s per itr)
+  [info] - COMPARE A: Scheduling speed -- large job on 450 node cluster (53 seconds,
+   991 milliseconds)
+  ran 1 iterations in 1.8 m (1.8 m per itr)
+  [info] - COMPARE A: Scheduling speed -- large job on 500 node cluster (1 minute, 48 seconds)
+  ran 1 iterations in 2.3 m (2.3 m per itr)
+  [info] - COMPARE A: Scheduling speed -- large job on 550 node cluster (2 minutes, 19 seconds)
      */
     testScheduler(
       s"COMPARE A: Scheduling speed -- large job on ${nodes} node cluster",
@@ -149,15 +162,15 @@ ran 1 iterations in 2.3 m (2.3 m per itr)
   }
 
   /*
-nHosts = 400; nExecutorsPerHost = 1; nCores = 800
-ran 2 iterations in 11.7 s (5.9 s per itr)
-[info] - COMPARE B: Lots of nodes (12 seconds, 679 milliseconds)
-nHosts = 1; nExecutorsPerHost = 400; nCores = 800
-ran 3 iterations in 14.2 s (4.7 s per itr)
-[info] - COMPARE B: Lots of executors, one node (14 seconds, 290 milliseconds)
-nHosts = 1; nExecutorsPerHost = 1; nCores = 800
-ran 3 iterations in 11.0 s (3.7 s per itr)
-[info] - COMPARE B: Super executor (11 seconds, 6 milliseconds)
+  nHosts = 400; nExecutorsPerHost = 1; nCores = 800
+  ran 2 iterations in 11.7 s (5.9 s per itr)
+  [info] - COMPARE B: Lots of nodes (12 seconds, 679 milliseconds)
+  nHosts = 1; nExecutorsPerHost = 400; nCores = 800
+  ran 3 iterations in 14.2 s (4.7 s per itr)
+  [info] - COMPARE B: Lots of executors, one node (14 seconds, 290 milliseconds)
+  nHosts = 1; nExecutorsPerHost = 1; nCores = 800
+  ran 3 iterations in 11.0 s (3.7 s per itr)
+  [info] - COMPARE B: Super executor (11 seconds, 6 milliseconds)
    */
   testScheduler(
     s"COMPARE B: Lots of nodes",
@@ -224,9 +237,29 @@ ran 3 iterations in 11.0 s (3.7 s per itr)
   // one bad executor out of 20.  When a task fails, it gets requeued immediately -- and guess
   // which is the only executor which has a free slot?  Bingo, the one it just failed on
   testScheduler(
-    "bad execs, no blacklist",
+    "bad execs with blacklist",
     extraConfs = Seq(
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
+    )
+  ) {
+    runBadExecJob(3000, badExecs, badHosts)
+  }
+
+  testScheduler(
+    "COMPARE D bad execs with advanced blacklist",
+    extraConfs = Seq(
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
+      "spark.scheduler.blacklist.advancedStrategy" -> "true"
+    )
+  ) {
+    runBadExecJob(3000, badExecs, badHosts)
+  }
+
+  testScheduler(
+    "COMPARE D bad execs with simple blacklist",
+    extraConfs = Seq(
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
+      "spark.scheduler.blacklist.advancedStrategy" -> "false"
     )
   ) {
     runBadExecJob(3000, badExecs, badHosts)
