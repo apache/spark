@@ -57,6 +57,12 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed, expected)
   }
 
+  test("create database - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE DATABASE my_db WITH DBPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
   test("drop database") {
     val sql1 = "DROP DATABASE IF EXISTS database_name RESTRICT"
     val sql2 = "DROP DATABASE IF EXISTS database_name CASCADE"
@@ -119,6 +125,12 @@ class DDLCommandSuite extends PlanTest {
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+  }
+
+  test("alter database - property values must be set") {
+    assertUnsupported(
+      sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
   }
 
   test("describe database") {
@@ -226,6 +238,16 @@ class DDLCommandSuite extends PlanTest {
         fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
           s"got ${other.getClass.getName}: $query")
     }
+  }
+
+  test("create table - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+    assertUnsupported(
+      sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
+        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
   }
 
   test("create table - location implies external") {
@@ -349,6 +371,18 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed3_view, expected3_view)
   }
 
+  test("alter table - property values must be set") {
+    assertUnsupported(
+      sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("alter table unset properties - property values must NOT be set") {
+    assertUnsupported(
+      sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_with_value"))
+  }
+
   test("alter table: SerDe properties") {
     val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val sql2 =
@@ -402,6 +436,13 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
     comparePlans(parsed5, expected5)
+  }
+
+  test("alter table - SerDe property values must be set") {
+    assertUnsupported(
+      sql = "ALTER TABLE my_tab SET SERDE 'serde' " +
+        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
   }
 
   // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION partition_spec
