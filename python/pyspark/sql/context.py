@@ -196,7 +196,28 @@ class SQLContext(object):
         >>> sqlContext.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """
-        self.sparkSession.catalog.registerFunction(name, f, returnType)
+        return self.sparkSession.catalog.registerFunction(name, f, returnType)
+
+    @since(2.1)
+    def registerJythonFunction(self, name, f, returnType=StringType()):
+        """
+        Register a function to be executed using Jython on the workers.
+        The function passed in must either be a string containing Python your python lambda,
+        or if you have dill installed on the driver a bare lambda.
+        Note that not all Python code will execute in Jython and not all Python
+        code will execute well in Jython. However, for some UDFs, executing in Jython
+        may be faster as we can avoid copying the data from the JVM to the Python
+        executor.
+
+        This is a very experimental feature, and may be removed in future versions
+        once we figure out if it is a good idea or not.
+        ...Note: Experimental
+
+        :param name: name of the UDF
+        :param f: String containing python lambda or python function
+        :param returnType: a :class:`DataType` object
+        """
+        return self.sparkSession.catalog.registerJythonFunction(name, f, returnType)
 
     # TODO(andrew): delete this once we refactor things to take in SparkSession
     def _inferSchema(self, rdd, samplingRatio=None):

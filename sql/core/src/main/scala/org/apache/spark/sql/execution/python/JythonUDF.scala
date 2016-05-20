@@ -31,13 +31,29 @@ import org.apache.spark.sql.types.DataType
 private[spark] class JythonUDF(
     name: String,
     func: JythonFunction,
+    sfunc: AnyRef,
     dataType: DataType,
     children: Seq[Expression])
-  extends ScalaUDF(func.toScalaFunc(), dataType, children) {
+  extends ScalaUDF(sfunc, dataType, children) {
+
+  // For the copy constructor
+  def this(sfunc: AnyRef, dataType: DataType, children: Seq[Expression],
+    inputTypes: Seq[DataType], name: String, func: JythonFunction) = {
+    this(name, func, sfunc, dataType, children)
+  }
+
+  def this(name: String, func: JythonFunction, dataType: DataType, children: Seq[Expression]) {
+    this(name, func, func.toScalaFunc(), dataType, children)
+  }
 
   override def toString: String = s"JythonUDF_$name(${children.mkString(", ")})"
 
   override def nullable: Boolean = true
+
+  override protected def otherCopyArgs: Seq[AnyRef] = {
+    println("sup copying ")
+    List(name, func)
+  }
 }
 
 /**
@@ -51,7 +67,7 @@ case class JythonFunction(src: String, pythonVars: String) {
     val jython = JythonFunc.jython
     val className = s"__reservedPandaClass"
     val code = s"""
-for k, v in ${pythonVars}:
+for k, v in pickle.load(${pythonVars}):
   exec "%s = v" % k
 class ${className}(object):
   def __init__(self):
@@ -91,5 +107,9 @@ class LazyJythonFunc(code: String, className: String) extends Serializable {
  */
 object JythonFunc {
   lazy val mgr = new ScriptEngineManager()
-  lazy val jython = mgr.getEngineByName("python")
+  lazy val jython = {
+    val engine = mgr.getEngineByName("python")
+    engine.eval("import pickle")
+    engine
+  }
 }

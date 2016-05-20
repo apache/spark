@@ -23,8 +23,22 @@ import sys
 
 if sys.version < "3":
     from itertools import imap as map
+    try:
+        import cPickle as pickle
+    except:
+        import pickle
+    protocol = 2
+    try:
+        from cStringIO import StringIO
+    except ImportError:
+        from StringIO import StringIO
+else:
+    import pickle
+    protocol = 3
+    xrange = range
+    from io import BytesIO as StringIO
 
-from pyspark import since, SparkContext
+from pyspark import since, SparkContext, cloudpickle
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
 from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
@@ -1710,11 +1724,66 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
+@ignore_unicode_prefix
+def _wrap_jython_func(sc, src, extra, returnType):
+    return sc._jvm.org.apache.spark.sql.execution.python.JythonFunction(
+        src, extra)
+
 def _wrap_function(sc, func, returnType):
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
+class UserDefinedJythonFunction(object):
+    """
+    User defined function in Jython - note this might be a bad idea to use.
+
+    .. versionadded:: 2.0
+    .. Note: Experimental
+    """
+    def __init__(self, func, returnType, name=None):
+        self.func = func
+        self.returnType = returnType
+        self._broadcast = None
+        self._judf = self._create_judf(name)
+
+    def _create_judf(self, name):
+        func = self.func
+        from pyspark.sql import SQLContext
+        sc = SparkContext.getOrCreate()
+        if isinstance(func, basestring):
+            src = func
+            extra = {}
+        else:
+            try:
+                import dill
+            except ImportError:
+                raise ImportError("Failed to import dill, magic JYthon function serialization depends on dill on the driver machine")
+            src = dill.source.getsource(func)
+            file = StringIO()
+            cp = cloudpickle.CloudPickler(file)
+            code, f_globals, defaults, closure, dct, base_globals = cp.extract_func_data(func)
+            extra = dict(base_globals).update(f_globals)
+        ctx = SQLContext.getOrCreate(sc)
+        jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
+        if name is None:
+            f = self.func
+            name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
+        wrapped_jython_func = _wrap_jython_func(sc, src, pickle.dumps(extra), self.returnType)
+        judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedJythonFunction(
+            name, wrapped_jython_func, jdt)
+        return judf
+
+    def __del__(self):
+        if self._broadcast is not None:
+            self._broadcast.unpersist()
+            self._broadcast = None
+
+    def __call__(self, *cols):
+        sc = SparkContext._active_spark_context
+        jc = self._judf.apply(_to_seq(sc, cols, _to_java_column))
+        return Column(jc)
 
 
 class UserDefinedFunction(object):
