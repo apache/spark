@@ -371,11 +371,9 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   override lazy val dataType: StructType = {
     val fields = names.zip(valExprs).map {
       case (name, valExpr: NamedExpression) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, valExpr.metadata)
+        StructField(name, valExpr.dataType, valExpr.nullable, valExpr.metadata)
       case (name, valExpr) =>
-        StructField(name.asInstanceOf[UTF8String].toString,
-          valExpr.dataType, valExpr.nullable, Metadata.empty)
+        StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
     }
     StructType(fields)
   }
