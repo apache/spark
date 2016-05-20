@@ -18,7 +18,6 @@
 package org.apache.spark.ml.tuning;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.List;
 
 import org.junit.Assert;
@@ -26,15 +25,15 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.classification.LogisticRegression;
-import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.ml.param.ParamMap;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateLogisticInputAsList;
 
 
-public class JavaCrossValidatorSuite extends SharedSparkSession implements Serializable {
+public class JavaCrossValidatorSuite extends SharedSparkSession {
 
   private transient Dataset<Row> dataset;
 

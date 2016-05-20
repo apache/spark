@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.fpm;
 
 import java.io.File;
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -30,7 +29,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.util.Utils;
 
-public class JavaFPGrowthSuite extends SharedSparkSession implements Serializable {
+public class JavaFPGrowthSuite extends SharedSparkSession {
 
   @Test
   public void runFPGrowth() {

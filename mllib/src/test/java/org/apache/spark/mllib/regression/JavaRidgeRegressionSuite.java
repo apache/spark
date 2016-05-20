@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.regression;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Random;
 
@@ -28,7 +27,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.util.LinearDataGenerator;
 
-public class JavaRidgeRegressionSuite extends SharedSparkSession implements Serializable {
+public class JavaRidgeRegressionSuite extends SharedSparkSession {
 
   private static double predictionError(List<LabeledPoint> validationData,
                                         RidgeRegressionModel model) {

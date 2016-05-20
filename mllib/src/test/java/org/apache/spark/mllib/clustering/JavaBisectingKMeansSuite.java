@@ -17,8 +17,6 @@
 
 package org.apache.spark.mllib.clustering;
 
-import java.io.Serializable;
-
 import com.google.common.collect.Lists;
 
 import org.junit.Assert;
@@ -29,7 +27,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
-public class JavaBisectingKMeansSuite extends SharedSparkSession implements Serializable {
+public class JavaBisectingKMeansSuite extends SharedSparkSession {
 
   @Test
   public void twoDimensionalData() {

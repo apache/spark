@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.clustering;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -36,7 +35,7 @@ import org.apache.spark.mllib.linalg.Matrix;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
-public class JavaLDASuite extends SharedSparkSession implements Serializable {
+public class JavaLDASuite extends SharedSparkSession {
   @Override
   public void setUp() throws IOException {
     super.setUp();

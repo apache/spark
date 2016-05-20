@@ -18,20 +18,20 @@
 package org.apache.spark.ml.clustering;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+
+import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
-public class JavaKMeansSuite extends SharedSparkSession implements Serializable {
+public class JavaKMeansSuite extends SharedSparkSession {
 
   private transient int k = 5;
   private transient Dataset<Row> dataset;

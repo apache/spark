@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.feature;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,7 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
 
-public class JavaVectorIndexerSuite extends SharedSparkSession implements Serializable {
+public class JavaVectorIndexerSuite extends SharedSparkSession {
 
   @Test
   public void vectorIndexerAPI() {

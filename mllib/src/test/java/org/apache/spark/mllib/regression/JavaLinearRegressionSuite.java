@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.regression;
 
-import java.io.Serializable;
 import java.util.List;
 
 import org.junit.Assert;
@@ -29,7 +28,7 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.util.LinearDataGenerator;
 
-public class JavaLinearRegressionSuite extends SharedSparkSession implements Serializable {
+public class JavaLinearRegressionSuite extends SharedSparkSession {
 
   int validatePrediction(List<LabeledPoint> validationData, LinearRegressionModel model) {
     int numAccurate = 0;

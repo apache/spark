@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.List;
 
 import org.junit.Assert;
@@ -32,7 +31,7 @@ import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
-public class JavaLogisticRegressionSuite extends SharedSparkSession implements Serializable {
+public class JavaLogisticRegressionSuite extends SharedSparkSession {
 
   private transient Dataset<Row> dataset;
 

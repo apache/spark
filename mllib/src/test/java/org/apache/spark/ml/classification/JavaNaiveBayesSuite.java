@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -35,7 +34,7 @@ import org.apache.spark.sql.types.Metadata;
 import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 
-public class JavaNaiveBayesSuite extends SharedSparkSession implements Serializable {
+public class JavaNaiveBayesSuite extends SharedSparkSession {
 
   public void validatePrediction(Dataset<Row> predictionAndLabels) {
     for (Row r : predictionAndLabels.collectAsList()) {

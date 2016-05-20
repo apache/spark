@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.classification;
 
-import java.io.Serializable;
 import java.util.List;
 
 import org.junit.Assert;
@@ -27,7 +26,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.regression.LabeledPoint;
 
-public class JavaLogisticRegressionSuite extends SharedSparkSession implements Serializable {
+public class JavaLogisticRegressionSuite extends SharedSparkSession {
 
   int validatePrediction(List<LabeledPoint> validationData, LogisticRegressionModel model) {
     int numAccurate = 0;

@@ -18,7 +18,6 @@
 package org.apache.spark.ml.classification;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.List;
 
 import scala.collection.JavaConverters;
@@ -28,12 +27,12 @@ import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
+import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.ml.feature.LabeledPoint;
 import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 
-public class JavaOneVsRestSuite extends SharedSparkSession implements Serializable {
+public class JavaOneVsRestSuite extends SharedSparkSession {
 
   private transient Dataset<Row> dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;

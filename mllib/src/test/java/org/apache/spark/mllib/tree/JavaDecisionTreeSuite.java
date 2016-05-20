@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.tree;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 
@@ -34,7 +33,7 @@ import org.apache.spark.mllib.tree.configuration.Strategy;
 import org.apache.spark.mllib.tree.impurity.Gini;
 import org.apache.spark.mllib.tree.model.DecisionTreeModel;
 
-public class JavaDecisionTreeSuite extends SharedSparkSession implements Serializable {
+public class JavaDecisionTreeSuite extends SharedSparkSession {
 
   int validatePrediction(List<LabeledPoint> validationData, DecisionTreeModel model) {
     int numCorrect = 0;

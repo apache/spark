@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.regression;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -32,7 +31,7 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
 
-public class JavaDecisionTreeRegressorSuite extends SharedSparkSession implements Serializable {
+public class JavaDecisionTreeRegressorSuite extends SharedSparkSession {
 
   @Test
   public void runDT() {

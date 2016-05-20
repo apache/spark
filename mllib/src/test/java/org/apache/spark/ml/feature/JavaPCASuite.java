@@ -36,7 +36,7 @@ import org.apache.spark.mllib.linalg.distributed.RowMatrix;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
-public class JavaPCASuite extends SharedSparkSession implements Serializable {
+public class JavaPCASuite extends SharedSparkSession {
 
   public static class VectorPair implements Serializable {
     private Vector features = Vectors.dense(0.0);

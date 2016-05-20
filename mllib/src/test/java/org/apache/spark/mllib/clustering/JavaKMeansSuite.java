@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.clustering;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -30,7 +29,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Vector;
 import org.apache.spark.mllib.linalg.Vectors;
 
-public class JavaKMeansSuite extends SharedSparkSession implements Serializable {
+public class JavaKMeansSuite extends SharedSparkSession {
 
   @Test
   public void runKMeansUsingStaticMethods() {

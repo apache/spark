@@ -18,7 +18,6 @@
 package org.apache.spark.ml.regression;
 
 import java.io.IOException;
-import java.io.Serializable;
 import java.util.List;
 
 import org.junit.Test;
@@ -31,7 +30,7 @@ import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
-public class JavaLinearRegressionSuite extends SharedSparkSession implements Serializable {
+public class JavaLinearRegressionSuite extends SharedSparkSession {
   private transient Dataset<Row> dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;
 

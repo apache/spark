@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -31,7 +30,7 @@ import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
 public class JavaMultilayerPerceptronClassifierSuite
-  extends SharedSparkSession implements Serializable {
+  extends SharedSparkSession {
 
   @Test
   public void testMLPC() {

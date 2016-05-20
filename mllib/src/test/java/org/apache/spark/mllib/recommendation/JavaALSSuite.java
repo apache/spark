@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.recommendation;
 
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,7 +30,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 
-public class JavaALSSuite extends SharedSparkSession implements Serializable {
+public class JavaALSSuite extends SharedSparkSession {
 
   private void validatePrediction(
     MatrixFactorizationModel model,

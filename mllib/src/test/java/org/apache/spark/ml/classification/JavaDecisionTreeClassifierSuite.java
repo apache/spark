@@ -17,7 +17,6 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,7 +29,7 @@ import org.apache.spark.ml.tree.impl.TreeTests;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
 
-public class JavaDecisionTreeClassifierSuite extends SharedSparkSession implements Serializable {
+public class JavaDecisionTreeClassifierSuite extends SharedSparkSession {
 
   @Test
   public void runDT() {

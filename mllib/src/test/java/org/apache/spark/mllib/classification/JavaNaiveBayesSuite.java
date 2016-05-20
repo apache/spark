@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.classification;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -32,7 +31,7 @@ import org.apache.spark.mllib.linalg.Vectors;
 import org.apache.spark.mllib.regression.LabeledPoint;
 
 
-public class JavaNaiveBayesSuite extends SharedSparkSession implements Serializable {
+public class JavaNaiveBayesSuite extends SharedSparkSession {
 
   private static final List<LabeledPoint> POINTS = Arrays.asList(
     new LabeledPoint(0, Vectors.dense(1.0, 0.0, 0.0)),

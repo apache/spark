@@ -16,7 +16,6 @@
  */
 package org.apache.spark.mllib.fpm;
 
-import java.io.Serializable;
 import java.util.Arrays;
 
 import org.junit.Test;
@@ -25,7 +24,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.fpm.FPGrowth.FreqItemset;
 
-public class JavaAssociationRulesSuite extends SharedSparkSession implements Serializable {
+public class JavaAssociationRulesSuite extends SharedSparkSession {
 
   @Test
   public void runAssociationRules() {

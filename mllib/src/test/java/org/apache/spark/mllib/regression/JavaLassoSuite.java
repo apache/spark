@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.regression;
 
-import java.io.Serializable;
 import java.util.List;
 
 import org.junit.Assert;
@@ -27,7 +26,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.util.LinearDataGenerator;
 
-public class JavaLassoSuite extends SharedSparkSession implements Serializable {
+public class JavaLassoSuite extends SharedSparkSession {
 
   int validatePrediction(List<LabeledPoint> validationData, LassoModel model) {
     int numAccurate = 0;

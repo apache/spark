@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.feature;
 
-import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
@@ -28,7 +27,7 @@ import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.linalg.Vector;
 
-public class JavaTfIdfSuite extends SharedSparkSession implements Serializable {
+public class JavaTfIdfSuite extends SharedSparkSession {
 
   @Test
   public void tfIdf() {
