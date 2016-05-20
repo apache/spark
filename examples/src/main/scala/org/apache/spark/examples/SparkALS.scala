@@ -20,7 +20,7 @@ package org.apache.spark.examples
 
 import org.apache.commons.math3.linear._
 
-import org.apache.spark._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Alternating least squares matrix factorization.
@@ -108,8 +108,12 @@ object SparkALS {
 
     println(s"Running with M=$M, U=$U, F=$F, iters=$ITERATIONS")
 
-    val sparkConf = new SparkConf().setAppName("SparkALS")
-    val sc = new SparkContext(sparkConf)
+    val spark = SparkSession
+      .builder
+      .appName("SparkALS")
+      .getOrCreate()
+
+    val sc = spark.sparkContext
 
     val R = generateR()
 
@@ -135,7 +139,7 @@ object SparkALS {
       println()
     }
 
-    sc.stop()
+    spark.stop()
   }
 
   private def randomVector(n: Int): RealVector =

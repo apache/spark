@@ -23,9 +23,8 @@ import java.util.Random
 import scala.math.exp
 
 import breeze.linalg.{DenseVector, Vector}
-import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark._
+import org.apache.spark.sql.SparkSession
 
 /**
  * Logistic regression based classification.
@@ -67,11 +66,14 @@ object SparkHdfsLR {
 
     showWarning()
 
-    val sparkConf = new SparkConf().setAppName("SparkHdfsLR")
+    val spark = SparkSession
+      .builder
+      .appName("SparkHdfsLR")
+      .getOrCreate()
+
     val inputPath = args(0)
-    val conf = new Configuration()
-    val sc = new SparkContext(sparkConf)
-    val lines = sc.textFile(inputPath)
+    val lines = spark.read.text(inputPath).rdd
+
     val points = lines.map(parsePoint).cache()
     val ITERATIONS = args(1).toInt
 
@@ -88,7 +90,7 @@ object SparkHdfsLR {
     }
 
     println("Final w: " + w)
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

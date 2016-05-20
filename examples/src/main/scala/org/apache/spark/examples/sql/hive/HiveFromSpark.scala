@@ -22,7 +22,7 @@ import java.io.File
 
 import com.google.common.io.{ByteStreams, Files}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 
 object HiveFromSpark {
