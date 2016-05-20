@@ -599,6 +599,7 @@ case class TungstenAggregate(
 
     // create grouping key
     ctx.currentVars = input
+    ctx.INPUT_ROW = null
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
     val vectorizedRowKeys = ctx.generateExpressions(
