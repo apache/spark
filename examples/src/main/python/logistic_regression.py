@@ -20,7 +20,7 @@ A logistic regression implementation that uses NumPy (http://www.numpy.org)
 to act on batches of input data using efficient matrix operations.
 
 In practice, one may prefer to use the LogisticRegression algorithm in
-MLlib, as shown in examples/src/main/python/mllib/logistic_regression.py.
+ML, as shown in examples/src/main/python/ml/logistic_regression_with_elastic_net.py.
 """
 from __future__ import print_function
 
@@ -51,8 +51,9 @@ if __name__ == "__main__":
         exit(-1)
 
     print("""WARN: This is a naive implementation of Logistic Regression and is
-      given as an example! Please refer to examples/src/main/python/mllib/logistic_regression.py
-      to see how MLlib's implementation is used.""", file=sys.stderr)
+      given as an example!
+      Please refer to examples/src/main/python/ml/logistic_regression_with_elastic_net.py
+      to see how ML's implementation is used.""", file=sys.stderr)
 
     sc = SparkContext(appName="PythonLR")
     points = sc.textFile(sys.argv[1]).mapPartitions(readPointBatch).cache()
