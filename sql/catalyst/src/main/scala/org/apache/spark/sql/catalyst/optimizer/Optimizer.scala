@@ -1648,20 +1648,133 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
   }
 
   /**
+   * Statically evaluate an expression containing zero or more placeholders, given a set
+   * of bindings for placeholder values.
+   */
+  private def evalExpr(expr : Expression, bindings : Map[Long, Option[Any]]) : Option[Any] = {
+    val rewrittenExpr = expr transform {
+      case r @ AttributeReference(_, dataType, _, _) =>
+        bindings(r.exprId.id) match {
+          case Some(v) => Literal.create(v, dataType)
+          case None => Literal.default(NullType)
+        }
+    }
+    Option(rewrittenExpr.eval())
+  }
+
+  /**
    * Statically evaluate an expression containing one or more aggregates on an empty input.
    */
-  private def evalOnZeroTups(expr : Expression) : Option[Any] = {
+  private def evalAggOnZeroTups(expr : Expression) : Option[Any] = {
     // AggregateExpressions are Unevaluable, so we need to replace all aggregates
     // in the expression with the value they would return for zero input tuples.
     val rewrittenExpr = expr transform {
       case a @ AggregateExpression(aggFunc, _, _, resultId) =>
-        val resultLit = aggFunc.defaultResult match {
-          case Some(lit) => lit
-          case None => Literal.default(NullType)
-        }
-        Alias(resultLit, "aggVal") (exprId = resultId)
+        aggFunc.defaultResult.getOrElse(Literal.default(NullType))
     }
     Option(rewrittenExpr.eval())
+  }
+
+  /**
+   * Statically evaluate a scalar subquery on an empty input.
+   *
+   * <b>WARNING:</b> This method only covers subqueries that pass the checks under
+   * [[org.apache.spark.sql.catalyst.analysis.CheckAnalysis]]. If the checks in
+   * CheckAnalysis become less restrictive, this method will need to change.
+   */
+  private def evalSubqueryOnZeroTups(plan: LogicalPlan) : Option[Any] = {
+    // Inputs to this method will start with a chain of zero or more SubqueryAlias
+    // and Project operators, followed by an optional Filter, followed by an
+    // Aggregate. Traverse the operators recursively.
+    def evalPlan(lp : LogicalPlan) : Map[Long, Option[Any]] = {
+      lp match {
+        case SubqueryAlias(_, child) => evalPlan(child)
+        case Filter(condition, child) =>
+          val bindings = evalPlan(child)
+          if (bindings.size == 0) bindings
+          else {
+            val exprResult = evalExpr(condition, bindings).getOrElse(false)
+              .asInstanceOf[Boolean]
+            if (exprResult) bindings else Map()
+          }
+
+        case Project(projectList, child) =>
+          val bindings = evalPlan(child)
+          if (bindings.size == 0) {
+            bindings
+          } else {
+            projectList.map(ne => (ne.exprId.id, evalExpr(ne, bindings))).toMap
+          }
+
+        case Aggregate(_, aggExprs, _) =>
+          // Some of the expressions under the Aggregate node are the join columns
+          // for joining with the outer query block. Fill those expressions in with
+          // nulls and statically evaluate the remainder.
+          aggExprs.map(ne => ne match {
+            case AttributeReference(_, _, _, _) => (ne.exprId.id, None)
+            case Alias(AttributeReference(_, _, _, _), _) => (ne.exprId.id, None)
+            case _ => (ne.exprId.id, evalAggOnZeroTups(ne))
+          }).toMap
+
+        case _ => sys.error(s"Unexpected operator in scalar subquery: $lp")
+      }
+    }
+
+    val resultMap = evalPlan(plan)
+
+    // By convention, the scalar subquery result is the leftmost field.
+    resultMap(plan.output.head.exprId.id)
+  }
+
+  /**
+   * Split the plan for a scalar subquery into the parts above the Aggregate node
+   * (first part of returned value) and the parts below the Aggregate node, including
+   * the Aggregate (second part of returned value)
+   */
+  private def splitSubquery(plan : LogicalPlan) : Tuple2[Seq[LogicalPlan], Aggregate] = {
+    var topPart = List[LogicalPlan]()
+    var bottomPart : LogicalPlan = plan
+    while (! bottomPart.isInstanceOf[Aggregate]) {
+      topPart = bottomPart :: topPart
+      bottomPart = bottomPart.children.head
+    }
+    (topPart, bottomPart.asInstanceOf[Aggregate])
+  }
+
+  /**
+   * Rewrite the nodes above the Aggregate in a subquery so that they generate an
+   * auxiliary column "isFiltered"
+   * @param subqueryPlan plan before rewrite
+   * @param filteredId expression ID for the "isFiltered" column
+   */
+  private def addIsFiltered(subqueryPlan : LogicalPlan, filteredId : ExprId) : LogicalPlan = {
+    val isFilteredRef = AttributeReference("isFiltered", BooleanType)(exprId = filteredId)
+    val (topPart, aggNode) = splitSubquery(subqueryPlan)
+    var rewrittenQuery: LogicalPlan = null
+    if (topPart.size > 0 && topPart.head.isInstanceOf[Filter]) {
+      // Correlated subquery has a HAVING clause
+      // Rewrite the Filter into a Project that returns the value of the filtering predicate
+      val origFilter = topPart.head.asInstanceOf[Filter]
+      var topRemainder = topPart.tail
+      val newProjectList =
+        origFilter.output :+ Alias(origFilter.condition, "isFiltered")(exprId = filteredId)
+      val filterAsProject = Project(newProjectList, origFilter.child)
+
+      rewrittenQuery = filterAsProject
+      while (topRemainder.size > 0) {
+        rewrittenQuery = topRemainder.head match {
+          case Project(origList, _) => Project(origList :+ isFilteredRef, rewrittenQuery)
+          case SubqueryAlias(alias, _) => SubqueryAlias(alias, rewrittenQuery)
+        }
+        topRemainder = topRemainder.tail
+      }
+    } else {
+      // Correlated subquery without HAVING clause
+      // Add an additional Project that adds a constant value for "isFiltered"
+      rewrittenQuery = Project(subqueryPlan.output :+ Alias(Literal(false), "isFiltered")
+      (exprId = filteredId), subqueryPlan)
+    }
+    return rewrittenQuery
   }
 
   /**
@@ -1672,32 +1785,39 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       subqueries: ArrayBuffer[ScalarSubquery]): LogicalPlan = {
     subqueries.foldLeft(child) {
       case (currentChild, ScalarSubquery(query, conditions, _)) =>
-        val aggOutputExpr = query.asInstanceOf[Aggregate].aggregateExpressions.head
         val origOutput = query.output.head
 
-        // Ensure the rewritten subquery returns the same result when a tuple from the
-        // outer query block does not join with the subquery block.
-        // val (outputExpr, rewrittenQuery) = aggFunc.defaultResult match {
-        val (outputExpr, rewrittenQuery) = evalOnZeroTups(aggOutputExpr) match {
-          case Some(value) =>
-            val origExprId = origOutput.exprId
-            val newExprId = NamedExpression.newExprId
+        val resultWithZeroTups = evalSubqueryOnZeroTups(query)
+        if (resultWithZeroTups.isEmpty) {
+          Project(
+            currentChild.output :+ origOutput,
+            Join(currentChild, query, LeftOuter, conditions.reduceOption(And)))
+        } else {
+          // Renumber the original output, because the outer query refers to its ID.
+          val newExprId = NamedExpression.newExprId
+          val renumberedQuery = query transformExpressions {
+            case a@Alias(c, n) if a.exprId == origOutput.exprId => Alias(c, n)(exprId = newExprId)
+          }
 
-            // Renumber the original output, because the outer query refers to its ID.
-            val newQuery = query transformExpressions {
-              case Alias(c, n) => Alias(c, n)(exprId = newExprId)
-            }
-            val coalesceExpr = Alias(
-              Coalesce(Seq(newQuery.output.head, Literal(value))),
-              origOutput.name) (exprId = origExprId)
-            (coalesceExpr, newQuery)
+          val filteredId = NamedExpression.newExprId
+          val isFilteredRef = AttributeReference("isFiltered", BooleanType)(exprId = filteredId)
+          val withIsFiltered = addIsFiltered(renumberedQuery, filteredId)
+          val aggValRef = renumberedQuery.output.head
 
-          case None => (origOutput, query)
+          // CASE WHEN isFiltered IS NULL THEN COALESCE(aggVal, resultOnZeroTups)
+          //      WHEN isFiltered THEN CAST(null AS <type of aggVal>)
+          //      ELSE aggVal END
+          val caseExpr = Alias(CaseWhen(
+            Seq((IsNull(isFilteredRef), Coalesce(Seq(aggValRef,
+              Literal(resultWithZeroTups.getOrElse(null))))),
+              (isFilteredRef, Literal(null, aggValRef.dataType))),
+            aggValRef),
+            origOutput.name)(exprId = origOutput.exprId)
+
+          Project(
+            currentChild.output :+ caseExpr,
+            Join(currentChild, withIsFiltered, LeftOuter, conditions.reduceOption(And)))
         }
-
-        Project(
-          currentChild.output :+ outputExpr,
-          Join(currentChild, rewrittenQuery, LeftOuter, conditions.reduceOption(And)))
     }
   }
 
