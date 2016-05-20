@@ -91,7 +91,7 @@ case class CreateTempTableUsing(
   }
 }
 
-case class CreateTempTableUsingAsSelect(
+case class CreateTempTableUsingAsSelectCommand(
     tableIdent: TableIdentifier,
     provider: String,
     partitionColumns: Array[String],

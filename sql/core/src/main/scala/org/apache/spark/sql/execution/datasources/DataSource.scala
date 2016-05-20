@@ -433,7 +433,7 @@ case class DataSource(
         // ordering of data.logicalPlan (partition columns are all moved after data column).  This
         // will be adjusted within InsertIntoHadoopFsRelation.
         val plan =
-          InsertIntoHadoopFsRelation(
+          InsertIntoHadoopFsRelationCommand(
             outputPath,
             partitionColumns.map(UnresolvedAttribute.quoted),
             bucketSpec,
