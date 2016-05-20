@@ -134,7 +134,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   def set(bigintval: BigInteger): Decimal = {
     try {
       this.decimalVal = null
-      this.longVal = bigintval.longValueExact()
+      this.longVal = bigintval.longValue()
       this._precision = DecimalType.MAX_PRECISION
       this._scale = 0
       this
