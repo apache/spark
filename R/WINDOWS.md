@@ -21,7 +21,7 @@ To run existing unit tests in SparkR on Windows, the following setps are require
 
     It seems not requiring installing Hadoop but only this `winutils.exe`. It seems not included in Hadoop official binary releases so it should be built from source but it seems it is able to be downloaded from community (e.g. [steveloughran/winutils](https://github.com/steveloughran/winutils)).
 
-3. You can also run the unit-tests for SparkR by running (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
+3. Run unit-tests for SparkR by running below (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
  
     ```
     R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
