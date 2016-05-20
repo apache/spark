@@ -76,10 +76,12 @@ class SQLContext private[sql](
     this(sparkSession, true)
   }
 
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sc: SparkContext) = {
     this(new SparkSession(sc))
   }
 
+  @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
 
   // TODO: move this logic into SparkSession
