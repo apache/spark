@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml;
 
+import java.io.IOException;
+
 import org.junit.Test;
 
 import org.apache.spark.SharedSparkSession;
@@ -36,7 +38,8 @@ public class JavaPipelineSuite extends SharedSparkSession {
   private transient Dataset<Row> dataset;
 
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     JavaRDD<LabeledPoint> points =
       jsc.parallelize(generateLogisticInputAsList(1.0, 1.0, 100, 42), 2);
     dataset = spark.createDataFrame(points, LabeledPoint.class);

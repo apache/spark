@@ -30,13 +30,15 @@ public class JavaDefaultReadWriteSuite extends SharedSparkSession {
   File tempDir = null;
 
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     tempDir = Utils.createTempDir(
       System.getProperty("java.io.tmpdir"), "JavaDefaultReadWriteSuite");
   }
 
   @Override
-  protected void customTearDown() {
+  public void tearDown() {
+    super.tearDown();
     Utils.deleteRecursively(tempDir);
   }
 

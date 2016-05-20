@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.evaluation;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
@@ -34,7 +35,8 @@ public class JavaRankingMetricsSuite extends SharedSparkSession implements Seria
   private transient JavaRDD<Tuple2<List<Integer>, List<Integer>>> predictionAndLabels;
 
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     predictionAndLabels = jsc.parallelize(Arrays.asList(
       Tuple2$.MODULE$.apply(
         Arrays.asList(1, 6, 2, 7, 8, 3, 9, 10, 4, 5), Arrays.asList(1, 2, 3, 4, 5)),

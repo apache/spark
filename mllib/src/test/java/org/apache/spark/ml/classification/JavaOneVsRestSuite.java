@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.classification;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 
@@ -38,7 +39,8 @@ public class JavaOneVsRestSuite extends SharedSparkSession implements Serializab
   private transient JavaRDD<LabeledPoint> datasetRDD;
 
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     int nPoints = 3;
 
     // The following coefficients and xMean/xVariance are computed from iris dataset with

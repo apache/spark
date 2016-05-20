@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.tuning;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 
@@ -38,7 +39,8 @@ public class JavaCrossValidatorSuite extends SharedSparkSession implements Seria
   private transient Dataset<Row> dataset;
 
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     dataset = spark.createDataFrame(jsc.parallelize(points, 2), LabeledPoint.class);
   }

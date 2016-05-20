@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.clustering;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
@@ -36,7 +37,8 @@ public class JavaKMeansSuite extends SharedSparkSession implements Serializable 
   private transient Dataset<Row> dataset;
 
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k);
   }
 

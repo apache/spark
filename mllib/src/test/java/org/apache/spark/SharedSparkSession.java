@@ -25,7 +25,7 @@ import org.junit.Before;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.SparkSession;
 
-public class SharedSparkSession {
+public abstract class SharedSparkSession {
 
   public transient SparkSession spark;
   public transient JavaSparkContext jsc;
@@ -37,19 +37,11 @@ public class SharedSparkSession {
       .appName("shared-spark-session")
       .getOrCreate();
     jsc = new JavaSparkContext(spark.sparkContext());
-
-    customSetUp();
   }
-
-  protected void customSetUp() throws IOException {}
 
   @After
   public void tearDown() {
     spark.stop();
     spark = null;
-
-    customTearDown();
   }
-
-  protected void customTearDown() {}
 }

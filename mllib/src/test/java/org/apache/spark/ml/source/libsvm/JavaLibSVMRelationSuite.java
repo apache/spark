@@ -43,7 +43,8 @@ public class JavaLibSVMRelationSuite extends SharedSparkSession {
   private String path;
 
   @Override
-  protected void customSetUp() throws IOException {
+  public void setUp() throws IOException {
+    super.setUp();
     tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "datasource");
     File file = new File(tempDir, "part-00000");
     String s = "1 1:1.0 3:2.0 5:3.0\n0\n0 2:4.0 4:5.0 6:6.0";
@@ -52,7 +53,8 @@ public class JavaLibSVMRelationSuite extends SharedSparkSession {
   }
 
   @Override
-  protected void customTearDown() {
+  public void tearDown() {
+    super.tearDown();
     Utils.deleteRecursively(tempDir);
   }
 

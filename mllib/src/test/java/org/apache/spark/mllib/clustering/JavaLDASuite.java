@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.clustering;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -37,7 +38,8 @@ import org.apache.spark.mllib.linalg.Vectors;
 
 public class JavaLDASuite extends SharedSparkSession implements Serializable {
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     ArrayList<Tuple2<Long, Vector>> tinyCorpus = new ArrayList<>();
     for (int i = 0; i < LDASuite.tinyCorpus().length; i++) {
       tinyCorpus.add(new Tuple2<>((Long) LDASuite.tinyCorpus()[i]._1(),

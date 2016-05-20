@@ -17,6 +17,7 @@
 
 package org.apache.spark.ml.regression;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.List;
 
@@ -35,7 +36,8 @@ public class JavaLinearRegressionSuite extends SharedSparkSession implements Ser
   private transient JavaRDD<LabeledPoint> datasetRDD;
 
   @Override
-  protected void customSetUp() {
+  public void setUp() throws IOException {
+    super.setUp();
     List<LabeledPoint> points = generateLogisticInputAsList(1.0, 1.0, 100, 42);
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
