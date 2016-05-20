@@ -33,8 +33,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     val task = backend.beginTask()
     val host = backend.executorIdToExecutor(task.executorId).host
     if (host == badHost) {
-      val failure = new ExceptionFailure(new RuntimeException("I'm a bad host!"), Seq())
-      backend.taskFailed(task, TaskState.FAILED, failure)
+      backend.taskFailed(task, new RuntimeException("I'm a bad host!"))
     } else {
       backend.taskSuccess(task, 42)
     }

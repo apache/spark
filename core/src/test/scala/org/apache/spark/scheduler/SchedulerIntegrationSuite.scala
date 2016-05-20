@@ -17,11 +17,9 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.collection.JavaConverters._
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.{Duration, SECONDS}
 import scala.reflect.ClassTag
@@ -31,7 +29,6 @@ import org.scalatest.Assertions.AssertionsHelper
 
 import org.apache.spark._
 import org.apache.spark.TaskState._
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{CallSite, Utils}
@@ -46,7 +43,6 @@ import org.apache.spark.util.{CallSite, Utils}
  */
 abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends SparkFunSuite
     with LocalSparkContext {
-  val conf = new SparkConf
 
   var taskScheduler: TestTaskScheduler = null
   var scheduler: DAGScheduler = null
@@ -76,7 +72,6 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     backend = sc.schedulerBackend.asInstanceOf[T]
     taskScheduler = sc.taskScheduler.asInstanceOf[TestTaskScheduler]
     taskScheduler.initialize(sc.schedulerBackend)
-    backend.taskScheduler = taskScheduler
     scheduler = new DAGScheduler(sc, taskScheduler)
     taskScheduler.setDAGScheduler(scheduler)
   }
@@ -134,7 +129,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
         fail(msg)
       }
       // When a job fails, we terminate before waiting for all the task end events to come in,
-      // so there might still be a running task set.  That is why we only check these conditions
+      // so there might still be a running task set.  So we only check these conditions
       // when the job succeeds
       assert(taskScheduler.runningTaskSets.isEmpty)
       assert(!backend.hasTasks)
@@ -183,7 +178,7 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
    * test, where you submit jobs to your backend, wait for them to complete, then check
    * whatever conditions you want.  Note that this is *not* safe to all bad backends --
    * in particular, your `backendFunc` has to return quickly, it can't throw errors, (instead
-   * it should send back the right TaskEndReason
+   * it should send back the right TaskEndReason)
    */
   def withBackend[T](backendFunc: () => Unit)(testBody: => T): T = {
     val backendContinue = new AtomicBoolean(true)
@@ -216,16 +211,18 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
  */
 private[spark] abstract class MockBackend(
     conf: SparkConf,
-    var taskScheduler: TaskSchedulerImpl) extends SchedulerBackend with Logging {
+    val taskScheduler: TaskSchedulerImpl) extends SchedulerBackend with Logging {
 
   /**
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
    */
   def beginTask(): TaskDescription = {
-    val toRun = assignedTasksWaitingToRun.take()
-    runningTasks += toRun
-    toRun
+    synchronized {
+      val toRun = assignedTasksWaitingToRun.remove(assignedTasksWaitingToRun.size - 1)
+      runningTasks += toRun
+      toRun
+    }
   }
 
   /**
@@ -233,35 +230,32 @@ private[spark] abstract class MockBackend(
    * updates some internal state for this mock.
    */
   def taskSuccess(task: TaskDescription, result: Any): Unit = {
-    endTask(task)
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
-    val metrics = new TaskMetrics
     val directResult = new DirectTaskResult(resultBytes, Seq()) // no accumulator updates
-    val serializedDirectResult = ser.serialize(directResult)
-    taskScheduler.statusUpdate(task.taskId, TaskState.FINISHED, serializedDirectResult)
-    synchronized {
-      executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
-      freeCores += taskScheduler.CPUS_PER_TASK
-    }
-    reviveOffers()
-  }
-
-  def taskFailedWithException(task: TaskDescription, state: TaskState, exc: Exception): Unit = {
-    taskFailed(task, state, new ExceptionFailure(exc, Seq()))
+    taskUpdate(task, TaskState.FINISHED, directResult)
   }
 
   /**
    * Tell the scheduler the task failed, with the given state and result (probably ExceptionFailure
    * or FetchFailed).  Also updates some internal state for this mock.
    */
-  def taskFailed(task: TaskDescription, state: TaskState, result: Any): Unit = {
-    endTask(task)
+  def taskFailed(task: TaskDescription, exc: Exception): Unit = {
+    taskUpdate(task, TaskState.FAILED, new ExceptionFailure(exc, Seq()))
+  }
+
+  def taskFailed(task: TaskDescription, reason: TaskFailedReason): Unit = {
+    taskUpdate(task, TaskState.FAILED, reason)
+  }
+
+  def taskUpdate(task: TaskDescription, state: TaskState, result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
+    // statusUpdate is safe to call from multiple threads, its protected inside taskScheduler
     taskScheduler.statusUpdate(task.taskId, state, resultBytes)
     if (TaskState.isFinished(state)) {
       synchronized {
+        runningTasks -= task
         executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
         freeCores += taskScheduler.CPUS_PER_TASK
       }
@@ -269,31 +263,36 @@ private[spark] abstract class MockBackend(
     }
   }
 
-  private val assignedTasksWaitingToRun = new ArrayBlockingQueue[TaskDescription](10000)
+  // protected by this
+  private val assignedTasksWaitingToRun = new ArrayBuffer[TaskDescription](10000)
+  // protected by this
   private val runningTasks = ArrayBuffer[TaskDescription]()
 
-  def endTask(task: TaskDescription): Unit = synchronized {
-    runningTasks -= task
-  }
-
   def hasTasks: Boolean = synchronized {
-    !assignedTasksWaitingToRun.isEmpty() || runningTasks.nonEmpty
+    assignedTasksWaitingToRun.nonEmpty || runningTasks.nonEmpty
   }
 
   def hasTasksWaitingToRun: Boolean = {
-    !assignedTasksWaitingToRun.isEmpty()
+    assignedTasksWaitingToRun.nonEmpty
   }
 
   override def start(): Unit = {}
 
   override def stop(): Unit = {}
 
-  var freeCores: Int = _
   val env = SparkEnv.get
 
+  /** Accessed by both scheduling and backend thread, so should be protected by this. */
+  var freeCores: Int = _
+
+  /**
+   * Accessed by both scheduling and backend thread, so should be protected by this.
+   * Most likely the only thing that needs to be protected are the inidividual ExecutorTaskStatus,
+   * but for simplicity in this mock just lock the whole backend.
+   */
   def executorIdToExecutor: Map[String, ExecutorTaskStatus]
 
-  def generateOffers(): Seq[WorkerOffer] = {
+  private def generateOffers(): Seq[WorkerOffer] = {
     executorIdToExecutor.values.filter { exec =>
       exec.freeCores > 0
     }.map { exec =>
@@ -303,7 +302,8 @@ private[spark] abstract class MockBackend(
   }
 
   /**
-   * This is called by the scheduler whenever it has tasks it would like to schedule
+   * This is called by the scheduler whenever it has tasks it would like to schedule.  It gets
+   * called in the scheduling thread, not the backend thread.
    */
   override def reviveOffers(): Unit = {
     val offers: Seq[WorkerOffer] = generateOffers()
@@ -313,7 +313,7 @@ private[spark] abstract class MockBackend(
         executorIdToExecutor(task.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
       freeCores -= newTasks.size * taskScheduler.CPUS_PER_TASK
-      assignedTasksWaitingToRun.addAll(newTasks.asJava)
+      assignedTasksWaitingToRun ++= newTasks
     }
   }
 
@@ -341,7 +341,7 @@ private[spark] class SingleCoreMockBackend(
   val localExecutorId = SparkContext.DRIVER_IDENTIFIER
   val localExecutorHostname = "localhost"
 
-  val executorIdToExecutor: Map[String, ExecutorTaskStatus] = Map(
+  override val executorIdToExecutor: Map[String, ExecutorTaskStatus] = Map(
     localExecutorId -> new ExecutorTaskStatus(localExecutorHostname, localExecutorId, freeCores)
   )
 }
@@ -358,9 +358,11 @@ class MockRDD(
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
     throw new RuntimeException("should not be reached")
-  override def getPartitions: Array[Partition] = (0 until numPartitions).map(i => new Partition {
-    override def index: Int = i
-  }).toArray
+  override def getPartitions: Array[Partition] = {
+    (0 until numPartitions).map(i => new Partition {
+      override def index: Int = i
+    }).toArray
+  }
   override def getPreferredLocations(split: Partition): Seq[String] = Nil
   override def toString: String = "MockRDD " + id
 }
@@ -530,7 +532,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
         case (1, 0, 0) =>
           val fetchFailed = FetchFailed(
             DAGSchedulerSuite.makeBlockManagerId("hostA"), shuffleId, 0, 0, "ignored")
-          backend.taskFailed(taskDescription, TaskState.FAILED, fetchFailed)
+          backend.taskFailed(taskDescription, fetchFailed)
         case (1, _, partition) =>
           backend.taskSuccess(taskDescription, 42 + partition)
       }
@@ -548,8 +550,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
   testScheduler("job failure after 4 attempts") {
     def runBackend(): Unit = {
       val task = backend.beginTask()
-      val failure = new ExceptionFailure(new RuntimeException("test task failure"), Seq())
-      backend.taskFailed(task, TaskState.FAILED, failure)
+      backend.taskFailed(task, new RuntimeException("test task failure"))
     }
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)

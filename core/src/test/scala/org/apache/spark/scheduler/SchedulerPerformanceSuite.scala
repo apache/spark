@@ -18,12 +18,13 @@ package org.apache.spark.scheduler
 
 import scala.concurrent.duration.Duration
 
-import org.apache.spark.TaskState
 import org.apache.spark.util.Utils
 
 class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend] {
 
   def simpleWorkload(N: Int): MockRDD = {
+    // relatively simple job with 5 stages, so scheduling includes some aspects of submitting stages
+    // in addition to tasks
     val a = new MockRDD(sc, N, Nil)
     val b = shuffle(N, a)
     val c = shuffle(N, a)
@@ -47,7 +48,12 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
   def runJobWithBackend(N: Int, backend: () => Unit): Unit = {
-    // run as many jobs as we can in 10 seconds
+    // Try to run as many jobs as we can in 10 seconds, get the time per job.  The idea here is to
+    // balance:
+    // 1) have a big enough job that we're not effected by delays just from waiting for job
+    //   completion to propagate to the user thread (probably minor)
+    // 2) run enough iterations to get some reliable data
+    // 3) not wait toooooo long
     var itrs = 0
     val totalMs = withBackend(backend) {
       val start = System.currentTimeMillis()
@@ -191,10 +197,10 @@ ran 3 iterations in 11.0 s (3.7 s per itr)
     val task = taskSet.tasks(taskDescription.index)
     if (badExecs(taskDescription.executorId)) {
       val exc = new RuntimeException(s"bad exec ${taskDescription.executorId}")
-      backend.taskFailedWithException(taskDescription, TaskState.FAILED, exc)
+      backend.taskFailed(taskDescription, exc)
     } else if (badHosts(host)) {
       val exc = new RuntimeException(s"bad host ${host}")
-      backend.taskFailedWithException(taskDescription, TaskState.FAILED, exc)
+      backend.taskFailed(taskDescription, exc)
     } else {
       // every 5th stage is a ResultStage -- the rest are ShuffleMapStages
       (task.stageId, task.partitionId) match {
