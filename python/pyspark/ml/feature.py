@@ -23,11 +23,11 @@ from py4j.java_collections import JavaArray
 
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
-from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Binarizer',
            'Bucketizer',
@@ -352,7 +352,7 @@ class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by CountVectorizer.
+    Model fitted by :py:class:`CountVectorizer`.
 
     .. versionadded:: 1.6.0
     """
@@ -380,7 +380,7 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     .. seealso:: `More information on Wikipedia \
     <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df1 = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
     >>> dct = DCT(inverse=False, inputCol="vec", outputCol="resultVec")
     >>> df2 = dct.transform(df1)
@@ -447,7 +447,7 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
     with a provided "weight" vector. In other words, it scales each column of the dataset
     by a scalar multiplier.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
     >>> ep = ElementwiseProduct(scalingVec=Vectors.dense([1.0, 2.0, 3.0]),
     ...     inputCol="values", outputCol="eprod")
@@ -582,7 +582,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
 
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
-    >>> from pyspark.mllib.linalg import DenseVector
+    >>> from pyspark.ml.linalg import DenseVector
     >>> df = sqlContext.createDataFrame([(DenseVector([1.0, 2.0]),),
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
@@ -609,7 +609,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     """
 
     minDocFreq = Param(Params._dummy(), "minDocFreq",
-                       "minimum of documents in which a term should appear for filtering",
+                       "minimum number of documents in which a term should appear for filtering",
                        typeConverter=TypeConverters.toInt)
 
     @keyword_only
@@ -655,7 +655,7 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by IDF.
+    Model fitted by :py:class:`IDF`.
 
     .. versionadded:: 1.4.0
     """
@@ -670,7 +670,7 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
     any sparsity.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
     >>> model = maScaler.fit(df)
@@ -757,7 +757,7 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     Note that since zero values will probably be transformed to non-zero values, output of the
     transformer will be DenseVector even for sparse input.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
     >>> model = mmScaler.fit(df)
@@ -961,7 +961,7 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
      Normalize a vector to have unit norm using the given p-norm.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> svec = Vectors.sparse(4, {1: 4.0, 3: 3.0})
     >>> df = sqlContext.createDataFrame([(Vectors.dense([3.0, -4.0]), svec)], ["dense", "sparse"])
     >>> normalizer = Normalizer(p=2.0, inputCol="dense", outputCol="features")
@@ -1114,7 +1114,7 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     multiplication distributes over addition". Take a 2-variable feature vector as an example:
     `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
     >>> px = PolynomialExpansion(degree=2, inputCol="dense", outputCol="expanded")
     >>> px.transform(df).head().expanded
@@ -1302,7 +1302,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
 
     minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)",
                            typeConverter=TypeConverters.toInt)
-    gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
+    gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens " +
+                 "(False)")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing",
                     typeConverter=TypeConverters.toString)
     toLowercase = Param(Params._dummy(), "toLowercase", "whether to convert all characters to " +
@@ -1459,7 +1460,7 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
     >>> model = standardScaler.fit(df)
@@ -1549,7 +1550,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by StandardScaler.
+    Model fitted by :py:class:`StandardScaler`.
 
     .. versionadded:: 1.4.0
     """
@@ -1641,7 +1642,7 @@ class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by StringIndexer.
+    Model fitted by :py:class:`StringIndexer`.
 
     .. versionadded:: 1.4.0
     """
@@ -1907,7 +1908,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     """
     .. note:: Experimental
 
-    Class for indexing categorical feature columns in a dataset of [[Vector]].
+    Class for indexing categorical feature columns in a dataset of `Vector`.
 
     This has 2 usage modes:
       - Automatically identify categorical features (default behavior)
@@ -1942,7 +1943,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
       - Add warning if a categorical feature has only 1 category.
       - Add option for allowing unknown categories.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
     >>> indexer = VectorIndexer(maxCategories=2, inputCol="a", outputCol="indexed")
@@ -2023,7 +2024,17 @@ class VectorIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by VectorIndexer.
+    Model fitted by :py:class:`VectorIndexer`.
+
+    Transform categorical features to use 0-based indices instead of their original values.
+      - Categorical features are mapped to indices.
+      - Continuous features (columns) are left unchanged.
+
+    This also appends metadata to the output column, marking features as Numeric (continuous),
+    Nominal (categorical), or Binary (either continuous or categorical).
+    Non-ML metadata is not carried over from the input to the output column.
+
+    This maintains vector sparsity.
 
     .. versionadded:: 1.4.0
     """
@@ -2062,7 +2073,7 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     The output vector will order features with the selected indices first (in the order given),
     followed by the selected names (in the order given).
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame([
     ...     (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
     ...     (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
@@ -2296,7 +2307,7 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by Word2Vec.
+    Model fitted by :py:class:`Word2Vec`.
 
     .. versionadded:: 1.4.0
     """
@@ -2327,9 +2338,10 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     """
     .. note:: Experimental
 
-    PCA trains a model to project vectors to a low-dimensional space using PCA.
+    PCA trains a model to project vectors to a lower dimensional space of the
+    top :py:attr:`k` principal components.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
     ...     (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
     ...     (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
@@ -2401,7 +2413,7 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by PCA.
+    Model fitted by :py:class:`PCA`. Transforms vectors to a lower dimensional space.
 
     .. versionadded:: 1.5.0
     """
@@ -2532,7 +2544,8 @@ class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by :py:class:`RFormula`.
+    Model fitted by :py:class:`RFormula`. Fitting is required to determine the
+    factor levels of formula terms.
 
     .. versionadded:: 1.5.0
     """
@@ -2547,7 +2560,7 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     Chi-Squared feature selection, which selects categorical features to use for predicting a
     categorical label.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> df = sqlContext.createDataFrame(
     ...    [(Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
     ...     (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
@@ -2624,7 +2637,7 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by ChiSqSelector.
+    Model fitted by :py:class:`ChiSqSelector`.
 
     .. versionadded:: 2.0.0
     """

@@ -162,10 +162,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
 
-  def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
-
   def invalidateTable(tableName: String): Unit = {
     catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
   }

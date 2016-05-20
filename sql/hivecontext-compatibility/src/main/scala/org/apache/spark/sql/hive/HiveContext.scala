@@ -58,4 +58,16 @@ class HiveContext private[hive](
     sparkSession.sharedState.asInstanceOf[HiveSharedState]
   }
 
+  /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   *
+   * @since 1.3.0
+   */
+  def refreshTable(tableName: String): Unit = {
+    sparkSession.catalog.refreshTable(tableName)
+  }
+
 }

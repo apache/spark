@@ -212,4 +212,19 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     assert(longRelation.estimatedSize > (2L << 30))
     longRelation.close()
   }
+
+  test("build HashedRelation with more than 100 millions rows") {
+    val unsafeProj = UnsafeProjection.create(
+      Seq(BoundReference(0, IntegerType, false),
+        BoundReference(1, StringType, true)))
+    val unsafeRow = unsafeProj(InternalRow(0, UTF8String.fromString(" " * 100)))
+    val key = Seq(BoundReference(0, IntegerType, false))
+    val rows = (0 until (1 << 10)).iterator.map { i =>
+      unsafeRow.setInt(0, i % 1000000)
+      unsafeRow.setInt(1, i)
+      unsafeRow
+    }
+    val m = LongHashedRelation(rows, key, 100 << 20, mm)
+    m.close()
+  }
 }

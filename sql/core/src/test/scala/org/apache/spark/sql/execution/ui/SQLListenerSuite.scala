@@ -24,7 +24,7 @@ import org.mockito.Mockito.mock
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.execution.{SparkPlanInfo, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -383,7 +383,7 @@ class SQLListenerSuite extends SparkFunSuite with SharedSQLContext {
     }
     // Listener tracks only SQL metrics, not other accumulators
     assert(trackedAccums.size === 1)
-    assert(trackedAccums.head === sqlMetricInfo)
+    assert(trackedAccums.head === (sqlMetricInfo.id, sqlMetricInfo.update.get))
   }
 
 }
@@ -400,8 +400,8 @@ class SQLListenerMemoryLeakSuite extends SparkFunSuite {
         .set("spark.sql.ui.retainedExecutions", "50") // Set it to 50 to run this test quickly
       val sc = new SparkContext(conf)
       try {
-        SQLContext.clearSqlListener()
-        val spark = new SQLContext(sc)
+        SparkSession.sqlListener.set(null)
+        val spark = new SparkSession(sc)
         import spark.implicits._
         // Run 100 successful executions and 100 failed executions.
         // Each execution only has one job and one stage.

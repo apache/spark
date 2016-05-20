@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import java.math.BigInteger
 import java.sql.{Date, Timestamp}
 import java.util.Arrays
 
@@ -109,12 +110,14 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   encodeDecodeTest(BigDecimal("32131413.211321313"), "scala decimal")
   encodeDecodeTest(new java.math.BigDecimal("231341.23123"), "java decimal")
-
+  encodeDecodeTest(BigInt("23134123123"), "scala biginteger")
+  encodeDecodeTest(new BigInteger("23134123123"), "java BigInteger")
   encodeDecodeTest(Decimal("32131413.211321313"), "catalyst decimal")
 
   encodeDecodeTest("hello", "string")
   encodeDecodeTest(Date.valueOf("2012-12-23"), "date")
   encodeDecodeTest(Timestamp.valueOf("2016-01-29 10:00:00"), "timestamp")
+  encodeDecodeTest(Array(Timestamp.valueOf("2016-01-29 10:00:00")), "array of timestamp")
   encodeDecodeTest(Array[Byte](13, 21, -23), "binary")
 
   encodeDecodeTest(Seq(31, -123, 4), "seq of int")

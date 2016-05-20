@@ -206,7 +206,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawApplicationTimeline(${groupJsonArrayAsStr}," +
-      s"${eventArrayAsStr}, ${startTime});")}
+      s"${eventArrayAsStr}, ${startTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
   }
 

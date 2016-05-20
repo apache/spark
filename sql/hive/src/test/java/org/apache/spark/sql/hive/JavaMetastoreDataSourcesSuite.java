@@ -85,7 +85,7 @@ public class JavaMetastoreDataSourcesSuite {
     }
     JavaRDD<String> rdd = sc.parallelize(jsonObjects);
     df = sqlContext.read().json(rdd);
-    df.registerTempTable("jsonTable");
+    df.createOrReplaceTempView("jsonTable");
   }
 
   @After

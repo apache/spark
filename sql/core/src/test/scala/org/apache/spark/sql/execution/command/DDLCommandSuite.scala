@@ -24,7 +24,9 @@ import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.Project
 import org.apache.spark.sql.execution.SparkSqlParser
+import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsing}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 // TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
@@ -53,6 +55,12 @@ class DDLCommandSuite extends PlanTest {
       Some("database_comment"),
       Map("a" -> "a", "b" -> "b", "c" -> "c"))
     comparePlans(parsed, expected)
+  }
+
+  test("create database - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE DATABASE my_db WITH DBPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
   }
 
   test("drop database") {
@@ -117,6 +125,12 @@ class DDLCommandSuite extends PlanTest {
 
     comparePlans(parsed1, expected1)
     comparePlans(parsed2, expected2)
+  }
+
+  test("alter database - property values must be set") {
+    assertUnsupported(
+      sql = "ALTER DATABASE my_db SET DBPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
   }
 
   test("describe database") {
@@ -226,6 +240,16 @@ class DDLCommandSuite extends PlanTest {
     }
   }
 
+  test("create table - property values must be set") {
+    assertUnsupported(
+      sql = "CREATE TABLE my_tab TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+    assertUnsupported(
+      sql = "CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
+        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
   test("create table - location implies external") {
     val query = "CREATE TABLE my_tab LOCATION '/something/anything'"
     parser.parsePlan(query) match {
@@ -235,6 +259,57 @@ class DDLCommandSuite extends PlanTest {
       case other =>
         fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
             s"got ${other.getClass.getName}: $query")
+    }
+  }
+
+  test("create table using - with partitioned by") {
+    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
+    val expected = CreateTableUsing(
+      TableIdentifier("my_tab"),
+      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      "parquet",
+      false,
+      Map.empty,
+      null,
+      None,
+      false,
+      true)
+
+    parser.parsePlan(query) match {
+      case ct: CreateTableUsing =>
+        // We can't compare array in `CreateTableUsing` directly, so here we compare
+        // `partitionColumns` ahead, and make `partitionColumns` null before plan comparison.
+        assert(Seq("a") == ct.partitionColumns.toSeq)
+        comparePlans(ct.copy(partitionColumns = null), expected)
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query")
+    }
+  }
+
+  test("create table using - with bucket") {
+    val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet " +
+      "CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS"
+    val expected = CreateTableUsing(
+      TableIdentifier("my_tab"),
+      Some(new StructType().add("a", IntegerType).add("b", StringType)),
+      "parquet",
+      false,
+      Map.empty,
+      null,
+      Some(BucketSpec(5, Seq("a"), Seq("b"))),
+      false,
+      true)
+
+    parser.parsePlan(query) match {
+      case ct: CreateTableUsing =>
+        // `Array.empty == Array.empty` returns false, here we set `partitionColumns` to null before
+        // plan comparison.
+        assert(ct.partitionColumns.isEmpty)
+        comparePlans(ct.copy(partitionColumns = null), expected)
+      case other =>
+        fail(s"Expected to parse ${classOf[CreateTable].getClass.getName} from query," +
+          s"got ${other.getClass.getName}: $query")
     }
   }
 
@@ -296,6 +371,18 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed3_view, expected3_view)
   }
 
+  test("alter table - property values must be set") {
+    assertUnsupported(
+      sql = "ALTER TABLE my_tab SET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
+  }
+
+  test("alter table unset properties - property values must NOT be set") {
+    assertUnsupported(
+      sql = "ALTER TABLE my_tab UNSET TBLPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_with_value"))
+  }
+
   test("alter table: SerDe properties") {
     val sql1 = "ALTER TABLE table_name SET SERDE 'org.apache.class'"
     val sql2 =
@@ -349,6 +436,13 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
     comparePlans(parsed5, expected5)
+  }
+
+  test("alter table - SerDe property values must be set") {
+    assertUnsupported(
+      sql = "ALTER TABLE my_tab SET SERDE 'serde' " +
+        "WITH SERDEPROPERTIES('key_without_value', 'key_with_value'='x')",
+      containsThesePhrases = Seq("key_without_value"))
   }
 
   // ALTER TABLE table_name ADD [IF NOT EXISTS] PARTITION partition_spec

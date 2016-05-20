@@ -399,8 +399,8 @@ object CreateDataSourceTableUtils extends Logging {
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
-      case (Some(serde), relation: HadoopFsRelation)
-        if relation.location.paths.length == 1 && relation.partitionSchema.isEmpty =>
+      case (Some(serde), relation: HadoopFsRelation) if relation.location.paths.length == 1 &&
+        relation.partitionSchema.isEmpty && relation.bucketSpec.isEmpty =>
         val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
         val message =
           s"Persisting data source relation $qualifiedTableName with a single input path " +
@@ -411,6 +411,13 @@ object CreateDataSourceTableUtils extends Logging {
       case (Some(serde), relation: HadoopFsRelation) if relation.partitionSchema.nonEmpty =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+            "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
+        (None, message)
+
+      case (Some(serde), relation: HadoopFsRelation) if relation.bucketSpec.nonEmpty =>
+        val message =
+          s"Persisting bucketed data source relation $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
             "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
         (None, message)
