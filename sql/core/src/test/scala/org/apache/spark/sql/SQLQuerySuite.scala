@@ -104,9 +104,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     ).toDF("a", "b", "c").createOrReplaceTempView("cachedData")
 
     spark.catalog.cacheTable("cachedData")
-    checkAnswer(
-      sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
-      Row(0) :: Row(81) :: Nil)
+    withSQLConf("spark.sql.join.cartesian.enabled" -> "true") {
+      checkAnswer(
+        sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
+        Row(0) :: Row(81) :: Nil)
+    }
   }
 
   test("self join with aliases") {
@@ -824,12 +826,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("cartesian product join") {
-    checkAnswer(
-      testData3.join(testData3),
-      Row(1, null, 1, null) ::
-      Row(1, null, 2, 2) ::
-      Row(2, 2, 1, null) ::
-      Row(2, 2, 2, 2) :: Nil)
+    withSQLConf("spark.sql.join.cartesian.enabled" -> "true") {
+      checkAnswer(
+        testData3.join(testData3),
+        Row(1, null, 1, null) ::
+          Row(1, null, 2, 2) ::
+          Row(2, 2, 1, null) ::
+          Row(2, 2, 2, 2) :: Nil)
+    }
   }
 
   test("left outer join") {

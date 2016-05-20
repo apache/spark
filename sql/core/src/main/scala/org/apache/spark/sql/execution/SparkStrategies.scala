@@ -178,7 +178,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
       // Pick CartesianProduct for InnerJoin
       case logical.Join(left, right, Inner, condition) =>
-        joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
+        if (conf.cartesianProductEnabled) {
+          joins.CartesianProductExec(planLater(left), planLater(right), condition) :: Nil
+        } else {
+          throw new AnalysisException("Cartesian products are disabled by default. To explicitly " +
+            "enable them, please set spark.sql.join.cartesian.enabled = true")
+        }
 
       case logical.Join(left, right, joinType, condition) =>
         val buildSide =

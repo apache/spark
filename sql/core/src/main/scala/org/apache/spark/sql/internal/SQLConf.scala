@@ -348,6 +348,11 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CARTESIAN_PRODUCT_ENABLED = SQLConfigBuilder("spark.sql.join.cartesian.enabled")
+    .doc("When false, we will throw an error if a query contains a cartesian product")
+    .booleanConf
+    .createWithDefault(false)
+
   val ORDER_BY_ORDINAL = SQLConfigBuilder("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
          "When false, the ordinal numbers in order/sort By clause are ignored.")
@@ -631,6 +636,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
+  def cartesianProductEnabled: Boolean = getConf(SQLConf.CARTESIAN_PRODUCT_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

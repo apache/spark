@@ -62,7 +62,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   test("join operator selection") {
     spark.cacheManager.clearCache()
 
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0",
+      "spark.sql.join.cartesian.enabled" -> "true") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[SortMergeJoinExec]),
@@ -204,13 +205,26 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  test("cartisian product join") {
-    checkAnswer(
-      testData3.join(testData3),
-      Row(1, null, 1, null) ::
-        Row(1, null, 2, 2) ::
-        Row(2, 2, 1, null) ::
-        Row(2, 2, 2, 2) :: Nil)
+  test("cartesian product join") {
+    withSQLConf("spark.sql.join.cartesian.enabled" -> "true") {
+      checkAnswer(
+        testData3.join(testData3),
+        Row(1, null, 1, null) ::
+          Row(1, null, 2, 2) ::
+          Row(2, 2, 1, null) ::
+          Row(2, 2, 2, 2) :: Nil)
+    }
+    withSQLConf("spark.sql.join.cartesian.enabled" -> "false") {
+      val e = intercept[AnalysisException] {
+        checkAnswer(
+          testData3.join(testData3),
+          Row(1, null, 1, null) ::
+            Row(1, null, 2, 2) ::
+            Row(2, 2, 1, null) ::
+            Row(2, 2, 2, 2) :: Nil)
+      }
+      assert(e.getMessage().contains("Cartesian products are disabled by default"))
+    }
   }
 
   test("left outer join") {
