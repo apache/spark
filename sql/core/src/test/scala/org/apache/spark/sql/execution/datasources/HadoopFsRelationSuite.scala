@@ -47,5 +47,7 @@ class HadoopFsRelationSuite extends QueryTest with SharedSQLContext {
 
     assert(HadoopFsRelation.shouldFilterOut("_metadata"))
     assert(HadoopFsRelation.shouldFilterOut("_common_metadata"))
+    assert(!HadoopFsRelation.shouldFilterOut("_ab_metadata"))
+    assert(!HadoopFsRelation.shouldFilterOut("_cd_common_metadata"))
   }
 }
