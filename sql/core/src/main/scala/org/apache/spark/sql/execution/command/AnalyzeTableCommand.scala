@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogRelation, CatalogTable}
  * Right now, it only supports Hive tables and it only updates the size of a Hive table
  * in the Hive metastore.
  */
-case class AnalyzeTable(tableName: String) extends RunnableCommand {
+case class AnalyzeTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val sessionState = sparkSession.sessionState
@@ -95,7 +95,7 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
           sessionState.catalog.alterTable(
             catalogTable.copy(
               properties = relation.catalogTable.properties +
-                (AnalyzeTable.TOTAL_SIZE_FIELD -> newTotalSize.toString)))
+                (AnalyzeTableCommand.TOTAL_SIZE_FIELD -> newTotalSize.toString)))
         }
 
       case otherRelation =>
@@ -106,6 +106,6 @@ case class AnalyzeTable(tableName: String) extends RunnableCommand {
   }
 }
 
-object AnalyzeTable {
+object AnalyzeTableCommand {
   val TOTAL_SIZE_FIELD = "totalSize"
 }

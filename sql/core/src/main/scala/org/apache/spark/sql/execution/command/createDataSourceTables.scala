@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 /**
  * A command used to create a data source table.
  *
- * Note: This is different from [[CreateTable]]. Please check the syntax for difference.
+ * Note: This is different from [[CreateTableCommand]]. Please check the syntax for difference.
  * This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
@@ -252,6 +252,7 @@ case class CreateDataSourceTableAsSelectCommand(
     Seq.empty[Row]
   }
 }
+
 
 object CreateDataSourceTableUtils extends Logging {
   /**
