@@ -774,10 +774,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an resource command depending on the requested operation on resources.
-   * ADD FILE(s)|JAR(s) <filepath|jarfile>*
-   * DELETE FILE(s)|JAR(s) <filepath/jarfile>*
-   * LIST FILE(s)|JAR(s) <filepath|jarfile>*
+   * A resource command depending on the requested operation on resources.
+   * Expected format:
+   * {{{
+   *   ADD (FILE[s] [filepath ...] | JAR[s] [jarpath ...])
+   *   DELETE (FILE[s] [filepath ...] | JAR[s] [jarpath ...])
+   *   LIST (FILE[s] [filepath ...] | JAR[s] [jarpath ...])
+   * }}}
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
     ctx.op.getType match {

@@ -1387,8 +1387,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * List the file resources that were added.
-   */
+    * Return a list of file paths that are added to resources.
+    * If file paths are provided, return the ones that are added to resources.
+    */
   def listFiles(files: Seq[String] = Seq.empty[String]): Seq[String] = {
     if (files.size > 0) {
       files.map { f =>
@@ -1399,7 +1400,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         }
         new Path(schemeCorrectedPath).toUri.toString
       }.collect {
-        case f if addedFiles.keySet.toSeq.contains(f) => f
+        case f if addedFiles.keySet.contains(f) => f
       }
     } else {
       addedFiles.keySet.toSeq
@@ -1744,14 +1745,17 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     postEnvironmentUpdate()
   }
 
-  // list the jar resources that were added.
+  /**
+    * Return a list of jar files that are added to resources.
+    * If jar files are provided, return the ones that are added to resources.
+    */
   def listJars(jars: Seq[String] = Seq.empty[String]): Seq[String] = {
     if (jars.size > 0) {
       jars.map { f =>
         new Path(f).getName
-      }.map {f =>
-        addedJars.keySet.toSeq.map(new Path(_).toUri.toString).filter(_.contains(f))
-      }.flatten
+      }.flatMap {f =>
+        addedJars.keySet.filter(_.contains(f))
+      }
     } else {
       addedJars.keySet.toSeq
     }

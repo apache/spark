@@ -240,8 +240,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("list jars") {
-    val jarFile =
-      Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
       s"ADD JAR $jarFile" -> "",
       s"LIST JARS" -> "TestUDTF.jar",
@@ -250,8 +249,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   }
 
   test("list files") {
-    val dataFilePath =
-      Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
+    val dataFilePath = Thread.currentThread().getContextClassLoader
+      .getResource("data/files/small_kv.txt")
     runCliWithin(2.minute)(
       s"ADD FILE $dataFilePath" -> "",
       s"LIST FILES" -> "small_kv.txt",

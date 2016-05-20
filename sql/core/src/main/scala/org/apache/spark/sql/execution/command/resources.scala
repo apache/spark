@@ -48,7 +48,8 @@ case class AddFileCommand(path: String) extends RunnableCommand {
 }
 
 /**
- * List files
+ * Return a list of file paths that are added to resources.
+ * If file paths are provided, return the ones that are added to resources.
  */
 case class ListFiles(files: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
@@ -62,7 +63,8 @@ case class ListFiles(files: Seq[String] = Seq.empty[String]) extends RunnableCom
 }
 
 /**
- * List jars
+ * Return a list of jar files that are added to resources.
+ * If jar files are provided, return the ones that are added to resources.
  */
 case class ListJars(jars: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
