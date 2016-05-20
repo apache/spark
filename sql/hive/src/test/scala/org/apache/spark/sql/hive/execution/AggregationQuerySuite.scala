@@ -959,7 +959,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     }
   }
 
-  test("SPARK-15206: single distinct aggregate in having clause") {
+  test("SPARK-15206: single distinct aggregate function in having clause") {
     checkAnswer(
       sql(
         """
@@ -975,7 +975,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     )
   }
 
-  test("SPARK-15206: multiple distinct aggregates in having clause") {
+  test("SPARK-15206: multiple distinct aggregate function in having clause") {
     checkAnswer(
       sql(
         """
