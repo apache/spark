@@ -1553,8 +1553,8 @@ words.foreachRDD { rdd =>
   // Convert RDD[String] to DataFrame
   val wordsDataFrame = rdd.toDF("word")
 
-  // Register as table
-  wordsDataFrame.registerTempTable("words")
+  // Create a temporary view
+  wordsDataFrame.createOrReplaceTempView("words")
 
   // Do word count on DataFrame using SQL and print it
   val wordCountsDataFrame = 
@@ -1606,8 +1606,8 @@ words.foreachRDD(
       });
       DataFrame wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRow.class);
 
-      // Register as table
-      wordsDataFrame.registerTempTable("words");
+      // Creates a temporary view using the DataFrame
+      wordsDataFrame.createOrReplaceTempView("words");
 
       // Do word count on table using SQL and print it
       DataFrame wordCountsDataFrame =
@@ -1646,8 +1646,8 @@ def process(time, rdd):
         rowRdd = rdd.map(lambda w: Row(word=w))
         wordsDataFrame = sqlContext.createDataFrame(rowRdd)
 
-        # Register as table
-        wordsDataFrame.registerTempTable("words")
+        # Creates a temporary view using the DataFrame
+        wordsDataFrame.createOrReplaceTempView("words")
 
         # Do word count on table using SQL and print it
         wordCountsDataFrame = sqlContext.sql("select word, count(*) as total from words group by word")

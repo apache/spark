@@ -77,7 +77,7 @@ class StreamSuite extends StreamTest with SharedSQLContext {
 
   test("sql queries") {
     val inputData = MemoryStream[Int]
-    inputData.toDF().registerTempTable("stream")
+    inputData.toDF().createOrReplaceTempView("stream")
     val evens = sql("SELECT * FROM stream WHERE value % 2 = 0")
 
     testStream(evens)(
@@ -137,20 +137,88 @@ class StreamSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  // This would fail for now -- error is "Timed out waiting for stream"
-  // Root cause is that data generated in batch 0 may not get processed in batch 1
-  // Let's enable this after SPARK-14942: Reduce delay between batch construction and execution
-  ignore("minimize delay between batch construction and execution") {
+  test("minimize delay between batch construction and execution") {
+
+    // For each batch, we would retrieve new data's offsets and log them before we run the execution
+    // This checks whether the key of the offset log is the expected batch id
+    def CheckOffsetLogLatestBatchId(expectedId: Int): AssertOnQuery =
+      AssertOnQuery(_.offsetLog.getLatest().get._1 == expectedId,
+        s"offsetLog's latest should be $expectedId")
+
+    // For each batch, we would log the state change during the execution
+    // This checks whether the key of the state change log is the expected batch id
+    def CheckIncrementalExecutionCurrentBatchId(expectedId: Int): AssertOnQuery =
+      AssertOnQuery(_.lastExecution.asInstanceOf[IncrementalExecution].currentBatchId == expectedId,
+        s"lastExecution's currentBatchId should be $expectedId")
+
+    // For each batch, we would log the sink change after the execution
+    // This checks whether the key of the sink change log is the expected batch id
+    def CheckSinkLatestBatchId(expectedId: Int): AssertOnQuery =
+      AssertOnQuery(_.sink.asInstanceOf[MemorySink].latestBatchId.get == expectedId,
+        s"sink's lastBatchId should be $expectedId")
+
     val inputData = MemoryStream[Int]
     testStream(inputData.toDS())(
       StartStream(ProcessingTime("10 seconds"), new ManualClock),
+
       /* -- batch 0 ----------------------- */
-      AddData(inputData, 1),
-      AddData(inputData, 2),
-      AddData(inputData, 3),
+      // Add some data in batch 0
+      AddData(inputData, 1, 2, 3),
       AdvanceManualClock(10 * 1000), // 10 seconds
+
       /* -- batch 1 ----------------------- */
-      CheckAnswer(1, 2, 3))
+      // Check the results of batch 0
+      CheckAnswer(1, 2, 3),
+      CheckIncrementalExecutionCurrentBatchId(0),
+      CheckOffsetLogLatestBatchId(0),
+      CheckSinkLatestBatchId(0),
+      // Add some data in batch 1
+      AddData(inputData, 4, 5, 6),
+      AdvanceManualClock(10 * 1000),
+
+      /* -- batch _ ----------------------- */
+      // Check the results of batch 1
+      CheckAnswer(1, 2, 3, 4, 5, 6),
+      CheckIncrementalExecutionCurrentBatchId(1),
+      CheckOffsetLogLatestBatchId(1),
+      CheckSinkLatestBatchId(1),
+
+      AdvanceManualClock(10 * 1000),
+      AdvanceManualClock(10 * 1000),
+      AdvanceManualClock(10 * 1000),
+
+      /* -- batch __ ---------------------- */
+      // Check the results of batch 1 again; this is to make sure that, when there's no new data,
+      // the currentId does not get logged (e.g. as 2) even if the clock has advanced many times
+      CheckAnswer(1, 2, 3, 4, 5, 6),
+      CheckIncrementalExecutionCurrentBatchId(1),
+      CheckOffsetLogLatestBatchId(1),
+      CheckSinkLatestBatchId(1),
+
+      /* Stop then restart the Stream  */
+      StopStream,
+      StartStream(ProcessingTime("10 seconds"), new ManualClock),
+
+      /* -- batch 1 rerun ----------------- */
+      // this batch 1 would re-run because the latest batch id logged in offset log is 1
+      AdvanceManualClock(10 * 1000),
+
+      /* -- batch 2 ----------------------- */
+      // Check the results of batch 1
+      CheckAnswer(1, 2, 3, 4, 5, 6),
+      CheckIncrementalExecutionCurrentBatchId(1),
+      CheckOffsetLogLatestBatchId(1),
+      CheckSinkLatestBatchId(1),
+      // Add some data in batch 2
+      AddData(inputData, 7, 8, 9),
+      AdvanceManualClock(10 * 1000),
+
+      /* -- batch 3 ----------------------- */
+      // Check the results of batch 2
+      CheckAnswer(1, 2, 3, 4, 5, 6, 7, 8, 9),
+      CheckIncrementalExecutionCurrentBatchId(2),
+      CheckOffsetLogLatestBatchId(2),
+      CheckSinkLatestBatchId(2))
   }
 }
 

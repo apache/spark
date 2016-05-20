@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.command
 
-import java.util.NoSuchElementException
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
@@ -88,7 +86,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
       }
       val schema = StructType(
         StructField("key", StringType, nullable = false) ::
-          StructField("default", StringType, nullable = false) ::
+          StructField("value", StringType, nullable = false) ::
           StructField("meaning", StringType, nullable = false) :: Nil)
       (schema.toAttributes, runFunc)
 

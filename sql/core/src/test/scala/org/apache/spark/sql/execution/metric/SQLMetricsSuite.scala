@@ -29,9 +29,8 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.{AccumulatorContext, JsonProtocol, Utils}
 
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
@@ -165,7 +164,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -183,7 +182,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -237,7 +236,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -265,7 +264,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("CartesianProduct metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
@@ -308,7 +307,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       case Some(v) => fail(s"metric value was not a Long: ${v.getClass.getName}")
       case _ => fail("metric update is missing")
     }
-    assert(metricInfo.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    assert(metricInfo.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
     // After serializing to JSON, the original value type is lost, but we can still
     // identify that it's a SQL metric from the metadata
     val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
@@ -318,7 +317,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
       case _ => fail("deserialized metric update is missing")
     }
-    assert(metricInfoDeser.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    assert(metricInfoDeser.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 
 }

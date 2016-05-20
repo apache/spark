@@ -66,7 +66,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
     val res = df3.collect()
     val expected = Seq((18, 18, 8)).toDF("a", "x", "b").collect()
     assert(res.toSeq == expected.toSeq)
-    df3.registerTempTable("mai_table")
+    df3.createOrReplaceTempView("mai_table")
     val df4 = hc.table("mai_table")
     val res2 = df4.collect()
     assert(res2.toSeq == expected.toSeq)
@@ -82,7 +82,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
     val databases2 = hc.sql("SHOW DATABASES").collect().map(_.getString(0))
     assert(databases2.toSet == Set("default", "mee_db"))
     val df = (1 to 10).map { i => ("bob" + i.toString, i) }.toDF("name", "age")
-    df.registerTempTable("mee_table")
+    df.createOrReplaceTempView("mee_table")
     hc.sql("CREATE TABLE moo_table (name string, age int)")
     hc.sql("INSERT INTO moo_table SELECT * FROM mee_table")
     assert(

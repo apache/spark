@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.command.AnalyzeTable
+import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -33,7 +33,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
       val parsed = hiveContext.parseSql(analyzeCommand)
       val operators = parsed.collect {
-        case a: AnalyzeTable => a
+        case a: AnalyzeTableCommand => a
         case o => o
       }
 
@@ -49,23 +49,23 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
   }
 
   ignore("analyze MetastoreRelations") {
@@ -115,7 +115,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
     sql("DROP TABLE analyzeTable_part").collect()
 
     // Try to analyze a temp table
-    sql("""SELECT * FROM src""").registerTempTable("tempTable")
+    sql("""SELECT * FROM src""").createOrReplaceTempView("tempTable")
     intercept[UnsupportedOperationException] {
       hiveContext.sql("ANALYZE TABLE tempTable COMPUTE STATISTICS")
     }
