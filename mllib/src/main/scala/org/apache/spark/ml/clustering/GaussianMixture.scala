@@ -139,6 +139,13 @@ class GaussianMixtureModel private[ml] (
     sqlContext.createDataFrame(modelGaussians).toDF("mean", "cov")
   }
 
+  /**
+   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
+   *
+   * For [[GaussianMixtureModel]], this does NOT currently save the training [[summary]].
+   * An option to save [[summary]] may be added in the future.
+   *
+   */
   @Since("2.0.0")
   override def write: MLWriter = new GaussianMixtureModel.GaussianMixtureModelWriter(this)
 
