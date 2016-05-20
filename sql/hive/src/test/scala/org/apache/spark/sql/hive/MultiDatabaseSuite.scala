@@ -217,7 +217,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
           df.write.parquet(s"$path/p=2")
           sql("ALTER TABLE t ADD PARTITION (p=2)")
-          hiveContext.sessionState.refreshTable("t")
+          spark.catalog.refreshTable("t")
           checkAnswer(
             spark.table("t"),
             df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
@@ -249,7 +249,7 @@ class MultiDatabaseSuite extends QueryTest with SQLTestUtils with TestHiveSingle
 
         df.write.parquet(s"$path/p=2")
         sql(s"ALTER TABLE $db.t ADD PARTITION (p=2)")
-        hiveContext.sessionState.refreshTable(s"$db.t")
+        spark.catalog.refreshTable(s"$db.t")
         checkAnswer(
           spark.table(s"$db.t"),
           df.withColumn("p", lit(1)).union(df.withColumn("p", lit(2))))
