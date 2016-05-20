@@ -132,17 +132,11 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
    */
   def set(bigintval: BigInteger): Decimal = {
-    try {
       this.decimalVal = null
-      this.longVal = bigintval.longValueExact()
+      this.longVal = bigintval.longValue()
       this._precision = DecimalType.MAX_PRECISION
       this._scale = 0
       this
-    }
-    catch {
-      case e: ArithmeticException =>
-        throw new IllegalArgumentException(s"BigInteger ${bigintval} too large for decimal")
-     }
   }
 
   /**
