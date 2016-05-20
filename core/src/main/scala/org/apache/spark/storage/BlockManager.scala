@@ -172,14 +172,14 @@ private[spark] class BlockManager(
       }
     }
 
-    val priorityClass = conf.get("spark.replication.topologyawareness.prioritizer", "")
-    blockReplicationPrioritizer = if (!priorityClass.isEmpty) {
-      val ret = Utils.classForName(priorityClass).asInstanceOf[BlockReplicationPrioritization]
+    blockReplicationPrioritizer = {
+      val priorityClass = conf.get(
+        "spark.replication.topologyawareness.prioritizer",
+        "org.apache.spark.storage.DefaultBlockReplicationPrioritization")
+      val clazz = Utils.classForName(priorityClass)
+      val ret = clazz.newInstance.asInstanceOf[BlockReplicationPrioritization]
       logInfo(s"Using $priorityClass for prioritizing peers")
       ret
-    } else {
-      logInfo("Using DefaultBlockReplicationPrioritization for prioritizing peers")
-      new DefaultBlockReplicationPrioritization(blockTransferService.hostName)
     }
 
     blockManagerId = BlockManagerId(
@@ -1204,8 +1204,11 @@ private[spark] class BlockManager(
             val filteredPeers = getPeers(true).filter { p =>
               !(updatedFailedPeers.contains(p) || peersReplicatedTo.contains(p))
             }
-            val updatedPeers =
-              blockReplicationPrioritizer.prioritize(filteredPeers, peersReplicatedTo, blockId)
+            val updatedPeers = blockReplicationPrioritizer.prioritize(
+              blockManagerId,
+              filteredPeers,
+              peersReplicatedTo,
+              blockId)
             (numFailures + 1, updatedPeers, peersReplicatedTo, updatedFailedPeers)
         }
 
@@ -1216,7 +1219,7 @@ private[spark] class BlockManager(
     val startTime = System.currentTimeMillis
     val peersReplicatedTo = replicateBlock(
       0,
-      blockReplicationPrioritizer.prioritize(getPeers(false), Set.empty, blockId),
+      blockReplicationPrioritizer.prioritize(blockManagerId, getPeers(false), Set.empty, blockId),
       Set.empty,
       Set.empty)
     logDebug(s"Replicating $blockId of ${data.size} bytes to " +
