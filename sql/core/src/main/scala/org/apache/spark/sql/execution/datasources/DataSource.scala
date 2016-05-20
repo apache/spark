@@ -83,6 +83,14 @@ case class DataSource(
     "com.databricks.spark.csv" -> classOf[csv.DefaultSource].getCanonicalName
   )
 
+  /**
+   * Class that were removed in Spark 2.0. Used to detect incompatibility libraries for Spark 2.0.
+   */
+  private val spark2RemovedClasses = Set(
+    "org.apache.spark.sql.DataFrame",
+    "org.apache.spark.sql.sources.HadoopFsRelationProvider",
+    "org.apache.spark.Logging")
+
   /** Given a provider name, look up the data source class definition. */
   private def lookupDataSource(provider0: String): Class[_] = {
     val provider = backwardCompatibilityMap.getOrElse(provider0, provider0)
@@ -93,26 +101,45 @@ case class DataSource(
     serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
       // the provider format did not match any given registered aliases
       case Nil =>
-        Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
-          case Success(dataSource) =>
-            // Found the data source using fully qualified path
-            dataSource
-          case Failure(error) =>
-            if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-              throw new ClassNotFoundException(
-                "The ORC data source must be used with Hive support enabled.", error)
-            } else {
-              if (provider == "avro" || provider == "com.databricks.spark.avro") {
-                throw new ClassNotFoundException(
-                  s"Failed to find data source: $provider. Please use Spark package " +
-                  "http://spark-packages.org/package/databricks/spark-avro",
-                  error)
-              } else {
-                throw new ClassNotFoundException(
-                  s"Failed to find data source: $provider. Please find packages at " +
-                  "http://spark-packages.org",
-                  error)
+        try {
+          Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+            case Success(dataSource) =>
+              // Found the data source using fully qualified path
+              dataSource
+            case Failure(error) =>
+              if (error.isInstanceOf[ClassNotFoundException]) {
+                val className = error.getMessage
+                if (spark2RemovedClasses.contains(className)) {
+                  throw new ClassNotFoundException(s"$className is removed in Spark 2.0. " +
+                    "Please check if your library is compatible with Spark 2.0")
+                }
               }
+              if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+                throw new ClassNotFoundException(
+                  "The ORC data source must be used with Hive support enabled.", error)
+              } else {
+                if (provider == "avro" || provider == "com.databricks.spark.avro") {
+                  throw new ClassNotFoundException(
+                    s"Failed to find data source: $provider. Please use Spark package " +
+                      "http://spark-packages.org/package/databricks/spark-avro",
+                    error)
+                } else {
+                  throw new ClassNotFoundException(
+                    s"Failed to find data source: $provider. Please find packages at " +
+                      "http://spark-packages.org",
+                    error)
+                }
+              }
+          }
+        } catch {
+          case e: NoClassDefFoundError => // This one won't be caught by Scala NonFatal
+            // NoClassDefFoundError's class name uses "/" rather than "." for packages
+            val className = e.getMessage.replaceAll("/", ".")
+            if (spark2RemovedClasses.contains(className)) {
+              throw new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
+                "Please check if your library is compatible with Spark 2.0", e)
+            } else {
+              throw e
             }
         }
       case head :: Nil =>
