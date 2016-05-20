@@ -351,6 +351,25 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * Create a [[TruncateTable]] command.
+   *
+   * For example:
+   * {{{
+   *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   *   [COLUMNS (col1, col2)]
+   * }}}
+   */
+  override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.identifierList != null) {
+      throw operationNotAllowed("TRUNCATE TABLE ... COLUMNS", ctx)
+    }
+    TruncateTable(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    )
+  }
+
+  /**
    * Convert a table property list into a key-value map.
    */
   override def visitTablePropertyList(
