@@ -449,7 +449,7 @@ class LinearRegressionModel private[ml] (
   }
 
   /**
-   * Returns a [[MLWriter]] instance for this ML instance.
+   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
    *
    * For [[LinearRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
