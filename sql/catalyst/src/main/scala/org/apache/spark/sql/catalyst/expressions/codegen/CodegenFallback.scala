@@ -32,8 +32,9 @@ trait CodegenFallback extends Expression {
 
     ctx.references += this
     val objectTerm = ctx.freshName("obj")
+    val placeHolder = ctx.registerComment(this.toString)
     s"""
-      /* expression: ${this.toCommentSafeString} */
+      $placeHolder
       java.lang.Object $objectTerm = expressions[${ctx.references.size - 1}].eval(${ctx.INPUT_ROW});
       boolean ${ev.isNull} = $objectTerm == null;
       ${ctx.javaType(this.dataType)} ${ev.value} = ${ctx.defaultValue(this.dataType)};

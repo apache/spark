@@ -24,7 +24,8 @@ class CodeFormatterSuite extends SparkFunSuite {
 
   def testCase(name: String)(input: String)(expected: String): Unit = {
     test(name) {
-      assert(CodeFormatter.format(input).trim === expected.trim)
+      val sourceCode = new CodeAndComment(input, Map.empty)
+      assert(CodeFormatter.format(sourceCode).trim === expected.trim)
     }
   }
 
