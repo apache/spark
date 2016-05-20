@@ -22,6 +22,7 @@ import java.lang.reflect.InvocationTargetException
 import java.net.{URL, URLClassLoader}
 import java.util
 
+import scala.collection.JavaConverters._
 import scala.language.reflectiveCalls
 import scala.util.Try
 
@@ -244,8 +245,9 @@ private[hive] class IsolatedClientLoader(
 
   /** The isolated client interface to Hive. */
   private[hive] def createClient(): HiveClient = {
+    val hadoopConfMap = hadoopConf.asScala.map(e => e.getKey -> e.getValue).toMap
     if (!isolationOn) {
-      return new HiveClientImpl(version, sparkConf, hadoopConf, config, baseClassLoader, this)
+      return new HiveClientImpl(version, sparkConf, hadoopConfMap, config, baseClassLoader, this)
     }
     // Pre-reflective instantiation setup.
     logDebug("Initializing the logger to avoid disaster...")
@@ -256,7 +258,7 @@ private[hive] class IsolatedClientLoader(
       classLoader
         .loadClass(classOf[HiveClientImpl].getName)
         .getConstructors.head
-        .newInstance(version, sparkConf, hadoopConf, config, classLoader, this)
+        .newInstance(version, sparkConf, hadoopConfMap, config, classLoader, this)
         .asInstanceOf[HiveClient]
     } catch {
       case e: InvocationTargetException =>
