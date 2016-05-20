@@ -56,7 +56,7 @@ it is advisable to use a power of two as the feature dimension, otherwise the fe
 not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
 An optional binary toggle parameter controls term frequency counts. When set to true all nonzero frequency counts are
 set to 1. This is especially useful for discrete probabilistic models that model binary counts
-rather than integer.
+rather than integer counts.
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
@@ -152,7 +152,7 @@ for more details on the API.
  by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
  included in the vocabulary. Another optional binary toggle parameter controls the output vector.
  If set to true all nonzero counts are set to 1. This is especially useful for modelling discrete
- probabilistic models that model binary events rather than integer counts
+ probabilistic models that model binary events rather than integer counts.
 
 **Examples**
 
