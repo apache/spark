@@ -53,7 +53,10 @@ collisions, where different raw features may become the same term after hashing.
 chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
 of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
 it is advisable to use a power of two as the feature dimension, otherwise the features will 
-not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`. 
+not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
+An optional binary toggle parameter controls term frequency counts. When set to true all nonzero frequency counts are
+set to 1. This is especially useful for discrete probabilistic models that model binary counts
+rather than integer.
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
@@ -145,9 +148,11 @@ for more details on the API.
  passed to other algorithms like LDA.
 
  During the fitting process, `CountVectorizer` will select the top `vocabSize` words ordered by
- term frequency across the corpus. An optional parameter "minDF" also affects the fitting process
+ term frequency across the corpus. An optional parameter `minDF` also affects the fitting process
  by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
- included in the vocabulary.
+ included in the vocabulary. Another optional binary toggle parameter controls the output vector.
+ If set to true all nonzero counts are set to 1. This is especially useful for modelling discrete
+ probabilistic models that model binary events rather than integer counts
 
 **Examples**
 
@@ -1092,14 +1097,11 @@ for more details on the API.
 ## QuantileDiscretizer
 
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-categorical features.
-The bin ranges are chosen by taking a sample of the data and dividing it into roughly equal parts.
-The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
-This attempts to find `numBuckets` partitions based on a sample of the given input data, but it may
-find fewer depending on the data sample values.
-
-Note that the result may be different every time you run it, since the sample strategy behind it is
-non-deterministic.
+categorical features. The number of bins is set by the `numBuckets` parameter.
+The bin ranges are chosen using an approximate algorithm (see the documentation for [approxQuantile](https://github.com/apache/spark/blob/master/sql/core/src/main/scala/org/apache/spark/sql/DataFrameStatFunctions.scala)
+for a detailed description). The precision of the approximation can be controlled with the
+`relativeError` parameter. When set to zero, exact quantiles are calculated.
+The lower and upper bin bounds will be `-Infinity` and `+Infinity` covering all real values.
 
 **Examples**
 
