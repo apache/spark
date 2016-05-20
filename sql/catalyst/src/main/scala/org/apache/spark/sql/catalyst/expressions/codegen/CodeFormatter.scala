@@ -100,13 +100,11 @@ private class CodeFormatter {
     val thisLineIndent =
       if (line.isEmpty) {
         ""
+      } else if (line.startsWith("}") || line.startsWith(")") || line.endsWith(":")) {
+        " " * (indentSize * (indentLevel - 1))
+      } else {
+        indentString
       }
-      else if (!inCommentBlock &&
-               (line.startsWith("}") || line.startsWith(")") || line.endsWith(":"))) {
-      " " * (indentSize * (indentLevel - 1))
-    } else {
-      indentString
-    }
     code.append(f"/* ${currentLine}%03d */${if (!line.isEmpty) " " else ""}")
     code.append(thisLineIndent)
     code.append(line)

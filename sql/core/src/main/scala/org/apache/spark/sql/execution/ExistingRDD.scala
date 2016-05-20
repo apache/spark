@@ -251,8 +251,7 @@ private[sql] case class BatchedDataSourceScanExec(
     val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val placeHolder = ctx.registerComment(str)
-    val code = s"$placeHolder\n" + (if (nullable) {
+    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
       s"""
         boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
         $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);

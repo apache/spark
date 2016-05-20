@@ -96,16 +96,14 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      val placeHolder = ctx.registerComment(this.toString)
-      ExprCode(placeHolder, subExprState.isNull, subExprState.value)
+      ExprCode(ctx.registerComment(this.toString), subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val ve = doGenCode(ctx, ExprCode("", isNull, value))
       if (ve.code.nonEmpty) {
         // Add `this` in the comment.
-        val placeHolder = ctx.registerComment(this.toString)
-        ve.copy(code = s"$placeHolder\n" + ve.code.trim)
+        ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
       } else {
         ve
       }

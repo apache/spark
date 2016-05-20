@@ -77,9 +77,8 @@ trait CodegenSupport extends SparkPlan {
   final def produce(ctx: CodegenContext, parent: CodegenSupport): String = executeQuery {
     this.parent = parent
     ctx.freshNamePrefix = variablePrefix
-    val placeHolder = ctx.registerComment(s"PRODUCE: ${this.simpleString}")
     s"""
-       |$placeHolder
+       |${ctx.registerComment(s"PRODUCE: ${this.simpleString}")}
        |${doProduce(ctx)}
      """.stripMargin
   }
@@ -146,10 +145,8 @@ trait CodegenSupport extends SparkPlan {
 
     ctx.freshNamePrefix = parent.variablePrefix
     val evaluated = evaluateRequiredVariables(output, inputVars, parent.usedInputs)
-    val placeHolder = ctx.registerComment(s"CONSUME: ${parent.simpleString}")
     s"""
-       |
-       |$placeHolder
+       |${ctx.registerComment(s"CONSUME: ${parent.simpleString}")}
        |$evaluated
        |${parent.doConsume(ctx, inputVars, rowVar)}
      """.stripMargin
@@ -303,14 +300,12 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
   def doCodeGen(): (CodegenContext, CodeAndComment) = {
     val ctx = new CodegenContext
     val code = child.asInstanceOf[CodegenSupport].produce(ctx, this)
-    val placeHolder =
-      ctx.registerMultilineComment(s"""Codegend pipeline for:\n${child.treeString.trim}""")
     val source = s"""
       public Object generate(Object[] references) {
         return new GeneratedIterator(references);
       }
 
-      $placeHolder
+      ${ctx.registerComment(s"""Codegend pipeline for\n${child.treeString.trim}""")}
       final class GeneratedIterator extends org.apache.spark.sql.execution.BufferedRowIterator {
 
         private Object[] references;
@@ -335,9 +330,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
 
     // try to compile, helpful for debug
     val cleanedSource =
-      new CodeAndComment(
-        CodeFormatter.stripExtraNewLines(source),
-        ctx.getPlaceHolderToComments())
+      new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments())
 
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)

@@ -720,8 +720,8 @@ class CodegenContext {
   /**
    * Register a multi-line comment and return the corresponding place holder
    */
-  def registerMultilineComment(text: String): String = {
-    val placeHolder = s"/*${freshName("comment_placeholder")}*/"
+  private def registerMultilineComment(text: String): String = {
+    val placeHolder = s"/*${freshName("c")}*/"
     val comment = text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
     placeHolderToComments += (placeHolder -> comment)
     placeHolder
@@ -734,7 +734,7 @@ class CodegenContext {
     if (text.contains("\n") || text.contains("\r")) {
       registerMultilineComment(text)
     } else {
-      val placeHolder = s"/*${freshName("comment_placeholder")}*/"
+      val placeHolder = s"/*${freshName("c")}*/"
       val safeComment = s"// $text"
       placeHolderToComments += (placeHolder -> safeComment)
       placeHolder
@@ -756,7 +756,6 @@ abstract class GeneratedClass {
 class CodeAndComment(val body: String, val comment: collection.Map[String, String])
   extends Serializable {
   override def equals(that: Any): Boolean = that match {
-    case null => false
     case t: CodeAndComment if t.body == body => true
     case _ => false
   }
