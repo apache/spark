@@ -495,6 +495,8 @@ class StandaloneRestSubmitSuite extends SparkFunSuite with BeforeAndAfterEach {
       body: String = ""): HttpURLConnection = {
     val conn = new URL(url).openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
+    // Add CSRF protection header
+    conn.setRequestProperty(RestCsrfPreventionFilter.X_XSRF_HEADER, "true")
     if (body.nonEmpty) {
       conn.setDoOutput(true)
       val out = new DataOutputStream(conn.getOutputStream)

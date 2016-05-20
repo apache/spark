@@ -199,6 +199,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     logDebug(s"Sending POST request to server at $url.")
     val conn = url.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod("POST")
+    // Add CSRF protection header
+    conn.setRequestProperty(RestCsrfPreventionFilter.X_XSRF_HEADER, "true")
     readResponse(conn)
   }
 
@@ -209,6 +211,8 @@ private[spark] class RestSubmissionClient(master: String) extends Logging {
     conn.setRequestMethod("POST")
     conn.setRequestProperty("Content-Type", "application/json")
     conn.setRequestProperty("charset", "utf-8")
+    // Add CSRF protection header
+    conn.setRequestProperty(RestCsrfPreventionFilter.X_XSRF_HEADER, "true")
     conn.setDoOutput(true)
     try {
       val out = new DataOutputStream(conn.getOutputStream)
