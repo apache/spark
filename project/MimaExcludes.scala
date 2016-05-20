@@ -771,7 +771,7 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.AlphaComponent"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Experimental"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.DeveloperApi")
-     ) ++
+      ) ++ Seq(
         // [SPARK-14483][WEBUI] Display user name foreach job and query
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.copy"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.scheduler.SparkListenerJobStart.this"),
