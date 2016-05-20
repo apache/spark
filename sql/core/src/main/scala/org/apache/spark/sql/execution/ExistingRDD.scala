@@ -157,7 +157,8 @@ private[sql] case class RowDataSourceScanExec(
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
-      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+      !SparkSession.getActiveSession.get.sessionState.conf.getConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
     case _: HadoopFsRelation => true
     case _ => false
   }

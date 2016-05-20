@@ -77,12 +77,12 @@ class ListingFileCatalog(
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
       HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
     } else {
+      // Dummy jobconf to get to the pathFilter defined in configuration
+      val jobConf = new JobConf(hadoopConf, this.getClass)
+      val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
         logInfo(s"Listing $path on driver")
-        // Dummy jobconf to get to the pathFilter defined in configuration
-        val jobConf = new JobConf(hadoopConf, this.getClass)
-        val pathFilter = FileInputFormat.getInputPathFilter(jobConf)
 
         val statuses = {
           val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
@@ -101,7 +101,8 @@ class ListingFileCatalog(
           // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
           //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
           //   exceeds threshold.
-          case f => new LocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
+          case f =>
+            HadoopFsRelation.createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
         }
       }.filterNot { status =>
         val name = status.getPath.getName

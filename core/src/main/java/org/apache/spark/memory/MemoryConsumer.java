@@ -31,15 +31,24 @@ public abstract class MemoryConsumer {
 
   protected final TaskMemoryManager taskMemoryManager;
   private final long pageSize;
+  private final MemoryMode mode;
   protected long used;
 
-  protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize) {
+  protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize, MemoryMode mode) {
     this.taskMemoryManager = taskMemoryManager;
     this.pageSize = pageSize;
+    this.mode = mode;
   }
 
   protected MemoryConsumer(TaskMemoryManager taskMemoryManager) {
-    this(taskMemoryManager, taskMemoryManager.pageSizeBytes());
+    this(taskMemoryManager, taskMemoryManager.pageSizeBytes(), MemoryMode.ON_HEAP);
+  }
+
+  /**
+   * Returns the memory mode, ON_HEAP or OFF_HEAP.
+   */
+  public MemoryMode getMode() {
+    return mode;
   }
 
   /**
@@ -132,19 +141,19 @@ public abstract class MemoryConsumer {
   }
 
   /**
-   * Allocates a heap memory of `size`.
+   * Allocates memory of `size`.
    */
-  public long acquireOnHeapMemory(long size) {
-    long granted = taskMemoryManager.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this);
+  public long acquireMemory(long size) {
+    long granted = taskMemoryManager.acquireExecutionMemory(size, this);
     used += granted;
     return granted;
   }
 
   /**
-   * Release N bytes of heap memory.
+   * Release N bytes of memory.
    */
-  public void freeOnHeapMemory(long size) {
-    taskMemoryManager.releaseExecutionMemory(size, MemoryMode.ON_HEAP, this);
+  public void freeMemory(long size) {
+    taskMemoryManager.releaseExecutionMemory(size, this);
     used -= size;
   }
 }

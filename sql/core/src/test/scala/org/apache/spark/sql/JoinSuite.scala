@@ -344,8 +344,8 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("full outer join") {
-    upperCaseData.where('N <= 4).registerTempTable("`left`")
-    upperCaseData.where('N >= 3).registerTempTable("`right`")
+    upperCaseData.where('N <= 4).createOrReplaceTempView("`left`")
+    upperCaseData.where('N >= 3).createOrReplaceTempView("`right`")
 
     val left = UnresolvedRelation(TableIdentifier("left"), None)
     val right = UnresolvedRelation(TableIdentifier("right"), None)
@@ -438,7 +438,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
     spark.cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
-    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "1000000000") {
+    withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[BroadcastHashJoinExec]),

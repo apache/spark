@@ -34,7 +34,8 @@ public class TaskMemoryManagerSuite {
         Long.MAX_VALUE,
         1),
       0);
-    manager.allocatePage(4096, null);  // leak memory
+    final MemoryConsumer c = new TestMemoryConsumer(manager);
+    manager.allocatePage(4096, c);  // leak memory
     Assert.assertEquals(4096, manager.getMemoryConsumptionForThisTask());
     Assert.assertEquals(4096, manager.cleanUpAllAllocatedMemory());
   }
@@ -45,7 +46,8 @@ public class TaskMemoryManagerSuite {
       .set("spark.memory.offHeap.enabled", "true")
       .set("spark.memory.offHeap.size", "1000");
     final TaskMemoryManager manager = new TaskMemoryManager(new TestMemoryManager(conf), 0);
-    final MemoryBlock dataPage = manager.allocatePage(256, null);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
+    final MemoryBlock dataPage = manager.allocatePage(256, c);
     // In off-heap mode, an offset is an absolute address that may require more than 51 bits to
     // encode. This test exercises that corner-case:
     final long offset = ((1L << TaskMemoryManager.OFFSET_BITS) + 10);
@@ -58,7 +60,8 @@ public class TaskMemoryManagerSuite {
   public void encodePageNumberAndOffsetOnHeap() {
     final TaskMemoryManager manager = new TaskMemoryManager(
       new TestMemoryManager(new SparkConf().set("spark.memory.offHeap.enabled", "false")), 0);
-    final MemoryBlock dataPage = manager.allocatePage(256, null);
+    final MemoryConsumer c = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    final MemoryBlock dataPage = manager.allocatePage(256, c);
     final long encodedAddress = manager.encodePageNumberAndOffset(dataPage, 64);
     Assert.assertEquals(dataPage.getBaseObject(), manager.getPage(encodedAddress));
     Assert.assertEquals(64, manager.getOffsetInPage(encodedAddress));
@@ -104,6 +107,25 @@ public class TaskMemoryManagerSuite {
     c1.free(0);
     c2.free(100);
     Assert.assertEquals(0, manager.cleanUpAllAllocatedMemory());
+  }
+
+  @Test
+  public void shouldNotForceSpillingInDifferentModes() {
+    final TestMemoryManager memoryManager = new TestMemoryManager(new SparkConf());
+    memoryManager.limit(100);
+    final TaskMemoryManager manager = new TaskMemoryManager(memoryManager, 0);
+
+    TestMemoryConsumer c1 = new TestMemoryConsumer(manager, MemoryMode.ON_HEAP);
+    TestMemoryConsumer c2 = new TestMemoryConsumer(manager, MemoryMode.OFF_HEAP);
+    c1.use(80);
+    Assert.assertEquals(80, c1.getUsed());
+    c2.use(80);
+    Assert.assertEquals(20, c2.getUsed());  // not enough memory
+    Assert.assertEquals(80, c1.getUsed());  // not spilled
+
+    c2.use(10);
+    Assert.assertEquals(10, c2.getUsed());  // spilled
+    Assert.assertEquals(80, c1.getUsed());  // not spilled
   }
 
   @Test

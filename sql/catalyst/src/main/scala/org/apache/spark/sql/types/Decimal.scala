@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.types
 
-import java.math.{MathContext, RoundingMode}
+import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
 
@@ -129,6 +129,23 @@ final class Decimal extends Ordered[Decimal] with Serializable {
   }
 
   /**
+   * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
+   */
+  def set(bigintval: BigInteger): Decimal = {
+    try {
+      this.decimalVal = null
+      this.longVal = bigintval.longValueExact()
+      this._precision = DecimalType.MAX_PRECISION
+      this._scale = 0
+      this
+    }
+    catch {
+      case e: ArithmeticException =>
+        throw new IllegalArgumentException(s"BigInteger ${bigintval} too large for decimal")
+     }
+  }
+
+  /**
    * Set this Decimal to the given Decimal value.
    */
   def set(decimal: Decimal): Decimal = {
@@ -154,6 +171,10 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       java.math.BigDecimal.valueOf(longVal, _scale)
     }
   }
+
+  def toScalaBigInt: BigInt = BigInt(toLong)
+
+  def toJavaBigInteger: java.math.BigInteger = java.math.BigInteger.valueOf(toLong)
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
@@ -371,6 +392,10 @@ object Decimal {
 
   def apply(value: java.math.BigDecimal): Decimal = new Decimal().set(value)
 
+  def apply(value: java.math.BigInteger): Decimal = new Decimal().set(value)
+
+  def apply(value: scala.math.BigInt): Decimal = new Decimal().set(value.bigInteger)
+
   def apply(value: BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
 
@@ -387,6 +412,8 @@ object Decimal {
     value match {
       case j: java.math.BigDecimal => apply(j)
       case d: BigDecimal => apply(d)
+      case k: scala.math.BigInt => apply(k)
+      case l: java.math.BigInteger => apply(l)
       case d: Decimal => d
     }
   }
