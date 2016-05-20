@@ -424,12 +424,10 @@ object YarnSparkHadoopUtil {
    * '%%p' in an escaped way is '%%%%p'.
    */
   private[yarn] def addOutOfMemoryErrorArgument(javaOpts: ListBuffer[String]): Unit = {
-    if (Utils.isWindows) {
-      if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
+    if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
+      if (Utils.isWindows) {
         javaOpts += escapeForShell("-XX:OnOutOfMemoryError=taskkill /F /PID %%%%p")
-      }
-    } else {
-      if (!javaOpts.exists(_.contains("-XX:OnOutOfMemoryError"))) {
+      } else {
         javaOpts += "-XX:OnOutOfMemoryError='kill %p'"
       }
     }
