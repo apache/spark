@@ -783,11 +783,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
+    val mayebePaths = remainder(ctx.identifier).trim
     ctx.op.getType match {
       case SqlBaseParser.ADD =>
         ctx.identifier.getText.toLowerCase match {
-          case "file" => AddFile(remainder(ctx.identifier).trim)
-          case "jar" => AddJar(remainder(ctx.identifier).trim)
+          case "file" => AddFile(mayebePaths)
+          case "jar" => AddJar(mayebePaths)
           case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
       case SqlBaseParser.DELETE =>
@@ -795,14 +796,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       case SqlBaseParser.LIST =>
         ctx.identifier.getText.toLowerCase match {
           case "files" | "file" =>
-            if (remainder(ctx.identifier).trim.length > 0) {
-              ListFilesCommand(remainder(ctx.identifier).trim.split("\\s+"))
+            if (mayebePaths.length > 0) {
+              ListFilesCommand(mayebePaths.split("\\s+"))
             } else {
               ListFilesCommand()
             }
           case "jars" | "jar" =>
-            if (remainder(ctx.identifier).trim.length > 0) {
-              ListJarsCommand(remainder(ctx.identifier).trim.split("\\s+"))
+            if (mayebePaths.length > 0) {
+              ListJarsCommand(mayebePaths.split("\\s+"))
             } else {
               ListJarsCommand()
             }

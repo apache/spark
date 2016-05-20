@@ -23,7 +23,7 @@ import java.net.URI
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{Row, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
 /**
@@ -58,9 +58,7 @@ case class AddFileCommand(path: String) extends RunnableCommand {
  */
 case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("Results", StringType, nullable = false) :: Nil)
-    schema.toAttributes
+    AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val fileList = sparkSession.sparkContext.listFiles()
@@ -87,9 +85,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Runn
  */
 case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends RunnableCommand {
   override val output: Seq[Attribute] = {
-    val schema = StructType(
-      StructField("Results", StringType, nullable = false) :: Nil)
-    schema.toAttributes
+    AttributeReference("Results", StringType, nullable = false)() :: Nil
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val jarList = sparkSession.sparkContext.listJars()
