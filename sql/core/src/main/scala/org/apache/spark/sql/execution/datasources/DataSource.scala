@@ -84,7 +84,7 @@ case class DataSource(
   )
 
   /**
-   * Class that are removed in Spark 2.0. Used to detect incompatibility libraries for Spark 2.0.
+   * Class that were removed in Spark 2.0. Used to detect incompatibility libraries for Spark 2.0.
    */
   private val spark2RemovedClasses = Set(
     "org.apache.spark.sql.DataFrame",
@@ -136,8 +136,8 @@ case class DataSource(
             // NoClassDefFoundError's class name uses "/" rather than "." for packages
             val className = e.getMessage.replaceAll("/", ".")
             if (spark2RemovedClasses.contains(className)) {
-              throw new ClassNotFoundException(s"$className is removed in Spark 2.0. " +
-                "Please check if your library is compatible with Spark 2.0")
+              throw new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
+                "Please check if your library is compatible with Spark 2.0", e)
             } else {
               throw e
             }
