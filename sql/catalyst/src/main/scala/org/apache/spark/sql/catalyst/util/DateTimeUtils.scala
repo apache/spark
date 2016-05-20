@@ -334,7 +334,7 @@ object DateTimeUtils {
       digitsMilli += 1
     }
 
-    if (!justTime && checkInvalidDate(segments(0), segments(1), segments(2))) {
+    if (!justTime && isInvalidDate(segments(0), segments(1), segments(2))) {
       return None
     }
 
@@ -414,7 +414,7 @@ object DateTimeUtils {
       return None
     }
     segments(i) = currentSegmentValue
-    if (checkInvalidDate(segments(0), segments(1), segments(2))) {
+    if (isInvalidDate(segments(0), segments(1), segments(2))) {
       return None
     }
 
@@ -428,7 +428,7 @@ object DateTimeUtils {
   /**
    * Return true if the date is invalid.
    */
-  private def checkInvalidDate(year: Int, month: Int, day: Int): Boolean = {
+  private def isInvalidDate(year: Int, month: Int, day: Int): Boolean = {
     if (year < 0 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
       return true
     }

@@ -353,7 +353,7 @@ class DateTimeUtilsSuite extends SparkFunSuite {
         c.getTimeInMillis * 1000 + 123456)
   }
 
-  test("SPARK-15379 :special invalid date string") {
+  test("SPARK-15379: special invalid date string") {
     // Test stringToDate
     assert(stringToDate(
       UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
