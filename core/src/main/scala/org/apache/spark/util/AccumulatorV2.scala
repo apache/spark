@@ -437,7 +437,11 @@ class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def value: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
+  override def value: java.util.List[T] = _list.synchronized {
+    val newList = new java.util.ArrayList[T]
+    newList.addAll(_list)
+    java.util.Collections.unmodifiableList(newList)
+  }
 
   private[spark] def setValue(newValue: java.util.List[T]): Unit = {
     _list.clear()
