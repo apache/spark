@@ -204,6 +204,12 @@ class SparkSession(object):
 
     @property
     @since(2.0)
+    def sparkContext(self):
+        """Returns the underlying :class:`SparkContext`."""
+        return self._sc
+
+    @property
+    @since(2.0)
     def conf(self):
         """Runtime configuration interface for Spark.
 
