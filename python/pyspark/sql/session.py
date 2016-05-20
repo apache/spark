@@ -175,7 +175,7 @@ class SparkSession(object):
         if jsparkSession is None:
             jsparkSession = self._jvm.SparkSession(self._jsc.sc())
         self._jsparkSession = jsparkSession
-        self._jwrapped = self._jsparkSession.wrapped()
+        self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
         _monkey_patch_RDD(self)
         install_exception_handler()
