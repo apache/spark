@@ -381,8 +381,8 @@ object Decimal {
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
 
-  private[types] val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
-  private[types] val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
+  private val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
+  private val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 
