@@ -95,6 +95,7 @@ case class CartesianProductExec(
         "disabled by default. To explicitly enable them, please set " +
         s"${SQLConf.CROSS_JOINS_ENABLED.key} = true")
     }
+    super.doPrepare()
   }
 
   protected override def doExecute(): RDD[InternalRow] = {

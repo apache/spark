@@ -347,6 +347,7 @@ case class BroadcastNestedLoopJoinExec(
         "threshold and computing it could be prohibitively expensive. To explicitly enable it, " +
         s"please set ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
     }
+    super.doPrepare()
   }
 
   protected override def doExecute(): RDD[InternalRow] = {
