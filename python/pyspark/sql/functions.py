@@ -1729,11 +1729,13 @@ def _wrap_jython_func(sc, src, extra, returnType):
     return sc._jvm.org.apache.spark.sql.execution.python.JythonFunction(
         src, extra)
 
+
 def _wrap_function(sc, func, returnType):
     command = (func, returnType)
     pickled_command, broadcast_vars, env, includes = _prepare_for_python_RDD(sc, command)
     return sc._jvm.PythonFunction(bytearray(pickled_command), env, includes, sc.pythonExec,
                                   sc.pythonVer, broadcast_vars, sc._javaAccumulator)
+
 
 class UserDefinedJythonFunction(object):
     """
@@ -1759,8 +1761,16 @@ class UserDefinedJythonFunction(object):
             try:
                 import dill
             except ImportError:
-                raise ImportError("Failed to import dill, magic JYthon function serialization depends on dill on the driver machine")
-            src = dill.source.getsource(func)
+                raise ImportError("Failed to import dill, magic Jython function serialization " +
+                                  "depends on dill on the driver machine. You may wish to pass " +
+                                  "your function in as a string instead.")
+            try:
+                src = dill.source.getsource(func)
+            except:
+                print("Failed to get the source code associated with provided function. " +
+                      "You may wish to try and assign you lambda to a variable or pass in as a "+
+                      "string.")
+                raise
             file = StringIO()
             cp = cloudpickle.CloudPickler(file)
             code, f_globals, defaults, closure, dct, base_globals = cp.extract_func_data(func)
@@ -1773,7 +1783,9 @@ class UserDefinedJythonFunction(object):
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         # JSON serialize the extras: note self referental functions will fail here with a confusing
         # error about the function not being JSON serializable.
+
         def __dump_extra_json(extra):
+            # TODO(holden): Handle PySpark imports
             if not extra:
                 extra = None
             import json
