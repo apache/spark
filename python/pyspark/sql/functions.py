@@ -18,6 +18,7 @@
 """
 A collections of builtin functions
 """
+from base64 import b64encode
 import math
 import sys
 
@@ -40,7 +41,7 @@ else:
 
 from pyspark import since, SparkContext, cloudpickle
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
-from pyspark.serializers import PickleSerializer, AutoBatchedSerializer
+from pyspark.serializers import CloudPickleSerializer, PickleSerializer, AutoBatchedSerializer
 from pyspark.sql.types import StringType
 from pyspark.sql.column import Column, _to_java_column, _to_seq
 from pyspark.sql.dataframe import DataFrame
@@ -1725,9 +1726,9 @@ def sort_array(col, asc=True):
 # ---------------------------- User Defined Function ----------------------------------
 
 @ignore_unicode_prefix
-def _wrap_jython_func(sc, src, extra, returnType):
+def _wrap_jython_func(sc, src, extra, imports, returnType):
     return sc._jvm.org.apache.spark.sql.execution.python.JythonFunction(
-        src, extra)
+        src, extra, imports)
 
 
 def _wrap_function(sc, func, returnType):
@@ -1783,15 +1784,15 @@ class UserDefinedJythonFunction(object):
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         # JSON serialize the extras: note self referental functions will fail here with a confusing
         # error about the function not being JSON serializable.
-
+        ser = CloudPickleSerializer()
         def __dump_extra_json(extra):
             # TODO(holden): Handle PySpark imports
             if not extra:
                 extra = None
-            import json
-            return json.dumps(extra)
+            return b64encode(ser.dumps(extra))
         serializedExtras = __dump_extra_json(extra)
-        wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, self.returnType)
+        serializedImports = b64encode(ser.dumps(None))
+        wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, serializedImports, self.returnType)
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedJythonFunction(
             name, wrapped_jython_func, jdt)
         return judf

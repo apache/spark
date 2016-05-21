@@ -59,11 +59,17 @@ private[spark] class JythonUDF(
 /**
  * A wrapper for a Jython function, contains all necessary context to run the function in Jython.
  */
-case class JythonFunction(src: String, pythonVars: String) {
+case class JythonFunction(src: String, pythonVars: String, imports: String) {
   val className = s"__reservedPandaClass"
   val code = s"""
-import json
-pythonVars = json.loads('${pythonVars}')
+from base64 import b64decode
+import pickle
+
+pythonVars = pickle.loads(b64decode('${pythonVars}'))
+imports = pickle.loads(b64decode('${imports}'))
+if imports is not None:
+  for k, v in imports.iteritems():
+      exec "import %s as %s" % (v, k)
 if pythonVars is not None:
   for k, v in pythonVars.iteritems():
     exec "%s = v" % k
