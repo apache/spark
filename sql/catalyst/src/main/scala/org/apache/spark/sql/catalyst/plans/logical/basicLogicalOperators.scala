@@ -407,18 +407,23 @@ case class Sort(
   override def maxRows: Option[Long] = child.maxRows
 }
 
+/** Factory for constructing new `Range` nodes. */
+object Range {
+  def apply(start: Long, end: Long, step: Long, numSlices: Int): Range = {
+    val output = StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+    new Range(start, end, step, numSlices, output)
+  }
+}
 
 case class Range(
     start: Long,
     end: Long,
     step: Long,
-    numSlices: Int)
+    numSlices: Int,
+    output: Seq[Attribute])
   extends LeafNode with MultiInstanceRelation {
 
   require(step != 0, s"step ($step) cannot be 0")
-
-  override val output: Seq[Attribute] =
-    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
 
   val numElements: BigInt = {
     val safeStart = BigInt(start)
