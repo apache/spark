@@ -31,7 +31,8 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.types.{ArrayType, Decimal, ObjectType, StructType}
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 case class RepeatedStruct(s: Seq[PrimitiveData])
 
@@ -83,6 +84,25 @@ class JavaSerializable(val value: Int) extends Serializable {
   override def equals(other: Any): Boolean = other match {
     case that: JavaSerializable => this.value == that.value
     case _ => false
+  }
+}
+
+/** For testing UDT for a case class */
+@SQLUserDefinedType(udt = classOf[UDTForCaseClass])
+case class UDTCaseClass(uri: java.net.URI)
+
+class UDTForCaseClass extends UserDefinedType[UDTCaseClass] {
+
+  override def sqlType: DataType = StringType
+
+  override def serialize(obj: UDTCaseClass): UTF8String = {
+    UTF8String.fromString(obj.uri.toString)
+  }
+
+  override def userClass: Class[UDTCaseClass] = classOf[UDTCaseClass]
+
+  override def deserialize(datum: Any): UDTCaseClass = datum match {
+    case uri: UTF8String => UDTCaseClass(new java.net.URI(uri.toString))
   }
 }
 
@@ -146,6 +166,12 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
 
   encodeDecodeTest(Tuple1[Seq[Int]](null), "null seq in tuple")
   encodeDecodeTest(Tuple1[Map[String, String]](null), "null map in tuple")
+
+  encodeDecodeTest(List(1, 2), "list of int")
+  encodeDecodeTest(List("a", null), "list with String and null")
+
+  encodeDecodeTest(
+    UDTCaseClass(new java.net.URI("http://spark.apache.org/")), "udt with case class")
 
   // Kryo encoders
   encodeDecodeTest("hello", "kryo string")(encoderFor(Encoders.kryo[String]))
