@@ -315,8 +315,7 @@ case class RangeExec(range: org.apache.spark.sql.catalyst.plans.logical.Range)
   def numSlices: Int = range.numSlices
   def numElements: BigInt = range.numElements
 
-  override val output: Seq[Attribute] =
-    StructType(StructField("id", LongType, nullable = false) :: Nil).toAttributes
+  override val output: Seq[Attribute] = range.output
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
