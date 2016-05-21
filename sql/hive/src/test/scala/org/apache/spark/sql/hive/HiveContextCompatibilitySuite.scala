@@ -47,7 +47,6 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
 
   override def afterAll(): Unit = {
     try {
-      sc.stop()
       sc = null
       hc = null
     } finally {
