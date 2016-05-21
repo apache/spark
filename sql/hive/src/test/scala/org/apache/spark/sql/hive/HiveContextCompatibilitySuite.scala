@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 
 class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEach {
@@ -29,7 +29,7 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    sc = new SparkContext("local[4]", "test")
+    sc = SparkContext.getOrCreate(new SparkConf().setMaster("local").setAppName("test"))
     HiveUtils.newTemporaryConfiguration(useInMemoryDerby = true).foreach { case (k, v) =>
       sc.hadoopConfiguration.set(k, v)
     }
@@ -47,7 +47,6 @@ class HiveContextCompatibilitySuite extends SparkFunSuite with BeforeAndAfterEac
 
   override def afterAll(): Unit = {
     try {
-      sc.stop()
       sc = null
       hc = null
     } finally {
