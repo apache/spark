@@ -14,16 +14,20 @@ directory in Maven in `PATH`.
 
 ##  Unit tests
 
-To run existing unit tests in SparkR on Windows, the following setps are required (the steps below suppose you are in Spark root directory)
+To run the SparkR unit tests on Windows, the following steps are required —assuming you are in the Spark root directory and do not have Apache Hadoop installed already:
 
-1. Set `HADOOP_HOME`.
-2. Download `winutils.exe` and locate this in `$HADOOP_HOME/bin`. 
+1. Create a folder to download Hadoop related files for Windows. For example, `cd ..` and `mkdir hadoop`.
 
-    It seems not requiring installing Hadoop but only this `winutils.exe`. It seems not included in Hadoop official binary releases so it should be built from source but it seems it is able to be downloaded from community (e.g. [steveloughran/winutils](https://github.com/steveloughran/winutils)).
+2. Download the relevant Hadoop bin package from [steveloughran/winutils](https://github.com/steveloughran/winutils). While these are not official ASF artifacts, they are built from the ASF release git hashes by a Hadoop PMC member on a dedicated Windows VM. For further reading, consult [Windows Problems on the Hadoop wiki](https://wiki.apache.org/hadoop/WindowsProblems).
 
-3. Run unit-tests for SparkR by running below (you need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first):
- 
+3. Install the files into `hadoop\bin`; make sure that `winutils.exe` and `hadoop.dll` are present.
+
+4. Set the environment variable `HADOOP_HOME` to the full path to the newly created `hadoop` directory.
+
+5. Run unit tests for SparkR by running the command below. You need to install the [testthat](http://cran.r-project.org/web/packages/testthat/index.html) package first:
+
     ```
     R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
     .\bin\spark-submit2.cmd --conf spark.hadoop.fs.defualt.name="file:///" R\pkg\tests\run-all.R
     ```
+
