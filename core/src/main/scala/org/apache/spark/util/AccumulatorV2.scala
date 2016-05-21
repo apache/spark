@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
+import java.util.ArrayList
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -415,7 +416,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
 
 
 class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
-  private val _list: java.util.List[T] = new java.util.ArrayList[T]
+  private val _list: java.util.List[T] = new ArrayList[T]
 
   override def isZero: Boolean = _list.isEmpty
 
@@ -438,9 +439,7 @@ class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
   }
 
   override def value: java.util.List[T] = _list.synchronized {
-    val newList = new java.util.ArrayList[T]
-    newList.addAll(_list)
-    java.util.Collections.unmodifiableList(newList)
+    java.util.Collections.unmodifiableList(new ArrayList[T](_list))
   }
 
   private[spark] def setValue(newValue: java.util.List[T]): Unit = {
