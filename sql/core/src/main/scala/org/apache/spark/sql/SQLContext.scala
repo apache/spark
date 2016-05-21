@@ -115,14 +115,14 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def setConf(props: Properties): Unit = {
-    sessionState.conf.setConf(props)
+    runtimeConf.set(props)
   }
 
   /**
    * Set the given Spark SQL configuration property.
    */
   private[sql] def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    sessionState.conf.setConf(entry, value)
+    runtimeConf.set(entry, value)
   }
 
   /**
@@ -132,7 +132,7 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def setConf(key: String, value: String): Unit = {
-    sparkSession.conf.set(key, value)
+    runtimeConf.set(key, value)
   }
 
   /**
@@ -142,7 +142,7 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def getConf(key: String): String = {
-    sparkSession.conf.get(key)
+    runtimeConf.get(key)
   }
 
   /**
@@ -153,7 +153,7 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def getConf(key: String, defaultValue: String): String = {
-    sparkSession.conf.get(key, defaultValue)
+    runtimeConf.get(key, defaultValue)
   }
 
   /**
@@ -164,7 +164,7 @@ class SQLContext private[sql](
    * @since 1.0.0
    */
   def getAllConfs: immutable.Map[String, String] = {
-    sparkSession.conf.getAll
+    runtimeConf.getAll
   }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = sparkSession.parseSql(sql)

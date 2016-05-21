@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql
 
+import org.scalatest.BeforeAndAfterEach
+
 import org.apache.spark.{SparkContext, SparkFunSuite}
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
  */
-class SparkSessionBuilderSuite extends SparkFunSuite {
+class SparkSessionBuilderSuite extends SparkFunSuite with BeforeAndAfterEach {
 
   private var initialSession: SparkSession = _
 
@@ -35,9 +37,13 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     initialSession.sparkContext
   }
 
-  test("create with config options and propagate them to SparkContext and SparkSession") {
+  override def beforeEach() {
+    super.beforeEach()
     // Creating a new session with config - this works by just calling the lazy val
     sparkContext
+  }
+
+  test("create with config options and propagate them to SparkContext and SparkSession") {
     assert(initialSession.sparkContext.conf.get("some-config") == "v2")
     assert(initialSession.conf.get("some-config") == "v2")
     SparkSession.clearDefaultSession()
