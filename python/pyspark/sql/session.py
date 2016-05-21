@@ -272,6 +272,19 @@ class SparkSession(object):
 
         return DataFrame(jdf, self._wrapped)
 
+    @since(2.0)
+    def parallelize(self, c, numSlices=None):
+        """
+        Distribute a local Python collection to form an RDD. Using xrange
+        is recommended if the input represents a range for performance.
+
+        >>> spark.parallelize([0, 2, 3, 4, 6], 5).glom().collect()
+        [[0], [2], [3], [4], [6]]
+        >>> spark.parallelize(xrange(0, 6, 2), 5).glom().collect()
+        [[], [0], [], [2], [4]]
+        """
+        return self._sc.parallelize(c, numSlices)
+
     def _inferSchemaFromList(self, data):
         """
         Infer schema from list of Row or tuple.
