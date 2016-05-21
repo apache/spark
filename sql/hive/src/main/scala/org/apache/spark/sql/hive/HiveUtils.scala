@@ -344,8 +344,8 @@ private[spark] object HiveUtils extends Logging {
         hiveMetastoreVersion = hiveMetastoreVersion,
         hadoopVersion = VersionInfo.getVersion,
         sparkConf = conf,
-        hadoopConf = hadoopConf,
         sharesHadoopClasses = hiveMetastoreShareHadoopClasses,
+        hadoopConf = hadoopConf,
         config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
