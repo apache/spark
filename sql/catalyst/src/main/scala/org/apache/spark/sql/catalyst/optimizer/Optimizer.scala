@@ -673,7 +673,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val foldableMap = AttributeMap(plan.flatMap {
       case Project(projectList, _) => projectList.collect {
-        case a: Alias if a.resolved && a.child.foldable => (a.toAttribute, a)
+        case a: Alias if a.child.foldable => (a.toAttribute, a)
       }
       case _ => Nil
     })
