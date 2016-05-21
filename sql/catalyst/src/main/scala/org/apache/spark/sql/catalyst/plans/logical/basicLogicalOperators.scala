@@ -436,7 +436,7 @@ case class Range(
     }
   }
 
-  override def newInstance(): Range = copy()
+  override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
   override def statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
