@@ -767,5 +767,5 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def clear(): Unit = {
     settings.clear()
   }
-
 }
+
