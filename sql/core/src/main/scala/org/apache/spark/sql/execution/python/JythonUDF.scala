@@ -23,7 +23,7 @@ import javax.script._
 import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types._
 
 /**
  * A serialized version of a Python lambda function to be executed in Jython.
@@ -43,7 +43,7 @@ private[spark] class JythonUDF(
   }
 
   def this(name: String, func: JythonFunction, dataType: DataType, children: Seq[Expression]) {
-    this(name, func, func.toScalaFunc(), dataType, children)
+    this(name, func, func.toScalaFunc(JythonConverter.build(dataType)), dataType, children)
   }
 
   override def toString: String = s"JythonUDF_$name(${children.mkString(", ")})"
@@ -62,14 +62,14 @@ case class JythonFunction(src: String, pythonVars: String) {
   /**
    * Compile this function to a Scala function.
    */
-  def toScalaFunc(): AnyRef = {
+  def toScalaFunc(converter: Any => Any): AnyRef = {
     val jython = JythonFunc.jython
     val className = s"__reservedPandaClass"
     val code = s"""
-import pickle
-pythonVars = pickle.loads("${pythonVars}")
+import json
+pythonVars = json.loads('${pythonVars}')
 if pythonVars is not None:
-  for k, v in pythonVars:
+  for k, v in pythonVars.iteritems():
     exec "%s = v" % k
 class ${className}(object):
   def __init__(self):
@@ -77,7 +77,11 @@ class ${className}(object):
 ${className}_instance = ${className}()
 """
     val lazyFunc = new LazyJythonFunc(code, className)
-    lazyFunc.scalaFunc _
+    def convertedLazyFunc(ar: AnyRef) = {
+      val result = lazyFunc.scalaFunc(ar)
+      converter(result)
+    }
+    convertedLazyFunc _
   }
 }
 
@@ -98,9 +102,24 @@ class LazyJythonFunc(code: String, className: String) extends Serializable {
     scope.get(s"${className}_instance")
   }
 
-  def scalaFunc(ar: AnyRef): AnyRef = {
+  def scalaFunc(ar: AnyRef): Any = {
     val pythonRet = jython.asInstanceOf[Invocable].invokeMethod(func, "call", ar)
     pythonRet
+  }
+}
+
+object JythonConverter {
+  def build(dt: DataType): Any => Any = {
+    dt match {
+      case LongType => x => x.asInstanceOf[java.math.BigInteger].longValue()
+      case IntegerType => x => x.asInstanceOf[java.math.BigInteger].intValue()
+      case arrayType: ArrayType => x => {
+        val arr = x.asInstanceOf[java.util.List[_]].asScala
+        val innerConv = build(arrayType.elementType)
+        arr.map(innerConv)
+      }
+      case _ => x => x
+    }
   }
 }
 

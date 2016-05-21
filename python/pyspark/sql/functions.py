@@ -1764,13 +1764,20 @@ class UserDefinedJythonFunction(object):
             file = StringIO()
             cp = cloudpickle.CloudPickler(file)
             code, f_globals, defaults, closure, dct, base_globals = cp.extract_func_data(func)
-            extra = dict(base_globals).update(f_globals)
+            extra = dict(base_globals)
+            extra.update(f_globals)
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        wrapped_jython_func = _wrap_jython_func(sc, src, pickle.dumps(extra), self.returnType)
+        if not extra:
+            extra = None
+        # JSON serialize the extras: note self referental functions will fail here with a confusing
+        # error about the function not being JSON serializable.
+        import json
+        serializedExtras = json.dumps(extra)
+        wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, self.returnType)
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedJythonFunction(
             name, wrapped_jython_func, jdt)
         return judf
