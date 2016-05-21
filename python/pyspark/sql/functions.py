@@ -1771,7 +1771,7 @@ class UserDefinedJythonFunction(object):
                 src = dill.source.getsource(func)
             except:
                 print("Failed to get the source code associated with provided function. " +
-                      "You may wish to try and assign you lambda to a variable or pass in as a "+
+                      "You may wish to try and assign you lambda to a variable or pass in as a " +
                       "string.")
                 raise
             file = StringIO()
@@ -1786,6 +1786,7 @@ class UserDefinedJythonFunction(object):
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
         # Serialize the "extras" and drop PySpark imports
         ser = CloudPickleSerializer()
+
         def isInternal(v):
             isinstance(v, (type, types.ClassType)) and v.__module__.startswith("pyspark")
         filtered_extra = {k: v for k, v in extra.iteritems() if isInternal(v)}
@@ -1797,8 +1798,9 @@ class UserDefinedJythonFunction(object):
         print(extra_imports)
         serializedExtras = b64encode(ser.dumps(extra))
         serializedImports = b64encode(ser.dumps(extra_imports))
-
-        wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, serializedImports, self.returnType)
+        # Create a Java representation
+        wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, serializedImports,
+                                                self.returnType)
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedJythonFunction(
             name, wrapped_jython_func, jdt)
         return judf
