@@ -196,6 +196,10 @@ public class HiveServer2 extends CompositeService {
         for (String propKey : confProps.stringPropertyNames()) {
           // save logging message for log4j output latter after log4j initialize properly
           debugMessage.append("Setting " + propKey + "=" + confProps.getProperty(propKey) + ";\n");
+          if (propKey.equalsIgnoreCase("hive.metastore.warehouse.dir")) {
+            throw new Error("hive.metastore.warehouse.dir is deprecated. " +
+              "Instead, use spark.sql.warehouse.dir to specify the default location of database.");
+          }
           System.setProperty(propKey, confProps.getProperty(propKey));
         }
 
