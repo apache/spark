@@ -139,6 +139,21 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("reset - user-defined conf") {
+    spark.sqlContext.conf.clear()
+    val userDefinedConf = "x.y.z.reset"
+    try{
+      assert(spark.conf.getOption(userDefinedConf).isEmpty)
+      sql(s"set $userDefinedConf=false")
+      assert(spark.conf.get(userDefinedConf) === "false")
+      assert(sql(s"set").where(s"key = '$userDefinedConf'").count() == 1)
+      sql(s"reset")
+      assert(spark.conf.getOption(userDefinedConf).isEmpty)
+    } finally {
+      spark.conf.unset(userDefinedConf)
+    }
+  }
+
   test("invalid conf value") {
     spark.sqlContext.conf.clear()
     val e = intercept[IllegalArgumentException] {

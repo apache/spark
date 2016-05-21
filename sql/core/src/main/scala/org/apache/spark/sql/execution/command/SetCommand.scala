@@ -126,7 +126,7 @@ case class SetCommand(kv: Option[(String, Option[String])]) extends RunnableComm
 case object ResetCommand extends RunnableCommand with Logging {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.sessionState.conf.reset()
+    sparkSession.sessionState.conf.clear()
     Seq.empty[Row]
   }
 
