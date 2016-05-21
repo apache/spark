@@ -131,11 +131,11 @@ private[spark] object HiveUtils extends Logging {
 
   val HIVE_METASTORE_SHARE_HADOOPCLASSES =
     SQLConfigBuilder("spark.sql.hive.metastore.shareHadoopClasses")
-      .doc("When set to false, the classloader used to load Hive metastore client will " +
-        "explicitly load Hadoop classes instead of using classes loaded by the classloader " +
-        "that loads Spark.")
+      .doc("When set to true, the classloader used to load Hive metastore client will " +
+        "not explicitly load Hadoop classes. Instead, Hadoop classes loaded by the classloader " +
+        "that loads Spark will be used.")
       .booleanConf
-      .createWithDefault(true)
+      .createWithDefault(false)
 
   val HIVE_THRIFT_SERVER_ASYNC = SQLConfigBuilder("spark.sql.hive.thriftServer.async")
     .doc("When set to true, Hive Thrift server executes SQL queries in an asynchronous way.")
