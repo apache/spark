@@ -177,14 +177,16 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr.transformUp { case u @ UnresolvedAlias(child, optionalAliasName) =>
+          expr.transformUp { case u @ UnresolvedAlias(child, optGenAliasFunc) =>
             child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
               case e: ExtractValue => Alias(e, toPrettySQL(e))()
-              case e => Alias(e, optionalAliasName.getOrElse(toPrettySQL(e)))()
+              case e if optGenAliasFunc.isDefined =>
+                Alias(child, optGenAliasFunc.get.apply(e))()
+              case e => Alias(e, toPrettySQL(e))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
