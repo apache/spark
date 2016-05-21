@@ -1188,7 +1188,8 @@ def _test():
     from pyspark.mllib.linalg import Matrices
     import pyspark.mllib.linalg.distributed
     globs = pyspark.mllib.linalg.distributed.__dict__.copy()
-    spark = SparkSession.builder.master("local[2]").appName("mllib.linalg.distributed tests").getOrCreate()
+    spark = SparkSession.builder.master("local[2]")\
+        .appName("mllib.linalg.distributed tests").getOrCreate()
     globs['sc'] = spark.sparkContext
     globs['Matrices'] = Matrices
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
