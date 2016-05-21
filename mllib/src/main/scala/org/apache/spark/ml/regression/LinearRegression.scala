@@ -271,7 +271,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
     if (!$(fitIntercept) && (0 until numFeatures).exists { i =>
       featuresStd(i) == 0.0 && featuresMean(i) != 0.0 }) {
       logWarning("Fitting LinearRegressionModel without intercept on dataset with " +
-        "constant nonzero column, Spark ML outputs zero coefficients for constant nonzero " +
+        "constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero " +
         "columns. This behavior is the same as R glmnet but different from LIBSVM.")
     }
 
