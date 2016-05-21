@@ -99,7 +99,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("deprecated property") {
     spark.sqlContext.conf.clear()
     val original = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-    try{
+    try {
       sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
       assert(spark.conf.get(SQLConf.SHUFFLE_PARTITIONS) === 10)
     } finally {
@@ -110,7 +110,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("reset - public conf") {
     spark.sqlContext.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
-    try{
+    try {
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
       sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
@@ -126,7 +126,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("reset - internal conf") {
     spark.sqlContext.conf.clear()
     val original = spark.conf.get(SQLConf.NATIVE_VIEW)
-    try{
+    try {
       assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
       sql(s"set ${SQLConf.NATIVE_VIEW.key}=false")
       assert(spark.conf.get(SQLConf.NATIVE_VIEW) === false)
@@ -142,7 +142,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("reset - user-defined conf") {
     spark.sqlContext.conf.clear()
     val userDefinedConf = "x.y.z.reset"
-    try{
+    try {
       assert(spark.conf.getOption(userDefinedConf).isEmpty)
       sql(s"set $userDefinedConf=false")
       assert(spark.conf.get(userDefinedConf) === "false")
