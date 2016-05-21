@@ -440,9 +440,9 @@ case class Range(
 
   override def simpleString: String = {
     if (step == 1) {
-      s"Range($start, $end, splits=$numSlices)"
+      s"Range ($start, $end, splits=$numSlices)"
     } else {
-      s"Range($start, $end, step=$step, splits=$numSlices)"
+      s"Range ($start, $end, step=$step, splits=$numSlices)"
     }
   }
 }
