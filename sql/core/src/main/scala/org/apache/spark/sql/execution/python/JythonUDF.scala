@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.Row
 
 /**
  * A serialized version of a Python lambda function to be executed in Jython.
@@ -64,6 +65,29 @@ case class JythonFunction(src: String, pythonVars: String, imports: String) {
   val code = s"""
 from base64 import b64decode
 import pickle
+import os
+import sys
+sys.path.extend(os.environ["PYTHONPATH"].split(":"))
+# A mini version of Row for complex types
+class Row(tuple):
+    def __new__(self, *args, **kwargs):
+        if args and kwargs:
+            raise ValueError("Can not use both args "
+                             "and kwargs to create Row")
+        if args:
+            # create row class or objects
+            return tuple.__new__(self, args)
+
+        elif kwargs:
+            # create row objects
+            names = sorted(kwargs.keys())
+            row = tuple.__new__(self, [kwargs[n] for n in names])
+            row.__fields__ = names
+            return row
+
+        else:
+            raise ValueError("No args or kwargs")
+
 
 pythonVars = pickle.loads(b64decode('${pythonVars}'))
 imports = pickle.loads(b64decode('${imports}'))
@@ -121,17 +145,25 @@ object JythonConverter {
     dt match {
       case LongType => x => x.asInstanceOf[java.math.BigInteger].longValue()
       case IntegerType => x => x.asInstanceOf[java.math.BigInteger].intValue()
-      case arrayType: ArrayType => x => {
-        val arr = x.asInstanceOf[JList[_]].asScala
+      case arrayType: ArrayType =>
         val innerConv = build(arrayType.elementType)
-        arr.map(innerConv)
-      }
-      case mapType: MapType => x => {
+        x => {
+          val arr = x.asInstanceOf[JList[_]].asScala
+          arr.map(innerConv)
+        }
+      case mapType: MapType =>
         val keyConverter = build(mapType.keyType)
         val valueConverter = build(mapType.valueType)
-        val dict = x.asInstanceOf[JMap[_, _]].asScala
-        dict.map{case (k, v) => (keyConverter(k), valueConverter(v))}
-      }
+        x => {
+          val dict = x.asInstanceOf[JMap[_, _]].asScala
+          dict.map{case (k, v) => (keyConverter(k), valueConverter(v))}
+        }
+      case structType: StructType =>
+        val converters = structType.fields.map(f => build(f.dataType))
+        x => {
+          val itr = x.asInstanceOf[org.python.core.PyTupleDerived].asScala
+          Row(converters.zip(itr).map{case (conv, v) => conv(v)} : _*)
+        }
       case _ => x => x
     }
   }

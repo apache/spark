@@ -18,6 +18,8 @@
 """
 A collections of builtin functions
 """
+from __future__ import absolute_import
+import types
 from base64 import b64encode
 import math
 import sys
@@ -1782,16 +1784,20 @@ class UserDefinedJythonFunction(object):
         if name is None:
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        # JSON serialize the extras: note self referental functions will fail here with a confusing
-        # error about the function not being JSON serializable.
+        # Serialize the "extras" and drop PySpark imports
         ser = CloudPickleSerializer()
-        def __dump_extra_json(extra):
-            # TODO(holden): Handle PySpark imports
-            if not extra:
-                extra = None
-            return b64encode(ser.dumps(extra))
-        serializedExtras = __dump_extra_json(extra)
-        serializedImports = b64encode(ser.dumps(None))
+        def isInternal(v):
+            isinstance(v, (type, types.ClassType)) and v.__module__.startswith("pyspark")
+        filtered_extra = {k: v for k, v in extra.iteritems() if isInternal(v)}
+        extra_imports = {}
+        extra = filtered_extra
+        if not extra:
+            extra = None
+        print(extra)
+        print(extra_imports)
+        serializedExtras = b64encode(ser.dumps(extra))
+        serializedImports = b64encode(ser.dumps(extra_imports))
+
         wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, serializedImports, self.returnType)
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedJythonFunction(
             name, wrapped_jython_func, jdt)
