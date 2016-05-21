@@ -43,7 +43,8 @@ private[spark] class JythonUDF(
   }
 
   def this(name: String, func: JythonFunction, dataType: DataType, children: Seq[Expression]) {
-    this(name, func, func.toScalaFunc(JythonConverter.build(dataType)), dataType, children)
+    this(name, func, func.toScalaFunc(JythonConverter.build(dataType), children.size), dataType,
+      children)
   }
 
   override def toString: String = s"JythonUDF_$name(${children.mkString(", ")})"
@@ -59,13 +60,8 @@ private[spark] class JythonUDF(
  * A wrapper for a Jython function, contains all necessary context to run the function in Jython.
  */
 case class JythonFunction(src: String, pythonVars: String) {
-  /**
-   * Compile this function to a Scala function.
-   */
-  def toScalaFunc(converter: Any => Any): AnyRef = {
-    val jython = JythonFunc.jython
-    val className = s"__reservedPandaClass"
-    val code = s"""
+  val className = s"__reservedPandaClass"
+  val code = s"""
 import json
 pythonVars = json.loads('${pythonVars}')
 if pythonVars is not None:
@@ -76,12 +72,18 @@ class ${className}(object):
     self.call = ${src}
 ${className}_instance = ${className}()
 """
-    val lazyFunc = new LazyJythonFunc(code, className)
-    def convertedLazyFunc(ar: AnyRef) = {
-      val result = lazyFunc.scalaFunc(ar)
-      converter(result)
+  val lazyFunc = new LazyJythonFunc(code, className)
+
+  /**
+   * Compile this function to a Scala function.
+   */
+  def toScalaFunc(converter: Any => Any, children: Int): AnyRef = {
+    children match {
+      case 0 => () => converter(lazyFunc.scalaFunc())
+      case 1 => (ar1: AnyRef) => converter(lazyFunc.scalaFunc(ar1))
+      case 2 => (ar1: AnyRef, ar2: AnyRef) => converter(lazyFunc.scalaFunc(ar1, ar2))
+      case _ => throw new Exception("Unsupported number of children " + children)
     }
-    convertedLazyFunc _
   }
 }
 
@@ -102,8 +104,8 @@ class LazyJythonFunc(code: String, className: String) extends Serializable {
     scope.get(s"${className}_instance")
   }
 
-  def scalaFunc(ar: AnyRef): Any = {
-    val pythonRet = jython.asInstanceOf[Invocable].invokeMethod(func, "call", ar)
+  def scalaFunc(ar: AnyRef*): Any = {
+    val pythonRet = jython.asInstanceOf[Invocable].invokeMethod(func, "call", ar : _*)
     pythonRet
   }
 }
@@ -114,9 +116,15 @@ object JythonConverter {
       case LongType => x => x.asInstanceOf[java.math.BigInteger].longValue()
       case IntegerType => x => x.asInstanceOf[java.math.BigInteger].intValue()
       case arrayType: ArrayType => x => {
-        val arr = x.asInstanceOf[java.util.List[_]].asScala
+        val arr = x.asInstanceOf[JList[_]].asScala
         val innerConv = build(arrayType.elementType)
         arr.map(innerConv)
+      }
+      case mapType: MapType => x => {
+        val keyConverter = build(mapType.keyType)
+        val valueConverter = build(mapType.valueType)
+        val dict = x.asInstanceOf[JMap[_, _]].asScala
+        dict.map{case (k, v) => (keyConverter(k), valueConverter(v))}
       }
       case _ => x => x
     }

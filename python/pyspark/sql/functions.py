@@ -1771,12 +1771,14 @@ class UserDefinedJythonFunction(object):
         if name is None:
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        if not extra:
-            extra = None
         # JSON serialize the extras: note self referental functions will fail here with a confusing
         # error about the function not being JSON serializable.
-        import json
-        serializedExtras = json.dumps(extra)
+        def __dump_extra_json(extra):
+            if not extra:
+                extra = None
+            import json
+            return json.dumps(extra)
+        serializedExtras = __dump_extra_json(extra)
         wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, self.returnType)
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedJythonFunction(
             name, wrapped_jython_func, jdt)
