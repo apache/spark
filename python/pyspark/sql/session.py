@@ -22,6 +22,7 @@ from functools import reduce
 from threading import RLock
 
 if sys.version >= '3':
+    xrange = range
     basestring = unicode = str
 else:
     from itertools import imap as map
