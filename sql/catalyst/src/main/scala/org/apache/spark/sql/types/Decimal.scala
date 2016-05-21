@@ -173,7 +173,7 @@ final class Decimal extends Ordered[Decimal] with Serializable {
 
   def toScalaBigInt: BigInt = BigInt(toLong)
 
-  def toJavaBigInteger: BigInteger = BigInteger.valueOf(toLong)
+  def toJavaBigInteger: java.math.BigInteger = java.math.BigInteger.valueOf(toLong)
 
   def toUnscaledLong: Long = {
     if (decimalVal.ne(null)) {
@@ -394,9 +394,9 @@ object Decimal {
 
   def apply(value: java.math.BigDecimal): Decimal = new Decimal().set(value)
 
-  def apply(value: BigInteger): Decimal = new Decimal().set(value)
+  def apply(value: java.math.BigInteger): Decimal = new Decimal().set(value)
 
-  def apply(value: BigInt): Decimal = new Decimal().set(value.bigInteger)
+  def apply(value: scala.math.BigInt): Decimal = new Decimal().set(value.bigInteger)
 
   def apply(value: BigDecimal, precision: Int, scale: Int): Decimal =
     new Decimal().set(value, precision, scale)
@@ -414,8 +414,8 @@ object Decimal {
     value match {
       case j: java.math.BigDecimal => apply(j)
       case d: BigDecimal => apply(d)
-      case k: BigInt => apply(k)
-      case l: BigInteger => apply(l)
+      case k: scala.math.BigInt => apply(k)
+      case l: java.math.BigInteger => apply(l)
       case d: Decimal => d
     }
   }
