@@ -140,6 +140,18 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   import testImplicits._
 
+  private def withSchemaInference(f: => Unit): Unit = {
+    withSQLConf(("spark.sql.streaming.allowSchemaInference", "true")) { f }
+  }
+
+  private def withoutSchemaInference(f: => Unit): Unit = {
+    withSQLConf(("spark.sql.streaming.allowSchemaInference", "false")) { f }
+  }
+
+  private def testWithSchemaInference(testName: String)(f: => Unit): Unit = {
+    test(testName) { withSchemaInference { f } }
+  }
+
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
   private def createFileStreamSource(
       format: String,
@@ -165,18 +177,31 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
   }
 
-  test("FileStreamSource schema: no path") {
+  // ============= Basic parameter exists tests ================
+
+  test("FileStreamSource schema: no path, no schema") {
     val e = intercept[IllegalArgumentException] {
       createFileStreamSourceAndGetSchema(format = None, path = None, schema = None)
     }
-    assert("'path' is not specified" === e.getMessage)
+    assert(e.getMessage.contains("path"))  // reason is path, not schema
   }
 
-  test("FileStreamSource schema: path doesn't exist") {
-    intercept[AnalysisException] {
+  test("FileStreamSource schema: path doesn't exist, no schema") {
+    val e = intercept[IllegalArgumentException] {
       createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
     }
+    assert(e.getMessage.toLowerCase.contains("schema"))  // reason is schema absence, not the path
   }
+
+  test("FileStreamSource schema: path doesn't exist, with schema") {
+    val e = intercept[AnalysisException] {
+      createFileStreamSourceAndGetSchema(
+        format = None, path = Some("/a/b/c"), schema = Some(new StructType))
+    }
+    assert(e.getMessage.contains("path"))  // reason is path does not exist
+  }
+
+  // =============== Text file stream schema tests ================
 
   test("FileStreamSource schema: text, no existing files, no schema") {
     withTempDir { src =>
@@ -205,7 +230,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("FileStreamSource schema: parquet, no existing files, no schema") {
+  // =============== Parquet file stream schema tests ================
+
+  testWithSchemaInference("FileStreamSource schema: parquet, no existing files, no schema") {
     withTempDir { src =>
       val e = intercept[AnalysisException] {
         createFileStreamSourceAndGetSchema(
@@ -220,9 +247,21 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       Seq("a", "b", "c").toDS().as("userColumn").toDF().write
         .mode(org.apache.spark.sql.SaveMode.Overwrite)
         .parquet(src.getCanonicalPath)
-      val schema = createFileStreamSourceAndGetSchema(
-        format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
-      assert(schema === new StructType().add("value", StringType))
+
+      // Without schema inference, should throw error
+      withoutSchemaInference {
+        intercept[IllegalArgumentException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
+        }
+      }
+
+      // With schema inference, should infer correct schema
+      withSchemaInference {
+        val schema = createFileStreamSourceAndGetSchema(
+          format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
+        assert(schema === new StructType().add("value", StringType))
+      }
     }
   }
 
@@ -237,7 +276,9 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("FileStreamSource schema: json, no existing files, no schema") {
+  // =============== JSON file stream schema tests ================
+
+  testWithSchemaInference("FileStreamSource schema: json, no existing files, no schema") {
     withTempDir { src =>
       val e = intercept[AnalysisException] {
         createFileStreamSourceAndGetSchema(
@@ -249,10 +290,22 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("FileStreamSource schema: json, existing files, no schema") {
     withTempDir { src =>
-      stringToFile(new File(src, "1"), "{'c': '1'}\n{'c': '2'}\n{'c': '3'}")
-      val schema = createFileStreamSourceAndGetSchema(
-        format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
-      assert(schema === new StructType().add("c", StringType))
+
+      // Without schema inference, should throw error
+      withoutSchemaInference {
+        intercept[IllegalArgumentException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        }
+      }
+
+      // With schema inference, should infer correct schema
+      withSchemaInference {
+        stringToFile(new File(src, "1"), "{'c': '1'}\n{'c': '2'}\n{'c': '3'}")
+        val schema = createFileStreamSourceAndGetSchema(
+          format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        assert(schema === new StructType().add("c", StringType))
+      }
     }
   }
 
@@ -265,6 +318,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       assert(schema === userSchema)
     }
   }
+
+  // =============== Text file stream tests ================
 
   test("read from text files") {
     withTempDirs { case (src, tmp) =>
@@ -283,6 +338,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
+
+  // =============== JSON file stream tests ================
 
   test("read from json files") {
     withTempDirs { case (src, tmp) =>
@@ -311,7 +368,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("read from json files with inferring schema") {
+  testWithSchemaInference("read from json files with inferring schema") {
     withTempDirs { case (src, tmp) =>
 
       // Add a file so that we can infer its schema
@@ -330,7 +387,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("reading from json files inside partitioned directory") {
+  testWithSchemaInference("reading from json files inside partitioned directory") {
     withTempDirs { case (baseSrc, tmp) =>
       val src = new File(baseSrc, "type=X")
       src.mkdirs()
@@ -350,7 +407,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("reading from json files with changing schema") {
+  testWithSchemaInference("reading from json files with changing schema") {
     withTempDirs { case (src, tmp) =>
 
       // Add a file so that we can infer its schema
@@ -381,6 +438,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
+  // =============== Parquet file stream tests ================
+
   test("read from parquet files") {
     withTempDirs { case (src, tmp) =>
       val fileStream = createFileStream("parquet", src.getCanonicalPath, Some(valueSchema))
@@ -399,7 +458,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("read from parquet files with changing schema") {
+  testWithSchemaInference("read from parquet files with changing schema") {
 
     withTempDirs { case (src, tmp) =>
       // Add a file so that we can infer its schema
@@ -430,20 +489,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
-  test("file stream source without schema") {
-    withTempDir { src =>
-      // Only "text" doesn't need a schema
-      createFileStream("text", src.getCanonicalPath)
-
-      // Both "json" and "parquet" require a schema if no existing file to infer
-      intercept[AnalysisException] {
-        createFileStream("json", src.getCanonicalPath)
-      }
-      intercept[AnalysisException] {
-        createFileStream("parquet", src.getCanonicalPath)
-      }
-    }
-  }
+  // =============== file stream globbing tests ================
 
   test("read new files in nested directories with globbing") {
     withTempDirs { case (dir, tmp) =>
@@ -517,6 +563,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
+
+  // =============== other tests ================
 
   test("fault tolerance") {
     withTempDirs { case (src, tmp) =>

@@ -31,6 +31,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{CalendarIntervalType, StructType}
 import org.apache.spark.util.Utils
@@ -186,6 +187,14 @@ case class DataSource(
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
+        if (!sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE) &&
+            userSpecifiedSchema.isEmpty &&
+            providingClass != classOf[text.DefaultSource]) {
+          throw new IllegalArgumentException(
+            "Schema must be specified for creating a streaming source DataFrame. " +
+              "If some input data already exists in the directory, you can create " +
+              "a static DataFrame with spark.read.load(path) and infer schema from it.")
+        }
         SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
 
       case _ =>
