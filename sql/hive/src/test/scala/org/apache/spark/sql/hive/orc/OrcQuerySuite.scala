@@ -29,6 +29,7 @@ import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.hive.test.TestHive._
 import org.apache.spark.sql.hive.test.TestHive.implicits._
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.StructType
 
 case class AllDataTypesWithNonPrimitiveType(
     stringField: String,
@@ -93,6 +94,12 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
       checkAnswer(
         read.orc(file),
         data.toDF().collect())
+    }
+  }
+
+  test("Read/write empty dataset") {
+    withOrcFile(Seq.empty[Tuple1[Int]]) { file =>
+      assert(new StructType() === spark.read.orc(file).schema)
     }
   }
 

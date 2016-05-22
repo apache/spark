@@ -211,7 +211,7 @@ private[orc] class OrcOutputWriter(
   // flag to decide whether `OrcRecordWriter.close()` needs to be called.
   private var recordWriterInstantiated = false
 
-  private lazy val recordWriter: RecordWriter[NullWritable, Writable] = {
+  private val recordWriter: RecordWriter[NullWritable, Writable] = {
     recordWriterInstantiated = true
     val uniqueWriteJobId = conf.get("spark.sql.sources.writeJobUUID")
     val taskAttemptId = context.getTaskAttemptID

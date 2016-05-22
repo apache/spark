@@ -47,13 +47,12 @@ private[orc] object OrcFileOperator extends Logging {
    * @todo Needs to consider all files when schema evolution is taken into account.
    */
   def getFileReader(basePath: String, config: Option[Configuration] = None): Option[Reader] = {
-    def isWithNonEmptySchema(path: Path, reader: Reader): Boolean = {
+    def logForEmptySchema(path: Path, reader: Reader): Boolean = {
       reader.getObjectInspector match {
         case oi: StructObjectInspector if oi.getAllStructFieldRefs.size() == 0 =>
           logInfo(
-            s"ORC file $path has empty schema, it probably contains no rows. " +
-              "Trying to read another ORC file to figure out the schema.")
-          false
+            s"Warning: ORC file $path has empty schema, it probably contains no rows. ")
+          true
         case _ => true
       }
     }
@@ -67,7 +66,7 @@ private[orc] object OrcFileOperator extends Logging {
     listOrcFiles(basePath, conf).iterator.map { path =>
       path -> OrcFile.createReader(fs, path)
     }.collectFirst {
-      case (path, reader) if isWithNonEmptySchema(path, reader) => reader
+      case (path, reader) if logForEmptySchema(path, reader) => reader
     }
   }
 
