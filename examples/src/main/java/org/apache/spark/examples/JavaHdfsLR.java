@@ -17,11 +17,10 @@
 
 package org.apache.spark.examples;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
+import org.apache.spark.sql.SparkSession;
 
 import java.io.Serializable;
 import java.util.Arrays;
@@ -122,9 +121,12 @@ public final class JavaHdfsLR {
 
     showWarning();
 
-    SparkConf sparkConf = new SparkConf().setAppName("JavaHdfsLR");
-    JavaSparkContext sc = new JavaSparkContext(sparkConf);
-    JavaRDD<String> lines = sc.textFile(args[0]);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaHdfsLR")
+      .getOrCreate();
+
+    JavaRDD<String> lines = spark.read().text(args[0]).javaRDD();
     JavaRDD<DataPoint> points = lines.map(new ParsePoint()).cache();
     int ITERATIONS = Integer.parseInt(args[1]);
 
@@ -152,6 +154,6 @@ public final class JavaHdfsLR {
 
     System.out.print("Final w: ");
     printWeights(w);
-    sc.stop();
+    spark.stop();
   }
 }

@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.types
 
+import java.lang.{Long => JLong}
 import java.math.{BigInteger, MathContext, RoundingMode}
 
 import org.apache.spark.annotation.DeveloperApi
@@ -132,17 +133,15 @@ final class Decimal extends Ordered[Decimal] with Serializable {
    * Set this Decimal to the given BigInteger value. Will have precision 38 and scale 0.
    */
   def set(bigintval: BigInteger): Decimal = {
-    try {
-      this.decimalVal = null
-      this.longVal = bigintval.longValueExact()
-      this._precision = DecimalType.MAX_PRECISION
-      this._scale = 0
-      this
-    }
-    catch {
-      case e: ArithmeticException =>
-        throw new IllegalArgumentException(s"BigInteger ${bigintval} too large for decimal")
-     }
+    // TODO: Remove this once we migrate to java8 and use longValueExact() instead.
+    require(
+      bigintval.compareTo(LONG_MAX_BIG_INT) <= 0 && bigintval.compareTo(LONG_MIN_BIG_INT) >= 0,
+      s"BigInteger $bigintval too large for decimal")
+    this.decimalVal = null
+    this.longVal = bigintval.longValue()
+    this._precision = DecimalType.MAX_PRECISION
+    this._scale = 0
+    this
   }
 
   /**
@@ -381,6 +380,9 @@ object Decimal {
 
   private[sql] val ZERO = Decimal(0)
   private[sql] val ONE = Decimal(1)
+
+  private val LONG_MAX_BIG_INT = BigInteger.valueOf(JLong.MAX_VALUE)
+  private val LONG_MIN_BIG_INT = BigInteger.valueOf(JLong.MIN_VALUE)
 
   def apply(value: Double): Decimal = new Decimal().set(value)
 
