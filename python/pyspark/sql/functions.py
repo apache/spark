@@ -1787,10 +1787,14 @@ class UserDefinedJythonFunction(object):
         # Serialize the "extras" and drop PySpark imports
         ser = CloudPickleSerializer()
 
+        def isClass(v):
+            return isinstance(v, (type, types.ClassType))
+
         def isInternal(v):
-            isinstance(v, (type, types.ClassType)) and v.__module__.startswith("pyspark")
-        filtered_extra = {k: v for k, v in extra.iteritems() if isInternal(v)}
-        extra_imports = {}
+            return v.__module__.startswith("pyspark")
+
+        filtered_extra = {k: v for k, v in extra.iteritems() if not isClass(v) or not isInternal(v)}
+        extra_imports = {(v.__module__, v.__name__, k) for k, v in extra.iteritems() if isClass(v) and isInternal(v)}
         extra = filtered_extra
         if not extra:
             extra = None

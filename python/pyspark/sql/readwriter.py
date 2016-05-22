@@ -20,7 +20,10 @@ import sys
 if sys.version >= '3':
     basestring = unicode = str
 
-from py4j.java_gateway import JavaClass
+# Detect when running in Jython and skip py4j
+is_jython = "JDK" in sys.version
+if not is_jython:
+    from py4j.java_gateway import JavaClass
 
 from pyspark import RDD, since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix

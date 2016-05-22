@@ -22,6 +22,8 @@ import javax.script._
 
 import scala.collection.JavaConverters._
 
+import org.python.core._
+
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
@@ -68,32 +70,12 @@ import pickle
 import os
 import sys
 sys.path.extend(os.environ["PYTHONPATH"].split(":"))
-# A mini version of Row for complex types
-class Row(tuple):
-    def __new__(self, *args, **kwargs):
-        if args and kwargs:
-            raise ValueError("Can not use both args "
-                             "and kwargs to create Row")
-        if args:
-            # create row class or objects
-            return tuple.__new__(self, args)
-
-        elif kwargs:
-            # create row objects
-            names = sorted(kwargs.keys())
-            row = tuple.__new__(self, [kwargs[n] for n in names])
-            row.__fields__ = names
-            return row
-
-        else:
-            raise ValueError("No args or kwargs")
-
 
 pythonVars = pickle.loads(b64decode('${pythonVars}'))
 imports = pickle.loads(b64decode('${imports}'))
 if imports is not None:
-  for k, v in imports.iteritems():
-      exec "import %s as %s" % (v, k)
+  for module, name, target in imports:
+      exec "from %s import %s as %s" % (module, name, target)
 if pythonVars is not None:
   for k, v in pythonVars.iteritems():
     exec "%s = v" % k
@@ -108,6 +90,7 @@ ${className}_instance = ${className}()
    * Compile this function to a Scala function.
    */
   def toScalaFunc(converter: Any => Any, children: Int): AnyRef = {
+    println("Making for " + code)
     children match {
       case 0 => () => converter(lazyFunc.scalaFunc())
       case 1 => (ar1: AnyRef) => converter(lazyFunc.scalaFunc(ar1))
@@ -141,6 +124,9 @@ class LazyJythonFunc(code: String, className: String) extends Serializable {
 }
 
 object JythonConverter {
+  // Needs to be on the worker - not properly serializable.
+  @transient lazy val fieldsPyStr = new PyString("__fields__")
+
   def build(dt: DataType): Any => Any = {
     dt match {
       case LongType => x => x.asInstanceOf[java.math.BigInteger].longValue()
@@ -161,8 +147,23 @@ object JythonConverter {
       case structType: StructType =>
         val converters = structType.fields.map(f => build(f.dataType))
         x => {
-          val itr = x.asInstanceOf[org.python.core.PyTupleDerived].asScala
-          Row(converters.zip(itr).map{case (conv, v) => conv(v)} : _*)
+          val rez = x.asInstanceOf[PyTupleDerived]
+          // Determine if the Row is named, or not.
+          val dict = rez.getDict().asInstanceOf[PyStringMap]
+          if (dict.has_key(fieldsPyStr)) {
+            val pyFields = dict.get(fieldsPyStr).asInstanceOf[JList[String]].asScala
+            val pyFieldsArray = pyFields.toArray
+            val structFields = structType.fields.map(_.name)
+            val rezArray = rez.toArray()
+            val elements = structFields.zip(converters).map{case (name, conv) =>
+              val idx = pyFieldsArray.indexOf(name)
+              conv(rezArray(idx))
+            }
+            Row(elements : _*)
+          } else {
+            val itr = rez.asScala
+            Row(converters.zip(itr).map{case (conv, v) => conv(v)} : _*)
+          }
         }
       case _ => x => x
     }

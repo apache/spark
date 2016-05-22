@@ -52,7 +52,10 @@ from pyspark.shuffle import Aggregator, ExternalMerger, \
     get_used_memory, ExternalSorter, ExternalGroupBy
 from pyspark.traceback_utils import SCCallSiteSync
 
-from py4j.java_collections import ListConverter, MapConverter
+# Detect when running in Jython and skip py4j
+is_jython = "JDK" in sys.version
+if not is_jython:
+    from py4j.java_collections import ListConverter, MapConverter
 
 
 __all__ = ["RDD"]

@@ -29,10 +29,14 @@ if sys.version >= "3":
     long = int
     basestring = unicode = str
 
-from py4j.protocol import register_input_converter
-from py4j.java_gateway import JavaClass
+# Detect when running in Jython
+is_jython = "JDK" in sys.version
 
-from pyspark.serializers import CloudPickleSerializer
+if not is_jython:
+    from py4j.protocol import register_input_converter
+    from py4j.java_gateway import JavaClass
+
+    from pyspark.serializers import CloudPickleSerializer
 
 __all__ = [
     "DataType", "NullType", "StringType", "BinaryType", "BooleanType", "DateType",
@@ -1526,8 +1530,9 @@ class DatetimeConverter(object):
         return t
 
 # datetime is a subclass of date, we should register DatetimeConverter first
-register_input_converter(DatetimeConverter())
-register_input_converter(DateConverter())
+if not is_jython:
+    register_input_converter(DatetimeConverter())
+    register_input_converter(DateConverter())
 
 
 def _test():
