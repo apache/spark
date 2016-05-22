@@ -59,13 +59,9 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
     assert(nullIntRow == org.apache.spark.sql.Row(null))
   }
 
-  test("SPARK-15285 Nested/Chained case statements generate codegen over 64kb") {
+  test("SPARK-15285 Generated SpecificSafeProjection.apply method grows beyond 64KB") {
     val ds100_5 = Seq(S100_5()).toDS()
     ds100_5.show
-    val ds10_50 = Seq(S10_50()).toDS()
-    ds10_50.show
-    val ds10_7_6 = Seq(S10_7_6()).toDS()
-    ds10_7_6.show
   }
 }
 
@@ -97,26 +93,3 @@ case class S100(
   s97: String = "97", s98: String = "98", s99: String = "99", s100: String = "100")
 case class S100_5(
   s1: S100 = S100(), s2: S100 = S100(), s3: S100 = S100(), s4: S100 = S100(), s5: S100 = S100())
-
-case class S10(
-  s1: String = "1", s2: String = "2", s3: String = "3", s4: String = "4", s5: String = "5",
-  s6: String = "6", s7: String = "7", s8: String = "8", s9: String = "9", s10: String = "10")
-case class S10_50(
-  s1: S10 = S10(), s2: S10 = S10(), s3: S10 = S10(), s4: S10 = S10(), s5: S10 = S10(),
-  s6: S10 = S10(), s7: S10 = S10(), s8: S10 = S10(), s9: S10 = S10(), s10: S10 = S10(),
-  s11: S10 = S10(), s12: S10 = S10(), s13: S10 = S10(), s14: S10 = S10(), s15: S10 = S10(),
-  s16: S10 = S10(), s17: S10 = S10(), s18: S10 = S10(), s19: S10 = S10(), s20: S10 = S10(),
-  s21: S10 = S10(), s22: S10 = S10(), s23: S10 = S10(), s24: S10 = S10(), s25: S10 = S10(),
-  s26: S10 = S10(), s27: S10 = S10(), s28: S10 = S10(), s29: S10 = S10(), s30: S10 = S10(),
-  s31: S10 = S10(), s32: S10 = S10(), s33: S10 = S10(), s34: S10 = S10(), s35: S10 = S10(),
-  s36: S10 = S10(), s37: S10 = S10(), s38: S10 = S10(), s39: S10 = S10(), s40: S10 = S10(),
-  s41: S10 = S10(), s42: S10 = S10(), s43: S10 = S10(), s44: S10 = S10(), s45: S10 = S10(),
-  s46: S10 = S10(), s47: S10 = S10(), s48: S10 = S10(), s49: S10 = S10(), s50: S10 = S10())
-
-case class S10_7(
-   s1: S10 = S10(), s2: S10 = S10(), s3: S10 = S10(), s4: S10 = S10(), s5: S10 = S10(),
-   s6: S10 = S10(), s7: S10 = S10())
-
-case class S10_7_6(
-   s1: S10_7 = S10_7(), s2: S10_7 = S10_7(), s3: S10_7 = S10_7(), s4: S10_7 = S10_7(),
-   s5: S10_7 = S10_7(), s6: S10_7 = S10_7())

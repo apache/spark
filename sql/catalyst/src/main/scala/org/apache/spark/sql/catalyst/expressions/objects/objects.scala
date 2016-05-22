@@ -28,7 +28,7 @@ import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types._
 
@@ -57,16 +57,8 @@ case class StaticInvoke(
   override def nullable: Boolean = true
   override def children: Seq[Expression] = arguments
 
-  override def eval(input: InternalRow): Any = {
-    val argVals = arguments.map(_.eval(input).asInstanceOf[AnyRef])
-    if (argVals.find(_ == null).isDefined) {
-      return null
-    }
-
-    val argTypes = arguments.map(e => DataType.javaType(e.dataType))
-    staticObject.getMethod(functionName, argTypes: _*)
-        .invoke(null, argVals: _*)
-  }
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
@@ -120,20 +112,10 @@ case class Invoke(
     propagateNull: Boolean = true) extends Expression with NonSQLExpression {
 
   override def nullable: Boolean = true
-
   override def children: Seq[Expression] = targetObject +: arguments
 
-  override def eval(input: InternalRow): Any = {
-    val argVals = arguments.map(_.eval(input).asInstanceOf[AnyRef])
-    if (argVals.find(_ == null).isDefined) {
-      return null
-    }
-
-    val argTypes = arguments.map(e => DataType.javaType(e.dataType))
-    DataType.javaType(targetObject.dataType)
-      .getMethod(functionName, argTypes: _*)
-      .invoke(targetObject.eval(input), argVals: _*)
-  }
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   @transient lazy val method = targetObject.dataType match {
     case ObjectType(cls) =>
@@ -228,8 +210,7 @@ case class NewInstance(
     arguments: Seq[Expression],
     propagateNull: Boolean,
     dataType: DataType,
-    outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression
-      with CodegenFallback {
+    outerPointer: Option[() => AnyRef]) extends Expression with NonSQLExpression {
   private val className = cls.getName
 
   override def nullable: Boolean = propagateNull
@@ -246,53 +227,60 @@ case class NewInstance(
     childrenResolved && !needOuterPointer
   }
 
-  override def eval(input: InternalRow): Any = {
-    if (arguments.length == 0) {
-      return cls.getConstructor().newInstance()
-    }
-
-    val argVals = arguments.map(_.eval(input).asInstanceOf[AnyRef])
-    if (argVals.find(_ == null).isDefined) {
-      return null
-    }
-
-    if (outerPointer.isDefined) {
-      throw new UnsupportedOperationException(
-        "For inner class, only code-generated evaluation is supported.")
-    }
-
-    val argTypes = arguments.map(e => DataType.javaType(e.dataType))
-    cls.getConstructor(argTypes: _*)
-       .newInstance(argVals: _*)
-  }
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported.")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    ctx.accumulatedComplexTypeGenCode *= arguments.length
-    if (ctx.accumulatedComplexTypeGenCode > 400) {
-      return super[CodegenFallback].doGenCode(ctx, ev)
-    }
     val javaType = ctx.javaType(dataType)
-    val argGen = arguments.map(_.genCode(ctx))
-    val argString = argGen.map(_.value).mkString(", ")
+    val argIsNulls = ctx.freshName("argIsNulls")
+    ctx.addMutableState("boolean[]", argIsNulls, "")
+    val argTypes = arguments.map(e => ctx.javaType(e.dataType))
+    val argValues = arguments.zipWithIndex.map { case (e, i) =>
+      val argValue = ctx.freshName("argValue")
+      ctx.addMutableState(argTypes(i), argValue, "")
+      argValue
+    }
+
+    val argCodes = arguments.zipWithIndex.map { case (e, i) =>
+      val expr = e.genCode(ctx)
+      expr.code + s"""
+       $argIsNulls[$i] = ${expr.isNull};
+       ${argValues(i)} = ${expr.value};
+     """
+    }
+    val argCode = ctx.splitExpressions(ctx.INPUT_ROW, argCodes)
 
     val outer = outerPointer.map(func => Literal.fromObject(func()).genCode(ctx))
 
     var isNull = ev.isNull
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      s"final boolean $isNull = ${argGen.map(_.isNull).mkString(" || ")};"
+      if (arguments.length <= 10) {
+        val argIsNull = arguments.zipWithIndex.map { case (e, i) =>
+          s"$argIsNulls[$i]"
+        }
+        s"final boolean $isNull = ${argIsNull.mkString(" || ")};"
+      } else {
+        s"""
+         boolean $isNull = false;
+         for (int idx = 0; idx < ${arguments.length}; idx++) {
+           if ($argIsNulls[idx]) { $isNull = true; break; }
+         }
+       """
+      }
     } else {
       isNull = "false"
       ""
     }
 
     val constructorCall = outer.map { gen =>
-      s"""${gen.value}.new ${cls.getSimpleName}($argString)"""
+      s"""${gen.value}.new ${cls.getSimpleName}(${argValues.mkString(", ")})"""
     }.getOrElse {
-      s"new $className($argString)"
+      s"new $className(${argValues.mkString(", ")})"
     }
 
     val code = s"""
-      ${argGen.map(_.code).mkString("\n")}
+      $argIsNulls = new boolean[${arguments.size}];
+      ${argCode.mkString("")}
       ${outer.map(_.code).getOrElse("")}
       $setIsNull
       final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;

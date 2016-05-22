@@ -185,9 +185,6 @@ class CodegenContext {
   final val JAVA_FLOAT = "float"
   final val JAVA_DOUBLE = "double"
 
-  /* The number of total complex types whose code has been generated */
-  var accumulatedComplexTypeGenCode = 1
-
   /** The variable name of the input row in generated code. */
   final var INPUT_ROW = "i"
 

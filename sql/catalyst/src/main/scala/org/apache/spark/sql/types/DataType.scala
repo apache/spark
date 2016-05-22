@@ -23,9 +23,7 @@ import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
 import org.apache.spark.util.Utils
 
 /**
@@ -246,25 +244,5 @@ object DataType {
 
       case (fromDataType, toDataType) => fromDataType == toDataType
     }
-  }
-
-  def javaType(dt: DataType): Class[_] = dt match {
-    case BooleanType => java.lang.Boolean.TYPE
-    case ByteType => java.lang.Byte.TYPE
-    case ShortType => java.lang.Short.TYPE
-    case IntegerType | DateType => java.lang.Integer.TYPE
-    case LongType | TimestampType => java.lang.Long.TYPE
-    case FloatType => java.lang.Float.TYPE
-    case DoubleType => java.lang.Double.TYPE
-    case dt: DecimalType => classOf[Decimal]
-    case BinaryType => classOf[Array[Byte]]
-    case StringType => classOf[UTF8String]
-    case CalendarIntervalType => classOf[CalendarInterval]
-    case _: StructType => InternalRow.getClass
-    case _: ArrayType => classOf[org.apache.spark.sql.catalyst.util.ArrayData]
-    case _: MapType => classOf[org.apache.spark.sql.catalyst.util.MapData]
-    case udt: UserDefinedType[_] => javaType(udt.sqlType)
-    case ObjectType(cls) => cls
-    case _ => classOf[java.lang.Object]
   }
 }

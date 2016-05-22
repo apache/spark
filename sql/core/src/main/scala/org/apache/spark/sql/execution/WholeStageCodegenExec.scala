@@ -22,7 +22,6 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
-import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.aggregate.TungstenAggregate
@@ -421,13 +420,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
   private def supportCodegen(e: Expression): Boolean = e match {
     case e: LeafExpression => true
     // CodegenFallback requires the input to be an InternalRow
-    case e: CodegenFallback =>
-      if (e.isInstanceOf[NewInstance]) {
-        // We assume that a class for java or Scala does not lead to CodegenFallback
-        val className = e.asInstanceOf[NewInstance].cls.getName
-        return (className.startsWith("java.") || className.startsWith("scala."))
-      }
-      false
+    case e: CodegenFallback => false
     case _ => true
   }
 
