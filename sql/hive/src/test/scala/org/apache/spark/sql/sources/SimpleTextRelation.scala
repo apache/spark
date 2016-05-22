@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GenericInternalRow, InterpretedPredicate, InterpretedProjection, JoinedRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 class SimpleTextSource extends FileFormat with DataSourceRegister {
@@ -40,7 +40,10 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    Some(DataType.fromJson(options("dataSchema")).asInstanceOf[StructType])
+    val schema = options.get("dataSchema")
+      .map(DataType.fromJson(_).asInstanceOf[StructType])
+      .getOrElse(StructType(StructField("_c0", StringType, nullable = true) :: Nil))
+    Some(schema)
   }
 
   override def prepareWrite(
