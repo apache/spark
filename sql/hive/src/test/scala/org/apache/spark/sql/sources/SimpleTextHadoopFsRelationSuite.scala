@@ -88,4 +88,20 @@ class SimpleTextHadoopFsRelationSuite extends HadoopFsRelationTest with Predicat
       assert(SimpleTextRelation.lastHadoopConf.get.get("some-random-read-option") == "hahah-READ")
     }
   }
+
+  test("Write and read back empty data") {
+    withTempPath { path =>
+      val emptyDf = spark.range(10).limit(0).toDF()
+      emptyDf.write
+        .format(dataSourceName)
+        .save(path.getCanonicalPath)
+
+      val copyEmptyDf = spark.read
+        .format(dataSourceName)
+        .option("dataSchema", emptyDf.schema.json)
+        .load(path.getCanonicalPath)
+
+      checkAnswer(emptyDf, copyEmptyDf)
+    }
+  }
 }
