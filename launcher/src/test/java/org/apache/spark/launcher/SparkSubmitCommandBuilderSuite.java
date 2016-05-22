@@ -67,7 +67,8 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
     List<String> sparkEmptyArgs = Collections.emptyList();
     cmd = buildCommand(sparkEmptyArgs, env);
-    assertTrue("org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
+    assertTrue(
+      "org.apache.spark.deploy.SparkSubmit should be contained in the final cmd of empty input.",
       cmd.contains("org.apache.spark.deploy.SparkSubmit"));
   }
 
