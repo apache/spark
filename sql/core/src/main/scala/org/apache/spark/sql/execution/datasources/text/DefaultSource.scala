@@ -20,14 +20,16 @@ package org.apache.spark.sql.execution.datasources.text
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -38,6 +40,8 @@ import org.apache.spark.util.SerializableConfiguration
 class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
+
+  override def toString: String = "Text"
 
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
@@ -108,6 +112,18 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       }
     }
   }
+
+  override def buildWriter(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      options: Map[String, String]): OutputWriterFactory = {
+    verifySchema(dataSchema)
+    new TextOutputWriterFactory(
+      sqlContext.conf,
+      dataSchema,
+      sqlContext.sparkContext.hadoopConfiguration,
+      options)
+  }
 }
 
 class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
@@ -137,5 +153,78 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
 
   override def close(): Unit = {
     recordWriter.close(context)
+  }
+}
+
+/**
+ * A factory for generating [[OutputWriter]]s for writing text files. This implemented is different
+ * from the [[TextOutputWriter]] as this does not use any [[OutputCommitter]]. It simply
+ * writes the data to the path used to generate the output writer. Callers of this factory
+ * has to ensure which files are to be considered as committed.
+ */
+private[sql] class TextOutputWriterFactory(
+    sqlConf: SQLConf,
+    dataSchema: StructType,
+    hadoopConf: Configuration,
+    options: Map[String, String]) extends OutputWriterFactory {
+
+  private val serializableConf = {
+    val conf = Job.getInstance(hadoopConf).getConfiguration
+    val compressionCodec = options.get("compression").map(CompressionCodecs.getCodecClassName)
+    compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
+    new SerializableConfiguration(conf)
+  }
+
+  /**
+   * Returns a [[OutputWriter]] that writes data to the give path without using an
+   * [[OutputCommitter]].
+   */
+  override private[sql] def newWriter(path: String): OutputWriter = new OutputWriter {
+
+    private val hadoopTaskAttempId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
+    private val hadoopAttemptContext =
+      new TaskAttemptContextImpl(serializableConf.value, hadoopTaskAttempId)
+
+    // Instance of RecordWriter that does not use OutputCommitter
+    private val recordWriter = createNoCommitterRecordWriter(path, hadoopAttemptContext)
+
+    private[this] val buffer = new Text()
+
+    override def write(row: Row): Unit = {
+      throw new UnsupportedOperationException("call writeInternal")
+    }
+
+    protected[sql] override def writeInternal(row: InternalRow): Unit = {
+      val utf8string = row.getUTF8String(0)
+      buffer.set(utf8string.getBytes)
+      recordWriter.write(NullWritable.get(), buffer)
+    }
+
+    override def close(): Unit = recordWriter.close(hadoopAttemptContext)
+  }
+
+  /** Create a [[RecordWriter]] that writes the given path without using an [[OutputCommitter]]. */
+  private def createNoCommitterRecordWriter(
+      path: String,
+      hadoopAttemptContext: TaskAttemptContext): RecordWriter[NullWritable, Text] = {
+    // Custom TextOutputFormat that disable use of committer and writes to the given path
+    val outputFormat = new TextOutputFormat[NullWritable, Text]() {
+      override def getOutputCommitter(c: TaskAttemptContext): OutputCommitter = { null }
+      override def getDefaultWorkFile(c: TaskAttemptContext, ext: String): Path = { new Path(path) }
+    }
+    outputFormat.getRecordWriter(hadoopAttemptContext)
+  }
+
+  /** Disable the use of the older API. */
+  def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter = {
+    throw new UnsupportedOperationException(
+      "this version of newInstance is not supported for " +
+        classOf[TextOutputWriterFactory].getSimpleName)
   }
 }

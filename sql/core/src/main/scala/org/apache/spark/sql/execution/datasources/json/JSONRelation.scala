@@ -24,17 +24,17 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -42,6 +42,8 @@ import org.apache.spark.util.SerializableConfiguration
 class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "json"
+
+  override def toString: String = "JSON"
 
   override def inferSchema(
       sparkSession: SparkSession,
@@ -147,11 +149,103 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def toString: String = "JSON"
+  override def buildWriter(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      options: Map[String, String]): OutputWriterFactory = {
+    new JsonOutputWriterFactory(
+      sqlContext.conf,
+      dataSchema,
+      sqlContext.sparkContext.hadoopConfiguration,
+      options)
+  }
 
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
+}
+
+/**
+ * A factory for generating [[OutputWriter]]s for writing JSON files. This implemented is different
+ * from the [[JsonOutputWriter]] as this does not use any [[OutputCommitter]]. It simply
+ * writes the data to the path used to generate the output writer. Callers of this factory
+ * has to ensure which files are to be considered as committed.
+ */
+private[sql] class JsonOutputWriterFactory(
+    sqlConf: SQLConf,
+    dataSchema: StructType,
+    hadoopConf: Configuration,
+    options: Map[String, String]) extends OutputWriterFactory {
+
+  private val parsedOptions: JSONOptions = new JSONOptions(options)
+
+  private val serializableConf = {
+    val conf = Job.getInstance(hadoopConf).getConfiguration
+    parsedOptions.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
+    new SerializableConfiguration(conf)
+  }
+
+  /**
+   * Returns a [[OutputWriter]] that writes data to the give path without using an
+   * [[OutputCommitter]].
+   */
+  override private[sql] def newWriter(path: String): OutputWriter = new OutputWriter {
+    private val hadoopTaskAttempId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
+    private val hadoopAttemptContext =
+      new TaskAttemptContextImpl(serializableConf.value, hadoopTaskAttempId)
+
+    // Instance of RecordWriter that does not use OutputCommitter
+    private val recordWriter = createNoCommitterRecordWriter(path, hadoopAttemptContext)
+
+    private val writer = new CharArrayWriter()
+    // create the Generator without separator inserted between 2 records
+    private val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
+    private val result = new Text()
+
+    override def write(row: Row): Unit = {
+      throw new UnsupportedOperationException("call writeInternal")
+    }
+
+    override protected[sql] def writeInternal(row: InternalRow): Unit = {
+      JacksonGenerator(dataSchema, gen)(row)
+      gen.flush()
+
+      result.set(writer.toString)
+      writer.reset()
+
+      recordWriter.write(NullWritable.get(), result)
+    }
+
+    override def close(): Unit = {
+      gen.close()
+      recordWriter.close(hadoopAttemptContext)
+    }
+  }
+
+  /** Create a [[RecordWriter]] that writes the given path without using an [[OutputCommitter]]. */
+  private def createNoCommitterRecordWriter(
+      path: String,
+      hadoopAttemptContext: TaskAttemptContext): RecordWriter[NullWritable, Text] = {
+    // Custom TextOutputFormat that disable use of committer and writes to the given path
+    val outputFormat = new TextOutputFormat[NullWritable, Text]() {
+      override def getOutputCommitter(c: TaskAttemptContext): OutputCommitter = { null }
+      override def getDefaultWorkFile(c: TaskAttemptContext, ext: String): Path = { new Path(path) }
+    }
+    outputFormat.getRecordWriter(hadoopAttemptContext)
+  }
+
+  /** Disable the use of the older API. */
+  def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter = {
+    throw new UnsupportedOperationException(
+      "this version of newInstance is not supported for " +
+        classOf[JsonOutputWriterFactory].getSimpleName)
+  }
 }
 
 private[json] class JsonOutputWriter(

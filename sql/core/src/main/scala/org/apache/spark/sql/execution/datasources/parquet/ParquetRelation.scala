@@ -494,8 +494,8 @@ private[sql] class ParquetOutputWriterFactory(
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
     throw new UnsupportedOperationException(
-      "this verison of newInstance not supported for " +
-        "ParquetOutputWriterFactory")
+      "this version of newInstance is not supported for " +
+        classOf[ParquetOutputWriterFactory].getSimpleName)
   }
 }
 
