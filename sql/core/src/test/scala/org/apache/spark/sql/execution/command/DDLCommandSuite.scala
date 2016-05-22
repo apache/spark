@@ -665,6 +665,21 @@ class DDLCommandSuite extends PlanTest {
     assert(parsed.isInstanceOf[Project])
   }
 
+  test("duplicate keys in table properties") {
+    val e = intercept[ParseException] {
+      parser.parsePlan("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('key1' = '1', 'key1' = '2')")
+    }.getMessage
+    assert(e.contains("Found duplicate keys 'key1'"))
+  }
+
+  test("duplicate columns in partition specs") {
+    val e = intercept[ParseException] {
+      parser.parsePlan(
+        "ALTER TABLE dbx.tab1 PARTITION (a='1', a='2') RENAME TO PARTITION (a='100', a='200')")
+    }.getMessage
+    assert(e.contains("Found duplicate keys 'a'"))
+  }
+
   test("drop table") {
     val tableName1 = "db.tab"
     val tableName2 = "tab"
