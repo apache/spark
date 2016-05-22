@@ -66,7 +66,8 @@ object UnsupportedOperationChecker {
             case _ => false
           }
           if (moreStreamingAggregates.nonEmpty) {
-            throwError("Multiple streaming aggregations are not supported with streaming DataFrames/Datasets")
+            throwError("Multiple streaming aggregations are not supported with " +
+              "streaming DataFrames/Datasets")
           }
 
         case Join(left, right, joinType, _) =>
