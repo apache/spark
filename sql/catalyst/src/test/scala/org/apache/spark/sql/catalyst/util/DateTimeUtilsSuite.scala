@@ -359,12 +359,17 @@ class DateTimeUtilsSuite extends SparkFunSuite {
       UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
     assert(stringToDate(
       UTF8String.fromString("2015-04-31 00:00:00")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("2015-02-29")).isEmpty)
+    assert(stringToDate(UTF8String.fromString("2015-04-31")).isEmpty)
+
 
     // Test stringToTimestamp
     assert(stringToTimestamp(
       UTF8String.fromString("2015-02-29 00:00:00")).isEmpty)
     assert(stringToTimestamp(
       UTF8String.fromString("2015-04-31 00:00:00")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("2015-02-29")).isEmpty)
+    assert(stringToTimestamp(UTF8String.fromString("2015-04-31")).isEmpty)
   }
 
   test("hours") {
