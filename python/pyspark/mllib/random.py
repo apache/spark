@@ -413,7 +413,10 @@ def _test():
     globs = globals().copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder.master("local[2]").appName("mllib.random tests").getOrCreate()
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("mllib.random tests")\
+        .getOrCreate()
     globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

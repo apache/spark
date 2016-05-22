@@ -734,7 +734,10 @@ def _test():
     import doctest
     from pyspark.sql import SparkSession
     globs = globals().copy()
-    spark = SparkSession.builder.master("local[4]").appName("mllib.feature tests").getOrCreate()
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.feature tests")\
+        .getOrCreate()
     globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

@@ -519,7 +519,10 @@ def _test():
     from pyspark.sql import SparkSession
     import pyspark.mllib.evaluation
     globs = pyspark.mllib.evaluation.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("mllib.evaluation tests").getOrCreate()
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.evaluation tests")\
+        .getOrCreate()
     globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

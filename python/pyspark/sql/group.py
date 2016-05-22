@@ -198,7 +198,10 @@ def _test():
     from pyspark.sql import Row, SparkSession
     import pyspark.sql.group
     globs = pyspark.sql.group.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]").appName("sql.group tests").getOrCreate()
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.group tests")\
+        .getOrCreate()
     sc = spark.sparkContext
     globs['sc'] = sc
     globs['df'] = sc.parallelize([(2, 'Alice'), (5, 'Bob')]) \

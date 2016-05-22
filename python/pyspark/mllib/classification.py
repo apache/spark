@@ -759,8 +759,10 @@ def _test():
     from pyspark.sql import SparkSession
     import pyspark.mllib.classification
     globs = pyspark.mllib.classification.__dict__.copy()
-    spark = SparkSession.builder.master("local[4]")\
-        .appName("mllib.classification tests").getOrCreate()
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.classification tests")\
+        .getOrCreate()
     globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
     spark.stop()

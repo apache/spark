@@ -2664,7 +2664,10 @@ if __name__ == "__main__":
 
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    spark = SparkSession.builder.master("local[2]").appName("ml.feature tests").getOrCreate()
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.feature tests")\
+        .getOrCreate()
     sc = spark.sparkContext
     globs['sc'] = sc
     globs['spark'] = spark
