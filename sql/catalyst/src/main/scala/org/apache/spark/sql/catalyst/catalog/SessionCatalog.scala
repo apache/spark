@@ -111,13 +111,13 @@ class SessionCatalog(
     fs.makeQualified(hadoopPath)
   }
 
-  protected[this] def requireDbExists(db: String): Unit = {
+  private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
     }
   }
 
-  protected[this] def requireTableExists(name: TableIdentifier): Unit = {
+  private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
       val db = name.database.getOrElse(currentDb)
       throw new NoSuchTableException(db = db, table = name.table)
@@ -315,7 +315,7 @@ class SessionCatalog(
   /**
    * Create a temporary table.
    */
-  def createTempTable(
+  def createTempView(
       name: String,
       tableDefinition: LogicalPlan,
       overrideIfExists: Boolean): Unit = synchronized {
@@ -510,6 +510,7 @@ class SessionCatalog(
       tableName: TableIdentifier,
       parts: Seq[CatalogTablePartition],
       ignoreIfExists: Boolean): Unit = {
+    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -523,13 +524,14 @@ class SessionCatalog(
    */
   def dropPartitions(
       tableName: TableIdentifier,
-      parts: Seq[TablePartitionSpec],
+      specs: Seq[TablePartitionSpec],
       ignoreIfNotExists: Boolean): Unit = {
+    requirePartialMatchedPartitionSpec(specs, getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
-    externalCatalog.dropPartitions(db, table, parts, ignoreIfNotExists)
+    externalCatalog.dropPartitions(db, table, specs, ignoreIfNotExists)
   }
 
   /**
@@ -542,6 +544,9 @@ class SessionCatalog(
       tableName: TableIdentifier,
       specs: Seq[TablePartitionSpec],
       newSpecs: Seq[TablePartitionSpec]): Unit = {
+    val tableMetadata = getTableMetadata(tableName)
+    requireExactMatchedPartitionSpec(specs, tableMetadata)
+    requireExactMatchedPartitionSpec(newSpecs, tableMetadata)
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -559,6 +564,7 @@ class SessionCatalog(
    * this becomes a no-op.
    */
   def alterPartitions(tableName: TableIdentifier, parts: Seq[CatalogTablePartition]): Unit = {
+    requireExactMatchedPartitionSpec(parts.map(_.spec), getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -571,6 +577,7 @@ class SessionCatalog(
    * If no database is specified, assume the table is in the current database.
    */
   def getPartition(tableName: TableIdentifier, spec: TablePartitionSpec): CatalogTablePartition = {
+    requireExactMatchedPartitionSpec(Seq(spec), getTableMetadata(tableName))
     val db = formatDatabaseName(tableName.database.getOrElse(getCurrentDatabase))
     val table = formatTableName(tableName.table)
     requireDbExists(db)
@@ -593,6 +600,42 @@ class SessionCatalog(
     requireDbExists(db)
     requireTableExists(TableIdentifier(table, Option(db)))
     externalCatalog.listPartitions(db, table, partialSpec)
+  }
+
+  /**
+   * Verify if the input partition spec exactly matches the existing defined partition spec
+   * The columns must be the same but the orders could be different.
+   */
+  private def requireExactMatchedPartitionSpec(
+      specs: Seq[TablePartitionSpec],
+      table: CatalogTable): Unit = {
+    val defined = table.partitionColumnNames.sorted
+    specs.foreach { s =>
+      if (s.keys.toSeq.sorted != defined) {
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must match " +
+            s"the partition spec (${table.partitionColumnNames.mkString(", ")}) defined in " +
+            s"table '${table.identifier}'")
+      }
+    }
+  }
+
+  /**
+   * Verify if the input partition spec partially matches the existing defined partition spec
+   * That is, the columns of partition spec should be part of the defined partition spec.
+   */
+  private def requirePartialMatchedPartitionSpec(
+      specs: Seq[TablePartitionSpec],
+      table: CatalogTable): Unit = {
+    val defined = table.partitionColumnNames
+    specs.foreach { s =>
+      if (!s.keys.forall(defined.contains)) {
+        throw new AnalysisException(
+          s"Partition spec is invalid. The spec (${s.keys.mkString(", ")}) must be contained " +
+            s"within the partition spec (${table.partitionColumnNames.mkString(", ")}) defined " +
+            s"in table '${table.identifier}'")
+      }
+    }
   }
 
   // ----------------------------------------------------------------------------

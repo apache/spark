@@ -111,7 +111,7 @@ class BinaryClassificationEvaluator(JavaEvaluator, HasLabelCol, HasRawPrediction
     The rawPrediction column can be of type double (binary 0/1 prediction, or probability of label
     1) or of type vector (length-2 vector of raw predictions, scores, or label probabilities).
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> scoreAndLabels = map(lambda x: (Vectors.dense([1.0 - x[0], x[0]]), x[1]),
     ...    [(0.1, 0.0), (0.1, 1.0), (0.4, 0.0), (0.6, 0.0), (0.6, 1.0), (0.6, 1.0), (0.8, 1.0)])
     >>> dataset = sqlContext.createDataFrame(scoreAndLabels, ["raw", "label"])
@@ -193,9 +193,6 @@ class RegressionEvaluator(JavaEvaluator, HasLabelCol, HasPredictionCol):
 
     .. versionadded:: 1.4.0
     """
-    # Because we will maximize evaluation value (ref: `CrossValidator`),
-    # when we evaluate a metric that is needed to minimize (e.g., `"rmse"`, `"mse"`, `"mae"`),
-    # we take and output the negative of this metric.
     metricName = Param(Params._dummy(), "metricName",
                        """metric name in evaluation - one of:
                        rmse - root mean squared error (default)
@@ -270,7 +267,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|precision|recall|weightedPrecision|weightedRecall)",
+                       "(f1|precision|recall|weightedPrecision|weightedRecall|accuracy)",
                        typeConverter=TypeConverters.toString)
 
     @keyword_only

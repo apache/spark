@@ -45,7 +45,9 @@ statement
     | ALTER DATABASE identifier SET DBPROPERTIES tablePropertyList     #setDatabaseProperties
     | DROP DATABASE (IF EXISTS)? identifier (RESTRICT | CASCADE)?      #dropDatabase
     | createTableHeader ('(' colTypeList ')')? tableProvider
-        (OPTIONS tablePropertyList)?                                   #createTableUsing
+        (OPTIONS tablePropertyList)?
+        (PARTITIONED BY partitionColumnNames=identifierList)?
+        bucketSpec?                                                    #createTableUsing
     | createTableHeader tableProvider
         (OPTIONS tablePropertyList)?
         (PARTITIONED BY partitionColumnNames=identifierList)?
@@ -102,6 +104,7 @@ statement
         ((FROM | IN) db=identifier)?                                   #showColumns
     | SHOW PARTITIONS tableIdentifier partitionSpec?                   #showPartitions
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
+    | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
@@ -117,6 +120,7 @@ statement
     | ADD identifier .*?                                               #addResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
+    | RESET                                                            #resetConfiguration
     | unsupportedHiveNativeCommands .*?                                #failNativeCommand
     ;
 
@@ -630,7 +634,7 @@ nonReserved
     | GROUPING | CUBE | ROLLUP
     | EXPLAIN | FORMAT | LOGICAL | FORMATTED | CODEGEN
     | TABLESAMPLE | USE | TO | BUCKET | PERCENTLIT | OUT | OF
-    | SET
+    | SET | RESET
     | VIEW | REPLACE
     | IF
     | NO | DATA
@@ -745,6 +749,7 @@ MAP: 'MAP';
 STRUCT: 'STRUCT';
 COMMENT: 'COMMENT';
 SET: 'SET';
+RESET: 'RESET';
 DATA: 'DATA';
 START: 'START';
 TRANSACTION: 'TRANSACTION';

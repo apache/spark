@@ -163,7 +163,9 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     val leftSize = left.statistics.sizeInBytes
     val rightSize = right.statistics.sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    Statistics(sizeInBytes = sizeInBytes)
+    val isBroadcastable = left.statistics.isBroadcastable || right.statistics.isBroadcastable
+
+    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
   }
 }
 
@@ -183,7 +185,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
       duplicateResolved
 
   override def statistics: Statistics = {
-    Statistics(sizeInBytes = left.statistics.sizeInBytes)
+    left.statistics.copy()
   }
 }
 
@@ -330,6 +332,16 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
+
+  override def statistics: Statistics = joinType match {
+    case LeftAnti | LeftSemi =>
+      // LeftSemi and LeftAnti won't ever be bigger than left
+      left.statistics.copy()
+    case _ =>
+      // make sure we don't propagate isBroadcastable in other joins, because
+      // they could explode the size.
+      super.statistics.copy(isBroadcastable = false)
+  }
 }
 
 /**
@@ -338,9 +350,8 @@ case class Join(
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  // We manually set statistics of BroadcastHint to smallest value to make sure
-  // the plan wrapped by BroadcastHint will be considered to broadcast later.
-  override def statistics: Statistics = Statistics(sizeInBytes = 1)
+  // set isBroadcastable to true so the child will be broadcasted
+  override def statistics: Statistics = super.statistics.copy(isBroadcastable = true)
 }
 
 case class InsertIntoTable(
@@ -420,8 +431,11 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
-  require(step != 0, "step cannot be 0")
+    output: Seq[Attribute])
+  extends LeafNode with MultiInstanceRelation {
+
+  require(step != 0, s"step ($step) cannot be 0")
+
   val numElements: BigInt = {
     val safeStart = BigInt(start)
     val safeEnd = BigInt(end)
@@ -433,12 +447,19 @@ case class Range(
     }
   }
 
-  override def newInstance(): Range =
-    Range(start, end, step, numSlices, output.map(_.newInstance()))
+  override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
   override def statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
+  }
+
+  override def simpleString: String = {
+    if (step == 1) {
+      s"Range ($start, $end, splits=$numSlices)"
+    } else {
+      s"Range ($start, $end, step=$step, splits=$numSlices)"
+    }
   }
 }
 
@@ -465,7 +486,7 @@ case class Aggregate(
 
   override def statistics: Statistics = {
     if (groupingExpressions.isEmpty) {
-      Statistics(sizeInBytes = 1)
+      super.statistics.copy(sizeInBytes = 1)
     } else {
       super.statistics
     }
@@ -638,7 +659,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -653,7 +674,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -690,7 +711,7 @@ case class Sample(
     if (sizeInBytes == 0) {
       sizeInBytes = 1
     }
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil

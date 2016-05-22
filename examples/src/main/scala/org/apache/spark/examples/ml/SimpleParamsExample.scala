@@ -19,9 +19,9 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{Row, SparkSession}
 
 /**
@@ -41,7 +41,7 @@ object SimpleParamsExample {
     import spark.implicits._
 
     // Prepare training data.
-    // We use LabeledPoint, which is a case class.  Spark SQL can convert RDDs of case classes
+    // We use LabeledPoint, which is a case class. Spark SQL can convert RDDs of case classes
     // into DataFrames, where it uses the case class metadata to infer the schema.
     val training = spark.createDataFrame(Seq(
       LabeledPoint(1.0, Vectors.dense(0.0, 1.1, 0.1)),
@@ -49,7 +49,7 @@ object SimpleParamsExample {
       LabeledPoint(0.0, Vectors.dense(2.0, 1.3, 1.0)),
       LabeledPoint(1.0, Vectors.dense(0.0, 1.2, -0.5))))
 
-    // Create a LogisticRegression instance.  This instance is an Estimator.
+    // Create a LogisticRegression instance. This instance is an Estimator.
     val lr = new LogisticRegression()
     // Print out the parameters, documentation, and any default values.
     println("LogisticRegression parameters:\n" + lr.explainParams() + "\n")
@@ -58,7 +58,7 @@ object SimpleParamsExample {
     lr.setMaxIter(10)
       .setRegParam(0.01)
 
-    // Learn a LogisticRegression model.  This uses the parameters stored in lr.
+    // Learn a LogisticRegression model. This uses the parameters stored in lr.
     val model1 = lr.fit(training)
     // Since model1 is a Model (i.e., a Transformer produced by an Estimator),
     // we can view the parameters it used during fit().
@@ -69,8 +69,8 @@ object SimpleParamsExample {
     // We may alternatively specify parameters using a ParamMap,
     // which supports several methods for specifying parameters.
     val paramMap = ParamMap(lr.maxIter -> 20)
-    paramMap.put(lr.maxIter, 30) // Specify 1 Param.  This overwrites the original maxIter.
-    paramMap.put(lr.regParam -> 0.1, lr.thresholds -> Array(0.45, 0.55)) // Specify multiple Params.
+    paramMap.put(lr.maxIter, 30) // Specify 1 Param. This overwrites the original maxIter.
+    paramMap.put(lr.regParam -> 0.1, lr.thresholds -> Array(0.5, 0.5)) // Specify multiple Params.
 
     // One can also combine ParamMaps.
     val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability") // Change output column name

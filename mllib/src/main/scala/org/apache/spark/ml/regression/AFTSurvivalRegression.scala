@@ -27,10 +27,11 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors, VectorUDT}
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row}
@@ -88,8 +89,8 @@ private[regression] trait AFTSurvivalRegressionParams extends Params
   def getQuantilesCol: String = $(quantilesCol)
 
   /** Checks whether the input has quantiles column name. */
-  protected[regression] def hasQuantilesCol: Boolean = {
-    isDefined(quantilesCol) && $(quantilesCol) != ""
+  private[regression] def hasQuantilesCol: Boolean = {
+    isDefined(quantilesCol) && $(quantilesCol).nonEmpty
   }
 
   /**

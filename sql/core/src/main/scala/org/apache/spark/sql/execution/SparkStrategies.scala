@@ -92,7 +92,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
      * Matches a plan whose output should be small enough to be used in broadcast join.
      */
     private def canBroadcast(plan: LogicalPlan): Boolean = {
-      plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold
+      plan.statistics.isBroadcastable ||
+        plan.statistics.sizeInBytes <= conf.autoBroadcastJoinThreshold
     }
 
     /**
@@ -303,7 +304,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           "logical except operator should have been replaced by anti-join in the optimizer")
 
       case logical.DeserializeToObject(deserializer, objAttr, child) =>
-        execution.DeserializeToObject(deserializer, objAttr, planLater(child)) :: Nil
+        execution.DeserializeToObjectExec(deserializer, objAttr, planLater(child)) :: Nil
       case logical.SerializeFromObject(serializer, child) =>
         execution.SerializeFromObjectExec(serializer, planLater(child)) :: Nil
       case logical.MapPartitions(f, objAttr, child) =>
@@ -359,8 +360,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           generator, join = join, outer = outer, g.output, planLater(child)) :: Nil
       case logical.OneRowRelation =>
         execution.RDDScanExec(Nil, singleRowRdd, "OneRowRelation") :: Nil
-      case r @ logical.Range(start, end, step, numSlices, output) =>
-        execution.RangeExec(start, step, numSlices, r.numElements, output) :: Nil
+      case r : logical.Range =>
+        execution.RangeExec(r) :: Nil
       case logical.RepartitionByExpression(expressions, child, nPartitions) =>
         exchange.ShuffleExchange(HashPartitioning(
           expressions, nPartitions.getOrElse(numPartitions)), planLater(child)) :: Nil
@@ -372,10 +373,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case CreateTableUsing(tableIdent, userSpecifiedSchema, provider, true, opts, false, _) =>
+      case c: CreateTableUsing if c.temporary && !c.allowExisting =>
         ExecutedCommandExec(
           CreateTempTableUsing(
-            tableIdent, userSpecifiedSchema, provider, opts)) :: Nil
+            c.tableIdent, c.userSpecifiedSchema, c.provider, c.options)) :: Nil
 
       case c: CreateTableUsing if !c.temporary =>
         val cmd =
@@ -384,6 +385,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             c.userSpecifiedSchema,
             c.provider,
             c.options,
+            c.partitionColumns,
+            c.bucketSpec,
             c.allowExisting,
             c.managedIfNoPath)
         ExecutedCommandExec(cmd) :: Nil
@@ -396,7 +399,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         sys.error("Cannot create temporary partitioned table.")
 
       case c: CreateTableUsingAsSelect if c.temporary =>
-        val cmd = CreateTempTableUsingAsSelect(
+        val cmd = CreateTempTableUsingAsSelectCommand(
           c.tableIdent, c.provider, Array.empty[String], c.mode, c.options, c.child)
         ExecutedCommandExec(cmd) :: Nil
 
@@ -413,10 +416,10 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         ExecutedCommandExec(cmd) :: Nil
 
       case logical.ShowFunctions(db, pattern) =>
-        ExecutedCommandExec(ShowFunctions(db, pattern)) :: Nil
+        ExecutedCommandExec(ShowFunctionsCommand(db, pattern)) :: Nil
 
       case logical.DescribeFunction(function, extended) =>
-        ExecutedCommandExec(DescribeFunction(function, extended)) :: Nil
+        ExecutedCommandExec(DescribeFunctionCommand(function, extended)) :: Nil
 
       case _ => Nil
     }

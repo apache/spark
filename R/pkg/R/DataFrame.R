@@ -1153,9 +1153,27 @@ setMethod("summarize",
             agg(x, ...)
           })
 
+dapplyInternal <- function(x, func, schema) {
+  packageNamesArr <- serialize(.sparkREnv[[".packages"]],
+                               connection = NULL)
+
+  broadcastArr <- lapply(ls(.broadcastNames),
+                         function(name) { get(name, .broadcastNames) })
+
+  sdf <- callJStatic(
+           "org.apache.spark.sql.api.r.SQLUtils",
+           "dapply",
+           x@sdf,
+           serialize(cleanClosure(func), connection = NULL),
+           packageNamesArr,
+           broadcastArr,
+           if (is.null(schema)) { schema } else { schema$jobj })
+  dataFrame(sdf)
+}
+
 #' dapply
 #'
-#' Apply a function to each partition of a DataFrame.
+#' Apply a function to each partition of a SparkDataFrame.
 #'
 #' @param x A SparkDataFrame
 #' @param func A function to be applied to each partition of the SparkDataFrame.
@@ -1197,21 +1215,57 @@ setMethod("summarize",
 setMethod("dapply",
           signature(x = "SparkDataFrame", func = "function", schema = "structType"),
           function(x, func, schema) {
-            packageNamesArr <- serialize(.sparkREnv[[".packages"]],
-                                         connection = NULL)
+            dapplyInternal(x, func, schema)
+          })
 
-            broadcastArr <- lapply(ls(.broadcastNames),
-                                   function(name) { get(name, .broadcastNames) })
+#' dapplyCollect
+#'
+#' Apply a function to each partition of a SparkDataFrame and collect the result back
+#’ to R as a data.frame.
+#'
+#' @param x A SparkDataFrame
+#' @param func A function to be applied to each partition of the SparkDataFrame.
+#'             func should have only one parameter, to which a data.frame corresponds
+#'             to each partition will be passed.
+#'             The output of func should be a data.frame.
+#' @family SparkDataFrame functions
+#' @rdname dapply
+#' @name dapplyCollect
+#' @export
+#' @examples
+#' \dontrun{
+#'   df <- createDataFrame (sqlContext, iris)
+#'   ldf <- dapplyCollect(df, function(x) { x })
+#'
+#'   # filter and add a column
+#'   df <- createDataFrame (
+#'           sqlContext, 
+#'           list(list(1L, 1, "1"), list(2L, 2, "2"), list(3L, 3, "3")),
+#'           c("a", "b", "c"))
+#'   ldf <- dapplyCollect(
+#'            df,
+#'            function(x) {
+#'              y <- x[x[1] > 1, ]
+#'              y <- cbind(y, y[1] + 1L)
+#'            })
+#'   # the result
+#'   #       a b c d
+#'   #       2 2 2 3
+#'   #       3 3 3 4
+#' }
+setMethod("dapplyCollect",
+          signature(x = "SparkDataFrame", func = "function"),
+          function(x, func) {
+            df <- dapplyInternal(x, func, NULL)
 
-            sdf <- callJStatic(
-                     "org.apache.spark.sql.api.r.SQLUtils",
-                     "dapply",
-                     x@sdf,
-                     serialize(cleanClosure(func), connection = NULL),
-                     packageNamesArr,
-                     broadcastArr,
-                     schema$jobj)
-            dataFrame(sdf)
+            content <- callJMethod(df@sdf, "collect")
+            # content is a list of items of struct type. Each item has a single field
+            # which is a serialized data.frame corresponds to one partition of the
+            # SparkDataFrame.
+            ldfs <- lapply(content, function(x) { unserialize(x[[1]]) })
+            ldf <- do.call(rbind, ldfs)
+            row.names(ldf) <- NULL
+            ldf
           })
 
 ############################## RDD Map Functions ##################################

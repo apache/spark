@@ -117,6 +117,7 @@ object DecimalType extends AbstractDataType {
   private[sql] val LongDecimal = DecimalType(20, 0)
   private[sql] val FloatDecimal = DecimalType(14, 7)
   private[sql] val DoubleDecimal = DecimalType(30, 15)
+  private[sql] val BigIntDecimal = DecimalType(38, 0)
 
   private[sql] def forType(dataType: DataType): DecimalType = dataType match {
     case ByteType => ByteDecimal

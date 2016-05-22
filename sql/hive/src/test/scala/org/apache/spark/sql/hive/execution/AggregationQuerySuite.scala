@@ -180,7 +180,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
     val emptyDF = spark.createDataFrame(
       sparkContext.emptyRDD[Row],
       StructType(StructField("key", StringType) :: StructField("value", IntegerType) :: Nil))
-    emptyDF.registerTempTable("emptyTable")
+    emptyDF.createOrReplaceTempView("emptyTable")
 
     // Register UDAFs
     spark.udf.register("mydoublesum", new MyDoubleSum)
@@ -193,14 +193,14 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       spark.sql("DROP TABLE IF EXISTS agg1")
       spark.sql("DROP TABLE IF EXISTS agg2")
       spark.sql("DROP TABLE IF EXISTS agg3")
-      spark.catalog.dropTempTable("emptyTable")
+      spark.catalog.dropTempView("emptyTable")
     } finally {
       super.afterAll()
     }
   }
 
   test("group by function") {
-    Seq((1, 2)).toDF("a", "b").registerTempTable("data")
+    Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("data")
 
     checkAnswer(
       sql("SELECT floor(a) AS a, collect_set(b) FROM data GROUP BY floor(a) ORDER BY a"),
@@ -783,7 +783,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       (5, 8, 17),
       (6, 2, 11)).toDF("a", "b", "c")
 
-    covar_tab.registerTempTable("covar_tab")
+    covar_tab.createOrReplaceTempView("covar_tab")
 
     checkAnswer(
       spark.sql(
@@ -938,7 +938,7 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
       spark.createDataFrame(
         sparkContext.parallelize(data, 2),
         schema)
-        .registerTempTable("noInputSchemaUDAF")
+        .createOrReplaceTempView("noInputSchemaUDAF")
 
       checkAnswer(
         spark.sql(
@@ -957,6 +957,37 @@ abstract class AggregationQuerySuite extends QueryTest with SQLTestUtils with Te
           """.stripMargin),
         Row(11) :: Nil)
     }
+  }
+
+  test("SPARK-15206: single distinct aggregate function in having clause") {
+    checkAnswer(
+      sql(
+        """
+          |select key, count(distinct value1)
+          |from agg2 group by key
+          |having count(distinct value1) > 0
+        """.stripMargin),
+      Seq(
+        Row(null, 3),
+        Row(1, 2),
+        Row(2, 2)
+      )
+    )
+  }
+
+  test("SPARK-15206: multiple distinct aggregate function in having clause") {
+    checkAnswer(
+      sql(
+        """
+          |select key, count(distinct value1), count(distinct value2)
+          |from agg2 group by key
+          |having count(distinct value1) > 0 and count(distinct value2) = 3
+        """.stripMargin),
+      Seq(
+        Row(null, 3, 3),
+        Row(1, 2, 3)
+      )
+    )
   }
 }
 

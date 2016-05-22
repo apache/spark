@@ -225,7 +225,9 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         userSpecifiedSchema = None,
         source,
         temporary = false,
-        options,
+        options = options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
     sparkSession.executePlan(cmd).toRdd
@@ -272,6 +274,8 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         source,
         temporary = false,
         options,
+        partitionColumns = Array.empty[String],
+        bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
     sparkSession.executePlan(cmd).toRdd
@@ -279,16 +283,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
   }
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached/persisted before, it's also unpersisted.
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached/persisted before, it's also unpersisted.
    *
-   * @param tableName the name of the table to be unregistered.
+   * @param viewName the name of the view to be dropped.
    * @group ddl_ops
    * @since 2.0.0
    */
-  override def dropTempTable(tableName: String): Unit = {
-    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName))
-    sessionCatalog.dropTable(TableIdentifier(tableName), ignoreIfNotExists = true)
+  override def dropTempView(viewName: String): Unit = {
+    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
+    sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
   }
 
   /**
@@ -339,6 +343,33 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    */
   protected[sql] def isCached(qName: Dataset[_]): Boolean = {
     sparkSession.cacheManager.lookupCachedData(qName).nonEmpty
+  }
+
+  /**
+   * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
+   * is refreshed.
+   *
+   * @group cachemgmt
+   * @since 2.0.0
+   */
+  override def refreshTable(tableName: String): Unit = {
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionCatalog.refreshTable(tableIdent)
+
+    // If this table is cached as a InMemoryRelation, drop the original
+    // cached version and make the new version cached lazily.
+    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
+    // Use lookupCachedData directly since RefreshTable also takes databaseName.
+    val isCached = sparkSession.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    if (isCached) {
+      // Create a data frame to represent the table.
+      // TODO: Use uncacheTable once it supports database name.
+      val df = Dataset.ofRows(sparkSession, logicalPlan)
+      // Uncache the logicalPlan.
+      sparkSession.cacheManager.tryUncacheQuery(df, blocking = true)
+      // Cache it again.
+      sparkSession.cacheManager.cacheQuery(df, Some(tableIdent.table))
+    }
   }
 
 }

@@ -227,8 +227,8 @@ object IntegerIndex {
  *  - Unnamed grouping expressions are named so that they can be referred to across phases of
  *    aggregation
  *  - Aggregations that appear multiple times are deduplicated.
- *  - The compution of the aggregations themselves is separated from the final result. For example,
- *    the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
+ *  - The computation of the aggregations themselves is separated from the final result. For
+ *    example, the `count` in `count + 1` will be split into an [[AggregateExpression]] and a final
  *    computation that computes `count.resultAttribute + 1`.
  */
 object PhysicalAggregation {

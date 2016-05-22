@@ -76,8 +76,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AnalyzeTable]] command. This currently only implements the NOSCAN option (other
-   * options are passed on to Hive) e.g.:
+   * Create a [[ResetCommand]] logical plan.
+   * Example SQL :
+   * {{{
+   *   RESET;
+   * }}}
+   */
+  override def visitResetConfiguration(
+      ctx: ResetConfigurationContext): LogicalPlan = withOrigin(ctx) {
+    ResetCommand
+  }
+
+  /**
+   * Create an [[AnalyzeTableCommand]] command. This currently only implements the NOSCAN
+   * option (other options are passed on to Hive) e.g.:
    * {{{
    *   ANALYZE TABLE table COMPUTE STATISTICS NOSCAN;
    * }}}
@@ -86,11 +98,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.partitionSpec == null &&
       ctx.identifier != null &&
       ctx.identifier.getText.toLowerCase == "noscan") {
-      AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
+      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
     } else {
       // Always just run the no scan analyze. We should fix this and implement full analyze
       // command in the future.
-      AnalyzeTable(visitTableIdentifier(ctx.tableIdentifier).toString)
+      AnalyzeTableCommand(visitTableIdentifier(ctx.tableIdentifier).toString)
     }
   }
 
@@ -179,6 +191,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val table = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
     ShowPartitionsCommand(table, partitionKeys)
+  }
+
+  /**
+   * Creates a [[ShowCreateTableCommand]]
+   */
+  override def visitShowCreateTable(ctx: ShowCreateTableContext): LogicalPlan = withOrigin(ctx) {
+    val table = visitTableIdentifier(ctx.tableIdentifier())
+    ShowCreateTableCommand(table)
   }
 
   /**
@@ -285,8 +305,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (external) {
       throw operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
+    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
+    val partitionColumnNames =
+      Option(ctx.partitionColumnNames)
+        .map(visitIdentifierList(_).toArray)
+        .getOrElse(Array.empty[String])
     val bucketSpec = Option(ctx.bucketSpec()).map(visitBucketSpec)
 
     if (ctx.query != null) {
@@ -302,21 +326,25 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         SaveMode.ErrorIfExists
       }
 
-      val partitionColumnNames =
-        Option(ctx.partitionColumnNames)
-          .map(visitIdentifierList(_).toArray)
-          .getOrElse(Array.empty[String])
-
       CreateTableUsingAsSelect(
         table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
-      CreateTableUsing(table, struct, provider, temp, options, ifNotExists, managedIfNoPath = true)
+      CreateTableUsing(
+        table,
+        struct,
+        provider,
+        temp,
+        options,
+        partitionColumnNames,
+        bucketSpec,
+        ifNotExists,
+        managedIfNoPath = true)
     }
   }
 
   /**
-   * Create a [[LoadData]] command.
+   * Create a [[LoadDataCommand]] command.
    *
    * For example:
    * {{{
@@ -325,7 +353,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitLoadData(ctx: LoadDataContext): LogicalPlan = withOrigin(ctx) {
-    LoadData(
+    LoadDataCommand(
       table = visitTableIdentifier(ctx.tableIdentifier),
       path = string(ctx.path),
       isLocal = ctx.LOCAL != null,
@@ -335,15 +363,64 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
+   * Create a [[TruncateTableCommand]] command.
+   *
+   * For example:
+   * {{{
+   *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
+   *   [COLUMNS (col1, col2)]
+   * }}}
+   */
+  override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
+    if (ctx.identifierList != null) {
+      throw operationNotAllowed("TRUNCATE TABLE ... COLUMNS", ctx)
+    }
+    TruncateTableCommand(
+      visitTableIdentifier(ctx.tableIdentifier),
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
+    )
+  }
+
+  /**
    * Convert a table property list into a key-value map.
+   * This should be called through [[visitPropertyKeyValues]] or [[visitPropertyKeys]].
    */
   override def visitTablePropertyList(
       ctx: TablePropertyListContext): Map[String, String] = withOrigin(ctx) {
-    ctx.tableProperty.asScala.map { property =>
+    val properties = ctx.tableProperty.asScala.map { property =>
       val key = visitTablePropertyKey(property.key)
       val value = Option(property.value).map(string).orNull
       key -> value
-    }.toMap
+    }
+    // Check for duplicate property names.
+    checkDuplicateKeys(properties, ctx)
+    properties.toMap
+  }
+
+  /**
+   * Parse a key-value map from a [[TablePropertyListContext]], assuming all values are specified.
+   */
+  private def visitPropertyKeyValues(ctx: TablePropertyListContext): Map[String, String] = {
+    val props = visitTablePropertyList(ctx)
+    val badKeys = props.filter { case (_, v) => v == null }.keys
+    if (badKeys.nonEmpty) {
+      throw operationNotAllowed(
+        s"Values must be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
+    }
+    props
+  }
+
+  /**
+   * Parse a list of keys from a [[TablePropertyListContext]], assuming no values are specified.
+   */
+  private def visitPropertyKeys(ctx: TablePropertyListContext): Seq[String] = {
+    val props = visitTablePropertyList(ctx)
+    val badKeys = props.filter { case (_, v) => v != null }.keys
+    if (badKeys.nonEmpty) {
+      throw operationNotAllowed(
+        s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
+    }
+    props.keys.toSeq
   }
 
   /**
@@ -360,7 +437,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[CreateDatabase]] command.
+   * Create a [[CreateDatabaseCommand]] command.
    *
    * For example:
    * {{{
@@ -369,16 +446,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitCreateDatabase(ctx: CreateDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    CreateDatabase(
+    CreateDatabaseCommand(
       ctx.identifier.getText,
       ctx.EXISTS != null,
       Option(ctx.locationSpec).map(visitLocationSpec),
       Option(ctx.comment).map(string),
-      Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))
+      Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
-   * Create an [[AlterDatabaseProperties]] command.
+   * Create an [[AlterDatabasePropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -387,13 +464,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitSetDatabaseProperties(
       ctx: SetDatabasePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterDatabaseProperties(
+    AlterDatabasePropertiesCommand(
       ctx.identifier.getText,
-      visitTablePropertyList(ctx.tablePropertyList))
+      visitPropertyKeyValues(ctx.tablePropertyList))
   }
 
   /**
-   * Create a [[DropDatabase]] command.
+   * Create a [[DropDatabaseCommand]] command.
    *
    * For example:
    * {{{
@@ -401,11 +478,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitDropDatabase(ctx: DropDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DropDatabase(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
+    DropDatabaseCommand(ctx.identifier.getText, ctx.EXISTS != null, ctx.CASCADE != null)
   }
 
   /**
-   * Create a [[DescribeDatabase]] command.
+   * Create a [[DescribeDatabaseCommand]] command.
    *
    * For example:
    * {{{
@@ -413,11 +490,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
-    DescribeDatabase(ctx.identifier.getText, ctx.EXTENDED != null)
+    DescribeDatabaseCommand(ctx.identifier.getText, ctx.EXTENDED != null)
   }
 
   /**
-   * Create a [[CreateFunction]] command.
+   * Create a [[CreateFunctionCommand]] command.
    *
    * For example:
    * {{{
@@ -438,7 +515,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     // Extract database, name & alias.
     val functionIdentifier = visitFunctionName(ctx.qualifiedName)
-    CreateFunction(
+    CreateFunctionCommand(
       functionIdentifier.database,
       functionIdentifier.funcName,
       string(ctx.className),
@@ -447,7 +524,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[DropFunction]] command.
+   * Create a [[DropFunctionCommand]] command.
    *
    * For example:
    * {{{
@@ -456,7 +533,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitDropFunction(ctx: DropFunctionContext): LogicalPlan = withOrigin(ctx) {
     val functionIdentifier = visitFunctionName(ctx.qualifiedName)
-    DropFunction(
+    DropFunctionCommand(
       functionIdentifier.database,
       functionIdentifier.funcName,
       ctx.EXISTS != null,
@@ -464,20 +541,20 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create a [[DropTable]] command.
+   * Create a [[DropTableCommand]] command.
    */
   override def visitDropTable(ctx: DropTableContext): LogicalPlan = withOrigin(ctx) {
     if (ctx.PURGE != null) {
       throw operationNotAllowed("DROP TABLE ... PURGE", ctx)
     }
-    DropTable(
+    DropTableCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.EXISTS != null,
       ctx.VIEW != null)
   }
 
   /**
-   * Create a [[AlterTableRename]] command.
+   * Create a [[AlterTableRenameCommand]] command.
    *
    * For example:
    * {{{
@@ -486,14 +563,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitRenameTable(ctx: RenameTableContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRename(
+    AlterTableRenameCommand(
       visitTableIdentifier(ctx.from),
       visitTableIdentifier(ctx.to),
       ctx.VIEW != null)
   }
 
   /**
-   * Create an [[AlterTableSetProperties]] command.
+   * Create an [[AlterTableSetPropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -503,14 +580,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitSetTableProperties(
       ctx: SetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetProperties(
+    AlterTableSetPropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      visitTablePropertyList(ctx.tablePropertyList),
+      visitPropertyKeyValues(ctx.tablePropertyList),
       ctx.VIEW != null)
   }
 
   /**
-   * Create an [[AlterTableUnsetProperties]] command.
+   * Create an [[AlterTableUnsetPropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -520,15 +597,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitUnsetTableProperties(
       ctx: UnsetTablePropertiesContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableUnsetProperties(
+    AlterTableUnsetPropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      visitTablePropertyList(ctx.tablePropertyList).keys.toSeq,
+      visitPropertyKeys(ctx.tablePropertyList),
       ctx.EXISTS != null,
       ctx.VIEW != null)
   }
 
   /**
-   * Create an [[AlterTableSerDeProperties]] command.
+   * Create an [[AlterTableSerDePropertiesCommand]] command.
    *
    * For example:
    * {{{
@@ -537,16 +614,16 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitSetTableSerDe(ctx: SetTableSerDeContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSerDeProperties(
+    AlterTableSerDePropertiesCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.STRING).map(string),
-      Option(ctx.tablePropertyList).map(visitTablePropertyList),
+      Option(ctx.tablePropertyList).map(visitPropertyKeyValues),
       // TODO a partition spec is allowed to have optional values. This is currently violated.
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**
-   * Create an [[AlterTableAddPartition]] command.
+   * Create an [[AlterTableAddPartitionCommand]] command.
    *
    * For example:
    * {{{
@@ -574,14 +651,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Alter View: the location clauses are not allowed.
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec(_) -> None)
     }
-    AlterTableAddPartition(
+    AlterTableAddPartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       specsAndLocs,
       ctx.EXISTS != null)
   }
 
   /**
-   * Create an [[AlterTableRenamePartition]] command
+   * Create an [[AlterTableRenamePartitionCommand]] command
    *
    * For example:
    * {{{
@@ -590,14 +667,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitRenameTablePartition(
       ctx: RenameTablePartitionContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableRenamePartition(
+    AlterTableRenamePartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       visitNonOptionalPartitionSpec(ctx.from),
       visitNonOptionalPartitionSpec(ctx.to))
   }
 
   /**
-   * Create an [[AlterTableDropPartition]] command
+   * Create an [[AlterTableDropPartitionCommand]] command
    *
    * For example:
    * {{{
@@ -616,14 +693,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.PURGE != null) {
       throw operationNotAllowed("ALTER TABLE ... DROP PARTITION ... PURGE", ctx)
     }
-    AlterTableDropPartition(
+    AlterTableDropPartitionCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       ctx.partitionSpec.asScala.map(visitNonOptionalPartitionSpec),
       ctx.EXISTS != null)
   }
 
   /**
-   * Create an [[AlterTableSetLocation]] command
+   * Create an [[AlterTableSetLocationCommand]] command
    *
    * For example:
    * {{{
@@ -631,7 +708,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * }}}
    */
   override def visitSetTableLocation(ctx: SetTableLocationContext): LogicalPlan = withOrigin(ctx) {
-    AlterTableSetLocation(
+    AlterTableSetLocationCommand(
       visitTableIdentifier(ctx.tableIdentifier),
       Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec),
       visitLocationSpec(ctx.locationSpec))
@@ -697,18 +774,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AddJar]] or [[AddFile]] command depending on the requested resource.
+   * Create an [[AddJarCommand]] or [[AddFileCommand]] command depending on the requested resource.
    */
   override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
     ctx.identifier.getText.toLowerCase match {
-      case "file" => AddFile(remainder(ctx.identifier).trim)
-      case "jar" => AddJar(remainder(ctx.identifier).trim)
+      case "file" => AddFileCommand(remainder(ctx.identifier).trim)
+      case "jar" => AddJarCommand(remainder(ctx.identifier).trim)
       case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
     }
   }
 
   /**
-   * Create a table, returning either a [[CreateTable]] or a [[CreateTableAsSelectLogicalPlan]].
+   * Create a table, returning either a [[CreateTableCommand]] or a
+   * [[CreateTableAsSelectLogicalPlan]].
    *
    * This is not used to create datasource tables, which is handled through
    * "CREATE TABLE ... USING ...".
@@ -737,7 +815,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (temp) {
       throw new ParseException(
         "CREATE TEMPORARY TABLE is not supported yet. " +
-          "Please use registerTempTable as an alternative.", ctx)
+          "Please use CREATE TEMPORARY VIEW as an alternative.", ctx)
     }
     if (ctx.skewSpec != null) {
       throw operationNotAllowed("CREATE TABLE ... SKEWED BY", ctx)
@@ -745,15 +823,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (ctx.bucketSpec != null) {
       throw operationNotAllowed("CREATE TABLE ... CLUSTERED BY", ctx)
     }
-    val tableType = if (external) {
-      CatalogTableType.EXTERNAL
-    } else {
-      CatalogTableType.MANAGED
-    }
     val comment = Option(ctx.STRING).map(string)
     val partitionCols = Option(ctx.partitionColumns).toSeq.flatMap(visitCatalogColumns)
     val cols = Option(ctx.columns).toSeq.flatMap(visitCatalogColumns)
-    val properties = Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty)
+    val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
 
     // Note: Hive requires partition columns to be distinct from the schema, so we need
@@ -780,6 +853,10 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       .getOrElse(EmptyStorageFormat)
     val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
+    // If we are creating an EXTERNAL table, then the LOCATION field is required
+    if (external && location.isEmpty) {
+      throw operationNotAllowed("CREATE EXTERNAL TABLE must be accompanied by LOCATION", ctx)
+    }
     val storage = CatalogStorageFormat(
       locationUri = location,
       inputFormat = fileStorage.inputFormat.orElse(defaultStorage.inputFormat),
@@ -787,6 +864,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       serde = rowStorage.serde.orElse(fileStorage.serde).orElse(defaultStorage.serde),
       compressed = false,
       serdeProperties = rowStorage.serdeProperties ++ fileStorage.serdeProperties)
+    // If location is defined, we'll assume this is an external table.
+    // Otherwise, we may accidentally delete existing data.
+    val tableType = if (external || location.isDefined) {
+      CatalogTableType.EXTERNAL
+    } else {
+      CatalogTableType.MANAGED
+    }
 
     // TODO support the sql text - have a proper location for this!
     val tableDesc = CatalogTable(
@@ -800,12 +884,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     selectQuery match {
       case Some(q) => CreateTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
-      case None => CreateTable(tableDesc, ifNotExists)
+      case None => CreateTableCommand(tableDesc, ifNotExists)
     }
   }
 
   /**
-   * Create a [[CreateTableLike]] command.
+   * Create a [[CreateTableLikeCommand]] command.
    *
    * For example:
    * {{{
@@ -816,7 +900,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitCreateTableLike(ctx: CreateTableLikeContext): LogicalPlan = withOrigin(ctx) {
     val targetTable = visitTableIdentifier(ctx.target)
     val sourceTable = visitTableIdentifier(ctx.source)
-    CreateTableLike(targetTable, sourceTable, ctx.EXISTS != null)
+    CreateTableLikeCommand(targetTable, sourceTable, ctx.EXISTS != null)
   }
 
   /**
@@ -903,7 +987,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     import ctx._
     EmptyStorageFormat.copy(
       serde = Option(string(name)),
-      serdeProperties = Option(tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty))
+      serdeProperties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
@@ -960,7 +1044,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         comment = Option(ctx.STRING).map(string),
         schema,
         ctx.query,
-        Option(ctx.tablePropertyList).map(visitTablePropertyList).getOrElse(Map.empty),
+        Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty),
         ctx.EXISTS != null,
         ctx.REPLACE != null,
         ctx.TEMPORARY != null
