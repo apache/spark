@@ -1798,8 +1798,6 @@ class UserDefinedJythonFunction(object):
         extra = filtered_extra
         if not extra:
             extra = None
-        print(extra)
-        print(extra_imports)
         serializedExtras = b64encode(ser.dumps(extra))
         serializedImports = b64encode(ser.dumps(extra_imports))
         # Create a Java representation
