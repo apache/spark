@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import java.beans.Introspector
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -30,6 +31,7 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -98,24 +100,10 @@ class SparkSession private(
   }
 
   /**
-   * A wrapped version of this session in the form of a [[SQLContext]].
+   * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
    */
   @transient
-  private var _wrapped: SQLContext = _
-
-  @transient
-  private val _wrappedLock = new Object
-
-  protected[sql] def wrapped: SQLContext = _wrappedLock.synchronized {
-    if (_wrapped == null) {
-      _wrapped = new SQLContext(self, isRootContext = false)
-    }
-    _wrapped
-  }
-
-  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = _wrappedLock.synchronized {
-    _wrapped = sqlContext
-  }
+  private[sql] val sqlContext: SQLContext = new SQLContext(this)
 
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener
@@ -238,7 +226,7 @@ class SparkSession private(
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-    SQLContext.setActive(wrapped)
+    SparkSession.setActiveSession(this)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
@@ -254,7 +242,7 @@ class SparkSession private(
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-    SQLContext.setActive(wrapped)
+    SparkSession.setActiveSession(this)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
@@ -573,7 +561,7 @@ class SparkSession private(
    */
   @Experimental
   object implicits extends SQLImplicits with Serializable {
-    protected override def _sqlContext: SQLContext = wrapped
+    protected override def _sqlContext: SQLContext = SparkSession.this.sqlContext
   }
   // scalastyle:on
 
@@ -649,8 +637,16 @@ object SparkSession {
 
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
+    private[this] var userSuppliedContext: Option[SparkContext] = None
+
+    private[sql] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+      userSuppliedContext = Option(sparkContext)
+      this
+    }
+
     /**
      * Sets a name for the application, which will be shown in the Spark web UI.
+     * If no application name is set, a randomly generated name will be used.
      *
      * @since 2.0.0
      */
@@ -735,28 +731,129 @@ object SparkSession {
     }
 
     /**
-     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new one
-     * based on the options set in this builder.
+     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
+     * one based on the options set in this builder.
+     *
+     * This method first checks whether there is a valid thread-local SparkSession,
+     * and if yes, return that one. It then checks whether there is a valid global
+     * default SparkSession, and if yes, return that one. If no valid global default
+     * SparkSession exists, the method creates a new SparkSession and assigns the
+     * newly created SparkSession as the global default.
+     *
+     * In case an existing SparkSession is returned, the config options specified in
+     * this builder will be applied to the existing SparkSession.
      *
      * @since 2.0.0
      */
     def getOrCreate(): SparkSession = synchronized {
-      // Step 1. Create a SparkConf
-      // Step 2. Get a SparkContext
-      // Step 3. Get a SparkSession
-      val sparkConf = new SparkConf()
-      options.foreach { case (k, v) => sparkConf.set(k, v) }
-      val sparkContext = SparkContext.getOrCreate(sparkConf)
+      // Get the session from current thread's active session.
+      var session = activeThreadSession.get()
+      if ((session ne null) && !session.sparkContext.isStopped) {
+        options.foreach { case (k, v) => session.conf.set(k, v) }
+        return session
+      }
 
-      SQLContext.getOrCreate(sparkContext).sparkSession
+      // Global synchronization so we will only set the default session once.
+      SparkSession.synchronized {
+        // If the current thread does not have an active session, get it from the global session.
+        session = defaultSession.get()
+        if ((session ne null) && !session.sparkContext.isStopped) {
+          options.foreach { case (k, v) => session.conf.set(k, v) }
+          return session
+        }
+
+        // No active nor global default session. Create a new one.
+        val sparkContext = userSuppliedContext.getOrElse {
+          // set app name if not given
+          if (!options.contains("spark.app.name")) {
+            options += "spark.app.name" -> java.util.UUID.randomUUID().toString
+          }
+
+          val sparkConf = new SparkConf()
+          options.foreach { case (k, v) => sparkConf.set(k, v) }
+          SparkContext.getOrCreate(sparkConf)
+        }
+        session = new SparkSession(sparkContext)
+        options.foreach { case (k, v) => session.conf.set(k, v) }
+        defaultSession.set(session)
+
+        // Register a successfully instantiated context to the singleton. This should be at the
+        // end of the class definition so that the singleton is updated only if there is no
+        // exception in the construction of the instance.
+        sparkContext.addSparkListener(new SparkListener {
+          override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+            defaultSession.set(null)
+            sqlListener.set(null)
+          }
+        })
+      }
+
+      return session
     }
   }
 
   /**
    * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
+   *
    * @since 2.0.0
    */
   def builder(): Builder = new Builder
+
+  /**
+   * Changes the SparkSession that will be returned in this thread and its children when
+   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * a SparkSession with an isolated session, instead of the global (first created) context.
+   *
+   * @since 2.0.0
+   */
+  def setActiveSession(session: SparkSession): Unit = {
+    activeThreadSession.set(session)
+  }
+
+  /**
+   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
+   * return the first created context instead of a thread-local override.
+   *
+   * @since 2.0.0
+   */
+  def clearActiveSession(): Unit = {
+    activeThreadSession.remove()
+  }
+
+  /**
+   * Sets the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def setDefaultSession(session: SparkSession): Unit = {
+    defaultSession.set(session)
+  }
+
+  /**
+   * Clears the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def clearDefaultSession(): Unit = {
+    defaultSession.set(null)
+  }
+
+  private[sql] def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+
+  private[sql] def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+
+  /** A global SQL listener used for the SQL UI. */
+  private[sql] val sqlListener = new AtomicReference[SQLListener]()
+
+  ////////////////////////////////////////////////////////////////////////////////////////
+  // Private methods from now on
+  ////////////////////////////////////////////////////////////////////////////////////////
+
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[SparkSession]
 
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
