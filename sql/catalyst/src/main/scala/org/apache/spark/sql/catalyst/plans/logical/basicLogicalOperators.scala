@@ -431,8 +431,11 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
-  require(step != 0, "step cannot be 0")
+    output: Seq[Attribute])
+  extends LeafNode with MultiInstanceRelation {
+
+  require(step != 0, s"step ($step) cannot be 0")
+
   val numElements: BigInt = {
     val safeStart = BigInt(start)
     val safeEnd = BigInt(end)
@@ -444,12 +447,19 @@ case class Range(
     }
   }
 
-  override def newInstance(): Range =
-    Range(start, end, step, numSlices, output.map(_.newInstance()))
+  override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
   override def statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
+  }
+
+  override def simpleString: String = {
+    if (step == 1) {
+      s"Range ($start, $end, splits=$numSlices)"
+    } else {
+      s"Range ($start, $end, step=$step, splits=$numSlices)"
+    }
   }
 }
 
