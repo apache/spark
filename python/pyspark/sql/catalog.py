@@ -215,7 +215,6 @@ class Catalog(object):
         self._jsparkSession.udf().registerPython(name, udf._judf)
         return udf
 
-    @ignore_unicode_prefix
     @since(2.1)
     def registerJythonFunction(self, name, f, returnType=StringType()):
         """

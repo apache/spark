@@ -1727,7 +1727,6 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-@ignore_unicode_prefix
 def _wrap_jython_func(sc, src, extra, imports, returnType):
     return sc._jvm.org.apache.spark.sql.execution.python.JythonFunction(
         src, extra, imports)
