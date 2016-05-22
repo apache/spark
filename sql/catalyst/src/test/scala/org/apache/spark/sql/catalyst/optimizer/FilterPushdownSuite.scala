@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.{DoubleType, IntegerType}
+import org.apache.spark.sql.types.IntegerType
 
 class FilterPushdownSuite extends PlanTest {
 
@@ -125,18 +125,6 @@ class FilterPushdownSuite extends PlanTest {
   test("nondeterministic: can't push down filter through project with nondeterministic field") {
     val originalQuery = testRelation
       .select(Rand(10).as('rand), 'a)
-      .where('a > 5)
-      .analyze
-
-    val optimized = Optimize.execute(originalQuery)
-
-    comparePlans(optimized, originalQuery)
-  }
-
-  test("SPARK-15282: can't push down filter with udf column through project") {
-    // UDF function might be non-deterministic
-    val originalQuery = testRelation
-      .select(ScalaUDF(() => Math.random(), DoubleType, Nil, Nil).as('udf), 'a)
       .where('a > 5)
       .analyze
 
