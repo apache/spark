@@ -63,7 +63,7 @@ object HiveThriftServer2 extends Logging {
 
     server.init(executionHive.conf)
     server.start()
-    listener = new HiveThriftServer2Listener(server, sqlContext.conf)
+    listener = new HiveThriftServer2Listener(server, sqlContext.sessionState.conf)
     sqlContext.sparkContext.addSparkListener(listener)
     uiTab = if (sqlContext.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
       Some(new ThriftServerTab(sqlContext.sparkContext))
@@ -94,7 +94,7 @@ object HiveThriftServer2 extends Logging {
       server.init(executionHive.conf)
       server.start()
       logInfo("HiveThriftServer2 started")
-      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.conf)
+      listener = new HiveThriftServer2Listener(server, SparkSQLEnv.sqlContext.sessionState.conf)
       SparkSQLEnv.sparkContext.addSparkListener(listener)
       uiTab = if (SparkSQLEnv.sparkContext.getConf.getBoolean("spark.ui.enabled", true)) {
         Some(new ThriftServerTab(SparkSQLEnv.sparkContext))
