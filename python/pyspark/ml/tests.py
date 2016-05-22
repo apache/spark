@@ -59,6 +59,7 @@ from pyspark.ml.param.shared import HasMaxIter, HasInputCol, HasSeed
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import LinearRegression, DecisionTreeRegressor, \
     GeneralizedLinearRegression
+from pyspark.ml.stat.distribution import MultivariateGaussian
 from pyspark.ml.tuning import *
 from pyspark.ml.wrapper import JavaParams
 from pyspark.mllib.common import _java2py
@@ -68,6 +69,7 @@ from pyspark.sql.functions import rand
 from pyspark.sql.utils import IllegalArgumentException
 from pyspark.storagelevel import *
 from pyspark.tests import ReusedPySparkTestCase as PySparkTestCase
+
 
 ser = PickleSerializer()
 
@@ -1493,7 +1495,62 @@ class MatrixUDTTests(MLlibTestCase):
                 self.assertTrue(m, self.sm1)
             else:
                 raise ValueError("Expected a matrix but got type %r" % type(m))
+class MultiVariateGaussianTests(PySparkTestCase):
+    def test_univariate(self) :
+        x1=Vectors.dense([0.0])
+        x2=Vectors.dense([1.5])
 
+        mu = Vectors.dense([0.0])
+        sigma1= DenseMatrix(1, 1, [1.0])
+        dist1= MultivariateGaussian(mu, sigma1)
+
+        self.assertAlmostEqual(dist1.pdf(x1),0.39894, 5)
+        self.assertAlmostEqual(dist1.pdf(x2),0.12952, 5)
+
+        sigma2= DenseMatrix(1, 1, [4.0])
+        dist2= MultivariateGaussian(mu, sigma2)
+
+        self.assertAlmostEqual(dist2.pdf(x1),0.19947, 5)
+        self.assertAlmostEqual(dist2.pdf(x2),0.15057, 5)
+
+    def test_multivariate(self) :
+        x1=Vectors.dense([0.0, 0.0])
+        x2=Vectors.dense([1.0, 1.0])
+
+        mu = Vectors.dense([0.0, 0.0])
+        sigma1= DenseMatrix(2, 2, [1.0, 0.0, 0.0, 1.0])
+        dist1= MultivariateGaussian(mu, sigma1)
+
+        self.assertAlmostEqual(dist1.pdf(x1),0.159154, 5)
+        self.assertAlmostEqual(dist1.pdf(x2),0.05855, 5)
+
+        sigma2= DenseMatrix(2, 2, [4.0, -1.0, -1.0, 2.0])
+        dist2= MultivariateGaussian(mu, sigma2)
+
+        self.assertAlmostEqual(dist2.pdf(x1),0.060155, 5)
+        self.assertAlmostEqual(dist2.pdf(x2),0.0339717, 5)
+
+    def test_multivariate_degenerate(self) :
+        x1=Vectors.dense([0.0, 0.0])
+        x2=Vectors.dense([1.0, 1.0])
+
+        mu = Vectors.dense([0.0, 0.0])
+        sigma1= DenseMatrix(2, 2, [1.0, 1.0, 1.0, 1.0])
+        dist1= MultivariateGaussian(mu, sigma1)
+
+        self.assertAlmostEqual(dist1.pdf(x1),0.11254, 5)
+        self.assertAlmostEqual(dist1.pdf(x2),0.068259, 5)
+
+    def test_SPARK_11302(self) :
+        x=Vectors.dense([629, 640, 1.7188, 618.19])
+
+        mu = Vectors.dense([1055.3910505836575, 1070.489299610895, 1.39020554474708, 1040.5907503867697])
+        sigma= DenseMatrix(4, 4, [166769.00466698944, 169336.6705268059, 12.820670788921873, 164243.93314092053,
+      169336.6705268059, 172041.5670061245, 21.62590020524533, 166678.01075856484,
+      12.820670788921873, 21.62590020524533, 0.872524191943962, 4.283255814732373,
+      164243.93314092053, 166678.01075856484, 4.283255814732373, 161848.9196719207])
+        dist= MultivariateGaussian(mu, sigma)
+        self.assertAlmostEqual(dist.pdf(x),0.00007154782, 9)
 
 if __name__ == "__main__":
     from pyspark.ml.tests import *
