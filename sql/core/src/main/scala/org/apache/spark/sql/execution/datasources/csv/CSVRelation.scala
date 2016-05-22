@@ -164,8 +164,10 @@ private[sql] class CsvOutputWriter(
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()
 
+  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
+
   private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
+    val writer = new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = context.getConfiguration
         val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
@@ -174,11 +176,14 @@ private[sql] class CsvOutputWriter(
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
       }
     }.getRecordWriter(context)
+    // Write header even if `writeInternal()` is not called.
+    if (params.headerFlag) {
+      val headerString = csvWriter.writeRow(Seq.empty[String], includeHeader = true)
+      text.set(headerString)
+      writer.write(NullWritable.get(), text)
+    }
+    writer
   }
-
-  private var firstRow: Boolean = params.headerFlag
-
-  private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
 
   private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
     if (field != null) {
@@ -192,10 +197,8 @@ private[sql] class CsvOutputWriter(
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
     // TODO: Instead of converting and writing every row, we should use the univocity buffer
-    val resultString = csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), firstRow)
-    if (firstRow) {
-      firstRow = false
-    }
+    val resultString =
+      csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), includeHeader = false)
     text.set(resultString)
     recordWriter.write(NullWritable.get(), text)
   }

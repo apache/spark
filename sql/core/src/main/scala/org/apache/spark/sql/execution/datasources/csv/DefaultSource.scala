@@ -55,17 +55,25 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val csvOptions = new CSVOptions(options)
 
     // TODO: Move filtering.
-    val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
+    val paths = files.filterNot(_.getPath.getName.startsWith("_")).map(_.getPath.toString)
     val rdd = baseRdd(sparkSession, csvOptions, paths)
     val firstLine = findFirstLine(csvOptions, rdd)
-    val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
+    val header = if (firstLine != null) {
+      val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
 
-    val header = if (csvOptions.headerFlag) {
-      firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
+      if (csvOptions.headerFlag) {
+        firstRow.zipWithIndex.map { case (value, index) =>
+          if (value == null || value.isEmpty || value == csvOptions.nullValue) {
+            s"_c$index"
+          } else {
+            value
+          }
+        }
+      } else {
+        firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
       }
     } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
+      Array.empty[String]
     }
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
@@ -78,6 +86,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       }
       StructType(schemaFields)
     }
+
     Some(schema)
   }
 
@@ -151,11 +160,11 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       val comment = options.comment.toString
       rdd.filter { line =>
         line.trim.nonEmpty && !line.startsWith(comment)
-      }.first()
+      }.take(1).headOption.orNull
     } else {
       rdd.filter { line =>
         line.trim.nonEmpty
-      }.first()
+      }.take(1).headOption.orNull
     }
   }
 
