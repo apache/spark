@@ -265,7 +265,7 @@ private[spark] object HiveUtils extends Logging {
       version = IsolatedClientLoader.hiveVersion(hiveExecutionVersion),
       sparkConf = conf,
       execJars = Seq(),
-      hadoopConf = hadoopConf,
+      hadoopConf = hadoopConf.asScala.map(e => e.getKey -> e.getValue).toMap,
       config = newTemporaryConfiguration(useInMemoryDerby = true),
       isolationOn = false,
       baseClassLoader = Utils.getContextOrSparkClassLoader)
@@ -297,6 +297,7 @@ private[spark] object HiveUtils extends Logging {
     val hiveMetastoreBarrierPrefixes = HiveUtils.hiveMetastoreBarrierPrefixes(sqlConf)
     val hiveMetastoreShareHadoopClasses = HiveUtils.hiveMetastoreShareHadoopClasses(sqlConf)
     val metaVersion = IsolatedClientLoader.hiveVersion(hiveMetastoreVersion)
+    val hadoopConfMap = hadoopConf.asScala.map(e => e.getKey -> e.getValue).toMap
 
     val isolatedLoader = if (hiveMetastoreJars == "builtin") {
       if (hiveExecutionVersion != hiveMetastoreVersion) {
@@ -329,7 +330,7 @@ private[spark] object HiveUtils extends Logging {
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
-        hadoopConf = hadoopConf,
+        hadoopConf = hadoopConfMap,
         execJars = jars.toSeq,
         config = configurations,
         isolationOn = true,
@@ -345,7 +346,7 @@ private[spark] object HiveUtils extends Logging {
         hadoopVersion = VersionInfo.getVersion,
         sparkConf = conf,
         sharesHadoopClasses = hiveMetastoreShareHadoopClasses,
-        hadoopConf = hadoopConf,
+        hadoopConf = hadoopConfMap,
         config = configurations,
         barrierPrefixes = hiveMetastoreBarrierPrefixes,
         sharedPrefixes = hiveMetastoreSharedPrefixes)
@@ -374,7 +375,7 @@ private[spark] object HiveUtils extends Logging {
       new IsolatedClientLoader(
         version = metaVersion,
         sparkConf = conf,
-        hadoopConf = hadoopConf,
+        hadoopConf = hadoopConfMap,
         execJars = jars.toSeq,
         config = configurations,
         isolationOn = true,

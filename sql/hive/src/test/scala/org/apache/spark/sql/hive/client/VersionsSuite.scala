@@ -19,6 +19,8 @@ package org.apache.spark.sql.hive.client
 
 import java.io.{ByteArrayOutputStream, File, PrintStream}
 
+import scala.collection.JavaConverters._
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
@@ -71,7 +73,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
       sparkConf = sparkConf,
-      hadoopConf = new Configuration(),
+      hadoopConf = Map.empty[String, String],
       config = buildConf(),
       ivyPath = ivyPath).createClient()
     val db = new CatalogDatabase("default", "desc", "loc", Map())
@@ -85,7 +87,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
       hiveMetastoreVersion = HiveUtils.hiveExecutionVersion,
       hadoopVersion = VersionInfo.getVersion,
       sparkConf = sparkConf,
-      hadoopConf = hadoopConf,
+      hadoopConf = hadoopConf.asScala.map(e => e.getKey -> e.getValue).toMap,
       config = buildConf(),
       ivyPath = ivyPath).createClient()
     assert("success" === client.getConf("test", null))
@@ -114,7 +116,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = "13",
           hadoopVersion = VersionInfo.getVersion,
           sparkConf = sparkConf,
-          hadoopConf = new Configuration(),
+          hadoopConf = Map.empty[String, String],
           config = buildConf(),
           ivyPath = ivyPath).createClient()
       }
@@ -137,7 +139,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = version,
           hadoopVersion = VersionInfo.getVersion,
           sparkConf = sparkConf,
-          hadoopConf = hadoopConf,
+          hadoopConf = hadoopConf.asScala.map(e => e.getKey -> e.getValue).toMap,
           config = buildConf(),
           ivyPath = ivyPath).createClient()
     }
