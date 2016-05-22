@@ -33,6 +33,12 @@ import org.apache.spark.sql.Row
  *
  * TODO: Consider if extending ScalaUDF is the right path forward
  * TODO: Consider if pipelining multiple JythonUDFs is important
+ *
+ * @param name  Name of UDF
+ * @param func  JYthon function
+ * @param sfunc  Scala function (normally supplied only at copy time)
+ * @param dataType  Return data type.
+ * @param children  Sequence of child expressions.
  */
 private[sql] class JythonUDF(
     name: String,
