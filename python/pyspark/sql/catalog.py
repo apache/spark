@@ -195,17 +195,19 @@ class Catalog(object):
         :param f: python function
         :param returnType: a :class:`DataType` object
 
-        >>> spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
+        >>> strLenStr = spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
         >>> spark.sql("SELECT stringLengthString('test')").collect()
+        [Row(stringLengthString(test)=u'4')]
+        >>> df.select(strLenStr(df.test)).collect()
         [Row(stringLengthString(test)=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sli = spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
 
         >>> from pyspark.sql.types import IntegerType
-        >>> spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
+        >>> sli = spark.udf.register("stringLengthInt", lambda x: len(x), IntegerType())
         >>> spark.sql("SELECT stringLengthInt('test')").collect()
         [Row(stringLengthInt(test)=4)]
         """

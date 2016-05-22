@@ -216,6 +216,56 @@ class SQLContext(object):
         :param name: name of the UDF
         :param f: String containing python lambda or python function
         :param returnType: a :class:`DataType` object
+
+        >>> rdd = sc.parallelize([Row(r1=17, r2="hi panda", r3=4),
+        >>>    		          Row(r1=21, r2="bye panda", r3=5)])
+        >>> df = rdd.toDF()
+        >>> df.registerTempTable("magic")
+        >>> g = 3
+        >>> f = lambda x: x + 1
+        >>> f3 = lambda x: x + g
+        >>> myLen = lambda x: len(x)
+        >>> split = lambda x: x.split()
+        >>> avg2 = lambda x, y: (x + y) / 2.0
+        >>> makeMap = lambda x: {"hi": str(x), "magic":"yes"}
+        >>> rowMagic1 = lambda x: Row(hi="murh", by=x)
+        >>> rowMagic2 = lambda x: Row("murh", x)
+        >>> add1 = sqlCtx.registerJythonFunction("add1", f, IntegerType())
+        >>> add1B = sqlCtx.registerJythonFunction("add1B", "lambda x: x", IntegerType())
+        >>> add3 = sqlCtx.registerJythonFunction("add3", f3, IntegerType())
+        >>> strLen = sqlCtx.registerJythonFunction("strLen", myLen, IntegerType())
+        >>> split = sqlCtx.registerJythonFunction("tokenize", split, ArrayType(StringType()))
+        >>> simpleMap = sqlCtx.registerJythonFunction("simpleMap", makeMap,
+        ...                                           MapType(StringType(), StringType()))
+        >>> avg2 = sqlCtx.registerJythonFunction("2avg", avg2, DoubleType())
+        >>> complex = sqlCtx.
+        ...   registerJythonFunction("complex", rowMagic1,
+        ... 			 StructType([StructField("by", IntegerType()),
+        ... 				     StructField("hi", StringType())]))
+        >>> complex2 = sqlCtx.
+        ...   registerJythonFunction("complex2", rowMagic1,
+        ... 			 StructType([StructField("hi", StringType()),
+        ... 				     StructField("by", IntegerType())]))
+        >>> complex3 = sqlCtx.
+        ...   registerJythonFunction("complex3", rowMagic2,
+        ... 			     StructType([StructField("hi", StringType()),
+        ...				         StructField("by", IntegerType())]))
+        >>> sqlCtx.sql("SELECT add1(r1), add1B(r1), add3(r1) FROM magic").collect()
+        [Row(add1(r1)=18, add1B(r1)=18, add3(r1)=20), Row(add1(r1)=22, add1B(r1)=22, add3(r1)=24)]
+        >>> df.select(add1(df.r1), add1B(df.r1), add3(df.r1)).collect()
+        [Row(add1(r1)=18, add1B(r1)=18, add3(r1)=20), Row(add1(r1)=22, add1B(r1)=22, add3(r1)=24)]
+        >>> sqlCtx.sql("SELECT tokenize(r2) FROM magic").collect()
+        [Row(tokenize(r2)=[u'hi', u'panda']), Row(tokenize(r2)=[u'bye', u'panda'])]
+        >>> sqlCtx.sql("SELECT simpleMap(r1) FROM magic").take(1)
+        [Row(simpleMap(r1)={u'hi': u'17', u'magic': u'yes'})]
+        >>> sqlCtx.sql("SELECT 2avg(r1, r3) FROM magic").collect()
+        [Row(2avg(r1, r3)=10.5), Row(2avg(r1, r3)=13.0)]
+        >>> sqlCtx.sql("SELECT complex(r1) FROM magic").take(1)
+        [Row(complex(r1)=Row(by=17, hi=u'murh'))]
+        >>> sqlCtx.sql("SELECT complex2(r1) FROM magic").take(1)
+        [Row(complex2(r1)=Row(hi=u'murh', by=17))]
+        >>> sqlCtx.sql("SELECT complex3(r1) FROM magic").take(1)
+        [Row(complex3(r1)=Row(hi=u'murh', by=17))]
         """
         return self.sparkSession.catalog.registerJythonFunction(name, f, returnType)
 
