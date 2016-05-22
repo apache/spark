@@ -1049,9 +1049,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
     val tabName = "tbl"
     withTable(tabName) {
-      val expectedMsg =
-        s"Please enable Hive support when operating non-temporary tables: `$tabName`"
-      sql(s"CREATE TABLE $tabName(i INT, j STRING)")
+      sql(s"CREATE TABLE $tabName (i INT, j STRING)")
       val catalogTable =
         spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
       assert(catalogTable.tableType == CatalogTableType.MANAGED)
@@ -1059,11 +1057,38 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var message = intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
       }.getMessage
-      assert(message.contains(expectedMsg))
+      assert(message.contains("Please enable Hive support when inserting the regular tables"))
       message = intercept[AnalysisException] {
         sql(s"SELECT * FROM $tabName")
       }.getMessage
-      assert(message.contains(expectedMsg))
+      assert(message.contains("Please enable Hive support when selecting the regular tables"))
+    }
+  }
+
+  test("select/insert into external table") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    withTempDir { tempDir =>
+      val tabName = "tbl"
+      withTable(tabName) {
+        sql(
+          s"""
+             |CREATE EXTERNAL TABLE $tabName (i INT, j STRING)
+             |ROW FORMAT DELIMITED FIELDS TERMINATED BY ','
+             |LOCATION '$tempDir'
+           """.stripMargin)
+        val catalogTable =
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        assert(catalogTable.tableType == CatalogTableType.EXTERNAL)
+
+        var message = intercept[AnalysisException] {
+          sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
+        }.getMessage
+        assert(message.contains("Please enable Hive support when inserting the regular tables"))
+        message = intercept[AnalysisException] {
+          sql(s"SELECT * FROM $tabName")
+        }.getMessage
+        assert(message.contains("Please enable Hive support when selecting the regular tables"))
+      }
     }
   }
 
