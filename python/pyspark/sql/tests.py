@@ -258,6 +258,96 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertEqual(99, self.df.filter(~(self.df.key == 1)).count())
         self.assertRaises(ValueError, lambda: not self.df.key == 1)
 
+    def test_jython_dill_udf_lambda(self):
+        try:
+            import dill
+        except:
+            pass
+
+        d = [Row(number=i, squared=i**2) for i in range(10)]
+        rdd = self.sc.parallelize(d)
+        data = self.spark.createDataFrame(rdd)
+
+        f = lambda x: x + 1
+        add1 = self.spark.catalog.registerJythonFunction("add1", f, IntegerType())
+        res1 = data.select(add1(data['number']).alias("add1"))
+        self.assertEqual(res.agg({'add1': 'sum'}).collect()[0][0], 55)
+
+    def test_jython_dill_udf_lambda_capture(self):
+        try:
+            import dill
+        except:
+            pass
+
+        d = [Row(number=i, squared=i**2) for i in range(10)]
+        g = 4
+        f4 = lambda x: x + g
+        addFour = self.spark.catalog.registerJythonFunction("add4", f4, IntegerType())
+        res = data.select(addFour(data['number']).alias('plus_four'))
+        self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
+
+
+    def test_jython_dill_udf_row(self):
+        try:
+            import dill
+        except:
+            pass
+
+        d = [Row(number=i, squared=i**2) for i in range(2)]
+        rdd = self.sc.parallelize(d)
+        data = self.spark.createDataFrame(rdd)
+        struct = self.spark. \
+                 registerJythonFunction("complex", rowMagic1,
+                                        StructType([StructField("by", IntegerType()),
+                                                    StructField("hi", StringType())]))
+        struct2 = self.spark. \
+                  registerJythonFunction("complex2", rowMagic1,
+                                         StructType([StructField("hi", StringType()),
+                                                     StructField("by", IntegerType())]))
+        struct3 = self.spark. \
+                  registerJythonFunction("complex3", rowMagic2,
+                                         StructType([StructField("hi", StringType()),
+                                                     StructField("by", IntegerType())]))
+        structs = [struct, struct2, struct3]
+        for struct in structs:
+            res = data.select(struct(data['number'])).collect()
+            self.assertEqual([Row(by=1, hi="murh"), Row(by=2, hi="murh")], res)
+        
+
+    def test_jython_udf_avg2(self):
+        d = [Row(number=i, squared=i**2) for i in range(3)]
+        rdd = self.sc.parallelize(d)
+        data = self.spark.createDataFrame(rdd)
+        
+        avg2 = "lambda x, y: (x + y) / 2.0"
+        avg2UDF = self.spark.catalog.registerJythonFunction("2avg", avg2, DoubleType())
+        res = data.select(avg2UDF(data['number'], data['squared']).alias('avg')).collect()
+        self.assertEqual([Row(avg=0.0), Row(avg=1.0), Row(avg=3.0)], res)
+
+    def test_jython_udf_map(self):
+        rdd = self.sc.parallelize([Row(r1=17, r2="hi KK6JKQ", r3=4),
+                             Row(r1=21, r2="bye KK6JKQ", r3=5)])
+        data = self.spark.createDataFrame(rdd)
+        makeMap = """lambda x: {"hi": str(x), "magic":"yes"}"""
+        simpleMap = self.spark.catalog.registerJythonFunction("simpleMap", makeMap,
+                                                  MapType(StringType(), StringType()))
+        res = data.select(simpleMap(data['r1']).alias("map")).collect()
+        his = map(lambda x: x["hi"], res)
+        magic = map(lambda x: x["magic"], res)
+        self.assertEqual([17, 21], his)
+        self.assertEqual(["yes", "yes"], magic)
+
+    def test_jython_udf_tokenize(self):
+        rdd = self.sc.parallelize([Row(r1=17, r2="hi KK6JKQ", r3=4),
+                              Row(r1=21, r2="bye KK6JKQ", r3=5)])
+        data = self.spark.createDataFrame(rdd)
+        split = "lambda x: x.split()"
+        tokenize = self.spark.catalog.registerJythonFunction("tokenize", split, ArrayType(StringType()))
+        res = data.select(tokenize(data['r2']).alias("words")).collect()
+        self.assertEqual([Row(words=["hi", "KK6JKQ"]), Row(words=["bye", "KK6JKQ"])],
+                         res)
+
+        
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -286,7 +376,7 @@ class SQLTests(ReusedPySparkTestCase):
         pudf = UserDefinedFunction(pfunc, LongType())
         res = data.select(pudf(data['number']).alias('plus_four'))
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
-
+        
     def test_udf(self):
         self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
