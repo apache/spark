@@ -122,7 +122,7 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
     test(s"Columns output ${expectedColumns.mkString(",")}: $sqlString") {
 
       // These tests check a particular plan, disable whole stage codegen.
-      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      caseInsensitiveContext.runtimeConf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
       try {
         val queryExecution = sql(sqlString).queryExecution
         val rawPlan = queryExecution.executedPlan.collect {
@@ -145,7 +145,7 @@ class PrunedScanSuite extends DataSourceTest with SharedSQLContext {
           fail(s"Wrong output row. Got $rawOutput\n$queryExecution")
         }
       } finally {
-        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+        caseInsensitiveContext.runtimeConf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }

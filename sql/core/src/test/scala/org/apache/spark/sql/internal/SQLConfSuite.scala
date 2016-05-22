@@ -35,7 +35,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     // Set a conf first.
     spark.conf.set(testKey, testVal)
     // Clear the conf.
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
     assert(spark.conf.getAll === TestSQLContext.overrideConfs)
 
@@ -50,11 +50,11 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
     assert(spark.conf.getAll.contains(testKey))
 
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
   }
 
   test("parse SQL set commands") {
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
     sql(s"set $testKey=$testVal")
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
@@ -72,7 +72,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     sql(s"set $key=")
     assert(spark.conf.get(key, "0") === "")
 
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
   }
 
   test("set command for display") {
@@ -97,7 +97,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("deprecated property") {
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
     val original = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
     try{
       sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
@@ -108,7 +108,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("invalid conf value") {
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
     val e = intercept[IllegalArgumentException] {
       sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
     }
@@ -116,7 +116,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Test SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE's method") {
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
 
     spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "100")
     assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 100)
@@ -144,7 +144,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
     }
 
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
   }
 
   test("SparkSession can access configs set in SparkConf") {

@@ -146,6 +146,15 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
   }
 
   /**
+   * Resets all the configuration properties.
+   *
+   * @since 2.0.0
+   */
+  def clear(): Unit = {
+    sqlConf.clear()
+  }
+
+  /**
    * Returns whether a particular key is set.
    */
   protected[sql] def contains(key: String): Boolean = {
