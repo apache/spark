@@ -40,6 +40,7 @@ else:
     protocol = 3
     xrange = range
     from io import BytesIO as StringIO
+    basestring = str
 
 from pyspark import since, SparkContext, cloudpickle
 from pyspark.rdd import _prepare_for_python_RDD, ignore_unicode_prefix
@@ -1792,13 +1793,13 @@ class UserDefinedJythonFunction(object):
         def isInternal(v):
             return v.__module__.startswith("pyspark")
 
-        filtered_extra = {k: v for k, v in extra.iteritems() if not isClass(v) or not isInternal(v)}
-        extra_imports = {(v.__module__, v.__name__, k) for k, v in extra.iteritems() if isClass(v) and isInternal(v)}
+        filtered_extra = {k: v for k, v in extra.items() if not isClass(v) or not isInternal(v)}
+        extra_imports = {(v.__module__, v.__name__, k) for k, v in extra.items() if isClass(v) and isInternal(v)}
         extra = filtered_extra
         if not extra:
             extra = None
-        serializedExtras = b64encode(ser.dumps(extra))
-        serializedImports = b64encode(ser.dumps(extra_imports))
+        serializedExtras = b64encode(ser.dumps(extra)).decode("utf-8")
+        serializedImports = b64encode(ser.dumps(extra_imports)).decode("utf-8")
         # Create a Java representation
         wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, serializedImports,
                                                 self.returnType)

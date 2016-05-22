@@ -198,8 +198,6 @@ class Catalog(object):
         >>> strLenStr = spark.catalog.registerFunction("stringLengthString", lambda x: len(x))
         >>> spark.sql("SELECT stringLengthString('test')").collect()
         [Row(stringLengthString(test)=u'4')]
-        >>> df.select(strLenStr(df.test)).collect()
-        [Row(stringLengthString(test)=u'4')]
 
         >>> from pyspark.sql.types import IntegerType
         >>> sli = spark.catalog.registerFunction("stringLengthInt", lambda x: len(x), IntegerType())
