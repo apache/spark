@@ -392,7 +392,7 @@ private[sql] class DefaultSource
       dataSchema: StructType,
       options: Map[String, String]): OutputWriterFactory = {
     new ParquetOutputWriterFactory(
-      sqlContext.conf,
+      sqlContext.sessionState.conf,
       dataSchema,
       sqlContext.sparkContext.hadoopConfiguration,
       options)

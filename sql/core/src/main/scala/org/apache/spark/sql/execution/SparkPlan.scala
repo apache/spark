@@ -58,7 +58,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   // the value of subexpressionEliminationEnabled will be set by the deserializer after the
   // constructor has run.
   val subexpressionEliminationEnabled: Boolean = if (sqlContext != null) {
-    sqlContext.conf.subexpressionEliminationEnabled
+    sqlContext.sessionState.conf.subexpressionEliminationEnabled
   } else {
     false
   }

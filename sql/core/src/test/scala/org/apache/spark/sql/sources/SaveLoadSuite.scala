@@ -35,7 +35,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    originalDefaultSource = caseInsensitiveContext.conf.defaultDataSourceName
+    originalDefaultSource = caseInsensitiveContext.sessionState.conf.defaultDataSourceName
 
     path = Utils.createTempDir()
     path.delete()

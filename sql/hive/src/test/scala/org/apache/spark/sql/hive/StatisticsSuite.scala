@@ -105,7 +105,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
         |SELECT * FROM src
       """.stripMargin).collect()
 
-    assert(queryTotalSize("analyzeTable_part") === hiveContext.conf.defaultSizeInBytes)
+    assert(queryTotalSize("analyzeTable_part") === hiveContext.sessionState.conf.defaultSizeInBytes)
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
@@ -148,8 +148,9 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
       val sizes = df.queryExecution.analyzed.collect {
         case r if ct.runtimeClass.isAssignableFrom(r.getClass) => r.statistics.sizeInBytes
       }
-      assert(sizes.size === 2 && sizes(0) <= hiveContext.conf.autoBroadcastJoinThreshold
-        && sizes(1) <= hiveContext.conf.autoBroadcastJoinThreshold,
+      assert(sizes.size === 2
+        && sizes(0) <= hiveContext.sessionState.conf.autoBroadcastJoinThreshold
+        && sizes(1) <= hiveContext.sessionState.conf.autoBroadcastJoinThreshold,
         s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
       // Using `sparkPlan` because for relevant patterns in HashJoin to be
@@ -160,8 +161,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
       checkAnswer(df, expectedAnswer) // check correctness of output
 
-      hiveContext.conf.settings.synchronized {
-        val tmp = hiveContext.conf.autoBroadcastJoinThreshold
+      hiveContext.sessionState.conf.settings.synchronized {
+        val tmp = hiveContext.sessionState.conf.autoBroadcastJoinThreshold
 
         sql(s"""SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1""")
         df = sql(query)
@@ -204,8 +205,9 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
         .isAssignableFrom(r.getClass) =>
         r.statistics.sizeInBytes
     }
-    assert(sizes.size === 2 && sizes(1) <= hiveContext.conf.autoBroadcastJoinThreshold
-      && sizes(0) <= hiveContext.conf.autoBroadcastJoinThreshold,
+    assert(sizes.size === 2
+      && sizes(1) <= hiveContext.sessionState.conf.autoBroadcastJoinThreshold
+      && sizes(0) <= hiveContext.sessionState.conf.autoBroadcastJoinThreshold,
       s"query should contain two relations, each of which has size smaller than autoConvertSize")
 
     // Using `sparkPlan` because for relevant patterns in HashJoin to be
@@ -218,8 +220,8 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
     checkAnswer(df, answer) // check correctness of output
 
-    hiveContext.conf.settings.synchronized {
-      val tmp = hiveContext.conf.autoBroadcastJoinThreshold
+    hiveContext.sessionState.conf.settings.synchronized {
+      val tmp = hiveContext.sessionState.conf.autoBroadcastJoinThreshold
 
       sql(s"SET ${SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key}=-1")
       df = sql(leftSemiJoinQuery)

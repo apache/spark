@@ -92,7 +92,7 @@ class FileStreamSinkWriter(
     options: Map[String, String]) extends Serializable with Logging {
 
   PartitioningUtils.validatePartitionColumnDataTypes(
-    data.schema, partitionColumnNames, data.sqlContext.conf.caseSensitiveAnalysis)
+    data.schema, partitionColumnNames, data.sqlContext.sessionState.conf.caseSensitiveAnalysis)
 
   private val serializableConf = new SerializableConfiguration(hadoopConf)
   private val dataSchema = data.schema
