@@ -108,7 +108,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reset - public conf") {
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
     try {
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
@@ -124,7 +124,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reset - internal conf") {
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
     val original = spark.conf.get(SQLConf.NATIVE_VIEW)
     try {
       assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
@@ -140,7 +140,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reset - user-defined conf") {
-    spark.sqlContext.conf.clear()
+    spark.conf.clear()
     val userDefinedConf = "x.y.z.reset"
     try {
       assert(spark.conf.getOption(userDefinedConf).isEmpty)
