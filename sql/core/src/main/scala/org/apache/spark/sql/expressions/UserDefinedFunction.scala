@@ -25,6 +25,7 @@ import org.apache.spark.sql.types.DataType
 
 /**
  * A user-defined function. To create one, use the `udf` functions in [[functions]].
+ * Note that the user-defined functions should be deterministic.
  * As an example:
  * {{{
  *   // Defined a UDF that returns true or false based on some numeric score.

@@ -145,6 +145,7 @@ class SparkSession private(
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
+   * Note that the user-defined functions should be deterministic.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
