@@ -270,7 +270,7 @@ class SQLTests(ReusedPySparkTestCase):
 
         f = lambda x: x + 1
         add1 = self.spark.catalog.registerJythonFunction("add1", f, IntegerType())
-        res1 = data.select(add1(data['number']).alias("add1"))
+        res = data.select(add1(data['number']).alias("add1"))
         self.assertEqual(res.agg({'add1': 'sum'}).collect()[0][0], 55)
 
     def test_jython_dill_udf_lambda_capture(self):
@@ -280,6 +280,9 @@ class SQLTests(ReusedPySparkTestCase):
             pass
 
         d = [Row(number=i, squared=i**2) for i in range(10)]
+        rdd = self.sc.parallelize(d)
+        data = self.spark.createDataFrame(rdd)
+
         g = 4
         f4 = lambda x: x + g
         addFour = self.spark.catalog.registerJythonFunction("add4", f4, IntegerType())
@@ -296,6 +299,7 @@ class SQLTests(ReusedPySparkTestCase):
         d = [Row(number=i, squared=i**2) for i in range(2)]
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
+
         struct = self.spark. \
                  registerJythonFunction("complex", rowMagic1,
                                         StructType([StructField("by", IntegerType()),
@@ -326,20 +330,21 @@ class SQLTests(ReusedPySparkTestCase):
 
     def test_jython_udf_map(self):
         rdd = self.sc.parallelize([Row(r1=17, r2="hi KK6JKQ", r3=4),
-                             Row(r1=21, r2="bye KK6JKQ", r3=5)])
+                                   Row(r1=21, r2="bye KK6JKQ", r3=5)])
         data = self.spark.createDataFrame(rdd)
+
         makeMap = """lambda x: {"hi": str(x), "magic":"yes"}"""
         simpleMap = self.spark.catalog.registerJythonFunction("simpleMap", makeMap,
                                                   MapType(StringType(), StringType()))
         res = data.select(simpleMap(data['r1']).alias("map")).collect()
-        his = map(lambda x: x["hi"], res)
-        magic = map(lambda x: x["magic"], res)
+        his = map(lambda x: x[0]["hi"], res)
+        magic = map(lambda x: x[0]["magic"], res)
         self.assertEqual([17, 21], his)
         self.assertEqual(["yes", "yes"], magic)
 
     def test_jython_udf_tokenize(self):
         rdd = self.sc.parallelize([Row(r1=17, r2="hi KK6JKQ", r3=4),
-                              Row(r1=21, r2="bye KK6JKQ", r3=5)])
+                                   Row(r1=21, r2="bye KK6JKQ", r3=5)])
         data = self.spark.createDataFrame(rdd)
         split = "lambda x: x.split()"
         tokenize = self.spark.catalog.registerJythonFunction("tokenize", split, ArrayType(StringType()))
