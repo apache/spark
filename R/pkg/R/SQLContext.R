@@ -45,7 +45,9 @@ dispatchFunc <- function(newFuncSig, x, ...) {
   # Strip sqlContext from list of parameters and then pass the rest along.
   # In the following, if '&' is used instead of '&&', it warns about
   # "the condition has length > 1 and only the first element will be used"
-  if (class(x) == "jobj" &&
+  if (missing(x) && length(list(...)) == 0) {
+    f()
+  } else if (class(x) == "jobj" &&
       getClassName.jobj(x) == "org.apache.spark.sql.SQLContext") {
     .Deprecated(newFuncSig, old = paste0(funcName, "(sqlContext...)"))
     f(...)
@@ -205,7 +207,6 @@ as.DataFrame <- function(x, ...) {
 }
 
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
-  sqlContext <- getSqlContext()
   createDataFrame(data, schema, samplingRatio)
 }
 
@@ -228,8 +229,7 @@ setGeneric("toDF", function(x, ...) { standardGeneric("toDF") })
 
 setMethod("toDF", signature(x = "RDD"),
           function(x, ...) {
-            sqlContext <- getSqlContext()
-            createDataFrame(sqlContext, x, ...)
+            createDataFrame(x, ...)
           })
 
 #' Create a SparkDataFrame from a JSON file.
@@ -273,9 +273,8 @@ jsonFile <- function(x, ...) {
 }
 
 jsonFile.default <- function(path) {
-  sqlContext <- getSqlContext()
   .Deprecated("read.json")
-  read.json(sqlContext, path)
+  read.json(path)
 }
 
 
@@ -324,7 +323,7 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #' @export
 
 read.parquet <- function(x, ...) {
-  dispatchFunc("parquetFile(...)", x, ...)
+  dispatchFunc("read.parquet(...)", x, ...)
 }
 
 read.parquet.default <- function(path) {
@@ -345,9 +344,8 @@ parquetFile <- function(x, ...) {
 }
 
 parquetFile.default <- function(...) {
-  sqlContext <- getSqlContext()
   .Deprecated("read.parquet")
-  read.parquet(sqlContext, unlist(list(...)))
+  read.parquet(unlist(list(...)))
 }
 
 #' Create a SparkDataFrame from a text file.
@@ -437,7 +435,7 @@ tableToDF <- function(x, ...) {
   dispatchFunc("tableToDF(tableName)", x, ...)
 }
 
-tableToDF.default <- function(sqlContext, tableName) {
+tableToDF.default <- function(tableName) {
   sqlContext <- getSqlContext()
   sdf <- callJMethod(sqlContext, "table", tableName)
   dataFrame(sdf)
@@ -566,8 +564,8 @@ uncacheTable.default <- function(tableName) {
 #' clearCache(sqlContext)
 #' }
 
-clearCache <- function(x, ...) {
-  dispatchFunc("clearCache()", x, ...)
+clearCache <- function() {
+  dispatchFunc("clearCache()")
 }
 
 clearCache.default <- function() {
