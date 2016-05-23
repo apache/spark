@@ -267,8 +267,8 @@ createFileFormat
     ;
 
 fileFormat
-    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING (SERDE serdeCls=STRING)?         #tableFileFormat
-    | identifier                                                                           #genericFileFormat
+    : INPUTFORMAT inFmt=STRING OUTPUTFORMAT outFmt=STRING    #tableFileFormat
+    | identifier                                             #genericFileFormat
     ;
 
 storageHandler
