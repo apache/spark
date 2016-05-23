@@ -102,7 +102,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
   testScheduler(
-    "Scheduling speed -- large job on a super node",
+    "COMPARE A Scheduling speed -- large job on a super node",
     extraConfs = Seq(
       "spark.testing.nHosts" -> "1",
       "spark.testing.nExecutorsPerHost" -> "1",
@@ -114,7 +114,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   testScheduler(
     // 4 execs per node, 2 cores per exec, so 400 cores
-    "Scheduling speed -- large job on 50 node cluster",
+    "COMPARE A Scheduling speed -- large job on 50 node cluster",
     extraConfs = Seq(
       "spark.testing.nHosts" -> "50"
     )
@@ -124,7 +124,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   testScheduler(
     // 4 execs per node, 2 cores per exec, so 800 cores
-    "Scheduling speed -- large job on 100 node cluster",
+    "COMPARE A Scheduling speed -- large job on 100 node cluster",
     extraConfs = Seq(
       "spark.testing.nHosts" -> "100"
     )
