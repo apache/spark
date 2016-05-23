@@ -515,20 +515,18 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(subdir.getCanonicalPath)
 
       // Inferring schema should throw error as it should not find any file to infer
-      if (dataSourceName != classOf[SimpleTextSource].getCanonicalName) {
-        // Currently, text data source has the default schema with
-        // the string type column with the name `_c0`.
-        val e = intercept[Exception] {
-          spark.read.format(dataSourceName).load(dir.getCanonicalPath)
-        }
+      // Currently, text data source has the default schema with
+      // the string type column with the name `_c0`.
+      val e = intercept[Exception] {
+        spark.read.format(dataSourceName).load(dir.getCanonicalPath)
+      }
 
-        e match {
-          case _: AnalysisException =>
-            assert(e.getMessage.contains("infer"))
+      e match {
+        case _: AnalysisException =>
+          assert(e.getMessage.contains("infer"))
 
-          case _ =>
-            fail("Unexpected error trying to infer schema from empty dir", e)
-        }
+        case _ =>
+          fail("Unexpected error trying to infer schema from empty dir", e)
       }
 
       /** Test whether data is read with the given path matches the expected answer */
@@ -633,7 +631,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
     }
   }
 
-  ignore("Hadoop style globbing - partitioned data with schema inference") {
+  test("Hadoop style globbing - partitioned data with schema inference") {
 
     // Tests the following on partition data
     // - partitions are not discovered with globbing and without base path set.
@@ -660,7 +658,17 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
             .load(path)
 
           assert(expectedResult.isLeft, s"Error was expected with $path but result found")
-          checkAnswer(testDf, expectedResult.left.get)
+          if (dataSourceName == classOf[SimpleTextSource].getCanonicalName) {
+            // Text data source does infers all the types as strings if schema is not given.
+            // So, this is being tested and compared after casting them all to strings.
+            val expectedTextRows = expectedResult.left.get.collect()
+              .map(_.toSeq.map(_.toString))
+            val testTextRows = testDf.collect()
+              .map(_.toSeq.map(_.toString))
+            assert(testTextRows.toSet === expectedTextRows.toSet)
+          } else {
+            checkAnswer(testDf, expectedResult.left.get)
+          }
         } catch {
           case e: Throwable =>
             assert(expectedResult.isRight, s"Was not expecting error with $path: " + e)

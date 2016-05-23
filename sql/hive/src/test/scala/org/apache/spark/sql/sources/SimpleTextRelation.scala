@@ -43,21 +43,25 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
       sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
-    val schema = if (options.contains("dataSchema")) {
-      DataType.fromJson(options("dataSchema")).asInstanceOf[StructType]
+    if (files.isEmpty) {
+      None
     } else {
-      val firstRow = baseRDD(sparkSession, files).take(1).headOption.orNull
-      val fields: Seq[StructField] = if (firstRow != null) {
-        firstRow.split(",", -1).zipWithIndex.map { case (_, index) =>
-          StructField(s"_c$index", StringType, nullable = true)
-        }
+      val schema = if (options.contains("dataSchema")) {
+        DataType.fromJson(options("dataSchema")).asInstanceOf[StructType]
       } else {
-        Seq.empty[StructField]
+        val firstRow = baseRDD(sparkSession, files).take(1).headOption.orNull
+        val fields: Seq[StructField] = if (firstRow != null) {
+          firstRow.split(",", -1).zipWithIndex.map { case (_, index) =>
+            StructField(s"_c$index", StringType, nullable = true)
+          }
+        } else {
+          Seq.empty[StructField]
+        }
+        StructType(fields)
       }
-      StructType(fields)
-    }
 
-    Some(schema)
+      Some(schema)
+    }
   }
 
   private def baseRDD(
