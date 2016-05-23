@@ -364,6 +364,33 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("save csv with quote escaping enabled") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val df = spark.createDataFrame(Seq(("test \"quote\"", 123,
+                                             "it \"works\"!", "\"very\" well")))
+        .toDF("a", "b", "c", "d")
+
+      df.coalesce(1).write
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\"")
+        .option("quoteEscapingEnabled", "true")
+        .save(csvDir)
+
+      val results = spark.read
+        .format("text")
+        .load(csvDir)
+        .collect()
+
+      val expected = Seq(Seq("\"test \"\"quote\"\"\",123,\"it \"\"works\"\"!\"," +
+                               "\"\"\"very\"\" well\""))
+
+      assert(results.toSeq.map(_.toSeq) === expected)
+    }
+  }
+
   test("commented lines in CSV data") {
     val results = spark.read
       .format("csv")
