@@ -83,7 +83,7 @@ private[scheduler] trait BlacklistStrategy {
  */
 private[scheduler] class SingleTaskStrategy(
     val expireTimeInMilliseconds: Long) extends BlacklistStrategy {
-  var executorBlacklistCallCount = 0
+  var executorBlacklistCallCount = 0L
   def getExecutorBlacklist(
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
       atomTask: StageAndPartition,
@@ -108,18 +108,26 @@ private[scheduler] class SingleTaskStrategy(
 private[scheduler] class AdvancedSingleTaskStrategy(
     expireTimeInMilliseconds: Long) extends SingleTaskStrategy(expireTimeInMilliseconds) {
 
-  var nodeBlacklistCallCount = 0
+  var nodeBlacklistCallCount = 0L
   override def getNodeBlacklistForStage(
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
       stageId: Int,
       clock: Clock): Set[String] = {
     nodeBlacklistCallCount += 1
+    // when there is one bad node (or executor), this is really slow.  We pile up a ton of
+    // task failures, and we've got to iterate through failure data for each task.  Furthermore,
+    // since we don't actively blacklist the bad node / executor, we just keep assigning it more
+    // tasks that fail.  And after each failure, we invalidate our cache, which means we need
+    // to call this again.
+    // This can be particularly painful when the failures are fast, since its likely the only
+    // executor with free slots is the one which just failed some tasks, which just keep going ...
     val nodes = executorIdToFailureStatus.filter{
       case (_, failureStatus) =>
         failureStatus.numFailuresPerTask.keySet.map(_.stageId).contains(stageId) &&
         clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
     }.values.map(_.host)
     getDuplicateElem(nodes, 1)
+    super.getNodeBlacklistForStage(executorIdToFailureStatus, stageId, clock)
   }
 
   override def getNodeBlacklist(

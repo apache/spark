@@ -237,6 +237,18 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // one bad executor out of 20.  When a task fails, it gets requeued immediately -- and guess
   // which is the only executor which has a free slot?  Bingo, the one it just failed on
   testScheduler(
+    "COMPARE D bad execs with simple blacklist",
+    extraConfs = Seq(
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
+      "spark.scheduler.blacklist.advancedStrategy" -> "false",
+      "spark.testing.nHosts" -> "2",
+      "spark.testing.nExecutorsPerHost" -> "2"
+    )
+  ) {
+    runBadExecJob(100, badExecs, badHosts)
+  }
+
+  testScheduler(
     "COMPARE D bad execs with advanced blacklist",
     extraConfs = Seq(
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
@@ -249,15 +261,15 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
   testScheduler(
-    "COMPARE D bad execs with simple blacklist",
+    "COMPARE D bad host with advanced blacklist",
     extraConfs = Seq(
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
-      "spark.scheduler.blacklist.advancedStrategy" -> "false",
+      "spark.scheduler.blacklist.advancedStrategy" -> "true",
       "spark.testing.nHosts" -> "2",
       "spark.testing.nExecutorsPerHost" -> "2"
     )
   ) {
-    runBadExecJob(100, badExecs, badHosts)
+    runBadExecJob(100, badExecs, Set("host-0"))
   }
 
 }

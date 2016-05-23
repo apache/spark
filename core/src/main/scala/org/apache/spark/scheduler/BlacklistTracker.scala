@@ -65,11 +65,11 @@ private[spark] class BlacklistTracker(
   def stop(): Unit = {
     scheduler.shutdown()
     scheduler.awaitTermination(10, TimeUnit.SECONDS)
-    logDebug(s"Executor Blacklist callcount =" +
+    logInfo(s"Executor Blacklist callcount =" +
       s" ${strategy.asInstanceOf[SingleTaskStrategy].executorBlacklistCallCount}")
     strategy match {
       case as: AdvancedSingleTaskStrategy =>
-        logDebug(s"Node Blacklist callcount =" +
+        logInfo(s"Node Blacklist callcount =" +
           s" ${as.nodeBlacklistCallCount}")
       case _ => // no op
     }
@@ -201,12 +201,14 @@ private[spark] class BlacklistTracker(
       clock: Clock): Set[String] = {
     val executors = executorsOnBlacklistedNode(sched, atomTask) ++
       strategy.getExecutorBlacklist(executorIdToFailureStatus, atomTask, clock)
+    logInfo(s"Blacklisting executors ${executors} for task ${atomTask}")
     updateBlacklistExecutorCache(atomTask, executors)
     executors
   }
 
   private def reEvaluateNodeBlacklistForStageAndUpdateCache(stageId: Int): Set[String] = {
     val nodes = strategy.getNodeBlacklistForStage(executorIdToFailureStatus, stageId, clock)
+    logInfo(s"Blacklisting nodes ${nodes} for stage ${stageId}")
     updateBlacklistNodeCache(nodes)
     nodes
   }
