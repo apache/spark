@@ -65,6 +65,14 @@ private[spark] class BlacklistTracker(
   def stop(): Unit = {
     scheduler.shutdown()
     scheduler.awaitTermination(10, TimeUnit.SECONDS)
+    logDebug(s"Executor Blacklist callcount =" +
+      s" ${strategy.asInstanceOf[SingleTaskStrategy].executorBlacklistCallCount}")
+    strategy match {
+      case as: AdvancedSingleTaskStrategy =>
+        logDebug(s"Node Blacklist callcount =" +
+          s" ${as.nodeBlacklistCallCount}")
+      case _ => // no op
+    }
   }
 
   // The actual implementation is delegated to strategy
@@ -255,7 +263,7 @@ private[scheduler] trait BlacklistCache extends Logging {
   }
 
   protected def invalidateCache(): Unit = cacheLock.synchronized {
-    logInfo("invalidatinig blacklist cache")
+    logInfo("invalidating blacklist cache")
     _isBlacklistExecutorCacheValid = false
     _isBlacklistNodeCacheValid = false
     _isBlacklistNodeForStageCacheValid = false

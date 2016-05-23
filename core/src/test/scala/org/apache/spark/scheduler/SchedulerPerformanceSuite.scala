@@ -57,7 +57,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
     var itrs = 0
     val totalMs = withBackend(backend) {
       val start = System.currentTimeMillis()
-      while (System.currentTimeMillis() - start < 10000 ) {
+      while (System.currentTimeMillis() - start < 30000 ) {
         withClue(s"failure in iteration = $itrs") {
           val jobFuture = submit(simpleWorkload(N), (0 until N).toArray)
           // Note: Do not call Await.ready(future) because that calls `scala.concurrent.blocking`,
@@ -237,31 +237,27 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // one bad executor out of 20.  When a task fails, it gets requeued immediately -- and guess
   // which is the only executor which has a free slot?  Bingo, the one it just failed on
   testScheduler(
-    "bad execs with blacklist",
-    extraConfs = Seq(
-      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
-    )
-  ) {
-    runBadExecJob(3000, badExecs, badHosts)
-  }
-
-  testScheduler(
     "COMPARE D bad execs with advanced blacklist",
     extraConfs = Seq(
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
-      "spark.scheduler.blacklist.advancedStrategy" -> "true"
+      "spark.scheduler.blacklist.advancedStrategy" -> "true",
+      "spark.testing.nHosts" -> "2",
+      "spark.testing.nExecutorsPerHost" -> "2"
     )
   ) {
-    runBadExecJob(50, badExecs, badHosts)
+    runBadExecJob(100, badExecs, badHosts)
   }
 
   testScheduler(
     "COMPARE D bad execs with simple blacklist",
     extraConfs = Seq(
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
-      "spark.scheduler.blacklist.advancedStrategy" -> "false"
+      "spark.scheduler.blacklist.advancedStrategy" -> "false",
+      "spark.testing.nHosts" -> "2",
+      "spark.testing.nExecutorsPerHost" -> "2"
     )
   ) {
-    runBadExecJob(50, badExecs, badHosts)
+    runBadExecJob(100, badExecs, badHosts)
   }
+
 }

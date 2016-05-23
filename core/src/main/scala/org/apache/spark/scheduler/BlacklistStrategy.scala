@@ -24,6 +24,8 @@ import org.apache.spark.util.Clock
 
 /**
  * The interface to determine executor blacklist and node blacklist.
+ *
+ * TODO notes on thread-safety
  */
 private[scheduler] trait BlacklistStrategy {
   /** Define a time interval to expire failure information of executors */
@@ -81,10 +83,12 @@ private[scheduler] trait BlacklistStrategy {
  */
 private[scheduler] class SingleTaskStrategy(
     val expireTimeInMilliseconds: Long) extends BlacklistStrategy {
+  var executorBlacklistCallCount = 0
   def getExecutorBlacklist(
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
       atomTask: StageAndPartition,
       clock: Clock): Set[String] = {
+    executorBlacklistCallCount += 1
     executorIdToFailureStatus.filter{
       case (_, failureStatus) => failureStatus.numFailuresPerTask.keySet.contains(atomTask) &&
         clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
@@ -104,10 +108,12 @@ private[scheduler] class SingleTaskStrategy(
 private[scheduler] class AdvancedSingleTaskStrategy(
     expireTimeInMilliseconds: Long) extends SingleTaskStrategy(expireTimeInMilliseconds) {
 
+  var nodeBlacklistCallCount = 0
   override def getNodeBlacklistForStage(
       executorIdToFailureStatus: mutable.HashMap[String, FailureStatus],
       stageId: Int,
       clock: Clock): Set[String] = {
+    nodeBlacklistCallCount += 1
     val nodes = executorIdToFailureStatus.filter{
       case (_, failureStatus) =>
         failureStatus.numFailuresPerTask.keySet.map(_.stageId).contains(stageId) &&

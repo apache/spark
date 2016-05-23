@@ -131,8 +131,13 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       // When a job fails, we terminate before waiting for all the task end events to come in,
       // so there might still be a running task set.  So we only check these conditions
       // when the job succeeds
-      assert(taskScheduler.runningTaskSets.isEmpty)
-      assert(!backend.hasTasks)
+      if (taskScheduler.runningTaskSets.nonEmpty) {
+        fail(s"taskScheduler still has running taskSets: ${taskScheduler.runningTaskSets}")
+      }
+      if (backend.hasTasks) {
+        fail(s"backend still has tasks. Waiting to run: ${backend.assignedTasksWaitingToRun}; " +
+          s"running : ${backend.runningTasks}")
+      }
     }
     assert(scheduler.activeJobs.isEmpty)
   }
@@ -264,9 +269,9 @@ private[spark] abstract class MockBackend(
   }
 
   // protected by this
-  private val assignedTasksWaitingToRun = new ArrayBuffer[TaskDescription](10000)
+  val assignedTasksWaitingToRun = new ArrayBuffer[TaskDescription](10000)
   // protected by this
-  private val runningTasks = ArrayBuffer[TaskDescription]()
+  val runningTasks = ArrayBuffer[TaskDescription]()
 
   def hasTasks: Boolean = synchronized {
     assignedTasksWaitingToRun.nonEmpty || runningTasks.nonEmpty
