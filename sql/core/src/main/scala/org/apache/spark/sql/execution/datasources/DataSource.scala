@@ -187,9 +187,10 @@ case class DataSource(
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-        if (!sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE) &&
-            userSpecifiedSchema.isEmpty &&
-            providingClass != classOf[text.DefaultSource]) {
+        val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
+        val isTextSource = providingClass == classOf[text.DefaultSource]
+        // If the schema inference is disabled, only text sources require schema to be specified
+        if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
           throw new IllegalArgumentException(
             "Schema must be specified for creating a streaming source DataFrame. " +
               "If some input data already exists in the directory, you can create " +

@@ -141,11 +141,11 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   import testImplicits._
 
   private def withSchemaInference(f: => Unit): Unit = {
-    withSQLConf("spark.sql.streaming.allowSchemaInference" -> "true")(f)
+    withSQLConf("spark.sql.streaming.schemaInference" -> "true")(f)
   }
 
   private def withoutSchemaInference(f: => Unit): Unit = {
-    withSQLConf("spark.sql.streaming.allowSchemaInference" -> "false")(f)
+    withSQLConf("spark.sql.streaming.schemaInference" -> "false")(f)
   }
 
   private def testWithSchemaInference(testName: String)(f: => Unit): Unit = {

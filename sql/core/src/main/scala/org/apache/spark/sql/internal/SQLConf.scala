@@ -522,7 +522,7 @@ object SQLConf {
       .createWithDefault(60 * 1000L) // 10 minutes
 
   val STREAMING_SCHEMA_INFERENCE =
-    SQLConfigBuilder("spark.sql.streaming.allowSchemaInference")
+    SQLConfigBuilder("spark.sql.streaming.schemaInference")
       .internal()
       .doc("Whether file-based streaming sources will infer its own schema")
       .booleanConf
