@@ -49,7 +49,7 @@ import org.apache.spark.util.Utils
 
 
 /**
- * The entry point to programming Spark with the Dataset and DataFrame API.
+ * The entry point to programming Spark with RDD, Dataset and DataFrame API.
  *
  * To create a SparkSession, use the following builder pattern:
  *
@@ -441,6 +441,22 @@ class SparkSession private(
   def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
     new Dataset(self, Range(start, end, step, numPartitions), Encoders.LONG)
   }
+
+  /**
+   * Distribute a local Scala collection to form an RDD.
+   *
+   * @since 2.0.0
+   */
+  def parallelize[T: ClassTag](seq: Seq[T]): RDD[T] =
+    self.sparkContext.parallelize[T](seq)
+
+  /**
+   * Distribute a local Scala collection to form an RDD.
+   *
+   * @since 2.0.0
+   */
+  def parallelize[T: ClassTag](seq: Seq[T], numSlices: Int): RDD[T] =
+    self.sparkContext.parallelize[T](seq, numSlices)
 
   /**
    * Creates a [[DataFrame]] from an RDD[Row].

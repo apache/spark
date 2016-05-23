@@ -685,7 +685,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   // Methods for creating RDDs
 
-  /** Distribute a local Scala collection to form an RDD.
+  /**
+   * Distribute a local Scala collection to form an RDD.
    *
    * @note Parallelize acts lazily. If `seq` is a mutable collection and is altered after the call
    * to parallelize and before the first action on the RDD, the resultant RDD will reflect the
