@@ -87,7 +87,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec]): Unit = {
-    specs foreach { s =>
+    specs.foreach { s =>
       if (!partitionExists(db, table, s)) {
         throw new NoSuchPartitionException(db = db, table = table, spec = s)
       }
@@ -98,7 +98,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
       db: String,
       table: String,
       specs: Seq[TablePartitionSpec]): Unit = {
-    specs foreach { s =>
+    specs.foreach { s =>
       if (partitionExists(db, table, s)) {
         throw new PartitionAlreadyExistsException(db = db, table = table, spec = s)
       }

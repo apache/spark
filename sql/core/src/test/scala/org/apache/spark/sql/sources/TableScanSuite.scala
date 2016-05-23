@@ -38,7 +38,7 @@ class SimpleScanSource extends RelationProvider {
 case class SimpleScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
@@ -70,7 +70,7 @@ case class AllDataTypesScan(
   extends BaseRelation
   with TableScan {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType = userSpecifiedSchema
 
