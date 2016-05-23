@@ -272,7 +272,7 @@ case class NewInstance(
     }
 
     val code = s"""
-      ${argCode}
+      $argCode
       ${outer.map(_.code).getOrElse("")}
       $setIsNull
       final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
