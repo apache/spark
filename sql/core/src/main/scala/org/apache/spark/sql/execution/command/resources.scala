@@ -89,12 +89,11 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
   }
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val jarList = sparkSession.sparkContext.listJars()
-    if (jars.size > 0) {
-      jars.map { f =>
-        new Path(f).getName
-      }.flatMap { f =>
-        jarList.filter(_.contains(f))
-      }.map(Row(_))
+    if (jars.nonEmpty) {
+      for {
+        jarName <- jars.map(f => new Path(f).getName)
+        jarPath <- jarList if jarPath.contains(jarName)
+      } yield Row(jarPath)
     } else {
       jarList.map(Row(_))
     }
