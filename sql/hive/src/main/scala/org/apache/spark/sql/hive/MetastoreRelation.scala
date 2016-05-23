@@ -129,7 +129,7 @@ private[hive] case class MetastoreRelation(
           totalSize.toLong
         } else if (Option(rawDataSize).map(_.toLong).getOrElse(0L) > 0) {
           rawDataSize.toLong
-        } else {
+        } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
           try {
             val hadoopConf = sparkSession.sessionState.newHadoopConf()
             val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
@@ -139,6 +139,8 @@ private[hive] case class MetastoreRelation(
               logWarning("Failed to get table size from hdfs.", e)
               sparkSession.sessionState.conf.defaultSizeInBytes
           }
+        } else {
+          sparkSession.sessionState.conf.defaultSizeInBytes
         })
     }
   )
