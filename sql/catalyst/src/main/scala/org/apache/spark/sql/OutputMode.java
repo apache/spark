@@ -15,9 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql;
 
-sealed trait OutputMode
-
-case object Append extends OutputMode
-case object Update extends OutputMode
+public enum OutputMode {
+  Append,
+  Update,
+  Complete
+}

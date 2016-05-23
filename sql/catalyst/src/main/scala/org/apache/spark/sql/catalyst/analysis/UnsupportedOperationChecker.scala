@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.OutputMode
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -56,7 +57,7 @@ object UnsupportedOperationChecker {
           throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
 
         case Aggregate(_, _, child) if child.isStreaming =>
-          if (outputMode == Append) {
+          if (outputMode == OutputMode.Append) {
             throwError(
               "Aggregations are not supported on streaming DataFrames/Datasets in " +
                 "Append output mode. Consider changing output mode to Update.")

@@ -327,6 +327,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointLocation,
         df,
         sink,
+        outputMode,
         trigger)
       continuousQuery
     } else {
@@ -353,6 +354,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointLocation,
         df,
         dataSource.createSink(),
+        outputMode,
         trigger)
     }
   }
@@ -704,6 +706,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var outputMode: OutputMode = OutputMode.Append
 
   private var trigger: Trigger = ProcessingTime(0L)
 

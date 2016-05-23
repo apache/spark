@@ -82,10 +82,12 @@ case class StateStoreRestoreExec(
 case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
+    returnAllStates: Boolean,
     child: SparkPlan)
   extends execution.UnaryExecNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
+    val saveAndReturnFunc = if (returnAllStates) saveAndReturnAll _ else saveAndReturnUpdated _
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
@@ -93,29 +95,47 @@ case class StateStoreSaveExec(
       keyExpressions.toStructType,
       child.output.toStructType,
       sqlContext.sessionState,
-      Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
-        new Iterator[InternalRow] {
-          private[this] val baseIterator = iter
-          private[this] val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
-
-          override def hasNext: Boolean = {
-            if (!baseIterator.hasNext) {
-              store.commit()
-              false
-            } else {
-              true
-            }
-          }
-
-          override def next(): InternalRow = {
-            val row = baseIterator.next().asInstanceOf[UnsafeRow]
-            val key = getKey(row)
-            store.put(key.copy(), row.copy())
-            row
-          }
-        }
-    }
+      Some(sqlContext.streams.stateStoreCoordinator)
+    )(saveAndReturnFunc)
   }
 
   override def output: Seq[Attribute] = child.output
+
+  private def saveAndReturnUpdated(
+      store: StateStore,
+      iter: Iterator[InternalRow]): Iterator[InternalRow] = {
+    new Iterator[InternalRow] {
+      private[this] val baseIterator = iter
+      private[this] val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+
+      override def hasNext: Boolean = {
+        if (!baseIterator.hasNext) {
+          store.commit()
+          false
+        } else {
+          true
+        }
+      }
+
+      override def next(): InternalRow = {
+        val row = baseIterator.next().asInstanceOf[UnsafeRow]
+        val key = getKey(row)
+        store.put(key.copy(), row.copy())
+        row
+      }
+    }
+  }
+
+  private def saveAndReturnAll(
+      store: StateStore,
+      iter: Iterator[InternalRow]): Iterator[InternalRow] = {
+    val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
+    while (iter.hasNext) {
+      val row = iter.next().asInstanceOf[UnsafeRow]
+      val key = getKey(row)
+      store.put(key.copy(), row.copy())
+    }
+    store.commit()
+    store.iterator().map(_._2.asInstanceOf[InternalRow])
+  }
 }

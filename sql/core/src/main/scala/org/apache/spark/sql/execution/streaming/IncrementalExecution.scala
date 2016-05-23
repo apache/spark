@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.OutputMode
+import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
@@ -35,15 +35,36 @@ class IncrementalExecution private[sql](
     val currentBatchId: Long)
   extends QueryExecution(sparkSession, logicalPlan) {
 
-  // TODO: make this always part of planning.
-  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy :: Nil
-
   // Modified planner with stateful operations.
   override def planner: SparkPlanner =
     new SparkPlanner(
       sparkSession.sparkContext,
       sparkSession.sessionState.conf,
-      stateStrategy)
+      Nil) {
+
+      override def strategies: Seq[Strategy] = {
+        StatefulAggregationStrategy +: super.strategies
+      }
+
+      /**
+       * Used to plan aggregation queries that are computed incrementally as part of a
+       * [[org.apache.spark.sql.ContinuousQuery]].
+       */
+      object StatefulAggregationStrategy extends Strategy {
+        override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+          case PhysicalAggregation(
+            namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
+            execution.aggregate.Utils.planStreamingAggregation(
+              namedGroupingExpressions,
+              aggregateExpressions,
+              rewrittenResultExpressions,
+              outputMode,
+              planLater(child))
+
+          case _ => Nil
+        }
+      }
+    }
 
   /**
    * Records the current id for a given stateful operator in the query plan as the `state`
@@ -54,7 +75,7 @@ class IncrementalExecution private[sql](
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None,
+      case StateStoreSaveExec(keys, None, outputMode,
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
         val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
@@ -63,6 +84,7 @@ class IncrementalExecution private[sql](
         StateStoreSaveExec(
           keys,
           Some(stateId),
+          outputMode,
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,

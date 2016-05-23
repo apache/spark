@@ -199,25 +199,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     }
   }
 
-  /**
-   * Used to plan aggregation queries that are computed incrementally as part of a
-   * [[org.apache.spark.sql.ContinuousQuery]]. Currently this rule is injected into the planner
-   * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
-   */
-  object StatefulAggregationStrategy extends Strategy {
-    override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalAggregation(
-        namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
-
-        aggregate.Utils.planStreamingAggregation(
-          namedGroupingExpressions,
-          aggregateExpressions,
-          rewrittenResultExpressions,
-          planLater(child))
-
-      case _ => Nil
-    }
-  }
 
   /**
    * Used to plan the aggregate operator for expressions based on the AggregateFunction2 interface.
