@@ -228,10 +228,7 @@ private[storage] class BlockInfoManager extends Logging {
       infos.get(blockId) match {
         case None => return None
         case Some(info) =>
-          if (info.writerTask == currentTaskAttemptId) {
-            throw new IllegalStateException(
-              s"Task $currentTaskAttemptId has already locked $blockId for writing")
-          } else if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
+          if (info.writerTask == BlockInfo.NO_WRITER && info.readerCount == 0) {
             info.writerTask = currentTaskAttemptId
             writeLocksByTask.addBinding(currentTaskAttemptId, blockId)
             logTrace(s"Task $currentTaskAttemptId acquired write lock for $blockId")

@@ -185,6 +185,28 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(encoder.serializer.head.nullable == false)
   }
 
+  test("RowEncoder should preserve nested column name") {
+    val schema = new StructType().add(
+      "struct",
+      new StructType()
+        .add("i", IntegerType, nullable = false)
+        .add(
+          "s",
+          new StructType().add("int", IntegerType, nullable = false),
+          nullable = false),
+      nullable = false)
+    val encoder = RowEncoder(schema)
+    assert(encoder.serializer.length == 1)
+    assert(encoder.serializer.head.dataType ==
+      new StructType()
+      .add("i", IntegerType, nullable = false)
+      .add(
+        "s",
+        new StructType().add("int", IntegerType, nullable = false),
+        nullable = false))
+    assert(encoder.serializer.head.nullable == false)
+  }
+
   test("RowEncoder should support array as the external type for ArrayType") {
     val schema = new StructType()
       .add("array", ArrayType(IntegerType))

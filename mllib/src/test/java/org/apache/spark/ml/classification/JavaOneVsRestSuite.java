@@ -17,39 +17,29 @@
 
 package org.apache.spark.ml.classification;
 
-import java.io.Serializable;
+import java.io.IOException;
 import java.util.List;
 
 import scala.collection.JavaConverters;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 import org.apache.spark.ml.feature.LabeledPoint;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
+import static org.apache.spark.ml.classification.LogisticRegressionSuite.generateMultinomialLogisticInput;
 
-public class JavaOneVsRestSuite implements Serializable {
+public class JavaOneVsRestSuite extends SharedSparkSession {
 
-  private transient SparkSession spark;
-  private transient JavaSparkContext jsc;
   private transient Dataset<Row> dataset;
   private transient JavaRDD<LabeledPoint> datasetRDD;
 
-  @Before
-  public void setUp() {
-    spark = SparkSession.builder()
-      .master("local")
-      .appName("JavaLOneVsRestSuite")
-      .getOrCreate();
-    jsc = new JavaSparkContext(spark.sparkContext());
-
+  @Override
+  public void setUp() throws IOException {
+    super.setUp();
     int nPoints = 3;
 
     // The following coefficients and xMean/xVariance are computed from iris dataset with
@@ -66,12 +56,6 @@ public class JavaOneVsRestSuite implements Serializable {
     ).asJava();
     datasetRDD = jsc.parallelize(points, 2);
     dataset = spark.createDataFrame(datasetRDD, LabeledPoint.class);
-  }
-
-  @After
-  public void tearDown() {
-    spark.stop();
-    spark = null;
   }
 
   @Test
