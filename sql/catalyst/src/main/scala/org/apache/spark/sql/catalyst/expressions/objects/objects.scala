@@ -233,11 +233,11 @@ case class NewInstance(
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val javaType = ctx.javaType(dataType)
     val argIsNulls = ctx.freshName("argIsNulls")
-    ctx.addMutableState("boolean[]", argIsNulls, "")
-    val argTypes = arguments.map(e => ctx.javaType(e.dataType))
+    ctx.addMutableState("boolean[]", argIsNulls,
+      s"$argIsNulls = new boolean[${arguments.size}];")
     val argValues = arguments.zipWithIndex.map { case (e, i) =>
       val argValue = ctx.freshName("argValue")
-      ctx.addMutableState(argTypes(i), argValue, "")
+      ctx.addMutableState(ctx.javaType(e.dataType), argValue, "")
       argValue
     }
 
@@ -279,7 +279,6 @@ case class NewInstance(
     }
 
     val code = s"""
-      $argIsNulls = new boolean[${arguments.size}];
       ${argCode.mkString("")}
       ${outer.map(_.code).getOrElse("")}
       $setIsNull
