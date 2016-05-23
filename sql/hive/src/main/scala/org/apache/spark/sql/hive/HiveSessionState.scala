@@ -83,9 +83,9 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       override val sparkSession: SparkSession = self.sparkSession
 
       override def strategies: Seq[Strategy] = {
-        experimentalMethods.extraStrategies.map(_(this)) ++ Seq(
-          FileSourceStrategy(this),
-          DataSourceStrategy(this),
+        experimentalMethods.extraStrategies ++ Seq(
+          FileSourceStrategy,
+          DataSourceStrategy,
           DDLStrategy,
           SpecialLimits,
           InMemoryScans,

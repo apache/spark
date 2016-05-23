@@ -20,7 +20,6 @@ package org.apache.spark.sql
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.execution.SparkPlanner
 
 /**
  * :: Experimental ::
@@ -43,7 +42,7 @@ class ExperimentalMethods private[sql]() {
    * @since 1.3.0
    */
   @Experimental
-  @volatile var extraStrategies: Seq[SparkPlanner => Strategy] = Nil
+  @volatile var extraStrategies: Seq[Strategy] = Nil
 
   @Experimental
   @volatile var extraOptimizations: Seq[Rule[LogicalPlan]] = Nil
