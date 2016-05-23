@@ -59,7 +59,6 @@ class SimpleTextSource extends FileFormat with DataSourceRegister {
         }
         StructType(fields)
       }
-
       Some(schema)
     }
   }
