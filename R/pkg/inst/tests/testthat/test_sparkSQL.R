@@ -2172,23 +2172,23 @@ test_that("createDataFrame sqlContext parameter backward compatibility", {
   a <- 1:3
   b <- c("a", "b", "c")
   ldf <- data.frame(a, b)
-  df <- createDataFrame(sqlContext, ldf)
+  df <- suppressWarnings(createDataFrame(sqlContext, ldf))
   expect_equal(columns(df), c("a", "b"))
   expect_equal(dtypes(df), list(c("a", "int"), c("b", "string")))
   expect_equal(count(df), 3)
   ldf2 <- collect(df)
   expect_equal(ldf$a, ldf2$a)
 
-  df2 <- createDataFrame(sqlContext, iris)
+  df2 <- suppressWarnings(createDataFrame(sqlContext, iris))
   expect_equal(count(df2), 150)
   expect_equal(ncol(df2), 5)
 
-  df3 <- read.df(sqlContext, jsonPath, "json")
+  df3 <- suppressWarnings(read.df(sqlContext, jsonPath, "json"))
   expect_is(df3, "SparkDataFrame")
   expect_equal(count(df3), 3)
 
-  before <- createDataFrame(sqlContext, iris)
-  after <- createDataFrame(iris)
+  before <- suppressWarnings(createDataFrame(sqlContext, iris))
+  after <- suppressWarnings(createDataFrame(iris))
   expect_equal(collect(before), collect(after))
 })
 
