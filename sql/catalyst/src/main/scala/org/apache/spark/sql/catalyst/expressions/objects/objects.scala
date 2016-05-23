@@ -254,19 +254,12 @@ case class NewInstance(
 
     var isNull = ev.isNull
     val setIsNull = if (propagateNull && arguments.nonEmpty) {
-      if (arguments.length <= 10) {
-        val argIsNull = arguments.zipWithIndex.map { case (e, i) =>
-          s"$argIsNulls[$i]"
-        }
-        s"final boolean $isNull = ${argIsNull.mkString(" || ")};"
-      } else {
-        s"""
-         boolean $isNull = false;
-         for (int idx = 0; idx < ${arguments.length}; idx++) {
-           if ($argIsNulls[idx]) { $isNull = true; break; }
-         }
-       """
-      }
+      s"""
+       boolean $isNull = false;
+       for (int idx = 0; idx < ${arguments.length}; idx++) {
+         if ($argIsNulls[idx]) { $isNull = true; break; }
+       }
+      """
     } else {
       isNull = "false"
       ""
@@ -279,7 +272,7 @@ case class NewInstance(
     }
 
     val code = s"""
-      ${argCode.mkString("")}
+      ${argCode}
       ${outer.map(_.code).getOrElse("")}
       $setIsNull
       final $javaType ${ev.value} = $isNull ? ${ctx.defaultValue(javaType)} : $constructorCall;
