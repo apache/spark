@@ -1924,10 +1924,61 @@ class Analyzer(
           } else {
             inputAttributes
           }
+
+          validateBoundReference(deserializer, inputs)
+
           val unbound = deserializer transform {
             case b: BoundReference => inputs(b.ordinal)
           }
-          resolveExpression(unbound, LocalRelation(inputs), throws = true)
+          val resolved = resolveExpression(unbound, LocalRelation(inputs), throws = true)
+
+          validateGetStructField(resolved)
+          resolved
+      }
+    }
+
+    private def fail(schema: StructType, maxOrdinal: Int): Unit = {
+      throw new AnalysisException(s"Try to map ${schema.simpleString} to Tuple${maxOrdinal + 1}, " +
+        "but failed as the number of fields does not line up.")
+    }
+
+    /**
+     * Deserializer expression may contains `BoundReference`s instead of `AttributeReference`s
+     * (e.g. if it's from a tuple encoder or tupled encoder), we should check if their
+     * ordinals match the real schema.
+     */
+    private def validateBoundReference(deserializer: Expression, inputs: Seq[Attribute]): Unit = {
+      var maxOrdinal = -1
+      deserializer.foreach {
+        case b: BoundReference => if (b.ordinal > maxOrdinal) maxOrdinal = b.ordinal
+        case _ =>
+      }
+      if (maxOrdinal >= 0 && maxOrdinal != inputs.length - 1) {
+        fail(inputs.toStructType, maxOrdinal)
+      }
+    }
+
+    /**
+     * Deserializer expression may contains `GetStructField`s instead of `UnresolvedExtractValue`s
+     * (e.g. if we are encoding a nested tuple), we should check if their ordinals match the real
+     * schema.
+     */
+    private def validateGetStructField(deserializer: Expression): Unit = {
+      val exprToMaxOrdinal = scala.collection.mutable.HashMap.empty[Expression, Int]
+      deserializer foreach {
+        case g: GetStructField =>
+          val maxOrdinal = exprToMaxOrdinal.getOrElse(g.child, -1)
+          if (maxOrdinal < g.ordinal) {
+            exprToMaxOrdinal.update(g.child, g.ordinal)
+          }
+        case _ =>
+      }
+      exprToMaxOrdinal.foreach {
+        case (expr, maxOrdinal) =>
+          val schema = expr.dataType.asInstanceOf[StructType]
+          if (maxOrdinal != schema.length - 1) {
+            fail(schema, maxOrdinal)
+          }
       }
     }
   }

@@ -334,7 +334,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       val encoder = implicitly[ExpressionEncoder[T]]
       val row = encoder.toRow(input)
       val schema = encoder.schema.toAttributes
-      val boundEncoder = encoder.defaultBinding
+      val boundEncoder = encoder.resolveAndBind()
       val convertedBack = try boundEncoder.fromRow(row) catch {
         case e: Exception =>
           fail(
