@@ -550,17 +550,19 @@ abstract class RDD[T: ClassTag](
         } else {
           val fraction = SamplingUtils.computeFractionForSampleSize(num, initialCount,
             withReplacement)
-          var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+          var samples = this.sample(withReplacement, fraction, rand.nextInt())
+          var count = samples.count()
 
           // If the first sample didn't turn out large enough, keep trying to take samples;
           // this shouldn't happen often because we use a big multiplier for the initial size
           var numIters = 0
-          while (samples.length < num) {
+          while (count < num) {
             logWarning(s"Needed to re-sample due to insufficient sample size. Repeat #$numIters")
-            samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
+            samples = this.sample(withReplacement, fraction, rand.nextInt())
+            count = samples.count()
             numIters += 1
           }
-          Utils.randomizeInPlace(samples, rand).take(num)
+          Utils.randomizeInPlace(samples.collect(), rand).take(num)
         }
       }
     }
