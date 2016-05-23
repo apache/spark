@@ -390,7 +390,6 @@ case class InsertIntoTable(
 case class InsertIntoDir(
     path: String,
     isLocal: Boolean,
-    fileFormat: String,
     rowFormat: CatalogStorageFormat,
     child: LogicalPlan)
   extends LogicalPlan {

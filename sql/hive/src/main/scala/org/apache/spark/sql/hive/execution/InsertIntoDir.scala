@@ -24,15 +24,9 @@ import scala.language.existentials
 
 import antlr.SemanticException
 import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.hive.ql.io.{HiveIgnoreKeyTextOutputFormat, RCFileOutputFormat}
-import org.apache.hadoop.hive.ql.io.orc.{OrcOutputFormat, OrcSerde}
-import org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
-import org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde.serdeConstants
-import org.apache.hadoop.hive.serde2.SerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
-import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred._
 
 import org.apache.spark.rdd.RDD
@@ -42,12 +36,12 @@ import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.HiveShim.{ShimFileSinkDesc => FileSinkDesc}
+import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.util.{SerializableJobConf, Utils}
 
 case class InsertIntoDir(
     path: String,
     isLocal: Boolean,
-    fileFormat: String,
     rowFormat: CatalogStorageFormat,
     child: SparkPlan) extends SaveAsHiveFile {
 
@@ -68,28 +62,20 @@ case class InsertIntoDir(
     properties.put("columns", cols.dropRight(1))
     properties.put("columns.types", types.dropRight(1))
 
-    val fileFormatMap = Map[String, (Class[_ <: OutputFormat[_, _]], Class[_ <: SerDe])](
-      "orc" -> (classOf[OrcOutputFormat], classOf[OrcSerde]),
-      "parquet" -> (classOf[MapredParquetOutputFormat], classOf[ParquetHiveSerDe]),
-      "rcfile" -> (classOf[RCFileOutputFormat], classOf[LazySimpleSerDe]),
-      "textfile" -> (classOf[HiveIgnoreKeyTextOutputFormat[Text, Text]], classOf[LazySimpleSerDe]),
-      "sequencefile" -> (classOf[SequenceFileOutputFormat[Any, Any]], classOf[LazySimpleSerDe])
-    )
+    val defaultSerde = hadoopConf.get("hive.default.fileformat", "textFile")
+    val serDe = rowFormat.serde.getOrElse(defaultSerde).toLowerCase
+    val hiveSerDe = HiveSerDe.sourceToSerDe(serDe, sessionState.conf).getOrElse(
+      throw new SemanticException(s"Unrecognized serde format ${serDe}"))
 
-    val (ouputFormatClass, serdeClass) = fileFormatMap.getOrElse(fileFormat.toLowerCase,
-      throw new SemanticException(s"Unrecognized file format in STORED AS clause: $fileFormat," +
-        s" expected one of ${fileFormatMap.keys.mkString(",")}"))
+    properties.put(serdeConstants.SERIALIZATION_LIB,
+      hiveSerDe.serde.getOrElse(classOf[LazySimpleSerDe].getName))
 
-    properties.put(serdeConstants.SERIALIZATION_LIB, serdeClass.getName)
     import scala.collection.JavaConverters._
     properties.putAll(rowFormat.serdeProperties.asJava)
 
-    // if user specified a serde in the ROW FORMAT, use that.
-    rowFormat.serde.map(properties.put(serdeConstants.SERIALIZATION_LIB, _))
-
     val tableDesc = new TableDesc(
       classOf[TextInputFormat],
-      ouputFormatClass,
+      Utils.classForName(hiveSerDe.outputFormat.get),
       properties
     )
 

@@ -296,23 +296,19 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   private def withInsertInto(
       ctx: InsertIntoContext,
       query: LogicalPlan): LogicalPlan = withOrigin(ctx) {
-    val tableIdent = Option(ctx.tableIdentifier)
-      .map(ti => Option(visitTableIdentifier(ti))).getOrElse(None)
+    val tableIdent = Option(ctx.tableIdentifier).map(visitTableIdentifier).getOrElse(None)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
-    tableIdent.map(ti => InsertIntoTable(
-      UnresolvedRelation(ti, None),
-      partitionKeys,
-      query,
-      ctx.OVERWRITE != null,
-      ctx.EXISTS != null)).getOrElse(
-        InsertIntoDir(
-          string(ctx.path),
-          ctx.LOCAL != null,
-          Option(ctx.format).map(_.getText).getOrElse("textfile"),
-          Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat),
-          query)
-    )
+    var storageFormat = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
+    storageFormat = storageFormat.copy(serde = Option(ctx.format).map(format => format.getText))
+
+    tableIdent match {
+      case Some(ti: TableIdentifier) => InsertIntoTable(UnresolvedRelation(ti, None),
+        partitionKeys,
+        query,
+        ctx.OVERWRITE != null, ctx.EXISTS != null)
+      case _ => InsertIntoDir(string(ctx.path), ctx.LOCAL != null, storageFormat, query)
+    }
   }
 
   /**
