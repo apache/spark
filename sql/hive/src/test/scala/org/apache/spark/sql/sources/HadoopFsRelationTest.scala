@@ -515,8 +515,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         .save(subdir.getCanonicalPath)
 
       // Inferring schema should throw error as it should not find any file to infer
-      // Currently, text data source has the default schema with
-      // the string type column with the name `_c0`.
       val e = intercept[Exception] {
         spark.read.format(dataSourceName).load(dir.getCanonicalPath)
       }
