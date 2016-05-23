@@ -131,9 +131,10 @@ object JacksonParser extends Logging {
         val value = parser.getText
         if (value.equals("NaN") ||
           value.equals("Infinity") ||
+          value.equals("+Infinity") ||
           value.equals("-Infinity")) {
           value.toFloat
-        } else if (value.equals("+INF")) {
+        } else if (value.equals("+INF") || value.equals("INF")) {
           Float.PositiveInfinity
         } else if (value.equals("-INF")) {
           Float.NegativeInfinity
@@ -149,9 +150,10 @@ object JacksonParser extends Logging {
         val value = parser.getText
         if (value.equals("NaN") ||
           value.equals("Infinity") ||
+          value.equals("+Infinity") ||
           value.equals("-Infinity")) {
           value.toDouble
-        } else if (value.equals("+INF")) {
+        } else if (value.equals("+INF") || value.equals("INF")) {
           Double.PositiveInfinity
         } else if (value.equals("-INF")) {
           Double.NegativeInfinity

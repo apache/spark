@@ -97,7 +97,8 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
   test("allowNonNumericNumbers off") {
     // non-quoted non-numeric numbers don't work if allowNonNumericNumbers is off.
     var testCases: Seq[String] = Seq("""{"age": NaN}""", """{"age": Infinity}""",
-      """{"age": -Infinity}""", """{"age": +INF}""", """{"age": -INF}""")
+      """{"age": +Infinity}""", """{"age": -Infinity}""", """{"age": INF}""",
+      """{"age": +INF}""", """{"age": -INF}""")
     testCases.foreach { str =>
       val rdd = spark.sparkContext.parallelize(Seq(str))
       val df = spark.read.option("allowNonNumericNumbers", "false").json(rdd)
@@ -106,10 +107,11 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
     }
 
     // quoted non-numeric numbers should still work even allowNonNumericNumbers is off.
-    testCases = Seq("""{"age": "NaN"}""", """{"age": "Infinity"}""", """{"age": "-Infinity"}""",
-      """{"age": "+INF"}""", """{"age": "-INF"}""")
-    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isNegInfinity,
-      _.isPosInfinity, _.isNegInfinity)
+    testCases = Seq("""{"age": "NaN"}""", """{"age": "Infinity"}""", """{"age": "+Infinity"}""",
+      """{"age": "-Infinity"}""", """{"age": "INF"}""", """{"age": "+INF"}""",
+      """{"age": "-INF"}""")
+    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isPosInfinity,
+      _.isNegInfinity, _.isPosInfinity, _.isPosInfinity, _.isNegInfinity)
     val schema = StructType(StructField("age", DoubleType, true) :: Nil)
 
     testCases.zipWithIndex.foreach { case (str, idx) =>
@@ -123,11 +125,12 @@ class JsonParsingOptionsSuite extends QueryTest with SharedSQLContext {
 
   test("allowNonNumericNumbers on") {
     val testCases: Seq[String] = Seq("""{"age": NaN}""", """{"age": Infinity}""",
-      """{"age": -Infinity}""", """{"age": +INF}""", """{"age": -INF}""", """{"age": "NaN"}""",
-      """{"age": "Infinity"}""", """{"age": "-Infinity"}""")
-    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isNegInfinity,
-      _.isPosInfinity, _.isNegInfinity, _.isNaN, _.isPosInfinity, _.isNegInfinity,
-      _.isPosInfinity, _.isNegInfinity)
+      """{"age": +Infinity}""", """{"age": -Infinity}""", """{"age": +INF}""",
+      """{"age": -INF}""", """{"age": "NaN"}""", """{"age": "Infinity"}""",
+      """{"age": "-Infinity"}""")
+    val tests: Seq[Double => Boolean] = Seq(_.isNaN, _.isPosInfinity, _.isPosInfinity,
+      _.isNegInfinity, _.isPosInfinity, _.isNegInfinity, _.isNaN, _.isPosInfinity,
+      _.isNegInfinity, _.isPosInfinity, _.isNegInfinity)
     val schema = StructType(StructField("age", DoubleType, true) :: Nil)
     testCases.zipWithIndex.foreach { case (str, idx) =>
       val rdd = spark.sparkContext.parallelize(Seq(str))
