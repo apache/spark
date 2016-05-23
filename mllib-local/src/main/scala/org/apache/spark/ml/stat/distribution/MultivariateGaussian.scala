@@ -19,6 +19,7 @@ package org.apache.spark.ml.stat.distribution
 
 import breeze.linalg.{diag, eigSym, max, DenseMatrix => BDM, DenseVector => BDV, Vector => BV}
 
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.ml.impl.Utils
 import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 
@@ -32,9 +33,11 @@ import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
  * @param mean The mean vector of the distribution
  * @param cov The covariance matrix of the distribution
  */
-class MultivariateGaussian(
-    val mean: Vector,
-    val cov: Matrix) extends Serializable {
+@Since("2.0.0")
+@DeveloperApi
+class MultivariateGaussian @Since("2.0.0") (
+    @Since("2.0.0") val mean: Vector,
+    @Since("2.0.0") val cov: Matrix) extends Serializable {
 
   require(cov.numCols == cov.numRows, "Covariance matrix must be square")
   require(mean.size == cov.numCols, "Mean vector length must match covariance matrix size")
@@ -56,6 +59,7 @@ class MultivariateGaussian(
   /**
    * Returns density of this multivariate Gaussian at given point, x
    */
+  @Since("2.0.0")
   def pdf(x: Vector): Double = {
     pdf(x.toBreeze)
   }
@@ -63,6 +67,7 @@ class MultivariateGaussian(
   /**
    * Returns the log-density of this multivariate Gaussian at given point, x
    */
+  @Since("2.0.0")
   def logpdf(x: Vector): Double = {
     logpdf(x.toBreeze)
   }

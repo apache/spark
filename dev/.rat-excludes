@@ -98,3 +98,4 @@ spark-deps-.*
 .*csv
 .*tsv
 org.apache.spark.scheduler.ExternalClusterManager
+.*\.sql

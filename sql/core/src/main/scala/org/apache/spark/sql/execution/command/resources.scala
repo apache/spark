@@ -24,7 +24,7 @@ import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 /**
  * Adds a jar to the current session so it can be used (for UDFs or serdes).
  */
-case class AddJar(path: String) extends RunnableCommand {
+case class AddJarCommand(path: String) extends RunnableCommand {
   override val output: Seq[Attribute] = {
     val schema = StructType(
       StructField("result", IntegerType, nullable = false) :: Nil)
@@ -40,7 +40,7 @@ case class AddJar(path: String) extends RunnableCommand {
 /**
  * Adds a file to the current session so it can be used.
  */
-case class AddFile(path: String) extends RunnableCommand {
+case class AddFileCommand(path: String) extends RunnableCommand {
   override def run(sparkSession: SparkSession): Seq[Row] = {
     sparkSession.sparkContext.addFile(path)
     Seq.empty[Row]
