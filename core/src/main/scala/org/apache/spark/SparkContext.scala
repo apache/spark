@@ -1387,7 +1387,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Return a list of file paths that are added to resources.
+   * Returns a list of file paths that are added to resources.
    */
   def listFiles(): Seq[String] = addedFiles.keySet.toSeq
 
@@ -1730,7 +1730,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Return a list of jar files that are added to resources.
+   * Returns a list of jar files that are added to resources.
    */
   def listJars(): Seq[String] = addedJars.keySet.toSeq
 

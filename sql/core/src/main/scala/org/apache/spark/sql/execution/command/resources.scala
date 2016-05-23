@@ -53,7 +53,7 @@ case class AddFileCommand(path: String) extends RunnableCommand {
 }
 
 /**
- * Return a list of file paths that are added to resources.
+ * Returns a list of file paths that are added to resources.
  * If file paths are provided, return the ones that are added to resources.
  */
 case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends RunnableCommand {
@@ -80,7 +80,7 @@ case class ListFilesCommand(files: Seq[String] = Seq.empty[String]) extends Runn
 }
 
 /**
- * Return a list of jar files that are added to resources.
+ * Returns a list of jar files that are added to resources.
  * If jar files are provided, return the ones that are added to resources.
  */
 case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends RunnableCommand {
@@ -92,7 +92,7 @@ case class ListJarsCommand(jars: Seq[String] = Seq.empty[String]) extends Runnab
     if (jars.size > 0) {
       jars.map { f =>
         new Path(f).getName
-      }.flatMap {f =>
+      }.flatMap { f =>
         jarList.filter(_.contains(f))
       }.map(Row(_))
     } else {

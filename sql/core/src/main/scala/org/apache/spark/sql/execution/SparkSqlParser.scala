@@ -778,9 +778,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * command depending on the requested operation on resources.
    * Expected format:
    * {{{
-   *   ADD (FILE[s] [filepath ...] | JAR[s] [jarpath ...])
-   *   DELETE (FILE[s] [filepath ...] | JAR[s] [jarpath ...])
-   *   LIST (FILE[s] [filepath ...] | JAR[s] [jarpath ...])
+   *   ADD (FILE[S] <filepath ...> | JAR[S] <jarpath ...>)
+   *   LIST (FILE[S] [filepath ...] | JAR[S] [jarpath ...])
    * }}}
    */
   override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
@@ -792,8 +791,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           case "jar" => AddJarCommand(mayebePaths)
           case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
-      case SqlBaseParser.DELETE =>
-        throw operationNotAllowed(s"DELETE resources", ctx)
       case SqlBaseParser.LIST =>
         ctx.identifier.getText.toLowerCase match {
           case "files" | "file" =>
@@ -810,6 +807,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             }
           case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
         }
+      case _ => throw operationNotAllowed(s"Other types of operation on resources", ctx)
     }
   }
 
