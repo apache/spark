@@ -35,6 +35,8 @@ getInternalType <- function(x) {
          POSIXlt = "timestamp",
          POSIXct = "timestamp",
          stop(paste("Unsupported type for SparkDataFrame:", class(x))))
+}
+
 #' Temporary function to reroute old S3 Method call to new
 #' We need to check the class of x to ensure it is SQLContext before dispatching
 dispatchFunc <- function(newFuncSig, x, ...) {
@@ -198,7 +200,12 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
-as.DataFrame <- function(data, schema = NULL, samplingRatio = 1.0) {
+as.DataFrame <- function(x, ...) {
+  dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+}
+
+as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
+  sqlContext <- getSqlContext()
   createDataFrame(data, schema, samplingRatio)
 }
 
@@ -244,12 +251,19 @@ setMethod("toDF", signature(x = "RDD"),
 #' df <- read.json(sqlContext, path)
 #' df <- jsonFile(sqlContext, path)
 #' }
-read.json <- function(sqlContext, path) {
+
+read.json <- function(x, ...) {
+  dispatchFunc("read.json(path)", x, ...)
+}
+
+read.json.default <- function(path) {
+  sqlContext <- getSqlContext()
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")
   sdf <- callJMethod(read, "json", paths)
   dataFrame(sdf)
+}
 
 #' @rdname read.json
 #' @name jsonFile
@@ -308,7 +322,13 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #' @rdname read.parquet
 #' @name read.parquet
 #' @export
-read.parquet <- function(sqlContext, path) {
+
+read.parquet <- function(x, ...) {
+  dispatchFunc("parquetFile(...)", x, ...)
+}
+
+read.parquet.default <- function(path) {
+  sqlContext <- getSqlContext()
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")
@@ -350,7 +370,13 @@ parquetFile.default <- function(...) {
 #' path <- "path/to/file.txt"
 #' df <- read.text(sqlContext, path)
 #' }
-read.text <- function(sqlContext, path) {
+
+read.text <- function(x, ...) {
+  dispatchFunc("read.text(path)", x, ...)
+}
+
+read.text.default <- function(path) {
+  sqlContext <- getSqlContext()
   # Allow the user to have a more flexible definiton of the text file path
   paths <- as.list(suppressWarnings(normalizePath(path)))
   read <- callJMethod(sqlContext, "read")
@@ -407,7 +433,12 @@ sql.default <- function(sqlQuery) {
 #' new_df <- tableToDF(sqlContext, "table")
 #' }
 
-tableToDF <- function(sqlContext, tableName) {
+tableToDF <- function(x, ...) {
+  dispatchFunc("tableToDF(tableName)", x, ...)
+}
+
+tableToDF.default <- function(sqlContext, tableName) {
+  sqlContext <- getSqlContext()
   sdf <- callJMethod(sqlContext, "table", tableName)
   dataFrame(sdf)
 }
@@ -679,7 +710,6 @@ createExternalTable.default <- function(tableName, path = NULL, source = NULL, .
 #' Don't create too many partitions in parallel on a large cluster; otherwise Spark might crash
 #' your external database systems.
 #'
-#' @param sqlContext SQLContext to use
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
 #' @param tableName the name of the table in the external database
 #' @param partitionColumn the name of a column of integral type that will be used for partitioning
@@ -699,12 +729,12 @@ createExternalTable.default <- function(tableName, path = NULL, source = NULL, .
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' jdbcUrl <- "jdbc:mysql://localhost:3306/databasename"
-#' df <- read.jdbc(sqlContext, jdbcUrl, "table", predicates = list("field<=123"), user = "username")
-#' df2 <- read.jdbc(sqlContext, jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
+#' df <- read.jdbc(jdbcUrl, "table", predicates = list("field<=123"), user = "username")
+#' df2 <- read.jdbc(jdbcUrl, "table2", partitionColumn = "index", lowerBound = 0,
 #'                  upperBound = 10000, user = "username", password = "password")
 #' }
 
-read.jdbc <- function(sqlContext, url, tableName,
+read.jdbc <- function(url, tableName,
                       partitionColumn = NULL, lowerBound = NULL, upperBound = NULL,
                       numPartitions = 0L, predicates = list(), ...) {
   jprops <- varargsToJProperties(...)
@@ -712,6 +742,7 @@ read.jdbc <- function(sqlContext, url, tableName,
   read <- callJMethod(sqlContext, "read")
   if (!is.null(partitionColumn)) {
     if (is.null(numPartitions) || numPartitions == 0) {
+      sqlContext <- getSqlContext()
       sc <- callJMethod(sqlContext, "sparkContext")
       numPartitions <- callJMethod(sc, "defaultParallelism")
     } else {
