@@ -29,7 +29,7 @@ import org.apache.parquet.hadoop.ParquetOutputCommitter
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.DataSourceScanExec
-import org.apache.spark.sql.execution.datasources.{FileScanRDD, LocalityTestFileSystem}
+import org.apache.spark.sql.execution.datasources.{FileScanRDD, HadoopFsRelation, LocalityTestFileSystem, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
@@ -876,26 +876,6 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
 
       withSQLConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD.key -> "0") {
         checkLocality()
-      }
-    }
-  }
-
-  test("SPARK-10216: Avoid empty files during overwriting with group by query") {
-    withSQLConf(SQLConf.SHUFFLE_PARTITIONS.key -> "10") {
-      withTempPath { path =>
-        val df = spark.range(0, 5)
-        val groupedDF = df.groupBy("id").count()
-        groupedDF.write
-          .format(dataSourceName)
-          .mode(SaveMode.Overwrite)
-          .save(path.getCanonicalPath)
-
-        val overwrittenFiles = path.listFiles()
-          .filter(f => f.isFile && !f.getName.startsWith(".") && !f.getName.startsWith("_"))
-          .sortBy(_.getName)
-        val overwrittenFilesWithoutEmpty = overwrittenFiles.filter(_.length > 0)
-
-        assert(overwrittenFiles === overwrittenFilesWithoutEmpty)
       }
     }
   }

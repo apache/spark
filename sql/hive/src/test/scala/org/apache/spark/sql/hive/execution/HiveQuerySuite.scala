@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.internal.SQLConf
 
 case class TestData(a: Int, b: String)
 
@@ -48,6 +49,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
+  private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
+
   override def beforeAll() {
     super.beforeAll()
     TestHive.setCacheTables(true)
@@ -55,6 +58,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
+    // Ensures that cross joins are enabled so that we can test them
+    TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
   }
 
   override def afterAll() {
@@ -63,6 +68,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
       sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
+      TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
     } finally {
       super.afterAll()
     }
