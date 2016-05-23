@@ -300,18 +300,17 @@ class SQLTests(ReusedPySparkTestCase):
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
 
-        struct = self.spark. \
-                 registerJythonFunction("complex", rowMagic1,
-                                        StructType([StructField("by", IntegerType()),
-                                                    StructField("hi", StringType())]))
-        struct2 = self.spark. \
-                  registerJythonFunction("complex2", rowMagic1,
-                                         StructType([StructField("hi", StringType()),
-                                                     StructField("by", IntegerType())]))
-        struct3 = self.spark. \
-                  registerJythonFunction("complex3", rowMagic2,
-                                         StructType([StructField("hi", StringType()),
-                                                     StructField("by", IntegerType())]))
+        r1 = lambda x: Row(hi="murh", by=x)
+        r2 = lambda x: Row("murh", x)
+        struct = self.spark.catalog.registerJythonFunction(
+            "c", r1, StructType([
+                StructField("by", IntegerType()), StructField("hi", StringType())]))
+        struct2 = self.spark.catalog.registerJythonFunction(
+            "c2", r1, StructType([
+                StructField("hi", StringType()), StructField("by", IntegerType())]))
+        struct3 = self.spark.catalog.registerJythonFunction(
+            "c3", r2, StructType([
+                StructField("hi", StringType()), StructField("by", IntegerType())]))
         structs = [struct, struct2, struct3]
         for struct in structs:
             res = data.select(struct(data['number'])).collect()
@@ -339,8 +338,8 @@ class SQLTests(ReusedPySparkTestCase):
         res = data.select(simpleMap(data['r1']).alias("map")).collect()
         his = map(lambda x: x[0]["hi"], res)
         magic = map(lambda x: x[0]["magic"], res)
-        self.assertEqual([17, 21], his)
-        self.assertEqual(["yes", "yes"], magic)
+        self.assertEqual(["17", "21"], list(his))
+        self.assertEqual(["yes", "yes"], list(magic))
 
     def test_jython_udf_tokenize(self):
         rdd = self.sc.parallelize([Row(r1=17, r2="hi KK6JKQ", r3=4),
