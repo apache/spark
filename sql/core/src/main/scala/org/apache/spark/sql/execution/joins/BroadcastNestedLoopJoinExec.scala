@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.AnalysisException
@@ -343,7 +342,7 @@ case class BroadcastNestedLoopJoinExec(
 
   protected override def doPrepare(): Unit = {
     if (!withinBroadcastThreshold && !sqlContext.conf.crossJoinEnabled) {
-      throw new SparkException("Both sides of this join are outside the broadcasting " +
+      throw new AnalysisException("Both sides of this join are outside the broadcasting " +
         "threshold and computing it could be prohibitively expensive. To explicitly enable it, " +
         s"please set ${SQLConf.CROSS_JOINS_ENABLED.key} = true")
     }
