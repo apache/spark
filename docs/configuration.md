@@ -1480,6 +1480,397 @@ Apart from these, the following properties are also available, and may be useful
 </table>
 
 
+#### Spark SQL
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td><code>spark.sql.adaptive.enabled</code></td>
+  <td>false</td>
+  <td>
+    When true, enable adaptive query execution.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.adaptive.shuffle.targetPostShuffleInputSize</code></td>
+  <td>67108864b</td>
+  <td>
+    The target post-shuffle input size in bytes of a task.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.autoBroadcastJoinThreshold</code></td>
+  <td>10485760</td>
+  <td>
+    Configures the maximum size in bytes for a table that will be broadcast
+    to all worker nodes when performing a join.  By setting this value to -1
+    broadcasting can be disabled. Note that currently statistics are only
+    supported for Hive Metastore tables where the command
+    <code>ANALYZE TABLE &lt;tableName&gt; COMPUTE STATISTICS noscan</code>
+    has been run.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.broadcastTimeout</code></td>
+  <td>300</td>
+  <td>
+    Timeout in seconds for the broadcast wait time in broadcast joins.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.crossJoin.enabled</code></td>
+  <td>false</td>
+  <td>
+    When false, we will throw an error if a query contains a cross join
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.columnNameOfCorruptRecord</code></td>
+  <td>_corrupt_record</td>
+  <td>
+    The name of internal column for storing raw/un-parsed JSON records that fail to parse.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.files.maxPartitionBytes</code></td>
+  <td>134217728</td>
+  <td>
+    The maximum number of bytes to pack into a single partition when reading files.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.groupByOrdinal</code></td>
+  <td>true</td>
+  <td>
+    When true, the ordinal numbers in group by clauses are treated as the position in
+    the select list. When false, the ordinal numbers are ignored.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.convertCTAS</code></td>
+  <td>false</td>
+  <td>
+    When true, a table created by a Hive CTAS statement (no USING clause) will be
+    converted to a data source table, using the data source set by
+    <code>spark.sql.sources.default</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.convertMetastoreParquet</code></td>
+  <td>true</td>
+  <td>
+    When set to false, Spark SQL will use the Hive SerDe for Parquet tables instead of
+    the built in support.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.convertMetastoreOrc</code></td>
+  <td>true</td>
+  <td>
+    When set to false, Spark SQL will use the Hive SerDe for ORC tables instead of
+    the built in support.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.convertMetastoreParquet.mergeSchema</code></td>
+  <td>false</td>
+  <td>
+    When true, also tries to merge possibly different but compatible Parquet schemas
+    in different Parquet data files. This configuration is only effective when
+    "spark.sql.hive.convertMetastoreParquet" is true.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.metastorePartitionPruning</code></td>
+  <td>false</td>
+  <td>
+    When true, some predicates will be pushed down into the Hive metastore
+    so that unmatching partitions can be eliminated earlier.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.metastore.barrierPrefixes</code></td>
+  <td>&lt;undefined&gt;</td>
+  <td>
+    A comma separated list of class prefixes that should explicitly be reloaded
+    for each version of Hive that Spark SQL is communicating with. For example,
+    Hive UDFs that are declared in a prefix that typically would be shared
+    (i.e. <code>org.apache.spark.*</code>).
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.metastore.jars</code></td>
+  <td>builtin</td>
+  <td>
+    Location of the jars that should be used to instantiate the HiveMetastoreClient.
+    This property can be one of three options:
+    1. "builtin"
+      Use Hive 1.2.1, which is bundled with the Spark assembly when
+      <code>-Phive</code> is enabled. When this option is chosen,
+      <code>spark.sql.hive.metastore.version</code> must be either
+      <code>1.2.1</code> or not defined.
+    2. "maven"
+      Use Hive jars of specified version downloaded from Maven repositories.
+    3. A classpath in the standard format for both Hive and Hadoop.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.metastore.sharedPrefixes</code></td>
+  <td>com.mysql.jdbc,org.postgresql,com.microsoft.sqlserver,oracle.jdbc</td>
+  <td>
+    A comma separated list of class prefixes that should be loaded using the
+    classloader that is shared between Spark SQL and a specific version of Hive.
+    An example of classes that should be shared is JDBC drivers that are needed
+    to talk to the metastore. Other classes that need to be shared are those
+    that interact with classes that are already shared. For example, custom
+    appenders that are used by log4j.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.metastore.version</code></td>
+  <td>1.2.1</td>
+  <td>
+    Version of the Hive metastore.
+    Available options are <code>0.12.0</code> through <code>1.2.1</code>.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.thriftServer.async</code></td>
+  <td>true</td>
+  <td>
+    When set to true, Hive Thrift server executes SQL queries in an asynchronous way.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.verifyPartitionPath</code></td>
+  <td>false</td>
+  <td>
+    When true, check all the partition paths under the table's root directory
+    when reading data stored in HDFS.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.hive.version</code></td>
+  <td>1.2.1</td>
+  <td>
+    Version of Hive used internally by Spark SQL.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.orc.filterPushdown</code></td>
+  <td>false</td>
+  <td>
+    When true, enable filter pushdown for ORC files.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.orderByOrdinal</code></td>
+  <td>true</td>
+  <td>
+    When true, the ordinal numbers are treated as the position in the select list.
+    When false, the ordinal numbers in order/sort by clause are ignored.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.binaryAsString</code></td>
+  <td>false</td>
+  <td>
+    Some other Parquet-producing systems, in particular Impala and older versions
+    of Spark SQL, do not differentiate between binary data and strings when writing
+    out the Parquet schema. This flag tells Spark SQL to interpret binary data as
+    a string to provide compatibility with these systems.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.cacheMetadata</code></td>
+  <td>true</td>
+  <td>
+    Turns on caching of Parquet schema metadata. Can speed up querying of static data.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.compression.codec</code></td>
+  <td>snappy</td>
+  <td>
+    Sets the compression codec use when writing Parquet files.
+    Acceptable values include: uncompressed, snappy, gzip, lzo.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.enableVectorizedReader</code></td>
+  <td>true</td>
+  <td>
+    Enables vectorized parquet decoding.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.int96AsTimestamp</code></td>
+  <td>true</td>
+  <td>
+    Some Parquet-producing systems, in particular Impala, store Timestamp into INT96.
+    Spark would also store Timestamp as INT96 because we need to avoid precision
+    lost of the nanoseconds field. This flag tells Spark SQL to interpret INT96
+    data as a timestamp to provide compatibility with these systems.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.filterPushdown</code></td>
+  <td>true</td>
+  <td>
+    Enables Parquet filter push-down optimization when set to true.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.mergeSchema</code></td>
+  <td>false</td>
+  <td>
+    When true, the Parquet data source merges schemas collected from all data files,
+    otherwise the schema is picked from the summary file or a random data file if
+    no summary file is available.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.output.committer.class</code></td>
+  <td>org.apache.parquet.hadoop.ParquetOutputCommitter</td>
+  <td>
+    The output committer class used by Parquet. The specified class needs to be
+    a subclass of org.apache.hadoop.mapreduce.OutputCommitter. Typically, it's also
+    a subclass of org.apache.parquet.hadoop.ParquetOutputCommitter.
+    NOTE: 1. Instead of SQLConf, this option must be set in Hadoop Configuration.
+    2. This option overrides "spark.sql.sources.outputCommitterClass".
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.respectSummaryFiles</code></td>
+  <td>false</td>
+  <td>
+    When true, we make assumption that all part-files of Parquet are consistent
+    with summary files and we will ignore them when merging schema. Otherwise,
+    if this is false, which is the default, we will merge all part-files.
+    This should be considered as expert-only option, and shouldn't be enabled
+    before knowing what it means exactly.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.parquet.writeLegacyFormat</code></td>
+  <td>false</td>
+  <td>
+    Whether to follow Parquet's format specification when converting
+    Parquet schema to Spark SQL schema and vice versa.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.pivotMaxValues</code></td>
+  <td>10000</td>
+  <td>
+    When doing a pivot without specifying values for the pivot column this is the
+    maximum number of (distinct) values that will be collected without error.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.shuffle.partitions</code></td>
+  <td>200</td>
+  <td>
+    The default number of partitions to use when shuffling data for joins
+    or aggregations.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.sources.bucketing.enabled</code></td>
+  <td>true</td>
+  <td>
+    When false, we will treat bucketed table as normal table.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.sources.default</code></td>
+  <td>parquet</td>
+  <td>
+    The default data source to use in input/output.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.sources.maxConcurrentWrites</code></td>
+  <td>1</td>
+  <td>
+    The maximum number of concurrent files to open before falling back on
+    sorting when writing out files using dynamic partitioning.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.sources.parallelPartitionDiscovery.threshold</code></td>
+  <td>32</td>
+  <td>
+    The degree of parallelism for schema merging and partition discovery
+     of Parquet data sources.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.sources.partitionColumnTypeInference.enabled</code></td>
+  <td>true</td>
+  <td>
+    When true, automatically infer the data types for partitioned columns.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.sources.partitionDiscovery.enabled</code></td>
+  <td>true</td>
+  <td>
+    When true, automatically discover data partitions.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.streaming.checkpointLocation</code></td>
+  <td>&lt;undefined&gt;</td>
+  <td>
+    The default location for storing checkpoint data for continuously executing
+    queries.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.thriftserver.scheduler.pool</code></td>
+  <td>&lt;undefined&gt;</td>
+  <td>
+    Set a Fair Scheduler pool for a JDBC client session.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.thriftserver.ui.retainedSessions</code></td>
+  <td>200</td>
+  <td>
+    The number of SQL client sessions kept in the JDBC/ODBC web UI history.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.thriftserver.ui.retainedStatements</code></td>
+  <td>200</td>
+  <td>
+    The number of SQL statements kept in the JDBC/ODBC web UI history.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.variable.substitute</code></td>
+  <td>true</td>
+  <td>
+    This enables substitution using syntax like ${var} ${system:var} and ${env:var}.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.variable.substitute.depth</code></td>
+  <td>40</td>
+  <td>
+    The maximum replacements the substitution engine will do.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.sql.warehouse.dir</code></td>
+  <td>&lt;current working directory&gt;/spark-warehouse</td>
+  <td>
+    The default location for managed databases and tables.
+  </td>
+</tr>
+</table>
+
+
 #### Spark Streaming
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
