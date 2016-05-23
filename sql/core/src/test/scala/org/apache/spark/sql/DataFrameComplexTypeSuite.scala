@@ -91,5 +91,6 @@ case class S100(
   s89: String = "89", s90: String = "90", s91: String = "91", s92: String = "92",
   s93: String = "93", s94: String = "94", s95: String = "95", s96: String = "96",
   s97: String = "97", s98: String = "98", s99: String = "99", s100: String = "100")
+
 case class S100_5(
   s1: S100 = S100(), s2: S100 = S100(), s3: S100 = S100(), s4: S100 = S100(), s5: S100 = S100())
