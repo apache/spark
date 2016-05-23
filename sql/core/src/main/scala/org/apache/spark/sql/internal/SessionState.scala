@@ -100,6 +100,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
 
   /**
    * Interface exposed to the user for registering user-defined functions.
+   * Note that the user-defined functions must be deterministic.
    */
   lazy val udf: UDFRegistration = new UDFRegistration(functionRegistry)
 
