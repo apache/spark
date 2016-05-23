@@ -141,15 +141,15 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   import testImplicits._
 
   private def withSchemaInference(f: => Unit): Unit = {
-    withSQLConf(("spark.sql.streaming.allowSchemaInference", "true")) { f }
+    withSQLConf("spark.sql.streaming.allowSchemaInference" -> "true")(f)
   }
 
   private def withoutSchemaInference(f: => Unit): Unit = {
-    withSQLConf(("spark.sql.streaming.allowSchemaInference", "false")) { f }
+    withSQLConf("spark.sql.streaming.allowSchemaInference" -> "false")(f)
   }
 
   private def testWithSchemaInference(testName: String)(f: => Unit): Unit = {
-    test(testName) { withSchemaInference { f } }
+    test(testName) { withSchemaInference(f) }
   }
 
   /** Use `format` and `path` to create FileStreamSource via DataFrameReader */
@@ -179,27 +179,31 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   // ============= Basic parameter exists tests ================
 
-  test("FileStreamSource schema: no path, no schema") {
-    val e = intercept[IllegalArgumentException] {
-      createFileStreamSourceAndGetSchema(format = None, path = None, schema = None)
+  test("FileStreamSource schema: no path") {
+    def testError(): Unit = {
+      val e = intercept[IllegalArgumentException] {
+        createFileStreamSourceAndGetSchema(format = None, path = None, schema = None)
+      }
+      assert(e.getMessage.contains("path")) // reason is path, not schema
     }
-    assert(e.getMessage.contains("path"))  // reason is path, not schema
+    withoutSchemaInference { testError() }
+    withSchemaInference { testError() }
   }
 
   test("FileStreamSource schema: path doesn't exist, no schema") {
     val e = intercept[IllegalArgumentException] {
       createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
     }
-    assert(e.getMessage.toLowerCase.contains("schema"))  // reason is schema absence, not the path
+    assert(e.getMessage.toLowerCase.contains("schema")) // reason is schema absence, not the path
   }
 
   test("FileStreamSource schema: path doesn't exist, with schema") {
-    val e = intercept[AnalysisException] {
-      createFileStreamSourceAndGetSchema(
-        format = None, path = Some("/a/b/c"), schema = Some(new StructType))
-    }
-    assert(e.getMessage.contains("path"))  // reason is path does not exist
+    val userSchema = new StructType().add(new StructField("value", IntegerType))
+    val schema = createFileStreamSourceAndGetSchema(
+      format = None, path = Some("/a/b/c"), schema = Some(userSchema))
+    assert(schema === userSchema)
   }
+
 
   // =============== Text file stream schema tests ================
 
