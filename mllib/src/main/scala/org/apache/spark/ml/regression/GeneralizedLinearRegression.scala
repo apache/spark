@@ -788,6 +788,8 @@ class GeneralizedLinearRegressionModel private[ml] (
   @Since("2.0.0")
   override def write: MLWriter =
     new GeneralizedLinearRegressionModel.GeneralizedLinearRegressionModelWriter(this)
+
+  override val numFeatures: Int = coefficients.size
 }
 
 @Since("2.0.0")
