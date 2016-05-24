@@ -1777,8 +1777,14 @@ class UserDefinedJythonFunction(object):
             file = StringIO()
             cp = cloudpickle.CloudPickler(file)
             code, f_globals, defaults, closure, dct, base_globals = cp.extract_func_data(func)
+            closure_dct = {}
+            if func.__closure__:
+                # Python 2 alternative to inspect.getclosurevars
+                closure_dct = dict(zip(func.func_code.co_freevars,
+                                       (c.cell_contents for c in func.func_closure)))
             extra = dict(base_globals)
             extra.update(f_globals)
+            extra.update(closure_dct)
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:

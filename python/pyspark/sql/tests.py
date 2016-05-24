@@ -261,8 +261,8 @@ class SQLTests(ReusedPySparkTestCase):
     def test_jython_dill_udf_lambda(self):
         try:
             import dill
-        except:
-            skip("dill not installed, skipping dill test")
+        except ImportError:
+            raise unittest.SkipTest("dill not installed, skipping dill test")
 
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -276,8 +276,8 @@ class SQLTests(ReusedPySparkTestCase):
     def test_jython_dill_udf_lambda_capture(self):
         try:
             import dill
-        except:
-            skip("dill not installed, skipping dill test")
+        except ImportError:
+            raise unittest.SkipTest("dill not installed, skipping dill test")
 
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -293,8 +293,8 @@ class SQLTests(ReusedPySparkTestCase):
     def test_jython_dill_udf_row(self):
         try:
             import dill
-        except:
-            skip("dill not installed, skipping dill test")
+        except ImportError:
+            raise unittest.SkipTest("dill not installed, skipping dill test")
 
         d = [Row(number=i, squared=i**2) for i in range(2)]
         rdd = self.sc.parallelize(d)
@@ -302,19 +302,19 @@ class SQLTests(ReusedPySparkTestCase):
 
         r1 = lambda x: Row(hi="murh", by=x)
         r2 = lambda x: Row("murh", x)
-        struct = self.spark.catalog.registerJythonFunction(
-            "c", r1, StructType([
-                StructField("by", IntegerType()), StructField("hi", StringType())]))
-        struct2 = self.spark.catalog.registerJythonFunction(
-            "c2", r1, StructType([
-                StructField("hi", StringType()), StructField("by", IntegerType())]))
-        struct3 = self.spark.catalog.registerJythonFunction(
-            "c3", r2, StructType([
-                StructField("hi", StringType()), StructField("by", IntegerType())]))
-        structs = [struct, struct2, struct3]
+        fields = [StructField("hi", StringType()), StructField("by", IntegerType())]
+        # Check that with named fields it doesn't matter what order the result is in
+        struct1 = self.spark.catalog.registerJythonFunction("c", r1, StructType(fields[::-1]))
+        struct2 = self.spark.catalog.registerJythonFunction("c2", r1, StructType(fields))
+        # Verify without names the mapping works
+        struct3 = self.spark.catalog.registerJythonFunction("c3", r2, StructType(fields))
+        structs = [struct1, struct2, struct3]
         for struct in structs:
-            res = data.select(struct(data['number'])).collect()
-            self.assertEqual([Row(by=1, hi="murh"), Row(by=2, hi="murh")], res)
+            res = data.select(struct(data['number']).alias("meep")).collect()
+            self.assertEqual(res[0]['meep']['hi'], "murh")
+            self.assertEqual(res[0]['meep']['by'], 0)
+            self.assertEqual(res[1]['meep']['hi'], "murh")
+            self.assertEqual(res[1]['meep']['by'], 1)
         
 
     def test_jython_udf_avg2(self):
