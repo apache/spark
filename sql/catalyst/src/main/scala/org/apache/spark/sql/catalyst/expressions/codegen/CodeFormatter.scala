@@ -40,7 +40,7 @@ object CodeFormatter {
     var lastLine: String = "dummy"
     input.split('\n').foreach { l =>
       val line = l.trim()
-      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{"))
+      val skip = line == "" && (lastLine == "" || lastLine.endsWith("{") || lastLine.endsWith("*/"))
       if (!skip) {
         code.append(line)
         code.append("\n")
@@ -48,6 +48,24 @@ object CodeFormatter {
       lastLine = line
     }
     code.result()
+  }
+
+  def stripOverlappingComments(codeAndComment: CodeAndComment): CodeAndComment = {
+    val code = new StringBuilder
+    val map = codeAndComment.comment
+    var lastLine: String = "dummy"
+    codeAndComment.body.split('\n').foreach { l =>
+      val line = l.trim()
+      val skip = lastLine.startsWith("/*") && lastLine.endsWith("*/") &&
+        line.startsWith("/*") && line.endsWith("*/") &&
+        map(lastLine).substring(3).contains(map(line).substring(3))
+      if (!skip) {
+        code.append(line)
+        code.append("\n")
+      }
+      lastLine = line
+    }
+    new CodeAndComment(code.result().trim(), map)
   }
 }
 
@@ -100,8 +118,11 @@ private class CodeFormatter {
       indentString
     }
     code.append(f"/* ${currentLine}%03d */ ")
-    code.append(thisLineIndent)
-    code.append(line)
+    if (line.trim().length > 0) {
+      code.append(thisLineIndent)
+      if (inCommentBlock && line.startsWith("*") || line.startsWith("*/")) code.append(" ")
+      code.append(line)
+    }
     code.append("\n")
     indentLevel = newIndentLevel
     indentString = " " * (indentSize * newIndentLevel)

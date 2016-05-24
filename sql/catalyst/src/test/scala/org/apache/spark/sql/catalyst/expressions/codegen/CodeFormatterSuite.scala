@@ -36,6 +36,22 @@ class CodeFormatterSuite extends SparkFunSuite {
     }
   }
 
+  test("removing overlapping comments") {
+    val code = new CodeAndComment(
+      """/*project_c4*/
+        |/*project_c3*/
+        |/*project_c2*/
+      """.stripMargin,
+      Map(
+        "/*project_c4*/" -> "// (((input[0, bigint, false] + 1) + 2) + 3))",
+        "/*project_c3*/" -> "// ((input[0, bigint, false] + 1) + 2)",
+        "/*project_c2*/" -> "// (input[0, bigint, false] + 1)"
+      ))
+
+    val reducedCode = CodeFormatter.stripOverlappingComments(code)
+    assert(reducedCode.body === "/*project_c4*/")
+  }
+
   testCase("basic example") {
     """class A {
       |blahblah;
@@ -147,4 +163,31 @@ class CodeFormatterSuite extends SparkFunSuite {
       |/* 006 */ }
     """.stripMargin
   }
+
+  // scalastyle:off whitespace.end.of.line
+  testCase("reduce empty lines") {
+    CodeFormatter.stripExtraNewLines(
+      """class A {
+        |
+        |
+        | /*** comment1 */
+        |
+        | class body;
+        |
+        |
+        | if (c) {duh;}
+        | else {boo;}
+        |}""".stripMargin)
+  }{
+    """
+      |/* 001 */ class A {
+      |/* 002 */   /*** comment1 */
+      |/* 003 */   class body;
+      |/* 004 */ 
+      |/* 005 */   if (c) {duh;}
+      |/* 006 */   else {boo;}
+      |/* 007 */ }
+    """.stripMargin
+  }
+  // scalastyle:on whitespace.end.of.line
 }
