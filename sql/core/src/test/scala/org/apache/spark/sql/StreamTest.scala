@@ -429,7 +429,7 @@ trait StreamTest extends QueryTest with Timeouts {
               }
             }
 
-            val sparkAnswer = try if (lastOnly) sink.lastBatch else sink.allData catch {
+            val sparkAnswer = try if (lastOnly) sink.latestBatchData else sink.allData catch {
               case e: Exception =>
                 failTest("Exception while getting data from sink", e)
             }

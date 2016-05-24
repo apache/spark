@@ -17,13 +17,84 @@
 
 package org.apache.spark.sql.streaming
 
-import org.apache.spark.sql.{AnalysisException, Row, StreamTest}
+import scala.language.implicitConversions
+
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class MemorySinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
+
+  test("add data in Append output mode") {
+    implicit val schema = new StructType().add(new StructField("value", IntegerType))
+    val sink = new MemorySink(schema, OutputMode.Append)
+
+    // Before adding data, check output
+    assert(sink.latestBatchId === None)
+    checkAnswer(sink.latestBatchData, Seq.empty)
+    checkAnswer(sink.allData, Seq.empty)
+
+    // Add batch 0 and check outputs
+    sink.addBatch(0, 1 to 3)
+    assert(sink.latestBatchId === Some(0))
+    checkAnswer(sink.latestBatchData, 1 to 3)
+    checkAnswer(sink.allData, 1 to 3)
+
+    // Add batch 1 and check outputs
+    sink.addBatch(1, 4 to 6)
+    assert(sink.latestBatchId === Some(1))
+    checkAnswer(sink.latestBatchData, 4 to 6)
+    checkAnswer(sink.allData, 1 to 6)     // new data should get appended to old data
+
+    // Re-add batch 1 with different data, should not be added and outputs should not be changed
+    sink.addBatch(1, 7 to 9)
+    assert(sink.latestBatchId === Some(1))
+    checkAnswer(sink.latestBatchData, 4 to 6)
+    checkAnswer(sink.allData, 1 to 6)
+
+    // Add batch 2 and check outputs
+    sink.addBatch(2, 7 to 9)
+    assert(sink.latestBatchId === Some(2))
+    checkAnswer(sink.latestBatchData, 7 to 9)
+    checkAnswer(sink.allData, 1 to 9)
+  }
+
+  test("add data in Complete output mode") {
+    implicit val schema = new StructType().add(new StructField("value", IntegerType))
+    val sink = new MemorySink(schema, OutputMode.Complete)
+
+    // Before adding data, check output
+    assert(sink.latestBatchId === None)
+    checkAnswer(sink.latestBatchData, Seq.empty)
+    checkAnswer(sink.allData, Seq.empty)
+
+    // Add batch 0 and check outputs
+    sink.addBatch(0, 1 to 3)
+    assert(sink.latestBatchId === Some(0))
+    checkAnswer(sink.latestBatchData, 1 to 3)
+    checkAnswer(sink.allData, 1 to 3)
+
+    // Add batch 1 and check outputs
+    sink.addBatch(1, 4 to 6)
+    assert(sink.latestBatchId === Some(1))
+    checkAnswer(sink.latestBatchData, 4 to 6)
+    checkAnswer(sink.allData, 4 to 6)     // new data should replace old data
+
+    // Re-add batch 1 with different data, should not be added and outputs should not be changed
+    sink.addBatch(1, 7 to 9)
+    assert(sink.latestBatchId === Some(1))
+    checkAnswer(sink.latestBatchData, 4 to 6)
+    checkAnswer(sink.allData, 4 to 6)
+
+    // Add batch 2 and check outputs
+    sink.addBatch(2, 7 to 9)
+    assert(sink.latestBatchId === Some(2))
+    checkAnswer(sink.latestBatchData, 7 to 9)
+    checkAnswer(sink.allData, 7 to 9)
+  }
 
   test("registering as a table") {
     testRegisterAsTable()
@@ -87,5 +158,16 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext {
         .option("checkpointLocation", location)
         .startStream()
     }
+  }
+
+  private def checkAnswer(rows: Seq[Row], expected: Seq[Int])(implicit schema: StructType): Unit = {
+    checkAnswer(
+      sqlContext.createDataFrame(sparkContext.makeRDD(rows), schema),
+      intsToDF(expected)(schema))
+  }
+
+  implicit def intsToDF(seq: Seq[Int])(implicit schema: StructType): DataFrame = {
+    require(schema.fields.size === 1)
+    sqlContext.createDataset(seq).toDF(schema.fieldNames.head)
   }
 }

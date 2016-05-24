@@ -131,7 +131,7 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     batches.lastOption.map(_.batchId)
   }
 
-  def lastBatch: Seq[Row] = synchronized { batches.lastOption.toSeq.flatten(_.data) }
+  def latestBatchData: Seq[Row] = synchronized { batches.lastOption.toSeq.flatten(_.data) }
 
   def toDebugString: String = synchronized {
     batches.map { case AddedData(batchId, data) =>
