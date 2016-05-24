@@ -29,9 +29,8 @@ object CodeFormatter {
   def format(code: CodeAndComment): String = {
     val formatter = new CodeFormatter
     code.body.split("\n").foreach { line =>
-      val trimmed = line.trim
       val comment = commentHolder.replaceAllIn(
-        trimmed,
+        line.trim,
         m => code.comment.getOrElse(m.group(1), m.group(0)))
       formatter.addLine(comment)
     }
@@ -56,16 +55,28 @@ object CodeFormatter {
   def stripOverlappingComments(codeAndComment: CodeAndComment): CodeAndComment = {
     val code = new StringBuilder
     val map = codeAndComment.comment
+
+    def getComment(line: String): Option[String] = {
+      if (line.startsWith("/*") && line.endsWith("*/")) {
+        map.get(line.substring(2, line.length - 2))
+      } else {
+        None
+      }
+    }
+
     var lastLine: String = "dummy"
     codeAndComment.body.split('\n').foreach { l =>
       val line = l.trim()
-      val skip = lastLine.startsWith("/*") && lastLine.endsWith("*/") &&
-        line.startsWith("/*") && line.endsWith("*/") &&
-        map(lastLine).substring(3).contains(map(line).substring(3))
-      if (!skip) {
-        code.append(line)
-        code.append("\n")
+
+      val skip = getComment(lastLine).zip(getComment(line)).exists {
+        case (lastComment, currentComment) =>
+          lastComment.substring(3).contains(currentComment.substring(3))
       }
+
+      if (!skip) {
+        code.append(line).append("\n")
+      }
+
       lastLine = line
     }
     new CodeAndComment(code.result().trim(), map)
@@ -120,8 +131,9 @@ private class CodeFormatter {
     } else {
       indentString
     }
-    code.append(f"/* ${currentLine}%03d */ ")
+    code.append(f"/* ${currentLine}%03d */")
     if (line.trim().length > 0) {
+      code.append(" ") // add a space after the line number comment.
       code.append(thisLineIndent)
       if (inCommentBlock && line.startsWith("*") || line.startsWith("*/")) code.append(" ")
       code.append(line)
