@@ -182,7 +182,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       }
     }
   }
-  
+
   override def buildWriter(
       sqlContext: SQLContext,
       dataSchema: StructType,
