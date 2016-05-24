@@ -657,9 +657,14 @@ class GradientBoostedTrees(object):
 def _test():
     import doctest
     globs = globals().copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    from pyspark.sql import SparkSession
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.tree tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

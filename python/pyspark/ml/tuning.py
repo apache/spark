@@ -152,7 +152,7 @@ class CrossValidator(Estimator, ValidatorParams):
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
-    >>> dataset = sqlContext.createDataFrame(
+    >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
     ...      (Vectors.dense([0.5]), 0.0),
@@ -311,7 +311,7 @@ class TrainValidationSplit(Estimator, ValidatorParams):
     >>> from pyspark.ml.classification import LogisticRegression
     >>> from pyspark.ml.evaluation import BinaryClassificationEvaluator
     >>> from pyspark.ml.linalg import Vectors
-    >>> dataset = sqlContext.createDataFrame(
+    >>> dataset = spark.createDataFrame(
     ...     [(Vectors.dense([0.0]), 0.0),
     ...      (Vectors.dense([0.4]), 1.0),
     ...      (Vectors.dense([0.5]), 0.0),
@@ -456,17 +456,19 @@ class TrainValidationSplitModel(Model, ValidatorParams):
 if __name__ == "__main__":
     import doctest
 
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = globals().copy()
 
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.tuning tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.tuning tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    sc.stop()
+    spark.stop()
     if failure_count:
         exit(-1)

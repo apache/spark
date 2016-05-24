@@ -178,12 +178,15 @@ private[sql] class CsvOutputWriter(
     }.getRecordWriter(context)
     // Write header even if `writeInternal()` is not called.
     if (params.headerFlag) {
-      val headerString = csvWriter.writeRow(Seq.empty[String], includeHeader = true)
-      text.set(headerString)
+      csvWriter.writeRow(Seq.empty[String], includeHeader = true)
+      text.set(csvWriter.flush())
       writer.write(NullWritable.get(), text)
     }
     writer
   }
+
+  private val FLUSH_BATCH_SIZE = 1024L
+  private var records: Long = 0L
 
   private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
     if (field != null) {
@@ -196,14 +199,23 @@ private[sql] class CsvOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    // TODO: Instead of converting and writing every row, we should use the univocity buffer
-    val resultString =
-      csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), includeHeader = false)
-    text.set(resultString)
-    recordWriter.write(NullWritable.get(), text)
+    csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), includeHeader = false)
+    records += 1
+    if (records % FLUSH_BATCH_SIZE == 0) {
+      flush()
+    }
+  }
+
+  private def flush(): Unit = {
+    val lines = csvWriter.flush()
+    if (lines.nonEmpty) {
+      text.set(lines)
+      recordWriter.write(NullWritable.get(), text)
+    }
   }
 
   override def close(): Unit = {
+    flush()
     recordWriter.close(context)
   }
 }
