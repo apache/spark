@@ -20,7 +20,7 @@ package org.apache.spark.examples
 
 import breeze.linalg.{squaredDistance, DenseVector, Vector}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.sql.SparkSession
 
 /**
  * K-means clustering.
@@ -66,14 +66,17 @@ object SparkKMeans {
 
     showWarning()
 
-    val sparkConf = new SparkConf().setAppName("SparkKMeans")
-    val sc = new SparkContext(sparkConf)
-    val lines = sc.textFile(args(0))
+    val spark = SparkSession
+      .builder
+      .appName("SparkKMeans")
+      .getOrCreate()
+
+    val lines = spark.read.text(args(0)).rdd
     val data = lines.map(parseVector _).cache()
     val K = args(1).toInt
     val convergeDist = args(2).toDouble
 
-    val kPoints = data.takeSample(withReplacement = false, K, 42).toArray
+    val kPoints = data.takeSample(withReplacement = false, K, 42)
     var tempDist = 1.0
 
     while(tempDist > convergeDist) {
@@ -97,7 +100,7 @@ object SparkKMeans {
 
     println("Final centers:")
     kPoints.foreach(println)
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

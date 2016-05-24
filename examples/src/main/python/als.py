@@ -28,7 +28,7 @@ import sys
 import numpy as np
 from numpy.random import rand
 from numpy import matrix
-from pyspark import SparkContext
+from pyspark.sql import SparkSession
 
 LAMBDA = 0.01   # regularization
 np.random.seed(42)
@@ -62,7 +62,13 @@ if __name__ == "__main__":
       example. Please use pyspark.ml.recommendation.ALS for more
       conventional use.""", file=sys.stderr)
 
-    sc = SparkContext(appName="PythonALS")
+    spark = SparkSession\
+        .builder\
+        .appName("PythonALS")\
+        .getOrCreate()
+
+    sc = spark._sc
+
     M = int(sys.argv[1]) if len(sys.argv) > 1 else 100
     U = int(sys.argv[2]) if len(sys.argv) > 2 else 500
     F = int(sys.argv[3]) if len(sys.argv) > 3 else 10
@@ -99,4 +105,4 @@ if __name__ == "__main__":
         print("Iteration %d:" % i)
         print("\nRMSE: %5.4f\n" % error)
 
-    sc.stop()
+    spark.stop()

@@ -213,7 +213,8 @@ class HashedRelationSuite extends SparkFunSuite with SharedSQLContext {
     longRelation.close()
   }
 
-  test("build HashedRelation with more than 100 millions rows") {
+  // This test require 4G heap to run, should run it manually
+  ignore("build HashedRelation with more than 100 millions rows") {
     val unsafeProj = UnsafeProjection.create(
       Seq(BoundReference(0, IntegerType, false),
         BoundReference(1, StringType, true)))
