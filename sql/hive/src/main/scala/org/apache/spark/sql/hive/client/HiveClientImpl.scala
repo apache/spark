@@ -377,7 +377,7 @@ private[hive] class HiveClientImpl(
             // allows directory paths as location URIs while Spark SQL data source tables also
             // allows file paths. So the standard Hive `dataLocation` is meaningless for Spark SQL
             // data source tables.
-            DDLUtils.isDatasourceTable(properties)
+            DDLUtils.isDatasourceTable(properties) && h.getTableType == HiveTableType.EXTERNAL_TABLE
           },
           inputFormat = Option(h.getInputFormatClass).map(_.getName),
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),

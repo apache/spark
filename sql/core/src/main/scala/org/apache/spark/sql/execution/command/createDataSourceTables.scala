@@ -400,7 +400,10 @@ object CreateDataSourceTableUtils extends Logging {
         schema = relation.schema.map { f =>
           CatalogColumn(f.name, f.dataType.catalogString)
         },
-        properties = tableProperties.toMap,
+        // Removes the provider property since we are gonna saving this table as a Hive compatible
+        // one, and other places use this property to check whether a table is a data source table
+        // (e.g. `DDLUtils.isDatasourceTable`).
+        properties = (tableProperties - "spark.sql.sources.provider").toMap,
         viewText = None)
     }
 
