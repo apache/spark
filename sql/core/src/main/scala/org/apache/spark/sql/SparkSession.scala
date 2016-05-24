@@ -633,7 +633,7 @@ object SparkSession {
   /**
    * Builder for [[SparkSession]].
    */
-  class Builder {
+  class Builder extends Logging {
 
     private[this] val options = new scala.collection.mutable.HashMap[String, String]
 
@@ -750,6 +750,7 @@ object SparkSession {
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
         options.foreach { case (k, v) => session.conf.set(k, v) }
+        logWarning("Use an existing SparkSession, some configuration may not take effect.")
         return session
       }
 
@@ -759,6 +760,7 @@ object SparkSession {
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
           options.foreach { case (k, v) => session.conf.set(k, v) }
+          logWarning("Use an existing SparkSession, some configuration may not take effect.")
           return session
         }
 
@@ -771,7 +773,11 @@ object SparkSession {
 
           val sparkConf = new SparkConf()
           options.foreach { case (k, v) => sparkConf.set(k, v) }
-          SparkContext.getOrCreate(sparkConf)
+          val sc = SparkContext.getOrCreate(sparkConf)
+          // maybe this is an existing SparkContext, update its SparkConf which maybe used
+          // by SparkSession
+          options.foreach { case (k, v) => sc.conf.set(k, v) }
+          sc
         }
         session = new SparkSession(sparkContext)
         options.foreach { case (k, v) => session.conf.set(k, v) }
