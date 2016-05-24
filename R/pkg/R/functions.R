@@ -2226,7 +2226,7 @@ setMethod("window", signature(x = "Column"),
 #' @export
 #' @examples \dontrun{locate('b', df$c, 1)}
 setMethod("locate", signature(substr = "character", str = "Column"),
-          function(substr, str, pos = 0) {
+          function(substr, str, pos = 1) {
             jc <- callJStatic("org.apache.spark.sql.functions",
                               "locate",
                               substr, str@jc, as.integer(pos))
