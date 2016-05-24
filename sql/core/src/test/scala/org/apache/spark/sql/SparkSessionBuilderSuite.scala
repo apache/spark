@@ -100,5 +100,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(session.conf.get("key2") == "value2")
     assert(session.sparkContext.conf.get("key1") == "value1")
     assert(session.sparkContext.conf.get("key2") == "value2")
+    session.stop()
   }
 }
