@@ -390,27 +390,25 @@ interface, and will throw an exception if this constraint is exceeded. See the [
  Still, for linear and logistic regression, models with an increased number of features can be trained 
  using the `LinearRegression` and `LogisticRegression` estimators.
 
-An exponential family distribution is any probability distribution of the form
+The canonical form of an exponential family distribution is given as:
 
 $$
-f\left(y|\theta, \phi, w\right) = \exp{\left(\frac{y\theta - b(\theta)}{\phi/w} - c(y, \phi)\right)}
+f_Y(y|\theta, \tau) = h(y, \tau)\exp{\left( \frac{\theta \cdot T(y) - A(\theta)}{d(\tau)} \right)}
 $$
 
-where $\theta$ and $\phi$ are location and scale parameters, and $w_i$ is known as a _prior weight_ and
-is usually equal to one. In a GLM the response variable $Y_i$ is assumed to be drawn from an exponential family distribution:
+where $\theta$ is the parameter of interest and $\tau$ is a dispersion parameter. In a GLM the response variable $Y_i$ is assumed to be drawn from an exponential family distribution:
 
 $$
-Y_i \sim f\left(\cdot|\theta_i, \phi, w_i\right)
+Y_i \sim f\left(\cdot|\theta_i, \tau \right)
 $$
 
-where the parameter of interest $\theta_i$ is related to the expected value of the response variable
-$\mu_i$ by
+where the parameter of interest $\theta_i$ is related to the expected value of the response variable $\mu_i$ by
 
 $$
-\theta_i = h(\mu_i)
+\mu_i = A'(\theta_i)
 $$
 
-Here, $h(\mu_i)$ is defined by the form of the exponential family distribution used. GLMs also allow specification
+Here, $A'(\theta_i)$ is defined by the form of the exponential family distribution used. GLMs also allow specification
 of a link function, which defines the relationship between the expected value of the response variable $\mu_i$
 and the so called _linear predictor_ $\eta_i$:
 
@@ -418,26 +416,26 @@ $$
 g(\mu_i) = \eta_i = \vec{x_i}^T \cdot \vec{\beta}
 $$
 
-Often, the link function is chosen such that $h(\mu) = g(\mu)$, which yields a simplified relationship
+Often, the link function is chosen such that $A' = g^{-1}$, which yields a simplified relationship
 between the parameter of interest $\theta$ and the linear predictor $\eta$. In this case, the link
 function $g(\mu)$ is said to be the "canonical" link function.
 
 $$
-\theta_i = h(g^{-1}(\eta_i)) = \eta_i
+\theta_i = A'^{-1}(\mu_i) = g(g^{-1}(\eta_i)) = \eta_i
 $$
 
 A GLM finds the regression coefficients $\vec{\beta}$ which maximize the likelihood function.
 
 $$
 \min_{\vec{\beta}} \mathcal{L}(\vec{\theta}|\vec{y},X) =
-\prod_{i=1}^{N} \exp{\left(\frac{y_i\theta_i - b(\theta_i)}{\phi/w_i} - c(y_i, \phi)\right)}
+\prod_{i=1}^{N} h(y_i, \tau) \exp{\left(\frac{y_i\theta_i - A(\theta_i)}{d(\tau)}\right)}
 $$
 
 where the parameter of interest $\theta_i$ is related to the regression coefficients $\vec{\beta}$
 by
 
 $$
-\theta_i = h(g^{-1}(\vec{x_i} \cdot \vec{\beta}))
+\theta_i = A'(g^{-1}(\vec{x_i} \cdot \vec{\beta}))
 $$
 
 Spark's generalized linear regression interface also provides summary statistics for diagnosing the
