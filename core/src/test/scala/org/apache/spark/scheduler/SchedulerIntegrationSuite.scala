@@ -418,15 +418,20 @@ private class MockExternalClusterManager extends ExternalClusterManager {
 /** TaskSchedulerImpl that just tracks a tiny bit more state to enable checks in tests. */
 class TestTaskScheduler(sc: SparkContext) extends TaskSchedulerImpl(sc) {
   /** Set of TaskSets the DAGScheduler has requested executed. */
+  // protected by this
   val runningTaskSets = HashSet[TaskSet]()
 
   override def submitTasks(taskSet: TaskSet): Unit = {
-    runningTaskSets += taskSet
+    synchronized {
+      runningTaskSets += taskSet
+    }
     super.submitTasks(taskSet)
   }
 
   override def taskSetFinished(manager: TaskSetManager): Unit = {
-    runningTaskSets -= manager.taskSet
+    synchronized {
+      runningTaskSets -= manager.taskSet
+    }
     super.taskSetFinished(manager)
   }
 }
