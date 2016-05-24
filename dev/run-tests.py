@@ -506,6 +506,8 @@ def main():
         test_env = "amplab_jenkins"
         # add path for Python3 in Jenkins if we're calling from a Jenkins machine
         os.environ["PATH"] = "/home/anaconda/envs/py3k/bin:" + os.environ.get("PATH")
+        # add java 7 to the environment too
+        os.environ["JAVA_7_HOME"] = "/usr/java/latest"
     else:
         # else we're running locally and can use local settings
         build_tool = "sbt"
