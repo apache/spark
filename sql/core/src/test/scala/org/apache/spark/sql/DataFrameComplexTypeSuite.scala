@@ -61,7 +61,7 @@ class DataFrameComplexTypeSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15285 Generated SpecificSafeProjection.apply method grows beyond 64KB") {
     val ds100_5 = Seq(S100_5()).toDS()
-    ds100_5.show
+    ds100_5.rdd.count
   }
 }
 
