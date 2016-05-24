@@ -45,8 +45,8 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     // Since every we are doing tests for DDL statements,
     // it is better to reset before every test.
     hiveContext.reset()
-    // Register the testData, which will be used in every test.
-    testData.registerTempTable("testData")
+    // Creates a temporary view with testData, which will be used in all tests.
+    testData.createOrReplaceTempView("testData")
   }
 
   test("insertInto() HiveTable") {
@@ -98,7 +98,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     val rowRDD = hiveContext.sparkContext.parallelize(
       (1 to 100).map(i => Row(scala.collection.mutable.HashMap(s"key$i" -> s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithMapValue")
+    df.createOrReplaceTempView("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m MAP <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
 
@@ -171,7 +171,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       StructField("a", ArrayType(StringType, containsNull = false))))
     val rowRDD = hiveContext.sparkContext.parallelize((1 to 100).map(i => Row(Seq(s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithArrayValue")
+    df.createOrReplaceTempView("tableWithArrayValue")
     sql("CREATE TABLE hiveTableWithArrayValue(a Array <STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithArrayValue SELECT a FROM tableWithArrayValue")
 
@@ -188,7 +188,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     val rowRDD = hiveContext.sparkContext.parallelize(
       (1 to 100).map(i => Row(Map(s"key$i" -> s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithMapValue")
+    df.createOrReplaceTempView("tableWithMapValue")
     sql("CREATE TABLE hiveTableWithMapValue(m Map <STRING, STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithMapValue SELECT m FROM tableWithMapValue")
 
@@ -205,7 +205,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     val rowRDD = hiveContext.sparkContext.parallelize(
       (1 to 100).map(i => Row(Row(s"value$i"))))
     val df = hiveContext.createDataFrame(rowRDD, schema)
-    df.registerTempTable("tableWithStructValue")
+    df.createOrReplaceTempView("tableWithStructValue")
     sql("CREATE TABLE hiveTableWithStructValue(s Struct <f: STRING>)")
     sql("INSERT OVERWRITE TABLE hiveTableWithStructValue SELECT s FROM tableWithStructValue")
 

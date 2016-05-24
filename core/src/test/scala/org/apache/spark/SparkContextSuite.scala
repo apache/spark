@@ -108,7 +108,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     assert(byteArray2.length === 0)
   }
 
-  test("addFile works") {
+  test("basic case for addFile and listFiles") {
     val dir = Utils.createTempDir()
 
     val file1 = File.createTempFile("someprefix1", "somesuffix1", dir)
@@ -156,6 +156,18 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
         }
         x
       }).count()
+      assert(sc.listFiles().filter(_.contains("somesuffix1")).size == 1)
+    } finally {
+      sc.stop()
+    }
+  }
+
+  test("add and list jar files") {
+    val jarPath = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
+    try {
+      sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+      sc.addJar(jarPath.toString)
+      assert(sc.listJars().filter(_.contains("TestUDTF.jar")).size == 1)
     } finally {
       sc.stop()
     }

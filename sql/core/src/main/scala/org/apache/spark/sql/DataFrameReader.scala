@@ -440,16 +440,20 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a text file and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
    * contains a single string column named "value".
    *
-   * Each line in the text file is a new row in the resulting Dataset. For example:
+   * If the directory structure of the text files contains partitioning information, those are
+   * ignored in the resulting Dataset. To include partitioning information as columns, use
+   * `read.format("text").load("...")`.
+   *
+   * Each line in the text files is a new element in the resulting Dataset. For example:
    * {{{
    *   // Scala:
-   *   sqlContext.read.text("/path/to/spark/README.md")
+   *   spark.read.text("/path/to/spark/README.md")
    *
    *   // Java:
-   *   sqlContext.read().text("/path/to/spark/README.md")
+   *   spark.read().text("/path/to/spark/README.md")
    * }}}
    *
    * @param paths input path
@@ -457,7 +461,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).as[String](sparkSession.implicits.newStringEncoder)
+    format("text").load(paths : _*).select("value")
+      .as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

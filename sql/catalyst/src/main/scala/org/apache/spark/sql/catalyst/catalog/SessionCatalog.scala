@@ -111,13 +111,13 @@ class SessionCatalog(
     fs.makeQualified(hadoopPath)
   }
 
-  protected[this] def requireDbExists(db: String): Unit = {
+  private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
     }
   }
 
-  protected[this] def requireTableExists(name: TableIdentifier): Unit = {
+  private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
       val db = name.database.getOrElse(currentDb)
       throw new NoSuchTableException(db = db, table = name.table)

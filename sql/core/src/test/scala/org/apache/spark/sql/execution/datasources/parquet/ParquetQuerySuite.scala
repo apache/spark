@@ -46,7 +46,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    spark.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     // Query appends, don't test with both read modes.
     withParquetTable(data, "t", false) {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
@@ -58,7 +58,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    spark.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withParquetTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(spark.table("t"), data.map(Row.fromTuple))

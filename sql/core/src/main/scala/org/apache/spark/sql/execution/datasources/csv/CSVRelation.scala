@@ -32,8 +32,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -95,6 +93,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    verifySchema(dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(options)
     csvOptions.compressionCodec.foreach { codec =>
@@ -102,6 +101,17 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
 
     new CSVOutputWriterFactory(csvOptions)
+  }
+
+  private def verifySchema(schema: StructType): Unit = {
+    schema.foreach { field =>
+      field.dataType match {
+        case _: ArrayType | _: MapType | _: StructType =>
+          throw new UnsupportedOperationException(
+            s"CSV data source does not support ${field.dataType.simpleString} data type.")
+        case _ =>
+      }
+    }
   }
 
   override def buildReader(
@@ -194,21 +204,30 @@ private[sql] class CsvOutputWriter(
   private[this] val csvWriter = new CsvWriter(writer, writerSettings)
   private[this] var writeHeader = options.headerFlag
 
+  private val FLUSH_BATCH_SIZE = 1024L
+  private var records: Long = 0L
+
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
     // TODO: Instead of converting and writing every row, we should use the univocity buffer
     UnivocityGenerator(dataSchema, csvWriter, headers, writeHeader, options)(row)
-    csvWriter.flush()
+    records += 1
+    if (records % FLUSH_BATCH_SIZE == 0) {
+      flush()
+    }
+    writeHeader = false
+  }
 
+  private def flush(): Unit = {
+    csvWriter.flush()
     result.set(writer.toString)
     writer.reset()
-
-    writeHeader = false
     recordWriter.write(NullWritable.get(), result)
   }
 
   override def close(): Unit = {
+    flush()
     csvWriter.close()
     recordWriter.close(context)
   }
