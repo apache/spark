@@ -91,7 +91,7 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     newSession.stop()
   }
 
-  test("create sparkContext first then sparkSession") {
+  test("create SparkContext first then SparkSession") {
     sparkContext.stop()
     val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
     val sparkContext2 = new SparkContext(conf)
