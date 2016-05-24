@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.util.Properties
+
 import org.apache.spark.internal.config.{ConfigEntry, OptionalConfigEntry}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -55,6 +57,24 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def set(key: String, value: Long): Unit = {
     set(key, value.toString)
+  }
+
+  /**
+   * Set the given Spark runtime configuration property.
+   *
+   * @since 2.0.0
+   */
+  protected[sql] def set[T](entry: ConfigEntry[T], value: T): Unit = {
+    sqlConf.setConf(entry, value)
+  }
+
+  /**
+   * Set the given Spark runtime configuration properties.
+   *
+   * @since 2.0.0
+   */
+  def set(props: Properties): Unit = {
+    sqlConf.setConf(props)
   }
 
   /**
@@ -123,6 +143,15 @@ class RuntimeConfig private[sql](sqlConf: SQLConf = new SQLConf) {
    */
   def unset(key: String): Unit = {
     sqlConf.unsetConf(key)
+  }
+
+  /**
+   * Resets all the configuration properties.
+   *
+   * @since 2.0.0
+   */
+  def clear(): Unit = {
+    sqlConf.clear()
   }
 
   /**

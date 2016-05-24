@@ -310,7 +310,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
 
     test(s"PushDown Returns $expectedCount: $sqlString") {
       // These tests check a particular plan, disable whole stage codegen.
-      caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
+      caseInsensitiveContext.runtimeConf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED, false)
       try {
         val queryExecution = sql(sqlString).queryExecution
         val rawPlan = queryExecution.executedPlan.collect {
@@ -337,7 +337,7 @@ class FilteredScanSuite extends DataSourceTest with SharedSQLContext with Predic
               queryExecution)
         }
       } finally {
-        caseInsensitiveContext.conf.setConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
+        caseInsensitiveContext.runtimeConf.set(SQLConf.WHOLESTAGE_CODEGEN_ENABLED,
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.defaultValue.get)
       }
     }

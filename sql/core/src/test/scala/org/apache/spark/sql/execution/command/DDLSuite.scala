@@ -130,7 +130,8 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql(s"CREATE DATABASE db2")
         val pathInCatalog = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
         assert("file" === pathInCatalog.getScheme)
-        val expectedPath = appendTrailingSlash(sqlContext.conf.warehousePath) + "db2.db"
+        val expectedPath =
+          appendTrailingSlash(sqlContext.sessionState.conf.warehousePath) + "db2.db"
         assert(expectedPath === pathInCatalog.getPath)
       }
 

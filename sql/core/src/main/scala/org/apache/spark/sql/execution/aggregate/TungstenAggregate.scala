@@ -478,7 +478,7 @@ case class TungstenAggregate(
       .forall(!DecimalType.isByteArrayDecimalType(_))
 
     isSupported  && isNotByteArrayDecimalType &&
-      schemaLength <= sqlContext.conf.vectorizedAggregateMapMaxColumns
+      schemaLength <= sqlContext.sessionState.conf.vectorizedAggregateMapMaxColumns
   }
 
   private def doProduceWithKeys(ctx: CodegenContext): String = {

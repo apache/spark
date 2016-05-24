@@ -37,8 +37,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
 
   private val originalTimeZone = TimeZone.getDefault
   private val originalLocale = Locale.getDefault
-  private val originalColumnBatchSize = TestHive.conf.columnBatchSize
-  private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
+  private val originalColumnBatchSize = TestHive.sessionState.conf.columnBatchSize
+  private val originalInMemoryPartitionPruning = TestHive.sessionState.conf.inMemoryPartitionPruning
   private val originalConvertMetastoreOrc = TestHive.sessionState.convertMetastoreOrc
   private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
 

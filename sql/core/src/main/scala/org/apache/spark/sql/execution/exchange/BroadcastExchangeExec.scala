@@ -53,7 +53,7 @@ case class BroadcastExchangeExec(
 
   @transient
   private val timeout: Duration = {
-    val timeoutValue = sqlContext.conf.broadcastTimeout
+    val timeoutValue = sqlContext.sessionState.conf.broadcastTimeout
     if (timeoutValue < 0) {
       Duration.Inf
     } else {

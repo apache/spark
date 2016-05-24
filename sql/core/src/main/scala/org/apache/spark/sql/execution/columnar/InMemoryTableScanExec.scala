@@ -105,7 +105,7 @@ private[sql] case class InMemoryRelation(
       if (batchStats.value.isEmpty) {
         // Underlying columnar RDD hasn't been materialized, no useful statistics information
         // available, return the default statistics.
-        Statistics(sizeInBytes = child.sqlContext.conf.defaultSizeInBytes)
+        Statistics(sizeInBytes = child.sqlContext.sessionState.conf.defaultSizeInBytes)
       } else {
         // Underlying columnar RDD has been materialized, required information has also been
         // collected via the `batchStats` accumulator, compute the final statistics,
@@ -292,7 +292,8 @@ private[sql] case class InMemoryTableScanExec(
   lazy val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
   lazy val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
 
-  private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
+  private val inMemoryPartitionPruningEnabled =
+    sqlContext.sessionState.conf.inMemoryPartitionPruning
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
