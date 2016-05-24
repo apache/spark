@@ -46,7 +46,8 @@ dispatchFunc <- function(newFuncSig, x, ...) {
   if (missing(x) && length(list(...)) == 0) {
     f()
   } else if (class(x) == "jobj" &&
-      getClassName.jobj(x) == "org.apache.spark.sql.SQLContext") {
+      (getClassName.jobj(x) == "org.apache.spark.sql.SQLContext" ||
+       getClassName.jobj(x) == "org.apache.spark.sql.hive.HiveContext")) {
     .Deprecated(newFuncSig, old = paste0(funcName, "(sqlContext...)"))
     f(...)
   } else {
