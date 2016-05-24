@@ -1824,6 +1824,24 @@ private[spark] object Utils extends Logging {
     }
   }
 
+   /**
+    * Normalize the local path for windows. If the path is absolute (starts with drive label)
+    * it will append a leading slash. The back slashes will be replaced with slash
+    * @param path the path to be normalized
+    * @return the normalized path
+    */
+  def normalizePath(path: String): String = {
+    if (isWindows) {
+      if (path.matches("""^[A-Za-z]:[/\\].*$""")) {
+        "/" + path.replace("\\", "/")
+      } else {
+        path.replace("\\", "/")
+      }
+    } else {
+      path
+    }
+  }
+
   /**
    * Return a well-formed URI for the file described by a user input string.
    *
@@ -1832,7 +1850,15 @@ private[spark] object Utils extends Logging {
    */
   def resolveURI(path: String): URI = {
     try {
-      val uri = new URI(path)
+      // append slash if the path starts with drive label on windows
+      val escapedPath =
+        if (Utils.isWindows && path.matches("""^[A-Za-z]:[/\\].*$""")) {
+          "/" + path // windows path like D:/ will be recognize as schema D
+        } else {
+          path
+        }
+
+      val uri = new URI(escapedPath)
       if (uri.getScheme() != null) {
         return uri
       }

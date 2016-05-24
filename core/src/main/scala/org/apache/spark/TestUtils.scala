@@ -92,7 +92,8 @@ private[spark] object TestUtils {
     val jarStream = new JarOutputStream(jarFileStream, new java.util.jar.Manifest())
 
     for (file <- files) {
-      val jarEntry = new JarEntry(Paths.get(directoryPrefix.getOrElse(""), file.getName).toString)
+      val jarEntry = new JarEntry(
+        Paths.get(directoryPrefix.getOrElse(""), file.getName).toString.replace("\\", "/"))
       jarStream.putNextEntry(jarEntry)
 
       val in = new FileInputStream(file)
