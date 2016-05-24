@@ -192,9 +192,10 @@ case class DataSource(
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
           throw new IllegalArgumentException(
-            "Schema must be specified for creating a streaming source DataFrame. " +
-              "If some input data already exists in the directory, you can create " +
-              "a static DataFrame with spark.read.load(path) and infer schema from it.")
+            "Schema must be specified when creating a streaming source DataFrame. " +
+              "If some files already exist in the directory, then depending on the file format " +
+              "you may be able to create a static DataFrame on that directory with " +
+              "'spark.read.load(directory)' and infer schema from it.")
         }
         SourceInfo(s"FileSource[$path]", inferFileFormatSchema(format))
 
