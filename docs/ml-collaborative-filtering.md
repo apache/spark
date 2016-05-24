@@ -29,6 +29,10 @@ following parameters:
   *baseline* confidence in preference observations (defaults to 1.0).
 * *nonnegative* specifies whether or not to use nonnegative constraints for least squares (defaults to `false`).
 
+**Note:** The DataFrame-based API for ALS currently only supports integers for user and item ids.
+Other numeric types are supported for the user and item id columns, 
+but the ids must be within the integer value range. 
+
 ### Explicit vs. implicit feedback
 
 The standard approach to matrix factorization based collaborative filtering treats 
