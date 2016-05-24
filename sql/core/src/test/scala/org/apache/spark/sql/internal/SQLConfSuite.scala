@@ -35,7 +35,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     // Set a conf first.
     spark.conf.set(testKey, testVal)
     // Clear the conf.
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
     assert(spark.conf.getAll === TestSQLContext.overrideConfs)
 
@@ -50,11 +50,11 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
     assert(spark.conf.getAll.contains(testKey))
 
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
   }
 
   test("parse SQL set commands") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     sql(s"set $testKey=$testVal")
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
@@ -72,11 +72,11 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     sql(s"set $key=")
     assert(spark.conf.get(key, "0") === "")
 
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
   }
 
   test("set command for display") {
-    spark.wrapped.conf.clear()
+    spark.sessionState.conf.clear()
     checkAnswer(
       sql("SET").where("key = 'spark.sql.groupByOrdinal'").select("key", "value"),
       Nil)
@@ -97,9 +97,9 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("deprecated property") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     val original = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
-    try{
+    try {
       sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
       assert(spark.conf.get(SQLConf.SHUFFLE_PARTITIONS) === 10)
     } finally {
@@ -107,8 +107,55 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("reset - public conf") {
+    spark.sqlContext.conf.clear()
+    val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
+    try {
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      sql(s"set ${SQLConf.GROUP_BY_ORDINAL.key}=false")
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === false)
+      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 1)
+      sql(s"reset")
+      assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
+      assert(sql(s"set").where(s"key = '${SQLConf.GROUP_BY_ORDINAL.key}'").count() == 0)
+    } finally {
+      sql(s"set ${SQLConf.GROUP_BY_ORDINAL}=$original")
+    }
+  }
+
+  test("reset - internal conf") {
+    spark.sqlContext.conf.clear()
+    val original = spark.conf.get(SQLConf.NATIVE_VIEW)
+    try {
+      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
+      sql(s"set ${SQLConf.NATIVE_VIEW.key}=false")
+      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === false)
+      assert(sql(s"set").where(s"key = '${SQLConf.NATIVE_VIEW.key}'").count() == 1)
+      sql(s"reset")
+      assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
+      assert(sql(s"set").where(s"key = '${SQLConf.NATIVE_VIEW.key}'").count() == 0)
+    } finally {
+      sql(s"set ${SQLConf.NATIVE_VIEW}=$original")
+    }
+  }
+
+  test("reset - user-defined conf") {
+    spark.sqlContext.conf.clear()
+    val userDefinedConf = "x.y.z.reset"
+    try {
+      assert(spark.conf.getOption(userDefinedConf).isEmpty)
+      sql(s"set $userDefinedConf=false")
+      assert(spark.conf.get(userDefinedConf) === "false")
+      assert(sql(s"set").where(s"key = '$userDefinedConf'").count() == 1)
+      sql(s"reset")
+      assert(spark.conf.getOption(userDefinedConf).isEmpty)
+    } finally {
+      spark.conf.unset(userDefinedConf)
+    }
+  }
+
   test("invalid conf value") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     val e = intercept[IllegalArgumentException] {
       sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
     }
@@ -116,7 +163,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Test SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE's method") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
 
     spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "100")
     assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 100)
@@ -144,7 +191,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
     }
 
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
   }
 
   test("SparkSession can access configs set in SparkConf") {

@@ -34,7 +34,9 @@ case class ReflectData(
     decimalField: java.math.BigDecimal,
     date: Date,
     timestampField: Timestamp,
-    seqInt: Seq[Int])
+    seqInt: Seq[Int],
+    javaBigInt: java.math.BigInteger,
+    scalaBigInt: scala.math.BigInt)
 
 case class NullReflectData(
     intField: java.lang.Integer,
@@ -77,13 +79,15 @@ class ScalaReflectionRelationSuite extends SparkFunSuite with SharedSQLContext {
 
   test("query case class RDD") {
     val data = ReflectData("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
-      new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3))
+      new java.math.BigDecimal(1), Date.valueOf("1970-01-01"), new Timestamp(12345), Seq(1, 2, 3),
+      new java.math.BigInteger("1"), scala.math.BigInt(1))
     Seq(data).toDF().createOrReplaceTempView("reflectData")
 
     assert(sql("SELECT * FROM reflectData").collect().head ===
       Row("a", 1, 1L, 1.toFloat, 1.toDouble, 1.toShort, 1.toByte, true,
         new java.math.BigDecimal(1), Date.valueOf("1970-01-01"),
-        new Timestamp(12345), Seq(1, 2, 3)))
+        new Timestamp(12345), Seq(1, 2, 3), new java.math.BigDecimal(1),
+        new java.math.BigDecimal(1)))
   }
 
   test("query case class RDD with nulls") {
