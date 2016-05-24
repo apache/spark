@@ -262,7 +262,6 @@ object Utils {
       groupingExpressions: Seq[NamedExpression],
       functionsWithoutDistinct: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
-      outputMode: OutputMode,
       child: SparkPlan): Seq[SparkPlan] = {
 
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
@@ -313,9 +312,8 @@ object Utils {
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = restored)
     }
-    val returnAllStates = if (outputMode == OutputMode.Complete) true else false
-
-    val saved = StateStoreSaveExec(groupingAttributes, None, returnAllStates, partialMerged2)
+    val saved = StateStoreSaveExec(
+      groupingAttributes, stateId = None, returnAllStates = None, partialMerged2)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))

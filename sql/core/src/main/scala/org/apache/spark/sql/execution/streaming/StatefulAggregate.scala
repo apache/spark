@@ -82,12 +82,14 @@ case class StateStoreRestoreExec(
 case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
-    returnAllStates: Boolean,
+    returnAllStates: Option[Boolean],
     child: SparkPlan)
   extends execution.UnaryExecNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val saveAndReturnFunc = if (returnAllStates) saveAndReturnAll _ else saveAndReturnUpdated _
+    assert(returnAllStates.nonEmpty,
+      "Incorrect planning in IncrementalExecution, returnAllStates have not been set")
+    val saveAndReturnFunc = if (returnAllStates.get) saveAndReturnAll _ else saveAndReturnUpdated _
     child.execute().mapPartitionsWithStateStore(
       getStateId.checkpointLocation,
       operatorId = getStateId.operatorId,
