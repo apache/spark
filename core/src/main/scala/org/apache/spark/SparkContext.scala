@@ -1387,6 +1387,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Returns a list of file paths that are added to resources.
+   */
+  def listFiles(): Seq[String] = addedFiles.keySet.toSeq
+
+  /**
    * Add a file to be downloaded with this Spark job on every node.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
@@ -1723,6 +1728,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
     postEnvironmentUpdate()
   }
+
+  /**
+   * Returns a list of jar files that are added to resources.
+   */
+  def listJars(): Seq[String] = addedJars.keySet.toSeq
 
   // Shut down the SparkContext.
   def stop() {

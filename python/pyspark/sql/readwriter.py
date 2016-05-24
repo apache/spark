@@ -193,6 +193,9 @@ class DataFrameReader(object):
                                         set, it uses the default value, ``true``.
         :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is
                                         set, it uses the default value, ``false``.
+        :param allowNonNumericNumbers: allows using non-numeric numbers such as "NaN", "Infinity",
+                                       "-Infinity", "INF", "-INF", which are convertd to floating
+                                       point numbers, ``true``.
         :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character
                                                    using backslash quoting mechanism. If None is
                                                    set, it uses the default value, ``false``.
