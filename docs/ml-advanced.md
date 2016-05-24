@@ -32,7 +32,7 @@ algorithm in the family of quasi-Newton methods to solve the optimization proble
 `$\min_{\wv \in\R^d} \; f(\wv)$`. The L-BFGS method approximates the objective function locally as a 
 quadratic without evaluating the second partial derivatives of the objective function to construct the 
 Hessian matrix. The Hessian matrix is approximated by previous gradient evaluations, so there is no 
-vertical scalability issue (the number of training features) when computing the Hessian matrix 
+vertical scalability issue (the number of training features) unlike computing the Hessian matrix 
 explicitly in Newton's method. As a result, L-BFGS often achieves faster convergence compared with 
 other first-order optimizations.
 
@@ -45,11 +45,11 @@ L-BFGS is used as a solver for [LinearRegression](api/scala/index.html#org.apach
 [AFTSurvivalRegression](api/scala/index.html#org.apache.spark.ml.regression.AFTSurvivalRegression)
 and [MultilayerPerceptronClassifier](api/scala/index.html#org.apache.spark.ml.classification.MultilayerPerceptronClassifier).
 
-The `spark.ml` L-BFGS solver calls the corresponding implementation in [breeze](https://github.com/scalanlp/breeze/blob/master/math/src/main/scala/breeze/optimize/LBFGS.scala).
+MLlib L-BFGS solver calls the corresponding implementation in [breeze](https://github.com/scalanlp/breeze/blob/master/math/src/main/scala/breeze/optimize/LBFGS.scala).
 
 ## Normal equation solver for weighted least squares (normal)
 
-`spark.ml` implements normal equation solver for weighted least squares by [WeightedLeastSquares](https://github.com/apache/spark/blob/master/mllib/src/main/scala/org/apache/spark/ml/optim/WeightedLeastSquares.scala).
+MLlib implements normal equation solver for [weighted least squares](https://en.wikipedia.org/wiki/Least_squares#Weighted_least_squares) by [WeightedLeastSquares](https://github.com/apache/spark/blob/master/mllib/src/main/scala/org/apache/spark/ml/optim/WeightedLeastSquares.scala).
 
 Given $n$ weighted observations $(w_i, a_i, b_i)$:
 
@@ -69,11 +69,11 @@ Unlike the original dataset which can only be stored in distributed system,
 these statistics can be easily loaded into memory on a single machine, and then we can solve the objective function through Cholesky factorization on the driver.
 
 WeightedLeastSquares only supports L2 regularization and provides options to enable or disable regularization, standardizing features and labels.
-In order to take the normal equation approach efficiently, WeightedLeastSquares only supports the number of features is no more than 4096.
+In order to take the normal equation approach efficiently, WeightedLeastSquares requires that the number of features be no more than 4096. For larger problems, use L-BFGS instead.
 
 ## Iteratively re-weighted least squares (IRLS)
 
-`spark.ml` implements iteratively reweighted least squares (IRLS) by [IterativelyReweightedLeastSquares](https://github.com/apache/spark/blob/master/mllib/src/main/scala/org/apache/spark/ml/optim/IterativelyReweightedLeastSquares.scala).
+MLlib implements [iteratively reweighted least squares (IRLS)](https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares) by [IterativelyReweightedLeastSquares](https://github.com/apache/spark/blob/master/mllib/src/main/scala/org/apache/spark/ml/optim/IterativelyReweightedLeastSquares.scala).
 It can be used to find the maximum likelihood estimates of a generalized linear model (GLM), find M-estimator in robust regression and other optimization problems.
 Refer to [Iteratively Reweighted Least Squares for Maximum Likelihood Estimation, and some Robust and Resistant Alternatives](http://www.jstor.org/stable/2345503) for more information.
 
@@ -83,6 +83,6 @@ It solves certain optimization problems iteratively:
 * solve a weighted least squares (WLS) problem by WeightedLeastSquares.
 * repeat above steps until convergence.
 
-Due to it involves solving a weighted least squares (WLS) problem by WeightedLeastSquares in each step of the iteration,
-it also only supports the number of features is no more than 4096.
-Currently IRLS was used as the default solver of [GeneralizedLinearRegression](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression).
+Since it involves solving a weighted least squares (WLS) problem by WeightedLeastSquares in each iteration,
+it also requires the number of features to be no more than 4096.
+Currently IRLS is used as the default solver of [GeneralizedLinearRegression](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression).
