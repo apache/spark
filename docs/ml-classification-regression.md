@@ -385,19 +385,22 @@ prediction problems including linear regression, Poisson regression, logistic re
 Currently in `spark.ml`, only a subset of the exponential family distributions are supported and they are listed
 [below](#available-families).
 
-**NOTE**: Spark currently only supports up to 4096 features for GLM models, and will throw an exception if this 
-constraint is exceeded. See the [optimization section](#optimization) for more details.
-
-In a GLM the resonse variable $Y_i$ is assumed to be drawn from an exponential family distribution:
-
-$$
-Y_i \sim f\left(\cdot|\theta_i, \phi, w_i\right)
-$$
+**NOTE**: Spark currently only supports up to 4096 features through its `GeneralizedLinearRegression`
+interface, and will throw an exception if this constraint is exceeded. See the [advanced section](ml-advanced) for more details.
+ Still, for linear and logistic regression, models with an increased number of features can be trained 
+ using the `LinearRegression` and `LogisticRegression` estimators.
 
 An exponential family distribution is any probability distribution of the form
 
 $$
 f\left(y|\theta, \phi, w\right) = \exp{\left(\frac{y\theta - b(\theta)}{\phi/w} - c(y, \phi)\right)}
+$$
+
+where $\theta$ and $\phi$ are location and scale parameters, and $w_i$ is known as a _prior weight_ and
+is usually equal to one. In a GLM the response variable $Y_i$ is assumed to be drawn from an exponential family distribution:
+
+$$
+Y_i \sim f\left(\cdot|\theta_i, \phi, w_i\right)
 $$
 
 where the parameter of interest $\theta_i$ is related to the expected value of the response variable
@@ -441,6 +444,8 @@ Spark's generalized linear regression interface also provides summary statistics
 fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
 others.
 
+[See here](http://data.princeton.edu/wws509/notes/) for a more comprehensive review of GLMs and their applications.
+
 ###  Available families
 
 <table class="table">
@@ -474,26 +479,6 @@ others.
     <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
   </tbody>
 </table>
-
-### Optimization
-
-The `spark.ml` GLM implements the method of 
-[iteratively re-weighted least squares](https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares) (IRLS) for finding
-the optimal regression coefficients. GLMs seek to find a maximum likelihood estimate of the
-regression coefficients by finding zeros of the [score equation](https://en.wikipedia.org/wiki/Score_(statistics)).
-The method of IRLS uses a first-order Taylor approximation of the score equation in the vicinity of an initial guess for the expected response
- $\vec{\mu}$. This approximation can be manipulated to the form of a simple weighted least squares regression, which is straightforward
- to solve using a normal equation solver. Solving this initial weighted least squares problem yields a (likely poor) approximation
- to the regression coefficients $\vec{\beta}$. However, this approximation of $\vec{\beta}$ generates an improved approximation for $\vec{\mu}$
- using the fact that $\vec{\mu} = g^{-1}(X\vec{\beta})$. In turn, an even more improved approximation to $\vec{\beta}$ can be found
- solving the weighted least squares problem again. The true value of $\vec{\beta}$ is converged upon by repeatedly solving weighted least
- squares problems in this manner (hence the name, iteratively re-weighted least squares).
-
- Note that solving the normal equations, as in a weighted least squares, for a linear system $A\vec{x} = \vec{b}$ involves 
- inverting the covariance matrix $A^TA$. If $A$ is an $M \times N$ matrix, then $A^TA$ has dimension $N \times N$. When N is relatively
- small (< 4096) then the covariance matrix can (generally) fit into main memory on the driver node and the linear system can
- then be solved using well-established linear subroutines like the Cholesky decomposition. For this reason, it is important
- to note that the `spark.ml` generalized linear regression module currently does not accept more than 4096 feature columns.
 
 **Example**
 
