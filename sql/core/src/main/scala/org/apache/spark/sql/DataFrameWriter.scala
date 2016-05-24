@@ -84,6 +84,25 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `OutputMode.Append`:   only the new rows in the streaming DataFrame/Dataset will be
+   *                            written to the sink
+   *   - `OutputMode.Update`:   only the changed rows in the streaming DataFrame/Dataset will be
+   *                            written to the sink every time there is some updates
+   *   - `OutputMode.Complete`: all the rows in the streaming DataFrame/Dataset will be written
+   *                            to the sink every time these is some updates
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: OutputMode): DataFrameWriter = {
+    assertStreaming("outputMode() can only be called on continuous queries")
+    this.outputMode = outputMode
+    this
+  }
+
+
+  /**
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
    *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
    *                 the sink
    *   - `update`:   only the changed rows in the streaming DataFrame/Dataset will be written to

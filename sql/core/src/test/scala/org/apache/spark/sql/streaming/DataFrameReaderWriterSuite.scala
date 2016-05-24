@@ -418,6 +418,35 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     assert(e.getMessage == "mode() can only be called on non-continuous queries;")
   }
 
+  test("check outputMode(OutputMode) can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.outputMode(OutputMode.Append))
+    Seq("outputmode", "continuous queries").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
+  test("check outputMode(string) can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.outputMode("append"))
+    Seq("outputmode", "continuous queries").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
+  test("check outputMode(string) throws expcetion on incorrect mode") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+    val w = df.write
+    val e = intercept[IllegalArgumentException](w.outputMode("xyz"))
+    Seq("output mode", "unknown", "xyz").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
   test("check bucketBy() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
