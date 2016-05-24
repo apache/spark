@@ -14,6 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+from pyspark.debugutil import check_debugger
+check_debugger()
 
 """
 Unit tests for PySpark; additional tests are implemented as doctests in

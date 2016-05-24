@@ -32,6 +32,9 @@ if sys.version < '3':
 else:
     import queue as Queue
 
+import pydevd
+print("connecting to debug server, host %s, port %s" % ('n131', 5678))
+pydevd.settrace('n131',port=5678,stdoutToServer=False,stderrToServer=False)
 
 # Append `SPARK_HOME/dev` to the Python path so that we can import the sparktestsupport module
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dev/"))
@@ -63,7 +66,7 @@ else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
 
 
-def run_individual_python_test(test_name, pyspark_python):
+def run_individual_python_test(test_name, pyspark_python, is_single_test=False, debug_server=None, debug_port=None):
     env = dict(os.environ)
     env.update({
         'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
@@ -72,10 +75,19 @@ def run_individual_python_test(test_name, pyspark_python):
         'PYSPARK_PYTHON': which(pyspark_python),
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
+    if is_single_test:
+        if debug_server != None:
+            env.update({'PYTHON_REMOTE_DEBUG_SERVER': debug_server})
+        if debug_port != None:
+            env.update({'PYTHON_REMOTE_DEBUG_PORT': '%d' % debug_port})
+            
     LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
-        per_test_output = tempfile.TemporaryFile()
+        if is_single_test:
+            per_test_output = None
+        else:
+            per_test_output = tempfile.TemporaryFile()
         retcode = subprocess.Popen(
             [os.path.join(SPARK_HOME, "bin/pyspark"), test_name],
             stderr=per_test_output, stdout=per_test_output, env=env).wait()
@@ -88,16 +100,17 @@ def run_individual_python_test(test_name, pyspark_python):
     # Exit on the first failure.
     if retcode != 0:
         try:
-            with FAILURE_REPORTING_LOCK:
-                with open(LOG_FILE, 'ab') as log_file:
+            if per_test_output != None:
+                with FAILURE_REPORTING_LOCK:
+                    with open(LOG_FILE, 'ab') as log_file:
+                        per_test_output.seek(0)
+                        log_file.writelines(per_test_output)
                     per_test_output.seek(0)
-                    log_file.writelines(per_test_output)
-                per_test_output.seek(0)
-                for line in per_test_output:
-                    decoded_line = line.decode()
-                    if not re.match('[0-9]+', decoded_line):
-                        print(decoded_line, end='')
-                per_test_output.close()
+                    for line in per_test_output:
+                        decoded_line = line.decode()
+                        if not re.match('[0-9]+', decoded_line):
+                            print(decoded_line, end='')
+                    per_test_output.close()
         except:
             LOGGER.exception("Got an exception while trying to print failed test output")
         finally:
@@ -106,7 +119,8 @@ def run_individual_python_test(test_name, pyspark_python):
             # this code is invoked from a thread other than the main thread.
             os._exit(-1)
     else:
-        per_test_output.close()
+        if per_test_output != None:
+           per_test_output.close()
         LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
@@ -140,7 +154,19 @@ def parse_opts():
         "--verbose", action="store_true",
         help="Enable additional debug logging"
     )
-
+    parser.add_option(
+        "--single-test", type="string", default=None,
+        help="specify a python module to run single python test."
+    )
+    parser.add_option(
+        "--debug-server", type="string", default=None,
+        help="debug server host, only used in single test."
+    )
+    parser.add_option(
+        "--debug-port", type="int", default=5678,
+        help="debug server port, only used in single test."
+    )
+    
     (opts, args) = parser.parse_args()
     if args:
         parser.error("Unsupported arguments: %s" % ' '.join(args))
@@ -169,6 +195,15 @@ def main():
                   (module_name, ", ".join(python_modules)))
             sys.exit(-1)
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
+    
+    if(opts.single_test != None):
+        test_goal = opts.single_test
+        LOGGER.info("Will test the single Python module: %s", test_goal)
+        for python_exec in python_execs:
+            run_individual_python_test(test_goal, python_exec,
+                                       True, opts.debug_server, opts.debug_port)
+        return
+    
     LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
 
     task_queue = Queue.PriorityQueue()
