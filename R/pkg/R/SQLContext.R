@@ -43,8 +43,6 @@ dispatchFunc <- function(newFuncSig, x, ...) {
   funcName <- as.character(sys.call(sys.parent())[[1]])
   f <- get(paste0(funcName, ".default"))
   # Strip sqlContext from list of parameters and then pass the rest along.
-  # In the following, if '&' is used instead of '&&', it warns about
-  # "the condition has length > 1 and only the first element will be used"
   if (missing(x) && length(list(...)) == 0) {
     f()
   } else if (class(x) == "jobj" &&
