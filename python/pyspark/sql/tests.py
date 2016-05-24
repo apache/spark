@@ -262,7 +262,7 @@ class SQLTests(ReusedPySparkTestCase):
         try:
             import dill
         except:
-            pass
+            skip("dill not installed, skipping dill test")
 
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -277,7 +277,7 @@ class SQLTests(ReusedPySparkTestCase):
         try:
             import dill
         except:
-            pass
+            skip("dill not installed, skipping dill test")
 
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -294,7 +294,7 @@ class SQLTests(ReusedPySparkTestCase):
         try:
             import dill
         except:
-            pass
+            skip("dill not installed, skipping dill test")
 
         d = [Row(number=i, squared=i**2) for i in range(2)]
         rdd = self.sc.parallelize(d)
