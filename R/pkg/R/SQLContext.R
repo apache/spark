@@ -652,7 +652,7 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   dataFrame(sdf)
 }
 
-#' @aliases read.df
+#' @rdname read.df
 #' @name loadDF
 loadDF <- function(x, ...) {
   dispatchFunc("loadDF(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
