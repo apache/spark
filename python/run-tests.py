@@ -63,7 +63,8 @@ else:
     raise Exception("Cannot find assembly build directory, please build Spark first.")
 
 
-def run_individual_python_test(test_name, pyspark_python, is_single_test=False, debug_server=None, debug_port=None):
+def run_individual_python_test(test_name, pyspark_python,
+                               is_single_test=False, debug_server=None, debug_port=None):
     env = dict(os.environ)
     env.update({
         'SPARK_DIST_CLASSPATH': SPARK_DIST_CLASSPATH,
@@ -73,11 +74,11 @@ def run_individual_python_test(test_name, pyspark_python, is_single_test=False, 
         'PYSPARK_DRIVER_PYTHON': which(pyspark_python)
     })
     if is_single_test:
-        if debug_server != None:
+        if debug_server is not None:
             env.update({'PYTHON_REMOTE_DEBUG_SERVER': debug_server})
-        if debug_port != None:
+        if debug_port is not None:
             env.update({'PYTHON_REMOTE_DEBUG_PORT': '%d' % debug_port})
-            
+
     LOGGER.debug("Starting test(%s): %s", pyspark_python, test_name)
     start_time = time.time()
     try:
@@ -97,7 +98,7 @@ def run_individual_python_test(test_name, pyspark_python, is_single_test=False, 
     # Exit on the first failure.
     if retcode != 0:
         try:
-            if per_test_output != None:
+            if per_test_output is not None:
                 with FAILURE_REPORTING_LOCK:
                     with open(LOG_FILE, 'ab') as log_file:
                         per_test_output.seek(0)
@@ -116,8 +117,8 @@ def run_individual_python_test(test_name, pyspark_python, is_single_test=False, 
             # this code is invoked from a thread other than the main thread.
             os._exit(-1)
     else:
-        if per_test_output != None:
-           per_test_output.close()
+        if per_test_output is not None:
+            per_test_output.close()
         LOGGER.info("Finished test(%s): %s (%is)", pyspark_python, test_name, duration)
 
 
@@ -163,7 +164,7 @@ def parse_opts():
         "--debug-port", type="int", default=5678,
         help="debug server port, only used in single test."
     )
-    
+
     (opts, args) = parser.parse_args()
     if args:
         parser.error("Unsupported arguments: %s" % ' '.join(args))
@@ -192,15 +193,15 @@ def main():
                   (module_name, ", ".join(python_modules)))
             sys.exit(-1)
     LOGGER.info("Will test against the following Python executables: %s", python_execs)
-    
-    if(opts.single_test != None):
+
+    if(opts.single_test is not None):
         test_goal = opts.single_test
         LOGGER.info("Will test the single Python module: %s", test_goal)
         for python_exec in python_execs:
             run_individual_python_test(test_goal, python_exec,
                                        True, opts.debug_server, opts.debug_port)
         return
-    
+
     LOGGER.info("Will test the following Python modules: %s", [x.name for x in modules_to_test])
 
     task_queue = Queue.PriorityQueue()
