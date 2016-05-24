@@ -30,7 +30,7 @@ import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -84,6 +84,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    verifySchema(dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(options)
     csvOptions.compressionCodec.foreach { codec =>
@@ -171,10 +172,22 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
+  private def verifySchema(schema: StructType): Unit = {
+    schema.foreach { field =>
+      field.dataType match {
+        case _: ArrayType | _: MapType | _: StructType =>
+          throw new UnsupportedOperationException(
+            s"CSV data source does not support ${field.dataType.simpleString} data type.")
+        case _ =>
+      }
+    }
+  }
+  
   override def buildWriter(
       sqlContext: SQLContext,
       dataSchema: StructType,
       options: Map[String, String]): OutputWriterFactory = {
+    verifySchema(dataSchema)
     new CSVStreamingOutputWriterFactory(
       sqlContext.conf,
       dataSchema,

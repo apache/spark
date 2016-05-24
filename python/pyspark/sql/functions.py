@@ -1756,6 +1756,9 @@ class UserDefinedFunction(object):
 @since(1.3)
 def udf(f, returnType=StringType()):
     """Creates a :class:`Column` expression representing a user defined function (UDF).
+    Note that the user-defined functions must be deterministic. Due to optimization,
+    duplicate invocations may be eliminated or the function may even be invoked more times than
+    it is present in the query.
 
     >>> from pyspark.sql.types import IntegerType
     >>> slen = udf(lambda s: len(s), IntegerType())
