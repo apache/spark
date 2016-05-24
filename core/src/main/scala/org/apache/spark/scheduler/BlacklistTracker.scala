@@ -199,16 +199,15 @@ private[spark] class BlacklistTracker(
       sched: TaskSchedulerImpl,
       atomTask: StageAndPartition,
       clock: Clock): Set[String] = {
+    // TODO some kind of logging when the blacklist is *updated*
     val executors = executorsOnBlacklistedNode(sched, atomTask) ++
       strategy.getExecutorBlacklist(executorIdToFailureStatus, atomTask, clock)
-    logInfo(s"Blacklisting executors ${executors} for task ${atomTask}")
     updateBlacklistExecutorCache(atomTask, executors)
     executors
   }
 
   private def reEvaluateNodeBlacklistForStageAndUpdateCache(stageId: Int): Set[String] = {
     val nodes = strategy.getNodeBlacklistForStage(executorIdToFailureStatus, stageId, clock)
-    logInfo(s"Blacklisting nodes ${nodes} for stage ${stageId}")
     updateBlacklistNodeCache(nodes)
     nodes
   }
@@ -257,6 +256,10 @@ private[scheduler] trait BlacklistCache extends Logging {
   protected def updateBlacklistNodeForStageCache(
       stageId: Int,
       blacklistNode: Set[String]): Unit = cacheLock.synchronized {
+    val wasBlacklisted = blacklistNodeForStageCache.getOrElse(stageId, Set.empty[String])
+    if (wasBlacklisted != blacklistNode) {
+      logInfo(s"Updating node blacklist for Stage ${stageId} to ${blacklistNode}")
+    }
     if (!_isBlacklistNodeForStageCacheValid) {
       blacklistNodeForStageCache.clear()
     }
