@@ -22,7 +22,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -216,7 +216,25 @@ class SessionCatalog(
     val table = formatTableName(tableDefinition.identifier.table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     requireDbExists(db)
-    externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
+
+    if (newTableDefinition.tableType == CatalogTableType.EXTERNAL) {
+      // !! HACK ALERT !!
+      //
+      // See https://issues.apache.org/jira/browse/SPARK-15269 for more details about why we have to
+      // set `locationUri` and then remove the directory after creating the external table:
+      val tablePath = defaultTablePath(newTableDefinition.identifier)
+      try {
+        externalCatalog.createTable(
+          db,
+          newTableDefinition.withNewStorage(locationUri = Some(tablePath)),
+          ignoreIfExists)
+      } finally {
+        val path = new Path(tablePath)
+        FileSystem.get(path.toUri, hadoopConf).delete(path, true)
+      }
+    } else {
+      externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
+    }
   }
 
   /**

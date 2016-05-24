@@ -118,8 +118,8 @@ case class CreateDataSourceTableCommand(
 /**
  * A command used to create a data source table using the result of a query.
  *
- * Note: This is different from [[CreateTableAsSelect]]. Please check the syntax for difference.
- * This is not intended for temporary tables.
+ * Note: This is different from [[CreateTableAsSelectLogicalPlan]]. Please check the syntax for
+ * difference. This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
  * {{{

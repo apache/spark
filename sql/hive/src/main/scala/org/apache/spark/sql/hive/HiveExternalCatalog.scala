@@ -21,6 +21,7 @@ import java.util
 
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.ql.metadata.HiveException
 import org.apache.thrift.TException
 
@@ -68,7 +69,8 @@ private[spark] class HiveExternalCatalog(client: HiveClient) extends ExternalCat
       body
     } catch {
       case NonFatal(e) if isClientException(e) =>
-        throw new AnalysisException(e.getClass.getCanonicalName + ": " + e.getMessage)
+        throw new AnalysisException(
+          e.getClass.getCanonicalName + ": " + e.getMessage, cause = Some(e))
     }
   }
 
