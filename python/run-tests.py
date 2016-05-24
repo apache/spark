@@ -32,9 +32,6 @@ if sys.version < '3':
 else:
     import queue as Queue
 
-import pydevd
-print("connecting to debug server, host %s, port %s" % ('n131', 5678))
-pydevd.settrace('n131',port=5678,stdoutToServer=False,stderrToServer=False)
 
 # Append `SPARK_HOME/dev` to the Python path so that we can import the sparktestsupport module
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../dev/"))
