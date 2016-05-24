@@ -151,7 +151,7 @@ for more details on the API.
  term frequency across the corpus. An optional parameter `minDF` also affects the fitting process
  by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
  included in the vocabulary. Another optional binary toggle parameter controls the output vector.
- If set to true all nonzero counts are set to 1. This is especially useful for modelling discrete
+ If set to true all nonzero counts are set to 1. This is especially useful for discrete
  probabilistic models that model binary events rather than integer counts.
 
 **Examples**
@@ -1102,9 +1102,9 @@ for more details on the API.
 
 `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
 categorical features. The number of bins is set by the `numBuckets` parameter.
-The bin ranges are chosen using an approximate algorithm (see the documentation for [approxQuantile](https://github.com/apache/spark/blob/master/sql/core/src/main/scala/org/apache/spark/sql/DataFrameStatFunctions.scala)
+The bin ranges are chosen using an approximate algorithm (see the documentation for [approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions.scala)
 for a detailed description). The precision of the approximation can be controlled with the
-`relativeError` parameter. When set to zero, exact quantiles are calculated.
+`relativeError` parameter. When set to zero, exact quantiles are calculated. Computing exact quantiles is an expensive operation.
 The lower and upper bin bounds will be `-Infinity` and `+Infinity` covering all real values.
 
 **Examples**
