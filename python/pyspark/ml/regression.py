@@ -887,7 +887,8 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
         return RandomForestRegressionModel(java_model)
 
 
-class RandomForestRegressionModel(TreeEnsembleModels, JavaPredictionModel, JavaMLWritable, JavaMLReadable):
+class RandomForestRegressionModel(TreeEnsembleModels, JavaPredictionModel, JavaMLWritable,
+                                  JavaMLReadable):
     """
     .. note:: Experimental
 
