@@ -1779,9 +1779,13 @@ class UserDefinedJythonFunction(object):
             code, f_globals, defaults, closure, dct, base_globals = cp.extract_func_data(func)
             closure_dct = {}
             if func.__closure__:
-                # Python 2 alternative to inspect.getclosurevars
-                closure_dct = dict(zip(func.func_code.co_freevars,
-                                       (c.cell_contents for c in func.func_closure)))
+                if sys.version < "3":
+                    closure_dct = dict(zip(func.func_code.co_freevars,
+                                           (c.cell_contents for c in func.func_closure)))
+                else:
+                    closure_dct = dict(zip(func.__code__.co_freevars,
+                                           (c.cell_contents for c in func.__closure__)))
+
             extra = dict(base_globals)
             extra.update(f_globals)
             extra.update(closure_dct)
