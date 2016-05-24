@@ -147,4 +147,29 @@ class CodeFormatterSuite extends SparkFunSuite {
       |/* 006 */ }
     """.stripMargin
   }
+
+  test("comment place holder") {
+    val holderToComment = Map("c1" -> "/*abc*/", "c2" -> "/*xyz*/")
+    val code =
+      """
+        |/*c1*/
+        |class A
+        |/*c2*/
+        |class B
+        |/*c1*//*c2*/
+      """.stripMargin.trim
+
+    val formatted = CodeFormatter.format(new CodeAndComment(code, holderToComment)).trim
+
+    val expected =
+      """
+        |/* 001 */ /*abc*/
+        |/* 002 */ class A
+        |/* 003 */ /*xyz*/
+        |/* 004 */ class B
+        |/* 005 */ /*abc*//*xyz*/
+      """.stripMargin.trim
+
+    assert(formatted == expected)
+  }
 }

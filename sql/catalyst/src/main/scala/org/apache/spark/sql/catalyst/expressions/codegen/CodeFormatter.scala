@@ -24,11 +24,16 @@ package org.apache.spark.sql.catalyst.expressions.codegen
  * Written by Matei Zaharia.
  */
 object CodeFormatter {
+  val commentHolder = """\/\*(.+?)\*\/""".r
+
   def format(code: CodeAndComment): String = {
     val formatter = new CodeFormatter
     code.body.split("\n").foreach { line =>
       val trimmed = line.trim
-      formatter.addLine(code.comment.getOrElse(trimmed, trimmed))
+      val comment = commentHolder.replaceAllIn(
+        trimmed,
+        m => code.comment.getOrElse(m.group(1), m.group(0)))
+      formatter.addLine(comment)
     }
     formatter.result()
   }
