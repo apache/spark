@@ -734,7 +734,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
-  require(numPartitions > 0, "numPartitions must be greater than 0.")
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
   override def output: Seq[Attribute] = child.output
 }
 
