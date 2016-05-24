@@ -774,13 +774,40 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AddJarCommand]] or [[AddFileCommand]] command depending on the requested resource.
+   * Create a [[AddFileCommand]], [[AddJarCommand]], [[ListFilesCommand]] or [[ListJarsCommand]]
+   * command depending on the requested operation on resources.
+   * Expected format:
+   * {{{
+   *   ADD (FILE[S] <filepath ...> | JAR[S] <jarpath ...>)
+   *   LIST (FILE[S] [filepath ...] | JAR[S] [jarpath ...])
+   * }}}
    */
-  override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
-    ctx.identifier.getText.toLowerCase match {
-      case "file" => AddFileCommand(remainder(ctx.identifier).trim)
-      case "jar" => AddJarCommand(remainder(ctx.identifier).trim)
-      case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
+  override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
+    val mayebePaths = remainder(ctx.identifier).trim
+    ctx.op.getType match {
+      case SqlBaseParser.ADD =>
+        ctx.identifier.getText.toLowerCase match {
+          case "file" => AddFileCommand(mayebePaths)
+          case "jar" => AddJarCommand(mayebePaths)
+          case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
+        }
+      case SqlBaseParser.LIST =>
+        ctx.identifier.getText.toLowerCase match {
+          case "files" | "file" =>
+            if (mayebePaths.length > 0) {
+              ListFilesCommand(mayebePaths.split("\\s+"))
+            } else {
+              ListFilesCommand()
+            }
+          case "jars" | "jar" =>
+            if (mayebePaths.length > 0) {
+              ListJarsCommand(mayebePaths.split("\\s+"))
+            } else {
+              ListJarsCommand()
+            }
+          case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
+        }
+      case _ => throw operationNotAllowed(s"Other types of operation on resources", ctx)
     }
   }
 
@@ -796,14 +823,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    *
    * Expected format:
    * {{{
-   *   CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
-   *   [(col1 data_type [COMMENT col_comment], ...)]
+   *   CREATE [EXTERNAL] TABLE [IF NOT EXISTS] [db_name.]table_name
+   *   [(col1[:] data_type [COMMENT col_comment], ...)]
    *   [COMMENT table_comment]
-   *   [PARTITIONED BY (col3 data_type [COMMENT col_comment], ...)]
-   *   [CLUSTERED BY (col1, ...) [SORTED BY (col1 [ASC|DESC], ...)] INTO num_buckets BUCKETS]
-   *   [SKEWED BY (col1, col2, ...) ON ((col_value, col_value, ...), ...) [STORED AS DIRECTORIES]]
+   *   [PARTITIONED BY (col2[:] data_type [COMMENT col_comment], ...)]
    *   [ROW FORMAT row_format]
-   *   [STORED AS file_format | STORED BY storage_handler_class [WITH SERDEPROPERTIES (...)]]
+   *   [STORED AS file_format]
    *   [LOCATION path]
    *   [TBLPROPERTIES (property_name=property_value, ...)]
    *   [AS select_statement];
@@ -849,6 +874,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         compressed = false,
         serdeProperties = Map())
     }
+    validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
       .getOrElse(EmptyStorageFormat)
     val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
@@ -905,6 +931,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create a [[CatalogStorageFormat]] for creating tables.
+   *
+   * Format: STORED AS ...
    */
   override def visitCreateFileFormat(
       ctx: CreateFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
@@ -932,9 +960,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
     EmptyStorageFormat.copy(
       inputFormat = Option(string(ctx.inFmt)),
-      outputFormat = Option(string(ctx.outFmt)),
-      serde = Option(ctx.serdeCls).map(string)
-    )
+      outputFormat = Option(string(ctx.outFmt)))
   }
 
   /**
@@ -1016,6 +1042,49 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           "line.delim" -> value
         }
     EmptyStorageFormat.copy(serdeProperties = entries.toMap)
+  }
+
+  /**
+   * Throw a [[ParseException]] if the user specified incompatible SerDes through ROW FORMAT
+   * and STORED AS.
+   *
+   * The following are allowed. Anything else is not:
+   *   ROW FORMAT SERDE ... STORED AS [SEQUENCEFILE | RCFILE | TEXTFILE]
+   *   ROW FORMAT DELIMITED ... STORED AS TEXTFILE
+   *   ROW FORMAT ... STORED AS INPUTFORMAT ... OUTPUTFORMAT ...
+   */
+  private def validateRowFormatFileFormat(
+      rowFormatCtx: RowFormatContext,
+      createFileFormatCtx: CreateFileFormatContext,
+      parentCtx: ParserRuleContext): Unit = {
+    if (rowFormatCtx == null || createFileFormatCtx == null) {
+      return
+    }
+    (rowFormatCtx, createFileFormatCtx.fileFormat) match {
+      case (_, ffTable: TableFileFormatContext) => // OK
+      case (rfSerde: RowFormatSerdeContext, ffGeneric: GenericFileFormatContext) =>
+        ffGeneric.identifier.getText.toLowerCase match {
+          case ("sequencefile" | "textfile" | "rcfile") => // OK
+          case fmt =>
+            throw operationNotAllowed(
+              s"ROW FORMAT SERDE is incompatible with format '$fmt', which also specifies a serde",
+              parentCtx)
+        }
+      case (rfDelimited: RowFormatDelimitedContext, ffGeneric: GenericFileFormatContext) =>
+        ffGeneric.identifier.getText.toLowerCase match {
+          case "textfile" => // OK
+          case fmt => throw operationNotAllowed(
+            s"ROW FORMAT DELIMITED is only compatible with 'textfile', not '$fmt'", parentCtx)
+        }
+      case _ =>
+        // should never happen
+        def str(ctx: ParserRuleContext): String = {
+          (0 until ctx.getChildCount).map { i => ctx.getChild(i).getText }.mkString(" ")
+        }
+        throw operationNotAllowed(
+          s"Unexpected combination of ${str(rowFormatCtx)} and ${str(createFileFormatCtx)}",
+          parentCtx)
+    }
   }
 
   /**
