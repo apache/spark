@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions.codegen
 
+import java.util.regex.Matcher
+
 /**
  * An utility class that indents a block of code based on the curly braces and parentheses.
  * This is used to prettify generated code when in debug mode (or exceptions).
@@ -29,10 +31,10 @@ object CodeFormatter {
   def format(code: CodeAndComment): String = {
     val formatter = new CodeFormatter
     code.body.split("\n").foreach { line =>
-      val comment = commentHolder.replaceAllIn(
+      val commentReplaced = commentHolder.replaceAllIn(
         line.trim,
-        m => code.comment.getOrElse(m.group(1), m.group(0)))
-      formatter.addLine(comment)
+        m => code.comment.get(m.group(1)).map(Matcher.quoteReplacement).getOrElse(m.group(0)))
+      formatter.addLine(commentReplaced)
     }
     formatter.result()
   }

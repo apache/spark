@@ -44,9 +44,9 @@ class CodeFormatterSuite extends SparkFunSuite {
         |/*project_c2*/
       """.stripMargin,
       Map(
-        "/*project_c4*/" -> "// (((input[0, bigint, false] + 1) + 2) + 3))",
-        "/*project_c3*/" -> "// ((input[0, bigint, false] + 1) + 2)",
-        "/*project_c2*/" -> "// (input[0, bigint, false] + 1)"
+        "project_c4" -> "// (((input[0, bigint, false] + 1) + 2) + 3))",
+        "project_c3" -> "// ((input[0, bigint, false] + 1) + 2)",
+        "project_c2" -> "// (input[0, bigint, false] + 1)"
       ))
 
     val reducedCode = CodeFormatter.stripOverlappingComments(code)
