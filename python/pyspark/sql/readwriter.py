@@ -505,12 +505,14 @@ class DataFrameWriter(object):
         """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
 
         Options include:
-        * `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
-                      the sink
-        * `update`:   only the changed rows in the streaming DataFrame/Dataset will be written to
-                      the sink every time there is some updates
-        * `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
-                      every time these is some updates
+
+        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+           the sink
+        * `update`:Only the changed rows in the streaming DataFrame/Dataset will be written to
+           the sink every time there is some updates
+        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+           every time these is some updates
+
         >>> sdf.write.outputMode('append')
         """
         if outputMode is not None:
