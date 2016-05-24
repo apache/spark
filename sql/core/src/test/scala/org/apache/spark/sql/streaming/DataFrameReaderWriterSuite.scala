@@ -90,10 +90,11 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   override def createSink(
       spark: SQLContext,
       parameters: Map[String, String],
-      partitionColumns: Seq[String]): Sink = {
+      partitionColumns: Seq[String],
+      outputMode: OutputMode): Sink = {
     LastOptions.parameters = parameters
     LastOptions.partitionColumns = partitionColumns
-    LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns)
+    LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
     new Sink {
       override def addBatch(batchId: Long, data: DataFrame): Unit = {}
     }

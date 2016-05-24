@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{OutputMode, StreamTest}
+import org.apache.spark.sql.{AnalysisException, OutputMode, StreamTest}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -85,6 +85,20 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
       AddData(inputData, 4, 4, 4, 4),
       CheckLastBatch((4, 4), (3, 2), (2, 2), (1, 1))
     )
+  }
+
+  test("simple count, append mode") {
+    val inputData = MemoryStream[Int]
+
+    val aggregated =
+      inputData.toDF()
+        .groupBy($"value")
+        .agg(count("*"))
+        .as[(Int, Long)]
+
+    intercept[AnalysisException] {
+      testStream(aggregated, OutputMode.Append)()
+    }
   }
 
   test("multiple keys") {

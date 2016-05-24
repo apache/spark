@@ -237,16 +237,14 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
           try {
             val df = ds.toDF
             val metadataRoot =
-              Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-            query = spark
-              .streams
-              .startQuery(
-                StreamExecution.nextName,
-                metadataRoot,
-                df,
-                new MemorySink(df.schema),
-                OutputMode.Append)
-              .asInstanceOf[StreamExecution]
+              Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
+            query =
+              df.write
+                .format("memory")
+                .option("checkpointLocation", "memory")
+                .outputMode("append")
+                .startStream()
+                .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
               if (query != null) query.stop()

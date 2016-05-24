@@ -77,7 +77,31 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case "ignore" => SaveMode.Ignore
       case "error" | "default" => SaveMode.ErrorIfExists
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
-        "Accepted modes are 'overwrite', 'append', 'ignore', 'error'.")
+        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error'.")
+    }
+    this
+  }
+
+  /**
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
+   *                 the sink
+   *   - `update`:   only the changed rows in the streaming DataFrame/Dataset will be written to
+   *                 the sink every time there is some updates
+   *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
+   *                 every time these is some updates
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: String): DataFrameWriter = {
+    assertStreaming("outputMode() can only be called on continuous queries")
+    this.outputMode = outputMode.toLowerCase match {
+      case "append" => OutputMode.Append
+      case "update" => OutputMode.Update
+      case "complete" => OutputMode.Complete
+      case _ => throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
+        "Accepted output modes are 'append', 'update', 'complete'")
     }
     this
   }
@@ -319,7 +343,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointPath.toUri.toString
       }
 
-      val sink = new MemorySink(df.schema)
+      if (!Seq(OutputMode.Append, OutputMode.Complete).contains(outputMode)) {
+        throw new IllegalArgumentException(s"Memory sink does not support output mode $outputMode")
+      }
+
+      val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       resultDf.createOrReplaceTempView(queryName)
       val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
@@ -353,7 +381,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         queryName,
         checkpointLocation,
         df,
-        dataSource.createSink(),
+        dataSource.createSink(outputMode),
         outputMode,
         trigger)
     }

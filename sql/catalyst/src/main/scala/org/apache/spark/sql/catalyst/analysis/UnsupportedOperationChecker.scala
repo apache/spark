@@ -37,7 +37,7 @@ object UnsupportedOperationChecker {
     }
   }
 
-  def checkForStreaming(plan: LogicalPlan, outputMode: OutputMode): Unit = {
+  def checkForStreaming(implicit plan: LogicalPlan, outputMode: OutputMode): Unit = {
 
     if (!plan.isStreaming) {
       throwError(
@@ -55,21 +55,6 @@ object UnsupportedOperationChecker {
 
         case _: InsertIntoTable =>
           throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
-
-        case Aggregate(_, _, child) if child.isStreaming =>
-          if (outputMode == OutputMode.Append) {
-            throwError(
-              "Aggregations are not supported on streaming DataFrames/Datasets in " +
-                "Append output mode. Consider changing output mode to Update.")
-          }
-          val moreStreamingAggregates = child.find {
-            case Aggregate(_, _, grandchild) if grandchild.isStreaming => true
-            case _ => false
-          }
-          if (moreStreamingAggregates.nonEmpty) {
-            throwError("Multiple streaming aggregations are not supported with " +
-              "streaming DataFrames/Datasets")
-          }
 
         case Join(left, right, joinType, _) =>
 
@@ -138,6 +123,26 @@ object UnsupportedOperationChecker {
 
         case _ =>
       }
+    }
+
+    // Checks related to aggregations
+    val aggregates = plan.collect { case a @ Aggregate(_, _, _) if a.isStreaming => a }
+    outputMode match {
+      case OutputMode.Append if aggregates.nonEmpty =>
+        throwError(
+          s"$outputMode output mode not supported with streaming aggregates on " +
+            s"streaming DataFrames/DataSets")
+
+      case OutputMode.Complete | OutputMode.Update if aggregates.isEmpty =>
+        throwError(
+          s"$outputMode output mode not supported when not streaming aggregates are present on " +
+            s"streaming DataFrames/Datasets")
+
+      case _ =>
+    }
+    if (aggregates.size > 1) {
+      throwError(
+        "Multiple streaming aggregations are not supported with streaming DataFrames/Datasets")
     }
   }
 

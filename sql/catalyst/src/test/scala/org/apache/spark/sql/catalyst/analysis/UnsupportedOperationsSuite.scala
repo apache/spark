@@ -205,7 +205,6 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.intersect(_),
     streamStreamSupported = false)
 
-
   // Unary operations
   testUnaryOperatorInStreamingPlan("sort", Sort(Nil, true, _))
   testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
@@ -214,6 +213,10 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   testUnaryOperatorInStreamingPlan(
     "window", Window(Nil, Nil, Nil, _), expectedMsg = "non-time-based windows")
 
+  // Output modes with aggregation and non-aggregation plans
+  testOutputMode(OutputMode.Append, shouldSupportAggregation = false)
+  testOutputMode(OutputMode.Update, shouldSupportAggregation = true)
+  testOutputMode(OutputMode.Complete, shouldSupportAggregation = true)
 
   /*
     =======================================================================================
@@ -310,6 +313,37 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       s"$operationName with batch-batch relations",
       planGenerator(batchRelation, batchRelation),
       outputMode)
+  }
+
+  def testOutputMode(
+      outputMode: OutputMode,
+      shouldSupportAggregation: Boolean): Unit = {
+
+    // aggregation
+    if (shouldSupportAggregation) {
+      assertNotSupportedInStreamingPlan(
+        s"$outputMode output mode - no aggregation",
+        streamRelation.where($"a" > 1),
+        outputMode = outputMode,
+        Seq("aggregation", s"$outputMode output mode"))
+
+      assertSupportedInStreamingPlan(
+        s"$outputMode output mode - aggregation",
+        streamRelation.groupBy("a")("count(*)"),
+        outputMode = outputMode)
+
+    } else {
+      assertSupportedInStreamingPlan(
+        s"$outputMode output mode - no aggregation",
+        streamRelation.where($"a" > 1),
+        outputMode = outputMode)
+
+      assertNotSupportedInStreamingPlan(
+        s"$outputMode output mode - aggregation",
+        streamRelation.groupBy("a")("count(*)"),
+        outputMode = outputMode,
+        Seq("aggregation", s"$outputMode output mode"))
+    }
   }
 
   /**

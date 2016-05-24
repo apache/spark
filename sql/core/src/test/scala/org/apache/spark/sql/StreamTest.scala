@@ -198,7 +198,7 @@ trait StreamTest extends QueryTest with Timeouts {
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
-    val sink = new MemorySink(stream.schema)
+    val sink = new MemorySink(stream.schema, outputMode)
 
     @volatile
     var streamDeathCause: Throwable = null
