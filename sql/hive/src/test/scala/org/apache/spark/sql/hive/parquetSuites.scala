@@ -23,7 +23,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.command.ExecutedCommandExec
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSource, InsertIntoHadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InsertIntoDataSourceCommand, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.hive.execution.HiveTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -171,8 +171,9 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
       sql(s"ALTER TABLE partitioned_parquet_with_complextypes ADD PARTITION (p=$p)")
     }
 
-    (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").registerTempTable("jt")
-    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a").registerTempTable("jt_array")
+    (1 to 10).map(i => (i, s"str$i")).toDF("a", "b").createOrReplaceTempView("jt")
+    (1 to 10).map(i => Tuple1(Seq(new Integer(i), null))).toDF("a")
+      .createOrReplaceTempView("jt_array")
 
     setConf(HiveUtils.CONVERT_METASTORE_PARQUET, true)
   }
@@ -307,10 +308,10 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt")
       df.queryExecution.sparkPlan match {
-        case ExecutedCommandExec(_: InsertIntoHadoopFsRelation) => // OK
+        case ExecutedCommandExec(_: InsertIntoHadoopFsRelationCommand) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan. " +
+          s"${classOf[InsertIntoDataSourceCommand].getCanonicalName} should have been SparkPlan. " +
           s"However, found a ${o.toString} ")
       }
 
@@ -337,10 +338,10 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
 
       val df = sql("INSERT INTO TABLE test_insert_parquet SELECT a FROM jt_array")
       df.queryExecution.sparkPlan match {
-        case ExecutedCommandExec(_: InsertIntoHadoopFsRelation) => // OK
+        case ExecutedCommandExec(_: InsertIntoHadoopFsRelationCommand) => // OK
         case o => fail("test_insert_parquet should be converted to a " +
           s"${classOf[HadoopFsRelation ].getCanonicalName} and " +
-          s"${classOf[InsertIntoDataSource].getCanonicalName} is expected as the SparkPlan." +
+          s"${classOf[InsertIntoDataSourceCommand].getCanonicalName} should have been SparkPlan." +
           s"However, found a ${o.toString} ")
       }
 
@@ -541,8 +542,8 @@ class ParquetMetastoreSuite extends ParquetPartitioningTest {
             |STORED AS PARQUET
           """.stripMargin)
 
-        // Temp table to insert data into partitioned table
-        Seq("foo", "bar").toDF("a").registerTempTable("test_temp")
+        // Temp view that is used to insert data into partitioned table
+        Seq("foo", "bar").toDF("a").createOrReplaceTempView("test_temp")
         sql("INSERT INTO test_added_partitions PARTITION(b='0') SELECT a FROM test_temp")
 
         checkAnswer(

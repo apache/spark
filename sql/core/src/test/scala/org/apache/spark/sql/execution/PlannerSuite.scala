@@ -78,7 +78,7 @@ class PlannerSuite extends SharedSQLContext {
         val schema = StructType(fields)
         val row = Row.fromSeq(Seq.fill(fields.size)(null))
         val rowRDD = sparkContext.parallelize(row :: Nil)
-        spark.createDataFrame(rowRDD, schema).registerTempTable("testLimit")
+        spark.createDataFrame(rowRDD, schema).createOrReplaceTempView("testLimit")
 
         val planned = sql(
           """
@@ -132,7 +132,7 @@ class PlannerSuite extends SharedSQLContext {
   test("InMemoryRelation statistics propagation") {
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "81920") {
       withTempTable("tiny") {
-        testData.limit(3).registerTempTable("tiny")
+        testData.limit(3).createOrReplaceTempView("tiny")
         sql("CACHE TABLE tiny")
 
         val a = testData.as("a")
@@ -155,7 +155,7 @@ class PlannerSuite extends SharedSQLContext {
       val path = file.getCanonicalPath
       testData.write.parquet(path)
       val df = spark.read.parquet(path)
-      spark.wrapped.registerDataFrameAsTable(df, "testPushed")
+      spark.sqlContext.registerDataFrameAsTable(df, "testPushed")
 
       withTempTable("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan
@@ -199,9 +199,9 @@ class PlannerSuite extends SharedSQLContext {
 
   test("PartitioningCollection") {
     withTempTable("normal", "small", "tiny") {
-      testData.registerTempTable("normal")
-      testData.limit(10).registerTempTable("small")
-      testData.limit(3).registerTempTable("tiny")
+      testData.createOrReplaceTempView("normal")
+      testData.limit(10).createOrReplaceTempView("small")
+      testData.limit(3).createOrReplaceTempView("tiny")
 
       // Disable broadcast join
       withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {

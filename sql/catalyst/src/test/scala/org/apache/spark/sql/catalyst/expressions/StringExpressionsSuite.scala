@@ -688,7 +688,7 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         Literal(Decimal(123123324123L) * Decimal(123123.21234d)), Literal(4)),
       "15,159,339,180,002,773.2778")
     checkEvaluation(FormatNumber(Literal.create(null, IntegerType), Literal(3)), null)
-    checkEvaluation(FormatNumber(Literal.create(null, NullType), Literal(3)), null)
+    assert(FormatNumber(Literal.create(null, NullType), Literal(3)).resolved === false)
   }
 
   test("find in set") {

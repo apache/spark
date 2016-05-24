@@ -40,7 +40,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
     val newSession = sqlContext.newSession()
     assert(SQLContext.getOrCreate(sc).eq(sqlContext),
       "SQLContext.getOrCreate after explicitly created SQLContext did not return the context")
-    SQLContext.setActive(newSession)
+    SparkSession.setActiveSession(newSession.sparkSession)
     assert(SQLContext.getOrCreate(sc).eq(newSession),
       "SQLContext.getOrCreate after explicitly setActive() did not return the active context")
   }
@@ -60,7 +60,7 @@ class SQLContextSuite extends SparkFunSuite with SharedSparkContext {
 
     // temporary table should not be shared
     val df = session1.range(10)
-    df.registerTempTable("test1")
+    df.createOrReplaceTempView("test1")
     assert(session1.tableNames().contains("test1"))
     assert(!session2.tableNames().contains("test1"))
 

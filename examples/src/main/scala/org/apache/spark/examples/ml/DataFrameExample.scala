@@ -24,7 +24,8 @@ import com.google.common.io.Files
 import scopt.OptionParser
 
 import org.apache.spark.examples.mllib.AbstractParams
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.sql.{DataFrame, Row, SparkSession}
 
@@ -80,7 +81,7 @@ object DataFrameExample {
     // Convert features column to an RDD of vectors.
     val features = df.select("features").rdd.map { case Row(v: Vector) => v }
     val featureSummary = features.aggregate(new MultivariateOnlineSummarizer())(
-      (summary, feat) => summary.add(feat),
+      (summary, feat) => summary.add(Vectors.fromML(feat)),
       (sum1, sum2) => sum1.merge(sum2))
     println(s"Selected features column with average values:\n ${featureSummary.mean.toString}")
 

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.exchange
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 
-import org.apache.spark.broadcast
+import org.apache.spark.{broadcast, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
@@ -72,9 +72,18 @@ case class BroadcastExchangeExec(
         val beforeCollect = System.nanoTime()
         // Note that we use .executeCollect() because we don't want to convert data to Scala types
         val input: Array[InternalRow] = child.executeCollect()
+        if (input.length >= 512000000) {
+          throw new SparkException(
+            s"Cannot broadcast the table with more than 512 millions rows: ${input.length} rows")
+        }
         val beforeBuild = System.nanoTime()
         longMetric("collectTime") += (beforeBuild - beforeCollect) / 1000000
-        longMetric("dataSize") += input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+        val dataSize = input.map(_.asInstanceOf[UnsafeRow].getSizeInBytes.toLong).sum
+        longMetric("dataSize") += dataSize
+        if (dataSize >= (8L << 30)) {
+          throw new SparkException(
+            s"Cannot broadcast the table that is larger than 8GB: ${dataSize >> 30} GB")
+        }
 
         // Construct and broadcast the relation.
         val relation = mode.transform(input)

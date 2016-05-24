@@ -80,7 +80,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
          """.stripMargin)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
         checkAnswer(
           sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM jsonTable"),
           sql("SELECT a, b, `c_!@(3)`, `<d>`.`d!`, `<d>`.`=` FROM expectedJsonTable"))
@@ -110,7 +110,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       assert(expectedSchema === table("jsonTable").schema)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
         checkAnswer(
           sql("SELECT b, `<d>`.`=` FROM jsonTable"),
           sql("SELECT b, `<d>`.`=` FROM expectedJsonTable"))
@@ -248,7 +248,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
          """.stripMargin)
 
       withTempTable("expectedJsonTable") {
-        read.json(jsonFilePath).registerTempTable("expectedJsonTable")
+        read.json(jsonFilePath).createOrReplaceTempView("expectedJsonTable")
 
         checkAnswer(
           sql("SELECT * FROM jsonTable"),
@@ -554,7 +554,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
   test("scan a parquet table created through a CTAS statement") {
     withSQLConf(HiveUtils.CONVERT_METASTORE_PARQUET.key -> "true") {
       withTempTable("jt") {
-        (1 to 10).map(i => i -> s"str$i").toDF("a", "b").registerTempTable("jt")
+        (1 to 10).map(i => i -> s"str$i").toDF("a", "b").createOrReplaceTempView("jt")
 
         withTable("test_parquet_ctas") {
           sql(
@@ -622,7 +622,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("arrayInParquet")
 
-      sessionState.refreshTable("arrayInParquet")
+      sparkSession.catalog.refreshTable("arrayInParquet")
 
       checkAnswer(
         sql("SELECT a FROM arrayInParquet"),
@@ -681,7 +681,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("mapInParquet")
 
-      sessionState.refreshTable("mapInParquet")
+      sparkSession.catalog.refreshTable("mapInParquet")
 
       checkAnswer(
         sql("SELECT a FROM mapInParquet"),
@@ -746,6 +746,9 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       sessionState.invalidateTable(tableName)
       val actualSchema = table(tableName).schema
       assert(schema === actualSchema)
+
+      // Checks the DESCRIBE output.
+      checkAnswer(sql("DESCRIBE spark6655"), Row("int", "int", "") :: Nil)
     }
   }
 

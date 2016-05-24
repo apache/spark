@@ -25,11 +25,12 @@ class CodeFormatterSuite extends SparkFunSuite {
 
   def testCase(name: String)(input: String)(expected: String): Unit = {
     test(name) {
-      if (CodeFormatter.format(input).trim !== expected.trim) {
+      val sourceCode = new CodeAndComment(input, Map.empty)
+      if (CodeFormatter.format(sourceCode).trim !== expected.trim) {
         fail(
           s"""
              |== FAIL: Formatted code doesn't match ===
-             |${sideBySide(CodeFormatter.format(input).trim, expected.trim).mkString("\n")}
+             |${sideBySide(CodeFormatter.format(sourceCode).trim, expected.trim).mkString("\n")}
            """.stripMargin)
       }
     }

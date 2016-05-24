@@ -76,17 +76,26 @@ private[sql] class LineCsvWriter(params: CSVOptions, headers: Seq[String]) exten
   writerSettings.setQuoteAllFields(false)
   writerSettings.setHeaders(headers: _*)
 
-  def writeRow(row: Seq[String], includeHeader: Boolean): String = {
-    val buffer = new ByteArrayOutputStream()
-    val outputWriter = new OutputStreamWriter(buffer, StandardCharsets.UTF_8)
-    val writer = new CsvWriter(outputWriter, writerSettings)
+  private var buffer = new ByteArrayOutputStream()
+  private var writer = new CsvWriter(
+    new OutputStreamWriter(buffer, StandardCharsets.UTF_8),
+    writerSettings)
 
+  def writeRow(row: Seq[String], includeHeader: Boolean): Unit = {
     if (includeHeader) {
       writer.writeHeaders()
     }
     writer.writeRow(row.toArray: _*)
+  }
+
+  def flush(): String = {
     writer.close()
-    buffer.toString.stripLineEnd
+    val lines = buffer.toString.stripLineEnd
+    buffer = new ByteArrayOutputStream()
+    writer = new CsvWriter(
+      new OutputStreamWriter(buffer, StandardCharsets.UTF_8),
+      writerSettings)
+    lines
   }
 }
 

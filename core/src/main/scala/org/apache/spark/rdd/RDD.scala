@@ -1107,10 +1107,21 @@ abstract class RDD[T: ClassTag](
   /**
    * Approximate version of count() that returns a potentially incomplete result
    * within a timeout, even if not all tasks have finished.
+   *
+   * The confidence is the probability that the error bounds of the result will
+   * contain the true value. That is, if countApprox were called repeatedly
+   * with confidence 0.9, we would expect 90% of the results to contain the
+   * true count. The confidence must be in the range [0,1] or an exception will
+   * be thrown.
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
+   * @return a potentially incomplete result, with error bounds
    */
   def countApprox(
       timeout: Long,
       confidence: Double = 0.95): PartialResult[BoundedDouble] = withScope {
+    require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
     val countElements: (TaskContext, Iterator[T]) => Long = { (ctx, iter) =>
       var result = 0L
       while (iter.hasNext) {
@@ -1137,10 +1148,15 @@ abstract class RDD[T: ClassTag](
 
   /**
    * Approximate version of countByValue().
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
+   * @return a potentially incomplete result, with error bounds
    */
   def countByValueApprox(timeout: Long, confidence: Double = 0.95)
       (implicit ord: Ordering[T] = null)
       : PartialResult[Map[T, BoundedDouble]] = withScope {
+    require(0.0 <= confidence && confidence <= 1.0, s"confidence ($confidence) must be in [0,1]")
     if (elementClassTag.runtimeClass.isArray) {
       throw new SparkException("countByValueApprox() does not support arrays")
     }

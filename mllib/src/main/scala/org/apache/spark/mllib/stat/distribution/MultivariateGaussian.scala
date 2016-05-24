@@ -64,7 +64,7 @@ class MultivariateGaussian @Since("1.3.0") (
   /**
    * Returns density of this multivariate Gaussian at given point, x
    */
-   @Since("1.3.0")
+  @Since("1.3.0")
   def pdf(x: Vector): Double = {
     pdf(x.toBreeze)
   }
@@ -72,7 +72,7 @@ class MultivariateGaussian @Since("1.3.0") (
   /**
    * Returns the log-density of this multivariate Gaussian at given point, x
    */
-   @Since("1.3.0")
+  @Since("1.3.0")
   def logpdf(x: Vector): Double = {
     logpdf(x.toBreeze)
   }
