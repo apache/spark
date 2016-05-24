@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.{BaseRelation, InsertableRelation}
 
 /**
- * Try to replaces [[UnresolvedRelation]]s with [[ResolvedDataSource]].
+ * Try to replaces [[UnresolvedRelation]]s with [[ResolveDataSource]].
  */
 private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {

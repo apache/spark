@@ -18,6 +18,7 @@
 package org.apache.spark.sql.sources
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.execution.datasources.DataSource
 
 class ResolvedDataSourceSuite extends SparkFunSuite {
@@ -61,12 +62,12 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
   }
 
   test("error message for unknown data sources") {
-    val error1 = intercept[ClassNotFoundException] {
+    val error1 = intercept[AnalysisException] {
       getProvidingClass("avro")
     }
     assert(error1.getMessage.contains("spark-packages"))
 
-    val error2 = intercept[ClassNotFoundException] {
+    val error2 = intercept[AnalysisException] {
       getProvidingClass("com.databricks.spark.avro")
     }
     assert(error2.getMessage.contains("spark-packages"))

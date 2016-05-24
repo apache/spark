@@ -1838,20 +1838,43 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df)
     })
 
-    val e1 = intercept[AnalysisException] {
+    var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e1.message.contains("Table or view not found"))
+    assert(e.message.contains("Table or view not found"))
 
-    val e2 = intercept[AnalysisException] {
+    e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e2.message.contains("Table or view not found"))
+    assert(e.message.contains("Table or view not found"))
 
-    val e3 = intercept[AnalysisException] {
+    e = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("Path does not exist"))
+    assert(e.message.contains("Path does not exist"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
+    }
+    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `com.databricks.spark.avro`.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro. " +
+      "Please use Spark package http://spark-packages.org/package/databricks/spark-avro"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `avro`.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
+      "http://spark-packages.org/package/databricks/spark-avro"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
+    }
+    assert(e.message.contains("org.apache.spark.sql.sources.HadoopFsRelationProvider is removed " +
+      "in Spark 2.0. Please check if your library is compatible with Spark 2.0"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {

@@ -108,21 +108,19 @@ case class DataSource(
               dataSource
             case Failure(error) =>
               if (error.isInstanceOf[ClassNotFoundException]) {
-                val className = error.getMessage
-                if (spark2RemovedClasses.contains(className)) {
-                  throw new ClassNotFoundException(s"$className is removed in Spark 2.0. " +
+                if (spark2RemovedClasses.contains(provider)) {
+                  throw new AnalysisException(s"$provider is removed in Spark 2.0. " +
                     "Please check if your library is compatible with Spark 2.0")
                 }
               }
               if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-                throw new ClassNotFoundException(
-                  "The ORC data source must be used with Hive support enabled.", error)
+                throw new AnalysisException(
+                  s"The ORC data source must be used with Hive support enabled")
               } else {
                 if (provider == "avro" || provider == "com.databricks.spark.avro") {
-                  throw new ClassNotFoundException(
+                  throw new AnalysisException(
                     s"Failed to find data source: $provider. Please use Spark package " +
-                      "http://spark-packages.org/package/databricks/spark-avro",
-                    error)
+                      s"http://spark-packages.org/package/databricks/spark-avro")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider. Please find packages at " +
@@ -132,12 +130,10 @@ case class DataSource(
               }
           }
         } catch {
-          case e: NoClassDefFoundError => // This one won't be caught by Scala NonFatal
-            // NoClassDefFoundError's class name uses "/" rather than "." for packages
-            val className = e.getMessage.replaceAll("/", ".")
-            if (spark2RemovedClasses.contains(className)) {
-              throw new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
-                "Please check if your library is compatible with Spark 2.0", e)
+          case e: NoClassDefFoundError =>
+            if (spark2RemovedClasses.contains(provider)) {
+              throw new AnalysisException(s"$provider was removed in Spark 2.0. " +
+                s"Please check if your library is compatible with Spark 2.0")
             } else {
               throw e
             }
