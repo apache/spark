@@ -543,9 +543,6 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return the position of the first occurrence of substr, if not found, -1 returned.
    */
   public int indexOf(UTF8String v, int start) {
-    if (start < 0) {
-      return -1;
-    }
     if (v.numBytes() == 0) {
       return 0;
     }
