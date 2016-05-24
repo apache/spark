@@ -43,11 +43,9 @@ package org.apache
 
 import java.util.Properties
 
-import org.apache.spark.internal.Logging
-
 package object spark {
 
-  private object SparkBuildInfo extends Logging {
+  private object SparkBuildInfo {
     val unknownProp = "<unknown>"
     val props = new Properties()
     val resourceStream = Thread.currentThread().getContextClassLoader.
