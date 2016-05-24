@@ -38,6 +38,6 @@ def check_debugger():
                             port=int(debug_port), 
                             stdoutToServer=False, 
                             stderrToServer=False)
-        except Exception, e:
+        except Exception as e:
             print(e)
             raise Exception('init debugger fail.' )
