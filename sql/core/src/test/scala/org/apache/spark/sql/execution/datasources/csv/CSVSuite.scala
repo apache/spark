@@ -368,9 +368,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
 
-      val df = spark.createDataFrame(Seq(("test \"quote\"", 123,
-                                             "it \"works\"!", "\"very\" well")))
-        .toDF("a", "b", "c", "d")
+      val data = Seq(("test \"quote\"", 123, "it \"works\"!", "\"very\" well"))
+      val df = spark.createDataFrame(data).toDF("a", "b", "c", "d")
 
       df.coalesce(1).write
         .format("csv")
@@ -384,10 +383,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(csvDir)
         .collect()
 
-      val expected = Seq(Seq("\"test \"\"quote\"\"\",123,\"it \"\"works\"\"!\"," +
-                               "\"\"\"very\"\" well\""))
+      val expected = "\"test \"\"quote\"\"\",123,\"it \"\"works\"\"!\",\"\"\"very\"\" well\""
 
-      assert(results.toSeq.map(_.toSeq) === expected)
+      assert(results.toSeq.map(_.toSeq) === Seq(Seq(expected)))
     }
   }
 
