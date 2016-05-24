@@ -480,8 +480,18 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     try {
       Option(hive.getFunction(db, name)).map(fromHiveFunction)
     } catch {
-      case CausedBy(ex: Exception) if ex.getMessage.contains(s"$name does not exist") =>
+      case e: Throwable if isCausedBy(e, s"$name does not exist") =>
         None
+    }
+  }
+
+  private def isCausedBy(e: Throwable, matchMassage: String): Boolean = {
+    if (e.getMessage.contains(matchMassage)) {
+      true
+    } else if (e.getCause != null) {
+      isCausedBy(e.getCause, matchMassage)
+    } else {
+      false
     }
   }
 
