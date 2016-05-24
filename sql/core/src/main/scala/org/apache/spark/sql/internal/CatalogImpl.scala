@@ -345,6 +345,33 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     sparkSession.cacheManager.lookupCachedData(qName).nonEmpty
   }
 
+  /**
+   * Refresh the cache entry for a table, if any. For Hive metastore table, the metadata
+   * is refreshed.
+   *
+   * @group cachemgmt
+   * @since 2.0.0
+   */
+  override def refreshTable(tableName: String): Unit = {
+    val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
+    sessionCatalog.refreshTable(tableIdent)
+
+    // If this table is cached as a InMemoryRelation, drop the original
+    // cached version and make the new version cached lazily.
+    val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
+    // Use lookupCachedData directly since RefreshTable also takes databaseName.
+    val isCached = sparkSession.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    if (isCached) {
+      // Create a data frame to represent the table.
+      // TODO: Use uncacheTable once it supports database name.
+      val df = Dataset.ofRows(sparkSession, logicalPlan)
+      // Uncache the logicalPlan.
+      sparkSession.cacheManager.tryUncacheQuery(df, blocking = true)
+      // Cache it again.
+      sparkSession.cacheManager.cacheQuery(df, Some(tableIdent.table))
+    }
+  }
+
 }
 
 

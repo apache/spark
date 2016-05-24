@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Pivot}
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
+import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.NumericType
 
@@ -73,6 +74,8 @@ class RelationalGroupedDataset protected[sql](
   private[this] def alias(expr: Expression): NamedExpression = expr match {
     case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
+    case a: AggregateExpression if (a.aggregateFunction.isInstanceOf[TypedAggregateExpression]) =>
+      UnresolvedAlias(a, Some(Column.generateAlias))
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
 

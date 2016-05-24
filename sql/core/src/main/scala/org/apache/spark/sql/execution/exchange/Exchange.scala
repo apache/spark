@@ -60,9 +60,6 @@ case class ReusedExchangeExec(override val output: Seq[Attribute], child: Exchan
   override protected[sql] def doExecuteBroadcast[T](): broadcast.Broadcast[T] = {
     child.executeBroadcast()
   }
-
-  // Do not repeat the same tree in explain.
-  override def treeChildren: Seq[SparkPlan] = Nil
 }
 
 /**

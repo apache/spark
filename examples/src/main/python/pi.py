@@ -20,14 +20,20 @@ import sys
 from random import random
 from operator import add
 
-from pyspark import SparkContext
+from pyspark.sql import SparkSession
 
 
 if __name__ == "__main__":
     """
         Usage: pi [partitions]
     """
-    sc = SparkContext(appName="PythonPi")
+    spark = SparkSession\
+        .builder\
+        .appName("PythonPi")\
+        .getOrCreate()
+
+    sc = spark._sc
+
     partitions = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     n = 100000 * partitions
 
@@ -39,4 +45,4 @@ if __name__ == "__main__":
     count = sc.parallelize(range(1, n + 1), partitions).map(f).reduce(add)
     print("Pi is roughly %f" % (4.0 * count / n))
 
-    sc.stop()
+    spark.stop()

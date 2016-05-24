@@ -104,9 +104,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     ).toDF("a", "b", "c").createOrReplaceTempView("cachedData")
 
     spark.catalog.cacheTable("cachedData")
-    checkAnswer(
-      sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
-      Row(0) :: Row(81) :: Nil)
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("SELECT t1.b FROM cachedData, cachedData t1 GROUP BY t1.b"),
+        Row(0) :: Row(81) :: Nil)
+    }
   }
 
   test("self join with aliases") {
@@ -435,10 +437,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("left semi greater than predicate") {
-    checkAnswer(
-      sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
-      Seq(Row(3, 1), Row(3, 2))
-    )
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("SELECT * FROM testData2 x LEFT SEMI JOIN testData2 y ON x.a >= y.a + 2"),
+        Seq(Row(3, 1), Row(3, 2))
+      )
+    }
   }
 
   test("left semi greater than predicate and equal operator") {
@@ -824,12 +828,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("cartesian product join") {
-    checkAnswer(
-      testData3.join(testData3),
-      Row(1, null, 1, null) ::
-      Row(1, null, 2, 2) ::
-      Row(2, 2, 1, null) ::
-      Row(2, 2, 2, 2) :: Nil)
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        testData3.join(testData3),
+        Row(1, null, 1, null) ::
+          Row(1, null, 2, 2) ::
+          Row(2, 2, 1, null) ::
+          Row(2, 2, 2, 2) :: Nil)
+    }
   }
 
   test("left outer join") {
@@ -1042,7 +1048,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SET commands semantics using sql()") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
@@ -1083,17 +1089,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SET $nonexistentKey"),
       Row(nonexistentKey, "<undefined>")
     )
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
   }
 
   test("SET commands with illegal or inappropriate argument") {
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
-    spark.wrapped.conf.clear()
+    spark.sqlContext.conf.clear()
   }
 
   test("apply schema") {

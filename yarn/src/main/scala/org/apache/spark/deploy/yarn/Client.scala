@@ -591,10 +591,11 @@ private[spark] class Client(
     copyFileToRemote(destDir, localConfArchive, replication, force = true,
       destName = Some(LOCALIZED_CONF_ARCHIVE))
 
-    val (_, confLocalizedPath) = distribute(createConfArchive().toURI().getPath(),
-      resType = LocalResourceType.ARCHIVE,
-      destName = Some(LOCALIZED_CONF_DIR))
-    require(confLocalizedPath != null)
+    // Manually add the config archive to the cache manager so that the AM is launched with
+    // the proper files set up.
+    distCacheMgr.addResource(
+      remoteFs, hadoopConf, remoteConfArchivePath, localResources, LocalResourceType.ARCHIVE,
+      LOCALIZED_CONF_DIR, statCache, appMasterOnly = false)
 
     // Clear the cache-related entries from the configuration to avoid them polluting the
     // UI's environment page. This works for client mode; for cluster mode, this is handled

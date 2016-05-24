@@ -43,6 +43,13 @@ object ParserUtils {
     new ParseException(s"Operation not allowed: $message", ctx)
   }
 
+  /** Check if duplicate keys exist in a set of key-value pairs. */
+  def checkDuplicateKeys[T](keyPairs: Seq[(String, T)], ctx: ParserRuleContext): Unit = {
+    keyPairs.groupBy(_._1).filter(_._2.size > 1).foreach { case (key, _) =>
+      throw new ParseException(s"Found duplicate keys '$key'.", ctx)
+    }
+  }
+
   /** Get the code that creates the given node. */
   def source(ctx: ParserRuleContext): String = {
     val stream = ctx.getStart.getInputStream

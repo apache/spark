@@ -70,16 +70,6 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
-  val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
-    .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
-      "When set to false, only one SQLContext/HiveContext is allowed to be created " +
-      "through the constructor (new SQLContexts/HiveContexts created through newSession " +
-      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once " +
-      "a SQLContext/HiveContext has been created, changing the value of this conf will not " +
-      "have effect.")
-    .booleanConf
-    .createWithDefault(true)
-
   val COMPRESS_CACHED = SQLConfigBuilder("spark.sql.inMemoryColumnarStorage.compressed")
     .internal()
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +
@@ -348,9 +338,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CROSS_JOINS_ENABLED = SQLConfigBuilder("spark.sql.crossJoin.enabled")
+    .doc("When false, we will throw an error if a query contains a cross join")
+    .booleanConf
+    .createWithDefault(false)
+
   val ORDER_BY_ORDINAL = SQLConfigBuilder("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
-         "When false, the ordinal numbers in order/sort By clause are ignored.")
+         "When false, the ordinal numbers in order/sort by clause are ignored.")
     .booleanConf
     .createWithDefault(true)
 
@@ -631,6 +626,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
+  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.

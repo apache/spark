@@ -213,7 +213,7 @@ class Dataset[T] private[sql](
   private implicit def classTag = unresolvedTEncoder.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
-  @transient lazy val sqlContext: SQLContext = sparkSession.wrapped
+  @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)

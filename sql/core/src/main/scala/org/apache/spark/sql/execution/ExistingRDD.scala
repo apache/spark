@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.datasources.HadoopFsRelation
 import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
@@ -157,7 +156,8 @@ private[sql] case class RowDataSourceScanExec(
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
-      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+      !SparkSession.getActiveSession.get.sessionState.conf.getConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
     case _: HadoopFsRelation => true
     case _ => false
   }
@@ -252,7 +252,7 @@ private[sql] case class BatchedDataSourceScanExec(
     val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"/* ${toCommentSafeString(str)} */\n" + (if (nullable) {
+    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
       s"""
         boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
         $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);

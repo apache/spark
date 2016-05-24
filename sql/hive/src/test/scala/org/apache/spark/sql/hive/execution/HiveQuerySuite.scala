@@ -35,6 +35,7 @@ import org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec
 import org.apache.spark.sql.hive._
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.hive.test.TestHive._
+import org.apache.spark.sql.internal.SQLConf
 
 case class TestData(a: Int, b: String)
 
@@ -48,6 +49,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
 
   import org.apache.spark.sql.hive.test.TestHive.implicits._
 
+  private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
+
   override def beforeAll() {
     super.beforeAll()
     TestHive.setCacheTables(true)
@@ -55,6 +58,8 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
     // Add Locale setting
     Locale.setDefault(Locale.US)
+    // Ensures that cross joins are enabled so that we can test them
+    TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
   }
 
   override def afterAll() {
@@ -63,6 +68,7 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       TimeZone.setDefault(originalTimeZone)
       Locale.setDefault(originalLocale)
       sql("DROP TEMPORARY FUNCTION IF EXISTS udtf_count2")
+      TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
     } finally {
       super.afterAll()
     }
@@ -870,6 +876,13 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE t1""")
     sql("select * from src join t1 on src.key = t1.a")
     sql("DROP TABLE t1")
+    assert(sql("list jars").
+      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+    assert(sql("list jar").
+      filter(_.getString(0).contains("hive-hcatalog-core-0.13.1.jar")).count() > 0)
+    val testJar2 = TestHive.getHiveFile("TestUDTF.jar").getCanonicalPath
+    sql(s"ADD JAR $testJar2")
+    assert(sql(s"list jar $testJar").count() == 1)
   }
 
   test("CREATE TEMPORARY FUNCTION") {
@@ -893,6 +906,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
     }
 
     assert(checkAddFileRDD.first())
+    assert(sql("list files").
+      filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
+    assert(sql("list file").
+      filter(_.getString(0).contains("data/files/v1.txt")).count() > 0)
+    assert(sql(s"list file $testFile").count() == 1)
   }
 
   createQueryTest("dynamic_partition",
