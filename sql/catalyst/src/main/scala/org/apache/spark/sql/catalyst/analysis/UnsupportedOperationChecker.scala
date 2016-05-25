@@ -130,12 +130,12 @@ object UnsupportedOperationChecker {
     outputMode match {
       case OutputMode.Append if aggregates.nonEmpty =>
         throwError(
-          s"$outputMode output mode not supported with streaming aggregates on " +
+          s"$outputMode output mode not supported when there are streaming aggregations on " +
             s"streaming DataFrames/DataSets")
 
       case OutputMode.Complete | OutputMode.Update if aggregates.isEmpty =>
         throwError(
-          s"$outputMode output mode not supported when not streaming aggregates are present on " +
+          s"$outputMode output mode not supported when there are no streaming aggregations on " +
             s"streaming DataFrames/Datasets")
 
       case _ =>

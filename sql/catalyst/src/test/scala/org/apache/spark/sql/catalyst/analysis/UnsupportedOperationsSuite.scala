@@ -75,35 +75,13 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     expectedMsgs = "commands" :: Nil)
 
-  // Aggregates: Not supported on streams in Append mode
-  assertSupportedInStreamingPlan(
-    "aggregate - batch with update output mode",
-    batchRelation.groupBy("a")("count(*)"),
-    outputMode = Update)
-
-  assertSupportedInStreamingPlan(
-    "aggregate - batch with append output mode",
-    batchRelation.groupBy("a")("count(*)"),
-    outputMode = Append)
-
-  assertSupportedInStreamingPlan(
-    "aggregate - stream with update output mode",
-    streamRelation.groupBy("a")("count(*)"),
-    outputMode = Update)
-
-  assertNotSupportedInStreamingPlan(
-    "aggregate - stream with append output mode",
-    streamRelation.groupBy("a")("count(*)"),
-    outputMode = Append,
-    Seq("aggregation", "append output mode"))
-
   // Multiple streaming aggregations not supported
   def aggExprs(name: String): Seq[NamedExpression] = Seq(Count("*").as(name))
 
   assertSupportedInStreamingPlan(
     "aggregate - multiple batch aggregations",
     Aggregate(Nil, aggExprs("c"), Aggregate(Nil, aggExprs("d"), batchRelation)),
-    Update)
+    Append)
 
   assertSupportedInStreamingPlan(
     "aggregate - multiple aggregations but only one streaming aggregation",
