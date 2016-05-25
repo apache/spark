@@ -169,12 +169,13 @@ test_that("create DataFrame from RDD", {
   error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
-  suppressWarnings(sql(hiveCtx, "CREATE TABLE people (name string, age double, height float)"))
-  df <- suppressWarnings(read.df(hiveCtx, jsonPathNa, "json", schema))
+  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  sql("CREATE TABLE people (name string, age double, height float)")
+  df <- read.df(jsonPathNa, "json", schema)
   invisible(insertInto(df, "people"))
-  expect_equal(collect(sql(hiveCtx, "SELECT age from people WHERE name = 'Bob'"))$age,
+  expect_equal(collect(sql("SELECT age from people WHERE name = 'Bob'"))$age,
                c(16))
-  expect_equal(collect(sql(hiveCtx, "SELECT height from people WHERE name ='Bob'"))$height,
+  expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
 })
 
@@ -959,30 +960,31 @@ test_that("test HiveContext", {
   error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
-  df <- suppressWarnings(createExternalTable(hiveCtx, "json", jsonPath, "json"))
+  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  df <- createExternalTable("json", jsonPath, "json")
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
-  df2 <- suppressWarnings(sql(hiveCtx, "select * from json"))
+  df2 <- sql("select * from json")
   expect_is(df2, "SparkDataFrame")
   expect_equal(count(df2), 3)
 
   jsonPath2 <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "json2", "json", "append", path = jsonPath2))
-  df3 <- suppressWarnings(sql(hiveCtx, "select * from json2"))
+  df3 <- sql("select * from json2")
   expect_is(df3, "SparkDataFrame")
   expect_equal(count(df3), 3)
   unlink(jsonPath2)
 
   hivetestDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "hivetestbl", path = hivetestDataPath))
-  df4 <- suppressWarnings(sql(hiveCtx, "select * from hivetestbl"))
+  df4 <- sql("select * from hivetestbl")
   expect_is(df4, "SparkDataFrame")
   expect_equal(count(df4), 3)
   unlink(hivetestDataPath)
 
   parquetDataPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
   invisible(saveAsTable(df, "parquetest", "parquet", mode = "overwrite", path = parquetDataPath))
-  df5 <- suppressWarnings(sql(hiveCtx, "select * from parquetest"))
+  df5 <- sql("select * from parquetest")
   expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
@@ -2141,9 +2143,9 @@ test_that("Window functions on a DataFrame", {
     skip("Hive is not build with SparkSQL, skipped")
   })
 
-  df <- suppressWarnings(createDataFrame(hiveCtx,
-                        list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
-                        schema = c("key", "value")))
+  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
+                        schema = c("key", "value"))
   ws <- orderBy(window.partitionBy("key"), "value")
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
