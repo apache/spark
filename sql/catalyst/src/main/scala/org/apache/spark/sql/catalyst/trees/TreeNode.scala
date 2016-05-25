@@ -594,7 +594,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     // returns null if the product type doesn't have a primary constructor, e.g. HiveFunctionWrapper
     case p: Product => try {
       val fieldNames = getConstructorParameterNames(p.getClass)
-      val fieldValues = p.productIterator.toSeq
+      val fieldValues = fieldNames.map { name =>
+        p.getClass.getMethod(name).invoke(p)
+      }
       assert(fieldNames.length == fieldValues.length)
       ("product-class" -> JString(p.getClass.getName)) :: fieldNames.zip(fieldValues).map {
         case (name, value) => name -> parseToJson(value)
