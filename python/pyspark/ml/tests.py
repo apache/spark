@@ -861,8 +861,7 @@ class PersistenceTest(SparkSessionTestCase):
 
     def test_onevsrest(self):
         temp_path = tempfile.mkdtemp()
-        sqlContext = SQLContext(self.sc)
-        df = sqlContext.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
+        df = self.spark.createDataFrame([(0.0, Vectors.dense(1.0, 0.8)),
                                          (1.0, Vectors.sparse(2, [], [])),
                                          (2.0, Vectors.dense(0.5, 0.5))] * 10,
                                         ["label", "features"])
