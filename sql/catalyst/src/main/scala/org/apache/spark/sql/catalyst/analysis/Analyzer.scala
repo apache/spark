@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
-import org.apache.spark.sql.catalyst.planning.{ExtractJoinOutputAttributes, IntegerIndex}
+import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
@@ -109,8 +109,8 @@ class Analyzer(
       TimeWindowing ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
-    Batch("Solve", Once,
-      SolveIllegalReferences),
+    Batch("FixNullability", Once,
+      FixNullability),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -1450,27 +1450,32 @@ class Analyzer(
   }
 
   /**
-   * Corrects attribute references in an expression tree of some operators (e.g., filters and
-   * projects) if these operators have a join as a child and the references point to columns on the
-   * input relation of the join. This is because some joins change the nullability of input columns
-   * and this could cause illegal optimization (e.g., NULL propagation) and wrong answers.
+   * Fixes nullability of Attributes in a resolved LogicalPlan by using the nullability of
+   * corresponding Attributes of its children output Attributes. This step is needed because
+   * users can use a resolved AttributeReference in the Dataset API and outer joins
+   * can change the nullability of an AttribtueReference. Without the fix, a nullable column's
+   * nullable field can be actually set as non-nullable, which cause illegal optimization
+   * (e.g., NULL propagation) and wrong answers.
    * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
    */
-  object SolveIllegalReferences extends Rule[LogicalPlan] {
+  object FixNullability extends Rule[LogicalPlan] {
 
-    private def replaceReferences(e: Expression, attrMap: AttributeMap[Attribute]) = e.transform {
-      case a: AttributeReference => attrMap.get(a).getOrElse(a)
-    }
-
-    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case q: LogicalPlan =>
-        q.transform {
-          case f @ Filter(filterCondition, ExtractJoinOutputAttributes(join, joinOutputMap)) =>
-            f.copy(condition = replaceReferences(filterCondition, joinOutputMap))
-          case p @ Project(projectList, ExtractJoinOutputAttributes(join, joinOutputMap)) =>
-            p.copy(projectList = projectList.map { e =>
-              replaceReferences(e, joinOutputMap).asInstanceOf[NamedExpression]
-            })
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case q: LogicalPlan if q.resolved =>
+        val childrenOutput = q.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
+          case (exprId, attributes) =>
+            // If there are multiple Attributes having the same ExpirId, we need to resolve
+            // the conflict of nullable field.
+            val nullable = attributes.map(_.nullable).reduce(_ || _)
+            attributes.map(attr => attr.withNullability(nullable))
+        }.toSeq
+        val attributeMap = AttributeMap[Attribute](childrenOutput.map(attr => attr -> attr))
+        // For an Attribute used by the current LogicalPlan, if it is from its children,
+        // we fix the nullable field by using the nullability setting of the corresponding
+        // output Attribute from the children.
+        q.transformExpressions {
+          case attr: Attribute if attributeMap.contains(attr) =>
+            attr.withNullability(attributeMap(attr).nullable)
         }
     }
   }
