@@ -345,6 +345,19 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table"),
         Seq.empty[Row])
+
+      withView("v1") {
+        sql(s"CREATE VIEW v1 AS SELECT * FROM non_part_table")
+        val msg = intercept[AnalysisException] {
+          sql("truncate table v1")
+        }.getMessage
+        assert(msg.contains("is not allowed on a view"))
+      }
+
+      val msg = intercept[AnalysisException] {
+        sql("TRUNCATE TABLE parquet_tab1")
+      }.getMessage
+      assert(msg.contains("is not allowed on a datasource table"))
     }
   }
 
