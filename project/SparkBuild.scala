@@ -278,14 +278,22 @@ object SparkBuild extends PomBuild {
     javacOptions in (Compile, compile) ++= Seq(
       "-target", javacJVMVersion.value
     ) ++ sys.env.get("JAVA_7_HOME").map { jdk7 =>
-      Seq("-bootclasspath", s"$jdk7/jre/lib/rt.jar")
+      if (javacJVMVersion.value == "1.7") {
+        Seq("-bootclasspath", s"$jdk7/jre/lib/rt.jar")
+      } else {
+        Nil
+      }
     }.getOrElse(Nil),
 
     scalacOptions in Compile ++= Seq(
       s"-target:jvm-${scalacJVMVersion.value}",
       "-sourcepath", (baseDirectory in ThisBuild).value.getAbsolutePath  // Required for relative source links in scaladoc
     ) ++ sys.env.get("JAVA_7_HOME").map { jdk7 =>
-      Seq("-javabootclasspath", s"$jdk7/jre/lib/rt.jar")
+      if (javacJVMVersion.value == "1.7") {
+        Seq("-javabootclasspath", s"$jdk7/jre/lib/rt.jar")
+      } else {
+        Nil
+      }
     }.getOrElse(Nil),
 
     // Implements -Xfatal-warnings, ignoring deprecation warnings.
