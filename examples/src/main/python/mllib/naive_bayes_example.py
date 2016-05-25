@@ -29,8 +29,6 @@ import shutil
 from pyspark import SparkContext
 # $example on$
 from pyspark.mllib.classification import NaiveBayes, NaiveBayesModel
-from pyspark.mllib.linalg import Vectors
-from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.util import MLUtils
 
 
@@ -45,14 +43,14 @@ if __name__ == "__main__":
     data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
     # Split data approximately into training (60%) and test (40%)
-    trainingData, testData = data.randomSplit([0.6, 0.4], seed=0)
+    training, test = data.randomSplit([0.6, 0.4], seed=0)
 
     # Train a naive Bayes model.
-    model = NaiveBayes.train(trainingData, 1.0)
+    model = NaiveBayes.train(training, 1.0)
 
     # Make prediction and test accuracy.
-    predictionAndLabel = testData.map(lambda p: (model.predict(p.features), p.label))
-    accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / testData.count()
+    predictionAndLabel = test.map(lambda p: (model.predict(p.features), p.label))
+    accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
     print('model accuracy {}'.format(accuracy))
 
     # Save and load model
@@ -60,8 +58,8 @@ if __name__ == "__main__":
     shutil.rmtree(output_dir, ignore_errors=True)
     model.save(sc, output_dir)
     sameModel = NaiveBayesModel.load(sc, output_dir)
-    predictionAndLabel = testData.map(lambda p: (sameModel.predict(p.features), p.label))
-    accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / testData.count()
+    predictionAndLabel = test.map(lambda p: (sameModel.predict(p.features), p.label))
+    accuracy = 1.0 * predictionAndLabel.filter(lambda (x, v): x == v).count() / test.count()
     print('sameModel accuracy {}'.format(accuracy))
 
     # $example off$
