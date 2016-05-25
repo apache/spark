@@ -126,6 +126,50 @@ methods <- c("avg", "max", "mean", "min", "sum")
 # These are not exposed on GroupedData: "kurtosis", "skewness", "stddev", "stddev_samp", "stddev_pop",
 # "variance", "var_samp", "var_pop"
 
+#' Pivot
+#' 
+#' Pivot GroupedData column to expand unique values of this column into set of column named accordingly and perform
+#' aggregation
+#' 
+#' @param x: a GroupedData object
+#' @param by: name of column to pivot data by
+#' @param values: a unique list of values that will be translated to columns in the output SparkDataFrame. 
+#' If not given it will be computed on the fly which will influence performance
+#' @return GroupedData object
+#' @rdname pivot
+#' @export 
+#' @examples 
+#' \dontrun{
+#' df = createDataFrame(sqlContext, data.frame(
+#' earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+#' course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+#' year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+#' ))
+#' sums <- groupBy(df, "year") %>% 
+#' pivot("course", values) %>% 
+#' SparkR::summarize(sumOfEarnings = sum(df$earnings) ) %>% 
+#' collect()
+#' @param by: name of column to pivot by
+#' @rdname values: a unique list of values that will be translated to columns in the output SparkDataFrame
+#' @export
+#' @examples 
+#' \dontrun{
+#' pivot(groupBy(df, "year"))
+#' }
+
+setMethod("pivot",
+          signature(x = "GroupedData"),
+          function(x, colname, values=NULL){
+              if(is.null(values)){
+                  result <- SparkR:::callJMethod(x@sgd, "pivot", colname)
+              }else{
+                  stopifnot(length(values)==length(unique(values)))
+                  result <- SparkR:::callJMethod(x@sgd, "pivot", colname, values)
+              }
+              SparkR:::groupedData(result)
+          })
+
+
 createMethod <- function(name) {
   setMethod(name,
             signature(x = "GroupedData"),
