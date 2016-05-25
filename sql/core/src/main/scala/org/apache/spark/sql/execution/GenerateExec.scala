@@ -118,7 +118,7 @@ case class GenerateExec(
   }
 
   private def codegenExplode(
-      e: Explode,
+      e: Expression,
       ctx: CodegenContext,
       input: Seq[ExprCode],
       row: ExprCode): String = {
@@ -126,7 +126,7 @@ case class GenerateExec(
     ctx.copyResult = true
 
     // Generate the driving expression.
-    val data = e.child.genCode(ctx)
+    val data = e.genCode(ctx)
 
     // Generate looping variables.
     val numOutput = metricTerm(ctx, "numOutputRows")
@@ -153,6 +153,7 @@ case class GenerateExec(
     }
     val values = e.child.dataType match {
       case ArrayType(dataType, nullable) =>
+        // Add unwrapping here for tuples.
         Seq(accessor("", "col", dataType, nullable))
       case MapType(keyType, valueType, valueContainsNull) =>
         Seq(accessor(".keyArray()", "key", keyType, nullable = false),

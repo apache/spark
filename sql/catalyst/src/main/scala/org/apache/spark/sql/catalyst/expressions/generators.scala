@@ -150,6 +150,6 @@ case class Explode(child: Expression) extends UnaryExpression with Generator {
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    sys.error("Just don't")
+    child.genCode(ctx)
   }
 }
