@@ -24,7 +24,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -368,17 +368,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * For example:
    * {{{
    *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
-   *   [COLUMNS (col1, col2)]
    * }}}
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.identifierList != null) {
-      throw operationNotAllowed("TRUNCATE TABLE ... COLUMNS", ctx)
-    }
     TruncateTableCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    )
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**
@@ -491,6 +486,37 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
     DescribeDatabaseCommand(ctx.identifier.getText, ctx.EXTENDED != null)
+  }
+
+  /**
+   * Create a plan for a DESCRIBE FUNCTION command.
+   */
+  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        FunctionIdentifier(string(describeFuncName.STRING()), database = None)
+      } else if (describeFuncName.qualifiedName() != null) {
+        visitFunctionName(describeFuncName.qualifiedName)
+      } else {
+        FunctionIdentifier(describeFuncName.getText, database = None)
+      }
+    DescribeFunctionCommand(functionName, EXTENDED != null)
+  }
+
+  /**
+   * Create a plan for a SHOW FUNCTIONS command.
+   */
+  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    if (qualifiedName != null) {
+      val name = visitFunctionName(qualifiedName)
+      ShowFunctionsCommand(name.database, Some(name.funcName))
+    } else if (pattern != null) {
+      ShowFunctionsCommand(None, Some(string(pattern)))
+    } else {
+      ShowFunctionsCommand(None, None)
+    }
   }
 
   /**
@@ -774,13 +800,40 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Create an [[AddJarCommand]] or [[AddFileCommand]] command depending on the requested resource.
+   * Create a [[AddFileCommand]], [[AddJarCommand]], [[ListFilesCommand]] or [[ListJarsCommand]]
+   * command depending on the requested operation on resources.
+   * Expected format:
+   * {{{
+   *   ADD (FILE[S] <filepath ...> | JAR[S] <jarpath ...>)
+   *   LIST (FILE[S] [filepath ...] | JAR[S] [jarpath ...])
+   * }}}
    */
-  override def visitAddResource(ctx: AddResourceContext): LogicalPlan = withOrigin(ctx) {
-    ctx.identifier.getText.toLowerCase match {
-      case "file" => AddFileCommand(remainder(ctx.identifier).trim)
-      case "jar" => AddJarCommand(remainder(ctx.identifier).trim)
-      case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
+  override def visitManageResource(ctx: ManageResourceContext): LogicalPlan = withOrigin(ctx) {
+    val mayebePaths = remainder(ctx.identifier).trim
+    ctx.op.getType match {
+      case SqlBaseParser.ADD =>
+        ctx.identifier.getText.toLowerCase match {
+          case "file" => AddFileCommand(mayebePaths)
+          case "jar" => AddJarCommand(mayebePaths)
+          case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
+        }
+      case SqlBaseParser.LIST =>
+        ctx.identifier.getText.toLowerCase match {
+          case "files" | "file" =>
+            if (mayebePaths.length > 0) {
+              ListFilesCommand(mayebePaths.split("\\s+"))
+            } else {
+              ListFilesCommand()
+            }
+          case "jars" | "jar" =>
+            if (mayebePaths.length > 0) {
+              ListJarsCommand(mayebePaths.split("\\s+"))
+            } else {
+              ListJarsCommand()
+            }
+          case other => throw operationNotAllowed(s"LIST with resource type '$other'", ctx)
+        }
+      case _ => throw operationNotAllowed(s"Other types of operation on resources", ctx)
     }
   }
 

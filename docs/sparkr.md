@@ -386,6 +386,7 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 ## Upgrading From SparkR 1.5.x to 1.6.x
 
  - Before Spark 1.6.0, the default mode for writes was `append`. It was changed in Spark 1.6.0 to `error` to match the Scala API.
+ - SparkSQL converts `NA` in R to `null` and vice-versa.
 
 ## Upgrading From SparkR 1.6.x to 2.0
 

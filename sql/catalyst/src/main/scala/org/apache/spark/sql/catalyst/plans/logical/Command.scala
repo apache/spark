@@ -15,18 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.util;
+package org.apache.spark.sql.catalyst.plans.logical
 
 /**
- * :: DeveloperApi ::
- *
- * This abstract class represents a handle that refers to a record written in a
- * {@link org.apache.spark.streaming.util.WriteAheadLog WriteAheadLog}.
- * It must contain all the information necessary for the record to be read and returned by
- * an implementation of the WriteAheadLog class.
- *
- * @see org.apache.spark.streaming.util.WriteAheadLog
+ * A logical node that represents a non-query command to be executed by the system.  For example,
+ * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
+ * eagerly executed.
  */
-@org.apache.spark.annotation.DeveloperApi
-public abstract class WriteAheadLogRecordHandle implements java.io.Serializable {
-}
+trait Command

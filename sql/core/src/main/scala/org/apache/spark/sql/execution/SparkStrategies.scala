@@ -416,12 +416,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             c.child)
         ExecutedCommandExec(cmd) :: Nil
 
-      case logical.ShowFunctions(db, pattern) =>
-        ExecutedCommandExec(ShowFunctionsCommand(db, pattern)) :: Nil
-
-      case logical.DescribeFunction(function, extended) =>
-        ExecutedCommandExec(DescribeFunctionCommand(function, extended)) :: Nil
-
       case _ => Nil
     }
   }
