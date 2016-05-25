@@ -375,7 +375,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .format("csv")
         .option("quote", "\"")
         .option("escape", "\"")
-        .option("quoteEscapingEnabled", "true")
+        .option("escapeQuotes", "true")
         .save(csvDir)
 
       val results = spark.read

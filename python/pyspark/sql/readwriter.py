@@ -766,7 +766,7 @@ class DataFrameWriter(object):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None, quoteEscapingEnabled=None):
+            header=None, nullValue=None, escapeQuotes=None):
         """Saves the content of the [[DataFrame]] in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -787,7 +787,7 @@ class DataFrameWriter(object):
                       value, ``"``.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
-        :param quoteEscapingEnabled: A flag indicating whether values containing quotes
+        :param escapeQuotes: A flag indicating whether values containing quotes
                                      should always be enclosed in quotes. Default is to escape
                                      only values starting with a quote character. ``false``
         :param header: writes the names of columns as the first line. If None is set, it uses
@@ -810,8 +810,8 @@ class DataFrameWriter(object):
             self.option("header", header)
         if nullValue is not None:
             self.option("nullValue", nullValue)
-        if quoteEscapingEnabled is not None:
-            self.option("quoteEscapingEnabled", nullValue)
+        if escapeQuotes is not None:
+            self.option("escapeQuotes", nullValue)
         self._jwrite.csv(path)
 
     @since(1.5)

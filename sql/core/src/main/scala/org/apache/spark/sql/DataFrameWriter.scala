@@ -684,7 +684,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * the separator can be part of the value.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
-   * <li>`quoteEscapingEnabled` (default `false`): a flag indicating whether values containing
+   * <li>`escapeQuotes` (default `false`): a flag indicating whether values containing
    * quotes should always be enclosed in quotes. Default is to escape only values starting
    * with a quote character</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
