@@ -25,21 +25,29 @@ from pyspark.sql.functions import explode, split
 from pyspark.sql.types import *
 import timeit
 
+
 def legacy_word_count(rdd):
     wc = rdd.flatMap(lambda x: x.split(" ")).map(lambda w: (w, 1)).reduceByKey(lambda x, y: x + y)
     return wc.count()
 
+
 def dataframe_udf_word_count(df):
-    wc = df.select(tokenizeUDF(df['value']).alias("w")).select(explode("w").alias("words")).groupBy("words").count()
+    wc = df.select(tokenizeUDF(df['value']).alias("w")).select(explode("w").alias("words")) \
+                                                       .groupBy("words").count()
     return wc.count()
+
 
 def dataframe_jython_udf_word_count(df):
-    wc = df.select(tokenizeJythonUDF(df['value']).alias("w")).select(explode("w").alias("words")).groupBy("words").count()
+    wc = df.select(tokenizeJythonUDF(df['value']).alias("w")).select(explode("w").alias("words")) \
+                                                             .groupBy("words").count()
     return wc.count()
 
+
 def dataframe_scala_udf_word_count(df):
-    wc = df.select(split(df['value'], " ").alias("w")).select(explode("w").alias("words")).groupBy("words").count()
+    wc = df.select(split(df['value'], " ").alias("w")).select(explode("w").alias("words")) \
+                                                      .groupBy("words").count()
     return wc.count()
+
 
 def benchmark(textInputPath, repeat, number):
     print("Benchmarking wordcount:")
@@ -62,6 +70,7 @@ def benchmark(textInputPath, repeat, number):
     print("DataFrame Scala UDF:")
     print(timeit.repeat(lambda: dataframe_scala_udf_word_count(df), repeat=10, number=500))
 
+
 if __name__ == "__main__":
     session = SparkSession\
         .builder\
@@ -73,4 +82,3 @@ if __name__ == "__main__":
     repeat = args[1]
     number = args[3]
     benchmark(textInputPath, repeat, number)
-    
