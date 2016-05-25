@@ -1111,7 +1111,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       spark.range(1).write.json(path)
 
       withTable("t") {
-        sql(s"CREATE TABLE t USING json OPTIONS (PATH '/tmp/test.json')")
+        sql(s"CREATE TABLE t USING json OPTIONS (PATH '$path')")
         sql("DROP TABLE t")
         sql(s"CREATE TABLE t USING json AS SELECT 1 AS c")
       }
