@@ -259,12 +259,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("repartition") {
+    intercept[IllegalArgumentException] {
+      testData.select('key).repartition(0)
+    }
+
     checkAnswer(
       testData.select('key).repartition(10).select('key),
       testData.select('key).collect().toSeq)
   }
 
   test("coalesce") {
+    intercept[IllegalArgumentException] {
+      testData.select('key).coalesce(0)
+    }
+
     assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
 
     checkAnswer(

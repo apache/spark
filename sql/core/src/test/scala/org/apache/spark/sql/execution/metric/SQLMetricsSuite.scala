@@ -29,6 +29,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.execution.SparkPlanInfo
 import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{AccumulatorContext, JsonProtocol, Utils}
 
@@ -237,16 +238,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
     testDataForJoin.createOrReplaceTempView("testDataForJoin")
-    withTempTable("testDataForJoin") {
-      // Assume the execution plan is
-      // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = spark.sql(
-        "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-          "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
-      testSparkPlanMetrics(df, 3, Map(
-        1L -> ("BroadcastNestedLoopJoin", Map(
-          "number of output rows" -> 12L)))
-      )
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withTempTable("testDataForJoin") {
+        // Assume the execution plan is
+        // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val df = spark.sql(
+          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+        testSparkPlanMetrics(df, 3, Map(
+          1L -> ("BroadcastNestedLoopJoin", Map(
+            "number of output rows" -> 12L)))
+        )
+      }
     }
   }
 
@@ -263,17 +266,18 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("CartesianProduct metrics") {
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.createOrReplaceTempView("testDataForJoin")
-    withTempTable("testDataForJoin") {
-      // Assume the execution plan is
-      // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = spark.sql(
-        "SELECT * FROM testData2 JOIN testDataForJoin")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> ("CartesianProduct", Map(
-          "number of output rows" -> 12L)))
-      )
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      testDataForJoin.createOrReplaceTempView("testDataForJoin")
+      withTempTable("testDataForJoin") {
+        // Assume the execution plan is
+        // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val df = spark.sql(
+          "SELECT * FROM testData2 JOIN testDataForJoin")
+        testSparkPlanMetrics(df, 1, Map(
+          0L -> ("CartesianProduct", Map("number of output rows" -> 12L)))
+        )
+      }
     }
   }
 

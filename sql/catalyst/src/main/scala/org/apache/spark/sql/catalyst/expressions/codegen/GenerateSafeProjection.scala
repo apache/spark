@@ -48,7 +48,7 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
     val tmp = ctx.freshName("tmp")
     val output = ctx.freshName("safeRow")
     val values = ctx.freshName("values")
-    // These expressions could be splitted into multiple functions
+    // These expressions could be split into multiple functions
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
     val rowClass = classOf[GenericInternalRow].getName
@@ -181,7 +181,8 @@ object GenerateSafeProjection extends CodeGenerator[Seq[Expression], Projection]
       }
     """
 
-    val code = new CodeAndComment(codeBody, ctx.getPlaceHolderToComments())
+    val code = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(codeBody, ctx.getPlaceHolderToComments()))
     logDebug(s"code for ${expressions.mkString(",")}:\n${CodeFormatter.format(code)}")
 
     val c = CodeGenerator.compile(code)
