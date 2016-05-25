@@ -276,6 +276,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
   test("repartitioned RDDs") {
     val data = sc.parallelize(1 to 1000, 10)
 
+    intercept[IllegalArgumentException] {
+      data.repartition(0)
+    }
+
     // Coalesce partitions
     val repartitioned1 = data.repartition(2)
     assert(repartitioned1.partitions.size == 2)
@@ -328,6 +332,10 @@ class RDDSuite extends SparkFunSuite with SharedSparkContext {
 
   test("coalesced RDDs") {
     val data = sc.parallelize(1 to 10, 10)
+
+    intercept[IllegalArgumentException] {
+      data.coalesce(0)
+    }
 
     val coalesced1 = data.coalesce(2)
     assert(coalesced1.collect().toList === (1 to 10).toList)
