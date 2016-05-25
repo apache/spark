@@ -18,11 +18,11 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.catalyst.FunctionIdentifier
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser._
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, ShowFunctionsCommand}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Parser test cases for rules defined in [[SparkSqlParser]].
@@ -32,12 +32,14 @@ import org.apache.spark.sql.execution.command.{DescribeFunctionCommand, ShowFunc
  */
 class SparkSqlParserSuite extends PlanTest {
 
+  private lazy val parser = new SparkSqlParser(new SQLConf)
+
   private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
-    comparePlans(parsePlan(sqlCommand), plan)
+    comparePlans(parser.parsePlan(sqlCommand), plan)
   }
 
   private def intercept(sqlCommand: String, messages: String*): Unit = {
-    val e = intercept[ParseException](parsePlan(sqlCommand))
+    val e = intercept[ParseException](parser.parsePlan(sqlCommand))
     messages.foreach { message =>
       assert(e.message.contains(message))
     }
