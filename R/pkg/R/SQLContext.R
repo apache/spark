@@ -43,11 +43,13 @@ dispatchFunc <- function(newFuncSig, x, ...) {
   funcName <- as.character(sys.call(sys.parent())[[1]])
   f <- get(paste0(funcName, ".default"))
   # Strip sqlContext from list of parameters and then pass the rest along.
+  contextNames <- c("org.apache.spark.sql.SQLContext",
+                    "org.apache.spark.sql.hive.HiveContext",
+                    "org.apache.spark.sql.hive.test.TestHiveContext")
   if (missing(x) && length(list(...)) == 0) {
     f()
   } else if (class(x) == "jobj" &&
-      (getClassName.jobj(x) == "org.apache.spark.sql.SQLContext" ||
-       getClassName.jobj(x) == "org.apache.spark.sql.hive.HiveContext")) {
+            any(grepl(paste(contextNames, collapse = "|"), getClassName.jobj(x)))) {
     .Deprecated(newFuncSig, old = paste0(funcName, "(sqlContext...)"))
     f(...)
   } else {
@@ -103,7 +105,6 @@ infer_type <- function(x) {
 #'
 #' Converts R data.frame or list into SparkDataFrame.
 #'
-#' @param sqlContext A SQLContext
 #' @param data An RDD or list or data.frame
 #' @param schema a list of column names or named list (StructType), optional
 #' @return a SparkDataFrame
@@ -113,16 +114,14 @@ infer_type <- function(x) {
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df1 <- as.DataFrame(sqlContext, iris)
-#' df2 <- as.DataFrame(sqlContext, list(3,4,5,6))
-#' df3 <- createDataFrame(sqlContext, iris)
+#' df1 <- as.DataFrame(iris)
+#' df2 <- as.DataFrame(list(3,4,5,6))
+#' df3 <- createDataFrame(iris)
 #' }
+#' @name createDataFrame
+#' @method createDataFrame default
 
 # TODO(davies): support sampling and infer type from NA
-createDataFrame <- function(x, ...) {
-  dispatchFunc("createDataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
-}
-
 createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   sqlContext <- getSqlContext()
   if (is.data.frame(data)) {
@@ -198,15 +197,21 @@ createDataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   dataFrame(sdf)
 }
 
+createDataFrame <- function(x, ...) {
+  dispatchFunc("createDataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
+}
+
 #' @rdname createDataFrame
 #' @aliases createDataFrame
 #' @export
-as.DataFrame <- function(x, ...) {
-  dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
-}
+#' @method as.DataFrame default
 
 as.DataFrame.default <- function(data, schema = NULL, samplingRatio = 1.0) {
   createDataFrame(data, schema, samplingRatio)
+}
+
+as.DataFrame <- function(x, ...) {
+  dispatchFunc("as.DataFrame(data, schema = NULL, samplingRatio = 1.0)", x, ...)
 }
 
 #' toDF
@@ -236,24 +241,20 @@ setMethod("toDF", signature(x = "RDD"),
 #' Loads a JSON file (one object per line), returning the result as a SparkDataFrame
 #' It goes through the entire dataset once to determine the schema.
 #'
-#' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.json
-#' @name read.json
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
-#' df <- jsonFile(sqlContext, path)
+#' df <- read.json(path)
+#' df <- jsonFile(path)
 #' }
-
-read.json <- function(x, ...) {
-  dispatchFunc("read.json(path)", x, ...)
-}
+#' @name read.json
+#' @method read.json default
 
 read.json.default <- function(path) {
   sqlContext <- getSqlContext()
@@ -264,18 +265,23 @@ read.json.default <- function(path) {
   dataFrame(sdf)
 }
 
+read.json <- function(x, ...) {
+  dispatchFunc("read.json(path)", x, ...)
+}
+
 #' @rdname read.json
 #' @name jsonFile
 #' @export
-jsonFile <- function(x, ...) {
-  dispatchFunc("jsonFile(path)", x, ...)
-}
+#' @method jsonFile default
 
 jsonFile.default <- function(path) {
   .Deprecated("read.json")
   read.json(path)
 }
 
+jsonFile <- function(x, ...) {
+  dispatchFunc("jsonFile(path)", x, ...)
+}
 
 #' JSON RDD
 #'
@@ -314,16 +320,12 @@ jsonRDD <- function(sqlContext, rdd, schema = NULL, samplingRatio = 1.0) {
 #'
 #' Loads a Parquet file, returning the result as a SparkDataFrame.
 #'
-#' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.parquet
-#' @name read.parquet
 #' @export
-
-read.parquet <- function(x, ...) {
-  dispatchFunc("read.parquet(...)", x, ...)
-}
+#' @name read.parquet
+#' @method read.parquet default
 
 read.parquet.default <- function(path) {
   sqlContext <- getSqlContext()
@@ -334,17 +336,22 @@ read.parquet.default <- function(path) {
   dataFrame(sdf)
 }
 
+read.parquet <- function(x, ...) {
+  dispatchFunc("read.parquet(...)", x, ...)
+}
+
 #' @rdname read.parquet
 #' @name parquetFile
 #' @export
-# TODO: Implement saveasParquetFile and write examples for both
-parquetFile <- function(x, ...) {
-  dispatchFunc("parquetFile(...)", x, ...)
-}
+#' @method parquetFile default
 
 parquetFile.default <- function(...) {
   .Deprecated("read.parquet")
   read.parquet(unlist(list(...)))
+}
+
+parquetFile <- function(x, ...) {
+  dispatchFunc("parquetFile(...)", x, ...)
 }
 
 #' Create a SparkDataFrame from a text file.
@@ -354,23 +361,19 @@ parquetFile.default <- function(...) {
 #' ignored in the resulting DataFrame.
 #' Each line in the text file is a new row in the resulting SparkDataFrame.
 #'
-#' @param sqlContext SQLContext to use
 #' @param path Path of file to read. A vector of multiple paths is allowed.
 #' @return SparkDataFrame
 #' @rdname read.text
-#' @name read.text
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.txt"
-#' df <- read.text(sqlContext, path)
+#' df <- read.text(path)
 #' }
-
-read.text <- function(x, ...) {
-  dispatchFunc("read.text(path)", x, ...)
-}
+#' @name read.text
+#' @method read.text default
 
 read.text.default <- function(path) {
   sqlContext <- getSqlContext()
@@ -381,27 +384,29 @@ read.text.default <- function(path) {
   dataFrame(sdf)
 }
 
+read.text <- function(x, ...) {
+  dispatchFunc("read.text(path)", x, ...)
+}
+
 #' SQL Query
 #'
 #' Executes a SQL query using Spark, returning the result as a SparkDataFrame.
 #'
-#' @param sqlContext SQLContext to use
 #' @param sqlQuery A character vector containing the SQL query
 #' @return SparkDataFrame
+#' @rdname sql
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
+#' df <- read.json(path)
 #' registerTempTable(df, "table")
-#' new_df <- sql(sqlContext, "SELECT * FROM table")
+#' new_df <- sql("SELECT * FROM table")
 #' }
-
-sql <- function(x, ...) {
-  dispatchFunc("sql(sqlQuery)", x, ...)
-}
+#' @name sql
+#' @method sql default
 
 sql.default <- function(sqlQuery) {
   sqlContext <- getSqlContext()
@@ -409,12 +414,15 @@ sql.default <- function(sqlQuery) {
   dataFrame(sdf)
 }
 
+sql <- function(x, ...) {
+  dispatchFunc("sql(sqlQuery)", x, ...)
+}
+
 #' Create a SparkDataFrame from a SparkSQL Table
 #'
 #' Returns the specified Table as a SparkDataFrame.  The Table must have already been registered
 #' in the SQLContext.
 #'
-#' @param sqlContext SQLContext to use
 #' @param tableName The SparkSQL Table to convert to a SparkDataFrame.
 #' @return SparkDataFrame
 #' @rdname tableToDF
@@ -425,16 +433,13 @@ sql.default <- function(sqlQuery) {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
+#' df <- read.json(path)
 #' registerTempTable(df, "table")
-#' new_df <- tableToDF(sqlContext, "table")
+#' new_df <- tableToDF("table")
 #' }
+#' @note since 2.0.0
 
-tableToDF <- function(x, ...) {
-  dispatchFunc("tableToDF(tableName)", x, ...)
-}
-
-tableToDF.default <- function(tableName) {
+tableToDF <- function(tableName) {
   sqlContext <- getSqlContext()
   sdf <- callJMethod(sqlContext, "table", tableName)
   dataFrame(sdf)
@@ -444,20 +449,18 @@ tableToDF.default <- function(tableName) {
 #'
 #' Returns a SparkDataFrame containing names of tables in the given database.
 #'
-#' @param sqlContext SQLContext to use
 #' @param databaseName name of the database
 #' @return a SparkDataFrame
+#' @rdname tables
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' tables(sqlContext, "hive")
+#' tables("hive")
 #' }
-
-tables <- function(x, ...) {
-  dispatchFunc("tables(databaseName = NULL)", x, ...)
-}
+#' @name tables
+#' @method tables default
 
 tables.default <- function(databaseName = NULL) {
   sqlContext <- getSqlContext()
@@ -469,25 +472,26 @@ tables.default <- function(databaseName = NULL) {
   dataFrame(jdf)
 }
 
+tables <- function(x, ...) {
+  dispatchFunc("tables(databaseName = NULL)", x, ...)
+}
 
 #' Table Names
 #'
 #' Returns the names of tables in the given database as an array.
 #'
-#' @param sqlContext SQLContext to use
 #' @param databaseName name of the database
 #' @return a list of table names
+#' @rdname tableNames
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' tableNames(sqlContext, "hive")
+#' tableNames("hive")
 #' }
-
-tableNames <- function(x, ...) {
-  dispatchFunc("tableNames(databaseName = NULL)", x, ...)
-}
+#' @name tableNames
+#' @method tableNames default
 
 tableNames.default <- function(databaseName = NULL) {
   sqlContext <- getSqlContext()
@@ -498,78 +502,88 @@ tableNames.default <- function(databaseName = NULL) {
   }
 }
 
+tableNames <- function(x, ...) {
+  dispatchFunc("tableNames(databaseName = NULL)", x, ...)
+}
 
 #' Cache Table
 #'
 #' Caches the specified table in-memory.
 #'
-#' @param sqlContext SQLContext to use
 #' @param tableName The name of the table being cached
 #' @return SparkDataFrame
+#' @rdname cacheTable
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
+#' df <- read.json(path)
 #' registerTempTable(df, "table")
-#' cacheTable(sqlContext, "table")
+#' cacheTable("table")
 #' }
-
-cacheTable <- function(x, ...) {
-  dispatchFunc("cacheTable(tableName)", x, ...)
-}
+#' @name cacheTable
+#' @method cacheTable default
 
 cacheTable.default <- function(tableName) {
   sqlContext <- getSqlContext()
   callJMethod(sqlContext, "cacheTable", tableName)
 }
 
+cacheTable <- function(x, ...) {
+  dispatchFunc("cacheTable(tableName)", x, ...)
+}
+
 #' Uncache Table
 #'
 #' Removes the specified table from the in-memory cache.
 #'
-#' @param sqlContext SQLContext to use
 #' @param tableName The name of the table being uncached
 #' @return SparkDataFrame
+#' @rdname uncacheTable
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
-#' df <- read.json(sqlContext, path)
+#' df <- read.json(path)
 #' registerTempTable(df, "table")
-#' uncacheTable(sqlContext, "table")
+#' uncacheTable("table")
 #' }
-
-uncacheTable <- function(x, ...) {
-  dispatchFunc("uncacheTable(tableName)", x, ...)
-}
+#' @name uncacheTable
+#' @method uncacheTable default
 
 uncacheTable.default <- function(tableName) {
   sqlContext <- getSqlContext()
   callJMethod(sqlContext, "uncacheTable", tableName)
 }
 
+uncacheTable <- function(x, ...) {
+  dispatchFunc("uncacheTable(tableName)", x, ...)
+}
+
 #' Clear Cache
 #'
 #' Removes all cached tables from the in-memory cache.
 #'
-#' @param sqlContext SQLContext to use
+#' @rdname clearCache
+#' @export
 #' @examples
 #' \dontrun{
-#' clearCache(sqlContext)
+#' clearCache()
 #' }
-
-clearCache <- function() {
-  dispatchFunc("clearCache()")
-}
+#' @name clearCache
+#' @method clearCache default
 
 clearCache.default <- function() {
   sqlContext <- getSqlContext()
   callJMethod(sqlContext, "clearCache")
+}
+
+clearCache <- function() {
+  dispatchFunc("clearCache()")
 }
 
 #' Drop Temporary Table
@@ -577,20 +591,19 @@ clearCache.default <- function() {
 #' Drops the temporary table with the given table name in the catalog.
 #' If the table has been cached/persisted before, it's also unpersisted.
 #'
-#' @param sqlContext SQLContext to use
 #' @param tableName The name of the SparkSQL table to be dropped.
+#' @rdname dropTempTable
+#' @export
 #' @examples
 #' \dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- read.df(sqlContext, path, "parquet")
+#' df <- read.df(path, "parquet")
 #' registerTempTable(df, "table")
-#' dropTempTable(sqlContext, "table")
+#' dropTempTable("table")
 #' }
-
-dropTempTable <- function(x, ...) {
-  dispatchFunc("dropTempTable(tableName)", x, ...)
-}
+#' @name dropTempTable
+#' @method dropTempTable default
 
 dropTempTable.default <- function(tableName) {
   sqlContext <- getSqlContext()
@@ -598,6 +611,10 @@ dropTempTable.default <- function(tableName) {
     stop("tableName must be a string.")
   }
   callJMethod(sqlContext, "dropTempTable", tableName)
+}
+
+dropTempTable <- function(x, ...) {
+  dispatchFunc("dropTempTable(tableName)", x, ...)
 }
 
 #' Load a SparkDataFrame
@@ -608,7 +625,6 @@ dropTempTable.default <- function(tableName) {
 #' If `source` is not specified, the default data source configured by
 #' "spark.sql.sources.default" will be used.
 #'
-#' @param sqlContext SQLContext to use
 #' @param path The path of files to load
 #' @param source The name of external data source
 #' @param schema The data schema defined in structType
@@ -620,16 +636,14 @@ dropTempTable.default <- function(tableName) {
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df1 <- read.df(sqlContext, "path/to/file.json", source = "json")
+#' df1 <- read.df("path/to/file.json", source = "json")
 #' schema <- structType(structField("name", "string"),
 #'                      structField("info", "map<string,double>"))
-#' df2 <- read.df(sqlContext, mapTypeJsonPath, "json", schema)
-#' df3 <- loadDF(sqlContext, "data/test_table", "parquet", mergeSchema = "true")
+#' df2 <- read.df(mapTypeJsonPath, "json", schema)
+#' df3 <- loadDF("data/test_table", "parquet", mergeSchema = "true")
 #' }
-
-read.df <- function(x, ...) {
-  dispatchFunc("read.df(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
-}
+#' @name read.df
+#' @method read.df default
 
 read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   sqlContext <- getSqlContext()
@@ -651,14 +665,20 @@ read.df.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   dataFrame(sdf)
 }
 
+read.df <- function(x, ...) {
+  dispatchFunc("read.df(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
+}
+
 #' @rdname read.df
 #' @name loadDF
-loadDF <- function(x, ...) {
-  dispatchFunc("loadDF(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
-}
+#' @method loadDF default
 
 loadDF.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
   read.df(path, source, schema, ...)
+}
+
+loadDF <- function(x, ...) {
+  dispatchFunc("loadDF(path = NULL, source = NULL, schema = NULL, ...)", x, ...)
 }
 
 #' Create an external table
@@ -670,22 +690,20 @@ loadDF.default <- function(path = NULL, source = NULL, schema = NULL, ...) {
 #' If `source` is not specified, the default data source configured by
 #' "spark.sql.sources.default" will be used.
 #'
-#' @param sqlContext SQLContext to use
 #' @param tableName A name of the table
 #' @param path The path of files to load
 #' @param source the name of external data source
 #' @return SparkDataFrame
+#' @rdname createExternalTable
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
-#' df <- sparkRSQL.createExternalTable(sqlContext, "myjson", path="path/to/json", source="json")
+#' df <- sparkRSQL.createExternalTable("myjson", path="path/to/json", source="json")
 #' }
-
-createExternalTable <- function(x, ...) {
-  dispatchFunc("createExternalTable(tableName, path = NULL, source = NULL, ...)", x, ...)
-}
+#' @name createExternalTable
+#' @method createExternalTable default
 
 createExternalTable.default <- function(tableName, path = NULL, source = NULL, ...) {
   sqlContext <- getSqlContext()
@@ -695,6 +713,10 @@ createExternalTable.default <- function(tableName, path = NULL, source = NULL, .
   }
   sdf <- callJMethod(sqlContext, "createExternalTable", tableName, source, options)
   dataFrame(sdf)
+}
+
+createExternalTable <- function(x, ...) {
+  dispatchFunc("createExternalTable(tableName, path = NULL, source = NULL, ...)", x, ...)
 }
 
 #' Create a SparkDataFrame representing the database table accessible via JDBC URL
