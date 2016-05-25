@@ -70,7 +70,7 @@ if __name__ == "__main__":
         .appName("AvroKeyInputFormat")\
         .getOrCreate()
 
-    sc = spark._sc
+    sc = spark.sparkContext
 
     conf = None
     if len(sys.argv) == 3:
