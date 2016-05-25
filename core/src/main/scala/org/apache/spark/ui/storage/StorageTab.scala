@@ -59,15 +59,7 @@ class StorageListener(storageStatusListener: StorageStatusListener) extends Bloc
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted): Unit = synchronized {
     val rddInfos = stageSubmitted.stageInfo.rddInfos
-    rddInfos.foreach { info =>
-      _rddInfoMap.get(info.id) match {
-        case Some(rddInfo) if info.name != rddInfo.name =>
-          rddInfo.name = info.name
-        case None =>
-          _rddInfoMap(info.id) = info
-        case _ =>
-      }
-     }
+    rddInfos.foreach { info => _rddInfoMap.getOrElseUpdate(info.id, info).name = info.name }
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = synchronized {

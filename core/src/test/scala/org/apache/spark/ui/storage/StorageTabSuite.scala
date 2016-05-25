@@ -180,15 +180,13 @@ class StorageTabSuite extends SparkFunSuite with BeforeAndAfter {
   }
 
   test("verify StorageTab still contains a renamed RDD") {
-    {
-      val rddInfo = new RDDInfo(0, "original_name", 1, memOnly, Seq(4))
-      val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo), Seq.empty, "details")
-      bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
-      bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
-      val blockUpdateInfos1 = Seq(BlockUpdatedInfo(bm1, RDDBlockId(0, 1), memOnly, 100L, 0L))
-      postUpdateBlocks(bus, blockUpdateInfos1)
-      assert(storageListener.rddInfoList.size == 1)
-    }
+    val rddInfo = new RDDInfo(0, "original_name", 1, memOnly, Seq(4))
+    val stageInfo0 = new StageInfo(0, 0, "stage0", 1, Seq(rddInfo), Seq.empty, "details")
+    bus.postToAll(SparkListenerBlockManagerAdded(1L, bm1, 1000L))
+    bus.postToAll(SparkListenerStageSubmitted(stageInfo0))
+    val blockUpdateInfos1 = Seq(BlockUpdatedInfo(bm1, RDDBlockId(0, 1), memOnly, 100L, 0L))
+    postUpdateBlocks(bus, blockUpdateInfos1)
+    assert(storageListener.rddInfoList.size == 1)
 
     val newName = "new_name"
     val rddInfoRenamed = new RDDInfo(0, newName, 1, memOnly, Seq(4))
