@@ -75,13 +75,20 @@ case class DataSource(
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap = Map(
-    "org.apache.spark.sql.jdbc" -> classOf[jdbc.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.jdbc.DefaultSource" -> classOf[jdbc.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.json" -> classOf[json.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.json.DefaultSource" -> classOf[json.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.parquet" -> classOf[parquet.DefaultSource].getCanonicalName,
-    "org.apache.spark.sql.parquet.DefaultSource" -> classOf[parquet.DefaultSource].getCanonicalName,
-    "com.databricks.spark.csv" -> classOf[csv.DefaultSource].getCanonicalName
+    "org.apache.spark.sql.jdbc" ->
+      classOf[jdbc.JdbcRelationProvider].getCanonicalName,
+    "org.apache.spark.sql.jdbc.DefaultSource" ->
+      classOf[jdbc.JdbcRelationProvider].getCanonicalName,
+    "org.apache.spark.sql.json" ->
+      classOf[json.JsonFileFormat].getCanonicalName,
+    "org.apache.spark.sql.json.DefaultSource" ->
+      classOf[json.JsonFileFormat].getCanonicalName,
+    "org.apache.spark.sql.parquet" ->
+      classOf[parquet.ParquetFileFormat].getCanonicalName,
+    "org.apache.spark.sql.parquet.DefaultSource" ->
+      classOf[parquet.ParquetFileFormat].getCanonicalName,
+    "com.databricks.spark.csv" ->
+      classOf[csv.CSVFileFormat].getCanonicalName
   )
 
   /**
@@ -188,7 +195,7 @@ case class DataSource(
           throw new IllegalArgumentException("'path' is not specified")
         })
         val isSchemaInferenceEnabled = sparkSession.conf.get(SQLConf.STREAMING_SCHEMA_INFERENCE)
-        val isTextSource = providingClass == classOf[text.DefaultSource]
+        val isTextSource = providingClass == classOf[text.TextFileFormat]
         // If the schema inference is disabled, only text sources require schema to be specified
         if (!isSchemaInferenceEnabled && !isTextSource && userSpecifiedSchema.isEmpty) {
           throw new IllegalArgumentException(
@@ -229,7 +236,7 @@ case class DataSource(
     providingClass.newInstance() match {
       case s: StreamSinkProvider => s.createSink(sparkSession.sqlContext, options, partitionColumns)
 
-      case parquet: parquet.DefaultSource =>
+      case parquet: parquet.ParquetFileFormat =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")

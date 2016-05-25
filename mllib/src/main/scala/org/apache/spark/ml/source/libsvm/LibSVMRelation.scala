@@ -90,7 +90,7 @@ private[libsvm] class LibSVMOutputWriter(
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = spark.read().format("libsvm")
+ *   Dataset<Row> df = spark.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}
@@ -107,7 +107,7 @@ private[libsvm] class LibSVMOutputWriter(
  *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
  */
 @Since("1.6.0")
-class DefaultSource extends FileFormat with DataSourceRegister {
+class LibSVMFileFormat extends FileFormat with DataSourceRegister {
 
   @Since("1.6.0")
   override def shortName(): String = "libsvm"

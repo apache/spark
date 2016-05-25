@@ -101,7 +101,6 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
 }
 
 class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
-  import testImplicits._
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
