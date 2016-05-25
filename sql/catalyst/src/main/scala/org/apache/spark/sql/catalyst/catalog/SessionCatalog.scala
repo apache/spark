@@ -221,6 +221,7 @@ class SessionCatalog(
     if (
       // If this is an external data source table
       tableDefinition.properties.contains("spark.sql.sources.provider") &&
+      tableDefinition.storage.locationUri.isEmpty &&
       newTableDefinition.tableType == CatalogTableType.EXTERNAL
     ) {
       // !! HACK ALERT !!

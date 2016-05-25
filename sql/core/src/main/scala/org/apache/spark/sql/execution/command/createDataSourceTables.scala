@@ -403,7 +403,7 @@ object CreateDataSourceTableUtils extends Logging {
         // Removes the provider property since we are gonna saving this table as a Hive compatible
         // one, and other places use this property to check whether a table is a data source table
         // (e.g. `DDLUtils.isDatasourceTable`).
-        properties = (tableProperties - "spark.sql.sources.provider").toMap,
+        properties = tableProperties.toMap,
         viewText = None)
     }
 
