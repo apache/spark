@@ -59,7 +59,7 @@ Given $n$ weighted observations $(w_i, a_i, b_i)$:
 
 The number of features for each observation is $m$. We use the following weighted least squares formulation:
 `\[   
-minimize_{x}\frac{1}{2} \sum_{i=1}^n \frac{w_i(a_i^T x -b_i)^2}{\sum_{i=1}^n w_i} + \frac{1}{2}\frac{\lambda}{\delta}\sum_{j=1}^m(\sigma_{j} x_{j})^2
+minimize_{x}\frac{1}{2} \sum_{i=1}^n \frac{w_i(a_i^T x -b_i)^2}{\sum_{k=1}^n w_k} + \frac{1}{2}\frac{\lambda}{\delta}\sum_{j=1}^m(\sigma_{j} x_{j})^2
 \]`
 where $\lambda$ is the regularization parameter, $\delta$ is the population standard deviation of label
 and $\sigma_j$ is the population standard deviation of the j-th feature column.
