@@ -241,7 +241,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
             query =
               df.write
                 .format("memory")
-                .option("checkpointLocation", "memory")
+                .queryName(s"query${Random.nextInt(100000)}")
+                .option("checkpointLocation", metadataRoot)
                 .outputMode("append")
                 .startStream()
                 .asInstanceOf[StreamExecution]
