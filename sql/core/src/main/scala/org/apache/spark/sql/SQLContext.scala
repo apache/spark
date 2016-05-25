@@ -23,7 +23,7 @@ import java.util.Properties
 import scala.collection.immutable
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
@@ -80,6 +80,27 @@ class SQLContext private[sql](
 
   @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sparkContext: JavaSparkContext) = this(sparkContext.sc)
+
+  // If spark.sql.allowMultipleContexts is true, we will throw an exception if a user
+  // wants to create a new root SQLContext (a SQLContext that is not created by newSession).
+  private val allowMultipleContexts =
+    sparkContext.conf.getBoolean(
+      SQLConf.ALLOW_MULTIPLE_CONTEXTS.key,
+      SQLConf.ALLOW_MULTIPLE_CONTEXTS.defaultValue.get)
+
+  // Assert no root SQLContext/SparkSession is running when allowMultipleContexts is false.
+  {
+    if (!allowMultipleContexts && isRootContext) {
+      SparkSession.getDefaultSession match {
+        case Some(existingSparkSession) =>
+          val errMsg = sparkContext.conf.get(
+            SQLConf.ALLOW_MULTIPLE_CONTEXTS_ERROR_MESSAGE.key,
+            SQLConf.ALLOW_MULTIPLE_CONTEXTS_ERROR_MESSAGE.defaultValue.get)
+          throw new SparkException(errMsg)
+        case None => // OK
+      }
+    }
+  }
 
   // TODO: move this logic into SparkSession
 
