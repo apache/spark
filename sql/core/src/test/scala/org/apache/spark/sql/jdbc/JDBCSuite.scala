@@ -661,4 +661,15 @@ class JDBCSuite extends SparkFunSuite
     assert(oracleDialect.getJDBCType(StringType).
       map(_.databaseTypeDefinition).get == "VARCHAR2(255)")
   }
+
+  test("SPARK 15491: Test JSON serialization for JDBC DataFrame") {
+    val JDBCDFtoJson = sqlContext.read.format("jdbc").options(
+      Map("url" -> urlWithUserAndPass,
+        "dbtable" -> "test.people")).load().queryExecution.logical.toJSON
+    assert(JDBCDFtoJson.contains("\"url\":\"jdbc:h2:mem:testdb0;user=testUser;password=testPass\"")
+      && JDBCDFtoJson.contains("\"table\":\"test.people\"")
+      && JDBCDFtoJson.contains("\"parts\":null")
+      && JDBCDFtoJson.contains("\"properties\":null")
+      && JDBCDFtoJson.contains("\"sparkSession\":null"))
+  }
 }
