@@ -113,6 +113,13 @@ object SQLConf {
     .longConf
     .createWithDefault(10L * 1024 * 1024)
 
+  val ENABLE_FALL_BACK_TO_HDFS_FOR_STATS =
+    SQLConfigBuilder("spark.sql.enableFallBackToHdfsForStats")
+    .doc("If the table statistics are not available from table metadata enable fall back to hdfs." +
+      " This is useful in determining if a table is small enough to use auto broadcast joins.")
+    .booleanConf
+    .createWithDefault(false)
+
   val DEFAULT_SIZE_IN_BYTES = SQLConfigBuilder("spark.sql.defaultSizeInBytes")
     .internal()
     .doc("The default table size used in query planning. By default, it is set to a larger " +
@@ -338,9 +345,14 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val CROSS_JOINS_ENABLED = SQLConfigBuilder("spark.sql.crossJoin.enabled")
+    .doc("When false, we will throw an error if a query contains a cross join")
+    .booleanConf
+    .createWithDefault(false)
+
   val ORDER_BY_ORDINAL = SQLConfigBuilder("spark.sql.orderByOrdinal")
     .doc("When true, the ordinal numbers are treated as the position in the select list. " +
-         "When false, the ordinal numbers in order/sort By clause are ignored.")
+         "When false, the ordinal numbers in order/sort by clause are ignored.")
     .booleanConf
     .createWithDefault(true)
 
@@ -511,6 +523,13 @@ object SQLConf {
       .timeConf(TimeUnit.MILLISECONDS)
       .createWithDefault(60 * 1000L) // 10 minutes
 
+  val STREAMING_SCHEMA_INFERENCE =
+    SQLConfigBuilder("spark.sql.streaming.schemaInference")
+      .internal()
+      .doc("Whether file-based streaming sources will infer its own schema")
+      .booleanConf
+      .createWithDefault(false)
+
   object Deprecated {
     val MAPRED_REDUCE_TASKS = "mapred.reduce.tasks"
   }
@@ -591,6 +610,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
+  def fallBackToHdfsForStatsEnabled: Boolean = getConf(ENABLE_FALL_BACK_TO_HDFS_FOR_STATS)
+
   def preferSortMergeJoin: Boolean = getConf(PREFER_SORTMERGEJOIN)
 
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
@@ -621,6 +642,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
     getConf(SQLConf.PARALLEL_PARTITION_DISCOVERY_THRESHOLD)
 
   def bucketingEnabled: Boolean = getConf(SQLConf.BUCKETING_ENABLED)
+
+  def crossJoinEnabled: Boolean = getConf(SQLConf.CROSS_JOINS_ENABLED)
 
   // Do not use a value larger than 4000 as the default value of this property.
   // See the comments of SCHEMA_STRING_LENGTH_THRESHOLD above for more information.
