@@ -107,13 +107,6 @@ case class DataSource(
               // Found the data source using fully qualified path
               dataSource
             case Failure(error) =>
-              if (error.isInstanceOf[ClassNotFoundException]) {
-                // error.getMessage is the class name of provider2. Instead, we use provider here.
-                if (spark2RemovedClasses.contains(provider)) {
-                  throw new AnalysisException(s"$provider is removed in Spark 2.0. " +
-                    "Please check if your library is compatible with Spark 2.0")
-                }
-              }
               if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
                 throw new AnalysisException(
                   "The ORC data source must be used with Hive support enabled")
@@ -131,11 +124,12 @@ case class DataSource(
               }
           }
         } catch {
-          case e: NoClassDefFoundError =>
-            // e.getMessage is the class name of provider2. Instead, we use provider here.
-            if (spark2RemovedClasses.contains(provider)) {
-              throw new AnalysisException(s"$provider was removed in Spark 2.0. " +
-                "Please check if your library is compatible with Spark 2.0")
+          case e: NoClassDefFoundError => // This one won't be caught by Scala NonFatal
+            // NoClassDefFoundError's class name uses "/" rather than "." for packages
+            val className = e.getMessage.replaceAll("/", ".")
+            if (spark2RemovedClasses.contains(className)) {
+              throw new ClassNotFoundException(s"$className was removed in Spark 2.0. " +
+                "Please check if your library is compatible with Spark 2.0", e)
             } else {
               throw e
             }

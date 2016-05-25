@@ -1873,8 +1873,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
     }
-    assert(e.message.contains("org.apache.spark.sql.sources.HadoopFsRelationProvider is removed " +
-      "in Spark 2.0. Please check if your library is compatible with Spark 2.0"))
+    assert(e.message.contains("Table or view not found: " +
+      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
