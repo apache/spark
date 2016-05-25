@@ -219,10 +219,13 @@ class SessionCatalog(
     requireDbExists(db)
 
     if (
-      // If this is an external data source table
+      // If this is an external data source table...
       tableDefinition.properties.contains("spark.sql.sources.provider") &&
-      tableDefinition.storage.locationUri.isEmpty &&
-      newTableDefinition.tableType == CatalogTableType.EXTERNAL
+      newTableDefinition.tableType == CatalogTableType.EXTERNAL &&
+      // ... that is not persisted as Hive compatible format (external tables in Hive compatible
+      // format always set `locationUri` to the actual data location and should NOT be hacked as
+      // following.)
+      tableDefinition.storage.locationUri.isEmpty
     ) {
       // !! HACK ALERT !!
       //
