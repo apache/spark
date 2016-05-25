@@ -235,16 +235,16 @@ class SessionCatalog(
       //
       // Please refer to https://issues.apache.org/jira/browse/SPARK-15269 for more details.
 
-      val tempPath = new Path(defaultTablePath(tableId), "-__PLACEHOLDER__").toString
+      val tempPath =
+        new Path(defaultTablePath(tableId).stripSuffix(Path.SEPARATOR) + "-__PLACEHOLDER__")
 
       try {
         externalCatalog.createTable(
           db,
-          newTableDefinition.withNewStorage(locationUri = Some(tempPath)),
+          newTableDefinition.withNewStorage(locationUri = Some(tempPath.toString)),
           ignoreIfExists)
       } finally {
-        val path = new Path(tempPath)
-        FileSystem.get(path.toUri, hadoopConf).delete(path, true)
+        FileSystem.get(tempPath.toUri, hadoopConf).delete(tempPath, true)
       }
     } else {
       externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
