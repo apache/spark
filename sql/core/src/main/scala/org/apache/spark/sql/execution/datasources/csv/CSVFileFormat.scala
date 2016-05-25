@@ -54,29 +54,8 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
     // TODO: Move filtering.
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
-    val rdd = baseRdd(sparkSession, csvOptions, paths)
-    val firstLine = findFirstLine(csvOptions, rdd)
-    val firstRow = new CsvReader(csvOptions).parseLine(firstLine)
-
-    val header = if (csvOptions.headerFlag) {
-      firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
-      }
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
-    }
-
-    val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
-    val schema = if (csvOptions.inferSchemaFlag) {
-      CSVInferSchema.infer(parsedRdd, header, csvOptions)
-    } else {
-      // By default fields are assumed to be StringType
-      val schemaFields = header.map { fieldName =>
-        StructField(fieldName.toString, StringType, nullable = true)
-      }
-      StructType(schemaFields)
-    }
-    Some(schema)
+    val rdd = CSVRelation.baseRdd(sparkSession, csvOptions, paths)
+    CSVInferSchema.inferSchemaFromRDD(rdd, csvOptions)
   }
 
   override def prepareWrite(
@@ -84,7 +63,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
-    verifySchema(dataSchema)
+    CSVRelation.verifySchema(dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(options)
     csvOptions.compressionCodec.foreach { codec =>
@@ -186,18 +165,13 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
   }
 
   private def verifySchema(schema: StructType): Unit = {
-    def verifyType(dataType: DataType): Unit = dataType match {
-        case ByteType | ShortType | IntegerType | LongType | FloatType |
-             DoubleType | BooleanType | _: DecimalType | TimestampType |
-             DateType | StringType =>
-
-        case udt: UserDefinedType[_] => verifyType(udt.sqlType)
-
-        case _ =>
+    schema.foreach { field =>
+      field.dataType match {
+        case _: ArrayType | _: MapType | _: StructType =>
           throw new UnsupportedOperationException(
-            s"CSV data source does not support ${dataType.simpleString} data type.")
+            s"CSV data source does not support ${field.dataType.simpleString} data type.")
+        case _ =>
+      }
     }
-
-    schema.foreach(field => verifyType(field.dataType))
   }
 }

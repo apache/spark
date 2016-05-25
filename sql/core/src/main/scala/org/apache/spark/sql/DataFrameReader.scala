@@ -26,7 +26,8 @@ import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.LogicalRDD
-import org.apache.spark.sql.execution.datasources.DataSource
+import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.csv._
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
 import org.apache.spark.sql.types.StructType
@@ -407,6 +408,36 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    */
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
+
+  def csv(csvRDD: RDD[String]): DataFrame = {
+    val parsedOptions: CSVOptions = new CSVOptions(extraOptions.toMap)
+    val firstLine = CSVRelation.findFirstLine(parsedOptions, csvRDD)
+    val firstRow = new LineCsvReader(parsedOptions).parseLine(firstLine)
+    val header = if (parsedOptions.headerFlag) {
+      firstRow.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == parsedOptions.nullValue) {
+          s"_c$index"
+        } else {
+          value
+        }
+      }
+    } else {
+      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
+    }
+    val tokenizedRDD = CSVRelation.univocityTokenizer(csvRDD, header, firstLine, parsedOptions)
+    val schema = CSVInferSchema.inferSchemaFromRDD(csvRDD, parsedOptions).get
+
+    Dataset.ofRows(
+      sparkSession,
+      LogicalRDD(
+        schema.toAttributes,
+        CSVRelation.parseCsv(
+          tokenizedRDD,
+          schema,
+          schema.fields.map(_.name),
+          parsedOptions
+        ))(sparkSession))
+  }
 
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. See the documentation

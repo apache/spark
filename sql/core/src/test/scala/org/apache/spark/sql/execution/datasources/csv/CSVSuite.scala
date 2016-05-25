@@ -663,6 +663,25 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(numbers.count() == 8)
   }
 
+  test("Create DataFrame out of RDD[String]") {
+    val testFilePath = testFile(numbersFile)
+    val options = Map(
+      "header" -> "true",
+      "mode" -> "DROPMALFORMED",
+      "nullValue" -> "--",
+      "nanValue" -> "NAN",
+      "negativeInf" -> "-INF",
+      "positiveInf" -> "INF")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val df = spark.read.options(options).csv(csvRDD)
+
+    assert(df.count() == 8)
+  }
+
   test("error handling for unsupported data types.") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath

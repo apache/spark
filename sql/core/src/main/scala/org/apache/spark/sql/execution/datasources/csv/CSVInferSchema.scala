@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
-private[csv] object CSVInferSchema {
+private[sql] object CSVInferSchema {
 
   /**
    * Similar to the JSON schema inference
@@ -55,6 +55,33 @@ private[csv] object CSVInferSchema {
     }
 
     StructType(structFields)
+  }
+
+  def inferSchemaFromRDD(
+      rdd: RDD[String],
+      csvOptions: CSVOptions): Option[StructType] = {
+    val firstLine = CSVRelation.findFirstLine(csvOptions, rdd)
+    val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
+
+    val header = if (csvOptions.headerFlag) {
+      firstRow.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
+      }
+    } else {
+      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
+    }
+
+    val parsedRdd = CSVRelation.tokenRdd(csvOptions, header, rdd)
+    val schema = if (csvOptions.inferSchemaFlag) {
+      infer(parsedRdd, header, csvOptions)
+    } else {
+      // By default fields are assumed to be StringType
+      val schemaFields = header.map { fieldName =>
+        StructField(fieldName.toString, StringType, nullable = true)
+      }
+      StructType(schemaFields)
+    }
+    Some(schema)
   }
 
   private def inferRowType(options: CSVOptions)
