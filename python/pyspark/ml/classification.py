@@ -1035,12 +1035,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     ...     (1.0, Vectors.dense([0.0, 1.0])),
     ...     (1.0, Vectors.dense([1.0, 0.0])),
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
-    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 5, 2], blockSize=1, seed=123)
+    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 2, 2], blockSize=1, seed=123)
     >>> model = mlp.fit(df)
     >>> model.layers
-    [2, 5, 2]
+    [2, 2, 2]
     >>> model.weights.size
-    27
+    12
     >>> testDF = spark.createDataFrame([
     ...     (Vectors.dense([1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
@@ -1064,8 +1064,7 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     True
     >>> model.weights == model2.weights
     True
-    >>> mlp2 = mlp2.setInitialWeights([2, 5, 1, -7, -5, -10, 0, 0.6, -1, 2, -2, 1, 2, -7, -1, -2,
-    ...    2, 1, -1, 9, -9, 3, -3, -3, 3.0, 0, -1])
+    >>> mlp2 = mlp2.setInitialWeights(list(range(0, 12)))
     >>> model3 = mlp2.fit(df)
     >>> model3.weights != model2.weights
     True
