@@ -1579,7 +1579,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("Use Dataset.flatMap(func) and function.explode with select instead.", "2.0.0")
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
@@ -1608,7 +1608,7 @@ class Dataset[T] private[sql](
    * @group untypedrel
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("Use Dataset.flatMap(func) and function.explode with select instead.", "2.0.0")
   def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
