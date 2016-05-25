@@ -21,10 +21,16 @@ runScript <- function() {
   sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
   jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
   scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/testthat/jarTest.R")
-  submitPath <- file.path(sparkHome, "bin/spark-submit")
-  res <- system2(command = submitPath,
+  if (.Platform$OS.type == "windows") {
+    submitPath <- file.path(sparkHome, "bin/spark-submit2.cmd")
+    command <- paste(submitPath, jarPath, scriptPath, sep = " ")
+    res <- shell(command, translate = TRUE, intern = TRUE)
+  } else {
+    submitPath <- file.path(sparkHome, "bin/spark-submit")
+    res <- system2(command = submitPath,
                  args = c(jarPath, scriptPath),
                  stdout = TRUE)
+  }
   tail(res, 2)
 }
 

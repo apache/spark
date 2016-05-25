@@ -43,17 +43,6 @@ determineSparkSubmitBin <- function() {
   sparkSubmitBinName
 }
 
-# R supports both file separator in the file path (Unix : / and Windows: \) irrespective
-# of the operating system. So, this should be manaully changed.
-determinefileSeparator <- function() {
-  if (.Platform$OS.type == "windows") {
-    fileSeparator <- "\\"
-  } else {
-    fileSeparator <- .Platform$file.sep
-  }
-  fileSeparator
-}
-
 generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   jars <- paste0(jars, collapse = ",")
   if (jars != "") {
@@ -71,15 +60,23 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
   combinedArgs
 }
 
+determineLauncher <- function(sparkSubmitBin, combinedArgs, capture = FALSE) {
+  if (.Platform$OS.type == "windows") {
+    sparkSubmitWithArgs <- paste(sparkSubmitBin, combinedArgs, sep = " ")
+    shell(sparkSubmitWithArgs, translate = TRUE, wait = ! capture, intern = capture)
+  } else {
+    system2(sparkSubmitBin, combinedArgs, wait = F, stdout = capture)
+  }
+}
+
 launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   sparkSubmitBinName <- determineSparkSubmitBin()
   if (sparkHome != "") {
-    fileSeparator <- determinefileSeparator()
-    sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName, fsep = fileSeparator)
+    sparkSubmitBin <- file.path(sparkHome, "bin", sparkSubmitBinName)
   } else {
     sparkSubmitBin <- sparkSubmitBinName
   }
   combinedArgs <- generateSparkSubmitArgs(args, sparkHome, jars, sparkSubmitOpts, packages)
   cat("Launching java with spark-submit command", sparkSubmitBin, combinedArgs, "\n")
-  invisible(system2(sparkSubmitBin, combinedArgs, wait = F))
+  invisible(determineLauncher(sparkSubmitBin, combinedArgs))
 }
