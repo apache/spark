@@ -56,6 +56,10 @@ class QueryExecutionException(CapturedException):
     Failed to execute a query.
     """
 
+class ClassNotFoundException(CapturedException):
+    """
+    Failed to find a class.
+    """
 
 def capture_sql_exception(f):
     def deco(*a, **kw):
@@ -77,6 +81,8 @@ def capture_sql_exception(f):
                 raise QueryExecutionException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('java.lang.IllegalArgumentException: '):
                 raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('java.lang.NoClassDefFoundError: '):
+                raise ClassNotFoundException(s.split(': ', 1)[1], stackTrace)
             raise
     return deco
 
