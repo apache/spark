@@ -125,9 +125,9 @@ private[hive] case class MetastoreRelation(
         // so when `totalSize` is zero, use `rawDataSize` instead
         // if the size is still less than zero, we try to get the file size from HDFS.
         // given this is only needed for optimization, if the HDFS call fails we return the default.
-        if (Option(totalSize).map(_.toLong).getOrElse(0L) > 0) {
+        if (totalSize != null && totalSize.toLong > 0L) {
           totalSize.toLong
-        } else if (Option(rawDataSize).map(_.toLong).getOrElse(0L) > 0) {
+        } else if (rawDataSize != null && rawDataSize.toLong > 0) {
           rawDataSize.toLong
         } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
           try {
