@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogRelation, InMemoryCatalog, SessionCatalog}
-import org.apache.spark.sql.catalyst.encoders.OuterScopes
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, OuterScopes}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
@@ -1887,7 +1887,12 @@ class Analyzer(
           val unbound = deserializer transform {
             case b: BoundReference => inputs(b.ordinal)
           }
-          resolveExpression(unbound, LocalRelation(inputs), throws = true)
+
+          val resolved = resolveExpression(unbound, LocalRelation(inputs), throws = true)
+
+          inputs.find(ExpressionEncoder.isNullFlagColumn).map { a =>
+            If(Or(IsNull(a), a), Literal.create(null, resolved.dataType), resolved)
+          }.getOrElse(resolved)
       }
     }
   }
@@ -2129,4 +2134,3 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
-

@@ -30,17 +30,8 @@ object CatalystSerde {
     DeserializeToObject(deserializer, generateObjAttr[T], child)
   }
 
-  def deserialize(child: LogicalPlan, encoder: ExpressionEncoder[Row]): DeserializeToObject = {
-    val deserializer = UnresolvedDeserializer(encoder.deserializer)
-    DeserializeToObject(deserializer, generateObjAttrForRow(encoder), child)
-  }
-
   def serialize[T : Encoder](child: LogicalPlan): SerializeFromObject = {
-    SerializeFromObject(encoderFor[T].namedExpressions, child)
-  }
-
-  def serialize(child: LogicalPlan, encoder: ExpressionEncoder[Row]): SerializeFromObject = {
-    SerializeFromObject(encoder.namedExpressions, child)
+    SerializeFromObject(encoderFor[T].serializerWithNullFlag, child)
   }
 
   def generateObjAttr[T : Encoder]: Attribute = {
@@ -128,7 +119,7 @@ object MapPartitionsInR {
       schema: StructType,
       encoder: ExpressionEncoder[Row],
       child: LogicalPlan): LogicalPlan = {
-    val deserialized = CatalystSerde.deserialize(child, encoder)
+    val deserialized = CatalystSerde.deserialize(child)(encoder)
     val mapped = MapPartitionsInR(
       func,
       packageNames,
@@ -137,7 +128,7 @@ object MapPartitionsInR {
       schema,
       CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
       deserialized)
-    CatalystSerde.serialize(mapped, RowEncoder(schema))
+    CatalystSerde.serialize(mapped)(RowEncoder(schema))
   }
 }
 
@@ -185,7 +176,7 @@ object AppendColumns {
     new AppendColumns(
       func.asInstanceOf[Any => Any],
       UnresolvedDeserializer(encoderFor[T].deserializer),
-      encoderFor[U].namedExpressions,
+      encoderFor[U].serializerWithNullFlag,
       child)
   }
 }

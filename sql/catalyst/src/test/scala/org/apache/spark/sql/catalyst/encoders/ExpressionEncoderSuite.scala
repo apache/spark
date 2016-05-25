@@ -354,7 +354,7 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
       val inputPlan = LocalRelation(attr)
       val plan =
         Project(Alias(encoder.deserializer, "obj")() :: Nil,
-          Project(encoder.namedExpressions,
+          Project(encoder.serializerWithNullFlag,
             inputPlan))
       assertAnalysisSuccess(plan)
 

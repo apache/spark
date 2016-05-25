@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, NewInstance}
 import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.sql.types.{MetadataBuilder, ObjectType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 /**
@@ -107,7 +107,10 @@ object ExpressionEncoder {
 
     val serializer = encoders.map {
       case e if e.flat => e.serializer.head
-      case other => CreateStruct(other.serializer)
+      case other =>
+        val inputObject = other.serializer.head.find(_.isInstanceOf[BoundReference]).get
+        val struct = CreateStruct(other.serializer)
+        If(IsNull(inputObject), Literal.create(null, struct.dataType), struct)
     }.zipWithIndex.map { case (expr, index) =>
       expr.transformUp {
         case BoundReference(0, t, _) =>
@@ -125,12 +128,13 @@ object ExpressionEncoder {
         }
       } else {
         val input = BoundReference(index, enc.schema, nullable = true)
-        enc.deserializer.transformUp {
+        val deserializer = enc.deserializer.transformUp {
           case UnresolvedAttribute(nameParts) =>
             assert(nameParts.length == 1)
             UnresolvedExtractValue(input, Literal(nameParts.head))
           case BoundReference(ordinal, dt, _) => GetStructField(input, ordinal)
         }
+        If(IsNull(input), Literal.create(null, deserializer.dataType), deserializer)
       }
     }
 
@@ -170,6 +174,17 @@ object ExpressionEncoder {
       e4: ExpressionEncoder[T4],
       e5: ExpressionEncoder[T5]): ExpressionEncoder[(T1, T2, T3, T4, T5)] =
     tuple(Seq(e1, e2, e3, e4, e5)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4, T5)]]
+
+  private val nullFlagName = "is_null_obj"
+  private val nullFlagMeta = new MetadataBuilder().putNull(nullFlagName).build()
+
+  def nullFlagColumn(inputObject: Expression): NamedExpression = {
+    Alias(IsNull(inputObject), nullFlagName)(explicitMetadata = Some(nullFlagMeta))
+  }
+
+  def isNullFlagColumn(f: StructField): Boolean = f.metadata.contains(nullFlagName)
+
+  def isNullFlagColumn(a: Attribute): Boolean = a.metadata.contains(nullFlagName)
 }
 
 /**
@@ -209,14 +224,22 @@ case class ExpressionEncoder[T](
     resolve(attrs, OuterScopes.outerScopes).bind(attrs)
   }
 
-
   /**
    * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
    * of this object.
    */
-  def namedExpressions: Seq[NamedExpression] = schema.map(_.name).zip(serializer).map {
+  def namedSerializer: Seq[NamedExpression] = schema.map(_.name).zip(serializer).map {
     case (_, ne: NamedExpression) => ne.newInstance()
     case (name, e) => Alias(e, name)()
+  }
+
+  def serializerWithNullFlag: Seq[NamedExpression] = {
+    if (flat) {
+      namedSerializer
+    } else {
+      val inputObject = serializer.head.find(_.isInstanceOf[BoundReference]).get
+      namedSerializer :+ ExpressionEncoder.nullFlagColumn(inputObject)
+    }
   }
 
   /**

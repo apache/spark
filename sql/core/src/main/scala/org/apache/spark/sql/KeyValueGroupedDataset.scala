@@ -22,7 +22,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.function._
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, OuterScopes}
-import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, CreateStruct}
+import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.execution.QueryExecution
 
@@ -214,7 +214,11 @@ class KeyValueGroupedDataset[K, V] private[sql](
       assert(groupingAttributes.length == 1)
       groupingAttributes.head
     } else {
-      Alias(CreateStruct(groupingAttributes), "key")()
+      val (nullColumn, groupAttr) = groupingAttributes.partition(ExpressionEncoder.isNullFlagColumn)
+      assert(nullColumn.length == 1)
+      val struct = CreateStruct(groupAttr)
+      val isObjectNull = Or(IsNull(nullColumn.head), nullColumn.head)
+      Alias(If(isObjectNull, Literal.create(null, struct.dataType), struct), "key")()
     }
     val aggregate = Aggregate(groupingAttributes, keyColumn +: namedColumns, logicalPlan)
     val execution = new QueryExecution(sparkSession, aggregate)

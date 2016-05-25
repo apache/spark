@@ -18,6 +18,8 @@
 package test.org.apache.spark.sql.sources;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.HashSet;
 
 import scala.Tuple2;
 
@@ -36,16 +38,26 @@ import org.apache.spark.sql.expressions.javalang.typed;
  * Suite for testing the aggregate functionality of Datasets in Java.
  */
 public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
+  private <T> void checkResult(List<T> expected, List<T> actual) {
+    HashSet<T> s1 = new HashSet<T>();
+    s1.addAll(expected);
+    HashSet<T> s2 = new HashSet<T>();
+    s2.addAll(actual);
+
+    Assert.assertEquals(s1, s2);
+  }
+
   @Test
   public void testTypedAggregationAnonClass() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
 
     Dataset<Tuple2<String, Integer>> agged = grouped.agg(new IntSumOf().toColumn());
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
+    checkResult(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
 
     Dataset<Tuple2<String, Integer>> agged2 = grouped.agg(new IntSumOf().toColumn())
       .as(Encoders.tuple(Encoders.STRING(), Encoders.INT()));
-    Assert.assertEquals(
+
+    checkResult(
       Arrays.asList(
         new Tuple2<>("a", 3),
         new Tuple2<>("b", 3)),
@@ -93,7 +105,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
           return (double)(value._2() * 2);
         }
       }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 6.0)), agged.collectAsList());
+    checkResult(Arrays.asList(tuple2("a", 3.0), tuple2("b", 6.0)), agged.collectAsList());
   }
 
   @Test
@@ -105,7 +117,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
           return value;
         }
       }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 2), tuple2("b", 1)), agged.collectAsList());
+    checkResult(Arrays.asList(tuple2("a", 2L), tuple2("b", 1L)), agged.collectAsList());
   }
 
   @Test
@@ -117,7 +129,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
           return (double)value._2();
         }
       }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 3.0)), agged.collectAsList());
+    checkResult(Arrays.asList(tuple2("a", 3.0), tuple2("b", 3.0)), agged.collectAsList());
   }
 
   @Test
@@ -129,6 +141,6 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
           return (long)value._2();
         }
       }));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
+    checkResult(Arrays.asList(tuple2("a", 3L), tuple2("b", 3L)), agged.collectAsList());
   }
 }
