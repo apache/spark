@@ -280,7 +280,7 @@ exportMethods("%in%",
               "year")
 
 exportClasses("GroupedData")
-exportMethods("agg")
+exportMethods("agg", "pivot")
 
 export("sparkRSQL.init",
        "sparkRHive.init")
