@@ -60,6 +60,14 @@ Running Spark on YARN requires a binary distribution of Spark which is built wit
 Binary distributions can be downloaded from the [downloads page](http://spark.apache.org/downloads.html) of the project website.
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
+To make Spark runtime jars accessible from YARN side, basically you will have 3 options:
+
+- Zip all the jars under `$SPARK_HOME/jars` and specify the path of zip file through `spark.yarn.archive`, Spark will add this zip file into distributed cache.
+- Specify the list of jars under `$SPARK_HOME/jars` with `spark.yarn.jars`, Spark will resolve globs and add into distributed cache. Should be noted the path support "*", so you could specify like `spark.yarn.jars=$SPARK_HOME/jars/*`.
+- If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will zip all the jars under `$SPARK_HOME/jars` and add this zip file into distributed cache automatically.
+
+Please be aware that `spark.yarn.archive` and `spark.yarn.jars` also support HDFS path. If you already put Spark runtime jars on the HDFS, YARN will directly pick them from HDFS, no need to upload from local environment each time when application starts, this will siginificantly save the start time of Spark application.
+
 # Configuration
 
 Most of the configs are the same for Spark on YARN as for other deployment modes. See the [configuration page](configuration.html) for more information on those.  These are configs that are specific to Spark on YARN.
@@ -98,6 +106,8 @@ log4j configuration, which may cause issues when they run on the same node (e.g.
 to the same log file).
 
 If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use `spark.yarn.app.container.log.dir` in your `log4j.properties`. For example, `log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log`. For streaming applications, configuring `RollingFileAppender` and setting file location to YARN's log directory will avoid disk overflow caused by large log files, and logs can be accessed using YARN's log utility.
+
+To use a custom metrics.properties for the application master and executors, just update the `SPARK_CONF_DIR/metrics.properties` file, it will automatically uploaded with other configurations, so you don't need to specify it manually with --files.
 
 #### Spark Properties
 
