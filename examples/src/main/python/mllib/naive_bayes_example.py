@@ -34,11 +34,6 @@ from pyspark.mllib.regression import LabeledPoint
 from pyspark.mllib.util import MLUtils
 
 
-def parseLine(line):
-    parts = line.split(',')
-    label = float(parts[0])
-    features = Vectors.dense([float(x) for x in parts[1].split(' ')])
-    return LabeledPoint(label, features)
 # $example off$
 
 if __name__ == "__main__":
@@ -50,7 +45,7 @@ if __name__ == "__main__":
     data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
     # Split data approximately into training (60%) and test (40%)
-    (trainingData, testData) = data.randomSplit([0.6, 0.4], seed=0)
+    trainingData, testData = data.randomSplit([0.6, 0.4], seed=0)
 
     # Train a naive Bayes model.
     model = NaiveBayes.train(trainingData, 1.0)
