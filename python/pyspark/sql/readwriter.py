@@ -788,8 +788,8 @@ class DataFrameWriter(object):
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: A flag indicating whether values containing quotes should always
-                             be enclosed in quotes. Default is to escape all values containing
-                             a quote character. ``true``
+                             be enclosed in quotes. If None is set, it uses the default value
+                             ``true``, escaping all values containing a quote character.
         :param header: writes the names of columns as the first line. If None is set, it uses
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
