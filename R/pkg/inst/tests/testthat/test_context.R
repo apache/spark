@@ -24,17 +24,13 @@ test_that("Check masked functions", {
   func <- lapply(masked, function(x) { capture.output(showMethods(x))[[1]] })
   funcSparkROrEmpty <- grepl("\\(package SparkR\\)$|^$", func)
   maskedBySparkR <- masked[funcSparkROrEmpty]
+  namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
+                     "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
+                     "summary", "transform", "drop", "window", "as.data.frame")
+  namesOfMaskedCompletely <- c("cov", "filter", "sample")
   if (as.numeric(R.version$major) == 3 && as.numeric(R.version$minor) > 2) {
-    namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
-                       "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                       "summary", "transform", "drop", "window", "as.data.frame",
-                       "endsWith", "startsWith")
-    namesOfMaskedCompletely <- c("cov", "filter", "sample", "endsWith", "startsWith")
-  } else {
-    namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
-                       "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                       "summary", "transform", "drop", "window", "as.data.frame")
-    namesOfMaskedCompletely <- c("cov", "filter", "sample")
+    namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
+    namesOfMaskedCompletely <- c("endsWith", "startsWith", namesOfMaskedCompletely)
   }
   expect_equal(length(maskedBySparkR), length(namesOfMasked))
   expect_equal(sort(maskedBySparkR), sort(namesOfMasked))
