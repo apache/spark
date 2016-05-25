@@ -59,7 +59,7 @@ private[sql] object CSVInferSchema {
 
   def inferSchemaFromRDD(
       rdd: RDD[String],
-      csvOptions: CSVOptions): Option[StructType] = {
+      csvOptions: CSVOptions): StructType = {
     val firstLine = CSVRelation.findFirstLine(csvOptions, rdd)
     val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
 
@@ -72,7 +72,7 @@ private[sql] object CSVInferSchema {
     }
 
     val parsedRdd = CSVRelation.tokenRdd(csvOptions, header, rdd)
-    val schema = if (csvOptions.inferSchemaFlag) {
+    if (csvOptions.inferSchemaFlag) {
       infer(parsedRdd, header, csvOptions)
     } else {
       // By default fields are assumed to be StringType
@@ -81,7 +81,6 @@ private[sql] object CSVInferSchema {
       }
       StructType(schemaFields)
     }
-    Some(schema)
   }
 
   private def inferRowType(options: CSVOptions)

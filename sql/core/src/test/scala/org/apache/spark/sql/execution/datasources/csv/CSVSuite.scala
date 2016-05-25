@@ -558,6 +558,30 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
+  test("RDD[String] to DataFrame: nullable fields with user defined null value of \"null\"") {
+    val testFilePath = testFile(carsNullFile)
+    val options = Map("header" -> "true", "nullValue" -> "null")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    // year,make,model,comment,blank
+    val dataSchema = StructType(List(
+      StructField("year", IntegerType, nullable = true),
+      StructField("make", StringType, nullable = false),
+      StructField("model", StringType, nullable = false),
+      StructField("comment", StringType, nullable = true),
+      StructField("blank", StringType, nullable = true)))
+
+    val cars = spark.read.schema(dataSchema).options(options).csv(csvRDD)
+    verifyCars(cars, withHeader = true, checkValues = false)
+    val results = cars.collect()
+    cars.printSchema()
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+  }
+
   test("save csv with compression codec option") {
     withTempDir { dir =>
       val csvDir = new File(dir, "csv").getCanonicalPath
@@ -626,6 +650,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .option("inferSchema", "true")
       .load(testFile(simpleSparseFile))
 
+    assert(
+      df.schema.fields.map(field => field.dataType).deep ==
+      Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
+  }
+
+  test("DataSet[String] to DataFrame -- Schema inference correctly identifies the datatype") {
+    val testFilePath = testFile(simpleSparseFile)
+    val options = Map("header" -> "true", "inferSchema" -> "true")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val df = spark.read.options(options).csv(csvRDD)
     assert(
       df.schema.fields.map(field => field.dataType).deep ==
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)

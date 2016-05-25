@@ -425,7 +425,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
     }
     val tokenizedRDD = CSVRelation.univocityTokenizer(csvRDD, header, firstLine, parsedOptions)
-    val schema = CSVInferSchema.inferSchemaFromRDD(csvRDD, parsedOptions).get
+    val schema = userSpecifiedSchema.getOrElse{
+      CSVInferSchema.inferSchemaFromRDD(csvRDD, parsedOptions)
+    }
 
     Dataset.ofRows(
       sparkSession,

@@ -55,7 +55,7 @@ class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
     // TODO: Move filtering.
     val paths = files.filterNot(_.getPath.getName startsWith "_").map(_.getPath.toString)
     val rdd = CSVRelation.baseRdd(sparkSession, csvOptions, paths)
-    CSVInferSchema.inferSchemaFromRDD(rdd, csvOptions)
+    Some(CSVInferSchema.inferSchemaFromRDD(rdd, csvOptions))
   }
 
   override def prepareWrite(
