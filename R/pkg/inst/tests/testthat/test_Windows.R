@@ -17,6 +17,9 @@
 context("test the support SparkR on Windows")
 
 test_that("sparkJars tag in SparkContext", {
+  if (.Platform$OS.type != "windows") {
+    skip("This test is only for Windows, skipped")
+  }
   testOutput <- determineLauncher("ECHO" ,"/a/b/c" , capture = TRUE)
   abcPath <- testOutput[1]
   expect_equal(abcPath, "\\a\\b\\c")

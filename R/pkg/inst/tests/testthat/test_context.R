@@ -125,13 +125,13 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
 test_that("sparkJars sparkPackages as comma-separated strings", {
   expect_warning(processSparkJars(" a, b "))
   jars <- suppressWarnings(processSparkJars(" a, b "))
-  expect_equal(sapply(jars, basename), c("a", "b"))
+  expect_equal(lapply(jars, basename), list("a", "b"))
 
   jars <- suppressWarnings(processSparkJars(" abc ,, def "))
-  expect_equal(sapply(jars, basename), c("abc", "def"))
+  expect_equal(lapply(jars, basename), list("abc", "def"))
 
   jars <- suppressWarnings(processSparkJars(c(" abc ,, def ", "", "xyz", " ", "a,b")))
-  expect_equal(sapply(jars, basename), c("abc", "def", "xyz", "a", "b"))
+  expect_equal(lapply(jars, basename), list("abc", "def", "xyz", "a", "b"))
 
   p <- processSparkPackages(c("ghi", "lmn"))
   expect_equal(p, c("ghi", "lmn"))
