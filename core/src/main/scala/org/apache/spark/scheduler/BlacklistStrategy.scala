@@ -127,7 +127,6 @@ private[scheduler] class AdvancedSingleTaskStrategy(
         clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
     }.values.map(_.host)
     getDuplicateElem(nodes, 1)
-    super.getNodeBlacklistForStage(executorIdToFailureStatus, stageId, clock)
   }
 
   override def getNodeBlacklist(
