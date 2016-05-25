@@ -23,6 +23,7 @@ import java.util.UUID
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
@@ -165,18 +166,35 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       .collect { case s @ StreamingRelation(dataSource, _, _) => s.schema }.head
   }
 
+  // ============= Basic parameter exists tests ================
+
   test("FileStreamSource schema: no path") {
-    val e = intercept[IllegalArgumentException] {
-      createFileStreamSourceAndGetSchema(format = None, path = None, schema = None)
+    def testError(): Unit = {
+      val e = intercept[IllegalArgumentException] {
+        createFileStreamSourceAndGetSchema(format = None, path = None, schema = None)
+      }
+      assert(e.getMessage.contains("path")) // reason is path, not schema
     }
-    assert("'path' is not specified" === e.getMessage)
+    withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "false") { testError() }
+    withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") { testError() }
   }
 
-  test("FileStreamSource schema: path doesn't exist") {
-    intercept[AnalysisException] {
+  test("FileStreamSource schema: path doesn't exist, no schema") {
+    val e = intercept[IllegalArgumentException] {
       createFileStreamSourceAndGetSchema(format = None, path = Some("/a/b/c"), schema = None)
     }
+    assert(e.getMessage.toLowerCase.contains("schema")) // reason is schema absence, not the path
   }
+
+  test("FileStreamSource schema: path doesn't exist, with schema") {
+    val userSchema = new StructType().add(new StructField("value", IntegerType))
+    val schema = createFileStreamSourceAndGetSchema(
+      format = None, path = Some("/a/b/c"), schema = Some(userSchema))
+    assert(schema === userSchema)
+  }
+
+
+  // =============== Text file stream schema tests ================
 
   test("FileStreamSource schema: text, no existing files, no schema") {
     withTempDir { src =>
@@ -205,13 +223,19 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
+  // =============== Parquet file stream schema tests ================
+
   test("FileStreamSource schema: parquet, no existing files, no schema") {
     withTempDir { src =>
-      val e = intercept[AnalysisException] {
-        createFileStreamSourceAndGetSchema(
-          format = Some("parquet"), path = Some(new File(src, "1").getCanonicalPath), schema = None)
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        val e = intercept[AnalysisException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("parquet"),
+            path = Some(new File(src, "1").getCanonicalPath),
+            schema = None)
+        }
+        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
       }
-      assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
     }
   }
 
@@ -220,9 +244,21 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       Seq("a", "b", "c").toDS().as("userColumn").toDF().write
         .mode(org.apache.spark.sql.SaveMode.Overwrite)
         .parquet(src.getCanonicalPath)
-      val schema = createFileStreamSourceAndGetSchema(
-        format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
-      assert(schema === new StructType().add("value", StringType))
+
+      // Without schema inference, should throw error
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "false") {
+        intercept[IllegalArgumentException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
+        }
+      }
+
+      // With schema inference, should infer correct schema
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        val schema = createFileStreamSourceAndGetSchema(
+          format = Some("parquet"), path = Some(src.getCanonicalPath), schema = None)
+        assert(schema === new StructType().add("value", StringType))
+      }
     }
   }
 
@@ -237,22 +273,39 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
     }
   }
 
+  // =============== JSON file stream schema tests ================
+
   test("FileStreamSource schema: json, no existing files, no schema") {
     withTempDir { src =>
-      val e = intercept[AnalysisException] {
-        createFileStreamSourceAndGetSchema(
-          format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+
+        val e = intercept[AnalysisException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        }
+        assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
       }
-      assert("Unable to infer schema. It must be specified manually.;" === e.getMessage)
     }
   }
 
   test("FileStreamSource schema: json, existing files, no schema") {
     withTempDir { src =>
-      stringToFile(new File(src, "1"), "{'c': '1'}\n{'c': '2'}\n{'c': '3'}")
-      val schema = createFileStreamSourceAndGetSchema(
-        format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
-      assert(schema === new StructType().add("c", StringType))
+
+      // Without schema inference, should throw error
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "false") {
+        intercept[IllegalArgumentException] {
+          createFileStreamSourceAndGetSchema(
+            format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        }
+      }
+
+      // With schema inference, should infer correct schema
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        stringToFile(new File(src, "1"), "{'c': '1'}\n{'c': '2'}\n{'c': '3'}")
+        val schema = createFileStreamSourceAndGetSchema(
+          format = Some("json"), path = Some(src.getCanonicalPath), schema = None)
+        assert(schema === new StructType().add("c", StringType))
+      }
     }
   }
 
@@ -265,6 +318,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       assert(schema === userSchema)
     }
   }
+
+  // =============== Text file stream tests ================
 
   test("read from text files") {
     withTempDirs { case (src, tmp) =>
@@ -283,6 +338,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
+
+  // =============== JSON file stream tests ================
 
   test("read from json files") {
     withTempDirs { case (src, tmp) =>
@@ -313,73 +370,81 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
 
   test("read from json files with inferring schema") {
     withTempDirs { case (src, tmp) =>
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
-      // Add a file so that we can infer its schema
-      stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
 
-      val fileStream = createFileStream("json", src.getCanonicalPath)
-      assert(fileStream.schema === StructType(Seq(StructField("c", StringType))))
+        val fileStream = createFileStream("json", src.getCanonicalPath)
+        assert(fileStream.schema === StructType(Seq(StructField("c", StringType))))
 
-      // FileStreamSource should infer the column "c"
-      val filtered = fileStream.filter($"c" contains "keep")
+        // FileStreamSource should infer the column "c"
+        val filtered = fileStream.filter($"c" contains "keep")
 
-      testStream(filtered)(
-        AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
-        CheckAnswer("keep2", "keep3", "keep5", "keep6")
-      )
+        testStream(filtered)(
+          AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6")
+        )
+      }
     }
   }
 
   test("reading from json files inside partitioned directory") {
     withTempDirs { case (baseSrc, tmp) =>
-      val src = new File(baseSrc, "type=X")
-      src.mkdirs()
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
+        val src = new File(baseSrc, "type=X")
+        src.mkdirs()
 
-      // Add a file so that we can infer its schema
-      stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'c': 'drop1'}\n{'c': 'keep2'}\n{'c': 'keep3'}")
 
-      val fileStream = createFileStream("json", src.getCanonicalPath)
+        val fileStream = createFileStream("json", src.getCanonicalPath)
 
-      // FileStreamSource should infer the column "c"
-      val filtered = fileStream.filter($"c" contains "keep")
+        // FileStreamSource should infer the column "c"
+        val filtered = fileStream.filter($"c" contains "keep")
 
-      testStream(filtered)(
-        AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
-        CheckAnswer("keep2", "keep3", "keep5", "keep6")
-      )
+        testStream(filtered)(
+          AddTextFileData("{'c': 'drop4'}\n{'c': 'keep5'}\n{'c': 'keep6'}", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6")
+        )
+      }
     }
   }
 
   test("reading from json files with changing schema") {
     withTempDirs { case (src, tmp) =>
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
-      // Add a file so that we can infer its schema
-      stringToFile(new File(src, "existing"), "{'k': 'value0'}")
+        // Add a file so that we can infer its schema
+        stringToFile(new File(src, "existing"), "{'k': 'value0'}")
 
-      val fileStream = createFileStream("json", src.getCanonicalPath)
+        val fileStream = createFileStream("json", src.getCanonicalPath)
 
-      // FileStreamSource should infer the column "k"
-      assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
+        // FileStreamSource should infer the column "k"
+        assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
 
-      // After creating DF and before starting stream, add data with different schema
-      // Should not affect the inferred schema any more
-      stringToFile(new File(src, "existing2"), "{'k': 'value1', 'v': 'new'}")
+        // After creating DF and before starting stream, add data with different schema
+        // Should not affect the inferred schema any more
+        stringToFile(new File(src, "existing2"), "{'k': 'value1', 'v': 'new'}")
 
-      testStream(fileStream)(
+        testStream(fileStream)(
 
-        // Should not pick up column v in the file added before start
-        AddTextFileData("{'k': 'value2'}", src, tmp),
-        CheckAnswer("value0", "value1", "value2"),
+          // Should not pick up column v in the file added before start
+          AddTextFileData("{'k': 'value2'}", src, tmp),
+          CheckAnswer("value0", "value1", "value2"),
 
-        // Should read data in column k, and ignore v
-        AddTextFileData("{'k': 'value3', 'v': 'new'}", src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3"),
+          // Should read data in column k, and ignore v
+          AddTextFileData("{'k': 'value3', 'v': 'new'}", src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3"),
 
-        // Should ignore rows that do not have the necessary k column
-        AddTextFileData("{'v': 'value4'}", src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3", null))
+          // Should ignore rows that do not have the necessary k column
+          AddTextFileData("{'v': 'value4'}", src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3", null))
+      }
     }
   }
+
+  // =============== Parquet file stream tests ================
 
   test("read from parquet files") {
     withTempDirs { case (src, tmp) =>
@@ -402,48 +467,38 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   test("read from parquet files with changing schema") {
 
     withTempDirs { case (src, tmp) =>
-      // Add a file so that we can infer its schema
-      AddParquetFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
+      withSQLConf(SQLConf.STREAMING_SCHEMA_INFERENCE.key -> "true") {
 
-      val fileStream = createFileStream("parquet", src.getCanonicalPath)
+        // Add a file so that we can infer its schema
+        AddParquetFileData.writeToFile(Seq("value0").toDF("k"), src, tmp)
 
-      // FileStreamSource should infer the column "k"
-      assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
+        val fileStream = createFileStream("parquet", src.getCanonicalPath)
 
-      // After creating DF and before starting stream, add data with different schema
-      // Should not affect the inferred schema any more
-      AddParquetFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
+        // FileStreamSource should infer the column "k"
+        assert(fileStream.schema === StructType(Seq(StructField("k", StringType))))
 
-      testStream(fileStream)(
-        // Should not pick up column v in the file added before start
-        AddParquetFileData(Seq("value2").toDF("k"), src, tmp),
-        CheckAnswer("value0", "value1", "value2"),
+        // After creating DF and before starting stream, add data with different schema
+        // Should not affect the inferred schema any more
+        AddParquetFileData.writeToFile(Seq(("value1", 0)).toDF("k", "v"), src, tmp)
 
-        // Should read data in column k, and ignore v
-        AddParquetFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3"),
+        testStream(fileStream)(
+          // Should not pick up column v in the file added before start
+          AddParquetFileData(Seq("value2").toDF("k"), src, tmp),
+          CheckAnswer("value0", "value1", "value2"),
 
-        // Should ignore rows that do not have the necessary k column
-        AddParquetFileData(Seq("value5").toDF("v"), src, tmp),
-        CheckAnswer("value0", "value1", "value2", "value3", null)
-      )
-    }
-  }
+          // Should read data in column k, and ignore v
+          AddParquetFileData(Seq(("value3", 1)).toDF("k", "v"), src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3"),
 
-  test("file stream source without schema") {
-    withTempDir { src =>
-      // Only "text" doesn't need a schema
-      createFileStream("text", src.getCanonicalPath)
-
-      // Both "json" and "parquet" require a schema if no existing file to infer
-      intercept[AnalysisException] {
-        createFileStream("json", src.getCanonicalPath)
-      }
-      intercept[AnalysisException] {
-        createFileStream("parquet", src.getCanonicalPath)
+          // Should ignore rows that do not have the necessary k column
+          AddParquetFileData(Seq("value5").toDF("v"), src, tmp),
+          CheckAnswer("value0", "value1", "value2", "value3", null)
+        )
       }
     }
   }
+
+  // =============== file stream globbing tests ================
 
   test("read new files in nested directories with globbing") {
     withTempDirs { case (dir, tmp) =>
@@ -517,6 +572,8 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
       )
     }
   }
+
+  // =============== other tests ================
 
   test("fault tolerance") {
     withTempDirs { case (src, tmp) =>
