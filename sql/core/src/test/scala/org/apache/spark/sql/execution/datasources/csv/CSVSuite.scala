@@ -522,6 +522,33 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
+  test("RDD[String] to DataFrame: load date types via custom date format") {
+    val testFilePath = testFile(datesFile)
+    val customSchema = new StructType(Array(StructField("date", DateType, true)))
+    val options = Map(
+      "header" -> "true",
+      "inferSchema" -> "false",
+      "dateFormat" -> "dd/MM/yyyy hh:mm")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val results = spark.read.schema(customSchema).options(options).csv(csvRDD).collect()
+    val dateFormat = new SimpleDateFormat("dd/MM/yyyy hh:mm")
+    val expected = Seq(
+      new Date(dateFormat.parse("26/08/2015 18:00").getTime),
+      new Date(dateFormat.parse("27/10/2014 18:30").getTime),
+      new Date(dateFormat.parse("28/01/2016 20:00").getTime))
+    val dates = results.toSeq.map(_.toSeq.head)
+    expected.zip(dates).foreach {
+      case (expectedDate, date) =>
+        // As it truncates the hours, minutes and etc., we only check
+        // if the dates (days, months and years) are the same via `toString()`.
+        assert(expectedDate.toString === date.toString)
+    }
+  }
+
   test("setting comment to null disables comment support") {
     val results = spark.read
       .format("csv")
@@ -529,6 +556,23 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(disableCommentsFile))
       .collect()
 
+    val expected =
+      Seq(
+        Seq("#1", "2", "3"),
+        Seq("4", "5", "6"))
+
+    assert(results.toSeq.map(_.toSeq) === expected)
+  }
+
+  test("RDD[String] to DataFrame: setting comment to null disables comment support") {
+    val testFilePath = testFile(disableCommentsFile)
+    val options = Map("header" -> "false", "comment" -> "")
+    val csvRDD = CSVRelation.baseRdd(
+      spark,
+      new CSVOptions(options),
+      Seq(testFilePath)
+    )
+    val results = spark.read.options(options).csv(csvRDD).collect()
     val expected =
       Seq(
         Seq("#1", "2", "3"),
@@ -655,7 +699,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
   }
 
-  test("DataSet[String] to DataFrame -- Schema inference correctly identifies the datatype") {
+  test("RDD[String] to DataFrame -- Schema inference correctly identifies the datatype") {
     val testFilePath = testFile(simpleSparseFile)
     val options = Map("header" -> "true", "inferSchema" -> "true")
     val csvRDD = CSVRelation.baseRdd(
