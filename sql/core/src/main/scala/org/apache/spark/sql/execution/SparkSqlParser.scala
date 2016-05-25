@@ -368,17 +368,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * For example:
    * {{{
    *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
-   *   [COLUMNS (col1, col2)]
    * }}}
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.identifierList != null) {
-      throw operationNotAllowed("TRUNCATE TABLE ... COLUMNS", ctx)
-    }
     TruncateTableCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    )
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**
