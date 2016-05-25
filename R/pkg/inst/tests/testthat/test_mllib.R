@@ -365,6 +365,7 @@ test_that("spark.naiveBayes", {
 
   t <- as.data.frame(Titanic)
   t1 <- t[t$Freq > 0, -5]
+
   df <- suppressWarnings(createDataFrame(sqlContext, t1))
   m <- spark.naiveBayes(df, Survived ~ .)
   s <- summary(m)
@@ -375,6 +376,16 @@ test_that("spark.naiveBayes", {
   expect_equal(p$prediction, c("Yes", "Yes", "Yes", "Yes", "No", "No", "Yes", "Yes", "No", "No",
                                "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "Yes", "No", "No",
                                "Yes", "Yes", "No", "No"))
+
+  # Test numeric response variable
+  t1$NumericSurvived <- ifelse(t1$Survived == "No", 0, 1)
+  t2 <- t1[-4]
+  df <- suppressWarnings(createDataFrame(sqlContext, t2))
+  m <- spark.naiveBayes(df, NumericSurvived ~ .)
+  s <- summary(m)
+  expect_equal(as.double(s$apriori[1, "1"]), 0.5833333, tolerance = 1e-6)
+  expect_equal(sum(s$apriori), 1)
+  expect_equal(as.double(s$tables["1", "Age_Adult"]), 0.5714286, tolerance = 1e-6)
 
   # Test model save/load
   modelPath <- tempfile(pattern = "spark-naiveBayes", fileext = ".tmp")
