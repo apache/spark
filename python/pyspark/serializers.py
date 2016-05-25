@@ -392,9 +392,8 @@ def _hijack_namedtuple():
     # so only hack those in __main__ module
     if "__main__" in sys.modules:
         for n, o in sys.modules["__main__"].__dict__.items():
-            if (type(o) is type and o.__base__ is tuple
-                  and hasattr(o, "_fields")
-                  and "__reduce__" not in o.__dict__):
+            if (type(o) is type and o.__base__ is tuple and hasattr(o, "_fields")
+                    and "__reduce__" not in o.__dict__):
                 _hack_namedtuple(o)  # hack inplace
 
 

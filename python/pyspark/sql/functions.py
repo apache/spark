@@ -1804,11 +1804,12 @@ class UserDefinedJythonFunction(object):
 
             # Sort out PySpark and non PySpark requirements
             req_vars = {k: v for k, v in req.items() if not isClass(v) or not isInternal(v)}
-            req_imports = {(v.__module__, v.__name__, k) for k, v in req.items() if isClass(v) and isInternal(v)}
+            req_imports = {k: v for k, v in req.items() if isClass(v) and isInternal(v)}
             if req_vars:
                 serialized_vars = b64encode(ser.dumps(req_vars)).decode("utf-8")
             if req_imports:
-                serialized_imports = b64encode(ser.dumps(req_imports)).decode("utf-8")
+                formatted_imports = {(v.__module__, v.__name__, k) for k, v in req_imports}
+                serialized_imports = b64encode(ser.dumps(formatted_imports)).decode("utf-8")
 
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
@@ -1827,6 +1828,7 @@ class UserDefinedJythonFunction(object):
             self._judf.func().lazyFunc().unpersist(False)
         except py4j.protocol.Py4JJavaError:
             # Exception happens if shutting down, doesn't matter.
+            pass
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context

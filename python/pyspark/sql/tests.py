@@ -289,7 +289,6 @@ class SQLTests(ReusedPySparkTestCase):
         res = data.select(addFour(data['number']).alias('plus_four'))
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
 
-
     def test_jython_dill_udf_row(self):
         try:
             import dill
@@ -315,13 +314,12 @@ class SQLTests(ReusedPySparkTestCase):
             self.assertEqual(res[0]['meep']['by'], 0)
             self.assertEqual(res[1]['meep']['hi'], "murh")
             self.assertEqual(res[1]['meep']['by'], 1)
-        
 
     def test_jython_udf_avg2(self):
         d = [Row(number=i, squared=i**2) for i in range(3)]
         rdd = self.sc.parallelize(d)
         data = self.spark.createDataFrame(rdd)
-        
+
         avg2 = "lambda x, y: (x + y) / 2.0"
         avg2UDF = self.spark.catalog.registerJythonFunction("2avg", avg2, DoubleType())
         res = data.select(avg2UDF(data['number'], data['squared']).alias('avg')).collect()
@@ -333,8 +331,8 @@ class SQLTests(ReusedPySparkTestCase):
         data = self.spark.createDataFrame(rdd)
 
         makeMap = """lambda x: {"hi": str(x), "magic":"yes"}"""
-        simpleMap = self.spark.catalog.registerJythonFunction("simpleMap", makeMap,
-                                                  MapType(StringType(), StringType()))
+        retType = MapType(StringType(), StringType())
+        simpleMap = self.spark.catalog.registerJythonFunction("simpleMap", makeMap, retType)
         res = data.select(simpleMap(data['r1']).alias("map")).collect()
         his = map(lambda x: x[0]["hi"], res)
         magic = map(lambda x: x[0]["magic"], res)
@@ -346,12 +344,12 @@ class SQLTests(ReusedPySparkTestCase):
                                    Row(r1=21, r2="bye KK6JKQ", r3=5)])
         data = self.spark.createDataFrame(rdd)
         split = "lambda x: x.split()"
-        tokenize = self.spark.catalog.registerJythonFunction("tokenize", split, ArrayType(StringType()))
+        retType = ArrayType(StringType())
+        tokenize = self.spark.catalog.registerJythonFunction("tokenize", split, retType)
         res = data.select(tokenize(data['r2']).alias("words")).collect()
         self.assertEqual([Row(words=["hi", "KK6JKQ"]), Row(words=["bye", "KK6JKQ"])],
                          res)
 
-        
     def test_udf_with_callable(self):
         d = [Row(number=i, squared=i**2) for i in range(10)]
         rdd = self.sc.parallelize(d)
@@ -380,7 +378,7 @@ class SQLTests(ReusedPySparkTestCase):
         pudf = UserDefinedFunction(pfunc, LongType())
         res = data.select(pudf(data['number']).alias('plus_four'))
         self.assertEqual(res.agg({'plus_four': 'sum'}).collect()[0][0], 85)
-        
+
     def test_udf(self):
         self.spark.catalog.registerFunction("twoArgs", lambda x, y: len(x) + y, IntegerType())
         [row] = self.spark.sql("SELECT twoArgs('test', 1)").collect()
