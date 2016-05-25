@@ -20,13 +20,16 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.DCT
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 object DCTExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("DCTExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("DCTExample")
+      .getOrCreate()
 
     // $example on$
     val data = Seq(

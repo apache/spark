@@ -23,7 +23,10 @@ from pyspark.ml.feature import Binarizer
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("BinarizerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("BinarizerExample")\
+        .getOrCreate()
 
     # $example on$
     continuousDataFrame = spark.createDataFrame([

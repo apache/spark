@@ -33,7 +33,10 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         print("Usage: dataframe_example.py <libsvm file>", file=sys.stderr)
         exit(-1)
-    spark = SparkSession.builder.appName("DataFrameExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("DataFrameExample")\
+        .getOrCreate()
     if len(sys.argv) == 2:
         input = sys.argv[1]
     else:

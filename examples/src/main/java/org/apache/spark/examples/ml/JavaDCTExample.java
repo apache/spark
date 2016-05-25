@@ -17,8 +17,6 @@
 
 package org.apache.spark.examples.ml;
 
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.SparkSession;
 
@@ -26,7 +24,6 @@ import org.apache.spark.sql.SparkSession;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.ml.feature.DCT;
 import org.apache.spark.mllib.linalg.VectorUDT;
 import org.apache.spark.mllib.linalg.Vectors;
@@ -39,7 +36,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaDCTExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaDCTExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaDCTExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

@@ -20,13 +20,16 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.ChiSqSelector
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 object ChiSqSelectorExample {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("ChiSqSelectorExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("ChiSqSelectorExample")
+      .getOrCreate()
     import spark.implicits._
 
     // $example on$

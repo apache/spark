@@ -23,7 +23,10 @@ from pyspark.ml.feature import MinMaxScaler
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("MinMaxScalerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("MinMaxScalerExample")\
+        .getOrCreate()
 
     # $example on$
     dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

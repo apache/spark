@@ -20,13 +20,16 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.PCA
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 object PCAExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("PCAExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("PCAExample")
+      .getOrCreate()
 
     // $example on$
     val data = Array(

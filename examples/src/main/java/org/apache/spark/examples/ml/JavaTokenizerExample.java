@@ -36,7 +36,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaTokenizerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaTokenizerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaTokenizerExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

@@ -29,7 +29,10 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("decision_tree_classification_example").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("decision_tree_classification_example")\
+        .getOrCreate()
 
     # $example on$
     # Load the data stored in LIBSVM format as a DataFrame.

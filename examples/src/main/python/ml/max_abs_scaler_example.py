@@ -23,7 +23,10 @@ from pyspark.ml.feature import MaxAbsScaler
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("MaxAbsScalerExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("MaxAbsScalerExample")\
+        .getOrCreate()
 
     # $example on$
     dataFrame = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

@@ -27,7 +27,10 @@ import org.apache.spark.sql.functions.max
 object LogisticRegressionSummaryExample {
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("LogisticRegressionSummaryExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("LogisticRegressionSummaryExample")
+      .getOrCreate()
     import spark.implicits._
 
     // Load training data

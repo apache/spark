@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object StringIndexerExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("StringIndexerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("StringIndexerExample")
+      .getOrCreate()
 
     // $example on$
     val df = spark.createDataFrame(

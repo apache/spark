@@ -30,10 +30,12 @@ import org.apache.spark.sql.SparkSession;
 public class JavaLinearRegressionWithElasticNetExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaLinearRegressionWithElasticNetExample").getOrCreate();
+      .builder()
+      .appName("JavaLinearRegressionWithElasticNetExample")
+      .getOrCreate();
 
     // $example on$
-    // Load training data
+    // Load training data.
     Dataset<Row> training = spark.read().format("libsvm")
       .load("data/mllib/sample_linear_regression_data.txt");
 
@@ -42,14 +44,14 @@ public class JavaLinearRegressionWithElasticNetExample {
       .setRegParam(0.3)
       .setElasticNetParam(0.8);
 
-    // Fit the model
+    // Fit the model.
     LinearRegressionModel lrModel = lr.fit(training);
 
-    // Print the coefficients and intercept for linear regression
+    // Print the coefficients and intercept for linear regression.
     System.out.println("Coefficients: "
       + lrModel.coefficients() + " Intercept: " + lrModel.intercept());
 
-    // Summarize the model over the training set and print out some metrics
+    // Summarize the model over the training set and print out some metrics.
     LinearRegressionTrainingSummary trainingSummary = lrModel.summary();
     System.out.println("numIterations: " + trainingSummary.totalIterations());
     System.out.println("objectiveHistory: " + Vectors.dense(trainingSummary.objectiveHistory()));

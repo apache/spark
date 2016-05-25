@@ -28,13 +28,19 @@ import org.apache.spark.sql.SparkSession;
 public class JavaMaxAbsScalerExample {
 
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaMaxAbsScalerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaMaxAbsScalerExample")
+      .getOrCreate();
 
     // $example on$
-    Dataset<Row> dataFrame = spark.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");
+    Dataset<Row> dataFrame = spark
+      .read()
+      .format("libsvm")
+      .load("data/mllib/sample_libsvm_data.txt");
     MaxAbsScaler scaler = new MaxAbsScaler()
-        .setInputCol("features")
-        .setOutputCol("scaledFeatures");
+      .setInputCol("features")
+      .setOutputCol("scaledFeatures");
 
     // Compute summary statistics and generate MaxAbsScalerModel
     MaxAbsScalerModel scalerModel = scaler.fit(dataFrame);

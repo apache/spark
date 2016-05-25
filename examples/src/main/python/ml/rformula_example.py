@@ -23,7 +23,10 @@ from pyspark.ml.feature import RFormula
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("RFormulaExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("RFormulaExample")\
+        .getOrCreate()
 
     # $example on$
     dataset = spark.createDataFrame(

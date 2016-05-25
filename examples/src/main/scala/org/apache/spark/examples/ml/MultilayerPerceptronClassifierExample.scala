@@ -30,7 +30,10 @@ import org.apache.spark.sql.SparkSession
 object MultilayerPerceptronClassifierExample {
 
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("MultilayerPerceptronClassifierExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("MultilayerPerceptronClassifierExample")
+      .getOrCreate()
 
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.

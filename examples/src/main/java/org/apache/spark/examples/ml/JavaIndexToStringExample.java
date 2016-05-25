@@ -37,7 +37,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaIndexToStringExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaIndexToStringExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaIndexToStringExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

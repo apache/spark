@@ -35,7 +35,10 @@ import org.apache.spark.sql.types.StructType;
 
 public class JavaNGramExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaNGramExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaNGramExample")
+      .getOrCreate();
 
     // $example on$
     List<Row> data = Arrays.asList(

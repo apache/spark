@@ -30,7 +30,10 @@ import org.apache.spark.sql.Row;
 
 public class JavaVectorIndexerExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaVectorIndexerExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaVectorIndexerExample")
+      .getOrCreate();
 
     // $example on$
     Dataset<Row> data = spark.read().format("libsvm").load("data/mllib/sample_libsvm_data.txt");

@@ -189,7 +189,9 @@ object LDAExample {
       vocabSize: Int,
       stopwordFile: String): (RDD[(Long, Vector)], Array[String], Long) = {
 
-    val spark = SparkSession.builder.getOrCreate()
+    val spark = SparkSession
+      .builder
+      .getOrCreate()
     import spark.implicits._
 
     // Get dataset of document texts

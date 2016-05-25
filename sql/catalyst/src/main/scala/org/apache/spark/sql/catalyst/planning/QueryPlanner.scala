@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.trees.TreeNode
 
 /**
- * Given a [[plans.logical.LogicalPlan LogicalPlan]], returns a list of `PhysicalPlan`s that can
+ * Given a [[LogicalPlan]], returns a list of `PhysicalPlan`s that can
  * be used for execution. If this strategy does not apply to the give logical operation then an
  * empty list should be returned.
  */
@@ -31,9 +31,10 @@ abstract class GenericStrategy[PhysicalPlan <: TreeNode[PhysicalPlan]] extends L
 }
 
 /**
- * Abstract class for transforming [[plans.logical.LogicalPlan LogicalPlan]]s into physical plans.
- * Child classes are responsible for specifying a list of [[Strategy]] objects that each of which
- * can return a list of possible physical plan options.  If a given strategy is unable to plan all
+ * Abstract class for transforming [[LogicalPlan]]s into physical plans.
+ * Child classes are responsible for specifying a list of [[GenericStrategy]] objects that
+ * each of which can return a list of possible physical plan options.
+ * If a given strategy is unable to plan all
  * of the remaining operators in the tree, it can call [[planLater]], which returns a placeholder
  * object that will be filled in using other available strategies.
  *

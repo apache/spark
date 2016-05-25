@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object VectorIndexerExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("VectorIndexerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("VectorIndexerExample")
+      .getOrCreate()
 
     // $example on$
     val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")

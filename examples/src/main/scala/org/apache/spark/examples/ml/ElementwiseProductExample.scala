@@ -20,13 +20,16 @@ package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.feature.ElementwiseProduct
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 // $example off$
 import org.apache.spark.sql.SparkSession
 
 object ElementwiseProductExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("ElementwiseProductExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("ElementwiseProductExample")
+      .getOrCreate()
 
     // $example on$
     // Create some vector data; also works for sparse vectors

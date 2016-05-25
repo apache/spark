@@ -24,7 +24,7 @@ import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.catalyst.analysis.Update
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
-import org.apache.spark.sql.expressions.scala.typed
+import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -81,25 +81,6 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
       CheckLastBatch((1, 2, 1), (2, 3, 1)),
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 2), (2, 3, 2))
-    )
-  }
-
-  test("multiple aggregations") {
-    val inputData = MemoryStream[Int]
-
-    val aggregated =
-      inputData.toDF()
-        .groupBy($"value")
-        .agg(count("*") as 'count)
-        .groupBy($"value" % 2)
-        .agg(sum($"count"))
-        .as[(Int, Long)]
-
-    testStream(aggregated)(
-      AddData(inputData, 1, 2, 3, 4),
-      CheckLastBatch((0, 2), (1, 2)),
-      AddData(inputData, 1, 3, 5),
-      CheckLastBatch((1, 5))
     )
   }
 

@@ -23,7 +23,7 @@ import java.util.Arrays
 
 import org.apache.spark.ml.attribute.{Attribute, AttributeGroup, NumericAttribute}
 import org.apache.spark.ml.feature.VectorSlicer
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.StructType
 // $example off$
@@ -31,7 +31,10 @@ import org.apache.spark.sql.SparkSession
 
 object VectorSlicerExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("VectorSlicerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("VectorSlicerExample")
+      .getOrCreate()
 
     // $example on$
     val data = Arrays.asList(Row(Vectors.dense(-2.0, 2.3, 0.0)))

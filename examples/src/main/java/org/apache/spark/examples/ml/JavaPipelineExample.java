@@ -36,7 +36,10 @@ import org.apache.spark.sql.SparkSession;
  */
 public class JavaPipelineExample {
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaPipelineExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaPipelineExample")
+      .getOrCreate();
 
     // $example on$
     // Prepare training documents, which are labeled.

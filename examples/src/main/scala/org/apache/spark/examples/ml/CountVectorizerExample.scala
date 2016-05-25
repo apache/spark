@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object CountVectorizerExample {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("CounterVectorizerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("CounterVectorizerExample")
+      .getOrCreate()
 
     // $example on$
     val df = spark.createDataFrame(Seq(

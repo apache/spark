@@ -31,7 +31,10 @@ Run with:
 """
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("TrainValidationSplit").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("TrainValidationSplit")\
+        .getOrCreate()
     # $example on$
     # Prepare training and test data.
     data = spark.read.format("libsvm")\

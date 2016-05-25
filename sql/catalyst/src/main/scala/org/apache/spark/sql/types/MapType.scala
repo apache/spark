@@ -20,6 +20,7 @@ package org.apache.spark.sql.types
 import org.json4s.JsonAST.JValue
 import org.json4s.JsonDSL._
 
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
@@ -31,6 +32,7 @@ import org.json4s.JsonDSL._
  * @param valueType The data type of map values.
  * @param valueContainsNull Indicates if map values have `null` values.
  */
+@DeveloperApi
 case class MapType(
   keyType: DataType,
   valueType: DataType,

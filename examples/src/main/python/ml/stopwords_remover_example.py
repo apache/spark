@@ -23,7 +23,10 @@ from pyspark.ml.feature import StopWordsRemover
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("StopWordsRemoverExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("StopWordsRemoverExample")\
+        .getOrCreate()
 
     # $example on$
     sentenceData = spark.createDataFrame([

@@ -44,6 +44,7 @@ import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
 import org.apache.spark.{SPARK_BRANCH, SPARK_BUILD_DATE, SPARK_BUILD_USER, SPARK_REPO_URL}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
+import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.util.{ChildFirstURLClassLoader, MutableURLClassLoader, Utils}
 
 
@@ -75,10 +76,6 @@ object SparkSubmit {
   private val CLIENT = 1
   private val CLUSTER = 2
   private val ALL_DEPLOY_MODES = CLIENT | CLUSTER
-
-  // A special jar name that indicates the class being run is inside of Spark itself, and therefore
-  // no user jar is needed.
-  private val SPARK_INTERNAL = "spark-internal"
 
   // Special primary resource names that represent shells rather than application jars.
   private val SPARK_SHELL = "spark-shell"
@@ -579,7 +576,7 @@ object SparkSubmit {
         childArgs += ("--primary-r-file", mainFile)
         childArgs += ("--class", "org.apache.spark.deploy.RRunner")
       } else {
-        if (args.primaryResource != SPARK_INTERNAL) {
+        if (args.primaryResource != SparkLauncher.NO_RESOURCE) {
           childArgs += ("--jar", args.primaryResource)
         }
         childArgs += ("--class", args.mainClass)
@@ -799,7 +796,7 @@ object SparkSubmit {
   }
 
   private[deploy] def isInternal(res: String): Boolean = {
-    res == SPARK_INTERNAL
+    res == SparkLauncher.NO_RESOURCE
   }
 
   /**
@@ -962,9 +959,9 @@ private[spark] object SparkSubmitUtils {
     // Add scala exclusion rule
     md.addExcludeRule(createExclusion("*:scala-library:*", ivySettings, ivyConfName))
 
-    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka and
+    // We need to specify each component explicitly, otherwise we miss spark-streaming-kafka-0-8 and
     // other spark-streaming utility components. Underscore is there to differentiate between
-    // spark-streaming_2.1x and spark-streaming-kafka-assembly_2.1x
+    // spark-streaming_2.1x and spark-streaming-kafka-0-8-assembly_2.1x
     val components = Seq("catalyst_", "core_", "graphx_", "hive_", "mllib_", "repl_",
       "sql_", "streaming_", "yarn_", "network-common_", "network-shuffle_", "network-yarn_")
 

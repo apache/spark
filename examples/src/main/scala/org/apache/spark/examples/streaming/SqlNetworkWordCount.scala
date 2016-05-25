@@ -66,8 +66,8 @@ object SqlNetworkWordCount {
       // Convert RDD[String] to RDD[case class] to DataFrame
       val wordsDataFrame = rdd.map(w => Record(w)).toDF()
 
-      // Register as table
-      wordsDataFrame.registerTempTable("words")
+      // Creates a temporary view using the DataFrame
+      wordsDataFrame.createOrReplaceTempView("words")
 
       // Do word count on table using SQL and print it
       val wordCountsDataFrame =
@@ -93,7 +93,10 @@ object SparkSessionSingleton {
 
   def getInstance(sparkConf: SparkConf): SparkSession = {
     if (instance == null) {
-      instance = SparkSession.builder.config(sparkConf).getOrCreate()
+      instance = SparkSession
+        .builder
+        .config(sparkConf)
+        .getOrCreate()
     }
     instance
   }

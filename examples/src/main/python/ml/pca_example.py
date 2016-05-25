@@ -24,7 +24,10 @@ from pyspark.mllib.linalg import Vectors
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("PCAExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("PCAExample")\
+        .getOrCreate()
 
     # $example on$
     data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),

@@ -24,7 +24,10 @@ import org.apache.spark.sql.SparkSession
 
 object QuantileDiscretizerExample {
   def main(args: Array[String]) {
-    val spark = SparkSession.builder.appName("QuantileDiscretizerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("QuantileDiscretizerExample")
+      .getOrCreate()
     import spark.implicits._
 
     // $example on$

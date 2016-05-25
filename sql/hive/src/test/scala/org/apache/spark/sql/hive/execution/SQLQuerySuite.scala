@@ -29,7 +29,6 @@ import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRela
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -103,14 +102,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-6835: udtf in lateral view") {
     val df = Seq((1, 1)).toDF("c1", "c2")
-    df.registerTempTable("table1")
+    df.createOrReplaceTempView("table1")
     val query = sql("SELECT c1, v FROM table1 LATERAL VIEW stack(3, 1, c1 + 1, c1 + 2) d AS v")
     checkAnswer(query, Row(1, 1) :: Row(1, 2) :: Row(1, 3) :: Nil)
   }
 
   test("SPARK-13651: generator outputs shouldn't be resolved from its child's output") {
     withTempTable("src") {
-      Seq(("id1", "value1")).toDF("key", "value").registerTempTable("src")
+      Seq(("id1", "value1")).toDF("key", "value").createOrReplaceTempView("src")
       val query =
         sql("SELECT genoutput.* FROM src " +
           "LATERAL VIEW explode(map('key1', 100, 'key2', 200)) genoutput AS key, value")
@@ -136,8 +135,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Order(1, "Atlas", "MTB", 434, "2015-01-07", "John D", "Pacifica", "CA", 20151),
       Order(11, "Swift", "YFlikr", 137, "2015-01-23", "John D", "Hayward", "CA", 20151))
 
-    orders.toDF.registerTempTable("orders1")
-    orderUpdates.toDF.registerTempTable("orderupdates1")
+    orders.toDF.createOrReplaceTempView("orders1")
+    orderUpdates.toDF.createOrReplaceTempView("orderupdates1")
 
     sql(
       """CREATE TABLE orders(
@@ -192,24 +191,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     allBuiltinFunctions.foreach { f =>
       assert(allFunctions.contains(f))
     }
-    checkAnswer(sql("SHOW functions abs"), Row("abs"))
-    checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
-    checkAnswer(sql("SHOW functions abc.abs"), Row("abs"))
-    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    checkAnswer(sql("SHOW functions `abc`.`abs`"), Row("abs"))
-    checkAnswer(sql("SHOW functions `~`"), Row("~"))
-    checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-    checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
-    // this probably will failed if we add more function with `sha` prefixing.
-    checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
-    // Test '|' for alternation.
-    checkAnswer(
-      sql("SHOW functions 'sha*|weekofyea*'"),
-      Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+    withTempDatabase { db =>
+      checkAnswer(sql("SHOW functions abs"), Row("abs"))
+      checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
+      checkAnswer(sql(s"SHOW functions $db.abs"), Row("abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
+      checkAnswer(sql("SHOW functions `~`"), Row("~"))
+      checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
+      checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
+      // this probably will failed if we add more function with `sha` prefixing.
+      checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+      // Test '|' for alternation.
+      checkAnswer(
+        sql("SHOW functions 'sha*|weekofyea*'"),
+        Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+    }
   }
 
-  test("describe functions") {
-    // The Spark SQL built-in functions
+  test("describe functions - built-in functions") {
     checkKeywordsExist(sql("describe function extended upper"),
       "Function: upper",
       "Class: org.apache.spark.sql.catalyst.expressions.Upper",
@@ -253,9 +253,59 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         "When a = b, returns c; when a = d, return e; else return f")
   }
 
+  test("describe functions - user defined functions") {
+    withUserDefinedFunction("udtf_count" -> false) {
+      sql(
+        s"""
+           |CREATE FUNCTION udtf_count
+           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+        """.stripMargin)
+
+      checkKeywordsExist(sql("describe function udtf_count"),
+        "Function: default.udtf_count",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+
+      checkAnswer(
+        sql("SELECT udtf_count(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Nil)
+
+      checkKeywordsExist(sql("describe function udtf_count"),
+        "Function: default.udtf_count",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+    }
+  }
+
+  test("describe functions - temporary user defined functions") {
+    withUserDefinedFunction("udtf_count_temp" -> true) {
+      sql(
+        s"""
+           |CREATE TEMPORARY FUNCTION udtf_count_temp
+           |AS 'org.apache.spark.sql.hive.execution.GenericUDTFCount2'
+           |USING JAR '${hiveContext.getHiveFile("TestUDTF.jar").getCanonicalPath()}'
+        """.stripMargin)
+
+      checkKeywordsExist(sql("describe function udtf_count_temp"),
+        "Function: udtf_count_temp",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+
+      checkAnswer(
+        sql("SELECT udtf_count_temp(a) FROM (SELECT 1 AS a FROM src LIMIT 3) t"),
+        Row(3) :: Row(3) :: Nil)
+
+      checkKeywordsExist(sql("describe function udtf_count_temp"),
+        "Function: udtf_count_temp",
+        "Class: org.apache.spark.sql.hive.execution.GenericUDTFCount2",
+        "Usage: N/A")
+    }
+  }
+
   test("SPARK-5371: union with null and sum") {
     val df = Seq((1, 1)).toDF("c1", "c2")
-    df.registerTempTable("table1")
+    df.createOrReplaceTempView("table1")
 
     val query = sql(
       """
@@ -279,7 +329,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("CTAS with WITH clause") {
     val df = Seq((1, 1)).toDF("c1", "c2")
-    df.registerTempTable("table1")
+    df.createOrReplaceTempView("table1")
 
     sql(
       """
@@ -296,7 +346,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("explode nested Field") {
-    Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.registerTempTable("nestedArray")
+    Seq(NestedArray1(NestedArray2(Seq(1, 2, 3)))).toDF.createOrReplaceTempView("nestedArray")
     checkAnswer(
       sql("SELECT ints FROM nestedArray LATERAL VIEW explode(a.b) a AS ints"),
       Row(1) :: Row(2) :: Row(3) :: Nil)
@@ -493,7 +543,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("specifying the column list for CTAS") {
-    Seq((1, "111111"), (2, "222222")).toDF("key", "value").registerTempTable("mytable1")
+    Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
 
     sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
     checkAnswer(
@@ -548,7 +598,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("double nested data") {
     sparkContext.parallelize(Nested1(Nested2(Nested3(1))) :: Nil)
-      .toDF().registerTempTable("nested")
+      .toDF().createOrReplaceTempView("nested")
     checkAnswer(
       sql("SELECT f1.f2.f3 FROM nested"),
       Row(1))
@@ -632,7 +682,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-4963 DataFrame sample on mutable row return wrong result") {
     sql("SELECT * FROM src WHERE key % 2 = 0")
       .sample(withReplacement = false, fraction = 0.3)
-      .registerTempTable("sampled")
+      .createOrReplaceTempView("sampled")
     (1 to 10).foreach { i =>
       checkAnswer(
         sql("SELECT * FROM sampled WHERE key % 2 = 1"),
@@ -657,7 +707,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    hiveContext.createDataFrame(rowRdd, schema).registerTempTable("testTable")
+    hiveContext.createDataFrame(rowRdd, schema).createOrReplaceTempView("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -683,14 +733,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("SPARK-4296 Grouping field with Hive UDF as sub expression") {
     val rdd = sparkContext.makeRDD( """{"a": "str", "b":"1", "c":"1970-01-01 00:00:00"}""" :: Nil)
-    read.json(rdd).registerTempTable("data")
+    read.json(rdd).createOrReplaceTempView("data")
     checkAnswer(
       sql("SELECT concat(a, '-', b), year(c) FROM data GROUP BY concat(a, '-', b), year(c)"),
       Row("str-1", 1970))
 
     dropTempTable("data")
 
-    read.json(rdd).registerTempTable("data")
+    read.json(rdd).createOrReplaceTempView("data")
     checkAnswer(sql("SELECT year(c) + 1 FROM data GROUP BY year(c) + 1"), Row(1971))
 
     dropTempTable("data")
@@ -698,14 +748,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("resolve udtf in projection #1") {
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    read.json(rdd).registerTempTable("data")
+    read.json(rdd).createOrReplaceTempView("data")
     val df = sql("SELECT explode(a) AS val FROM data")
     val col = df("val")
   }
 
   test("resolve udtf in projection #2") {
     val rdd = sparkContext.makeRDD((1 to 2).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    read.json(rdd).registerTempTable("data")
+    read.json(rdd).createOrReplaceTempView("data")
     checkAnswer(sql("SELECT explode(map(1, 1)) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     checkAnswer(sql("SELECT explode(map(1, 1)) as (k1, k2) FROM data LIMIT 1"), Row(1, 1) :: Nil)
     intercept[AnalysisException] {
@@ -720,7 +770,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   // TGF with non-TGF in project is allowed in Spark SQL, but not in Hive
   test("TGF with non-TGF in projection") {
     val rdd = sparkContext.makeRDD( """{"a": "1", "b":"1"}""" :: Nil)
-    read.json(rdd).registerTempTable("data")
+    read.json(rdd).createOrReplaceTempView("data")
     checkAnswer(
       sql("SELECT explode(map(a, b)) as (k1, k2), a, b FROM data"),
       Row("1", "1", "1", "1") :: Nil)
@@ -734,7 +784,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // PreInsertionCasts will actually start to work before ImplicitGenerate and then
     // generates an invalid query plan.
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
-    read.json(rdd).registerTempTable("data")
+    read.json(rdd).createOrReplaceTempView("data")
     val originalConf = sessionState.convertCTAS
     setConf(HiveUtils.CONVERT_CTAS, false)
 
@@ -774,7 +824,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     Seq.empty[(java.math.BigDecimal, java.math.BigDecimal)]
       .toDF("d1", "d2")
       .select($"d1".cast(DecimalType(10, 5)).as("d"))
-      .registerTempTable("dn")
+      .createOrReplaceTempView("dn")
 
     sql("select d from dn union all select d * 2 from dn")
       .queryExecution.analyzed
@@ -782,27 +832,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("Star Expansion - script transform") {
     val data = (1 to 100000).map { i => (i, i, i) }
-    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
     assert(100000 === sql("SELECT TRANSFORM (*) USING 'cat' FROM script_trans").count())
   }
 
   test("test script transform for stdout") {
     val data = (1 to 100000).map { i => (i, i, i) }
-    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
     assert(100000 ===
       sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat' AS (a,b,c) FROM script_trans").count())
   }
 
   test("test script transform for stderr") {
     val data = (1 to 100000).map { i => (i, i, i) }
-    data.toDF("d1", "d2", "d3").registerTempTable("script_trans")
+    data.toDF("d1", "d2", "d3").createOrReplaceTempView("script_trans")
     assert(0 ===
       sql("SELECT TRANSFORM (d1, d2, d3) USING 'cat 1>&2' AS (a,b,c) FROM script_trans").count())
   }
 
   test("test script transform data type") {
     val data = (1 to 5).map { i => (i, i) }
-    data.toDF("key", "value").registerTempTable("test")
+    data.toDF("key", "value").createOrReplaceTempView("test")
     checkAnswer(
       sql("""FROM
           |(FROM test SELECT TRANSFORM(key, value) USING 'cat' AS (`thing1` int, thing2 string)) t
@@ -812,9 +862,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("Sorting columns are not in Generate") {
     withTempTable("data") {
-      sqlContext.range(1, 5)
+      spark.range(1, 5)
         .select(array($"id", $"id" + 1).as("a"), $"id".as("b"), (lit(10) - $"id").as("c"))
-        .registerTempTable("data")
+        .createOrReplaceTempView("data")
 
       // case 1: missing sort columns are resolvable if join is true
       checkAnswer(
@@ -838,7 +888,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("test case key when") {
-    (1 to 5).map(i => (i, i.toString)).toDF("k", "v").registerTempTable("t")
+    (1 to 5).map(i => (i, i.toString)).toDF("k", "v").createOrReplaceTempView("t")
     checkAnswer(
       sql("SELECT CASE k WHEN 2 THEN 22 WHEN 4 THEN 44 ELSE 0 END, v FROM t"),
       Row(0, "1") :: Row(22, "2") :: Row(0, "3") :: Row(44, "4") :: Row(0, "5") :: Nil)
@@ -847,7 +897,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-7269 Check analysis failed in case in-sensitive") {
     Seq(1, 2, 3).map { i =>
       (i.toString, i.toString)
-    }.toDF("key", "value").registerTempTable("df_analysis")
+    }.toDF("key", "value").createOrReplaceTempView("df_analysis")
     sql("SELECT kEy from df_analysis group by key").collect()
     sql("SELECT kEy+3 from df_analysis group by key+3").collect()
     sql("SELECT kEy+3, a.kEy, A.kEy from df_analysis A group by key").collect()
@@ -981,7 +1031,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-8588 HiveTypeCoercion.inConversion fires too early") {
     val df =
       createDataFrame(Seq((1, "2014-01-01"), (2, "2015-01-01"), (3, "2016-01-01")))
-    df.toDF("id", "datef").registerTempTable("test_SPARK8588")
+    df.toDF("id", "datef").createOrReplaceTempView("test_SPARK8588")
     checkAnswer(
       sql(
         """
@@ -996,7 +1046,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-9371: fix the support for special chars in column names for hive context") {
     read.json(sparkContext.makeRDD(
       """{"a": {"c.b": 1}, "b.$q": [{"a@!.q": 1}], "q.w": {"w.i&": [1]}}""" :: Nil))
-      .registerTempTable("t")
+      .createOrReplaceTempView("t")
 
     checkAnswer(sql("SELECT a.`c.b`, `b.$q`[0].`a@!.q`, `q.w`.`w.i&`[0] FROM t"), Row(1, 1, 1))
   }
@@ -1033,7 +1083,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
       // We don't support creating a temporary table while specifying a database
       val message = intercept[AnalysisException] {
-        sqlContext.sql(
+        spark.sql(
           s"""
           |CREATE TEMPORARY TABLE db.t
           |USING parquet
@@ -1044,7 +1094,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }.getMessage
 
       // If you use backticks to quote the name then it's OK.
-      sqlContext.sql(
+      spark.sql(
         s"""
           |CREATE TEMPORARY TABLE `db.t`
           |USING parquet
@@ -1052,12 +1102,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           |  path '$path'
           |)
         """.stripMargin)
-      checkAnswer(sqlContext.table("`db.t`"), df)
+      checkAnswer(spark.table("`db.t`"), df)
     }
   }
 
   test("SPARK-10593 same column names in lateral view") {
-    val df = sqlContext.sql(
+    val df = spark.sql(
     """
       |select
       |insideLayer2.json as a2
@@ -1072,10 +1122,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   ignore("SPARK-10310: " +
     "script transformation using default input/output SerDe and record reader/writer") {
-    sqlContext
+    spark
       .range(5)
       .selectExpr("id AS a", "id AS b")
-      .registerTempTable("test")
+      .createOrReplaceTempView("test")
 
     checkAnswer(
       sql(
@@ -1090,10 +1140,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   ignore("SPARK-10310: script transformation using LazySimpleSerDe") {
-    sqlContext
+    spark
       .range(5)
       .selectExpr("id AS a", "id AS b")
-      .registerTempTable("test")
+      .createOrReplaceTempView("test")
 
     val df = sql(
       """FROM test
@@ -1112,7 +1162,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
       withTempTable("src") {
-        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF().registerTempTable("src")
+        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF().createOrReplaceTempView("src")
         sql("CREATE TABLE test10741(c1 STRING, c2 INT) STORED AS PARQUET AS SELECT * FROM src")
       }
 
@@ -1135,7 +1185,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("run sql directly on files") {
-    val df = sqlContext.range(100).toDF()
+    val df = spark.range(100).toDF()
     withTempPath(f => {
       df.write.parquet(f.getCanonicalPath)
       checkAnswer(sql(s"select id from parquet.`${f.getCanonicalPath}`"),
@@ -1277,14 +1327,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       Seq("3" -> "30").toDF("i", "j")
         .write.mode(SaveMode.Append).partitionBy("i").saveAsTable("tbl11453")
       checkAnswer(
-        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        spark.read.table("tbl11453").select("i", "j").orderBy("i"),
         Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Nil)
 
       // make sure case sensitivity is correct.
       Seq("4" -> "40").toDF("i", "j")
         .write.mode(SaveMode.Append).partitionBy("I").saveAsTable("tbl11453")
       checkAnswer(
-        sqlContext.read.table("tbl11453").select("i", "j").orderBy("i"),
+        spark.read.table("tbl11453").select("i", "j").orderBy("i"),
         Row("1", "10") :: Row("2", "20") :: Row("3", "30") :: Row("4", "40") :: Nil)
     }
   }
@@ -1322,9 +1372,9 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
   test("multi-insert with lateral view") {
     withTempTable("t1") {
-      sqlContext.range(10)
+      spark.range(10)
         .select(array($"id", $"id" + 1).as("arr"), $"id")
-        .registerTempTable("source")
+        .createOrReplaceTempView("source")
       withTable("dest1", "dest2") {
         sql("CREATE TABLE dest1 (i INT)")
         sql("CREATE TABLE dest2 (i INT)")
@@ -1340,10 +1390,10 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
           """.stripMargin)
 
         checkAnswer(
-          sqlContext.table("dest1"),
+          spark.table("dest1"),
           sql("SELECT id FROM source WHERE id > 3"))
         checkAnswer(
-          sqlContext.table("dest2"),
+          spark.table("dest2"),
           sql("SELECT col FROM source LATERAL VIEW EXPLODE(arr) exp AS col WHERE col > 3"))
       }
     }
@@ -1356,8 +1406,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     withTempPath { dir =>
       withTempTable("t1", "t2") {
         val path = dir.getCanonicalPath
-        val ds = sqlContext.range(10)
-        ds.registerTempTable("t1")
+        val ds = spark.range(10)
+        ds.createOrReplaceTempView("t1")
 
         sql(
           s"""CREATE TEMPORARY TABLE t2
@@ -1367,7 +1417,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
            """.stripMargin)
 
         checkAnswer(
-          sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
+          spark.sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
           Row(true)
         )
 
@@ -1381,7 +1431,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     "shouldn always be used together with PATH data source option"
   ) {
     withTempTable("t") {
-      sqlContext.range(10).registerTempTable("t")
+      spark.range(10).createOrReplaceTempView("t")
 
       val message = intercept[IllegalArgumentException] {
         sql(
@@ -1484,10 +1534,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(fs.listStatus(new Path(path, "part=1")).nonEmpty)
 
     sql("drop table test_table")
-    assert(
-      !fs.exists(path),
-      "Once a managed table has been dropped, " +
-        "dirs of this table should also have been deleted.")
+    assert(fs.exists(path), "This is an external table, so the data should not have been dropped")
   }
 
   test("SPARK-14981: DESC not supported for sorting columns") {
@@ -1503,6 +1550,14 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       }
 
       assert(cause.getMessage.contains("Column ordering must be ASC, was 'DESC'"))
+    }
+  }
+
+  test("insert into datasource table") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
+      Seq(1 -> "a").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
+      checkAnswer(sql("SELECT * FROM tbl"), Row(1, "a"))
     }
   }
 }

@@ -24,7 +24,10 @@ from pyspark.mllib.linalg import Vectors
 # $example off$
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("ChiSqSelectorExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("ChiSqSelectorExample")\
+        .getOrCreate()
 
     # $example on$
     df = spark.createDataFrame([

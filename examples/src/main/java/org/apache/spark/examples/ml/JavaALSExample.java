@@ -29,7 +29,6 @@ import org.apache.spark.api.java.function.Function;
 import org.apache.spark.ml.evaluation.RegressionEvaluator;
 import org.apache.spark.ml.recommendation.ALS;
 import org.apache.spark.ml.recommendation.ALSModel;
-import org.apache.spark.sql.types.DataTypes;
 // $example off$
 
 public class JavaALSExample {
@@ -81,7 +80,10 @@ public class JavaALSExample {
   // $example off$
 
   public static void main(String[] args) {
-    SparkSession spark = SparkSession.builder().appName("JavaALSExample").getOrCreate();
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaALSExample")
+      .getOrCreate();
 
     // $example on$
     JavaRDD<Rating> ratingsRDD = spark
@@ -106,10 +108,7 @@ public class JavaALSExample {
     ALSModel model = als.fit(training);
 
     // Evaluate the model by computing the RMSE on the test data
-    Dataset<Row> rawPredictions = model.transform(test);
-    Dataset<Row> predictions = rawPredictions
-      .withColumn("rating", rawPredictions.col("rating").cast(DataTypes.DoubleType))
-      .withColumn("prediction", rawPredictions.col("prediction").cast(DataTypes.DoubleType));
+    Dataset<Row> predictions = model.transform(test);
 
     RegressionEvaluator evaluator = new RegressionEvaluator()
       .setMetricName("rmse")

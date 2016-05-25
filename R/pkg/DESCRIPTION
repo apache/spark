@@ -26,6 +26,7 @@ Collate:
     'pairRDD.R'
     'DataFrame.R'
     'SQLContext.R'
+    'WindowSpec.R'
     'backend.R'
     'broadcast.R'
     'client.R'
@@ -38,4 +39,5 @@ Collate:
     'stats.R'
     'types.R'
     'utils.R'
+    'window.R'
 RoxygenNote: 5.0.1

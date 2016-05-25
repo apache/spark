@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object BucketizerExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("BucketizerExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("BucketizerExample")
+      .getOrCreate()
 
     // $example on$
     val splits = Array(Double.NegativeInfinity, -0.5, 0.0, 0.5, Double.PositiveInfinity)

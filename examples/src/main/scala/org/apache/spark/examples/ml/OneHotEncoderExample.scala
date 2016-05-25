@@ -25,7 +25,10 @@ import org.apache.spark.sql.SparkSession
 
 object OneHotEncoderExample {
   def main(args: Array[String]): Unit = {
-    val spark = SparkSession.builder.appName("OneHotEncoderExample").getOrCreate()
+    val spark = SparkSession
+      .builder
+      .appName("OneHotEncoderExample")
+      .getOrCreate()
 
     // $example on$
     val df = spark.createDataFrame(Seq(

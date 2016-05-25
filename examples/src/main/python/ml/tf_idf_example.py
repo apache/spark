@@ -23,7 +23,10 @@ from pyspark.ml.feature import HashingTF, IDF, Tokenizer
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":
-    spark = SparkSession.builder.appName("TfIdfExample").getOrCreate()
+    spark = SparkSession\
+        .builder\
+        .appName("TfIdfExample")\
+        .getOrCreate()
 
     # $example on$
     sentenceData = spark.createDataFrame([
