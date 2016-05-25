@@ -581,21 +581,11 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     assert(CatalystReadSupport.expandUDT(schema) === expected)
   }
 
-  test("read/write wide table") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      val df = spark.range(1000).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
-      df.write.mode(SaveMode.Overwrite).parquet(path)
-      checkAnswer(spark.read.parquet(path), df)
-    }
-  }
-
   test("returning batch for wide table") {
-    withSQLConf("spark.sql.codegen.maxFields" -> "100") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(100).select(Seq.tabulate(110) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
@@ -605,7 +595,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         checkAnswer(df2, df)
 
         // return batch
-        val columns = Seq.tabulate(90) {i => s"c$i"}
+        val columns = Seq.tabulate(9) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
         assert(
           df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,

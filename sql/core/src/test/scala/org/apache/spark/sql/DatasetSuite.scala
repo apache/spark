@@ -81,6 +81,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = (1 to 100).map(i => ClassData(i.toString, i))
     val ds = data.toDS()
 
+    intercept[IllegalArgumentException] {
+      ds.coalesce(0)
+    }
+
+    intercept[IllegalArgumentException] {
+      ds.repartition(0)
+    }
+
     assert(ds.repartition(10).rdd.partitions.length == 10)
     checkDataset(
       ds.repartition(10),

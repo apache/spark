@@ -21,28 +21,31 @@ import java.util.concurrent.Semaphore
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.deploy.{ApplicationDescription, Command}
-import org.apache.spark.deploy.client.{AppClient, AppClientListener}
+import org.apache.spark.deploy.client.{StandaloneAppClient, StandaloneAppClientListener}
 import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.{LauncherBackend, SparkAppHandle}
 import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler._
 import org.apache.spark.util.Utils
 
-private[spark] class SparkDeploySchedulerBackend(
+/**
+ * A [[SchedulerBackend]] implementation for Spark's standalone cluster manager.
+ */
+private[spark] class StandaloneSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     masters: Array[String])
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
-  with AppClientListener
+  with StandaloneAppClientListener
   with Logging {
 
-  private var client: AppClient = null
+  private var client: StandaloneAppClient = null
   private var stopping = false
   private val launcherBackend = new LauncherBackend() {
     override protected def onStopRequest(): Unit = stop(SparkAppHandle.State.KILLED)
   }
 
-  @volatile var shutdownCallback: SparkDeploySchedulerBackend => Unit = _
+  @volatile var shutdownCallback: StandaloneSchedulerBackend => Unit = _
   @volatile private var appId: String = _
 
   private val registrationBarrier = new Semaphore(0)
@@ -100,7 +103,7 @@ private[spark] class SparkDeploySchedulerBackend(
       }
     val appDesc = new ApplicationDescription(sc.appName, maxCores, sc.executorMemory, command,
       appUIAddress, sc.eventLogDir, sc.eventLogCodec, coresPerExecutor, initialExecutorLimit)
-    client = new AppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
+    client = new StandaloneAppClient(sc.env.rpcEnv, masters, appDesc, this, conf)
     client.start()
     launcherBackend.setState(SparkAppHandle.State.SUBMITTED)
     waitForRegistration()
