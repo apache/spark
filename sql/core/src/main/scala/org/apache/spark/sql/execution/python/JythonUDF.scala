@@ -24,6 +24,7 @@ import scala.collection.JavaConverters._
 
 import org.python.core._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.expressions.{Expression, ScalaUDF}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Row
@@ -78,7 +79,8 @@ private[sql] class JythonUDF(
  *                    name and value.
  * @param imports  Python imports as a base 64 encoded pickle set of module, name, target.
  */
-private[sql] case class JythonFunction(src: String, pythonVars: String, imports: String) {
+private[sql] case class JythonFunction(src: String, pythonVars: String, imports: String,
+  @transient val sparkContext: SparkContext) {
   val className = s"__reservedPandaClass"
   val code = s"""
               |from base64 import b64decode
@@ -99,16 +101,16 @@ private[sql] case class JythonFunction(src: String, pythonVars: String, imports:
               |  def __init__(self):
               |    self.call = ${src}
               |${className}_instance = ${className}()""".stripMargin('|')
-  val lazyFunc = new LazyJythonFunc(code, className)
+  val lazyFunc = sparkContext.broadcast(new LazyJythonFunc(code, className))
 
   /**
    * Compile this function to a Scala function.
    */
   def toScalaFunc(converter: Any => Any, children: Int): AnyRef = {
     children match {
-      case 0 => () => converter(lazyFunc.scalaFunc())
-      case 1 => (ar1: AnyRef) => converter(lazyFunc.scalaFunc(ar1))
-      case 2 => (ar1: AnyRef, ar2: AnyRef) => converter(lazyFunc.scalaFunc(ar1, ar2))
+      case 0 => () => converter(lazyFunc.value.scalaFunc())
+      case 1 => (ar1: AnyRef) => converter(lazyFunc.value.scalaFunc(ar1))
+      case 2 => (ar1: AnyRef, ar2: AnyRef) => converter(lazyFunc.value.scalaFunc(ar1, ar2))
       case _ => throw new Exception("Unsupported number of children " + children)
     }
   }

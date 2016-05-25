@@ -1730,7 +1730,7 @@ def sort_array(col, asc=True):
 
 def _wrap_jython_func(sc, src, extra, imports, returnType):
     return sc._jvm.org.apache.spark.sql.execution.python.JythonFunction(
-        src, extra, imports)
+        src, extra, imports, sc._jsc.sc())
 
 
 def _wrap_function(sc, func, returnType):
