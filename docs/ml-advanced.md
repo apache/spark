@@ -37,8 +37,8 @@ explicitly in Newton's method. As a result, L-BFGS often achieves faster converg
 other first-order optimizations.
 
 [Orthant-Wise Limited-memory
-QuasiNewton](http://research-srv.microsoft.com/en-us/um/people/jfgao/paper/icml07scalable.pdf)
-(OWL-QN) is an extension of L-BFGS that can effectively handle L1 regularization and elastic net.
+Quasi-Newton](http://research-srv.microsoft.com/en-us/um/people/jfgao/paper/icml07scalable.pdf)
+(OWL-QN) is an extension of L-BFGS that can effectively handle L1 and elastic net regularization.
 
 L-BFGS is used as a solver for [LinearRegression](api/scala/index.html#org.apache.spark.ml.regression.LinearRegression),
 [LogisticRegression](api/scala/index.html#org.apache.spark.ml.classification.LogisticRegression),
@@ -65,19 +65,19 @@ where $\lambda$ is the regularization parameter, $\delta$ is the population stan
 and $\sigma_j$ is the population standard deviation of the j-th feature column.
 
 This objective function has an analytic solution and it requires only one pass over the data to collect necessary statistics to solve.
-Unlike the original dataset which can only be stored in distributed system,
+Unlike the original dataset which can only be stored in a distributed system,
 these statistics can be easily loaded into memory on a single machine, and then we can solve the objective function through Cholesky factorization on the driver.
 
-WeightedLeastSquares only supports L2 regularization and provides options to enable or disable regularization, standardizing features and labels.
-In order to take the normal equation approach efficiently, WeightedLeastSquares requires that the number of features be no more than 4096. For larger problems, use L-BFGS instead.
+WeightedLeastSquares only supports L2 regularization and provides options to enable or disable regularization and standardization.
+In order to make the normal equation approach efficient, WeightedLeastSquares requires that the number of features be no more than 4096. For larger problems, use L-BFGS instead.
 
-## Iteratively re-weighted least squares (IRLS)
+## Iteratively reweighted least squares (IRLS)
 
 MLlib implements [iteratively reweighted least squares (IRLS)](https://en.wikipedia.org/wiki/Iteratively_reweighted_least_squares) by [IterativelyReweightedLeastSquares](https://github.com/apache/spark/blob/master/mllib/src/main/scala/org/apache/spark/ml/optim/IterativelyReweightedLeastSquares.scala).
 It can be used to find the maximum likelihood estimates of a generalized linear model (GLM), find M-estimator in robust regression and other optimization problems.
 Refer to [Iteratively Reweighted Least Squares for Maximum Likelihood Estimation, and some Robust and Resistant Alternatives](http://www.jstor.org/stable/2345503) for more information.
 
-It solves certain optimization problems iteratively:
+It solves certain optimization problems iteratively through the following procedure:
 
 * linearize the objective at current solution and update corresponding weight.
 * solve a weighted least squares (WLS) problem by WeightedLeastSquares.
