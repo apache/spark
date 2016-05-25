@@ -40,7 +40,8 @@ private[spark] class RRunner[U](
     broadcastVars: Array[Broadcast[Object]],
     numPartitions: Int = -1,
     isDataFrame: Boolean = false,
-    colNames: Array[String] = null)
+    colNames: Array[String] = null,
+    key: Array[String] = null)
   extends Logging {
   private var bootTime: Double = _
   private var dataStream: DataInputStream = _
@@ -149,10 +150,15 @@ private[spark] class RRunner[U](
 
           dataOut.writeInt(numPartitions)
 
-          dataOut.writeInt(if (isDataFrame) 1 else 0)
+          dataOut.writeInt(if (isDataFrame && key != null) 2 else
+            if (isDataFrame) 1 else 0)
 
           if (isDataFrame) {
             SerDe.writeObject(dataOut, colNames)
+          }
+
+          if (key != null) {
+            SerDe.writeObject(dataOut, key)
           }
 
           if (!iter.hasNext) {
@@ -180,6 +186,12 @@ private[spark] class RRunner[U](
 
           for (elem <- iter) {
             elem match {
+              case (key, innerIter: Iterator[_]) =>
+                for (innerElem <- innerIter) {
+                  writeElem(innerElem)
+                }
+                // Writes key which can be used as a boundary in group-aggregate
+                SerDe.writeObject(dataOut, key.asInstanceOf[Array[Byte]])
               case (key, value) =>
                 writeElem(key)
                 writeElem(value)
@@ -187,6 +199,7 @@ private[spark] class RRunner[U](
                 writeElem(elem)
             }
           }
+
           stream.flush()
         } catch {
           // TODO: We should propagate this error to the task thread

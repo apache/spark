@@ -84,67 +84,75 @@ broadcastElap <- elapsedSecs()
 # as number of partitions to create.
 numPartitions <- SparkR:::readInt(inputCon)
 
-isDataFrame <- as.logical(SparkR:::readInt(inputCon))
+# 0 - RDD mode, 1 - dapply mode, 2 - gapply mode
+mode <- SparkR:::readInt(inputCon)
 
-# If isDataFrame, then read column names
-if (isDataFrame) {
+# If DataFrame - mode = 1 and mode = 2, then read column names
+if (mode > 0) {
   colNames <- SparkR:::readObject(inputCon)
+  if (mode == 2) {
+    # TODO pass the key to R function on gapply mode
+    key <- SparkR:::readObject(inputCon)
+  }
 }
 
 isEmpty <- SparkR:::readInt(inputCon)
 
 if (isEmpty != 0) {
-
   if (numPartitions == -1) {
     if (deserializer == "byte") {
       # Now read as many characters as described in funcLen
-      data <- SparkR:::readDeserialize(inputCon)
+      dataList <- list(SparkR:::readDeserialize(inputCon))
     } else if (deserializer == "string") {
-      data <- as.list(readLines(inputCon))
-    } else if (deserializer == "row") {
-      data <- SparkR:::readMultipleObjects(inputCon)
+      dataList <- list(as.list(readLines(inputCon)))
+    } else if (deserializer == "row" && mode == 2) {
+      dataList <- SparkR:::readMultipleObjectsWithKeys(inputCon)
+    } else if (deserializer == "row"){
+      dataList <- list(SparkR:::readMultipleObjects(inputCon))
     }
     # Timing reading input data for execution
     inputElap <- elapsedSecs()
+    for (i in 1:length(dataList)) {
+      data <- dataList[[i]]
+      if (mode > 0) {
+        if (deserializer == "row") {
+          # Transform the list of rows into a data.frame
+          # Note that the optional argument stringsAsFactors for rbind is
+          # available since R 3.2.4. So we set the global option here.
+          oldOpt <- getOption("stringsAsFactors")
+          options(stringsAsFactors = FALSE)
+          data <- do.call(rbind.data.frame, data)
+          options(stringsAsFactors = oldOpt)
 
-    if (isDataFrame) {
-      if (deserializer == "row") {
-        # Transform the list of rows into a data.frame
-        # Note that the optional argument stringsAsFactors for rbind is
-        # available since R 3.2.4. So we set the global option here.
-        oldOpt <- getOption("stringsAsFactors")
-        options(stringsAsFactors = FALSE)
-        data <- do.call(rbind.data.frame, data)
-        options(stringsAsFactors = oldOpt)
-
-        names(data) <- colNames
+          names(data) <- colNames
+        } else {
+          # Check to see if data is a valid data.frame
+          stopifnot(deserializer == "byte")
+          stopifnot(class(data) == "data.frame")
+        }
+        output <- computeFunc(data)
+        if (serializer == "row") {
+          # Transform the result data.frame back to a list of rows
+          output <- split(output, seq(nrow(output)))
+        } else {
+          # Serialize the ouput to a byte array
+          stopifnot(serializer == "byte")
+        }
       } else {
-        # Check to see if data is a valid data.frame
-        stopifnot(deserializer == "byte")
-        stopifnot(class(data) == "data.frame")
+        output <- computeFunc(partition, data)
       }
-      output <- computeFunc(data)
-      if (serializer == "row") {
-        # Transform the result data.frame back to a list of rows
-        output <- split(output, seq(nrow(output)))
+
+      # Timing computing
+      computeElap <- elapsedSecs()
+
+      if (serializer == "byte") {
+        SparkR:::writeRawSerialize(outputCon, output)
+      } else if (serializer == "row") {
+        SparkR:::writeRowSerialize(outputCon, output)
       } else {
-        # Serialize the ouput to a byte array
-        stopifnot(serializer == "byte")
+        # write lines one-by-one with flag
+        lapply(output, function(line) SparkR:::writeString(outputCon, line))
       }
-    } else {
-      output <- computeFunc(partition, data)
-    }
-
-    # Timing computing
-    computeElap <- elapsedSecs()
-
-    if (serializer == "byte") {
-      SparkR:::writeRawSerialize(outputCon, output)
-    } else if (serializer == "row") {
-      SparkR:::writeRowSerialize(outputCon, output)
-    } else {
-      # write lines one-by-one with flag
-      lapply(output, function(line) SparkR:::writeString(outputCon, line))
     }
     # Timing output
     outputElap <- elapsedSecs()

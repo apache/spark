@@ -2000,6 +2000,25 @@ class Dataset[T] private[sql](
   }
 
   /**
+   * Returns a new [[DataFrame]] which contains the aggregated result of applying
+   * a serialized R function `func` to each group
+   *
+   * @group func
+   * @since 2.0.0
+   */
+  private[sql] def flatMapGroupsInR(
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Object],
+      outputSchema: StructType,
+      cols: Column*): DataFrame = {
+    val relationalGroupedDataSet = RelationalGroupedDataset(toDF(), cols.map(_.named),
+      RelationalGroupedDataset.GroupByType)
+    relationalGroupedDataSet.flatMapGroupsInR(func, packageNames, broadcastVars,
+       outputSchema)
+  }
+
+  /**
    * :: Experimental ::
    * (Scala-specific)
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],

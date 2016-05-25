@@ -20,13 +20,18 @@ package org.apache.spark.sql.execution
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.MapFunction
+import org.apache.spark.api.r.RRunner
+import org.apache.spark.api.r.SerializationFormats
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.api.r.SQLUtils._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.types.{DataType, ObjectType}
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.{DataType, ObjectType, StructType}
 
 
 /**
@@ -319,6 +324,80 @@ case class MapGroupsExec(
           getKey(key),
           rowIter.map(getValue))
         result.map(outputObject)
+      }
+    }
+  }
+}
+
+/**
+ * Groups the input rows together and calls the R function with each group and an iterator
+ * containing all elements in the group.
+ * The result of this function is flattened before being output.
+ */
+case class FlatMapGroupsInRExec(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
+    outputSchema: StructType,
+    keyDeserializer: Expression,
+    valueDeserializer: Expression,
+    groupingAttributes: Seq[Attribute],
+    dataAttributes: Seq[Attribute],
+    outputObjAttr: Attribute,
+    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
+
+  override def output: Seq[Attribute] = outputObjAttr :: Nil
+  override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
+
+  override def requiredChildDistribution: Seq[Distribution] =
+    ClusteredDistribution(groupingAttributes) :: Nil
+
+  override def requiredChildOrdering: Seq[Seq[SortOrder]] =
+    Seq(groupingAttributes.map(SortOrder(_, Ascending)))
+
+  override protected def doExecute(): RDD[InternalRow] = {
+    val isDeserializedRData =
+      if (outputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
+    val serializerForR = if (!isDeserializedRData) {
+      SerializationFormats.ROW
+    } else {
+      SerializationFormats.BYTE
+    }
+    val (deserializerForR, colNames) =
+      (SerializationFormats.ROW, inputSchema.fieldNames)
+
+    child.execute().mapPartitionsInternal { iter =>
+      val grouped = GroupedIterator(iter, groupingAttributes, child.output)
+      val getKey = deserializeRowToObject(keyDeserializer, groupingAttributes)
+      val getValue = deserializeRowToObject(valueDeserializer, dataAttributes)
+      val outputObject = wrapObjectToRow(outputObjAttr.dataType)
+      val groupNames = groupingAttributes.map(_.name).toArray
+
+      val runner = new RRunner[Array[Byte]](
+        func, deserializerForR, serializerForR, packageNames, broadcastVars,
+        isDataFrame = true, colNames = colNames, key = groupNames)
+
+      val hasGroups = grouped.hasNext
+      val groupedRBytes = grouped.flatMap { case (key, rowIter) =>
+        val deserializedIter = rowIter.map(getValue)
+        val newIter =
+          deserializedIter.asInstanceOf[Iterator[Row]].map {row => rowToRBytes(row)}
+        val newKey = rowToRBytes(getKey(key).asInstanceOf[Row])
+        Iterator((newKey, newIter))
+      }
+
+      if (hasGroups) {
+        val outputIter = runner.compute(groupedRBytes, -1)
+        if (!isDeserializedRData) {
+          val result = outputIter.map { bytes => bytesToRow(bytes, outputSchema) }
+          result.map(outputObject)
+        } else {
+          val result = outputIter.map { bytes => Row.fromSeq(Seq(bytes)) }
+          result.map(outputObject)
+        }
+      } else {
+        Iterator.empty
       }
     }
   }
