@@ -198,8 +198,8 @@ object GradientDescent extends Logging {
     }
 
     if (numIterations * miniBatchFraction < 1.0) {
-      logWarning("Not all examples will be used if numIterations * miniBatchFraction " +
-        "< 1.0")
+      logWarning("Not all examples will be used if numIterations * miniBatchFraction < 1.0: " +
+        s"numIterations=$numIterations and miniBatchFraction=$miniBatchFraction")
     }
 
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
