@@ -78,25 +78,54 @@ private[sql] class JythonUDF(
  * @param pythonVars  Variables to be set before the function, as a base 64 encoded pickle map of
  *                    name and value.
  * @param imports  Python imports as a base 64 encoded pickle set of module, name, target.
+ * @param setupCode  String of setup code (helper functions, etc.)
+ * @param sparkContext  SparkContext used to broadcast the function.
  */
 private[sql] case class JythonFunction(src: String, pythonVars: String, imports: String,
-  @transient val sparkContext: SparkContext) {
+  setupCode: String, @transient val sparkContext: SparkContext) {
   val className = s"__reservedPandaClass"
+  // Skip importing pickle and base64 if not needed
+  val preImports = if (imports.isEmpty && pythonVars.isEmpty) {
+    ""
+  } else {
+    s"""
+     |from base64 import b64decode
+     |import pickle
+    """.stripMargin('|')
+  }
+  // Only decode/load imports if non empty
+  val importCode = if (imports.isEmpty) {
+    ""
+  } else {
+    s"""
+     |imports = pickle.loads(b64decode('${imports}'))
+     |for module, name, target in imports:
+     |    exec "from %s import %s as %s" % (module, name, target)
+    """.stripMargin('|')
+  }
+  // Only decode/load vars if non empty
+  val varsCode = if (pythonVars.isEmpty) {
+    ""
+  } else {
+    s"""
+     |pythonVars = pickle.loads(b64decode('${pythonVars}'))
+     |for k, v in pythonVars.iteritems():
+     |  exec "%s = v" % k
+    """.stripMargin('|')
+  }
   val code = s"""
-              |from base64 import b64decode
-              |import pickle
               |import os
               |import sys
               |sys.path.extend(os.environ["PYTHONPATH"].split(":"))
               |
-              |pythonVars = pickle.loads(b64decode('${pythonVars}'))
-              |imports = pickle.loads(b64decode('${imports}'))
-              |if imports is not None:
-              |  for module, name, target in imports:
-              |      exec "from %s import %s as %s" % (module, name, target)
-              |if pythonVars is not None:
-              |  for k, v in pythonVars.iteritems():
-              |    exec "%s = v" % k
+              |${preImports}
+              |
+              |${importCode}
+              |
+              |${varsCode}
+              |
+              |${setupCode}
+              |
               |class ${className}(object):
               |  def __init__(self):
               |    self.call = ${src}

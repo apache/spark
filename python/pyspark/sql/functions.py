@@ -1728,9 +1728,9 @@ def sort_array(col, asc=True):
 
 # ---------------------------- User Defined Function ----------------------------------
 
-def _wrap_jython_func(sc, src, extra, imports, returnType):
+def _wrap_jython_func(sc, src, ser_vars, ser_imports, setup_code, returnType):
     return sc._jvm.org.apache.spark.sql.execution.python.JythonFunction(
-        src, extra, imports, sc._jsc.sc())
+        src, ser_vars, ser_imports, setup_code, sc._jsc.sc())
 
 
 def _wrap_function(sc, func, returnType):
@@ -1747,19 +1747,22 @@ class UserDefinedJythonFunction(object):
     .. versionadded:: 2.0
     .. Note: Experimental
     """
-    def __init__(self, func, returnType, name=None):
+    def __init__(self, func, returnType, name=None, setupCode=""):
         self.func = func
         self.returnType = returnType
-        self._broadcast = None
+        self.setupCode = setupCode
         self._judf = self._create_judf(name)
 
     def _create_judf(self, name):
         func = self.func
         from pyspark.sql import SQLContext
         sc = SparkContext.getOrCreate()
+        # Empty strings allow the Scala code to recognize no data and skip adding the Jython
+        # code to handle vars or imports if not needed.
+        serialized_vars = ""
+        serialized_imports = ""
         if isinstance(func, basestring):
             src = func
-            extra = {}
         else:
             try:
                 import dill
@@ -1774,6 +1777,7 @@ class UserDefinedJythonFunction(object):
                       "You may wish to try and assign you lambda to a variable or pass in as a " +
                       "string.")
                 raise
+            # Extract the globals, classes, etc. needed for this function
             file = StringIO()
             cp = cloudpickle.CloudPickler(file)
             code, f_globals, defaults, closure, dct, base_globals = cp.extract_func_data(func)
@@ -1786,41 +1790,43 @@ class UserDefinedJythonFunction(object):
                     closure_dct = dict(zip(func.__code__.co_freevars,
                                            (c.cell_contents for c in func.__closure__)))
 
-            extra = dict(base_globals)
-            extra.update(f_globals)
-            extra.update(closure_dct)
+            req = dict(base_globals)
+            req.update(f_globals)
+            req.update(closure_dct)
+            # Serialize the "extras" and drop PySpark imports
+            ser = CloudPickleSerializer()
+
+            def isClass(v):
+                return isinstance(v, (type, types.ClassType))
+
+            def isInternal(v):
+                return v.__module__.startswith("pyspark")
+
+            # Sort out PySpark and non PySpark requirements
+            req_vars = {k: v for k, v in req.items() if not isClass(v) or not isInternal(v)}
+            req_imports = {(v.__module__, v.__name__, k) for k, v in req.items() if isClass(v) and isInternal(v)}
+            if req_vars:
+                serialized_vars = b64encode(ser.dumps(req_vars)).decode("utf-8")
+            if req_imports:
+                serialized_imports = b64encode(ser.dumps(req_imports)).decode("utf-8")
+
         ctx = SQLContext.getOrCreate(sc)
         jdt = ctx._ssql_ctx.parseDataType(self.returnType.json())
         if name is None:
             f = self.func
             name = f.__name__ if hasattr(f, '__name__') else f.__class__.__name__
-        # Serialize the "extras" and drop PySpark imports
-        ser = CloudPickleSerializer()
-
-        def isClass(v):
-            return isinstance(v, (type, types.ClassType))
-
-        def isInternal(v):
-            return v.__module__.startswith("pyspark")
-
-        filtered_extra = {k: v for k, v in extra.items() if not isClass(v) or not isInternal(v)}
-        extra_imports = {(v.__module__, v.__name__, k) for k, v in extra.items() if isClass(v) and isInternal(v)}
-        extra = filtered_extra
-        if not extra:
-            extra = None
-        serializedExtras = b64encode(ser.dumps(extra)).decode("utf-8")
-        serializedImports = b64encode(ser.dumps(extra_imports)).decode("utf-8")
         # Create a Java representation
-        wrapped_jython_func = _wrap_jython_func(sc, src, serializedExtras, serializedImports,
-                                                self.returnType)
+        wrapped_jython_func = _wrap_jython_func(sc, src, serialized_vars, serialized_imports,
+                                                self.setupCode, self.returnType)
         judf = sc._jvm.org.apache.spark.sql.execution.python.UserDefinedJythonFunction(
             name, wrapped_jython_func, jdt)
         return judf
 
     def __del__(self):
-        if self._broadcast is not None:
-            self._broadcast.unpersist()
-            self._broadcast = None
+        try:
+            self._judf.func().lazyFunc().unpersist(False)
+        except py4j.protocol.Py4JJavaError:
+            # Exception happens if shutting down, doesn't matter.
 
     def __call__(self, *cols):
         sc = SparkContext._active_spark_context
