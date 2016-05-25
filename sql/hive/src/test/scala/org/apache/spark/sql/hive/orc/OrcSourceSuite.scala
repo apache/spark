@@ -25,6 +25,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
@@ -38,12 +39,12 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
     super.beforeAll()
 
     orcTableAsDir = File.createTempFile("orctests", "sparksql")
-    deleteDir(orcTableAsDir)
+    Utils.deleteRecursively(orcTableAsDir)
     orcTableAsDir.mkdir()
 
     // Hack: to prepare orc data files using hive external tables
     orcTableDir = File.createTempFile("orctests", "sparksql")
-    deleteDir(orcTableDir)
+    Utils.deleteRecursively(orcTableDir)
     orcTableDir.mkdir()
     import org.apache.spark.sql.hive.test.TestHive.implicits._
 
@@ -70,30 +71,11 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
 
   override def afterAll(): Unit = {
     try {
-      deleteDir(orcTableDir)
-      deleteDir(orcTableAsDir)
+      Utils.deleteRecursively(orcTableDir)
+      Utils.deleteRecursively(orcTableAsDir)
     } finally {
       super.afterAll()
     }
-  }
-
-  /**
-   * Delete the given file or directory, the directory could be non-empty.
-   *
-   * @param path the file or directory location to be deleted
-   * @return <code>true</code> if and only if the file or directory is
-   *         successfully deleted; <code>false</code> otherwise
-   */
-  private def deleteDir(path: File): Boolean = {
-    def getRecursively(f: File): Seq[File] = {
-      if (f.isDirectory) {
-        f.listFiles.filter(_.isDirectory).flatMap(getRecursively) ++ f.listFiles :+ f
-      } else {
-        Seq(f)
-      }
-    }
-    getRecursively(path).foreach { f => f.delete() }
-    !path.exists()
   }
 
   test("create temporary orc table") {
