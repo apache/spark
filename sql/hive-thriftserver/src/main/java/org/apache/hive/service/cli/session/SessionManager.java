@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Future;
@@ -35,7 +34,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
-import org.apache.hadoop.hive.ql.hooks.HookUtils;
 import org.apache.hive.service.CompositeService;
 import org.apache.hive.service.cli.HiveSQLException;
 import org.apache.hive.service.cli.SessionHandle;
@@ -151,7 +149,7 @@ public class SessionManager extends CompositeService {
   }
 
   private void startTimeoutChecker() {
-    final long interval = Math.max(checkInterval, 3000l);  // minimum 3 seconds
+    final long interval = Math.max(checkInterval, 3000L);  // minimum 3 seconds
     Runnable timeoutChecker = new Runnable() {
       @Override
       public void run() {
@@ -268,17 +266,6 @@ public class SessionManager extends CompositeService {
     if (isOperationLogEnabled) {
       session.setOperationLogSessionDir(operationLogRootDir);
     }
-    try {
-      executeSessionHooks(session);
-    } catch (Exception e) {
-      try {
-        session.close();
-      } catch (Throwable t) {
-        LOG.warn("Error closing session", t);
-      }
-      session = null;
-      throw new HiveSQLException("Failed to execute session hooks", e);
-    }
     handleToSession.put(session.getSessionHandle(), session);
     return session.getSessionHandle();
   }
@@ -359,15 +346,6 @@ public class SessionManager extends CompositeService {
 
   public static void clearProxyUserName() {
     threadLocalProxyUserName.remove();
-  }
-
-  // execute session hooks
-  private void executeSessionHooks(HiveSession session) throws Exception {
-    List<HiveSessionHook> sessionHooks = HookUtils.getHooks(hiveConf,
-        HiveConf.ConfVars.HIVE_SERVER2_SESSION_HOOK, HiveSessionHook.class);
-    for (HiveSessionHook sessionHook : sessionHooks) {
-      sessionHook.run(new HiveSessionHookContextImpl(session));
-    }
   }
 
   public Future<?> submitBackgroundOperation(Runnable r) {

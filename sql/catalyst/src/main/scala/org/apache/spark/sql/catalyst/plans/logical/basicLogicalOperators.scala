@@ -85,7 +85,7 @@ case class Generate(
   override lazy val resolved: Boolean = {
     generator.resolved &&
       childrenResolved &&
-      generator.elementTypes.length == generatorOutput.length &&
+      generator.elementSchema.length == generatorOutput.length &&
       generatorOutput.forall(_.resolved)
   }
 
@@ -109,7 +109,7 @@ case class Filter(condition: Expression, child: LogicalPlan)
 
   override protected def validConstraints: Set[Expression] = {
     val predicates = splitConjunctivePredicates(condition)
-      .filterNot(PredicateSubquery.hasPredicateSubquery)
+      .filterNot(SubqueryExpression.hasCorrelatedSubquery)
     child.constraints.union(predicates.toSet)
   }
 }
@@ -163,7 +163,9 @@ case class Intersect(left: LogicalPlan, right: LogicalPlan) extends SetOperation
     val leftSize = left.statistics.sizeInBytes
     val rightSize = right.statistics.sizeInBytes
     val sizeInBytes = if (leftSize < rightSize) leftSize else rightSize
-    Statistics(sizeInBytes = sizeInBytes)
+    val isBroadcastable = left.statistics.isBroadcastable || right.statistics.isBroadcastable
+
+    Statistics(sizeInBytes = sizeInBytes, isBroadcastable = isBroadcastable)
   }
 }
 
@@ -183,7 +185,7 @@ case class Except(left: LogicalPlan, right: LogicalPlan) extends SetOperation(le
       duplicateResolved
 
   override def statistics: Statistics = {
-    Statistics(sizeInBytes = left.statistics.sizeInBytes)
+    left.statistics.copy()
   }
 }
 
@@ -273,6 +275,8 @@ case class Join(
 
   override def output: Seq[Attribute] = {
     joinType match {
+      case j: ExistenceJoin =>
+        left.output :+ j.exists
       case LeftExistence(_) =>
         left.output
       case LeftOuter =>
@@ -295,6 +299,8 @@ case class Join(
       case LeftSemi if condition.isDefined =>
         left.constraints
           .union(splitConjunctivePredicates(condition.get).toSet)
+      case j: ExistenceJoin =>
+        left.constraints
       case Inner =>
         left.constraints.union(right.constraints)
       case LeftExistence(_) =>
@@ -326,6 +332,16 @@ case class Join(
     case UsingJoin(_, _) => false
     case _ => resolvedExceptNatural
   }
+
+  override def statistics: Statistics = joinType match {
+    case LeftAnti | LeftSemi =>
+      // LeftSemi and LeftAnti won't ever be bigger than left
+      left.statistics.copy()
+    case _ =>
+      // make sure we don't propagate isBroadcastable in other joins, because
+      // they could explode the size.
+      super.statistics.copy(isBroadcastable = false)
+  }
 }
 
 /**
@@ -334,9 +350,8 @@ case class Join(
 case class BroadcastHint(child: LogicalPlan) extends UnaryNode {
   override def output: Seq[Attribute] = child.output
 
-  // We manually set statistics of BroadcastHint to smallest value to make sure
-  // the plan wrapped by BroadcastHint will be considered to broadcast later.
-  override def statistics: Statistics = Statistics(sizeInBytes = 1)
+  // set isBroadcastable to true so the child will be broadcasted
+  override def statistics: Statistics = super.statistics.copy(isBroadcastable = true)
 }
 
 case class InsertIntoTable(
@@ -350,10 +365,24 @@ case class InsertIntoTable(
   override def children: Seq[LogicalPlan] = child :: Nil
   override def output: Seq[Attribute] = Seq.empty
 
+  private[spark] lazy val expectedColumns = {
+    if (table.output.isEmpty) {
+      None
+    } else {
+      val numDynamicPartitions = partition.values.count(_.isEmpty)
+      val (partitionColumns, dataColumns) = table.output
+          .partition(a => partition.keySet.contains(a.name))
+      Some(dataColumns ++ partitionColumns.takeRight(numDynamicPartitions))
+    }
+  }
+
   assert(overwrite || !ifNotExists)
-  override lazy val resolved: Boolean = childrenResolved && child.output.zip(table.output).forall {
-    case (childAttr, tableAttr) =>
-      DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+  override lazy val resolved: Boolean =
+    childrenResolved && table.resolved && expectedColumns.forall { expected =>
+    child.output.size == expected.size && child.output.zip(expected).forall {
+      case (childAttr, tableAttr) =>
+        DataType.equalsIgnoreCompatibleNullability(childAttr.dataType, tableAttr.dataType)
+    }
   }
 }
 
@@ -403,8 +432,11 @@ case class Range(
     end: Long,
     step: Long,
     numSlices: Int,
-    output: Seq[Attribute]) extends LeafNode with MultiInstanceRelation {
-  require(step != 0, "step cannot be 0")
+    output: Seq[Attribute])
+  extends LeafNode with MultiInstanceRelation {
+
+  require(step != 0, s"step ($step) cannot be 0")
+
   val numElements: BigInt = {
     val safeStart = BigInt(start)
     val safeEnd = BigInt(end)
@@ -416,12 +448,19 @@ case class Range(
     }
   }
 
-  override def newInstance(): Range =
-    Range(start, end, step, numSlices, output.map(_.newInstance()))
+  override def newInstance(): Range = copy(output = output.map(_.newInstance()))
 
   override def statistics: Statistics = {
     val sizeInBytes = LongType.defaultSize * numElements
     Statistics( sizeInBytes = sizeInBytes )
+  }
+
+  override def simpleString: String = {
+    if (step == 1) {
+      s"Range ($start, $end, splits=$numSlices)"
+    } else {
+      s"Range ($start, $end, step=$step, splits=$numSlices)"
+    }
   }
 }
 
@@ -448,7 +487,7 @@ case class Aggregate(
 
   override def statistics: Statistics = {
     if (groupingExpressions.isEmpty) {
-      Statistics(sizeInBytes = 1)
+      super.statistics.copy(sizeInBytes = 1)
     } else {
       super.statistics
     }
@@ -621,7 +660,7 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -636,7 +675,7 @@ case class LocalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNo
   override lazy val statistics: Statistics = {
     val limit = limitExpr.eval().asInstanceOf[Int]
     val sizeInBytes = (limit: Long) * output.map(a => a.dataType.defaultSize).sum
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 
@@ -673,7 +712,7 @@ case class Sample(
     if (sizeInBytes == 0) {
       sizeInBytes = 1
     }
-    Statistics(sizeInBytes = sizeInBytes)
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 
   override protected def otherCopyArgs: Seq[AnyRef] = isTableSample :: Nil
@@ -695,6 +734,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
   override def output: Seq[Attribute] = child.output
 }
 

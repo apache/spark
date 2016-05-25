@@ -18,9 +18,8 @@
 package org.apache.spark.sql
 
 import java.beans.Introspector
-import java.util.Properties
+import java.util.concurrent.atomic.AtomicReference
 
-import scala.collection.immutable
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
@@ -30,8 +29,9 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{CATALOG_IMPLEMENTATION, ConfigEntry}
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.catalog._
@@ -41,7 +41,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
@@ -49,34 +49,32 @@ import org.apache.spark.util.Utils
 
 
 /**
- * The entry point to Spark execution.
+ * The entry point to programming Spark with the Dataset and DataFrame API.
+ *
+ * To create a SparkSession, use the following builder pattern:
+ *
+ * {{{
+ *   SparkSession.builder()
+ *     .master("local")
+ *     .appName("Word Count")
+ *     .config("spark.some.config.option", "some-value").
+ *     .getOrCreate()
+ * }}}
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
     @transient private val existingSharedState: Option[SharedState])
   extends Serializable with Logging { self =>
 
-  def this(sc: SparkContext) {
+  private[sql] def this(sc: SparkContext) {
     this(sc, None)
   }
 
+  sparkContext.assertNotStopped()
 
   /* ----------------------- *
    |  Session-related state  |
    * ----------------------- */
-
-  {
-    val defaultWarehousePath =
-      SQLConf.WAREHOUSE_PATH
-        .defaultValueString
-        .replace("${system:user.dir}", System.getProperty("user.dir"))
-    val warehousePath = sparkContext.conf.get(
-      SQLConf.WAREHOUSE_PATH.key,
-      defaultWarehousePath)
-    sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, warehousePath)
-    sparkContext.conf.set("hive.metastore.warehouse.dir", warehousePath)
-    logInfo(s"Setting warehouse location to $warehousePath")
-  }
 
   /**
    * State shared across sessions, including the [[SparkContext]], cached data, listener,
@@ -102,21 +100,10 @@ class SparkSession private(
   }
 
   /**
-   * A wrapped version of this session in the form of a [[SQLContext]].
+   * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
    */
   @transient
-  private var _wrapped: SQLContext = _
-
-  protected[sql] def wrapped: SQLContext = {
-    if (_wrapped == null) {
-      _wrapped = new SQLContext(self, isRootContext = false)
-    }
-    _wrapped
-  }
-
-  protected[sql] def setWrappedContext(sqlContext: SQLContext): Unit = {
-    _wrapped = sqlContext
-  }
+  private[sql] val sqlContext: SQLContext = new SQLContext(this)
 
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener
@@ -158,6 +145,9 @@ class SparkSession private(
 
   /**
    * A collection of methods for registering user-defined functions (UDF).
+   * Note that the user-defined functions must be deterministic. Due to optimization,
+   * duplicate invocations may be eliminated or the function may even be invoked more times than
+   * it is present in the query.
    *
    * The following example registers a Scala closure as UDF:
    * {{{
@@ -239,7 +229,7 @@ class SparkSession private(
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
-    SQLContext.setActive(wrapped)
+    SparkSession.setActiveSession(this)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
@@ -255,7 +245,7 @@ class SparkSession private(
    */
   @Experimental
   def createDataFrame[A <: Product : TypeTag](data: Seq[A]): DataFrame = {
-    SQLContext.setActive(wrapped)
+    SparkSession.setActiveSession(this)
     val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
     val attributeSeq = schema.toAttributes
     Dataset.ofRows(self, LocalRelation.fromProduct(attributeSeq, data))
@@ -286,7 +276,7 @@ class SparkSession private(
    *  // |-- name: string (nullable = false)
    *  // |-- age: integer (nullable = true)
    *
-   *  dataFrame.registerTempTable("people")
+   *  dataFrame.createOrReplaceTempView("people")
    *  sparkSession.sql("select name from people").collect.foreach(println)
    * }}}
    *
@@ -479,8 +469,8 @@ class SparkSession private(
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
     // schema differs from the existing schema on any field data type.
     val catalystRows = if (needsConversion) {
-      val converter = CatalystTypeConverters.createToCatalystConverter(schema)
-      rowRDD.map(converter(_).asInstanceOf[InternalRow])
+      val encoder = RowEncoder(schema)
+      rowRDD.map(encoder.toRow)
     } else {
       rowRDD.map{r: Row => InternalRow.fromSeq(r.toSeq)}
     }
@@ -517,16 +507,15 @@ class SparkSession private(
   }
 
   /**
-   * Registers the given [[DataFrame]] as a temporary table in the catalog.
-   * Temporary tables exist only during the lifetime of this instance of [[SparkSession]].
+   * Creates a temporary view with a DataFrame. The lifetime of this temporary view is tied to
+   * this [[SparkSession]].
    */
-  protected[sql] def registerTable(df: DataFrame, tableName: String): Unit = {
-    sessionState.catalog.createTempTable(
-      sessionState.sqlParser.parseTableIdentifier(tableName).table,
-      df.logicalPlan,
-      overrideIfExists = true)
+  protected[sql] def createTempView(
+      viewName: String, df: DataFrame, replaceIfExists: Boolean) = {
+    sessionState.catalog.createTempView(
+      sessionState.sqlParser.parseTableIdentifier(viewName).table,
+      df.logicalPlan, replaceIfExists)
   }
-
 
   /* ----------------- *
    |  Everything else  |
@@ -566,7 +555,7 @@ class SparkSession private(
    * common Scala objects into [[DataFrame]]s.
    *
    * {{{
-   *   val sparkSession = new SparkSession(sc)
+   *   val sparkSession = SparkSession.builder.getOrCreate()
    *   import sparkSession.implicits._
    * }}}
    *
@@ -575,9 +564,18 @@ class SparkSession private(
    */
   @Experimental
   object implicits extends SQLImplicits with Serializable {
-    protected override def _sqlContext: SQLContext = wrapped
+    protected override def _sqlContext: SQLContext = SparkSession.this.sqlContext
   }
   // scalastyle:on
+
+  /**
+   * Stop the underlying [[SparkContext]].
+   *
+   * @since 2.0.0
+   */
+  def stop(): Unit = {
+    sparkContext.stop()
+  }
 
   protected[sql] def parseSql(sql: String): LogicalPlan = {
     sessionState.sqlParser.parsePlan(sql)
@@ -635,6 +633,231 @@ class SparkSession private(
 
 object SparkSession {
 
+  /**
+   * Builder for [[SparkSession]].
+   */
+  class Builder {
+
+    private[this] val options = new scala.collection.mutable.HashMap[String, String]
+
+    private[this] var userSuppliedContext: Option[SparkContext] = None
+
+    private[sql] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+      userSuppliedContext = Option(sparkContext)
+      this
+    }
+
+    /**
+     * Sets a name for the application, which will be shown in the Spark web UI.
+     * If no application name is set, a randomly generated name will be used.
+     *
+     * @since 2.0.0
+     */
+    def appName(name: String): Builder = config("spark.app.name", name)
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: String): Builder = synchronized {
+      options += key -> value
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: Long): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: Double): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a config option. Options set using this method are automatically propagated to
+     * both [[SparkConf]] and SparkSession's own configuration.
+     *
+     * @since 2.0.0
+     */
+    def config(key: String, value: Boolean): Builder = synchronized {
+      options += key -> value.toString
+      this
+    }
+
+    /**
+     * Sets a list of config options based on the given [[SparkConf]].
+     *
+     * @since 2.0.0
+     */
+    def config(conf: SparkConf): Builder = synchronized {
+      conf.getAll.foreach { case (k, v) => options += k -> v }
+      this
+    }
+
+    /**
+     * Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]" to
+     * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
+     *
+     * @since 2.0.0
+     */
+    def master(master: String): Builder = config("spark.master", master)
+
+    /**
+     * Enables Hive support, including connectivity to a persistent Hive metastore, support for
+     * Hive serdes, and Hive user-defined functions.
+     *
+     * @since 2.0.0
+     */
+    def enableHiveSupport(): Builder = synchronized {
+      if (hiveClassesArePresent) {
+        config(CATALOG_IMPLEMENTATION.key, "hive")
+      } else {
+        throw new IllegalArgumentException(
+          "Unable to instantiate SparkSession with Hive support because " +
+            "Hive classes are not found.")
+      }
+    }
+
+    /**
+     * Gets an existing [[SparkSession]] or, if there is no existing one, creates a new
+     * one based on the options set in this builder.
+     *
+     * This method first checks whether there is a valid thread-local SparkSession,
+     * and if yes, return that one. It then checks whether there is a valid global
+     * default SparkSession, and if yes, return that one. If no valid global default
+     * SparkSession exists, the method creates a new SparkSession and assigns the
+     * newly created SparkSession as the global default.
+     *
+     * In case an existing SparkSession is returned, the config options specified in
+     * this builder will be applied to the existing SparkSession.
+     *
+     * @since 2.0.0
+     */
+    def getOrCreate(): SparkSession = synchronized {
+      // Get the session from current thread's active session.
+      var session = activeThreadSession.get()
+      if ((session ne null) && !session.sparkContext.isStopped) {
+        options.foreach { case (k, v) => session.conf.set(k, v) }
+        return session
+      }
+
+      // Global synchronization so we will only set the default session once.
+      SparkSession.synchronized {
+        // If the current thread does not have an active session, get it from the global session.
+        session = defaultSession.get()
+        if ((session ne null) && !session.sparkContext.isStopped) {
+          options.foreach { case (k, v) => session.conf.set(k, v) }
+          return session
+        }
+
+        // No active nor global default session. Create a new one.
+        val sparkContext = userSuppliedContext.getOrElse {
+          // set app name if not given
+          if (!options.contains("spark.app.name")) {
+            options += "spark.app.name" -> java.util.UUID.randomUUID().toString
+          }
+
+          val sparkConf = new SparkConf()
+          options.foreach { case (k, v) => sparkConf.set(k, v) }
+          SparkContext.getOrCreate(sparkConf)
+        }
+        session = new SparkSession(sparkContext)
+        options.foreach { case (k, v) => session.conf.set(k, v) }
+        defaultSession.set(session)
+
+        // Register a successfully instantiated context to the singleton. This should be at the
+        // end of the class definition so that the singleton is updated only if there is no
+        // exception in the construction of the instance.
+        sparkContext.addSparkListener(new SparkListener {
+          override def onApplicationEnd(applicationEnd: SparkListenerApplicationEnd): Unit = {
+            defaultSession.set(null)
+            sqlListener.set(null)
+          }
+        })
+      }
+
+      return session
+    }
+  }
+
+  /**
+   * Creates a [[SparkSession.Builder]] for constructing a [[SparkSession]].
+   *
+   * @since 2.0.0
+   */
+  def builder(): Builder = new Builder
+
+  /**
+   * Changes the SparkSession that will be returned in this thread and its children when
+   * SparkSession.getOrCreate() is called. This can be used to ensure that a given thread receives
+   * a SparkSession with an isolated session, instead of the global (first created) context.
+   *
+   * @since 2.0.0
+   */
+  def setActiveSession(session: SparkSession): Unit = {
+    activeThreadSession.set(session)
+  }
+
+  /**
+   * Clears the active SparkSession for current thread. Subsequent calls to getOrCreate will
+   * return the first created context instead of a thread-local override.
+   *
+   * @since 2.0.0
+   */
+  def clearActiveSession(): Unit = {
+    activeThreadSession.remove()
+  }
+
+  /**
+   * Sets the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def setDefaultSession(session: SparkSession): Unit = {
+    defaultSession.set(session)
+  }
+
+  /**
+   * Clears the default SparkSession that is returned by the builder.
+   *
+   * @since 2.0.0
+   */
+  def clearDefaultSession(): Unit = {
+    defaultSession.set(null)
+  }
+
+  private[sql] def getActiveSession: Option[SparkSession] = Option(activeThreadSession.get)
+
+  private[sql] def getDefaultSession: Option[SparkSession] = Option(defaultSession.get)
+
+  /** A global SQL listener used for the SQL UI. */
+  private[sql] val sqlListener = new AtomicReference[SQLListener]()
+
+  ////////////////////////////////////////////////////////////////////////////////////////
+  // Private methods from now on
+  ////////////////////////////////////////////////////////////////////////////////////////
+
+  /** The active SparkSession for the current thread. */
+  private val activeThreadSession = new InheritableThreadLocal[SparkSession]
+
+  /** Reference to the root SparkSession. */
+  private val defaultSession = new AtomicReference[SparkSession]
+
   private val HIVE_SHARED_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSharedState"
   private val HIVE_SESSION_STATE_CLASS_NAME = "org.apache.spark.sql.hive.HiveSessionState"
 
@@ -680,19 +903,6 @@ object SparkSession {
       true
     } catch {
       case _: ClassNotFoundException | _: NoClassDefFoundError => false
-    }
-  }
-
-  /**
-   * Create a new [[SparkSession]] with a catalog backed by Hive.
-   */
-  def withHiveSupport(sc: SparkContext): SparkSession = {
-    if (hiveClassesArePresent) {
-      sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
-      new SparkSession(sc)
-    } else {
-      throw new IllegalArgumentException(
-        "Unable to instantiate SparkSession with Hive support because Hive classes are not found.")
     }
   }
 

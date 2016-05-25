@@ -21,6 +21,7 @@ package org.apache.spark
 import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.util.AccumulatorContext
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.

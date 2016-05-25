@@ -18,17 +18,16 @@
 // scalastyle:off println
 package org.apache.spark.examples.ml
 
-import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.evaluation.BinaryClassificationEvaluator
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tuning.{CrossValidator, ParamGridBuilder}
-import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.sql.Row
 // $example off$
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 
 /**
  * A simple example demonstrating model selection using CrossValidator.
@@ -42,13 +41,14 @@ import org.apache.spark.sql.SQLContext
 object ModelSelectionViaCrossValidationExample {
 
   def main(args: Array[String]): Unit = {
-    val conf = new SparkConf().setAppName("ModelSelectionViaCrossValidationExample")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
+    val spark = SparkSession
+      .builder
+      .appName("ModelSelectionViaCrossValidationExample")
+      .getOrCreate()
 
     // $example on$
     // Prepare training data from a list of (id, text, label) tuples.
-    val training = sqlContext.createDataFrame(Seq(
+    val training = spark.createDataFrame(Seq(
       (0L, "a b c d e spark", 1.0),
       (1L, "b d", 0.0),
       (2L, "spark f g h", 1.0),
@@ -98,7 +98,7 @@ object ModelSelectionViaCrossValidationExample {
     val cvModel = cv.fit(training)
 
     // Prepare test documents, which are unlabeled (id, text) tuples.
-    val test = sqlContext.createDataFrame(Seq(
+    val test = spark.createDataFrame(Seq(
       (4L, "spark i j k"),
       (5L, "l m n"),
       (6L, "mapreduce spark"),
@@ -114,7 +114,7 @@ object ModelSelectionViaCrossValidationExample {
       }
     // $example off$
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

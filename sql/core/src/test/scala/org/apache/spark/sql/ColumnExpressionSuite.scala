@@ -29,7 +29,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   import testImplicits._
 
   private lazy val booleanData = {
-    sqlContext.createDataFrame(sparkContext.parallelize(
+    spark.createDataFrame(sparkContext.parallelize(
       Row(false, false) ::
       Row(false, true) ::
       Row(true, false) ::
@@ -287,7 +287,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("isNaN") {
-    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+    val testData = spark.createDataFrame(sparkContext.parallelize(
       Row(Double.NaN, Float.NaN) ::
       Row(math.log(-1), math.log(-3).toFloat) ::
       Row(null, null) ::
@@ -308,7 +308,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("nanvl") {
-    val testData = sqlContext.createDataFrame(sparkContext.parallelize(
+    val testData = spark.createDataFrame(sparkContext.parallelize(
       Row(null, 3.0, Double.NaN, Double.PositiveInfinity, 1.0f, 4) :: Nil),
       StructType(Seq(StructField("a", DoubleType), StructField("b", DoubleType),
         StructField("c", DoubleType), StructField("d", DoubleType),
@@ -321,7 +321,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
         nanvl($"b", $"e"), nanvl($"e", $"f")),
       Row(null, 3.0, 10.0, null, Double.PositiveInfinity, 3.0, 1.0)
     )
-    testData.registerTempTable("t")
+    testData.createOrReplaceTempView("t")
     checkAnswer(
       sql(
         "select nanvl(a, 5), nanvl(b, 10), nanvl(10, b), nanvl(c, null), nanvl(d, 10), " +
@@ -351,7 +351,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
   }
 
   test("=!=") {
-    val nullData = sqlContext.createDataFrame(sparkContext.parallelize(
+    val nullData = spark.createDataFrame(sparkContext.parallelize(
       Row(1, 1) ::
       Row(1, 2) ::
       Row(1, null) ::
@@ -370,7 +370,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
       nullData.filter($"a" <=> $"b"),
       Row(1, 1) :: Row(null, null) :: Nil)
 
-    val nullData2 = sqlContext.createDataFrame(sparkContext.parallelize(
+    val nullData2 = spark.createDataFrame(sparkContext.parallelize(
         Row("abc") ::
         Row(null)  ::
         Row("xyz") :: Nil),
@@ -596,7 +596,7 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     withTempPath { dir =>
       val data = sparkContext.parallelize(0 to 10).toDF("id")
       data.write.parquet(dir.getCanonicalPath)
-      val answer = sqlContext.read.parquet(dir.getCanonicalPath).select(input_file_name())
+      val answer = spark.read.parquet(dir.getCanonicalPath).select(input_file_name())
         .head.getString(0)
       assert(answer.contains(dir.getCanonicalPath))
 

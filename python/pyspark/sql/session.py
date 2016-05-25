@@ -19,6 +19,7 @@ from __future__ import print_function
 import sys
 import warnings
 from functools import reduce
+from threading import RLock
 
 if sys.version >= '3':
     basestring = unicode = str
@@ -58,15 +59,105 @@ def _monkey_patch_RDD(sparkSession):
 
 
 class SparkSession(object):
-    """Main entry point for Spark SQL functionality.
+    """The entry point to programming Spark with the Dataset and DataFrame API.
 
     A SparkSession can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
+    To create a SparkSession, use the following builder pattern:
 
-    :param sparkContext: The :class:`SparkContext` backing this SparkSession.
-    :param jsparkSession: An optional JVM Scala SparkSession. If set, we do not instantiate a new
-        SparkSession in the JVM, instead we make all calls to this object.
+    >>> spark = SparkSession.builder \
+            .master("local") \
+            .appName("Word Count") \
+            .config("spark.some.config.option", "some-value") \
+            .getOrCreate()
+
     """
+
+    class Builder(object):
+        """Builder for :class:`SparkSession`.
+        """
+
+        _lock = RLock()
+        _options = {}
+
+        @since(2.0)
+        def config(self, key=None, value=None, conf=None):
+            """Sets a config option. Options set using this method are automatically propagated to
+            both :class:`SparkConf` and :class:`SparkSession`'s own configuration.
+
+            For an existing SparkConf, use `conf` parameter.
+            >>> from pyspark.conf import SparkConf
+            >>> SparkSession.builder.config(conf=SparkConf())
+            <pyspark.sql.session...
+
+            For a (key, value) pair, you can omit parameter names.
+            >>> SparkSession.builder.config("spark.some.config.option", "some-value")
+            <pyspark.sql.session...
+
+            :param key: a key name string for configuration property
+            :param value: a value for configuration property
+            :param conf: an instance of :class:`SparkConf`
+            """
+            with self._lock:
+                if conf is None:
+                    self._options[key] = str(value)
+                else:
+                    for (k, v) in conf.getAll():
+                        self._options[k] = v
+                return self
+
+        @since(2.0)
+        def master(self, master):
+            """Sets the Spark master URL to connect to, such as "local" to run locally, "local[4]"
+            to run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone
+            cluster.
+
+            :param master: a url for spark master
+            """
+            return self.config("spark.master", master)
+
+        @since(2.0)
+        def appName(self, name):
+            """Sets a name for the application, which will be shown in the Spark web UI.
+
+            If no application name is set, a randomly generated name will be used.
+
+            :param name: an application name
+            """
+            return self.config("spark.app.name", name)
+
+        @since(2.0)
+        def enableHiveSupport(self):
+            """Enables Hive support, including connectivity to a persistent Hive metastore, support
+            for Hive serdes, and Hive user-defined functions.
+            """
+            return self.config("spark.sql.catalogImplementation", "hive")
+
+        @since(2.0)
+        def getOrCreate(self):
+            """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
+            new one based on the options set in this builder.
+
+            This method first checks whether there is a valid thread-local SparkSession,
+            and if yes, return that one. It then checks whether there is a valid global
+            default SparkSession, and if yes, return that one. If no valid global default
+            SparkSession exists, the method creates a new SparkSession and assigns the
+            newly created SparkSession as the global default.
+
+            In case an existing SparkSession is returned, the config options specified
+            in this builder will be applied to the existing SparkSession.
+            """
+            with self._lock:
+                from pyspark.conf import SparkConf
+                from pyspark.context import SparkContext
+                from pyspark.sql.context import SQLContext
+                sparkConf = SparkConf()
+                for key, value in self._options.items():
+                    sparkConf.set(key, value)
+                sparkContext = SparkContext.getOrCreate(sparkConf)
+                return SQLContext.getOrCreate(sparkContext).sparkSession
+
+    builder = Builder()
 
     _instantiatedContext = None
 
@@ -80,7 +171,7 @@ class SparkSession(object):
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> df = allTypes.toDF()
-        >>> df.registerTempTable("allTypes")
+        >>> df.createOrReplaceTempView("allTypes")
         >>> spark.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
@@ -95,31 +186,27 @@ class SparkSession(object):
         if jsparkSession is None:
             jsparkSession = self._jvm.SparkSession(self._jsc.sc())
         self._jsparkSession = jsparkSession
-        self._jwrapped = self._jsparkSession.wrapped()
+        self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
         _monkey_patch_RDD(self)
         install_exception_handler()
         if SparkSession._instantiatedContext is None:
             SparkSession._instantiatedContext = self
 
-    @classmethod
-    @since(2.0)
-    def withHiveSupport(cls, sparkContext):
-        """Returns a new SparkSession with a catalog backed by Hive.
-
-        :param sparkContext: The underlying :class:`SparkContext`.
-        """
-        jsparkSession = sparkContext._jvm.SparkSession.withHiveSupport(sparkContext._jsc.sc())
-        return cls(sparkContext, jsparkSession)
-
     @since(2.0)
     def newSession(self):
         """
         Returns a new SparkSession as new session, that has separate SQLConf,
-        registered temporary tables and UDFs, but shared SparkContext and
+        registered temporary views and UDFs, but shared SparkContext and
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
+
+    @property
+    @since(2.0)
+    def sparkContext(self):
+        """Returns the underlying :class:`SparkContext`."""
+        return self._sc
 
     @property
     @since(2.0)
@@ -395,6 +482,8 @@ class SparkSession(object):
                 return (obj, )
             schema = StructType().add("value", datatype)
         else:
+            if isinstance(schema, list):
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):
@@ -414,7 +503,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerTable(df, "table1")
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.sql("SELECT field1 AS f1, field2 as f2 from table1")
         >>> df2.collect()
         [Row(f1=1, f2=u'row1'), Row(f1=2, f2=u'row2'), Row(f1=3, f2=u'row3')]
@@ -427,7 +516,7 @@ class SparkSession(object):
 
         :return: :class:`DataFrame`
 
-        >>> spark.catalog.registerTable(df, "table1")
+        >>> df.createOrReplaceTempView("table1")
         >>> df2 = spark.table("table1")
         >>> sorted(df.collect()) == sorted(df2.collect())
         True
@@ -444,6 +533,12 @@ class SparkSession(object):
         :return: :class:`DataFrameReader`
         """
         return DataFrameReader(self._wrapped)
+
+    @since(2.0)
+    def stop(self):
+        """Stop the underlying :class:`SparkContext`.
+        """
+        self._sc.stop()
 
 
 def _test():

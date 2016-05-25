@@ -29,7 +29,7 @@ public interface Service {
   /**
    * Service states
    */
-  public enum STATE {
+  enum STATE {
     /** Constructed but not initialized */
     NOTINITED,
 

@@ -48,7 +48,7 @@ class LauncherBackendSuite extends SparkFunSuite with Matchers {
       .setConf("spark.ui.enabled", "false")
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS, s"-Dtest.appender=console")
       .setMaster(master)
-      .setAppResource("spark-internal")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
       .setMainClass(TestApp.getClass.getName().stripSuffix("$"))
       .startApplication()
 

@@ -17,65 +17,51 @@
 
 package org.apache.spark.examples.ml;
 
-import java.util.Arrays;
-
-import org.apache.spark.SparkConf;
-import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.sql.RowFactory;
-import org.apache.spark.sql.SQLContext;
 // $example on$
 import org.apache.spark.ml.clustering.BisectingKMeans;
 import org.apache.spark.ml.clustering.BisectingKMeansModel;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.VectorUDT;
-import org.apache.spark.mllib.linalg.Vectors;
+import org.apache.spark.ml.linalg.Vector;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.types.Metadata;
-import org.apache.spark.sql.types.StructField;
-import org.apache.spark.sql.types.StructType;
 // $example off$
+import org.apache.spark.sql.SparkSession;
 
 
 /**
- * An example demonstrating a bisecting k-means clustering.
+ * An example demonstrating bisecting k-means clustering.
+ * Run with
+ * <pre>
+ * bin/run-example ml.JavaBisectingKMeansExample
+ * </pre>
  */
 public class JavaBisectingKMeansExample {
 
   public static void main(String[] args) {
-    SparkConf conf = new SparkConf().setAppName("JavaBisectingKMeansExample");
-    JavaSparkContext jsc = new JavaSparkContext(conf);
-    SQLContext jsql = new SQLContext(jsc);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaBisectingKMeansExample")
+      .getOrCreate();
 
     // $example on$
-    JavaRDD<Row> data = jsc.parallelize(Arrays.asList(
-      RowFactory.create(Vectors.dense(0.1, 0.1, 0.1)),
-      RowFactory.create(Vectors.dense(0.3, 0.3, 0.25)),
-      RowFactory.create(Vectors.dense(0.1, 0.1, -0.1)),
-      RowFactory.create(Vectors.dense(20.3, 20.1, 19.9)),
-      RowFactory.create(Vectors.dense(20.2, 20.1, 19.7)),
-      RowFactory.create(Vectors.dense(18.9, 20.0, 19.7))
-    ));
+    // Loads data.
+    Dataset<Row> dataset = spark.read().format("libsvm").load("data/mllib/sample_kmeans_data.txt");
 
-    StructType schema = new StructType(new StructField[]{
-      new StructField("features", new VectorUDT(), false, Metadata.empty()),
-    });
-
-    Dataset<Row> dataset = jsql.createDataFrame(data, schema);
-
-    BisectingKMeans bkm = new BisectingKMeans().setK(2);
+    // Trains a bisecting k-means model.
+    BisectingKMeans bkm = new BisectingKMeans().setK(2).setSeed(1);
     BisectingKMeansModel model = bkm.fit(dataset);
 
-    System.out.println("Compute Cost: " + model.computeCost(dataset));
+    // Evaluate clustering.
+    double cost = model.computeCost(dataset);
+    System.out.println("Within Set Sum of Squared Errors = " + cost);
 
-    Vector[] clusterCenters = model.clusterCenters();
-    for (int i = 0; i < clusterCenters.length; i++) {
-      Vector clusterCenter = clusterCenters[i];
-      System.out.println("Cluster Center " + i + ": " + clusterCenter);
+    // Shows the result.
+    System.out.println("Cluster Centers: ");
+    Vector[] centers = model.clusterCenters();
+    for (Vector center : centers) {
+      System.out.println(center);
     }
     // $example off$
 
-    jsc.stop();
+    spark.stop();
   }
 }

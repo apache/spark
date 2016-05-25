@@ -19,6 +19,7 @@ package org.apache.spark
 
 import java.io.{IOException, NotSerializableException, ObjectInputStream}
 
+import org.apache.spark.memory.TestMemoryConsumer
 import org.apache.spark.util.NonSerializable
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
@@ -149,7 +150,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     // cause is preserved
     val thrownDueToTaskFailure = intercept[SparkException] {
       sc.parallelize(Seq(0)).mapPartitions { iter =>
-        TaskContext.get().taskMemoryManager().allocatePage(128, null)
+        val c = new TestMemoryConsumer(TaskContext.get().taskMemoryManager())
+        TaskContext.get().taskMemoryManager().allocatePage(128, c)
         throw new Exception("intentional task failure")
         iter
       }.count()
@@ -159,7 +161,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     // If the task succeeded but memory was leaked, then the task should fail due to that leak
     val thrownDueToMemoryLeak = intercept[SparkException] {
       sc.parallelize(Seq(0)).mapPartitions { iter =>
-        TaskContext.get().taskMemoryManager().allocatePage(128, null)
+        val c = new TestMemoryConsumer(TaskContext.get().taskMemoryManager())
+        TaskContext.get().taskMemoryManager().allocatePage(128, c)
         iter
       }.count()
     }

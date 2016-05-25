@@ -65,7 +65,7 @@ private[spark] class BlockManager(
     memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
-    blockTransferService: BlockTransferService,
+    val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
     numUsableCores: Int)
   extends BlockDataManager with BlockEvictionHandler with Logging {

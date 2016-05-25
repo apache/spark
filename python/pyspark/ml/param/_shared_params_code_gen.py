@@ -85,8 +85,7 @@ def _gen_param_code(name, doc, defaultValueStr):
         """
         Sets the value of :py:attr:`$name`.
         """
-        self._set($name=value)
-        return self
+        return self._set($name=value)
 
     def get$Name(self):
         """
@@ -125,12 +124,12 @@ if __name__ == "__main__":
          "E.g. 10 means that the cache will get checkpointed every 10 iterations.", None,
          "TypeConverters.toInt"),
         ("seed", "random seed.", "hash(type(self).__name__)", "TypeConverters.toInt"),
-        ("tol", "the convergence tolerance for iterative algorithms.", None,
+        ("tol", "the convergence tolerance for iterative algorithms (>= 0).", None,
          "TypeConverters.toFloat"),
-        ("stepSize", "Step size to be used for each iteration of optimization.", None,
+        ("stepSize", "Step size to be used for each iteration of optimization (>= 0).", None,
          "TypeConverters.toFloat"),
         ("handleInvalid", "how to handle invalid entries. Options are skip (which will filter " +
-         "out rows with bad values), or error (which will throw an errror). More options may be " +
+         "out rows with bad values), or error (which will throw an error). More options may be " +
          "added later.", None, "TypeConverters.toString"),
         ("elasticNetParam", "the ElasticNet mixing parameter, in range [0, 1]. For alpha = 0, " +
          "the penalty is an L2 penalty. For alpha = 1, it is an L1 penalty.", "0.0",

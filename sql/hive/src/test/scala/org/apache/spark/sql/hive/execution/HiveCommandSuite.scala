@@ -19,7 +19,8 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.hive.test.{TestHive, TestHiveSingleton}
+import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -35,7 +36,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
     sql(
       """
-        |CREATE EXTERNAL TABLE parquet_tab2 (c1 INT, c2 STRING)
+        |CREATE TABLE parquet_tab2 (c1 INT, c2 STRING)
         |STORED AS PARQUET
         |TBLPROPERTIES('prop1Key'="prop1Val", '`prop2Key`'="prop2Val")
       """.stripMargin)
@@ -122,10 +123,10 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("show tblproperties for datasource table - errors") {
-    val message1 = intercept[AnalysisException] {
+    val message1 = intercept[NoSuchTableException] {
       sql("SHOW TBLPROPERTIES badtable")
     }.getMessage
-    assert(message1.contains("Table or View badtable not found in database default"))
+    assert(message1.contains("Table or view 'badtable' not found in database 'default'"))
 
     // When key is not found, a row containing the error is returned.
     checkAnswer(
@@ -269,6 +270,84 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
+  test("Truncate Table") {
+    withTable("non_part_table", "part_table") {
+      sql(
+        """
+          |CREATE TABLE non_part_table (employeeID INT, employeeName STRING)
+          |ROW FORMAT DELIMITED
+          |FIELDS TERMINATED BY '|'
+          |LINES TERMINATED BY '\n'
+        """.stripMargin)
+
+      val testData = hiveContext.getHiveFile("data/files/employee.dat").getCanonicalPath
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE non_part_table""")
+      checkAnswer(
+        sql("SELECT * FROM non_part_table WHERE employeeID = 16"),
+        Row(16, "john") :: Nil)
+
+      val testResults = sql("SELECT * FROM non_part_table").collect()
+
+      intercept[ParseException] {
+        sql("TRUNCATE TABLE non_part_table COLUMNS (employeeID)")
+      }
+
+      sql("TRUNCATE TABLE non_part_table")
+      checkAnswer(sql("SELECT * FROM non_part_table"), Seq.empty[Row])
+
+      sql(
+        """
+          |CREATE TABLE part_table (employeeID INT, employeeName STRING)
+          |PARTITIONED BY (c STRING, d STRING)
+          |ROW FORMAT DELIMITED
+          |FIELDS TERMINATED BY '|'
+          |LINES TERMINATED BY '\n'
+        """.stripMargin)
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="1")""")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
+        testResults)
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="1", d="2")""")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
+        testResults)
+
+      sql(s"""LOAD DATA LOCAL INPATH "$testData" INTO TABLE part_table PARTITION(c="2", d="2")""")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '2'"),
+        testResults)
+
+      intercept[ParseException] {
+        sql("TRUNCATE TABLE part_table PARTITION(c='1', d='1') COLUMNS (employeeID)")
+      }
+
+      sql("TRUNCATE TABLE part_table PARTITION(c='1', d='1')")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
+        Seq.empty[Row])
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
+        testResults)
+
+      intercept[ParseException] {
+        sql("TRUNCATE TABLE part_table PARTITION(c='1') COLUMNS (employeeID)")
+      }
+
+      sql("TRUNCATE TABLE part_table PARTITION(c='1')")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1'"),
+        Seq.empty[Row])
+
+      sql("TRUNCATE TABLE part_table")
+      checkAnswer(
+        sql("SELECT employeeID, employeeName FROM part_table"),
+        Seq.empty[Row])
+    }
+  }
+
   test("show columns") {
     checkAnswer(
       sql("SHOW COLUMNS IN parquet_tab3"),
@@ -289,7 +368,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val message = intercept[NoSuchTableException] {
       sql("SHOW COLUMNS IN badtable FROM default")
     }.getMessage
-    assert(message.contains("badtable not found in database"))
+    assert(message.contains("'badtable' not found in database"))
   }
 
   test("show partitions - show everything") {

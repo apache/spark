@@ -85,6 +85,7 @@ public enum OperationState {
       if (OperationState.CLOSED.equals(newState)) {
         return;
       }
+      break;
     default:
       // fall-through
     }

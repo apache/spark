@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.JoinedRow
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -61,9 +61,11 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
 
     val header = if (csvOptions.headerFlag) {
-      firstRow
+      firstRow.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
+      }
     } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"C$index" }
+      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
     }
 
     val parsedRdd = tokenRdd(sparkSession, csvOptions, header, paths)
@@ -84,6 +86,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
+    verifySchema(dataSchema)
     val conf = job.getConfiguration
     val csvOptions = new CSVOptions(options)
     csvOptions.compressionCodec.foreach { codec =>
@@ -117,20 +120,9 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
       CSVRelation.dropHeaderLine(file, lineIterator, csvOptions)
 
-      val unsafeRowIterator = {
-        val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
-        val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
-        tokenizedIterator.flatMap(parser(_).toSeq)
-      }
-
-      // Appends partition values
-      val fullOutput = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-      val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
-
-      unsafeRowIterator.map { dataRow =>
-        appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
-      }
+      val tokenizedIterator = new BulkCsvReader(lineIterator, csvOptions, headers)
+      val parser = CSVRelation.csvParser(dataSchema, requiredSchema.fieldNames, csvOptions)
+      tokenizedIterator.flatMap(parser(_).toSeq)
     }
   }
 
@@ -179,6 +171,17 @@ class DefaultSource extends FileFormat with DataSourceRegister {
       sparkSession.sparkContext
         .hadoopFile[LongWritable, Text, TextInputFormat](location)
         .mapPartitions(_.map(pair => new String(pair._2.getBytes, 0, pair._2.getLength, charset)))
+    }
+  }
+
+  private def verifySchema(schema: StructType): Unit = {
+    schema.foreach { field =>
+      field.dataType match {
+        case _: ArrayType | _: MapType | _: StructType =>
+          throw new UnsupportedOperationException(
+            s"CSV data source does not support ${field.dataType.simpleString} data type.")
+        case _ =>
+      }
     }
   }
 }

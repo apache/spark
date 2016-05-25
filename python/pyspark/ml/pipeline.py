@@ -71,8 +71,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
         :param value: a list of transformers or estimators
         :return: the pipeline instance
         """
-        self._set(stages=value)
-        return self
+        return self._set(stages=value)
 
     @since("1.3.0")
     def getStages(self):

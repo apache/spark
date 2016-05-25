@@ -236,9 +236,9 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 Multilayer perceptron classifier (MLPC) is a classifier based on the [feedforward artificial neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network). 
 MLPC consists of multiple layers of nodes. 
-Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes maps inputs to the outputs 
-by performing linear combination of the inputs with the node's weights `$\wv$` and bias `$\bv$` and applying an activation function. 
-It can be written in matrix form for MLPC with `$K+1$` layers as follows:
+Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes map inputs to outputs 
+by a linear combination of the inputs with the node's weights `$\wv$` and bias `$\bv$` and applying an activation function. 
+This can be written in matrix form for MLPC with `$K+1$` layers as follows:
 `\[
 \mathrm{y}(\x) = \mathrm{f_K}(...\mathrm{f_2}(\wv_2^T\mathrm{f_1}(\wv_1^T \x+b_1)+b_2)...+b_K)
 \]`
@@ -252,7 +252,7 @@ Nodes in the output layer use softmax function:
 \]`
 The number of nodes `$N$` in the output layer corresponds to the number of classes. 
 
-MLPC employs backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
+MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
 
 **Example**
 
@@ -300,13 +300,20 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 {% include_example java/org/apache/spark/examples/ml/JavaOneVsRestExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.OneVsRest) for more details.
+
+{% include_example python/ml/one_vs_rest_example.py %}
+</div>
 </div>
 
 ## Naive Bayes
 
-[Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
+[Naive Bayes classifiers](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
 probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence 
-assumptions between the features. The spark.ml implementation currently supports both [multinomial
+assumptions between the features. The `spark.ml` implementation currently supports both [multinomial
 naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
 and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
 More information can be found in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
@@ -475,11 +482,11 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 
 In `spark.ml`, we implement the [Accelerated failure time (AFT)](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) 
 model which is a parametric survival regression model for censored data. 
-It describes a model for the log of survival time, so it's often called 
-log-linear model for survival analysis. Different from 
+It describes a model for the log of survival time, so it's often called a 
+log-linear model for survival analysis. Different from a
 [Proportional hazards](https://en.wikipedia.org/wiki/Proportional_hazards_model) model
-designed for the same purpose, the AFT model is more easily to parallelize 
-because each instance contribute to the objective function independently.
+designed for the same purpose, the AFT model is easier to parallelize 
+because each instance contributes to the objective function independently.
 
 Given the values of the covariates $x^{'}$, for random lifetime $t_{i}$ of 
 subjects i = 1, ..., n, with possible right-censoring, 
@@ -494,10 +501,10 @@ assumes the form:
 \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+\delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
 \]`
 Where $S_{0}(\epsilon_{i})$ is the baseline survivor function,
-and $f_{0}(\epsilon_{i})$ is corresponding density function.
+and $f_{0}(\epsilon_{i})$ is the corresponding density function.
 
 The most commonly used AFT model is based on the Weibull distribution of the survival time. 
-The Weibull distribution for lifetime corresponding to extreme value distribution for 
+The Weibull distribution for lifetime corresponds to the extreme value distribution for the 
 log of the lifetime, and the $S_{0}(\epsilon)$ function is:
 `\[   
 S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
@@ -506,7 +513,7 @@ the $f_{0}(\epsilon_{i})$ function is:
 `\[
 f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
 \]`
-The log-likelihood function for AFT model with Weibull distribution of lifetime is:
+The log-likelihood function for AFT model with a Weibull distribution of lifetime is:
 `\[
 \iota(\beta,\sigma)= -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
 \]`
@@ -522,7 +529,7 @@ The gradient functions for $\beta$ and $\log\sigma$ respectively are:
 
 The AFT model can be formulated as a convex optimization problem, 
 i.e. the task of finding a minimizer of a convex function $-\iota(\beta,\sigma)$ 
-that depends coefficients vector $\beta$ and the log of scale parameter $\log\sigma$.
+that depends on the coefficients vector $\beta$ and the log of scale parameter $\log\sigma$.
 The optimization algorithm underlying the implementation is L-BFGS.
 The implementation matches the result from R's survival function 
 [survreg](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/survreg.html)

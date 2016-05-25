@@ -17,11 +17,14 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.catalyst.analysis.Update
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.expressions.scala.typed
+import org.apache.spark.sql.execution.streaming.state.StateStore
+import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 
@@ -29,7 +32,12 @@ object FailureSinglton {
   var firstTime = true
 }
 
-class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
+class StreamingAggregationSuite extends StreamTest with SharedSQLContext with BeforeAndAfterAll {
+
+  override def afterAll(): Unit = {
+    super.afterAll()
+    StateStore.stop()
+  }
 
   import testImplicits._
 
@@ -50,7 +58,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
       AddData(inputData, 3, 2),
       CheckLastBatch((3, 2), (2, 1)),
       StopStream,
-      StartStream,
+      StartStream(),
       AddData(inputData, 3, 2, 1),
       CheckLastBatch((3, 3), (2, 2), (1, 1)),
       // By default we run in new tuple mode.
@@ -76,25 +84,6 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
     )
   }
 
-  test("multiple aggregations") {
-    val inputData = MemoryStream[Int]
-
-    val aggregated =
-      inputData.toDF()
-        .groupBy($"value")
-        .agg(count("*") as 'count)
-        .groupBy($"value" % 2)
-        .agg(sum($"count"))
-        .as[(Int, Long)]
-
-    testStream(aggregated)(
-      AddData(inputData, 1, 2, 3, 4),
-      CheckLastBatch((0, 2), (1, 2)),
-      AddData(inputData, 1, 3, 5),
-      CheckLastBatch((1, 5))
-    )
-  }
-
   testQuietly("midbatch failure") {
     val inputData = MemoryStream[Int]
     FailureSinglton.firstTime = true
@@ -113,10 +102,10 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext {
           .as[(Int, Long)]
 
     testStream(aggregated)(
-      StartStream,
+      StartStream(),
       AddData(inputData, 1, 2, 3, 4),
       ExpectFailure[SparkException](),
-      StartStream,
+      StartStream(),
       CheckLastBatch((1, 1), (2, 1), (3, 1), (4, 1))
     )
   }

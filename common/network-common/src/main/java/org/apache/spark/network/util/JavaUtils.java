@@ -29,6 +29,7 @@ import java.util.regex.Pattern;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import io.netty.buffer.Unpooled;
+import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,14 +80,32 @@ public class JavaUtils {
     return Unpooled.wrappedBuffer(b).toString(StandardCharsets.UTF_8);
   }
 
-  /*
+  /**
    * Delete a file or directory and its contents recursively.
    * Don't follow directories if they are symlinks.
-   * Throws an exception if deletion is unsuccessful.
+   *
+   * @param file Input file / dir to be deleted
+   * @throws IOException if deletion is unsuccessful
    */
   public static void deleteRecursively(File file) throws IOException {
     if (file == null) { return; }
 
+    // On Unix systems, use operating system command to run faster
+    // If that does not work out, fallback to the Java IO way
+    if (SystemUtils.IS_OS_UNIX) {
+      try {
+        deleteRecursivelyUsingUnixNative(file);
+        return;
+      } catch (IOException e) {
+        logger.warn("Attempt to delete using native Unix OS command failed for path = {}. " +
+                        "Falling back to Java IO way", file.getAbsolutePath(), e);
+      }
+    }
+
+    deleteRecursivelyUsingJavaIO(file);
+  }
+
+  private static void deleteRecursivelyUsingJavaIO(File file) throws IOException {
     if (file.isDirectory() && !isSymlink(file)) {
       IOException savedIOException = null;
       for (File child : listFilesSafely(file)) {
@@ -105,6 +124,32 @@ public class JavaUtils {
     boolean deleted = file.delete();
     // Delete can also fail if the file simply did not exist.
     if (!deleted && file.exists()) {
+      throw new IOException("Failed to delete: " + file.getAbsolutePath());
+    }
+  }
+
+  private static void deleteRecursivelyUsingUnixNative(File file) throws IOException {
+    ProcessBuilder builder = new ProcessBuilder("rm", "-rf", file.getAbsolutePath());
+    Process process = null;
+    int exitCode = -1;
+
+    try {
+      // In order to avoid deadlocks, consume the stdout (and stderr) of the process
+      builder.redirectErrorStream(true);
+      builder.redirectOutput(new File("/dev/null"));
+
+      process = builder.start();
+
+      exitCode = process.waitFor();
+    } catch (Exception e) {
+      throw new IOException("Failed to delete: " + file.getAbsolutePath(), e);
+    } finally {
+      if (process != null) {
+        process.destroy();
+      }
+    }
+
+    if (exitCode != 0 || file.exists()) {
       throw new IOException("Failed to delete: " + file.getAbsolutePath());
     }
   }

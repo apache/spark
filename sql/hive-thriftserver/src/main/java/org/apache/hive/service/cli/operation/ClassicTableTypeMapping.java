@@ -42,7 +42,7 @@ public class ClassicTableTypeMapping implements TableTypeMapping {
   private final Map<String, String> hiveToClientMap = new HashMap<String, String>();
   private final Map<String, String> clientToHiveMap = new HashMap<String, String>();
 
-  public ClassicTableTypeMapping () {
+  public ClassicTableTypeMapping() {
     hiveToClientMap.put(TableType.MANAGED_TABLE.toString(),
         ClassicTableTypes.TABLE.toString());
     hiveToClientMap.put(TableType.EXTERNAL_TABLE.toString(),

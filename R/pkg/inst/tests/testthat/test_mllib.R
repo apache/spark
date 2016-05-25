@@ -450,9 +450,9 @@ test_that("spark.survreg", {
   if (requireNamespace("survival", quietly = TRUE)) {
     rData <- list(time = c(4, 3, 1, 1, 2, 2, 3), status = c(1, 1, 1, 0, 1, 1, 0),
                  x = c(0, 2, 1, 1, 1, 0, 0), sex = c(0, 0, 0, 0, 1, 1, 1))
-    expect_that(
+    expect_error(
       model <- survival::survreg(formula = survival::Surv(time, status) ~ x + sex, data = rData),
-      not(throws_error()))
+      NA)
     expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
   }
 })

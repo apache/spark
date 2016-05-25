@@ -38,7 +38,7 @@ import org.apache.commons.lang3.SystemUtils
 private[spark] class Benchmark(
     name: String,
     valuesPerIteration: Long,
-    iters: Int = 5,
+    defaultNumIters: Int = 5,
     outputPerIteration: Boolean = false) {
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
 
@@ -46,8 +46,8 @@ private[spark] class Benchmark(
    * Adds a case to run when run() is called. The given function will be run for several
    * iterations to collect timing statistics.
    */
-  def addCase(name: String)(f: Int => Unit): Unit = {
-    addTimerCase(name) { timer =>
+  def addCase(name: String, numIters: Int = 0)(f: Int => Unit): Unit = {
+    addTimerCase(name, numIters) { timer =>
       timer.startTiming()
       f(timer.iteration)
       timer.stopTiming()
@@ -59,8 +59,8 @@ private[spark] class Benchmark(
    * until timer.startTiming() is called within the given function. The corresponding
    * timer.stopTiming() method must be called before the function returns.
    */
-  def addTimerCase(name: String)(f: Benchmark.Timer => Unit): Unit = {
-    benchmarks += Benchmark.Case(name, f)
+  def addTimerCase(name: String, numIters: Int = 0)(f: Benchmark.Timer => Unit): Unit = {
+    benchmarks += Benchmark.Case(name, f, if (numIters == 0) defaultNumIters else numIters)
   }
 
   /**
@@ -75,7 +75,7 @@ private[spark] class Benchmark(
 
     val results = benchmarks.map { c =>
       println("  Running case: " + c.name)
-      Benchmark.measure(valuesPerIteration, iters, outputPerIteration)(c.fn)
+      Benchmark.measure(valuesPerIteration, c.numIters, outputPerIteration)(c.fn)
     }
     println
 
@@ -83,12 +83,11 @@ private[spark] class Benchmark(
     // The results are going to be processor specific so it is useful to include that.
     println(Benchmark.getJVMOSInfo())
     println(Benchmark.getProcessorName())
-    printf("%-35s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
+    printf("%-40s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
       "Per Row(ns)", "Relative")
-    println("-----------------------------------------------------------------------------------" +
-      "--------")
+    println("-" * 96)
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      printf("%-35s %16s %12s %13s %10s\n",
+      printf("%-40s %16s %12s %13s %10s\n",
         benchmark.name,
         "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
         "%10.1f" format result.bestRate,
@@ -128,7 +127,7 @@ private[spark] object Benchmark {
     }
   }
 
-  case class Case(name: String, fn: Timer => Unit)
+  case class Case(name: String, fn: Timer => Unit, numIters: Int)
   case class Result(avgMs: Double, bestRate: Double, bestMs: Double)
 
   /**

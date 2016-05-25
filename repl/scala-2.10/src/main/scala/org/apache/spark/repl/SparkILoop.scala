@@ -1003,7 +1003,7 @@ class SparkILoop(
 
   // NOTE: Must be public for visibility
   @DeveloperApi
-  def createSparkContext(): SparkContext = {
+  def createSparkSession(): SparkSession = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
     val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
@@ -1019,22 +1019,18 @@ class SparkILoop(
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
-    sparkContext = new SparkContext(conf)
-    logInfo("Created spark context..")
-    Signaling.cancelOnInterrupt(sparkContext)
-    sparkContext
-  }
 
-  @DeveloperApi
-  // TODO: don't duplicate this code
-  def createSparkSession(): SparkSession = {
-    if (SparkSession.hiveClassesArePresent) {
+    val builder = SparkSession.builder.config(conf)
+    val sparkSession = if (SparkSession.hiveClassesArePresent) {
       logInfo("Creating Spark session with Hive support")
-      SparkSession.withHiveSupport(sparkContext)
+      builder.enableHiveSupport().getOrCreate()
     } else {
       logInfo("Creating Spark session")
-      new SparkSession(sparkContext)
+      builder.getOrCreate()
     }
+    sparkContext = sparkSession.sparkContext
+    Signaling.cancelOnInterrupt(sparkContext)
+    sparkSession
   }
 
   private def getMaster(): String = {

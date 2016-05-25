@@ -454,7 +454,9 @@ class DStream(object):
         This is more efficient than `invReduceFunc` is None.
 
         @param reduceFunc:     associative and commutative reduce function
-        @param invReduceFunc:  inverse reduce function of `reduceFunc`
+        @param invReduceFunc:  inverse reduce function of `reduceFunc`; such that for all y,
+                               and invertible x:
+                               `invReduceFunc(reduceFunc(x, y), x) = y`
         @param windowDuration: width of the window; must be a multiple of this DStream's
                                batching interval
         @param slideDuration:  sliding interval of the window (i.e., the interval after which

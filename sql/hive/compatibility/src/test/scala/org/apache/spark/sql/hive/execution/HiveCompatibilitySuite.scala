@@ -40,6 +40,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
   private val originalColumnBatchSize = TestHive.conf.columnBatchSize
   private val originalInMemoryPartitionPruning = TestHive.conf.inMemoryPartitionPruning
   private val originalConvertMetastoreOrc = TestHive.sessionState.convertMetastoreOrc
+  private val originalCrossJoinEnabled = TestHive.conf.crossJoinEnabled
 
   def testCases: Seq[(String, File)] = {
     hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
@@ -61,6 +62,8 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // Ensures that the plans generation use metastore relation and not OrcRelation
     // Was done because SqlBuilder does not work with plans having logical relation
     TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, false)
+    // Ensures that cross joins are enabled so that we can test them
+    TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, true)
     RuleExecutor.resetTime()
   }
 
@@ -72,6 +75,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
       TestHive.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
       TestHive.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
       TestHive.setConf(HiveUtils.CONVERT_METASTORE_ORC, originalConvertMetastoreOrc)
+      TestHive.setConf(SQLConf.CROSS_JOINS_ENABLED, originalCrossJoinEnabled)
       TestHive.sessionState.functionRegistry.restore()
 
       // For debugging dump some statistics about how much time was spent in various optimizer rules
@@ -503,7 +507,15 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     // We have converted the useful parts of these tests to tests
     // in org.apache.spark.sql.hive.execution.SQLQuerySuite.
     "drop_database_removes_partition_dirs",
-    "drop_table_removes_partition_dirs"
+    "drop_table_removes_partition_dirs",
+
+    // These tests use EXPLAIN FORMATTED, which is not supported
+    "input4",
+    "join0",
+    "plan_json",
+
+    // This test uses CREATE EXTERNAL TABLE without specifying LOCATION
+    "alter2"
   )
 
   /**
@@ -516,7 +528,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "add_partition_no_whitelist",
     "add_partition_with_whitelist",
     "alias_casted_column",
-    "alter2",
     "alter_partition_with_whitelist",
     "alter_rename_partition",
     "ambiguous_col",
@@ -699,7 +710,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "input26",
     "input28",
     "input2_limit",
-    "input4",
     "input40",
     "input41",
     "input49",
@@ -728,7 +738,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "insert1_overwrite_partitions",
     "insert2_overwrite_partitions",
     "insert_compressed",
-    "join0",
     "join1",
     "join10",
     "join11",
@@ -866,7 +875,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "partition_type_check",
     "partition_varchar1",
     "partition_wise_fileformat9",
-    "plan_json",
     "ppd1",
     "ppd2",
     "ppd_clusterby",
@@ -924,6 +932,13 @@ class HiveCompatibilitySuite extends HiveQueryFileTest with BeforeAndAfter {
     "stats_aggregator_error_1",
     "stats_publisher_error_1",
     "subq2",
+    "subquery_exists",
+    "subquery_exists_having",
+    "subquery_notexists",
+    "subquery_notexists_having",
+    "subquery_in",
+    "subquery_in_having",
+    "subquery_notin_having",
     "tablename_with_select",
     "timestamp_3",
     "timestamp_comparison",

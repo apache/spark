@@ -18,27 +18,60 @@ This section covers algorithms for working with features, roughly divided into t
 
 # Feature Extractors
 
-## TF-IDF (HashingTF and IDF)
+## TF-IDF
 
-[Term Frequency-Inverse Document Frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) is a common text pre-processing step.  In Spark ML, TF-IDF is separate into two parts: TF (+hashing) and IDF.
+[Term frequency-inverse document frequency (TF-IDF)](http://en.wikipedia.org/wiki/Tf%E2%80%93idf) 
+is a feature vectorization method widely used in text mining to reflect the importance of a term 
+to a document in the corpus. Denote a term by `$t$`, a document by `$d$`, and the corpus by `$D$`.
+Term frequency `$TF(t, d)$` is the number of times that term `$t$` appears in document `$d$`, while 
+document frequency `$DF(t, D)$` is the number of documents that contains term `$t$`. If we only use 
+term frequency to measure the importance, it is very easy to over-emphasize terms that appear very 
+often but carry little information about the document, e.g. "a", "the", and "of". If a term appears 
+very often across the corpus, it means it doesn't carry special information about a particular document.
+Inverse document frequency is a numerical measure of how much information a term provides:
+`\[
+IDF(t, D) = \log \frac{|D| + 1}{DF(t, D) + 1},
+\]`
+where `$|D|$` is the total number of documents in the corpus. Since logarithm is used, if a term 
+appears in all documents, its IDF value becomes 0. Note that a smoothing term is applied to avoid 
+dividing by zero for terms outside the corpus. The TF-IDF measure is simply the product of TF and IDF:
+`\[
+TFIDF(t, d, D) = TF(t, d) \cdot IDF(t, D).
+\]`
+There are several variants on the definition of term frequency and document frequency.
+In MLlib, we separate TF and IDF to make them flexible.
 
 **TF**: Both `HashingTF` and `CountVectorizer` can be used to generate the term frequency vectors. 
 
 `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
-The algorithm combines Term Frequency (TF) counts with the 
-[hashing trick](http://en.wikipedia.org/wiki/Feature_hashing) for dimensionality reduction.
+`HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
+A raw feature is mapped into an index (term) by applying a hash function. Then term frequencies 
+are calculated based on the mapped indices. This approach avoids the need to compute a global 
+term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
+collisions, where different raw features may become the same term after hashing. To reduce the 
+chance of collision, we can increase the target feature dimension, i.e. the number of buckets 
+of the hash table. Since a simple modulo is used to transform the hash function to a column index, 
+it is advisable to use a power of two as the feature dimension, otherwise the features will 
+not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`. 
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
 
 **IDF**: `IDF` is an `Estimator` which is fit on a dataset and produces an `IDFModel`.  The 
-`IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and scales each column.  
-Intuitively, it down-weights columns which appear frequently in a corpus.
+`IDFModel` takes feature vectors (generally created from `HashingTF` or `CountVectorizer`) and 
+scales each column. Intuitively, it down-weights columns which appear frequently in a corpus.
 
-Please refer to the [MLlib user guide on TF-IDF](mllib-feature-extraction.html#tf-idf) for more details on Term Frequency and Inverse Document Frequency.
+**Note:** `spark.ml` doesn't provide tools for text segmentation.
+We refer users to the [Stanford NLP Group](http://nlp.stanford.edu/) and 
+[scalanlp/chalk](https://github.com/scalanlp/chalk).
 
-In the following code segment, we start with a set of sentences.  We split each sentence into words using `Tokenizer`.  For each sentence (bag of words), we use `HashingTF` to hash the sentence into a feature vector.  We use `IDF` to rescale the feature vectors; this generally improves performance when using text as features.  Our feature vectors could then be passed to a learning algorithm.
+**Examples**
+
+In the following code segment, we start with a set of sentences.  We split each sentence into words 
+using `Tokenizer`.  For each sentence (bag of words), we use `HashingTF` to hash the sentence into 
+a feature vector.  We use `IDF` to rescale the feature vectors; this generally improves performance 
+when using text as features.  Our feature vectors could then be passed to a learning algorithm.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -71,7 +104,7 @@ the [IDF Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.IDF) for mor
 `Word2Vec` is an `Estimator` which takes sequences of words representing documents and trains a
 `Word2VecModel`. The model maps each word to a unique fixed-size vector. The `Word2VecModel`
 transforms each document into a vector using the average of all words in the document; this vector
-can then be used for as features for prediction, document similarity calculations, etc.
+can then be used as features for prediction, document similarity calculations, etc.
 Please refer to the [MLlib user guide on Word2Vec](mllib-feature-extraction.html#word2vec) for more
 details.
 
@@ -107,12 +140,12 @@ for more details on the API.
 
 `CountVectorizer` and `CountVectorizerModel` aim to help convert a collection of text documents
  to vectors of token counts. When an a-priori dictionary is not available, `CountVectorizer` can
- be used as an `Estimator` to extract the vocabulary and generates a `CountVectorizerModel`. The
+ be used as an `Estimator` to extract the vocabulary, and generates a `CountVectorizerModel`. The
  model produces sparse representations for the documents over the vocabulary, which can then be
  passed to other algorithms like LDA.
 
  During the fitting process, `CountVectorizer` will select the top `vocabSize` words ordered by
- term frequency across the corpus. An optional parameter "minDF" also affect the fitting process
+ term frequency across the corpus. An optional parameter "minDF" also affects the fitting process
  by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
  included in the vocabulary.
 
@@ -127,9 +160,9 @@ Assume that we have the following DataFrame with columns `id` and `texts`:
  1  | Array("a", "b", "b", "c", "a")
 ~~~~
 
-each row in`texts` is a document of type Array[String].
-Invoking fit of `CountVectorizer` produces a `CountVectorizerModel` with vocabulary (a, b, c),
-then the output column "vector" after transformation contains:
+each row in `texts` is a document of type Array[String].
+Invoking fit of `CountVectorizer` produces a `CountVectorizerModel` with vocabulary (a, b, c).
+Then the output column "vector" after transformation contains:
 
 ~~~~
  id | texts                           | vector
@@ -138,7 +171,7 @@ then the output column "vector" after transformation contains:
  1  | Array("a", "b", "b", "c", "a")  | (3,[0,1,2],[2.0,2.0,1.0])
 ~~~~
 
-each vector represents the token counts of the document over the vocabulary.
+Each vector represents the token counts of the document over the vocabulary.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -185,7 +218,7 @@ for more details on the API.
 <div data-lang="scala" markdown="1">
 
 Refer to the [Tokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
-and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.Tokenizer)
+and the [RegexTokenizer Scala docs](api/scala/index.html#org.apache.spark.ml.feature.RegexTokenizer)
 for more details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/TokenizerExample.scala %}
@@ -444,8 +477,7 @@ for more details on the API.
 ## StringIndexer
 
 `StringIndexer` encodes a string column of labels to a column of label indices.
-The indices are in `[0, numLabels)`, ordered by label frequencies.
-So the most frequent label gets index `0`.
+The indices are in `[0, numLabels)`, ordered by label frequencies, so the most frequent label gets index `0`.
 If the input column is numeric, we cast it to string and index the string
 values. When downstream pipeline components such as `Estimator` or
 `Transformer` make use of this string-indexed label, you must set the input
@@ -552,7 +584,7 @@ for more details on the API.
 ## IndexToString
 
 Symmetrically to `StringIndexer`, `IndexToString` maps a column of label indices
-back to a column containing the original labels as strings. The common use case
+back to a column containing the original labels as strings. A common use case
 is to produce indices from labels with `StringIndexer`, train a model with those
 indices and retrieve the original labels from the column of predicted indices
 with `IndexToString`. However, you are free to supply your own labels.
@@ -619,7 +651,7 @@ for more details on the API.
 
 ## OneHotEncoder
 
-[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features
+[One-hot encoding](http://en.wikipedia.org/wiki/One-hot) maps a column of label indices to a column of binary vectors, with at most a single one-value. This encoding allows algorithms which expect continuous features, such as Logistic Regression, to use categorical features.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
@@ -775,7 +807,7 @@ The rescaled value for a feature E is calculated as,
 \end{equation}`
 For the case `E_{max} == E_{min}`, `Rescaled(e_i) = 0.5 * (max + min)`
 
-Note that since zero values will probably be transformed to non-zero values, output of the transformer will be DenseVector even for sparse input.
+Note that since zero values will probably be transformed to non-zero values, output of the transformer will be `DenseVector` even for sparse input.
 
 The following example demonstrates how to load a dataset in libsvm format and then rescale each feature to [0, 1].
 
@@ -801,6 +833,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [MinMaxScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScaler)
+and the [MinMaxScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MinMaxScalerModel)
 for more details on the API.
 
 {% include_example python/ml/min_max_scaler_example.py %}
@@ -841,6 +874,7 @@ for more details on the API.
 <div data-lang="python" markdown="1">
 
 Refer to the [MaxAbsScaler Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScaler)
+and the [MaxAbsScalerModel Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.MaxAbsScalerModel)
 for more details on the API.
 
 {% include_example python/ml/max_abs_scaler_example.py %}
@@ -853,7 +887,7 @@ for more details on the API.
 
 * `splits`: Parameter for mapping continuous features into buckets. With n+1 splits, there are n buckets. A bucket defined by splits x,y holds values in the range [x,y) except the last bucket, which also includes y. Splits should be strictly increasing. Values at -inf, inf must be explicitly provided to cover all Double values; Otherwise, values outside the splits specified will be treated as errors. Two examples of `splits` are `Array(Double.NegativeInfinity, 0.0, 1.0, Double.PositiveInfinity)` and `Array(0.0, 1.0, 2.0)`.
 
-Note that if you have no idea of the upper bound and lower bound of the targeted column, you would better add the `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potential out of Bucketizer bounds exception.
+Note that if you have no idea of the upper and lower bounds of the targeted column, you should add `Double.NegativeInfinity` and `Double.PositiveInfinity` as the bounds of your splits to prevent a potential out of Bucketizer bounds exception.
 
 Note also that the splits that you provided have to be in strictly increasing order, i.e. `s0 < s1 < s2 < ... < sn`.
 
@@ -941,7 +975,7 @@ for more details on the API.
 Currently we only support SQL syntax like `"SELECT ... FROM __THIS__ ..."`
 where `"__THIS__"` represents the underlying table of the input dataset.
 The select clause specifies the fields, constants, and expressions to display in
-the output, it can be any select clause that Spark SQL supports. Users can also
+the output, and can be any select clause that Spark SQL supports. Users can also
 use Spark SQL built-in function and UDFs to operate on these selected columns.
 For example, `SQLTransformer` supports statements like:
 
@@ -1086,7 +1120,7 @@ Assume that we have a DataFrame with the columns `id`, `hour`:
 ~~~
 
 `hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
-categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
+a categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
 
 ~~~
  id | hour | result
@@ -1118,6 +1152,15 @@ for more details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaQuantileDiscretizerExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [QuantileDiscretizer Python docs](api/python/pyspark.ml.html#pyspark.ml.feature.QuantileDiscretizer)
+for more details on the API.
+
+{% include_example python/ml/quantile_discretizer_example.py %}
+</div>
+
 </div>
 
 # Feature Selectors
@@ -1127,19 +1170,19 @@ for more details on the API.
 `VectorSlicer` is a transformer that takes a feature vector and outputs a new feature vector with a
 sub-array of the original features. It is useful for extracting features from a vector column.
 
-`VectorSlicer` accepts a vector column with a specified indices, then outputs a new vector column
+`VectorSlicer` accepts a vector column with specified indices, then outputs a new vector column
 whose values are selected via those indices. There are two types of indices,
 
- 1. Integer indices that represents the indices into the vector, `setIndices()`;
+ 1. Integer indices that represent the indices into the vector, `setIndices()`.
 
- 2. String indices that represents the names of features into the vector, `setNames()`.
+ 2. String indices that represent the names of features into the vector, `setNames()`.
  *This requires the vector column to have an `AttributeGroup` since the implementation matches on
  the name field of an `Attribute`.*
 
 Specification by integer and string are both acceptable. Moreover, you can use integer index and
 string name simultaneously. At least one feature must be selected. Duplicate features are not
 allowed, so there can be no overlap between selected indices and names. Note that if names of
-features are selected, an exception will be threw out when encountering with empty input attributes.
+features are selected, an exception will be thrown if empty input attributes are encountered.
 
 The output vector will order features with the selected indices first (in the order given),
 followed by the selected names (in the order given).
@@ -1154,8 +1197,8 @@ Suppose that we have a DataFrame with the column `userFeatures`:
  [0.0, 10.0, 0.5]
 ~~~
 
-`userFeatures` is a vector column that contains three user features. Assuming that the first column
-of `userFeatures` are all zeros, so we want to remove it and only the last two columns are selected.
+`userFeatures` is a vector column that contains three user features. Assume that the first column
+of `userFeatures` are all zeros, so we want to remove it and select only the last two columns.
 The `VectorSlicer` selects the last two elements with `setIndices(1, 2)` then produces a new vector
 column named `features`:
 
@@ -1165,7 +1208,7 @@ column named `features`:
  [0.0, 10.0, 0.5] | [10.0, 0.5]
 ~~~
 
-Suppose also that we have a potential input attributes for the `userFeatures`, i.e.
+Suppose also that we have potential input attributes for the `userFeatures`, i.e.
 `["f1", "f2", "f3"]`, then we can use `setNames("f2", "f3")` to select them.
 
 ~~~
@@ -1293,8 +1336,8 @@ id | features              | clicked
  9 | [1.0, 0.0, 15.0, 0.1] | 0.0
 ~~~
 
-If we use `ChiSqSelector` with a `numTopFeatures = 1`, then according to our label `clicked` the
-last column in our `features` chosen as the most useful feature:
+If we use `ChiSqSelector` with `numTopFeatures = 1`, then according to our label `clicked` the
+last column in our `features` is chosen as the most useful feature:
 
 ~~~
 id | features              | clicked | selectedFeatures

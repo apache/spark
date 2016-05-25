@@ -106,22 +106,14 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     val columnNameOfCorruptRecord = parsedOptions.columnNameOfCorruptRecord
       .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
 
-    val fullSchema = requiredSchema.toAttributes ++ partitionSchema.toAttributes
-    val joinedRow = new JoinedRow()
-
     (file: PartitionedFile) => {
       val lines = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map(_.toString)
 
-      val rows = JacksonParser.parseJson(
+      JacksonParser.parseJson(
         lines,
         requiredSchema,
         columnNameOfCorruptRecord,
         parsedOptions)
-
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullSchema, fullSchema)
-      rows.map { row =>
-        appendPartitionColumns(joinedRow(row, file.partitionValues))
-      }
     }
   }
 

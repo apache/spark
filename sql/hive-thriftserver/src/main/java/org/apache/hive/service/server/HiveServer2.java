@@ -236,8 +236,8 @@ public class HiveServer2 extends CompositeService {
   /**
    * The executor interface for running the appropriate HiveServer2 command based on parsed options
    */
-  static interface ServerOptionsExecutor {
-    public void execute();
+  interface ServerOptionsExecutor {
+    void execute();
   }
 
   /**

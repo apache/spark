@@ -115,13 +115,13 @@ head(df)
 
 SparkR supports operating on a variety of data sources through the `DataFrame` interface. This section describes the general methods for loading and saving data using Data Sources. You can check the Spark SQL programming guide for more [specific options](sql-programming-guide.html#manually-specifying-options) that are available for the built-in data sources.
 
-The general method for creating DataFrames from data sources is `read.df`. This method takes in the `SQLContext`, the path for the file to load and the type of data source. SparkR supports reading JSON and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [CSV](http://spark-packages.org/package/databricks/spark-csv) and [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
+The general method for creating DataFrames from data sources is `read.df`. This method takes in the `SQLContext`, the path for the file to load and the type of data source. SparkR supports reading JSON, CSV and Parquet files natively and through [Spark Packages](http://spark-packages.org/) you can find data source connectors for popular file formats like [Avro](http://spark-packages.org/package/databricks/spark-avro). These packages can either be added by
 specifying `--packages` with `spark-submit` or `sparkR` commands, or if creating context through `init`
 you can specify the packages with the `packages` argument.
 
 <div data-lang="r" markdown="1">
 {% highlight r %}
-sc <- sparkR.init(sparkPackages="com.databricks:spark-csv_2.11:1.0.3")
+sc <- sparkR.init(sparkPackages="com.databricks:spark-avro_2.11:2.0.1")
 sqlContext <- sparkRSQL.init(sc)
 {% endhighlight %}
 </div>

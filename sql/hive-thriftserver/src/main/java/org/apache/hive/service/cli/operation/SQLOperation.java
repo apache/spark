@@ -326,7 +326,7 @@ public class SQLOperation extends ExecuteStatementOperation {
     return resultSchema;
   }
 
-  private transient final List<Object> convey = new ArrayList<Object>();
+  private final transient List<Object> convey = new ArrayList<Object>();
 
   @Override
   public RowSet getNextRowSet(FetchOrientation orientation, long maxRows) throws HiveSQLException {
