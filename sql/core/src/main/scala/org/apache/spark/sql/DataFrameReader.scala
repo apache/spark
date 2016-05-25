@@ -409,6 +409,42 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   @scala.annotation.varargs
   def csv(paths: String*): DataFrame = format("csv").load(paths : _*)
 
+  /**
+   * Loads an `JavaRDD[String]` storing CSV objects (one object per record) and
+   * returns the result as a [[DataFrame]].
+   *
+   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param csvRDD input RDD with one CSV object per record
+   * @since 2.0.0
+   */
+  def csv(csvRDD: JavaRDD[String]): DataFrame = csv(csvRDD.rdd)
+
+  /**
+   * Loads an `Dataset[String]` storing CSV objects (one object per record) and
+   * returns the result as a [[DataFrame]].
+   *
+   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param csvDS input Dataset with one CSV object per record
+   * @since 2.0.0
+   */
+  def csv(csvDS: Dataset[String]): DataFrame = {
+    csv(csvDS.toJavaRDD)
+  }
+
+  /**
+   * Loads an `RDD[String]` storing CSV objects (one object per record) and
+   * returns the result as a [[DataFrame]].
+   *
+   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param csvRDD input RDD with one CSV object per record
+   * @since 2.0.0
+   */
   def csv(csvRDD: RDD[String]): DataFrame = {
     val parsedOptions: CSVOptions = new CSVOptions(extraOptions.toMap)
     val firstLine = CSVRelation.findFirstLine(parsedOptions, csvRDD)
