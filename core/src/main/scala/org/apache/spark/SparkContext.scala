@@ -2245,7 +2245,9 @@ object SparkContext extends Logging {
       if (activeContext.get() == null) {
         setActiveContext(new SparkContext(config), allowMultipleContexts = false)
       }
-      logWarning("Use an existing SparkContext, some configuration may not take effect.")
+      if (config.getAll.nonEmpty) {
+        logWarning("Use an existing SparkContext, some configuration may not take effect.")
+      }
       activeContext.get()
     }
   }

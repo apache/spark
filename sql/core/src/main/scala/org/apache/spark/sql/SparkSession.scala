@@ -750,7 +750,9 @@ object SparkSession {
       var session = activeThreadSession.get()
       if ((session ne null) && !session.sparkContext.isStopped) {
         options.foreach { case (k, v) => session.conf.set(k, v) }
-        logWarning("Use an existing SparkSession, some configuration may not take effect.")
+        if (options.nonEmpty) {
+          logWarning("Use an existing SparkSession, some configuration may not take effect.")
+        }
         return session
       }
 
@@ -760,7 +762,9 @@ object SparkSession {
         session = defaultSession.get()
         if ((session ne null) && !session.sparkContext.isStopped) {
           options.foreach { case (k, v) => session.conf.set(k, v) }
-          logWarning("Use an existing SparkSession, some configuration may not take effect.")
+          if (options.nonEmpty) {
+            logWarning("Use an existing SparkSession, some configuration may not take effect.")
+          }
           return session
         }
 
