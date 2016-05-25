@@ -108,6 +108,7 @@ case class DataSource(
               dataSource
             case Failure(error) =>
               if (error.isInstanceOf[ClassNotFoundException]) {
+                // error.getMessage is the class name of provider2. Instead, we use provider here.
                 if (spark2RemovedClasses.contains(provider)) {
                   throw new AnalysisException(s"$provider is removed in Spark 2.0. " +
                     "Please check if your library is compatible with Spark 2.0")
@@ -115,12 +116,12 @@ case class DataSource(
               }
               if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
                 throw new AnalysisException(
-                  s"The ORC data source must be used with Hive support enabled")
+                  "The ORC data source must be used with Hive support enabled")
               } else {
                 if (provider == "avro" || provider == "com.databricks.spark.avro") {
                   throw new AnalysisException(
                     s"Failed to find data source: $provider. Please use Spark package " +
-                      s"http://spark-packages.org/package/databricks/spark-avro")
+                      "http://spark-packages.org/package/databricks/spark-avro")
                 } else {
                   throw new ClassNotFoundException(
                     s"Failed to find data source: $provider. Please find packages at " +
@@ -131,9 +132,10 @@ case class DataSource(
           }
         } catch {
           case e: NoClassDefFoundError =>
+            // e.getMessage is the class name of provider2. Instead, we use provider here.
             if (spark2RemovedClasses.contains(provider)) {
               throw new AnalysisException(s"$provider was removed in Spark 2.0. " +
-                s"Please check if your library is compatible with Spark 2.0")
+                "Please check if your library is compatible with Spark 2.0")
             } else {
               throw e
             }
