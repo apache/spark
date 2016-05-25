@@ -63,9 +63,9 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
 determineLauncher <- function(sparkSubmitBin, combinedArgs, capture = FALSE) {
   if (.Platform$OS.type == "windows") {
     sparkSubmitWithArgs <- paste(sparkSubmitBin, combinedArgs, sep = " ")
-    shell(sparkSubmitWithArgs, translate = TRUE, wait = ! capture, intern = capture)
+    shell(sparkSubmitWithArgs, translate = TRUE, wait = capture, intern = capture)
   } else {
-    system2(sparkSubmitBin, combinedArgs, wait = F, stdout = capture)
+    system2(sparkSubmitBin, combinedArgs, wait = capture, stdout = capture)
   }
 }
 
