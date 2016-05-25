@@ -144,8 +144,8 @@ class SparkSession(object):
             default.
 
             >>> s1 = SparkSession.builder.config("k1", "v1").getOrCreate()
-            >>> s1.conf.get("k1")
-            u'v1'
+            >>> s1.conf.get("k1") == "v1"
+            True
 
             In case an existing SparkSession is returned, the config options specified
             in this builder will be applied to the existing SparkSession.
