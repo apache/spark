@@ -56,10 +56,12 @@ class QueryExecutionException(CapturedException):
     Failed to execute a query.
     """
 
+
 class ClassNotFoundException(CapturedException):
     """
     Failed to find a class.
     """
+
 
 def capture_sql_exception(f):
     def deco(*a, **kw):
