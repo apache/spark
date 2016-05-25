@@ -177,6 +177,7 @@ test_that("create DataFrame from RDD", {
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
+  remove(".sparkRHivesc", envir = .sparkREnv)
 })
 
 test_that("convert NAs to null type in DataFrames", {
@@ -988,6 +989,7 @@ test_that("test HiveContext", {
   expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
+  remove(".sparkRHivesc", envir = .sparkREnv)
 })
 
 test_that("column operators", {
@@ -2168,6 +2170,7 @@ test_that("Window functions on a DataFrame", {
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
+  remove(".sparkRHivesc", envir = .sparkREnv)
 })
 
 test_that("createDataFrame sqlContext parameter backward compatibility", {
