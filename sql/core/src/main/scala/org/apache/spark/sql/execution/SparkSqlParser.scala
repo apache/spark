@@ -24,7 +24,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -491,6 +491,37 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
     DescribeDatabaseCommand(ctx.identifier.getText, ctx.EXTENDED != null)
+  }
+
+  /**
+   * Create a plan for a DESCRIBE FUNCTION command.
+   */
+  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        FunctionIdentifier(string(describeFuncName.STRING()), database = None)
+      } else if (describeFuncName.qualifiedName() != null) {
+        visitFunctionName(describeFuncName.qualifiedName)
+      } else {
+        FunctionIdentifier(describeFuncName.getText, database = None)
+      }
+    DescribeFunctionCommand(functionName, EXTENDED != null)
+  }
+
+  /**
+   * Create a plan for a SHOW FUNCTIONS command.
+   */
+  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    if (qualifiedName != null) {
+      val name = visitFunctionName(qualifiedName)
+      ShowFunctionsCommand(name.database, Some(name.funcName))
+    } else if (pattern != null) {
+      ShowFunctionsCommand(None, Some(string(pattern)))
+    } else {
+      ShowFunctionsCommand(None, None)
+    }
   }
 
   /**
