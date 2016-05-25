@@ -24,10 +24,18 @@ test_that("Check masked functions", {
   func <- lapply(masked, function(x) { capture.output(showMethods(x))[[1]] })
   funcSparkROrEmpty <- grepl("\\(package SparkR\\)$|^$", func)
   maskedBySparkR <- masked[funcSparkROrEmpty]
-  namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
-                     "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                     "summary", "transform", "drop", "window", "as.data.frame",
-                     "endsWith", "startsWith")
+  if (as.numeric(R.version$major) == 3 && as.numeric(R.version$minor) > 2) {
+    namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
+                       "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
+                       "summary", "transform", "drop", "window", "as.data.frame",
+                       "endsWith", "startsWith")
+    namesOfMaskedCompletely <- c("cov", "filter", "sample", "endsWith", "startsWith")
+  } else {
+    namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
+                       "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
+                       "summary", "transform", "drop", "window", "as.data.frame")
+    namesOfMaskedCompletely <- c("cov", "filter", "sample")
+  }
   expect_equal(length(maskedBySparkR), length(namesOfMasked))
   expect_equal(sort(maskedBySparkR), sort(namesOfMasked))
   # above are those reported as masked when `library(SparkR)`
@@ -37,7 +45,6 @@ test_that("Check masked functions", {
                                         any(grepl("=\"ANY\"", capture.output(showMethods(x)[-1])))
                                       }))
   maskedCompletely <- masked[!funcHasAny]
-  namesOfMaskedCompletely <- c("cov", "filter", "sample", "endsWith", "startsWith")
   expect_equal(length(maskedCompletely), length(namesOfMaskedCompletely))
   expect_equal(sort(maskedCompletely), sort(namesOfMaskedCompletely))
 })
