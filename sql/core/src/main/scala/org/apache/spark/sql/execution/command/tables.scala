@@ -118,6 +118,8 @@ case class CreateTableLikeCommand(
 case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
+    DDLUtils.verifyTableProperties(table.storage.serdeProperties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }

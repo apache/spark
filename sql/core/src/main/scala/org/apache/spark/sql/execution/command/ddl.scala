@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils.DATASOURCE_PREFIX
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
@@ -228,15 +229,13 @@ case class AlterTableSetPropertiesCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    val ident = if (isView) "VIEW" else "TABLE"
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
+    DDLUtils.verifyTableProperties(properties.keys.toSeq, s"ALTER $ident")
     val table = catalog.getTableMetadata(tableName)
-    val newProperties = table.properties ++ properties
-    if (DDLUtils.isDatasourceTable(newProperties)) {
-      throw new AnalysisException("ALTER TABLE SET TBLPROPERTIES is not supported for " +
-        "tables defined using the datasource API")
-    }
-    val newTable = table.copy(properties = newProperties)
+    // This overrides old properties
+    val newTable = table.copy(properties = table.properties ++ properties)
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -260,18 +259,16 @@ case class AlterTableUnsetPropertiesCommand(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    val ident = if (isView) "VIEW" else "TABLE"
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
+    DDLUtils.verifyTableProperties(propKeys, s"ALTER $ident")
     val table = catalog.getTableMetadata(tableName)
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        "alter table properties is not supported for datasource tables")
-    }
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {
           throw new AnalysisException(
-            s"attempted to unset non-existent property '$k' in table '$tableName'")
+            s"Attempted to unset non-existent property '$k' in table '$tableName'")
         }
       }
     }
@@ -304,11 +301,15 @@ case class AlterTableSerDePropertiesCommand(
     "ALTER TABLE attempted to set neither serde class name nor serde properties")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    DDLUtils.verifyTableProperties(
+      serdeProperties.toSeq.flatMap(_.keys.toSeq),
+      "ALTER TABLE SERDEPROPERTIES")
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     // Do not support setting serde for datasource tables
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException("ALTER TABLE SET SERDE is not supported for datasource tables")
+      throw new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
+        "not supported for tables created with the datasource API")
     }
     val newTable = table.withNewStorage(
       serde = serdeClassName.orElse(table.storage.serde),
@@ -487,6 +488,18 @@ object DDLUtils {
           s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
       case _ =>
     })
+  }
+
+  /**
+   * If the given table properties (or SerDe properties) contains datasource properties,
+   * throw an exception.
+   */
+  def verifyTableProperties(propKeys: Seq[String], operation: String): Unit = {
+    val datasourceKeys = propKeys.filter(_.startsWith(DATASOURCE_PREFIX))
+    if (datasourceKeys.nonEmpty) {
+      throw new AnalysisException(s"Operation not allowed: $operation property keys may not " +
+        s"start with '$DATASOURCE_PREFIX': ${datasourceKeys.mkString("[", ", ", "]")}")
+    }
   }
 
   def isTablePartitioned(table: CatalogTable): Boolean = {
