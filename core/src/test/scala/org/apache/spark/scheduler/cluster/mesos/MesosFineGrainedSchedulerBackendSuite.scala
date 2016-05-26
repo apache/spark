@@ -40,7 +40,8 @@ import org.apache.spark.scheduler.{LiveListenerBus, SparkListenerExecutorAdded,
   TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.ExecutorInfo
 
-class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext with MockitoSugar {
+class MesosFineGrainedSchedulerBackendSuite
+  extends SparkFunSuite with LocalSparkContext with MockitoSugar {
 
   test("weburi is set in created scheduler driver") {
     val conf = new SparkConf
@@ -56,7 +57,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val driver = mock[SchedulerDriver]
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
 
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master") {
+    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master") {
       override protected def createSchedulerDriver(
         masterUrl: String,
         scheduler: Scheduler,
@@ -96,7 +97,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
 
-    val mesosSchedulerBackend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+    val mesosSchedulerBackend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
 
     val resources = Arrays.asList(
       mesosSchedulerBackend.createResource("cpus", 4),
@@ -127,7 +128,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val taskScheduler = mock[TaskSchedulerImpl]
     when(taskScheduler.CPUS_PER_TASK).thenReturn(2)
 
-    val mesosSchedulerBackend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+    val mesosSchedulerBackend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
 
     val resources = Arrays.asList(
       mesosSchedulerBackend.createResource("cpus", 4),
@@ -163,7 +164,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     when(sc.conf).thenReturn(conf)
     when(sc.listenerBus).thenReturn(listenerBus)
 
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
 
     val (execInfo, _) = backend.createExecutorInfo(
       Arrays.asList(backend.createResource("cpus", 4)), "mockExecutor")
@@ -222,7 +223,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     when(sc.conf).thenReturn(new SparkConf)
     when(sc.listenerBus).thenReturn(listenerBus)
 
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
 
     val minMem = backend.executorMemory(sc)
     val minCpu = 4
@@ -333,7 +334,7 @@ class MesosSchedulerBackendSuite extends SparkFunSuite with LocalSparkContext wi
     val mesosOffers = new java.util.ArrayList[Offer]
     mesosOffers.add(offer)
 
-    val backend = new MesosSchedulerBackend(taskScheduler, sc, "master")
+    val backend = new MesosFineGrainedSchedulerBackend(taskScheduler, sc, "master")
 
     val expectedWorkerOffers = new ArrayBuffer[WorkerOffer](1)
     expectedWorkerOffers.append(new WorkerOffer(

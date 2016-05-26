@@ -220,6 +220,21 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       CheckOffsetLogLatestBatchId(2),
       CheckSinkLatestBatchId(2))
   }
+
+  test("insert an extraStrategy") {
+    try {
+      spark.experimental.extraStrategies = TestStrategy :: Nil
+
+      val inputData = MemoryStream[(String, Int)]
+      val df = inputData.toDS().map(_._1).toDF("a")
+
+      testStream(df)(
+        AddData(inputData, ("so slow", 1)),
+        CheckAnswer("so fast"))
+    } finally {
+      spark.experimental.extraStrategies = Nil
+    }
+  }
 }
 
 /**

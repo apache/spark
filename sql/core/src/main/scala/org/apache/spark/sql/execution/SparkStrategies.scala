@@ -190,7 +190,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           }
         // This join could be very slow or OOM
         joins.BroadcastNestedLoopJoinExec(
-          planLater(left), planLater(right), buildSide, joinType, condition) :: Nil
+          planLater(left), planLater(right), buildSide, joinType, condition,
+          withinBroadcastThreshold = false) :: Nil
 
       // --- Cases where this strategy does not apply ---------------------------------------------
 
@@ -417,12 +418,6 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             c.options,
             c.child)
         ExecutedCommandExec(cmd) :: Nil
-
-      case logical.ShowFunctions(db, pattern) =>
-        ExecutedCommandExec(ShowFunctionsCommand(db, pattern)) :: Nil
-
-      case logical.DescribeFunction(function, extended) =>
-        ExecutedCommandExec(DescribeFunctionCommand(function, extended)) :: Nil
 
       case _ => Nil
     }
