@@ -65,7 +65,7 @@
 
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
 
     <!-- Not needed by the test code, but referenced by SparkSubmit which is used by the tests. -->

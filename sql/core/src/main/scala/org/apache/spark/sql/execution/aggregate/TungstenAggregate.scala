@@ -244,8 +244,12 @@ case class TungstenAggregate(
       }
     }
     ctx.currentVars = bufVars ++ input
-    // TODO: support subexpression elimination
-    val aggVals = updateExpr.map(BindReferences.bindReference(_, inputAttrs).genCode(ctx))
+    val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttrs))
+    val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+    val effectiveCodes = subExprs.codes.mkString("\n")
+    val aggVals = ctx.withSubExprEliminationExprs(subExprs.states) {
+      boundUpdateExpr.map(_.genCode(ctx))
+    }
     // aggregate buffer should be updated atomic
     val updates = aggVals.zipWithIndex.map { case (ev, i) =>
       s"""
@@ -255,6 +259,9 @@ case class TungstenAggregate(
     }
     s"""
        | // do aggregate
+       | // common sub-expressions
+       | $effectiveCodes
+       | // evaluate aggregate function
        | ${evaluateVariables(aggVals)}
        | // update aggregation buffer
        | ${updates.mkString("\n").trim}
@@ -650,8 +657,12 @@ case class TungstenAggregate(
     val updateRowInVectorizedHashMap: Option[String] = {
       if (isVectorizedHashMapEnabled) {
         ctx.INPUT_ROW = vectorizedRowBuffer
-        val vectorizedRowEvals =
-          updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
+        val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+        val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+        val effectiveCodes = subExprs.codes.mkString("\n")
+        val vectorizedRowEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
+          boundUpdateExpr.map(_.genCode(ctx))
+        }
         val updateVectorizedRow = vectorizedRowEvals.zipWithIndex.map { case (ev, i) =>
           val dt = updateExpr(i).dataType
           ctx.updateColumn(vectorizedRowBuffer, dt, i, ev, updateExpr(i).nullable,
@@ -659,6 +670,8 @@ case class TungstenAggregate(
         }
         Option(
           s"""
+             |// common sub-expressions
+             |$effectiveCodes
              |// evaluate aggregate function
              |${evaluateVariables(vectorizedRowEvals)}
              |// update vectorized row
@@ -701,13 +714,19 @@ case class TungstenAggregate(
 
     val updateRowInUnsafeRowMap: String = {
       ctx.INPUT_ROW = unsafeRowBuffer
-      val unsafeRowBufferEvals =
-        updateExpr.map(BindReferences.bindReference(_, inputAttr).genCode(ctx))
+      val boundUpdateExpr = updateExpr.map(BindReferences.bindReference(_, inputAttr))
+      val subExprs = ctx.subexpressionEliminationForWholeStageCodegen(boundUpdateExpr)
+      val effectiveCodes = subExprs.codes.mkString("\n")
+      val unsafeRowBufferEvals = ctx.withSubExprEliminationExprs(subExprs.states) {
+        boundUpdateExpr.map(_.genCode(ctx))
+      }
       val updateUnsafeRowBuffer = unsafeRowBufferEvals.zipWithIndex.map { case (ev, i) =>
         val dt = updateExpr(i).dataType
         ctx.updateColumn(unsafeRowBuffer, dt, i, ev, updateExpr(i).nullable)
       }
       s"""
+         |// common sub-expressions
+         |$effectiveCodes
          |// evaluate aggregate function
          |${evaluateVariables(unsafeRowBufferEvals)}
          |// update unsafe row buffer

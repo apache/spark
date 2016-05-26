@@ -20,12 +20,11 @@ package org.apache.spark.examples.ml
 
 import scala.beans.BeanInfo
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.Pipeline
 import org.apache.spark.ml.classification.LogisticRegression
 import org.apache.spark.ml.feature.{HashingTF, Tokenizer}
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.ml.linalg.Vector
+import org.apache.spark.sql.{Row, SparkSession}
 
 @BeanInfo
 case class LabeledDocument(id: Long, text: String, label: Double)
@@ -43,13 +42,14 @@ case class Document(id: Long, text: String)
 object SimpleTextClassificationPipeline {
 
   def main(args: Array[String]) {
-    val conf = new SparkConf().setAppName("SimpleTextClassificationPipeline")
-    val sc = new SparkContext(conf)
-    val sqlContext = new SQLContext(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession
+      .builder
+      .appName("SimpleTextClassificationPipeline")
+      .getOrCreate()
+    import spark.implicits._
 
     // Prepare training documents, which are labeled.
-    val training = sc.parallelize(Seq(
+    val training = spark.createDataFrame(Seq(
       LabeledDocument(0L, "a b c d e spark", 1.0),
       LabeledDocument(1L, "b d", 0.0),
       LabeledDocument(2L, "spark f g h", 1.0),
@@ -73,7 +73,7 @@ object SimpleTextClassificationPipeline {
     val model = pipeline.fit(training.toDF())
 
     // Prepare test documents, which are unlabeled.
-    val test = sc.parallelize(Seq(
+    val test = spark.createDataFrame(Seq(
       Document(4L, "spark i j k"),
       Document(5L, "l m n"),
       Document(6L, "spark hadoop spark"),
@@ -87,7 +87,7 @@ object SimpleTextClassificationPipeline {
         println(s"($id, $text) --> prob=$prob, prediction=$prediction")
       }
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

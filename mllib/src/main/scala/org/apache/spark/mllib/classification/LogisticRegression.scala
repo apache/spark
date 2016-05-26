@@ -431,7 +431,7 @@ class LogisticRegressionWithLBFGS
         if (userSuppliedWeights) {
           val uid = Identifiable.randomUID("logreg-static")
           lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(
-            uid, initialWeights, 1.0))
+            uid, initialWeights.asML, 1.0))
         }
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())
@@ -439,7 +439,7 @@ class LogisticRegressionWithLBFGS
         // Convert our input into a DataFrame
         val sqlContext = new SQLContext(input.context)
         import sqlContext.implicits._
-        val df = input.toDF()
+        val df = input.map(_.asML).toDF()
         // Determine if we should cache the DF
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model

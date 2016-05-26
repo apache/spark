@@ -33,7 +33,7 @@ import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, JarResource}
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveContext}
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
@@ -142,8 +142,7 @@ class HiveSparkSubmitSuite
     runSparkSubmit(args)
   }
 
-  // TODO: re-enable this after rebuilding the jar (HiveContext was removed)
-  ignore("SPARK-8489: MissingRequirementError during reflection") {
+  test("SPARK-8489: MissingRequirementError during reflection") {
     // This test uses a pre-built jar to test SPARK-8489. In a nutshell, this test creates
     // a HiveContext and uses it to create a data frame from an RDD using reflection.
     // Before the fix in SPARK-8470, this results in a MissingRequirementError because
@@ -290,8 +289,11 @@ object SetWarehouseLocationTest extends Logging {
     conf.set("spark.sql.warehouse.dir", warehouseLocation.toString)
     conf.set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
 
-    val sc = new SparkContext(conf)
-    val sparkSession = SparkSession.withHiveSupport(sc)
+    val sparkSession = SparkSession.builder
+      .config(conf)
+      .enableHiveSupport()
+      .getOrCreate()
+
     val catalog = sparkSession.sessionState.catalog
 
     sparkSession.sql("drop table if exists testLocation")
@@ -353,7 +355,7 @@ object TemporaryHiveUDFTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -391,7 +393,7 @@ object PermanentHiveUDFTest1 extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -423,11 +425,11 @@ object PermanentHiveUDFTest2 extends Logging {
     val function = CatalogFunction(
       FunctionIdentifier("example_max"),
       "org.apache.hadoop.hive.contrib.udaf.example.UDAFExampleMax",
-      ("JAR" -> jar) :: Nil)
+      FunctionResource(JarResource, jar) :: Nil)
     hiveContext.sessionState.catalog.createFunction(function, ignoreIfExists = false)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Actually use the loaded UDF.
     logInfo("Using the UDF.")
     val result = hiveContext.sql(
@@ -489,7 +491,7 @@ object SparkSubmitClassLoaderTest extends Logging {
       """.stripMargin)
     val source =
       hiveContext.createDataFrame((1 to 10).map(i => (i, s"str$i"))).toDF("key", "val")
-    source.registerTempTable("sourceTable")
+    source.createOrReplaceTempView("sourceTable")
     // Load a Hive SerDe from the jar.
     logInfo("Creating a Hive table with a SerDe provided in a jar.")
     hiveContext.sql(
@@ -553,7 +555,7 @@ object SparkSQLConfTest extends Logging {
 object SPARK_9757 extends QueryTest {
   import org.apache.spark.sql.functions._
 
-  protected var sqlContext: SQLContext = _
+  protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
@@ -565,7 +567,7 @@ object SPARK_9757 extends QueryTest {
         .set("spark.ui.enabled", "false"))
 
     val hiveContext = new TestHiveContext(sparkContext)
-    sqlContext = hiveContext
+    spark = hiveContext.sparkSession
     import hiveContext.implicits._
 
     val dir = Utils.createTempDir()
@@ -600,7 +602,7 @@ object SPARK_9757 extends QueryTest {
 object SPARK_11009 extends QueryTest {
   import org.apache.spark.sql.functions._
 
-  protected var sqlContext: SQLContext = _
+  protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
@@ -611,10 +613,10 @@ object SPARK_11009 extends QueryTest {
         .set("spark.sql.shuffle.partitions", "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
-    sqlContext = hiveContext
+    spark = hiveContext.sparkSession
 
     try {
-      val df = sqlContext.range(1 << 20)
+      val df = spark.range(1 << 20)
       val df2 = df.select((df("id") % 1000).alias("A"), (df("id") / 1000).alias("B"))
       val ws = Window.partitionBy(df2("A")).orderBy(df2("B"))
       val df3 = df2.select(df2("A"), df2("B"), row_number().over(ws).alias("rn")).filter("rn < 0")
@@ -631,7 +633,7 @@ object SPARK_14244 extends QueryTest {
   import org.apache.spark.sql.expressions.Window
   import org.apache.spark.sql.functions._
 
-  protected var sqlContext: SQLContext = _
+  protected var spark: SparkSession = _
 
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
@@ -642,13 +644,13 @@ object SPARK_14244 extends QueryTest {
         .set("spark.sql.shuffle.partitions", "100"))
 
     val hiveContext = new TestHiveContext(sparkContext)
-    sqlContext = hiveContext
+    spark = hiveContext.sparkSession
 
     import hiveContext.implicits._
 
     try {
       val window = Window.orderBy('id)
-      val df = sqlContext.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
+      val df = spark.range(2).select(cume_dist().over(window).as('cdist)).orderBy('cdist)
       checkAnswer(df, Seq(Row(0.5D), Row(1.0D)))
     } finally {
       sparkContext.stop()

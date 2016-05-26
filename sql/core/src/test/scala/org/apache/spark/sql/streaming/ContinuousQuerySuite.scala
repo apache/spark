@@ -45,7 +45,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
       TestAwaitTermination(ExpectNotBlocked),
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 2000, expectedReturnValue = true),
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 10, expectedReturnValue = true),
-      StartStream,
+      StartStream(),
       AssertOnQuery(_.isActive === true),
       AddData(inputData, 0),
       ExpectFailure[SparkException],

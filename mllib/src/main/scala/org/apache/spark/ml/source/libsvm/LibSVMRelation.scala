@@ -26,13 +26,13 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -203,25 +203,18 @@ class DefaultSource extends FileFormat with DataSourceRegister {
           }
 
       val converter = RowEncoder(dataSchema)
-
-      val unsafeRowIterator = points.map { pt =>
-        val features = if (sparse) pt.features.toSparse else pt.features.toDense
-        converter.toRow(Row(pt.label, features))
-      }
-
-      def toAttribute(f: StructField): AttributeReference =
+      val fullOutput = dataSchema.map { f =>
         AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
-
-      // Appends partition values
-      val fullOutput = (dataSchema ++ partitionSchema).map(toAttribute)
-      val requiredOutput = fullOutput.filter { a =>
-        requiredSchema.fieldNames.contains(a.name) || partitionSchema.fieldNames.contains(a.name)
       }
-      val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
+      val requiredOutput = fullOutput.filter { a =>
+        requiredSchema.fieldNames.contains(a.name)
+      }
 
-      unsafeRowIterator.map { dataRow =>
-        appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
+      val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
+
+      points.map { pt =>
+        val features = if (sparse) pt.features.toSparse else pt.features.toDense
+        requiredColumns(converter.toRow(Row(pt.label, features)))
       }
     }
   }

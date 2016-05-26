@@ -97,6 +97,8 @@ public final class UnsafeInMemorySorter {
 
   private long initialSize;
 
+  private long totalSortTimeNanos = 0L;
+
   public UnsafeInMemorySorter(
     final MemoryConsumer consumer,
     final TaskMemoryManager memoryManager,
@@ -158,6 +160,13 @@ public final class UnsafeInMemorySorter {
    */
   public int numRecords() {
     return pos / 2;
+  }
+
+  /**
+   * @return the total amount of time spent sorting data (in-memory only).
+   */
+  public long getSortTimeNanos() {
+    return totalSortTimeNanos;
   }
 
   public long getMemoryUsage() {
@@ -265,6 +274,7 @@ public final class UnsafeInMemorySorter {
    */
   public SortedIterator getSortedIterator() {
     int offset = 0;
+    long start = System.nanoTime();
     if (sorter != null) {
       if (this.radixSortSupport != null) {
         // TODO(ekl) we should handle NULL values before radix sort for efficiency, since they
@@ -275,6 +285,7 @@ public final class UnsafeInMemorySorter {
         sorter.sort(array, 0, pos / 2, sortComparator);
       }
     }
+    totalSortTimeNanos += System.nanoTime() - start;
     return new SortedIterator(pos / 2, offset);
   }
 }

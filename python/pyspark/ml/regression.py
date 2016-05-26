@@ -29,6 +29,7 @@ __all__ = ['AFTSurvivalRegression', 'AFTSurvivalRegressionModel',
            'DecisionTreeRegressor', 'DecisionTreeRegressionModel',
            'GBTRegressor', 'GBTRegressionModel',
            'GeneralizedLinearRegression', 'GeneralizedLinearRegressionModel',
+           'GeneralizedLinearRegressionSummary', 'GeneralizedLinearRegressionTrainingSummary',
            'IsotonicRegression', 'IsotonicRegressionModel',
            'LinearRegression', 'LinearRegressionModel',
            'LinearRegressionSummary', 'LinearRegressionTrainingSummary',
@@ -40,31 +41,37 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
                        HasRegParam, HasTol, HasElasticNetParam, HasFitIntercept,
                        HasStandardization, HasSolver, HasWeightCol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Linear regression.
 
     The learning objective is to minimize the squared error, with regularization.
     The specific squared error loss function used is: L = 1/2n ||A coefficients - y||^2^
 
-    This support multiple types of regularization:
-     - none (a.k.a. ordinary least squares)
-     - L2 (ridge regression)
-     - L1 (Lasso)
-     - L2 + L1 (elastic net)
+    This supports multiple types of regularization:
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+     * none (a.k.a. ordinary least squares)
+
+     * L2 (ridge regression)
+
+     * L1 (Lasso)
+
+     * L2 + L1 (elastic net)
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (1.0, 2.0, Vectors.dense(1.0)),
     ...     (0.0, 2.0, Vectors.sparse(1, [], []))], ["label", "weight", "features"])
     >>> lr = LinearRegression(maxIter=5, regParam=0.0, solver="normal", weightCol="weight")
     >>> model = lr.fit(df)
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> abs(model.transform(test0).head().prediction - (-1.0)) < 0.001
     True
     >>> abs(model.coefficients[0] - 1.0) < 0.001
     True
     >>> abs(model.intercept - 0.0) < 0.001
     True
-    >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> abs(model.transform(test1).head().prediction - 1.0) < 0.001
     True
     >>> lr.setParams("vector")
@@ -123,7 +130,9 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
 
 class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    Model fitted by LinearRegression.
+    .. note:: Experimental
+
+    Model fitted by :class:`LinearRegression`.
 
     .. versionadded:: 1.4.0
     """
@@ -229,7 +238,9 @@ class LinearRegressionSummary(JavaWrapper):
         """
         Returns the explained variance regression score.
         explainedVariance = 1 - variance(y - \hat{y}) / variance(y)
-        Reference: http://en.wikipedia.org/wiki/Explained_variation
+
+        .. seealso:: `Wikipedia explain variation \
+        <http://en.wikipedia.org/wiki/Explained_variation>`_
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -283,7 +294,9 @@ class LinearRegressionSummary(JavaWrapper):
     def r2(self):
         """
         Returns R^2^, the coefficient of determination.
-        Reference: http://en.wikipedia.org/wiki/Coefficient_of_determination
+
+        .. seealso:: `Wikipedia coefficient of determination \
+        <http://en.wikipedia.org/wiki/Coefficient_of_determination>`
 
         Note: This ignores instance weights (setting all to 1.0) from
         `LinearRegression.weightCol`. This will change in later Spark
@@ -403,13 +416,13 @@ class IsotonicRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     Currently implemented using parallelized pool adjacent violators algorithm.
     Only univariate (single feature) algorithm supported.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> ir = IsotonicRegression()
     >>> model = ir.fit(df)
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
     >>> model.boundaries
@@ -494,13 +507,13 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by IsotonicRegression.
+    Model fitted by :class:`IsotonicRegression`.
     """
 
     @property
     def boundaries(self):
         """
-        Model boundaries.
+        Boundaries in increasing order for which predictions are known.
         """
         return self._call_java("boundaries")
 
@@ -627,12 +640,14 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             DecisionTreeParams, TreeRegressorParams, HasCheckpointInterval,
                             HasSeed, JavaMLWritable, JavaMLReadable, HasVarianceCol):
     """
-    `http://en.wikipedia.org/wiki/Decision_tree_learning Decision tree`
+    .. note:: Experimental
+
+    `Decision tree <http://en.wikipedia.org/wiki/Decision_tree_learning>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> dt = DecisionTreeRegressor(maxDepth=2, varianceCol="variance")
@@ -643,10 +658,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     3
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
-    >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
     >>> dtr_path = temp_path + "/dtr"
@@ -709,7 +724,10 @@ class DecisionTreeRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 @inherit_doc
 class DecisionTreeModel(JavaModel):
-    """Abstraction for Decision Tree models.
+    """
+    .. note:: Experimental
+
+    Abstraction for Decision Tree models.
 
     .. versionadded:: 1.5.0
     """
@@ -732,7 +750,10 @@ class DecisionTreeModel(JavaModel):
 
 @inherit_doc
 class TreeEnsembleModels(JavaModel):
-    """Represents a tree ensemble model.
+    """
+    .. note:: Experimental
+
+    Represents a tree ensemble model.
 
     .. versionadded:: 1.5.0
     """
@@ -750,7 +771,9 @@ class TreeEnsembleModels(JavaModel):
 @inherit_doc
 class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReadable):
     """
-    Model fitted by DecisionTreeRegressor.
+    .. note:: Experimental
+
+    Model fitted by :class:`DecisionTreeRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -782,13 +805,15 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
                             RandomForestParams, TreeRegressorParams, HasCheckpointInterval,
                             JavaMLWritable, JavaMLReadable):
     """
-    `http://en.wikipedia.org/wiki/Random_forest  Random Forest`
+    .. note:: Experimental
+
+    `Random Forest <http://en.wikipedia.org/wiki/Random_forest>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
     >>> from numpy import allclose
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> rf = RandomForestRegressor(numTrees=2, maxDepth=2, seed=42)
@@ -797,10 +822,10 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0])
     True
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
-    >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     0.5
     >>> rfr_path = temp_path + "/rfr"
@@ -864,7 +889,9 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
-    Model fitted by RandomForestRegressor.
+    .. note:: Experimental
+
+    Model fitted by :class:`RandomForestRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -888,27 +915,31 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
 @inherit_doc
 class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
                    GBTParams, HasCheckpointInterval, HasStepSize, HasSeed, JavaMLWritable,
-                   JavaMLReadable):
+                   JavaMLReadable, TreeRegressorParams):
     """
-    `http://en.wikipedia.org/wiki/Gradient_boosting Gradient-Boosted Trees (GBTs)`
+    .. note:: Experimental
+
+    `Gradient-Boosted Trees (GBTs) <http://en.wikipedia.org/wiki/Gradient_boosting>`_
     learning algorithm for regression.
     It supports both continuous and categorical features.
 
     >>> from numpy import allclose
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> gbt = GBTRegressor(maxIter=5, maxDepth=2, seed=42)
+    >>> print(gbt.getImpurity())
+    variance
     >>> model = gbt.fit(df)
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
-    >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
     >>> gbtr_path = temp_path + "gbtr"
@@ -936,19 +967,21 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
+                 impurity="variance"):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                  maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                  maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
+                 checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
+                 impurity="variance")
         """
         super(GBTRegressor, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.regression.GBTRegressor", self.uid)
         self._setDefault(maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                          maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
                          checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1,
-                         seed=None)
+                         seed=None, impurity="variance")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
@@ -957,12 +990,14 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0,
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0,
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None):
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None,
+                  impuriy="variance"):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
                   maxDepth=5, maxBins=32, minInstancesPerNode=1, minInfoGain=0.0, \
                   maxMemoryInMB=256, cacheNodeIds=False, subsamplingRate=1.0, \
-                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None)
+                  checkpointInterval=10, lossType="squared", maxIter=20, stepSize=0.1, seed=None, \
+                  impurity="variance")
         Sets params for Gradient Boosted Tree Regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -988,7 +1023,9 @@ class GBTRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
 
 class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
-    Model fitted by GBTRegressor.
+    .. note:: Experimental
+
+    Model fitted by :class:`GBTRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -1013,6 +1050,8 @@ class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
 class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
                             HasFitIntercept, HasMaxIter, HasTol, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Accelerated Failure Time (AFT) Model Survival Regression
 
     Fit a parametric AFT survival regression model based on the Weibull distribution
@@ -1020,8 +1059,8 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
     .. seealso:: `AFT Model <https://en.wikipedia.org/wiki/Accelerated_failure_time_model>`_
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0), 1.0),
     ...     (0.0, Vectors.sparse(1, [], []), 0.0)], ["label", "features", "censor"])
     >>> aftsr = AFTSurvivalRegression()
@@ -1153,7 +1192,9 @@ class AFTSurvivalRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
 
 class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    Model fitted by AFTSurvivalRegression.
+    .. note:: Experimental
+
+    Model fitted by :class:`AFTSurvivalRegression`.
 
     .. versionadded:: 1.6.0
     """
@@ -1200,28 +1241,37 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
                                   HasFitIntercept, HasMaxIter, HasTol, HasRegParam, HasWeightCol,
                                   HasSolver, JavaMLWritable, JavaMLReadable):
     """
+    .. note:: Experimental
+
     Generalized Linear Regression.
 
     Fit a Generalized Linear Model specified by giving a symbolic description of the linear
     predictor (link function) and a description of the error distribution (family). It supports
     "gaussian", "binomial", "poisson" and "gamma" as family. Valid link functions for each family
     is listed below. The first link function of each family is the default one.
-    - "gaussian" -> "identity", "log", "inverse"
-    - "binomial" -> "logit", "probit", "cloglog"
-    - "poisson"  -> "log", "identity", "sqrt"
-    - "gamma"    -> "inverse", "identity", "log"
+
+    * "gaussian" -> "identity", "log", "inverse"
+
+    * "binomial" -> "logit", "probit", "cloglog"
+
+    * "poisson"  -> "log", "identity", "sqrt"
+
+    * "gamma"    -> "inverse", "identity", "log"
 
     .. seealso:: `GLM <https://en.wikipedia.org/wiki/Generalized_linear_model>`_
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(0.0, 0.0)),
     ...     (1.0, Vectors.dense(1.0, 2.0)),
     ...     (2.0, Vectors.dense(0.0, 0.0)),
     ...     (2.0, Vectors.dense(1.0, 1.0)),], ["label", "features"])
-    >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity")
+    >>> glr = GeneralizedLinearRegression(family="gaussian", link="identity", linkPredictionCol="p")
     >>> model = glr.fit(df)
-    >>> abs(model.transform(df).head().prediction - 1.5) < 0.001
+    >>> transformed = model.transform(df)
+    >>> abs(transformed.head().prediction - 1.5) < 0.001
+    True
+    >>> abs(transformed.head().p - 1.5) < 0.001
     True
     >>> model.coefficients
     DenseVector([1.5..., -1.0...])
@@ -1245,21 +1295,23 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
     family = Param(Params._dummy(), "family", "The name of family which is a description of " +
                    "the error distribution to be used in the model. Supported options: " +
-                   "gaussian(default), binomial, poisson and gamma.",
+                   "gaussian (default), binomial, poisson and gamma.",
                    typeConverter=TypeConverters.toString)
     link = Param(Params._dummy(), "link", "The name of link function which provides the " +
                  "relationship between the linear predictor and the mean of the distribution " +
                  "function. Supported options: identity, log, inverse, logit, probit, cloglog " +
                  "and sqrt.", typeConverter=TypeConverters.toString)
+    linkPredictionCol = Param(Params._dummy(), "linkPredictionCol", "link prediction (linear " +
+                              "predictor) column name", typeConverter=TypeConverters.toString)
 
     @keyword_only
     def __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-                 regParam=0.0, weightCol=None, solver="irls"):
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None):
         """
         __init__(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                  family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                 regParam=0.0, weightCol=None, solver="irls")
+                 regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None)
         """
         super(GeneralizedLinearRegression, self).__init__()
         self._java_obj = self._new_java_obj(
@@ -1272,11 +1324,11 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
     @since("2.0.0")
     def setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction",
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6,
-                  regParam=0.0, weightCol=None, solver="irls"):
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None):
         """
         setParams(self, labelCol="label", featuresCol="features", predictionCol="prediction", \
                   family="gaussian", link=None, fitIntercept=True, maxIter=25, tol=1e-6, \
-                  regParam=0.0, weightCol=None, solver="irls")
+                  regParam=0.0, weightCol=None, solver="irls", linkPredictionCol=None)
         Sets params for generalized linear regression.
         """
         kwargs = self.setParams._input_kwargs
@@ -1300,6 +1352,20 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
         return self.getOrDefault(self.family)
 
     @since("2.0.0")
+    def setLinkPredictionCol(self, value):
+        """
+        Sets the value of :py:attr:`linkPredictionCol`.
+        """
+        return self._set(linkPredictionCol=value)
+
+    @since("2.0.0")
+    def getLinkPredictionCol(self):
+        """
+        Gets the value of linkPredictionCol or its default value.
+        """
+        return self.getOrDefault(self.linkPredictionCol)
+
+    @since("2.0.0")
     def setLink(self, value):
         """
         Sets the value of :py:attr:`link`.
@@ -1316,7 +1382,9 @@ class GeneralizedLinearRegression(JavaEstimator, HasLabelCol, HasFeaturesCol, Ha
 
 class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
-    Model fitted by GeneralizedLinearRegression.
+    .. note:: Experimental
+
+    Model fitted by :class:`GeneralizedLinearRegression`.
 
     .. versionadded:: 2.0.0
     """
@@ -1337,25 +1405,225 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable
         """
         return self._call_java("intercept")
 
+    @property
+    @since("2.0.0")
+    def summary(self):
+        """
+        Gets summary (e.g. residuals, deviance, pValues) of model on
+        training set. An exception is thrown if
+        `trainingSummary is None`.
+        """
+        java_glrt_summary = self._call_java("summary")
+        return GeneralizedLinearRegressionTrainingSummary(java_glrt_summary)
+
+    @property
+    @since("2.0.0")
+    def hasSummary(self):
+        """
+        Indicates whether a training summary exists for this model
+        instance.
+        """
+        return self._call_java("hasSummary")
+
+    @since("2.0.0")
+    def evaluate(self, dataset):
+        """
+        Evaluates the model on a test dataset.
+
+        :param dataset:
+          Test dataset to evaluate model on, where dataset is an
+          instance of :py:class:`pyspark.sql.DataFrame`
+        """
+        if not isinstance(dataset, DataFrame):
+            raise ValueError("dataset must be a DataFrame but got %s." % type(dataset))
+        java_glr_summary = self._call_java("evaluate", dataset)
+        return GeneralizedLinearRegressionSummary(java_glr_summary)
+
+
+class GeneralizedLinearRegressionSummary(JavaWrapper):
+    """
+    .. note:: Experimental
+
+    Generalized linear regression results evaluated on a dataset.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def predictions(self):
+        """
+        Predictions output by the model's `transform` method.
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.0.0")
+    def predictionCol(self):
+        """
+        Field in :py:attr:`predictions` which gives the predicted value of each instance.
+        This is set to a new column name if the original model's `predictionCol` is not set.
+        """
+        return self._call_java("predictionCol")
+
+    @property
+    @since("2.0.0")
+    def rank(self):
+        """
+        The numeric rank of the fitted linear model.
+        """
+        return self._call_java("rank")
+
+    @property
+    @since("2.0.0")
+    def degreesOfFreedom(self):
+        """
+        Degrees of freedom.
+        """
+        return self._call_java("degreesOfFreedom")
+
+    @property
+    @since("2.0.0")
+    def residualDegreeOfFreedom(self):
+        """
+        The residual degrees of freedom.
+        """
+        return self._call_java("residualDegreeOfFreedom")
+
+    @property
+    @since("2.0.0")
+    def residualDegreeOfFreedomNull(self):
+        """
+        The residual degrees of freedom for the null model.
+        """
+        return self._call_java("residualDegreeOfFreedomNull")
+
+    @since("2.0.0")
+    def residuals(self, residualsType="deviance"):
+        """
+        Get the residuals of the fitted model by type.
+
+        :param residualsType: The type of residuals which should be returned.
+                              Supported options: deviance (default), pearson, working, and response.
+        """
+        return self._call_java("residuals", residualsType)
+
+    @property
+    @since("2.0.0")
+    def nullDeviance(self):
+        """
+        The deviance for the null model.
+        """
+        return self._call_java("nullDeviance")
+
+    @property
+    @since("2.0.0")
+    def deviance(self):
+        """
+        The deviance for the fitted model.
+        """
+        return self._call_java("deviance")
+
+    @property
+    @since("2.0.0")
+    def dispersion(self):
+        """
+        The dispersion of the fitted model.
+        It is taken as 1.0 for the "binomial" and "poisson" families, and otherwise
+        estimated by the residual Pearson's Chi-Squared statistic (which is defined as
+        sum of the squares of the Pearson residuals) divided by the residual degrees of freedom.
+        """
+        return self._call_java("dispersion")
+
+    @property
+    @since("2.0.0")
+    def aic(self):
+        """
+        Akaike's "An Information Criterion"(AIC) for the fitted model.
+        """
+        return self._call_java("aic")
+
+
+@inherit_doc
+class GeneralizedLinearRegressionTrainingSummary(GeneralizedLinearRegressionSummary):
+    """
+    .. note:: Experimental
+
+    Generalized linear regression training results.
+
+    .. versionadded:: 2.0.0
+    """
+
+    @property
+    @since("2.0.0")
+    def numIterations(self):
+        """
+        Number of training iterations.
+        """
+        return self._call_java("numIterations")
+
+    @property
+    @since("2.0.0")
+    def solver(self):
+        """
+        The numeric solver used for training.
+        """
+        return self._call_java("solver")
+
+    @property
+    @since("2.0.0")
+    def coefficientStandardErrors(self):
+        """
+        Standard error of estimated coefficients and intercept.
+
+        If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+        """
+        return self._call_java("coefficientStandardErrors")
+
+    @property
+    @since("2.0.0")
+    def tValues(self):
+        """
+        T-statistic of estimated coefficients and intercept.
+
+        If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+        """
+        return self._call_java("tValues")
+
+    @property
+    @since("2.0.0")
+    def pValues(self):
+        """
+        Two-sided p-value of estimated coefficients and intercept.
+
+        If :py:attr:`GeneralizedLinearRegression.fitIntercept` is set to True,
+        then the last element returned corresponds to the intercept.
+        """
+        return self._call_java("pValues")
+
 
 if __name__ == "__main__":
     import doctest
     import pyspark.ml.regression
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = pyspark.ml.regression.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.regression tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.regression tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     import tempfile
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        sc.stop()
+        spark.stop()
     finally:
         from shutil import rmtree
         try:

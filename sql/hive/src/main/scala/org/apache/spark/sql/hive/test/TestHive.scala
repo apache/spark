@@ -25,10 +25,8 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -485,11 +483,11 @@ private[hive] class TestHiveFunctionRegistry extends SimpleFunctionRegistry {
   private val removedFunctions =
     collection.mutable.ArrayBuffer.empty[(String, (ExpressionInfo, FunctionBuilder))]
 
-  def unregisterFunction(name: String): Unit = {
+  def unregisterFunction(name: String): Unit = synchronized {
     functionBuilders.remove(name).foreach(f => removedFunctions += name -> f)
   }
 
-  def restore(): Unit = {
+  def restore(): Unit = synchronized {
     removedFunctions.foreach {
       case (name, (info, builder)) => registerFunction(name, info, builder)
     }

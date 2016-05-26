@@ -22,12 +22,14 @@ import java.io.File
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.{DirectoryFileFilter, RegexFileFilter}
 
-import org.apache.spark.sql.{ContinuousQuery, Row, StreamTest}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.execution.datasources.parquet
-import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream}
+import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream, MetadataLogFileCatalog}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
 class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
@@ -38,11 +40,11 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
-    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val fileFormat = new parquet.DefaultSource()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = sqlContext
+      val df = spark
         .range(start, end, 1, numPartitions)
         .select($"id", lit(100).as("data"))
       val writer = new FileStreamSinkWriter(
@@ -54,7 +56,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val files1 = writeRange(0, 10, 2)
     assert(files1.size === 2, s"unexpected number of files: $files1")
     checkFilesExist(path, files1, "file not written")
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), (0 until 10).map(Row(_, 100)))
+    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 10).map(Row(_, 100)))
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(10, 20, 3)
@@ -62,7 +64,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     assert(files2.intersect(files1).isEmpty, "old files returned")
     checkFilesExist(path, files2, s"New file not written")
     checkFilesExist(path, files1, s"Old file not found")
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
+    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
   }
 
   test("FileStreamSinkWriter - partitioned data") {
@@ -70,11 +72,11 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val path = Utils.createTempDir()
     path.delete()
 
-    val hadoopConf = sqlContext.sparkContext.hadoopConfiguration
+    val hadoopConf = spark.sparkContext.hadoopConfiguration
     val fileFormat = new parquet.DefaultSource()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = sqlContext
+      val df = spark
         .range(start, end, 1, numPartitions)
         .flatMap(x => Iterator(x, x, x)).toDF("id")
         .select($"id", lit(100).as("data1"), lit(1000).as("data2"))
@@ -101,7 +103,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     checkOneFileWrittenPerKey(0 until 10, files1)
 
     val answer1 = (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), answer1)
+    checkAnswer(spark.read.load(path.getCanonicalPath), answer1)
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(0, 20, 3)
@@ -112,7 +114,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     checkOneFileWrittenPerKey(0 until 20, files2)
 
     val answer2 = (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(sqlContext.read.load(path.getCanonicalPath), answer1 ++ answer2)
+    checkAnswer(spark.read.load(path.getCanonicalPath), answer1 ++ answer2)
   }
 
   test("FileStreamSink - unpartitioned writing and batch reading") {
@@ -137,7 +139,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         query.processAllAvailable()
       }
 
-      val outputDf = sqlContext.read.parquet(outputDir).as[Int]
+      val outputDf = spark.read.parquet(outputDir).as[Int]
       checkDataset(outputDf, 1, 2, 3)
 
     } finally {
@@ -147,7 +149,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  test("FileStreamSink - partitioned writing and batch reading [IGNORES PARTITION COLUMN]") {
+  test("FileStreamSink - partitioned writing and batch reading") {
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
 
@@ -157,7 +159,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     var query: ContinuousQuery = null
 
     try {
-       query =
+      query =
         ds.map(i => (i, i * 1000))
           .toDF("id", "value")
           .write
@@ -171,12 +173,58 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         query.processAllAvailable()
       }
 
-      // TODO (tdas): Test partition column can be read or not
       val outputDf = sqlContext.read.parquet(outputDir)
-      checkDataset(
-        outputDf.as[Int],
-        1000, 2000, 3000)
+      val expectedSchema = new StructType()
+        .add(StructField("value", IntegerType))
+        .add(StructField("id", IntegerType))
+      assert(outputDf.schema === expectedSchema)
 
+      // Verify that MetadataLogFileCatalog is being used and the correct partitioning schema has
+      // been inferred
+      val hadoopdFsRelations = outputDf.queryExecution.analyzed.collect {
+        case LogicalRelation(baseRelation, _, _) if baseRelation.isInstanceOf[HadoopFsRelation] =>
+          baseRelation.asInstanceOf[HadoopFsRelation]
+      }
+      assert(hadoopdFsRelations.size === 1)
+      assert(hadoopdFsRelations.head.location.isInstanceOf[MetadataLogFileCatalog])
+      assert(hadoopdFsRelations.head.partitionSchema.exists(_.name == "id"))
+      assert(hadoopdFsRelations.head.dataSchema.exists(_.name == "value"))
+
+      // Verify the data is correctly read
+      checkDataset(
+        outputDf.as[(Int, Int)],
+        (1000, 1), (2000, 2), (3000, 3))
+
+      /** Check some condition on the partitions of the FileScanRDD generated by a DF */
+      def checkFileScanPartitions(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
+        val getFileScanRDD = df.queryExecution.executedPlan.collect {
+          case scan: DataSourceScanExec if scan.rdd.isInstanceOf[FileScanRDD] =>
+            scan.rdd.asInstanceOf[FileScanRDD]
+        }.headOption.getOrElse {
+          fail(s"No FileScan in query\n${df.queryExecution}")
+        }
+        func(getFileScanRDD.filePartitions)
+      }
+
+      // Read without pruning
+      checkFileScanPartitions(outputDf) { partitions =>
+        // There should be as many distinct partition values as there are distinct ids
+        assert(partitions.flatMap(_.files.map(_.partitionValues)).distinct.size === 3)
+      }
+
+      // Read with pruning, should read only files in partition dir id=1
+      checkFileScanPartitions(outputDf.filter("id = 1")) { partitions =>
+        val filesToBeRead = partitions.flatMap(_.files)
+        assert(filesToBeRead.map(_.filePath).forall(_.contains("/id=1/")))
+        assert(filesToBeRead.map(_.partitionValues).distinct.size === 1)
+      }
+
+      // Read with pruning, should read only files in partition dir id=1 and id=2
+      checkFileScanPartitions(outputDf.filter("id in (1,2)")) { partitions =>
+        val filesToBeRead = partitions.flatMap(_.files)
+        assert(!filesToBeRead.map(_.filePath).exists(_.contains("/id=3/")))
+        assert(filesToBeRead.map(_.partitionValues).distinct.size === 2)
+      }
     } finally {
       if (query != null) {
         query.stop()

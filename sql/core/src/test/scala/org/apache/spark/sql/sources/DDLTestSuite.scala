@@ -41,7 +41,7 @@ case class SimpleDDLScan(
     table: String)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(Seq(

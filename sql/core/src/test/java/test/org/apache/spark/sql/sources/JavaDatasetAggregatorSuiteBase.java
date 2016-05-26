@@ -26,36 +26,30 @@ import scala.Tuple2;
 import org.junit.After;
 import org.junit.Before;
 
-import org.apache.spark.SparkContext;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.MapFunction;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.KeyValueGroupedDataset;
-import org.apache.spark.sql.test.TestSQLContext;
+import org.apache.spark.sql.test.TestSparkSession;
 
 /**
  * Common test base shared across this and Java8DatasetAggregatorSuite.
  */
 public class JavaDatasetAggregatorSuiteBase implements Serializable {
-  protected transient JavaSparkContext jsc;
-  protected transient TestSQLContext context;
+  private transient TestSparkSession spark;
 
   @Before
   public void setUp() {
     // Trigger static initializer of TestData
-    SparkContext sc = new SparkContext("local[*]", "testing");
-    jsc = new JavaSparkContext(sc);
-    context = new TestSQLContext(sc);
-    context.loadTestData();
+    spark = new TestSparkSession();
+    spark.loadTestData();
   }
 
   @After
   public void tearDown() {
-    context.sparkContext().stop();
-    context = null;
-    jsc = null;
+    spark.stop();
+    spark = null;
   }
 
   protected <T1, T2> Tuple2<T1, T2> tuple2(T1 t1, T2 t2) {
@@ -66,7 +60,7 @@ public class JavaDatasetAggregatorSuiteBase implements Serializable {
     Encoder<Tuple2<String, Integer>> encoder = Encoders.tuple(Encoders.STRING(), Encoders.INT());
     List<Tuple2<String, Integer>> data =
       Arrays.asList(tuple2("a", 1), tuple2("a", 2), tuple2("b", 3));
-    Dataset<Tuple2<String, Integer>> ds = context.createDataset(data, encoder);
+    Dataset<Tuple2<String, Integer>> ds = spark.createDataset(data, encoder);
 
     return ds.groupByKey(
       new MapFunction<Tuple2<String, Integer>, String>() {
