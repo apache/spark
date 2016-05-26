@@ -377,7 +377,7 @@ regression model and extracting model summary statistics.
 ## Generalized linear regression
 
 Contrasted with linear regression where the output is assumed to follow a Gaussian
-distribution, [generalized linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) (GLMs) are specifications of linear models where the response variable $Y_i$ may take on _any_
+distribution, [generalized linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) (GLMs) are specifications of linear models where the response variable $Y_i$ follows some
 distribution from the [exponential family of distributions](https://en.wikipedia.org/wiki/Exponential_family).
 Spark's `GeneralizedLinearRegression` interface
 allows for flexible specification of GLMs which can be used for various types of
@@ -390,9 +390,8 @@ interface, and will throw an exception if this constraint is exceeded. See the [
  Still, for linear and logistic regression, models with an increased number of features can be trained 
  using the `LinearRegression` and `LogisticRegression` estimators.
 
-Though GLMs may be used with general exponential family distributions, it is common to work only with exponential families that are 
-in their _natural_ or _canonical_ forms. Any distribution can be converted to its canonical form via a simple transform, and this
-assumption simplifies the notation. The form of a [natural exponential family distribution](https://en.wikipedia.org/wiki/Natural_exponential_family) is given as:
+GLMs require exponential family distributions that can be written in their "canonical" or "natural" form, aka
+[natural exponential family distributions](https://en.wikipedia.org/wiki/Natural_exponential_family). The form of a natural exponential family distribution is given as:
 
 $$
 f_Y(y|\theta, \tau) = h(y, \tau)\exp{\left( \frac{\theta \cdot y - A(\theta)}{d(\tau)} \right)}
