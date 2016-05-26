@@ -1556,7 +1556,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] where each row has been expanded to zero or more
+   * (Scala-specific) Returns a new [[Dataset]] where each row has been expanded to zero or more
    * rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. The columns of
    * the input row are implicitly joined with each row that is output by the function.
    *
@@ -1599,7 +1599,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * (Scala-specific) Returns a new [[DataFrame]] where a single column has been expanded to zero
+   * (Scala-specific) Returns a new [[Dataset]] where a single column has been expanded to zero
    * or more rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. All
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
@@ -1640,7 +1640,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] by adding a column or replacing the existing column that has
+   * Returns a new [[Dataset]] by adding a column or replacing the existing column that has
    * the same name.
    *
    * @group untypedrel
@@ -1665,7 +1665,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] by adding a column with metadata.
+   * Returns a new [[Dataset]] by adding a column with metadata.
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
@@ -1686,7 +1686,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] with a column renamed.
+   * Returns a new [[Dataset]] with a column renamed.
    * This is a no-op if schema doesn't contain existingName.
    *
    * @group untypedrel
@@ -1711,7 +1711,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] with a column dropped.
+   * Returns a new [[Dataset]] with a column dropped.
    * This is a no-op if schema doesn't contain column name.
    *
    * @group untypedrel
@@ -1722,7 +1722,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] with columns dropped.
+   * Returns a new [[Dataset]] with columns dropped.
    * This is a no-op if schema doesn't contain column name(s).
    *
    * @group untypedrel
@@ -1741,7 +1741,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[DataFrame]] with a column dropped.
+   * Returns a new [[Dataset]] with a column dropped.
    * This version of drop accepts a Column rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
