@@ -237,19 +237,13 @@ class Dataset[T] private[sql](
    */
   private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
-    val takeResult = take(numRows + 1)
+    val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
-    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map {
-      case r: Row => r
-      case tuple: Product => Row.fromTuple(tuple)
-      case definedByCtor: DefinedByConstructorParams =>
-        Row.fromSeq(ScalaReflection.getConstructorParameterValues(definedByCtor))
-      case o => Row(o)
-    }.map { row =>
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
