@@ -795,6 +795,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
     val taskSet = FakeTask.createTaskSet(4)
+    sc.conf.set("spark.speculation.multiplier", "0.0")
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
     val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
       task.metrics.internalAccums
@@ -817,24 +818,24 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
       assert(sched.endedTasks(id) === Success)
     }
 
-    // Wait for the threshold time to start speculative attempt for the running task
-    Thread.sleep(100)
-    assert(manager.checkSpeculatableTasks)
+    assert(manager.checkSpeculatableTasks(0))
     // Offer resource to start the speculative attempt for the running task
     val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption5.isDefined)
     val task5 = taskOption5.get
+    assert(task5.index === 3)
     assert(task5.taskId === 4)
     assert(task5.executorId === "exec1")
     assert(task5.attemptNumber === 1)
     sched.backend = mock(classOf[SchedulerBackend])
     // Complete the speculative attempt for the running task
     manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
-    // It ends the task with success status as part of manager.handleSuccessfulTask() and
-    // issues sched.backend.killTask() for any other running attempts for the same task
-    assert(sched.endedTasks(3) === Success)
     // Verify that it kills other running attempt
     verify(sched.backend).killTask(3, "exec2", true)
+    // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
+    // killed, so the FakeTaskScheduler is only told about the successful completion
+    // of the speculated task.
+    assert(sched.endedTasks(3) === Success)
   }
 
   private def createTaskResult(

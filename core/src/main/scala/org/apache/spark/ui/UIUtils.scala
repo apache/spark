@@ -337,15 +337,6 @@ private[spark] object UIUtils extends Logging {
       completed: Int,
       failed: Int,
       skipped: Int,
-      total: Int): Seq[Node] = {
-    makeProgressBar(started, completed, failed, skipped, killed = 0, total)
-  }
-
-  def makeProgressBar(
-      started: Int,
-      completed: Int,
-      failed: Int,
-      skipped: Int,
       killed: Int,
       total: Int): Seq[Node] = {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)

@@ -19,9 +19,9 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.ListBuffer
 
-import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.TaskState
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.annotation.DeveloperApi
 
 /**
  * :: DeveloperApi ::
@@ -66,7 +66,7 @@ class TaskInfo(
     gettingResultTime = time
   }
 
-  private[spark] def markFinished(time: Long = System.currentTimeMillis, state: TaskState) {
+  private[spark] def markFinished(state: TaskState, time: Long = System.currentTimeMillis) {
     finishTime = time
     if (state == TaskState.FAILED) {
       failed = true
