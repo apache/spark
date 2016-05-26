@@ -57,7 +57,7 @@ case class Order(
  * valid, but Hive currently cannot execute it.
  */
 class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import spark._
+  import hiveContext._
   import spark.implicits._
 
   test("UDTF") {
