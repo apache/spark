@@ -1320,7 +1320,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
-        className = classOf[DefaultSource].getCanonicalName,
+        className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
 
       val d2 = DataSource(
@@ -1328,7 +1328,7 @@ class JsonSuite extends QueryTest with SharedSQLContext with TestJsonData {
         userSpecifiedSchema = None,
         partitionColumns = Array.empty[String],
         bucketSpec = None,
-        className = classOf[DefaultSource].getCanonicalName,
+        className = classOf[JsonFileFormat].getCanonicalName,
         options = Map("path" -> path)).resolveRelation()
       assert(d1 === d2)
     })

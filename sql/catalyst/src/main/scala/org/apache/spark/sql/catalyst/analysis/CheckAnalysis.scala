@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.UsingJoin
@@ -303,6 +304,20 @@ trait CheckAnalysis extends PredicateHelper {
                  |Failure when resolving conflicting references in Except:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
+
+          case s: SimpleCatalogRelation =>
+            failAnalysis(
+              s"""
+                 |Please enable Hive support when selecting the regular tables:
+                 |${s.catalogTable.identifier}
+               """.stripMargin)
+
+          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
+            failAnalysis(
+              s"""
+                 |Please enable Hive support when inserting the regular tables:
+                 |${s.catalogTable.identifier}
                """.stripMargin)
 
           case o if !o.resolved =>

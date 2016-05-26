@@ -53,12 +53,6 @@ case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
-  def getTempFilePath(prefix: String, suffix: String = ""): File = {
-    val tempFile = File.createTempFile(prefix, suffix)
-    tempFile.delete()
-    tempFile
-  }
-
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)

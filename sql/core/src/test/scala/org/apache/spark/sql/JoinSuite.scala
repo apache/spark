@@ -60,9 +60,10 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("join operator selection") {
-    spark.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
 
-    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0") {
+    withSQLConf("spark.sql.autoBroadcastJoinThreshold" -> "0",
+      SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
       Seq(
         ("SELECT * FROM testData LEFT SEMI JOIN testData2 ON key = a",
           classOf[SortMergeJoinExec]),
@@ -112,7 +113,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
 //  }
 
   test("broadcasted hash join operator selection") {
-    spark.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
     Seq(
       ("SELECT * FROM testData join testData2 ON key = a",
@@ -126,7 +127,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("broadcasted hash outer join operator selection") {
-    spark.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
     sql("CACHE TABLE testData2")
     Seq(
@@ -204,13 +205,27 @@ class JoinSuite extends QueryTest with SharedSQLContext {
       testData.rdd.flatMap(row => Seq.fill(16)(Row.merge(row, row))).collect().toSeq)
   }
 
-  test("cartisian product join") {
-    checkAnswer(
-      testData3.join(testData3),
-      Row(1, null, 1, null) ::
-        Row(1, null, 2, 2) ::
-        Row(2, 2, 1, null) ::
-        Row(2, 2, 2, 2) :: Nil)
+  test("cartesian product join") {
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      checkAnswer(
+        testData3.join(testData3),
+        Row(1, null, 1, null) ::
+          Row(1, null, 2, 2) ::
+          Row(2, 2, 1, null) ::
+          Row(2, 2, 2, 2) :: Nil)
+    }
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "false") {
+      val e = intercept[Exception] {
+        checkAnswer(
+          testData3.join(testData3),
+          Row(1, null, 1, null) ::
+            Row(1, null, 2, 2) ::
+            Row(2, 2, 1, null) ::
+            Row(2, 2, 2, 2) :: Nil)
+      }
+      assert(e.getMessage.contains("Cartesian joins could be prohibitively expensive and are " +
+        "disabled by default"))
+    }
   }
 
   test("left outer join") {
@@ -435,7 +450,7 @@ class JoinSuite extends QueryTest with SharedSQLContext {
   }
 
   test("broadcasted existence join operator selection") {
-    spark.cacheManager.clearCache()
+    spark.sharedState.cacheManager.clearCache()
     sql("CACHE TABLE testData")
 
     withSQLConf(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> Long.MaxValue.toString) {

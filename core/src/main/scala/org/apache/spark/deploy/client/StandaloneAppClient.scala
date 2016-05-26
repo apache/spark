@@ -32,17 +32,18 @@ import org.apache.spark.rpc._
 import org.apache.spark.util.{RpcUtils, ThreadUtils}
 
 /**
- * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
- * an app description, and a listener for cluster events, and calls back the listener when various
- * events occur.
+ * Interface allowing applications to speak with a Spark standalone cluster manager.
+ *
+ * Takes a master URL, an app description, and a listener for cluster events, and calls
+ * back the listener when various events occur.
  *
  * @param masterUrls Each url should look like spark://host:port.
  */
-private[spark] class AppClient(
+private[spark] class StandaloneAppClient(
     rpcEnv: RpcEnv,
     masterUrls: Array[String],
     appDescription: ApplicationDescription,
-    listener: AppClientListener,
+    listener: StandaloneAppClientListener,
     conf: SparkConf)
   extends Logging {
 

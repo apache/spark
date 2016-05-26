@@ -39,15 +39,15 @@ private case class KillTask(taskId: Long, interruptThread: Boolean)
 private case class StopExecutor()
 
 /**
- * Calls to LocalBackend are all serialized through LocalEndpoint. Using an RpcEndpoint makes the
- * calls on LocalBackend asynchronous, which is necessary to prevent deadlock between LocalBackend
- * and the TaskSchedulerImpl.
+ * Calls to [[LocalSchedulerBackendEndpoint]] are all serialized through LocalEndpoint. Using an
+ * RpcEndpoint makes the calls on [[LocalSchedulerBackendEndpoint]] asynchronous, which is necessary
+ * to prevent deadlock between [[LocalSchedulerBackendEndpoint]] and the [[TaskSchedulerImpl]].
  */
 private[spark] class LocalEndpoint(
     override val rpcEnv: RpcEnv,
     userClassPath: Seq[URL],
     scheduler: TaskSchedulerImpl,
-    executorBackend: LocalBackend,
+    executorBackend: LocalSchedulerBackendEndpoint,
     private val totalCores: Int)
   extends ThreadSafeRpcEndpoint with Logging {
 
@@ -91,11 +91,11 @@ private[spark] class LocalEndpoint(
 }
 
 /**
- * LocalBackend is used when running a local version of Spark where the executor, backend, and
- * master all run in the same JVM. It sits behind a TaskSchedulerImpl and handles launching tasks
- * on a single Executor (created by the LocalBackend) running locally.
+ * Used when running a local version of Spark where the executor, backend, and master all run in
+ * the same JVM. It sits behind a [[TaskSchedulerImpl]] and handles launching tasks on a single
+ * Executor (created by the [[LocalSchedulerBackendEndpoint]]) running locally.
  */
-private[spark] class LocalBackend(
+private[spark] class LocalSchedulerBackendEndpoint(
     conf: SparkConf,
     scheduler: TaskSchedulerImpl,
     val totalCores: Int)
@@ -124,7 +124,7 @@ private[spark] class LocalBackend(
   override def start() {
     val rpcEnv = SparkEnv.get.rpcEnv
     val executorEndpoint = new LocalEndpoint(rpcEnv, userClassPath, scheduler, this, totalCores)
-    localEndpoint = rpcEnv.setupEndpoint("LocalBackendEndpoint", executorEndpoint)
+    localEndpoint = rpcEnv.setupEndpoint("LocalSchedulerBackendEndpoint", executorEndpoint)
     listenerBus.post(SparkListenerExecutorAdded(
       System.currentTimeMillis,
       executorEndpoint.localExecutorId,
