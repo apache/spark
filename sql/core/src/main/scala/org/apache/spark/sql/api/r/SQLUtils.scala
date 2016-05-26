@@ -77,13 +77,11 @@ private[sql] object SQLUtils {
           throw new IllegalArgumentException(s"Invalid type $dataType")
         }
         val fields = fieldsStr.split(",")
-        val structFields = fields.map { field =>
-          field match {
-            case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
-              createStructField(fieldName, fieldType, true)
-
-            case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
-          }
+        val structFields = fields.map {
+          case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
+            createStructField(fieldName, fieldType, true)
+          case _ =>
+            throw new IllegalArgumentException(s"Invalid type $dataType")
         }
         createStructType(structFields)
       case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
@@ -96,7 +94,6 @@ private[sql] object SQLUtils {
   }
 
   def createDF(rdd: RDD[Array[Byte]], schema: StructType, sqlContext: SQLContext): DataFrame = {
-    val num = schema.fields.length
     val rowRDD = rdd.map(bytesToRow(_, schema))
     sqlContext.createDataFrame(rowRDD, schema)
   }
