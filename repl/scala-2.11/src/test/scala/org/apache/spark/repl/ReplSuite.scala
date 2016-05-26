@@ -101,6 +101,7 @@ class ReplSuite extends SparkFunSuite {
 
   test("SPARK-15236: use in-memory catalog") {
     Main.conf.set("spark.sql.catalogImplementation", "in-memory")
+
     val output = runInterpreter("local",
     """
       |org.apache.spark.repl.Main.sparkContext.getConf.get("spark.sql.catalogImplementation")

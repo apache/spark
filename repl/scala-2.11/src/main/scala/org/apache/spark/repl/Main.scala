@@ -22,6 +22,7 @@ import java.io.File
 import scala.tools.nsc.GenericRunnerSettings
 
 import org.apache.spark._
+import org.apache.spark.internal.config.CATALOG_IMPLEMENTATION
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
@@ -88,24 +89,25 @@ object Main extends Logging {
     }
 
     val builder = SparkSession.builder.config(conf)
-    if (conf.get("spark.sql.catalogImplementation", "hive").toLowerCase == "hive") {
+    if (conf.get(CATALOG_IMPLEMENTATION.key, "hive").toLowerCase == "hive") {
       if (SparkSession.hiveClassesArePresent) {
         // In the case that the property is not set at all, builder's config
         // does not have this value set to 'hive' yet. The original default
         // behavior is that when there are hive classes, we use hive catalog.
         sparkSession = builder.enableHiveSupport().getOrCreate()
-        logInfo("Created Spark session with Hive support")
+        logWarning("Created Spark session with Hive catalog")
       } else {
         // Need to change it back to 'in-memory' if no hive classes are found
         // in the case that the property is set to hive in spark-defaults.conf
-        builder.config("spark.sql.catalogImplementation", "in-memory")
+        builder.config(CATALOG_IMPLEMENTATION.key, "in-memory")
         sparkSession = builder.getOrCreate()
+        logWarning("Created Spark session with in-memory catalog")
       }
     } else {
       // In the case that the property is set but not to 'hive', the internal
       // default is 'in-memory'. So the sparkSession will use in-memory catalog.
       sparkSession = builder.getOrCreate()
-      logInfo("Created Spark session")
+      logWarning("Created Spark session with in-memory catalog")
     }
     sparkContext = sparkSession.sparkContext
     Signaling.cancelOnInterrupt(sparkContext)

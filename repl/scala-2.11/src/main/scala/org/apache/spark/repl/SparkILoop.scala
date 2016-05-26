@@ -43,10 +43,6 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
           println("Spark context available as 'sc' " +
             s"(master = ${_sc.master}, app id = ${_sc.applicationId}).")
           println("Spark session available as 'spark'.")
-          spark.usingHive match {
-            case true => println("Spark session is using Hive catalog.")
-            case _ => println("Spark session is using in-memory catalog.")
-          }
           _sc
         }
         """)
