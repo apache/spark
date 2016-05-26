@@ -36,7 +36,7 @@ import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
-class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
+class MesosCoarseGrainedSchedulerBackendSuite extends SparkFunSuite
     with LocalSparkContext
     with MockitoSugar
     with BeforeAndAfter {
@@ -44,7 +44,7 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
   private var sparkConf: SparkConf = _
   private var driver: SchedulerDriver = _
   private var taskScheduler: TaskSchedulerImpl = _
-  private var backend: CoarseMesosSchedulerBackend = _
+  private var backend: MesosCoarseGrainedSchedulerBackend = _
   private var externalShuffleClient: MesosExternalShuffleClient = _
   private var driverEndpoint: RpcEndpointRef = _
 
@@ -230,7 +230,8 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
     when(driver.start()).thenReturn(Protos.Status.DRIVER_RUNNING)
     val securityManager = mock[SecurityManager]
 
-    val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
+    val backend = new MesosCoarseGrainedSchedulerBackend(
+        taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(
         masterUrl: String,
         scheduler: Scheduler,
@@ -323,10 +324,11 @@ class CoarseMesosSchedulerBackendSuite extends SparkFunSuite
       taskScheduler: TaskSchedulerImpl,
       driver: SchedulerDriver,
       shuffleClient: MesosExternalShuffleClient,
-      endpoint: RpcEndpointRef): CoarseMesosSchedulerBackend = {
+      endpoint: RpcEndpointRef): MesosCoarseGrainedSchedulerBackend = {
     val securityManager = mock[SecurityManager]
 
-    val backend = new CoarseMesosSchedulerBackend(taskScheduler, sc, "master", securityManager) {
+    val backend = new MesosCoarseGrainedSchedulerBackend(
+        taskScheduler, sc, "master", securityManager) {
       override protected def createSchedulerDriver(
           masterUrl: String,
           scheduler: Scheduler,

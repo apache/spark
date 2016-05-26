@@ -289,10 +289,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
       val testResults = sql("SELECT * FROM non_part_table").collect()
 
-      intercept[ParseException] {
-        sql("TRUNCATE TABLE non_part_table COLUMNS (employeeID)")
-      }
-
       sql("TRUNCATE TABLE non_part_table")
       checkAnswer(sql("SELECT * FROM non_part_table"), Seq.empty[Row])
 
@@ -320,10 +316,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '2' AND d = '2'"),
         testResults)
 
-      intercept[ParseException] {
-        sql("TRUNCATE TABLE part_table PARTITION(c='1', d='1') COLUMNS (employeeID)")
-      }
-
       sql("TRUNCATE TABLE part_table PARTITION(c='1', d='1')")
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '1'"),
@@ -331,10 +323,6 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       checkAnswer(
         sql("SELECT employeeID, employeeName FROM part_table WHERE c = '1' AND d = '2'"),
         testResults)
-
-      intercept[ParseException] {
-        sql("TRUNCATE TABLE part_table PARTITION(c='1') COLUMNS (employeeID)")
-      }
 
       sql("TRUNCATE TABLE part_table PARTITION(c='1')")
       checkAnswer(

@@ -440,6 +440,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         assert(client.getFunctionOption("default", "func2").isEmpty)
       } else {
         assert(client.getFunctionOption("default", "func2").isDefined)
+        assert(client.getFunctionOption("default", "the_func_not_exists").isEmpty)
       }
     }
 
