@@ -28,8 +28,6 @@ import org.apache.hadoop.mapreduce._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.JoinedRow
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
@@ -38,7 +36,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * Provides access to CSV data from pure SQL statements.
  */
-class DefaultSource extends FileFormat with DataSourceRegister {
+class CSVFileFormat extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"
 
@@ -46,7 +44,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def hashCode(): Int = getClass.hashCode()
 
-  override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
+  override def equals(other: Any): Boolean = other.isInstanceOf[CSVFileFormat]
 
   override def inferSchema(
       sparkSession: SparkSession,

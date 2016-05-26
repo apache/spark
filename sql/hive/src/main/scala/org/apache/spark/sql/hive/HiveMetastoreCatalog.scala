@@ -32,8 +32,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
 import org.apache.spark.sql.execution.command.CreateTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
-import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
-import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.types._
 
 
@@ -281,7 +281,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           val inferredSchema =
             defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
           inferredSchema.map { inferred =>
-            ParquetRelation.mergeMetastoreParquetSchema(metastoreSchema, inferred)
+            ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, inferred)
           }.getOrElse(metastoreSchema)
         } else {
           defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles()).get
@@ -348,13 +348,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
 
     private def convertToParquetRelation(relation: MetastoreRelation): LogicalRelation = {
-      val defaultSource = new ParquetDefaultSource()
-      val fileFormatClass = classOf[ParquetDefaultSource]
+      val defaultSource = new ParquetFileFormat()
+      val fileFormatClass = classOf[ParquetFileFormat]
 
       val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
       val options = Map(
-        ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
-        ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
+        ParquetFileFormat.MERGE_SCHEMA -> mergeSchema.toString,
+        ParquetFileFormat.METASTORE_TABLE_NAME -> TableIdentifier(
           relation.tableName,
           Some(relation.databaseName)
         ).unquotedString
@@ -400,8 +400,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
 
     private def convertToOrcRelation(relation: MetastoreRelation): LogicalRelation = {
-      val defaultSource = new OrcDefaultSource()
-      val fileFormatClass = classOf[OrcDefaultSource]
+      val defaultSource = new OrcFileFormat()
+      val fileFormatClass = classOf[OrcFileFormat]
       val options = Map[String, String]()
 
       convertToLogicalRelation(relation, options, defaultSource, fileFormatClass, "orc")
