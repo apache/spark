@@ -185,7 +185,7 @@ case class DropTableCommand(
     if (!catalog.tableExists(tableName)) {
       if (!ifExists) {
         val objectName = if (isView) "View" else "Table"
-        logError(s"$objectName '${tableName.quotedString}' does not exist")
+        throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
       }
     } else {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
@@ -202,7 +202,7 @@ case class DropTableCommand(
       try {
         sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName.quotedString))
       } catch {
-        case NonFatal(e) => log.warn(s"${e.getMessage}", e)
+        case NonFatal(e) => log.warn(e.toString, e)
       }
       catalog.invalidateTable(tableName)
       catalog.dropTable(tableName, ifExists)
