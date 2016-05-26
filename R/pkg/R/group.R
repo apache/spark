@@ -140,21 +140,17 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' @export 
 #' @examples 
 #' \dontrun{
-#' df = createDataFrame(sqlContext, data.frame(
-#' earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
-#' course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
-#' year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
-#' ))
+#' df <- createDataFrame(sqlContext, 
+#' data.frame(
+#'              earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+#'              course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+#'              year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+#'          )
+#'      )
 #' sums <- groupBy(df, "year") %>% 
 #' pivot("course", values) %>% 
-#' SparkR::summarize(sumOfEarnings = sum(df$earnings) ) %>% 
+#' SparkR::summarize(sumOfEarnings = sum(df$earnings) ) %>%
 #' collect()
-#' @param by: name of column to pivot by
-#' @rdname values: a unique list of values that will be translated to columns in the output SparkDataFrame
-#' @export
-#' @examples 
-#' \dontrun{
-#' pivot(groupBy(df, "year"))
 #' }
 
 setMethod("pivot",
