@@ -140,17 +140,18 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' @export 
 #' @examples 
 #' \dontrun{
-#' df <- createDataFrame(sqlContext, 
-#' data.frame(
-#'              earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
-#'              course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
-#'              year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
-#'          )
-#'      )
-#' sums <- groupBy(df, "year") %>% 
-#' pivot("course", values) %>% 
-#' SparkR::summarize(sumOfEarnings = sum(df$earnings) ) %>%
-#' collect()
+#' library(magrittr)
+#' df <- data.frame(
+#'     earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+#'     course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+#'     year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+#' )
+#' SparkRdf <- createDataFrame(sqlContext, df)
+#' values <- list("R", "Python")
+#' sums <- groupBy(SparkRdf, "year") %>% 
+#'     pivot("course", values) %>% 
+#'     SparkR::summarize(sumOfEarnings = sum(SparkRdf$earnings) ) %>%
+#'     collect()
 #' }
 
 setMethod("pivot",

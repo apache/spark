@@ -16,6 +16,7 @@
 #
 
 library(testthat)
+library(magrittr)
 
 context("SparkSQL functions")
 
@@ -1349,6 +1350,24 @@ test_that("group by, agg functions", {
   unlink(jsonPath2)
   unlink(jsonPath3)
 })
+
+test_that("pivot GroupedData column",{
+    library(magrittr)
+    df <- data.frame(
+        earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
+        course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
+        year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
+    )
+    SparkRdf <- createDataFrame(sqlContext, df)
+    values <- list("R", "Python")
+    sums <- groupBy(SparkRdf, "year") %>% 
+        pivot("course", values) %>% 
+        SparkR::summarize(sumOfEarnings = sum(SparkRdf$earnings) ) %>%
+        collect()
+    testthat::expect_equal(colnames(sums) %in% c("year", "R", "Python") , c(T,T,T))
+    testthat::expect_equal( sum(df$earnings), sum(sums$R) + sum(sums$Python) )
+})
+
 
 test_that("arrange() and orderBy() on a DataFrame", {
   df <- read.json(sqlContext, jsonPath)
