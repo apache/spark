@@ -92,9 +92,9 @@ private[spark] class BlockManager(
   private[spark] val diskStore = new DiskStore(conf, diskBlockManager)
   memoryManager.setMemoryStore(memoryStore)
 
-  // Note: depending on the memory manager, `maxStorageMemory` may actually vary over time.
+  // Note: depending on the memory manager, `maxMemory` may actually vary over time.
   // However, since we use this only for reporting and logging, what we actually want here is
-  // the absolute maximum value that `maxStorageMemory` can ever possibly reach. We may need
+  // the absolute maximum value that `maxMemory` can ever possibly reach. We may need
   // to revisit whether reporting this value as the "max" is intuitive to the user.
   private val maxMemory = memoryManager.maxOnHeapStorageMemory
 
@@ -177,7 +177,7 @@ private[spark] class BlockManager(
     }
   }
 
-  private def registerWithExternalShuffleServer() {
+  private def registerWithExternalShuffleServer(): Unit = {
     logInfo("Registering executor with local external shuffle service.")
     val shuffleConfig = new ExecutorShuffleInfo(
       diskBlockManager.localDirs.map(_.toString),
@@ -231,7 +231,7 @@ private[spark] class BlockManager(
    */
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
-    logInfo("BlockManager re-registering with master")
+    logInfo(s"BlockManager $blockManagerId re-registering with master")
     master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
     reportAllBlocks()
   }
@@ -372,8 +372,7 @@ private[spark] class BlockManager(
   private def getCurrentBlockStatus(blockId: BlockId, info: BlockInfo): BlockStatus = {
     info.synchronized {
       info.level match {
-        case null =>
-          BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)
+        case null => BlockStatus.empty
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
@@ -804,7 +803,7 @@ private[spark] class BlockManager(
           c.taskMetrics().incUpdatedBlockStatuses(blockId -> putBlockStatus)
         }
       }
-      logDebug("Put block %s locally took %s".format(blockId, Utils.getUsedTimeMs(startTimeMs)))
+      logDebug(s"Put block $blockId locally took ${Utils.getUsedTimeMs(startTimeMs)}")
       if (level.replication > 1) {
         // Wait for asynchronous replication to finish
         try {
@@ -870,13 +869,9 @@ private[spark] class BlockManager(
         logWarning(s"Putting block $blockId failed")
       }
     }
-    if (level.replication > 1) {
-      logDebug("Putting block %s with replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-    } else {
-      logDebug("Putting block %s without replication took %s"
-        .format(blockId, Utils.getUsedTimeMs(startTimeMs)))
-    }
+    val usedTime = Utils.getUsedTimeMs(startTimeMs)
+    val withOrWithout = if (level.replication > 1) "with" else "without"
+    logDebug(s"Putting block $blockId $withOrWithout replication took $usedTime")
     result
   }
 
@@ -1349,7 +1344,7 @@ private[spark] object BlockManager {
     }
 
     val blockManagers = new HashMap[BlockId, Seq[String]]
-    for (i <- 0 until blockIds.length) {
+    for (i <- blockIds.indices) {
       blockManagers(blockIds(i)) = blockLocations(i).map(_.host)
     }
     blockManagers.toMap

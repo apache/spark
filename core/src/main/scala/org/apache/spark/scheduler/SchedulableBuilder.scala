@@ -71,19 +71,15 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
     var is: Option[InputStream] = None
     try {
       is = Option {
-        schedulerAllocFile.map { f =>
-          new FileInputStream(f)
-        }.getOrElse {
-          Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
-        }
+        schedulerAllocFile
+          .map { f => new FileInputStream(f) }
+          .getOrElse {
+            Utils.getSparkClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE) }
       }
-
       is.foreach { i => buildFairSchedulerPool(i) }
     } finally {
       is.foreach(_.close())
     }
-
-    // finally create "default" pool
     buildDefaultPool()
   }
 
@@ -92,15 +88,15 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
         DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
       rootPool.addSchedulable(pool)
-      logInfo("Created default pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-        DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+      logInfo(s"Created default pool $DEFAULT_POOL_NAME, " +
+        s"schedulingMode: $DEFAULT_SCHEDULING_MODE, minShare: $DEFAULT_MINIMUM_SHARE, " +
+        s"weight: $DEFAULT_WEIGHT")
     }
   }
 
   private def buildFairSchedulerPool(is: InputStream) {
     val xml = XML.load(is)
-    for (poolNode <- (xml \\ POOLS_PROPERTY)) {
-
+    for (poolNode <- xml \\ POOLS_PROPERTY) {
       val poolName = (poolNode \ POOL_NAME_PROPERTY).text
       var schedulingMode = DEFAULT_SCHEDULING_MODE
       var minShare = DEFAULT_MINIMUM_SHARE
@@ -112,7 +108,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
           schedulingMode = SchedulingMode.withName(xmlSchedulingMode)
         } catch {
           case e: NoSuchElementException =>
-            logWarning("Error xml schedulingMode, using default schedulingMode")
+            logWarning(s"Unsupported schedulingMode: $xmlSchedulingMode, " +
+              s"using the default schedulingMode: $schedulingMode")
         }
       }
 
@@ -128,8 +125,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
 
       val pool = new Pool(poolName, schedulingMode, minShare, weight)
       rootPool.addSchedulable(pool)
-      logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-        poolName, schedulingMode, minShare, weight))
+      logInfo(s"Created pool $poolName, schedulingMode: $schedulingMode," +
+        s" minShare: $minShare, weight: $weight")
     }
   }
 
@@ -145,11 +142,11 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
         parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
           DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
         rootPool.addSchedulable(parentPool)
-        logInfo("Created pool %s, schedulingMode: %s, minShare: %d, weight: %d".format(
-          poolName, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
+        logInfo(s"Created pool $poolName, schedulingMode: $DEFAULT_SCHEDULING_MODE, " +
+          s"minShare: $DEFAULT_MINIMUM_SHARE, weight: $DEFAULT_WEIGHT")
       }
     }
     parentPool.addSchedulable(manager)
-    logInfo("Added task set " + manager.name + " tasks to pool " + poolName)
+    logInfo(s"Added task set ${manager.name} to pool $poolName")
   }
 }

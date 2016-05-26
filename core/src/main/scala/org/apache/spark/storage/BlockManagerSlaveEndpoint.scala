@@ -43,18 +43,18 @@ class BlockManagerSlaveEndpoint(
   // Operations that involve removing blocks may be slow and should be done asynchronously
   override def receiveAndReply(context: RpcCallContext): PartialFunction[Any, Unit] = {
     case RemoveBlock(blockId) =>
-      doAsync[Boolean]("removing block " + blockId, context) {
+      doAsync[Boolean](s"removing block $blockId", context) {
         blockManager.removeBlock(blockId)
         true
       }
 
     case RemoveRdd(rddId) =>
-      doAsync[Int]("removing RDD " + rddId, context) {
+      doAsync[Int](s"removing RDD $rddId", context) {
         blockManager.removeRdd(rddId)
       }
 
     case RemoveShuffle(shuffleId) =>
-      doAsync[Boolean]("removing shuffle " + shuffleId, context) {
+      doAsync[Boolean](s"removing shuffle $shuffleId", context) {
         if (mapOutputTracker != null) {
           mapOutputTracker.unregisterShuffle(shuffleId)
         }
@@ -62,7 +62,7 @@ class BlockManagerSlaveEndpoint(
       }
 
     case RemoveBroadcast(broadcastId, _) =>
-      doAsync[Int]("removing broadcast " + broadcastId, context) {
+      doAsync[Int](s"removing broadcast $broadcastId", context) {
         blockManager.removeBroadcast(broadcastId, tellMaster = true)
       }
 
@@ -82,12 +82,12 @@ class BlockManagerSlaveEndpoint(
       body
     }
     future.onSuccess { case response =>
-      logDebug("Done " + actionMessage + ", response is " + response)
+      logDebug(s"Done $actionMessage, response is $response")
       context.reply(response)
-      logDebug("Sent response: " + response + " to " + context.senderAddress)
+      logDebug(s"Sent response: $response to ${context.senderAddress}")
     }
     future.onFailure { case t: Throwable =>
-      logError("Error in " + actionMessage, t)
+      logError(s"Error in $actionMessage", t)
       context.sendFailure(t)
     }
   }

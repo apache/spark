@@ -37,17 +37,17 @@ class BlockManagerMaster(
   val timeout = RpcUtils.askRpcTimeout(conf)
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
-  def removeExecutor(execId: String) {
+  def removeExecutor(execId: String): Unit = {
     tell(RemoveExecutor(execId))
-    logInfo("Removed " + execId + " successfully in removeExecutor")
+    logInfo(s"Removed executor $execId")
   }
 
   /** Register the BlockManager's id with the driver. */
   def registerBlockManager(
       blockManagerId: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef): Unit = {
-    logInfo("Trying to register BlockManager")
+    logInfo(s"Registering BlockManager $blockManagerId")
     tell(RegisterBlockManager(blockManagerId, maxMemSize, slaveEndpoint))
-    logInfo("Registered BlockManager")
+    logInfo(s"Registered BlockManager $blockManagerId")
   }
 
   def updateBlockInfo(
@@ -78,7 +78,7 @@ class BlockManagerMaster(
    * those blocks that are reported to block manager master.
    */
   def contains(blockId: BlockId): Boolean = {
-    !getLocations(blockId).isEmpty
+    getLocations(blockId).nonEmpty
   }
 
   /** Get ids of other nodes in the cluster from the driver */
@@ -179,7 +179,7 @@ class BlockManagerMaster(
     val blockStatus = timeout.awaitResult(
       Future.sequence[Option[BlockStatus], Iterable](futures)(cbf, ThreadUtils.sameThread))
     if (blockStatus == null) {
-      throw new SparkException("BlockManager returned null for BlockStatus query: " + blockId)
+      throw new SparkException(s"BlockManager returned null for BlockStatus query: $blockId")
     }
     blockManagerIds.zip(blockStatus).flatMap { case (blockManagerId, status) =>
       status.map { s => (blockManagerId, s) }

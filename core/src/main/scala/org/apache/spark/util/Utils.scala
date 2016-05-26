@@ -1169,7 +1169,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, stop SparkContext is there is any uncaught
+   * Execute a block of code that evaluates to Unit, stop SparkContext if there is any uncaught
    * exception
    *
    * NOTE: This method is to be called by the driver-side components to avoid stopping the
@@ -2253,7 +2253,6 @@ private[spark] object Utils extends Logging {
 
 
   /**
-   *
    * @return whether it is local mode
    */
   def isLocalMaster(conf: SparkConf): Boolean = {

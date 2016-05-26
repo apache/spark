@@ -189,7 +189,7 @@ class BlockManagerMasterEndpoint(
       val blockId = iterator.next
       val locations = blockLocations.get(blockId)
       locations -= blockManagerId
-      if (locations.size == 0) {
+      if (locations.isEmpty) {
         blockLocations.remove(blockId)
       }
     }
@@ -198,7 +198,7 @@ class BlockManagerMasterEndpoint(
   }
 
   private def removeExecutor(execId: String) {
-    logInfo("Trying to remove executor " + execId + " from BlockManagerMaster.")
+    logInfo(s"Removing executor $execId from BlockManagerMaster")
     blockManagerIdByExecutor.get(execId).foreach(removeBlockManager)
   }
 
@@ -298,19 +298,20 @@ class BlockManagerMasterEndpoint(
     ).map(_.flatten.toSeq)
   }
 
-  private def register(id: BlockManagerId, maxMemSize: Long, slaveEndpoint: RpcEndpointRef) {
+  private def register(
+      id: BlockManagerId,
+      maxMemSize: Long,
+      slaveEndpoint: RpcEndpointRef): Unit = {
     val time = System.currentTimeMillis()
     if (!blockManagerInfo.contains(id)) {
-      blockManagerIdByExecutor.get(id.executorId) match {
-        case Some(oldId) =>
-          // A block manager of the same executor already exists, so remove it (assumed dead)
-          logError("Got two different block manager registrations on same executor - "
-              + s" will replace old one $oldId with new one $id")
-          removeExecutor(id.executorId)
-        case None =>
+      blockManagerIdByExecutor.get(id.executorId).foreach { oldId =>
+        // A block manager of the same executor already exists, so remove it (assumed dead)
+        logError("Got two different block manager registrations on same executor - "
+            + s" will replace old one $oldId with new one $id")
+        removeExecutor(id.executorId)
       }
-      logInfo("Registering block manager %s with %s RAM, %s".format(
-        id.hostPort, Utils.bytesToString(maxMemSize), id))
+      val bytes = Utils.bytesToString(maxMemSize)
+      logInfo(s"Registering block manager ${id.hostPort} with $bytes RAM, $id")
 
       blockManagerIdByExecutor(id.executorId) = id
 
@@ -359,7 +360,7 @@ class BlockManagerMasterEndpoint(
     }
 
     // Remove the block from master tracking if it has been removed on all slaves.
-    if (locations.size == 0) {
+    if (locations.isEmpty) {
       blockLocations.remove(blockId)
     }
     true
