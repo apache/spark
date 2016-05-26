@@ -230,6 +230,19 @@ private[sql] object CSVRelation extends Logging {
 
     schema.foreach(field => verifyType(field.dataType))
   }
+
+  def getHeader(rdd: RDD[String], csvOptions: CSVOptions): Array[String] = {
+    val firstLine = findFirstLine(csvOptions, rdd)
+    val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
+
+    if (csvOptions.headerFlag) {
+      firstRow.zipWithIndex.map { case (value, index) =>
+        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
+      }
+    } else {
+      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
+    }
+  }
 }
 
 private[csv] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {

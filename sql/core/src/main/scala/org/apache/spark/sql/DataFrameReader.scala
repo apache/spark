@@ -422,22 +422,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def csv(csvDS: Dataset[String]): DataFrame = {
     val csvRDD = csvDS.rdd
     val parsedOptions: CSVOptions = new CSVOptions(extraOptions.toMap)
-    val firstLine = CSVRelation.findFirstLine(parsedOptions, csvRDD)
-    val firstRow = new LineCsvReader(parsedOptions).parseLine(firstLine)
-    val header = if (parsedOptions.headerFlag) {
-      firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == parsedOptions.nullValue) {
-          s"_c$index"
-        } else {
-          value
-        }
-      }
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
-    }
-    val tokenizedRDD = CSVRelation.tokenRdd(parsedOptions, header, csvRDD)
+    val header = CSVRelation.getHeader(csvRDD, parsedOptions)
+    val parsedRDD = CSVRelation.tokenRdd(parsedOptions, header, csvRDD)
     val schema = userSpecifiedSchema.getOrElse {
-        CSVInferSchema.infer(tokenizedRDD, header, parsedOptions)
+        CSVInferSchema.infer(parsedRDD, header, parsedOptions)
       }
 
     Dataset.ofRows(
@@ -445,7 +433,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       LogicalRDD(
         schema.toAttributes,
         CSVRelation.parseCsv(
-          tokenizedRDD,
+          parsedRDD,
           schema,
           schema.fields.map(_.name),
           parsedOptions
