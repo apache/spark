@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile, WriterContainer}
 import org.apache.spark.sql.types._
 
-object CSVRelation extends Logging {
+private[sql] object CSVRelation extends Logging {
 
   def univocityTokenizer(
       file: RDD[String],
@@ -178,22 +178,11 @@ object CSVRelation extends Logging {
   }
 
   def tokenRdd(
-      sparkSession: SparkSession,
-      options: CSVOptions,
-      header: Array[String],
-      inputPaths: Seq[String]): RDD[Array[String]] = {
-    val rdd = baseRdd(sparkSession, options, inputPaths)
-    // Make sure firstLine is materialized before sending to executors
-    val firstLine = if (options.headerFlag) findFirstLine(options, rdd) else null
-    CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
-  }
-
-  def tokenRdd(
       options: CSVOptions,
       header: Array[String],
       rdd: RDD[String]): RDD[Array[String]] = {
     val firstLine = if (options.headerFlag) findFirstLine(options, rdd) else null
-    CSVRelation.univocityTokenizer(rdd, header, firstLine, options)
+    univocityTokenizer(rdd, header, firstLine, options)
   }
 
   /**

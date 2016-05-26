@@ -522,7 +522,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     }
   }
 
-  test("RDD[String]/Dataset[String] to DataFrame " +
+  test("Dataset[String] to DataFrame " +
     "-- load date types via custom date format") {
     val testFilePath = testFile(datesFile)
     val customSchema = new StructType(Array(StructField("date", DateType, true)))
@@ -541,18 +541,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       new Date(dateFormat.parse("27/10/2014 18:30").getTime),
       new Date(dateFormat.parse("28/01/2016 20:00").getTime))
 
-    val results1 = spark.read.schema(customSchema).options(options).csv(csvRDD).collect()
-    val dates1 = results1.toSeq.map(_.toSeq.head)
-    expected.zip(dates1).foreach {
-      case (expectedDate, date) =>
-        // As it truncates the hours, minutes and etc., we only check
-        // if the dates (days, months and years) are the same via `toString()`.
-        assert(expectedDate.toString === date.toString)
-    }
-
-    val results2 = spark.read.schema(customSchema).options(options).csv(csvRDD.toDS()).collect()
-    val dates2 = results2.toSeq.map(_.toSeq.head)
-    expected.zip(dates2).foreach {
+    val results = spark.read.schema(customSchema).options(options).csv(csvRDD.toDS()).collect()
+    val dates = results.toSeq.map(_.toSeq.head)
+    expected.zip(dates).foreach {
       case (expectedDate, date) =>
         // As it truncates the hours, minutes and etc., we only check
         // if the dates (days, months and years) are the same via `toString()`.
@@ -575,7 +566,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results.toSeq.map(_.toSeq) === expected)
   }
 
-  test("RDD[String]/Dataset[String] to DataFrame " +
+  test("Dataset[String] to DataFrame " +
     "-- setting comment to null disables comment support") {
     val testFilePath = testFile(disableCommentsFile)
     val options = Map("header" -> "false", "comment" -> "")
@@ -585,14 +576,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       Seq(testFilePath)
     )
     val expected =
-      Seq(
-        Seq("#1", "2", "3"),
-        Seq("4", "5", "6"))
+      List(
+        List("#1", "2", "3"),
+        List("4", "5", "6"))
 
-    val results1 = spark.read.options(options).csv(csvRDD).collect()
-    assert(results1.toSeq.map(_.toSeq) === expected)
-    val results2 = spark.read.options(options).csv(csvRDD.toDS()).collect()
-    assert(results2.toSeq.map(_.toSeq) === expected)
+    val results = spark.read.options(options).csv(csvRDD.toDS()).collect()
+    assert(results.toSeq.map(_.toSeq) === expected)
   }
 
   test("nullable fields with user defined null value of \"null\"") {
@@ -616,7 +605,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
     assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
-  test("RDD[String]/Dataset[String] to DataFrame " +
+  test("Dataset[String] to DataFrame " +
     "-- nullable fields with user defined null value of \"null\"") {
     val testFilePath = testFile(carsNullFile)
     val options = Map("header" -> "true", "nullValue" -> "null")
@@ -633,17 +622,11 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       StructField("comment", StringType, nullable = true),
       StructField("blank", StringType, nullable = true)))
 
-    val cars1 = spark.read.schema(dataSchema).options(options).csv(csvRDD)
-    verifyCars(cars1, withHeader = true, checkValues = false)
-    val results1 = cars1.collect()
-    assert(results1(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
-    assert(results1(2).toSeq === Array(null, "Chevy", "Volt", null, null))
-
-    val cars2 = spark.read.schema(dataSchema).options(options).csv(csvRDD.toDS())
-    verifyCars(cars2, withHeader = true, checkValues = false)
-    val results2 = cars2.collect()
-    assert(results2(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
-    assert(results2(2).toSeq === Array(null, "Chevy", "Volt", null, null))
+    val cars = spark.read.schema(dataSchema).options(options).csv(csvRDD.toDS())
+    verifyCars(cars, withHeader = true, checkValues = false)
+    val results = cars.collect()
+    assert(results(0).toSeq === Array(2012, "Tesla", "S", "null", "null"))
+    assert(results(2).toSeq === Array(null, "Chevy", "Volt", null, null))
   }
 
   test("save csv with compression codec option") {
@@ -728,14 +711,9 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       new CSVOptions(options),
       Seq(testFilePath)
     )
-    val df1 = spark.read.options(options).csv(csvRDD)
+    val df = spark.read.options(options).csv(csvRDD.toDS())
     assert(
-      df1.schema.fields.map(field => field.dataType).deep ==
-      Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
-
-    val df2 = spark.read.options(options).csv(csvRDD.toDS())
-    assert(
-      df2.schema.fields.map(field => field.dataType).deep ==
+      df.schema.fields.map(field => field.dataType).deep ==
         Array(IntegerType, IntegerType, IntegerType, IntegerType).deep)
   }
 
@@ -785,11 +763,8 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       new CSVOptions(options),
       Seq(testFilePath)
     )
-    val df1 = spark.read.options(options).csv(csvRDD)
-    assert(df1.count() == 8)
-
-    val df2 = spark.read.options(options).csv(csvRDD.toDS())
-    assert(df1.count() == 8)
+    val df = spark.read.options(options).csv(csvRDD.toDS())
+    assert(df.count() == 8)
   }
 
   test("error handling for unsupported data types.") {

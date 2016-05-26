@@ -42,45 +42,26 @@ private[sql] object CSVInferSchema {
       tokenRdd: RDD[Array[String]],
       header: Array[String],
       options: CSVOptions): StructType = {
-    val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
-    val rootTypes: Array[DataType] =
-      tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
+    val structFields = if (options.inferSchemaFlag) {
+      val startType: Array[DataType] = Array.fill[DataType](header.length)(NullType)
+      val rootTypes: Array[DataType] =
+        tokenRdd.aggregate(startType)(inferRowType(options), mergeRowTypes)
 
-    val structFields = header.zip(rootTypes).map { case (thisHeader, rootType) =>
-      val dType = rootType match {
-        case _: NullType => StringType
-        case other => other
+      header.zip(rootTypes).map { case (thisHeader, rootType) =>
+        val dType = rootType match {
+          case _: NullType => StringType
+          case other => other
+        }
+        StructField(thisHeader, dType, nullable = true)
       }
-      StructField(thisHeader, dType, nullable = true)
+    } else {
+      // By default fields are assumed to be StringType
+      header.map { fieldName =>
+        StructField(fieldName.toString, StringType, nullable = true)
+      }
     }
 
     StructType(structFields)
-  }
-
-  def inferSchemaFromRDD(
-      rdd: RDD[String],
-      csvOptions: CSVOptions): StructType = {
-    val firstLine = CSVRelation.findFirstLine(csvOptions, rdd)
-    val firstRow = new LineCsvReader(csvOptions).parseLine(firstLine)
-
-    val header = if (csvOptions.headerFlag) {
-      firstRow.zipWithIndex.map { case (value, index) =>
-        if (value == null || value.isEmpty || value == csvOptions.nullValue) s"_c$index" else value
-      }
-    } else {
-      firstRow.zipWithIndex.map { case (value, index) => s"_c$index" }
-    }
-
-    val parsedRdd = CSVRelation.tokenRdd(csvOptions, header, rdd)
-    if (csvOptions.inferSchemaFlag) {
-      infer(parsedRdd, header, csvOptions)
-    } else {
-      // By default fields are assumed to be StringType
-      val schemaFields = header.map { fieldName =>
-        StructField(fieldName.toString, StringType, nullable = true)
-      }
-      StructType(schemaFields)
-    }
   }
 
   private def inferRowType(options: CSVOptions)
