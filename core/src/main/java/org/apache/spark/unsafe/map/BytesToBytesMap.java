@@ -221,6 +221,7 @@ public final class BytesToBytesMap extends MemoryConsumer {
       SparkEnv.get() != null ? SparkEnv.get().blockManager() :  null,
       SparkEnv.get() != null ? SparkEnv.get().serializerManager() :  null,
       initialCapacity,
+      // In order to re-use the longArray for sorting, the load factor cannot be larger than 0.5.
       0.5,
       pageSizeBytes,
       enablePerfMetrics);

@@ -58,6 +58,11 @@ final class ShuffleInMemorySorter {
    */
   private int pos = 0;
 
+  /**
+   * How many records could be inserted, because part of the array should be left for sorting.
+   */
+  private int capacity = 0;
+
   private int initialSize;
 
   ShuffleInMemorySorter(MemoryConsumer consumer, int initialSize, boolean useRadixSort) {
@@ -66,6 +71,13 @@ final class ShuffleInMemorySorter {
     this.initialSize = initialSize;
     this.useRadixSort = useRadixSort;
     this.array = consumer.allocateArray(initialSize);
+    this.capacity = calcCapacity();
+  }
+
+  private int calcCapacity() {
+    // Radix sort requires same amount of used memory as buffer, Tim sort requires
+    // half of the used memory as buffer.
+    return (int) (array.size() / (useRadixSort ? 2 : 1.5));
   }
 
   public void free() {
@@ -82,7 +94,8 @@ final class ShuffleInMemorySorter {
   public void reset() {
     if (consumer != null) {
       consumer.freeArray(array);
-      this.array = consumer.allocateArray(initialSize);
+      array = consumer.allocateArray(initialSize);
+      capacity = calcCapacity();
     }
     pos = 0;
   }
@@ -98,13 +111,11 @@ final class ShuffleInMemorySorter {
     );
     consumer.freeArray(array);
     array = newArray;
+    capacity = calcCapacity();
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    // Radix sort requires same amount of used memory as buffer, Tim sort requires
-    // half of the used memory as buffer, so we always preserve half of the whole
-    // array as buffer for sorting.
-    return pos < array.size() / 2;
+    return pos < capacity;
   }
 
   public long getMemoryUsage() {
