@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
+import org.apache.spark.util.Utils
+
 import scala.collection.mutable.HashSet
 import scala.language.existentials
 import scala.util.Random
@@ -206,9 +208,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
   }
 
   test("automatically cleanup normal checkpoint") {
-    val checkpointDir = java.io.File.createTempFile("temp", "")
-    checkpointDir.deleteOnExit()
-    checkpointDir.delete()
+    val checkpointDir = Utils.createTempDir()
     var rdd = newPairRDD()
     sc.setCheckpointDir(checkpointDir.toString)
     rdd.checkpoint()
