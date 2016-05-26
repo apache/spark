@@ -79,7 +79,7 @@ case class CreateViewCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = sparkSession.executePlan(child)
+    val qe = sparkSession.sessionState.executePlan(child)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
@@ -132,7 +132,7 @@ case class CreateViewCommand(
         val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
           case (attr, col) => Alias(attr, col.name)()
         }
-        sparkSession.executePlan(Project(projectList, analyzedPlan)).analyzed
+        sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
       }
     }
 
@@ -153,7 +153,7 @@ case class CreateViewCommand(
             val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
               case (attr, col) => Alias(attr, col.name)()
             }
-            sparkSession.executePlan(Project(projectList, analyzedPlan)).analyzed
+            sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
           }
         new SQLBuilder(logicalPlan).toSQL
       } else {

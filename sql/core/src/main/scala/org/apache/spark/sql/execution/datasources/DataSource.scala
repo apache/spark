@@ -476,7 +476,7 @@ case class DataSource(
             options,
             data.logicalPlan,
             mode)
-        sparkSession.executePlan(plan).toRdd
+        sparkSession.sessionState.executePlan(plan).toRdd
 
       case _ =>
         sys.error(s"${providingClass.getCanonicalName} does not allow create table as select.")
