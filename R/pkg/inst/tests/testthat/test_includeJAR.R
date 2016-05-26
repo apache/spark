@@ -23,14 +23,11 @@ runScript <- function() {
   scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/testthat/jarTest.R")
   if (.Platform$OS.type == "windows") {
     submitPath <- file.path(sparkHome, "bin/spark-submit2.cmd")
-    command <- paste(submitPath, jarPath, scriptPath, sep = " ")
-    res <- shell(command, translate = TRUE, intern = TRUE)
   } else {
     submitPath <- file.path(sparkHome, "bin/spark-submit")
-    res <- system2(command = submitPath,
-                 args = c(jarPath, scriptPath),
-                 stdout = TRUE)
   }
+  combinedArgs <- paste(jarPath, scriptPath, sep = " ")
+  res <- launchScript(submitPath, combinedArgs, capture = TRUE)
   tail(res, 2)
 }
 

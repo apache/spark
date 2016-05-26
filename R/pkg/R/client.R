@@ -60,15 +60,6 @@ generateSparkSubmitArgs <- function(args, sparkHome, jars, sparkSubmitOpts, pack
   combinedArgs
 }
 
-determineLauncher <- function(sparkSubmitBin, combinedArgs, capture = FALSE) {
-  if (.Platform$OS.type == "windows") {
-    sparkSubmitWithArgs <- paste(sparkSubmitBin, combinedArgs, sep = " ")
-    shell(sparkSubmitWithArgs, translate = TRUE, wait = capture, intern = capture)
-  } else {
-    system2(sparkSubmitBin, combinedArgs, wait = capture, stdout = capture)
-  }
-}
-
 launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   sparkSubmitBinName <- determineSparkSubmitBin()
   if (sparkHome != "") {
@@ -78,5 +69,5 @@ launchBackend <- function(args, sparkHome, jars, sparkSubmitOpts, packages) {
   }
   combinedArgs <- generateSparkSubmitArgs(args, sparkHome, jars, sparkSubmitOpts, packages)
   cat("Launching java with spark-submit command", sparkSubmitBin, combinedArgs, "\n")
-  invisible(determineLauncher(sparkSubmitBin, combinedArgs))
+  invisible(launchScript(sparkSubmitBin, combinedArgs))
 }
