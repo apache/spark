@@ -293,10 +293,18 @@ case class TruncateTableCommand(
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE on temporary tables: '$tableName'")
     } else {
+      val table = catalog.getTableMetadata(tableName)
+      if (table.tableType == VIEW ) {
+        throw new AnalysisException(
+          s"TRUNCATE TABLE is not allowed on a view: ${table.qualifiedName}")
+      } else if (DDLUtils.isDatasourceTable(table)) {
+        throw new AnalysisException(
+          s"TRUNCATE TABLE is not allowed on a datasource table: ${table.qualifiedName}")
+      }
+
       val locations = if (partitionSpec.isDefined) {
         catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
       } else {
-        val table = catalog.getTableMetadata(tableName)
         if (table.partitionColumnNames.nonEmpty) {
           catalog.listPartitions(tableName).map(_.storage.locationUri)
         } else {
