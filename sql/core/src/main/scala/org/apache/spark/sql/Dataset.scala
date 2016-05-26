@@ -38,6 +38,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.objects.Invoke
 import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -212,7 +213,7 @@ class Dataset[T] private[sql](
   private implicit def classTag = unresolvedTEncoder.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
-  @transient lazy val sqlContext: SQLContext = sparkSession.wrapped
+  @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   protected[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
@@ -245,6 +246,8 @@ class Dataset[T] private[sql](
     val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map {
       case r: Row => r
       case tuple: Product => Row.fromTuple(tuple)
+      case definedByCtor: DefinedByConstructorParams =>
+        Row.fromSeq(ScalaReflection.getConstructorParameterValues(definedByCtor))
       case o => Row(o)
     }.map { row =>
       row.toSeq.map { cell =>
@@ -1553,30 +1556,33 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific) Returns a new [[Dataset]] where each row has been expanded to zero or more
    * rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. The columns of
    * the input row are implicitly joined with each row that is output by the function.
    *
-   * The following example uses this function to count the number of books which contain
-   * a given word:
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()` or `flatMap()`. The following example uses these alternatives to count
+   * the number of books that contain a given word:
    *
    * {{{
    *   case class Book(title: String, words: String)
    *   val ds: Dataset[Book]
    *
-   *   case class Word(word: String)
-   *   val allWords = ds.explode('words) {
-   *     case Row(words: String) => words.split(" ").map(Word(_))
-   *   }
+   *   val allWords = ds.select('title, explode(split('words, " ")).as("word"))
    *
    *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
+   * }}}
+   *
+   * Using `flatMap()` this can similarly be exploded as:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
    * }}}
    *
    * @group untypedrel
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
@@ -1593,19 +1599,27 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific) Returns a new [[Dataset]] where a single column has been expanded to zero
    * or more rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. All
    * columns of the input row are implicitly joined with each value that is output by the function.
    *
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()`:
+   *
    * {{{
-   *   ds.explode("words", "word") {words: String => words.split(" ")}
+   *   ds.select(explode(split('words, " ")).as("word"))
+   * }}}
+   *
+   * or `flatMap()`:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
    * }}}
    *
    * @group untypedrel
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
@@ -2301,13 +2315,39 @@ class Dataset[T] private[sql](
 
   /**
    * Registers this [[Dataset]] as a temporary table using the given name. The lifetime of this
-   * temporary table is tied to the [[SQLContext]] that was used to create this Dataset.
+   * temporary table is tied to the [[SparkSession]] that was used to create this Dataset.
    *
    * @group basic
    * @since 1.6.0
    */
+  @deprecated("Use createOrReplaceTempView(viewName) instead.", "2.0.0")
   def registerTempTable(tableName: String): Unit = {
-    sparkSession.registerTable(toDF(), tableName)
+    createOrReplaceTempView(tableName)
+  }
+
+  /**
+   * Creates a temporary view using the given name. The lifetime of this
+   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @throws AnalysisException if the view name already exists
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  @throws[AnalysisException]
+  def createTempView(viewName: String): Unit = {
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = false)
+  }
+
+  /**
+   * Creates a temporary view using the given name. The lifetime of this
+   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def createOrReplaceTempView(viewName: String): Unit = {
+    sparkSession.createTempView(viewName, toDF(), replaceIfExists = true)
   }
 
   /**

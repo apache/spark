@@ -32,23 +32,24 @@ class PartitionBatchPruningSuite
 
   import testImplicits._
 
-  private lazy val originalColumnBatchSize = sqlContext.conf.columnBatchSize
-  private lazy val originalInMemoryPartitionPruning = sqlContext.conf.inMemoryPartitionPruning
+  private lazy val originalColumnBatchSize = spark.conf.get(SQLConf.COLUMN_BATCH_SIZE)
+  private lazy val originalInMemoryPartitionPruning =
+    spark.conf.get(SQLConf.IN_MEMORY_PARTITION_PRUNING)
 
   override protected def beforeAll(): Unit = {
     super.beforeAll()
     // Make a table with 5 partitions, 2 batches per partition, 10 elements per batch
-    sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, 10)
+    spark.conf.set(SQLConf.COLUMN_BATCH_SIZE.key, 10)
     // Enable in-memory partition pruning
-    sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, true)
+    spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, true)
     // Enable in-memory table scan accumulators
-    sqlContext.setConf("spark.sql.inMemoryTableScanStatistics.enable", "true")
+    spark.conf.set("spark.sql.inMemoryTableScanStatistics.enable", "true")
   }
 
   override protected def afterAll(): Unit = {
     try {
-      sqlContext.setConf(SQLConf.COLUMN_BATCH_SIZE, originalColumnBatchSize)
-      sqlContext.setConf(SQLConf.IN_MEMORY_PARTITION_PRUNING, originalInMemoryPartitionPruning)
+      spark.conf.set(SQLConf.COLUMN_BATCH_SIZE.key, originalColumnBatchSize)
+      spark.conf.set(SQLConf.IN_MEMORY_PARTITION_PRUNING.key, originalInMemoryPartitionPruning)
     } finally {
       super.afterAll()
     }
@@ -62,13 +63,13 @@ class PartitionBatchPruningSuite
       val string = if (((key - 1) / 10) % 2 == 0) null else key.toString
       TestData(key, string)
     }, 5).toDF()
-    pruningData.registerTempTable("pruningData")
-    sqlContext.cacheTable("pruningData")
+    pruningData.createOrReplaceTempView("pruningData")
+    spark.catalog.cacheTable("pruningData")
   }
 
   override protected def afterEach(): Unit = {
     try {
-      sqlContext.uncacheTable("pruningData")
+      spark.catalog.uncacheTable("pruningData")
     } finally {
       super.afterEach()
     }

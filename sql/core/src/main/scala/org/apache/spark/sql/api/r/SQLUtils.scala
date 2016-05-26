@@ -19,6 +19,7 @@ package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
 
+import scala.collection.JavaConverters._
 import scala.util.matching.Regex
 
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
@@ -26,9 +27,7 @@ import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row, SaveMode, SQLContext}
-import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
-import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils {
@@ -75,7 +74,7 @@ private[sql] object SQLUtils {
         org.apache.spark.sql.types.MapType(getSQLDataType(keyType), getSQLDataType(valueType))
       case r"\Astruct<(.+)${fieldsStr}>\Z" =>
         if (fieldsStr(fieldsStr.length - 1) == ',') {
-          throw new IllegalArgumentException(s"Invaid type $dataType")
+          throw new IllegalArgumentException(s"Invalid type $dataType")
         }
         val fields = fieldsStr.split(",")
         val structFields = fields.map { field =>
@@ -83,11 +82,11 @@ private[sql] object SQLUtils {
             case r"\A(.+)${fieldName}:(.+)${fieldType}\Z" =>
               createStructField(fieldName, fieldType, true)
 
-            case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+            case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
           }
         }
         createStructType(structFields)
-      case _ => throw new IllegalArgumentException(s"Invaid type $dataType")
+      case _ => throw new IllegalArgumentException(s"Invalid type $dataType")
     }
   }
 
@@ -110,6 +109,8 @@ private[sql] object SQLUtils {
     data match {
       case d: java.lang.Double if dataType == FloatType =>
         new java.lang.Float(d)
+      // Scala Map is the only allowed external type of map type in Row.
+      case m: java.util.Map[_, _] => m.asScala
       case _ => data
     }
   }
@@ -120,7 +121,7 @@ private[sql] object SQLUtils {
     val num = SerDe.readInt(dis)
     Row.fromSeq((0 until num).map { i =>
       doConversion(SerDe.readObject(dis), schema.fields(i).dataType)
-    }.toSeq)
+    })
   }
 
   private[sql] def rowToRBytes(row: Row): Array[Byte] = {

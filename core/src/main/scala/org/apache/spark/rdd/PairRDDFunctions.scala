@@ -40,7 +40,7 @@ import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.executor.{DataWriteMethod, OutputMetrics}
+import org.apache.spark.executor.OutputMetrics
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.serializer.Serializer
@@ -375,6 +375,16 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
   /**
    * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
+   *
+   * The confidence is the probability that the error bounds of the result will
+   * contain the true value. That is, if countApprox were called repeatedly
+   * with confidence 0.9, we would expect 90% of the results to contain the
+   * true count. The confidence must be in the range [0,1] or an exception will
+   * be thrown.
+   *
+   * @param timeout maximum time to wait for the job, in milliseconds
+   * @param confidence the desired statistical confidence in the result
+   * @return a potentially incomplete result, with error bounds
    */
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = self.withScope {

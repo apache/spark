@@ -39,21 +39,21 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, hiveCompatibility) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "hivecontext-compatibility"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
     streaming, streamingFlumeSink, streamingFlume, streamingKafka
   ) = Seq(
-    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka"
+    "streaming", "streaming-flume-sink", "streaming-flume", "streaming-kafka-0-8"
   ).map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
-    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, testTags, sketch, _*
+    core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, _*
   ) = Seq(
     "core", "graphx", "mllib", "mllib-local", "repl", "network-common", "network-shuffle", "launcher", "unsafe",
-    "test-tags", "sketch"
+    "tags", "sketch"
   ).map(ProjectRef(buildLocation, _)) ++ sqlProjects ++ streamingProjects
 
   val optionallyEnabledProjects@Seq(yarn, java8Tests, sparkGangliaLgpl,
@@ -62,7 +62,7 @@ object BuildCommons {
       "docker-integration-tests").map(ProjectRef(buildLocation, _))
 
   val assemblyProjects@Seq(networkYarn, streamingFlumeAssembly, streamingKafkaAssembly, streamingKinesisAslAssembly) =
-    Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-assembly", "streaming-kinesis-asl-assembly")
+    Seq("network-yarn", "streaming-flume-assembly", "streaming-kafka-0-8-assembly", "streaming-kinesis-asl-assembly")
       .map(ProjectRef(buildLocation, _))
 
   val copyJarsProjects@Seq(assembly, examples) = Seq("assembly", "examples")
@@ -339,8 +339,8 @@ object SparkBuild extends PomBuild {
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
-      spark, hive, hiveThriftServer, hiveCompatibility, catalyst, repl, networkCommon, networkShuffle, networkYarn,
-      unsafe, testTags, sketch, mllibLocal
+      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
+      unsafe, tags, sketch, mllibLocal
     ).contains(x)
   }
 
@@ -581,8 +581,8 @@ object Assembly {
         .getOrElse(SbtPomKeys.effectivePom.value.getProperties.get("hadoop.version").asInstanceOf[String])
     },
     jarName in assembly <<= (version, moduleName, hadoopVersion) map { (v, mName, hv) =>
-      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
-        // This must match the same name used in maven (see external/kafka-assembly/pom.xml)
+      if (mName.contains("streaming-flume-assembly") || mName.contains("streaming-kafka-0-8-assembly") || mName.contains("streaming-kinesis-asl-assembly")) {
+        // This must match the same name used in maven (see external/kafka-0-8-assembly/pom.xml)
         s"${mName}-${v}.jar"
       } else {
         s"${mName}-${v}-hadoop${hv}.jar"
@@ -685,9 +685,9 @@ object Unidoc {
     publish := {},
 
     unidocProjectFilter in(ScalaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags),
     unidocProjectFilter in(JavaUnidoc, unidoc) :=
-      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, testTags),
+      inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, streamingFlumeSink, yarn, tags),
 
     // Skip actual catalyst, but include the subproject.
     // Catalyst is not public API and contains quasiquotes which break scaladoc.

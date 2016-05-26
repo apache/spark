@@ -18,8 +18,9 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.hive.client.{HiveClient, HiveClientImpl}
-import org.apache.spark.sql.internal.SharedState
+import org.apache.spark.internal.Logging
+import org.apache.spark.sql.hive.client.HiveClient
+import org.apache.spark.sql.internal.{SharedState, SQLConf}
 
 
 /**
@@ -27,9 +28,17 @@ import org.apache.spark.sql.internal.SharedState
  * [[org.apache.spark.sql.SparkSession]] backed by Hive.
  */
 private[hive] class HiveSharedState(override val sparkContext: SparkContext)
-  extends SharedState(sparkContext) {
+  extends SharedState(sparkContext) with Logging {
 
-  // TODO: just share the IsolatedClientLoader instead of the client instances themselves
+  // TODO: just share the IsolatedClientLoader instead of the client instance itself
+
+  {
+    // Set the Hive metastore warehouse path to the one we use
+    val tempConf = new SQLConf
+    sparkContext.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
+    sparkContext.conf.set("hive.metastore.warehouse.dir", tempConf.warehousePath)
+    logInfo(s"Setting Hive metastore warehouse path to '${tempConf.warehousePath}'")
+  }
 
   /**
    * A Hive client used to interact with the metastore.

@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import scala.collection.JavaConverters._
 
 import com.google.common.cache.{CacheBuilder, CacheLoader, LoadingCache}
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
@@ -30,10 +30,10 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.execution.command.{CreateTableAsSelectLogicalPlan, CreateViewCommand}
+import org.apache.spark.sql.execution.command.CreateTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
-import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetDefaultSource, ParquetRelation}
-import org.apache.spark.sql.hive.orc.{DefaultSource => OrcDefaultSource}
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.hive.orc.OrcFileFormat
 import org.apache.spark.sql.types._
 
 
@@ -44,7 +44,6 @@ import org.apache.spark.sql.types._
  * cleaned up to integrate more nicely with [[HiveExternalCatalog]].
  */
 private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Logging {
-  private val conf = sparkSession.conf
   private val sessionState = sparkSession.sessionState.asInstanceOf[HiveSessionState]
   private val client = sparkSession.sharedState.asInstanceOf[HiveSharedState].metadataHive
 
@@ -71,6 +70,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       override def load(in: QualifiedTableName): LogicalPlan = {
         logDebug(s"Creating new cached data source for $in")
         val table = client.getTable(in.database, in.name)
+
+        // TODO: the following code is duplicated with FindDataSourceTable.readDataSourceTable
 
         def schemaStringFromParts: Option[String] = {
           table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
@@ -110,7 +111,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
 
         // We only need names at here since userSpecifiedSchema we loaded from the metastore
-        // contains partition columns. We can always get datatypes of partitioning columns
+        // contains partition columns. We can always get data types of partitioning columns
         // from userSpecifiedSchema.
         val partitionColumns = getColumnNames("part")
 
@@ -129,7 +130,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             options = options)
 
         LogicalRelation(
-          dataSource.resolveRelation(),
+          dataSource.resolveRelation(checkPathExist = true),
           metastoreTableIdentifier = Some(TableIdentifier(in.name, Some(in.database))))
       }
     }
@@ -271,14 +272,16 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         Some(partitionSpec))
 
       val hadoopFsRelation = cached.getOrElse {
-        val paths = new Path(metastoreRelation.catalogTable.storage.locationUri.get) :: Nil
-        val fileCatalog = new MetaStoreFileCatalog(sparkSession, paths, partitionSpec)
+        val fileCatalog = new MetaStorePartitionedTableFileCatalog(
+          sparkSession,
+          new Path(metastoreRelation.catalogTable.storage.locationUri.get),
+          partitionSpec)
 
         val inferredSchema = if (fileType.equals("parquet")) {
           val inferredSchema =
             defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles())
           inferredSchema.map { inferred =>
-            ParquetRelation.mergeMetastoreParquetSchema(metastoreSchema, inferred)
+            ParquetFileFormat.mergeMetastoreParquetSchema(metastoreSchema, inferred)
           }.getOrElse(metastoreSchema)
         } else {
           defaultSource.inferSchema(sparkSession, options, fileCatalog.allFiles()).get
@@ -293,7 +296,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
           fileFormat = defaultSource,
           options = options)
 
-        val created = LogicalRelation(relation)
+        val created = LogicalRelation(
+          relation,
+          metastoreTableIdentifier =
+            Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
         cachedDataSourceTables.put(tableIdentifier, created)
         created
       }
@@ -317,7 +323,10 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
               userSpecifiedSchema = Some(metastoreRelation.schema),
               bucketSpec = bucketSpec,
               options = options,
-              className = fileType).resolveRelation())
+              className = fileType).resolveRelation(),
+              metastoreTableIdentifier =
+                Some(TableIdentifier(tableIdentifier.name, Some(tableIdentifier.database))))
+
 
         cachedDataSourceTables.put(tableIdentifier, created)
         created
@@ -339,13 +348,13 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
 
     private def convertToParquetRelation(relation: MetastoreRelation): LogicalRelation = {
-      val defaultSource = new ParquetDefaultSource()
-      val fileFormatClass = classOf[ParquetDefaultSource]
+      val defaultSource = new ParquetFileFormat()
+      val fileFormatClass = classOf[ParquetFileFormat]
 
       val mergeSchema = sessionState.convertMetastoreParquetWithSchemaMerging
       val options = Map(
-        ParquetRelation.MERGE_SCHEMA -> mergeSchema.toString,
-        ParquetRelation.METASTORE_TABLE_NAME -> TableIdentifier(
+        ParquetFileFormat.MERGE_SCHEMA -> mergeSchema.toString,
+        ParquetFileFormat.METASTORE_TABLE_NAME -> TableIdentifier(
           relation.tableName,
           Some(relation.databaseName)
         ).unquotedString
@@ -391,8 +400,8 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     }
 
     private def convertToOrcRelation(relation: MetastoreRelation): LogicalRelation = {
-      val defaultSource = new OrcDefaultSource()
-      val fileFormatClass = classOf[OrcDefaultSource]
+      val defaultSource = new OrcFileFormat()
+      val fileFormatClass = classOf[OrcFileFormat]
       val options = Map[String, String]()
 
       convertToLogicalRelation(relation, options, defaultSource, fileFormatClass, "orc")
@@ -476,7 +485,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 
           val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
 
-          execution.CreateTableAsSelect(
+          execution.CreateTableAsSelectCommand(
             desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
             child,
             allowExisting)
@@ -531,18 +540,31 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
 /**
  * An override of the standard HDFS listing based catalog, that overrides the partition spec with
  * the information from the metastore.
+ * @param tableBasePath The default base path of the Hive metastore table
+ * @param partitionSpec The partition specifications from Hive metastore
  */
-private[hive] class MetaStoreFileCatalog(
+private[hive] class MetaStorePartitionedTableFileCatalog(
     sparkSession: SparkSession,
-    paths: Seq[Path],
-    partitionSpecFromHive: PartitionSpec)
+    tableBasePath: Path,
+    override val partitionSpec: PartitionSpec)
   extends ListingFileCatalog(
     sparkSession,
-    paths,
+    MetaStorePartitionedTableFileCatalog.getPaths(tableBasePath, partitionSpec),
     Map.empty,
-    Some(partitionSpecFromHive.partitionColumns)) {
+    Some(partitionSpec.partitionColumns)) {
+}
 
-  override def partitionSpec(): PartitionSpec = partitionSpecFromHive
+private[hive] object MetaStorePartitionedTableFileCatalog {
+  /** Get the list of paths to list files in the for a metastore table */
+  def getPaths(tableBasePath: Path, partitionSpec: PartitionSpec): Seq[Path] = {
+    // If there are no partitions currently specified then use base path,
+    // otherwise use the paths corresponding to the partitions.
+    if (partitionSpec.partitions.isEmpty) {
+      Seq(tableBasePath)
+    } else {
+      partitionSpec.partitions.map(_.path)
+    }
+  }
 }
 
 /**

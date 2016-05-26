@@ -26,9 +26,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types._
@@ -36,7 +36,7 @@ import org.apache.spark.sql.types._
 /**
  * A command used to create a data source table.
  *
- * Note: This is different from [[CreateTable]]. Please check the syntax for difference.
+ * Note: This is different from [[CreateTableCommand]]. Please check the syntax for difference.
  * This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
@@ -51,6 +51,8 @@ case class CreateDataSourceTableCommand(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
+    partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
   extends RunnableCommand {
@@ -84,7 +86,7 @@ case class CreateDataSourceTableCommand(
 
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path") && managedIfNoPath) {
+      if (!new CaseInsensitiveMap(options).contains("path") && managedIfNoPath) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
@@ -97,14 +99,14 @@ case class CreateDataSourceTableCommand(
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       bucketSpec = None,
-      options = optionsWithPath).resolveRelation()
+      options = optionsWithPath).resolveRelation(checkPathExist = false)
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
       userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
       provider = provider,
       options = optionsWithPath,
       isExternal = isExternal)
@@ -157,7 +159,7 @@ case class CreateDataSourceTableAsSelectCommand(
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path")) {
+      if (!new CaseInsensitiveMap(options).contains("path")) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
@@ -192,7 +194,14 @@ case class CreateDataSourceTableAsSelectCommand(
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+              if (query.schema.size != l.schema.size) {
+                throw new AnalysisException(
+                  s"The column number of the existing schema[${l.schema}] " +
+                    s"doesn't match the data schema[${query.schema}]'s")
+              }
               existingSchema = Some(l.schema)
+            case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
+              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -243,6 +252,7 @@ case class CreateDataSourceTableAsSelectCommand(
     Seq.empty[Row]
   }
 }
+
 
 object CreateDataSourceTableUtils extends Logging {
   /**
@@ -382,15 +392,16 @@ object CreateDataSourceTableUtils extends Logging {
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
-    val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
+    val resolvedRelation = dataSource.resolveRelation(checkPathExist = false)
+    val (hiveCompatibleTable, logMessage) = (maybeSerDe, resolvedRelation) match {
       case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
-      case (Some(serde), relation: HadoopFsRelation)
-        if relation.location.paths.length == 1 && relation.partitionSchema.isEmpty =>
+      case (Some(serde), relation: HadoopFsRelation) if relation.location.paths.length == 1 &&
+        relation.partitionSchema.isEmpty && relation.bucketSpec.isEmpty =>
         val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
         val message =
           s"Persisting data source relation $qualifiedTableName with a single input path " +
@@ -401,6 +412,13 @@ object CreateDataSourceTableUtils extends Logging {
       case (Some(serde), relation: HadoopFsRelation) if relation.partitionSchema.nonEmpty =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+            "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
+        (None, message)
+
+      case (Some(serde), relation: HadoopFsRelation) if relation.bucketSpec.nonEmpty =>
+        val message =
+          s"Persisting bucketed data source relation $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
             "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
         (None, message)

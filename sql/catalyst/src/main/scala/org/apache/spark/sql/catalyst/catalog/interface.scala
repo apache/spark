@@ -33,11 +33,10 @@ import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan}
  * @param className fully qualified class name, e.g. "org.apache.spark.util.MyFunc"
  * @param resources resource types and Uris used by the function
  */
-// TODO: Use FunctionResource instead of (String, String) as the element type of resources.
 case class CatalogFunction(
     identifier: FunctionIdentifier,
     className: String,
-    resources: Seq[(String, String)])
+    resources: Seq[FunctionResource])
 
 
 /**
@@ -80,6 +79,9 @@ case class CatalogTablePartition(
  *
  * Note that Hive's metastore also tracks skewed columns. We should consider adding that in the
  * future once we have a better understanding of how we want to handle skewed columns.
+ *
+ * @param unsupportedFeatures is a list of string descriptions of features that are used by the
+ *        underlying table but not supported by Spark SQL yet.
  */
 case class CatalogTable(
     identifier: TableIdentifier,
@@ -96,7 +98,8 @@ case class CatalogTable(
     properties: Map[String, String] = Map.empty,
     viewOriginalText: Option[String] = None,
     viewText: Option[String] = None,
-    comment: Option[String] = None) {
+    comment: Option[String] = None,
+    unsupportedFeatures: Seq[String] = Seq.empty) {
 
   // Verify that the provided columns are part of the schema
   private val colNames = schema.map(_.name).toSet
@@ -186,6 +189,8 @@ case class SimpleCatalogRelation(
 
   override def catalogTable: CatalogTable = metadata
 
+  override lazy val resolved: Boolean = false
+
   override val output: Seq[Attribute] = {
     val cols = catalogTable.schema
       .filter { c => !catalogTable.partitionColumnNames.contains(c.name) }
@@ -199,6 +204,7 @@ case class SimpleCatalogRelation(
     }
   }
 
-  require(metadata.identifier.database == Some(databaseName),
+  require(
+    metadata.identifier.database == Some(databaseName),
     "provided database does not match the one specified in the table definition")
 }

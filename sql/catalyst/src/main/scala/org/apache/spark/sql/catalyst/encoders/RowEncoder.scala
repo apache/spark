@@ -25,12 +25,33 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A factory for constructing encoders that convert external row to/from the Spark SQL
  * internal binary representation.
+ *
+ * The following is a mapping between Spark SQL types and its allowed external types:
+ * {{{
+ *   BooleanType -> java.lang.Boolean
+ *   ByteType -> java.lang.Byte
+ *   ShortType -> java.lang.Short
+ *   IntegerType -> java.lang.Integer
+ *   FloatType -> java.lang.Float
+ *   DoubleType -> java.lang.Double
+ *   StringType -> String
+ *   DecimalType -> java.math.BigDecimal or scala.math.BigDecimal or Decimal
+ *
+ *   DateType -> java.sql.Date
+ *   TimestampType -> java.sql.Timestamp
+ *
+ *   BinaryType -> byte array
+ *   ArrayType -> scala.collection.Seq or Array
+ *   MapType -> scala.collection.Map
+ *   StructType -> org.apache.spark.sql.Row or Product
+ * }}}
  */
 object RowEncoder {
   def apply(schema: StructType): ExpressionEncoder[Row] = {
@@ -41,7 +62,7 @@ object RowEncoder {
     new ExpressionEncoder[Row](
       schema,
       flat = false,
-      serializer.asInstanceOf[CreateStruct].children,
+      serializer.asInstanceOf[CreateNamedStruct].flatten,
       deserializer,
       ClassTag(cls))
   }
@@ -49,8 +70,7 @@ object RowEncoder {
   private def serializerFor(
       inputObject: Expression,
       inputType: DataType): Expression = inputType match {
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | CalendarIntervalType => inputObject
+    case dt if ScalaReflection.isNativeType(dt) => inputObject
 
     case p: PythonUserDefinedType => serializerFor(inputObject, p.sqlType)
 
@@ -84,10 +104,10 @@ object RowEncoder {
         "fromJavaDate",
         inputObject :: Nil)
 
-    case _: DecimalType =>
+    case d: DecimalType =>
       StaticInvoke(
         Decimal.getClass,
-        DecimalType.SYSTEM_DEFAULT,
+        d,
         "fromDecimal",
         inputObject :: Nil)
 
@@ -128,28 +148,30 @@ object RowEncoder {
         dataType = t)
 
     case StructType(fields) =>
-      val convertedFields = fields.zipWithIndex.map { case (f, i) =>
+      val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
         val fieldValue = serializerFor(
-          GetExternalRowField(inputObject, i, externalDataTypeForInput(f.dataType)),
-          f.dataType
+          GetExternalRowField(
+            inputObject, index, field.name, externalDataTypeForInput(field.dataType)),
+          field.dataType
         )
-        if (f.nullable) {
+        val convertedField = if (field.nullable) {
           If(
-            Invoke(inputObject, "isNullAt", BooleanType, Literal(i) :: Nil),
-            Literal.create(null, f.dataType),
+            Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
+            Literal.create(null, field.dataType),
             fieldValue
           )
         } else {
           fieldValue
         }
-      }
+        Literal(field.name) :: convertedField :: Nil
+      })
 
       if (inputObject.nullable) {
         If(IsNull(inputObject),
           Literal.create(null, inputType),
-          CreateStruct(convertedFields))
+          nonNullOutput)
       } else {
-        CreateStruct(convertedFields)
+        nonNullOutput
       }
   }
 
@@ -162,15 +184,16 @@ object RowEncoder {
    * `org.apache.spark.sql.types.Decimal`.
    */
   private def externalDataTypeForInput(dt: DataType): DataType = dt match {
-    // In order to support both Decimal and java BigDecimal in external row, we make this
+    // In order to support both Decimal and java/scala BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
+    // In order to support both Array and Seq in external row, we make this as java.lang.Object.
+    case _: ArrayType => ObjectType(classOf[java.lang.Object])
     case _ => externalDataTypeFor(dt)
   }
 
   private def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
-    case CalendarIntervalType => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
     case _: DecimalType => ObjectType(classOf[java.math.BigDecimal])
@@ -179,7 +202,6 @@ object RowEncoder {
     case _: MapType => ObjectType(classOf[scala.collection.Map[_, _]])
     case _: StructType => ObjectType(classOf[Row])
     case udt: UserDefinedType[_] => ObjectType(udt.userClass)
-    case _: NullType => ObjectType(classOf[java.lang.Object])
   }
 
   private def deserializerFor(schema: StructType): Expression = {
@@ -199,8 +221,7 @@ object RowEncoder {
   }
 
   private def deserializerFor(input: Expression): Expression = input.dataType match {
-    case NullType | BooleanType | ByteType | ShortType | IntegerType | LongType |
-         FloatType | DoubleType | BinaryType | CalendarIntervalType => input
+    case dt if ScalaReflection.isNativeType(dt) => input
 
     case udt: UserDefinedType[_] =>
       val annotation = udt.userClass.getAnnotation(classOf[SQLUserDefinedType])

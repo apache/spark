@@ -175,13 +175,13 @@ abstract class Catalog {
       options: Map[String, String]): DataFrame
 
   /**
-   * Drops the temporary table with the given table name in the catalog.
-   * If the table has been cached before, then it will also be uncached.
+   * Drops the temporary view with the given view name in the catalog.
+   * If the view has been cached before, then it will also be uncached.
    *
-   * @param tableName the name of the table to be dropped.
+   * @param viewName the name of the view to be dropped.
    * @since 2.0.0
    */
-  def dropTempTable(tableName: String): Unit
+  def dropTempView(viewName: String): Unit
 
   /**
    * Returns true if the table is currently cached in-memory.
@@ -210,5 +210,18 @@ abstract class Catalog {
    * @since 2.0.0
    */
   def clearCache(): Unit
+
+  /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   *
+   * If this table is cached as an InMemoryRelation, drop the original cached version and make the
+   * new version cached lazily.
+   *
+   * @since 2.0.0
+   */
+  def refreshTable(tableName: String): Unit
 
 }

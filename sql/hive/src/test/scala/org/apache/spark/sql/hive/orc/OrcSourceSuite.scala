@@ -25,6 +25,7 @@ import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
+import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
 
@@ -37,21 +38,17 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
   override def beforeAll(): Unit = {
     super.beforeAll()
 
-    orcTableAsDir = File.createTempFile("orctests", "sparksql")
-    orcTableAsDir.delete()
-    orcTableAsDir.mkdir()
+    orcTableAsDir = Utils.createTempDir("orctests", "sparksql")
 
     // Hack: to prepare orc data files using hive external tables
-    orcTableDir = File.createTempFile("orctests", "sparksql")
-    orcTableDir.delete()
-    orcTableDir.mkdir()
+    orcTableDir = Utils.createTempDir("orctests", "sparksql")
     import org.apache.spark.sql.hive.test.TestHive.implicits._
 
     sparkContext
       .makeRDD(1 to 10)
       .map(i => OrcData(i, s"part-$i"))
       .toDF()
-      .registerTempTable(s"orc_temp_table")
+      .createOrReplaceTempView(s"orc_temp_table")
 
     sql(
       s"""CREATE EXTERNAL TABLE normal_orc(
@@ -66,15 +63,6 @@ abstract class OrcSuite extends QueryTest with TestHiveSingleton with BeforeAndA
       s"""INSERT INTO TABLE normal_orc
          |SELECT intField, stringField FROM orc_temp_table
        """.stripMargin)
-  }
-
-  override def afterAll(): Unit = {
-    try {
-      orcTableDir.delete()
-      orcTableAsDir.delete()
-    } finally {
-      super.afterAll()
-    }
   }
 
   test("create temporary orc table") {
