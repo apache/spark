@@ -54,8 +54,8 @@ object LogisticRegressionWithLBFGSExample {
 
     // Get evaluation metrics.
     val metrics = new MulticlassMetrics(predictionAndLabels)
-    val precision = metrics.precision
-    println("Precision = " + precision)
+    val accuracy = metrics.accuracy
+    println(s"Accuracy = $accuracy")
 
     // Save and load model
     model.save(sc, "target/tmp/scalaLogisticRegressionWithLBFGSModel")

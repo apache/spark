@@ -152,7 +152,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val lrAlg = new LinearRegressionWithSGD()
+    val lrAlg = new LinearRegressionWithSGD(1.0, 100, 0.0, 1.0)
     lrAlg.setIntercept(intercept)
       .setValidateData(validateData)
     lrAlg.optimizer
@@ -181,7 +181,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val lassoAlg = new LassoWithSGD()
+    val lassoAlg = new LassoWithSGD(1.0, 100, 0.01, 1.0)
     lassoAlg.setIntercept(intercept)
       .setValidateData(validateData)
     lassoAlg.optimizer
@@ -209,7 +209,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val ridgeAlg = new RidgeRegressionWithSGD()
+    val ridgeAlg = new RidgeRegressionWithSGD(1.0, 100, 0.01, 1.0)
     ridgeAlg.setIntercept(intercept)
       .setValidateData(validateData)
     ridgeAlg.optimizer
@@ -268,7 +268,7 @@ private[python] class PythonMLLibAPI extends Serializable {
       intercept: Boolean,
       validateData: Boolean,
       convergenceTol: Double): JList[Object] = {
-    val LogRegAlg = new LogisticRegressionWithSGD()
+    val LogRegAlg = new LogisticRegressionWithSGD(1.0, 100, 0.01, 1.0)
     LogRegAlg.setIntercept(intercept)
       .setValidateData(validateData)
     LogRegAlg.optimizer
