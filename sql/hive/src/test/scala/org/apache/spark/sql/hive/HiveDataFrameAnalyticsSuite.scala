@@ -35,7 +35,7 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
   override def beforeAll() {
     super.beforeAll()
     testData = Seq((1, 2), (2, 2), (3, 4)).toDF("a", "b")
-    hiveContext.registerDataFrameAsTable(testData, "mytable")
+    testData.createOrReplaceTempView("mytable")
   }
 
   override def afterAll(): Unit = {
