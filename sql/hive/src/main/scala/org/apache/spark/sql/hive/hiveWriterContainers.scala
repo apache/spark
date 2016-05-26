@@ -52,8 +52,7 @@ import org.apache.spark.util.SerializableJobConf
 private[hive] class SparkHiveWriterContainer(
     @transient private val jobConf: JobConf,
     fileSinkConf: FileSinkDesc,
-    inputSchema: Seq[Attribute],
-    table: MetastoreRelation)
+    inputSchema: Seq[Attribute])
   extends Logging
   with HiveInspectors
   with Serializable {
@@ -218,7 +217,7 @@ private[spark] class SparkHiveDynamicPartitionWriterContainer(
     dynamicPartColNames: Array[String],
     inputSchema: Seq[Attribute],
     table: MetastoreRelation)
-  extends SparkHiveWriterContainer(jobConf, fileSinkConf, inputSchema, table) {
+  extends SparkHiveWriterContainer(jobConf, fileSinkConf, inputSchema) {
 
   import SparkHiveDynamicPartitionWriterContainer._
 

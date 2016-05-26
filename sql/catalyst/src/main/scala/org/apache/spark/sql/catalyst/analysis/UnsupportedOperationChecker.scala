@@ -55,6 +55,9 @@ object UnsupportedOperationChecker {
         case _: InsertIntoTable =>
           throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
 
+        case _: InsertIntoDir =>
+          throwError("InsertIntoDir is not supported with streaming DataFrames/Datasets")
+
         case Aggregate(_, _, child) if child.isStreaming =>
           if (outputMode == Append) {
             throwError(

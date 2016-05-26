@@ -201,6 +201,7 @@ query
 insertInto
     : INSERT OVERWRITE TABLE tableIdentifier partitionSpec? (IF NOT EXISTS)?
     | INSERT INTO TABLE? tableIdentifier partitionSpec?
+    | INSERT OVERWRITE LOCAL? DIRECTORY path=STRING rowFormat? (STORED AS format=IDENTIFIER)?
     ;
 
 partitionSpecLocation
@@ -648,7 +649,7 @@ nonReserved
     | ASC | DESC | LIMIT | RENAME | SETS
     | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
     | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
-    | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
+    | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE | DIRECTORY
     ;
 
 SELECT: 'SELECT';
@@ -716,6 +717,7 @@ WITH: 'WITH';
 VALUES: 'VALUES';
 CREATE: 'CREATE';
 TABLE: 'TABLE';
+DIRECTORY: 'DIRECTORY';
 VIEW: 'VIEW';
 REPLACE: 'REPLACE';
 INSERT: 'INSERT';
