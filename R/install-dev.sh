@@ -40,7 +40,7 @@ if [ ! -z "$R_HOME" ]
     R_SCRIPT_PATH="$R_HOME/bin"
   else
     # if system wide R_HOME is not found, then exit
-    if ! [ `command -v R` ]; then
+    if [ ! `command -v R` ]; then
       echo "Cannot find 'R_HOME'. Please specify 'R_HOME' or make sure R is properly installed."
       exit 1
     fi
