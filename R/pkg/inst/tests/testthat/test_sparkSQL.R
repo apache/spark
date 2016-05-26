@@ -32,6 +32,21 @@ markUtf8 <- function(s) {
   s
 }
 
+setHiveContext <- function() {
+  hiveCtx <- tryCatch({
+    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+  },
+  error = function(err) {
+    skip("Hive is not build with SparkSQL, skipped")
+  })
+  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  hiveCtx
+}
+
+unsetHiveContext <- function() {
+  remove(".sparkRHivesc", envir = .sparkREnv)
+}
+
 # Tests for SparkSQL functions in SparkR
 
 sc <- sparkR.init()
@@ -163,13 +178,7 @@ test_that("create DataFrame from RDD", {
                list(name = "John", age = 19L, height = 176.5))
 
   ssc <- callJMethod(sc, "sc")
-  hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  },
-  error = function(err) {
-    skip("Hive is not build with SparkSQL, skipped")
-  })
-  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  setHiveContext()
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
   invisible(insertInto(df, "people"))
@@ -177,6 +186,7 @@ test_that("create DataFrame from RDD", {
                c(16))
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
+  unsetHiveContext()
   remove(".sparkRHivesc", envir = .sparkREnv)
 })
 
@@ -955,13 +965,7 @@ test_that("column calculation", {
 
 test_that("test HiveContext", {
   ssc <- callJMethod(sc, "sc")
-  hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  },
-  error = function(err) {
-    skip("Hive is not build with SparkSQL, skipped")
-  })
-  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  setHiveContext()
   df <- createExternalTable("json", jsonPath, "json")
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
@@ -989,7 +993,7 @@ test_that("test HiveContext", {
   expect_is(df5, "SparkDataFrame")
   expect_equal(count(df5), 3)
   unlink(parquetDataPath)
-  remove(".sparkRHivesc", envir = .sparkREnv)
+  unsetHiveContext()
 })
 
 test_that("column operators", {
@@ -2138,14 +2142,7 @@ test_that("repartition by columns on DataFrame", {
 
 test_that("Window functions on a DataFrame", {
   ssc <- callJMethod(sc, "sc")
-  hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  },
-  error = function(err) {
-    skip("Hive is not build with SparkSQL, skipped")
-  })
-
-  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  setHiveContext()
   df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
                         schema = c("key", "value"))
   ws <- orderBy(window.partitionBy("key"), "value")
@@ -2170,7 +2167,7 @@ test_that("Window functions on a DataFrame", {
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
-  remove(".sparkRHivesc", envir = .sparkREnv)
+  unsetHiveContext()
 })
 
 test_that("createDataFrame sqlContext parameter backward compatibility", {

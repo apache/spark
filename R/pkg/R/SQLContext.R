@@ -38,7 +38,15 @@ getInternalType <- function(x) {
 }
 
 #' Temporary function to reroute old S3 Method call to new
-#' We need to check the class of x to ensure it is SQLContext before dispatching
+#' This function is specifically implemented to remove SQLContext from the parameter list.
+#' It determines the target to route the call by checking the parent of this callsite (say 'func').
+#' The target should be called 'func.default'.
+#' We need to check the class of x to ensure it is SQLContext/HiveContext before dispatching.
+#' @param newFuncSig name of the function the user should call instead in the deprecation message
+#' @param x the first parameter of the original call
+#' @param ... the rest of parameter to pass along
+#' @return whatever the target returns
+#' @noRd
 dispatchFunc <- function(newFuncSig, x, ...) {
   funcName <- as.character(sys.call(sys.parent())[[1]])
   f <- get(paste0(funcName, ".default"))
