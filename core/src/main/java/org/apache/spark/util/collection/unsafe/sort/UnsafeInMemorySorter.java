@@ -25,6 +25,7 @@ import org.apache.spark.memory.MemoryConsumer;
 import org.apache.spark.memory.TaskMemoryManager;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;
+import org.apache.spark.unsafe.memory.MemoryBlock;
 import org.apache.spark.util.collection.Sorter;
 
 /**
@@ -69,8 +70,6 @@ public final class UnsafeInMemorySorter {
   private final MemoryConsumer consumer;
   private final TaskMemoryManager memoryManager;
   @Nullable
-  private final Sorter<RecordPointerAndKeyPrefix, LongArray> sorter;
-  @Nullable
   private final Comparator<RecordPointerAndKeyPrefix> sortComparator;
 
   /**
@@ -78,11 +77,6 @@ public final class UnsafeInMemorySorter {
    */
   @Nullable
   private final PrefixComparators.RadixSortSupport radixSortSupport;
-
-  /**
-   * Set to 2x for radix sort to reserve extra memory for sorting, otherwise 1x.
-   */
-  private final int memoryAllocationFactor;
 
   /**
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
@@ -121,7 +115,6 @@ public final class UnsafeInMemorySorter {
     this.memoryManager = memoryManager;
     this.initialSize = array.size();
     if (recordComparator != null) {
-      this.sorter = new Sorter<>(UnsafeSortDataFormat.INSTANCE);
       this.sortComparator = new SortComparator(recordComparator, prefixComparator, memoryManager);
       if (canUseRadixSort && prefixComparator instanceof PrefixComparators.RadixSortSupport) {
         this.radixSortSupport = (PrefixComparators.RadixSortSupport)prefixComparator;
@@ -129,11 +122,9 @@ public final class UnsafeInMemorySorter {
         this.radixSortSupport = null;
       }
     } else {
-      this.sorter = null;
       this.sortComparator = null;
       this.radixSortSupport = null;
     }
-    this.memoryAllocationFactor = this.radixSortSupport != null ? 2 : 1;
     this.array = array;
   }
 
@@ -174,7 +165,10 @@ public final class UnsafeInMemorySorter {
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos + 1 < (array.size() / memoryAllocationFactor);
+    // Radix sort requires same amount of used memory as buffer, Tim sort requires
+    // half of the used memory as buffer, so we always preserve half of the whole
+    // array as buffer for sorting.
+    return pos + 1 < (array.size() / 2);
   }
 
   public void expandPointerArray(LongArray newArray) {
@@ -186,7 +180,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      array.size() * (8 / memoryAllocationFactor));
+      pos * 8);
     consumer.freeArray(array);
     array = newArray;
   }
@@ -275,13 +269,20 @@ public final class UnsafeInMemorySorter {
   public SortedIterator getSortedIterator() {
     int offset = 0;
     long start = System.nanoTime();
-    if (sorter != null) {
+    if (sortComparator != null) {
       if (this.radixSortSupport != null) {
         // TODO(ekl) we should handle NULL values before radix sort for efficiency, since they
         // force a full-width sort (and we cannot radix-sort nullable long fields at all).
         offset = RadixSort.sortKeyPrefixArray(
           array, pos / 2, 0, 7, radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
+        MemoryBlock unused = new MemoryBlock(
+          array.getBaseObject(),
+          array.getBaseOffset() + pos * 8,
+          (array.size() - pos) * 8);
+        LongArray buffer = new LongArray(unused);
+        Sorter<RecordPointerAndKeyPrefix, LongArray> sorter =
+          new Sorter<>(new UnsafeSortDataFormat(buffer));
         sorter.sort(array, 0, pos / 2, sortComparator);
       }
     }
