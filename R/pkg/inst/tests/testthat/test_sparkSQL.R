@@ -33,6 +33,7 @@ markUtf8 <- function(s) {
 }
 
 setHiveContext <- function() {
+  ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
   },
@@ -177,7 +178,6 @@ test_that("create DataFrame from RDD", {
   expect_equal(as.list(collect(where(df, df$name == "John"))),
                list(name = "John", age = 19L, height = 176.5))
 
-  ssc <- callJMethod(sc, "sc")
   setHiveContext()
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
