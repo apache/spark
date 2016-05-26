@@ -103,11 +103,7 @@ class SparkSession private(
    * A wrapped version of this session in the form of a [[SQLContext]], for backward compatibility.
    */
   @transient
-  private[sql] val sqlContext: SQLContext = existingSharedState match {
-    // If we have an existing SharedState, we should not create a root SQLContext at here.
-    case Some(sharedState) => new SQLContext(this, false)
-    case None => new SQLContext(this, true)
-  }
+  private[sql] val sqlContext: SQLContext = new SQLContext(this)
 
   protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
   protected[sql] def listener: SQLListener = sharedState.listener

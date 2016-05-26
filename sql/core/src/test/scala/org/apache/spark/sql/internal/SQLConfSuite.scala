@@ -27,8 +27,11 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call
     // clear().
+    val originalDefaultSparkSession = SparkSession.getDefaultSession
+    SparkSession.clearDefaultSession()
     val newContext = new SQLContext(sparkContext)
     assert(newContext.getConf("spark.sql.testkey", "false") === "true")
+    originalDefaultSparkSession.foreach(session => SparkSession.setDefaultSession(session))
   }
 
   test("programmatic ways of basic setting and getting") {
