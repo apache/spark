@@ -21,7 +21,6 @@ package org.apache.spark.examples.ml
 // $example on$
 import org.apache.spark.ml.classification.{LogisticRegression, OneVsRest}
 import org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator
-import org.apache.spark.sql.DataFrame
 // $example off$
 import org.apache.spark.sql.SparkSession
 
@@ -43,7 +42,7 @@ object OneVsRestExample {
 
     // $example on$
     // load data file.
-    val inputData: DataFrame = spark.read.format("libsvm")
+    val inputData = spark.read.format("libsvm")
       .load("data/mllib/sample_multiclass_classification_data.txt")
 
     // generate the train/test split.
