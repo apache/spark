@@ -213,8 +213,8 @@ private[spark] class BlacklistTracker(
 
   private def reEvaluateNodeBlacklistForStageAndUpdateCache(stageId: Int): Set[String] = {
     val nodes = strategy.getNodeBlacklistForStage(executorIdToFailureStatus, stageId, clock)
-//    updateBlacklistNodeForStageCache(stageId, nodes)
-    updateBlacklistNodeCache(nodes)
+    updateBlacklistNodeForStageCache(stageId, nodes)
+//    updateBlacklistNodeCache(nodes)
     nodes
   }
 }
