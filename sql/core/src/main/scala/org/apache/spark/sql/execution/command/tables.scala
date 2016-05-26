@@ -285,8 +285,8 @@ case class TruncateTableCommand(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand {
 
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val catalog = sparkSession.sessionState.catalog
+  override def run(spark: SparkSession): Seq[Row] = {
+    val catalog = spark.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
       throw new AnalysisException(s"Table '$tableName' in TRUNCATE TABLE does not exist.")
     }
@@ -320,7 +320,7 @@ case class TruncateTableCommand(
       } else {
         catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
       }
-    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    val hadoopConf = spark.sessionState.newHadoopConf()
     locations.foreach { location =>
       if (location.isDefined) {
         val path = new Path(location.get)
@@ -338,10 +338,10 @@ case class TruncateTableCommand(
     }
     // After deleting the data, invalidate the table to make sure we don't keep around a stale
     // file relation in the metastore cache.
-    sparkSession.sessionState.invalidateTable(tableName.unquotedString)
+    spark.sessionState.invalidateTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
-      sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName.quotedString))
+      spark.sharedState.cacheManager.tryUncacheQuery(spark.table(tableName.quotedString))
     } catch {
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table '$tableName'", e)

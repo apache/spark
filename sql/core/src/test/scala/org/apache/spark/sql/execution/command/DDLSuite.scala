@@ -1115,9 +1115,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     import testImplicits._
     val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
     data.write.saveAsTable("rectangles")
+    spark.table("rectangle").cache()
     assume(spark.table("rectangles").collect().nonEmpty, "bad test; table was empty to begin with")
+    assume(spark.catalog.isCached("rectangles"), "bad test; table was not cached to begin with")
     sql("TRUNCATE TABLE rectangles")
     assert(spark.table("rectangles").collect().isEmpty)
+    assert(!spark.catalog.isCached("rectangles"))
     // truncating partitioned data source tables is not supported
     data.write.partitionBy("length").saveAsTable("rectangles2")
     assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
