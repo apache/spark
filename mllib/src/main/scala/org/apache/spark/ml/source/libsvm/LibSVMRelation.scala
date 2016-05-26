@@ -109,6 +109,7 @@ private[libsvm] class LibSVMOutputWriter(
  * Note that this class is public for documentation purpose. Please don't use this class directly.
  * Rather, use the data source API as illustrated above.
  */
+// If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
 @Since("1.6.0")
 class LibSVMFileFormat extends FileFormat with DataSourceRegister {
 

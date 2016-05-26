@@ -78,18 +78,34 @@ case class DataSource(
   lazy val sourceInfo = sourceSchema()
 
   /** A map to maintain backward compatibility in case we move data sources around. */
-  private val backwardCompatibilityMap = Map(
-    "org.apache.spark.sql.jdbc" -> classOf[JdbcRelationProvider].getCanonicalName,
-    "org.apache.spark.sql.jdbc.DefaultSource" -> classOf[JdbcRelationProvider].getCanonicalName,
-    "org.apache.spark.sql.json" -> classOf[JsonFileFormat].getCanonicalName,
-    "org.apache.spark.sql.json.DefaultSource" -> classOf[JsonFileFormat].getCanonicalName,
-    "org.apache.spark.sql.parquet" -> classOf[ParquetFileFormat].getCanonicalName,
-    "org.apache.spark.sql.parquet.DefaultSource" -> classOf[ParquetFileFormat].getCanonicalName,
-    "org.apache.spark.ml.source.libsvm.DefaultSource" ->
-      "org.apache.spark.ml.source.libsvm.LibSVMFileFormat",
-    "org.apache.spark.ml.source.libsvm" -> "org.apache.spark.ml.source.libsvm.LibSVMFileFormat",
-    "com.databricks.spark.csv" -> classOf[CSVFileFormat].getCanonicalName
-  )
+  private val backwardCompatibilityMap: Map[String, String] = {
+    val jdbc = classOf[JdbcRelationProvider].getCanonicalName
+    val json = classOf[JsonFileFormat].getCanonicalName
+    val parquet = classOf[ParquetFileFormat].getCanonicalName
+    val csv = classOf[CSVFileFormat].getCanonicalName
+    val libsvm = "org.apache.spark.ml.source.libsvm.LibSVMFileFormat"
+    val orc = "org.apache.spark.sql.hive.orc.OrcFileFormat"
+
+    Map(
+      "org.apache.spark.sql.jdbc" -> jdbc,
+      "org.apache.spark.sql.jdbc.DefaultSource" -> jdbc,
+      "org.apache.spark.sql.execution.datasources.jdbc.DefaultSource" -> jdbc,
+      "org.apache.spark.sql.execution.datasources.jdbc" -> jdbc,
+      "org.apache.spark.sql.json" -> json,
+      "org.apache.spark.sql.json.DefaultSource" -> json,
+      "org.apache.spark.sql.execution.datasources.json" -> json,
+      "org.apache.spark.sql.execution.datasources.json.DefaultSource" -> json,
+      "org.apache.spark.sql.parquet" -> parquet,
+      "org.apache.spark.sql.parquet.DefaultSource" -> parquet,
+      "org.apache.spark.sql.execution.datasources.parquet" -> parquet,
+      "org.apache.spark.sql.execution.datasources.parquet.DefaultSource" -> parquet,
+      "org.apache.spark.sql.hive.orc.DefaultSource" -> orc,
+      "org.apache.spark.sql.hive.orc" -> orc,
+      "org.apache.spark.ml.source.libsvm.DefaultSource" -> libsvm,
+      "org.apache.spark.ml.source.libsvm" -> libsvm,
+      "com.databricks.spark.csv" -> csv
+    )
+  }
 
   /**
    * Class that were removed in Spark 2.0. Used to detect incompatibility libraries for Spark 2.0.
