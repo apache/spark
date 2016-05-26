@@ -33,26 +33,6 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
     join(N, b, c)
   }
 
-  def goodBackend(N: Int): Unit = {
-    val taskDescription = backend.beginTask()
-    val host = backend.executorIdToExecutor(taskDescription.executorId).host
-    val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
-    val task = taskSet.tasks(taskDescription.index)
-
-    // every 5th stage is a ResultStage -- the rest are ShuffleMapStages
-    (task.stageId, task.partitionId) match {
-      case (stage, _) if stage % 5 != 4 =>
-        backend.taskSuccess(taskDescription,
-          DAGSchedulerSuite.makeMapStatus(host, N))
-      case (_, _) =>
-        backend.taskSuccess(taskDescription, 42)
-    }
-  }
-
-  def runJobWithBackend(N: Int, backendFunc: () => Unit): Unit = {
-    runJobWithCustomBackend(N, new SimpleWrappedBackend(backend, backendFunc))
-  }
-
   def runJobWithCustomBackend(N: Int, backendWrapper: WrappedBackend): Unit = {
     // Try to run as many jobs as we can in 10 seconds, get the time per job.  The idea here is to
     // balance:
@@ -92,7 +72,17 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
   def runSuccessfulJob(N: Int): Unit = {
-    runJobWithBackend(N, () => goodBackend(N))
+    runJobWithCustomBackend(N, new QueuingWrappedBackend(backend) {
+      override def handleTask(taskDesc: TaskDescription, task: Task[_], host: String): Unit = {
+        // every 5th stage is a ResultStage -- the rest are ShuffleMapStages
+        (task.stageId, task.partitionId) match {
+          case (stage, _) if stage % 5 != 4 =>
+            queueSuccess(taskDesc, DAGSchedulerSuite.makeMapStatus(host, N))
+          case (_, _) =>
+            queueSuccess(taskDesc, 42)
+        }
+      }
+    })
   }
 
   testScheduler("Scheduling speed -- small job on a small cluster") {
@@ -215,101 +205,44 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
     runSuccessfulJob(3000)
   }
 
-  def backendWithBadExecs(
-      continue: AtomicBoolean,
-      N: Int,
-      badExecs: Set[String],
-      badHosts: Set[String]): Unit = {
-    var tasksToFail = List[TaskDescription]()
-    var tasksToSucceed = List[TaskDescription]()
-    val FAILURES_TILL_SUCCESS = 100 // that is, we get a task failure 100 times as fast as success
-    val waitForSuccess = 100
-    var failuresSinceLastSuccess = 0
-    while (continue.get()) {
-      // don't *just* keep failing tasks on the same executor.  While there are tasks to fail,
-      // we fail them more often, but we fail across all executors.  Furthermore, after X failures,
-      // we do have a task success
-
-      // first, queue up all the tasks needing to run
-      while (backend.hasTasksWaitingToRun) {
-        val taskDescription = backend.beginTask()
-        val host = backend.executorIdToExecutor(taskDescription.executorId).host
-        val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
-        val task = taskSet.tasks(taskDescription.index)
-        if (badExecs(taskDescription.executorId) || badHosts(host)) {
-          tasksToFail :+= taskDescription
-        } else {
-          tasksToSucceed :+= taskDescription
-        }
-      }
-
-      // send a task result.  Failure if there are any and we haven't had too many failures in a row
-      def failTask(): Unit = {
-        failuresSinceLastSuccess += 1
-        val toFail = tasksToFail.head
-        tasksToFail = tasksToFail.tail
-        val host = backend.executorIdToExecutor(toFail.executorId).host
-        if (badExecs(toFail.executorId)) {
-          val exc = new RuntimeException(s"bad exec ${toFail.executorId}")
-          backend.taskFailed(toFail, exc)
+  def runBadExecJob(N: Int, badExecs: Set[String], badHosts: Set[String]): Unit = {
+    val backendWrapper = new QueuingWrappedBackend(backend) {
+      override def handleTask(taskDesc: TaskDescription, task: Task[_], host: String): Unit = {
+        if (badExecs(taskDesc.executorId)) {
+          val exc = new RuntimeException(s"bad exec ${taskDesc.executorId}")
+          queueFailure(taskDesc, exc)
         } else if (badHosts(host)) {
           val exc = new RuntimeException(s"bad host ${host}")
-          backend.taskFailed(toFail, exc)
-        }
-      }
-      if (tasksToFail.nonEmpty && failuresSinceLastSuccess < FAILURES_TILL_SUCCESS) {
-        failTask()
-      } else if (tasksToSucceed.nonEmpty) {
-        // we might get here just by some chance of thread-scheduling in this mock.  Tasks fail,
-        // but the dag scheduler thread hasn't processed those before this thread tries to find
-        // another task to respond to.
-//        Thread.sleep(waitForSuccess)
-        if (tasksToFail.nonEmpty && failuresSinceLastSuccess < FAILURES_TILL_SUCCESS) {
-          failTask()
+          queueFailure(taskDesc, exc)
         } else {
-          logInfo(s"tasksToFail.size = ${tasksToFail.size}; " +
-            s"tasksToSucceed.size = ${tasksToSucceed.size}; " +
-            s"failuresSinceLastSuccess = ${failuresSinceLastSuccess}")
-          failuresSinceLastSuccess = 0
-          val taskDescription = tasksToSucceed.head
-          tasksToSucceed = tasksToSucceed.tail
-          val host = backend.executorIdToExecutor(taskDescription.executorId).host
-          val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
-          val task = taskSet.tasks(taskDescription.index)
           // every 5th stage is a ResultStage -- the rest are ShuffleMapStages
           (task.stageId, task.partitionId) match {
             case (stage, _) if stage % 5 != 4 =>
-              backend.taskSuccess(taskDescription,
-                DAGSchedulerSuite.makeMapStatus(host, N))
+              queueSuccess(taskDesc, DAGSchedulerSuite.makeMapStatus(host, N))
             case (_, _) =>
-              backend.taskSuccess(taskDescription, 42)
+              queueSuccess(taskDesc, 42)
           }
         }
-      } else {
-        Thread.sleep(10)  // wait till we've got work to do
-      }
-    }
-  }
-
-  def runBadExecJob(N: Int, badExecs: Set[String], badHosts: Set[String]): Unit = {
-    val backendWrapper = new WrappedBackend(backend) {
-      override def runBackend(continue: AtomicBoolean): Unit = {
-        backendWithBadExecs(continue, N, badExecs, badHosts)
       }
     }
     runJobWithCustomBackend(N, backendWrapper)
   }
 
-  val badExecs = (0 until 2).map{_.toString}.toSet
+  val oneBadExec = Set("0")
+  // intentionally on different nodes, so they don't trigger node blacklist
+  val twoBadExecs = Set("0", "15")
+
 
   // note this is *very* unlikely to succeed without blacklisting, even though its only
   // one bad executor out of 20.  When a task fails, it gets requeued immediately -- and guess
   // which is the only executor which has a free slot?  Bingo, the one it just failed on
   Seq(
-    ("bad execs with simple blacklist", "false", Set[String]()),
-    ("bad execs with advanced blacklist", "true", Set[String]()),
-    ("bad hosts with advanced blacklist", "true", Set[String]("host-0"))
-  ).foreach { case (name, strategy, badHosts) =>
+    ("bad exec with simple blacklist", "false", oneBadExec, Set[String]()),
+    ("two bad execs with simple blacklist", "false", twoBadExecs, Set[String]()),
+    ("bad exec with advanced blacklist", "true", oneBadExec, Set[String]()),
+    ("bad host with advanced blacklist", "true", Set[String](), Set[String]("host-0")),
+    ("bad exec and host with advanced blacklist", "true", oneBadExec, Set[String]("host-3"))
+  ).foreach { case (name, strategy, badExecs, badHosts) =>
     testScheduler(
       s"COMPARE D $name",
       extraConfs = Seq(
@@ -394,6 +327,18 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   // scalastyle:on line.size.limit
 
+
+  /*
+  RESULTS
+
+  On a happy cluster, speed is about the same in all modes, ~5s per iteration
+
+  On a bad cluster, slow in all versions, about 2m per iteration (original code, and new code with
+  various strategies).  the reason is that we waste soooooo long looping all tasks through
+  the bad nodes, and that has one n^2 penalty.
+
+   */
+
   abstract class WrappedBackend(backend: MockBackend) {
     val backendContinue = new AtomicBoolean(true)
     def runBackend(continue: AtomicBoolean): Unit
@@ -412,16 +357,71 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
         backendThread.join()
       }
     }
+
   }
 
-  class SimpleWrappedBackend(backend: MockBackend, backendFunc: () => Unit)
-      extends WrappedBackend(backend) {
+  abstract class QueuingWrappedBackend(backend: MockBackend) extends WrappedBackend(backend) {
+    var tasksToFail = List[(TaskDescription, Exception)]()
+    var tasksToSucceed = List[(TaskDescription, Any)]()
+    val FAILURES_TILL_SUCCESS = 100
+    // that is, we get a task failure 100 times as fast as success
+    val waitForSuccess = 100
+    var failuresSinceLastSuccess = 0
+
+    def handleTask(taskDesc: TaskDescription, task: Task[_], host: String): Unit
+
+    def queueSuccess(taskDesc: TaskDescription, result: Any): Unit = {
+      tasksToSucceed :+= taskDesc -> result
+    }
+
+    def queueFailure(taskDesc: TaskDescription, exc: Exception): Unit = {
+      tasksToFail :+= taskDesc -> exc
+    }
+
     override def runBackend(continue: AtomicBoolean): Unit = {
       while (continue.get()) {
-        if (backend.hasTasksWaitingToRun) {
-          backendFunc()
+        // don't *just* keep failing tasks on the same executor.  While there are tasks to fail,
+        // we fail them more often, but we fail across all executors.  Furthermore, after X failures
+        // we do have a task success
+
+        // first, queue up all the tasks needing to run
+        while (backend.hasTasksWaitingToRun) {
+          val taskDescription = backend.beginTask()
+          val host = backend.executorIdToExecutor(taskDescription.executorId).host
+          val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
+          val task = taskSet.tasks(taskDescription.index)
+          handleTask(taskDescription, task, host)
+        }
+
+        // send a task result.  Prioritize failures, if we haven't had too many failures in a row
+        def failTask(): Unit = {
+          failuresSinceLastSuccess += 1
+          val (toFail, exc) = tasksToFail.head
+          tasksToFail = tasksToFail.tail
+          backend.taskFailed(toFail, exc)
+        }
+
+        if (tasksToFail.nonEmpty && failuresSinceLastSuccess < FAILURES_TILL_SUCCESS) {
+          failTask()
+        } else if (tasksToSucceed.nonEmpty) {
+          // we might get here just by some chance of thread-scheduling in this mock.  Tasks fail,
+          // but the scheduler thread hasn't processed those before this thread tries to find
+          // another task to respond to.
+          //        if (tasksToFail.nonEmpty && failuresSinceLastSuccess < FAILURES_TILL_SUCCESS) {
+          //          failTask()
+          //        } else {
+          logInfo(s"tasksToFail.size = ${tasksToFail.size}; " +
+            s"tasksToSucceed.size = ${tasksToSucceed.size}; " +
+            s"failuresSinceLastSuccess = ${failuresSinceLastSuccess}")
+          failuresSinceLastSuccess = 0
+          val (taskDescription, result) = tasksToSucceed.head
+          tasksToSucceed = tasksToSucceed.tail
+          val host = backend.executorIdToExecutor(taskDescription.executorId).host
+          val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
+          val task = taskSet.tasks(taskDescription.index)
+          backend.taskSuccess(taskDescription, result)
         } else {
-          Thread.sleep(10)
+          Thread.sleep(10) // wait till we've got work to do
         }
       }
     }
