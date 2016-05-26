@@ -22,9 +22,9 @@
 #   build_tgt_directory - The target directory where properties file would be created. [./core/target/extra-resources]
 #   spark_version - The current version of spark
 
-RESOURCE_DIR=$1
-mkdir -p $RESOURCE_DIR
-SPARK_BUILD_INFO=${RESOURCE_DIR}/spark-version-info.properties
+RESOURCE_DIR="$1"
+mkdir -p "$RESOURCE_DIR"
+SPARK_BUILD_INFO="${RESOURCE_DIR}"/spark-version-info.properties
 
 echo_build_properties() {
   echo version=$1
@@ -35,4 +35,4 @@ echo_build_properties() {
   echo url=$(git config --get remote.origin.url)
 }
 
-echo_build_properties $2 > $SPARK_BUILD_INFO
+echo_build_properties $2 > "$SPARK_BUILD_INFO"
