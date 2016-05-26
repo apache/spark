@@ -426,7 +426,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param path input path
    * @since 1.5.0
-   * @note Currently, this method can only be used together with `HiveContext`.
+   * @note Currently, this method can only be used after enabling Hive support.
    */
   def orc(path: String): DataFrame = format("orc").load(path)
 

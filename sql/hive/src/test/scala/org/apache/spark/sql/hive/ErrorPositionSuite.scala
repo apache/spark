@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.util.quietly
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 
 class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAndAfterEach {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
@@ -130,12 +130,12 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
    * @param token a unique token in the string that should be indicated by the exception
    */
   def positionTest(name: String, query: String, token: String): Unit = {
-    def ast = hiveContext.parseSql(query)
+    def ast = spark.parseSql(query)
     def parseTree = Try(quietly(ast.treeString)).getOrElse("<failed to parse>")
 
     test(name) {
       val error = intercept[AnalysisException] {
-        quietly(hiveContext.sql(query))
+        quietly(spark.sql(query))
       }
 
       assert(!error.getMessage.contains("Seq("))
