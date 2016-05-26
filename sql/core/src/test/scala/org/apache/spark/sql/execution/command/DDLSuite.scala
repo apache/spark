@@ -130,7 +130,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql(s"CREATE DATABASE db2")
         val pathInCatalog = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
         assert("file" === pathInCatalog.getScheme)
-        val expectedPath = appendTrailingSlash(sqlContext.conf.warehousePath) + "db2.db"
+        val expectedPath = appendTrailingSlash(spark.sessionState.conf.warehousePath) + "db2.db"
         assert(expectedPath === pathInCatalog.getPath)
       }
 
@@ -143,7 +143,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
 
         databaseNames.foreach { dbName =>
@@ -170,7 +170,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("Create/Drop Database - location") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
     withTempDir { tmpDir =>
       val path = tmpDir.toString
@@ -198,7 +198,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
 
         databaseNames.foreach { dbName =>
@@ -229,7 +229,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
 
         databaseNames.foreach { dbName =>
@@ -298,7 +298,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("drop non-empty database in restrict mode") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val dbName = "db1"
     sql(s"CREATE DATABASE $dbName")
 
@@ -320,7 +320,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("drop non-empty database in cascade mode") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val dbName = "db1"
     sql(s"CREATE DATABASE $dbName")
 
@@ -439,7 +439,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         "RENAME TEMPORARY TABLE from '`tab1`' to '`default`.`tab2`': " +
           "cannot specify database name 'default' in the destination table"))
 
-      val catalog = sqlContext.sessionState.catalog
+      val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     }
   }
@@ -474,7 +474,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(e.getMessage.contains(
         "RENAME TEMPORARY TABLE from '`tab1`' to '`tab2`': destination table already exists"))
 
-      val catalog = sqlContext.sessionState.catalog
+      val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
     }
   }
@@ -745,8 +745,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("DROP TABLE dbx.tab1")
   }
 
-  test("drop view in SQLContext") {
-    // SQLContext does not support create view. Log an error message, if tab1 does not exists
+  test("drop view without Hive support") {
+    // Without enabling Hive support, does not support create view.
+    // Log an error message, if tab1 does not exists
     sql("DROP VIEW tab1")
 
     val catalog = spark.sessionState.catalog

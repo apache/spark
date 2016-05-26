@@ -30,7 +30,7 @@ class ErrorPositionSuite extends QueryTest with TestHiveSingleton with BeforeAnd
 
   override protected def beforeEach(): Unit = {
     super.beforeEach()
-    if (spark.sqlContext.tableNames().contains("src")) {
+    if (spark.catalog.listTables().collect().map(_.name).contains("src")) {
       spark.catalog.dropTempView("src")
     }
     Seq((1, "")).toDF("key", "value").createOrReplaceTempView("src")

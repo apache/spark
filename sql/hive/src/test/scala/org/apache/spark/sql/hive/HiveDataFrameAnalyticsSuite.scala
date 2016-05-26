@@ -40,7 +40,7 @@ class HiveDataFrameAnalyticsSuite extends QueryTest with TestHiveSingleton with 
 
   override def afterAll(): Unit = {
     try {
-      hiveContext.dropTempTable("mytable")
+      spark.catalog.dropTempView("mytable")
     } finally {
       super.afterAll()
     }
