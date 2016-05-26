@@ -29,8 +29,8 @@ import org.apache.spark.sql.execution.QueryExecution
 /**
  * :: Experimental ::
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
- * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupBy` on an existing
- * [[Dataset]].
+ * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupByKey` on an
+ * existing [[Dataset]].
  *
  * @since 2.0.0
  */

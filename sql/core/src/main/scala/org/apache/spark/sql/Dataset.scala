@@ -1255,6 +1255,7 @@ class Dataset[T] private[sql](
    * :: Experimental ::
    * (Scala-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
+   * Replaces `groupBy` combined with `keyAs` from Spark 1.6.
    *
    * @group typedrel
    * @since 2.0.0
@@ -1277,6 +1278,7 @@ class Dataset[T] private[sql](
    * :: Experimental ::
    * (Java-specific)
    * Returns a [[KeyValueGroupedDataset]] where the data is grouped by the given key `func`.
+   * Replaces `groupBy` combined with `keyAs` from Spark 1.6.
    *
    * @group typedrel
    * @since 2.0.0
