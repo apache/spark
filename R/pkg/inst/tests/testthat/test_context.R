@@ -27,6 +27,11 @@ test_that("Check masked functions", {
   namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
                      "summary", "transform", "drop", "window", "as.data.frame")
+  namesOfMaskedCompletely <- c("cov", "filter", "sample")
+  if (as.numeric(R.version$major) == 3 && as.numeric(R.version$minor) > 2) {
+    namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
+    namesOfMaskedCompletely <- c("endsWith", "startsWith", namesOfMaskedCompletely)
+  }
   expect_equal(length(maskedBySparkR), length(namesOfMasked))
   expect_equal(sort(maskedBySparkR), sort(namesOfMasked))
   # above are those reported as masked when `library(SparkR)`
@@ -36,7 +41,6 @@ test_that("Check masked functions", {
                                         any(grepl("=\"ANY\"", capture.output(showMethods(x)[-1])))
                                       }))
   maskedCompletely <- masked[!funcHasAny]
-  namesOfMaskedCompletely <- c("cov", "filter", "sample")
   expect_equal(length(maskedCompletely), length(namesOfMaskedCompletely))
   expect_equal(sort(maskedCompletely), sort(namesOfMaskedCompletely))
 })

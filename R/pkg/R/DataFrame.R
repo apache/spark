@@ -1445,7 +1445,11 @@ setMethod("[", signature(x = "SparkDataFrame"),
 #' }
 setMethod("subset", signature(x = "SparkDataFrame"),
           function(x, subset, select, drop = F, ...) {
-            x[subset, select, drop = drop]
+            if (missing(subset)) {
+                x[, select, drop = drop, ...]
+            } else {
+                x[subset, select, drop = drop, ...]
+            }
           })
 
 #' Select

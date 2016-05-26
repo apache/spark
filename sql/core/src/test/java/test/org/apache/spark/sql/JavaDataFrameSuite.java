@@ -21,6 +21,8 @@ import java.io.Serializable;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.util.*;
+import java.math.BigInteger;
+import java.math.BigDecimal;
 
 import scala.collection.JavaConverters;
 import scala.collection.Seq;
@@ -130,6 +132,7 @@ public class JavaDataFrameSuite {
     private Integer[] b = { 0, 1 };
     private Map<String, int[]> c = ImmutableMap.of("hello", new int[] { 1, 2 });
     private List<String> d = Arrays.asList("floppy", "disk");
+    private BigInteger e = new BigInteger("1234567");
 
     public double getA() {
       return a;
@@ -146,6 +149,8 @@ public class JavaDataFrameSuite {
     public List<String> getD() {
       return d;
     }
+
+    public BigInteger getE() { return e; }
   }
 
   void validateDataFrameWithBeans(Bean bean, Dataset<Row> df) {
@@ -163,7 +168,9 @@ public class JavaDataFrameSuite {
     Assert.assertEquals(
       new StructField("d", new ArrayType(DataTypes.StringType, true), true, Metadata.empty()),
       schema.apply("d"));
-    Row first = df.select("a", "b", "c", "d").first();
+    Assert.assertEquals(new StructField("e", DataTypes.createDecimalType(38,0), true,
+      Metadata.empty()), schema.apply("e"));
+    Row first = df.select("a", "b", "c", "d", "e").first();
     Assert.assertEquals(bean.getA(), first.getDouble(0), 0.0);
     // Now Java lists and maps are converted to Scala Seq's and Map's. Once we get a Seq below,
     // verify that it has the expected length, and contains expected elements.
@@ -182,6 +189,8 @@ public class JavaDataFrameSuite {
     for (int i = 0; i < d.length(); i++) {
       Assert.assertEquals(bean.getD().get(i), d.apply(i));
     }
+    // Java.math.BigInteger is equavient to Spark Decimal(38,0)
+    Assert.assertEquals(new BigDecimal(bean.getE()), first.getDecimal(4));
   }
 
   @Test

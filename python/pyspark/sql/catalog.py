@@ -244,21 +244,23 @@ class Catalog(object):
 def _test():
     import os
     import doctest
-    from pyspark.context import SparkContext
-    from pyspark.sql.session import SparkSession
+    from pyspark.sql import SparkSession
     import pyspark.sql.catalog
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.catalog.__dict__.copy()
-    sc = SparkContext('local[4]', 'PythonTest')
-    globs['sc'] = sc
-    globs['spark'] = SparkSession(sc)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("sql.catalog tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
+    globs['spark'] = spark
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.catalog,
         globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

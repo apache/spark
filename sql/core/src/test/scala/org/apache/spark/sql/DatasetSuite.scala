@@ -81,6 +81,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val data = (1 to 100).map(i => ClassData(i.toString, i))
     val ds = data.toDS()
 
+    intercept[IllegalArgumentException] {
+      ds.coalesce(0)
+    }
+
+    intercept[IllegalArgumentException] {
+      ds.repartition(0)
+    }
+
     assert(ds.repartition(10).rdd.partitions.length == 10)
     checkDataset(
       ds.repartition(10),
@@ -205,17 +213,24 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("b", 2))
   }
 
+  test("filter and then select") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.filter(_._1 == "b").select(expr("_1").as[String]),
+      ("b"))
+  }
+
   test("foreach") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    val acc = sparkContext.accumulator(0)
-    ds.foreach(v => acc += v._2)
+    val acc = sparkContext.longAccumulator
+    ds.foreach(v => acc.add(v._2))
     assert(acc.value == 6)
   }
 
   test("foreachPartition") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    val acc = sparkContext.accumulator(0)
-    ds.foreachPartition(_.foreach(v => acc += v._2))
+    val acc = sparkContext.longAccumulator
+    ds.foreachPartition(_.foreach(v => acc.add(v._2)))
     assert(acc.value == 6)
   }
 
@@ -507,7 +522,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val schema = StructType(Seq(
       StructField("f", StructType(Seq(
         StructField("a", StringType, nullable = true),
-        StructField("b", IntegerType, nullable = false)
+        StructField("b", IntegerType, nullable = true)
       )), nullable = true)
     ))
 
@@ -684,7 +699,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val message = intercept[Exception] {
       df.collect()
     }.getMessage
-    assert(message.contains("The 0th field of input row cannot be null"))
+    assert(message.contains("The 0th field 'i' of input row cannot be null"))
+  }
+
+  test("row nullability mismatch") {
+    val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
+    val rdd = sqlContext.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
+    val message = intercept[Exception] {
+      sqlContext.createDataFrame(rdd, schema).collect()
+    }.getMessage
+    assert(message.contains("The 1th field 'b' of input row cannot be null"))
   }
 
   test("createTempView") {
@@ -701,6 +725,11 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     intercept[AnalysisException](dataset.createTempView("tempView"))
     assert(e.message.contains("already exists"))
     dataset.sparkSession.catalog.dropTempView("tempView")
+  }
+
+  test("SPARK-15381: physical object operator should define `reference` correctly") {
+    val df = Seq(1 -> 2).toDF("a", "b")
+    checkAnswer(df.map(row => row)(RowEncoder(df.schema)).select("b", "a"), Row(2, 1))
   }
 }
 

@@ -289,8 +289,8 @@ case class UnwrapOption(
       ${inputObject.code}
 
       final boolean ${ev.isNull} = ${inputObject.isNull} || ${inputObject.value}.isEmpty();
-      $javaType ${ev.value} =
-        ${ev.isNull} ? ${ctx.defaultValue(javaType)} : ($javaType) ${inputObject.value}.get();
+      $javaType ${ev.value} = ${ev.isNull} ?
+        ${ctx.defaultValue(javaType)} : (${ctx.boxedType(javaType)}) ${inputObject.value}.get();
     """
     ev.copy(code = code)
   }
@@ -656,7 +656,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
   extends UnaryExpression with NonSQLExpression {
 
   override def dataType: DataType = child.dataType
-
+  override def foldable: Boolean = false
   override def nullable: Boolean = false
 
   override def eval(input: InternalRow): Any =
@@ -693,6 +693,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
 case class GetExternalRowField(
     child: Expression,
     index: Int,
+    fieldName: String,
     dataType: DataType) extends UnaryExpression with NonSQLExpression {
 
   override def nullable: Boolean = false
@@ -716,7 +717,8 @@ case class GetExternalRowField(
       }
 
       if (${row.value}.isNullAt($index)) {
-        throw new RuntimeException("The ${index}th field of input row cannot be null.");
+        throw new RuntimeException("The ${index}th field '$fieldName' of input row " +
+          "cannot be null.");
       }
 
       final ${ctx.javaType(dataType)} ${ev.value} = $getField;

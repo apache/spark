@@ -137,7 +137,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
           hiveMetastoreVersion = version,
           hadoopVersion = VersionInfo.getVersion,
           sparkConf = sparkConf,
-          hadoopConf,
+          hadoopConf = hadoopConf,
           config = buildConf(),
           ivyPath = ivyPath).createClient()
     }
@@ -440,6 +440,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         assert(client.getFunctionOption("default", "func2").isEmpty)
       } else {
         assert(client.getFunctionOption("default", "func2").isDefined)
+        assert(client.getFunctionOption("default", "the_func_not_exists").isEmpty)
       }
     }
 

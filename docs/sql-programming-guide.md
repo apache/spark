@@ -1663,43 +1663,50 @@ Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (
 
 <div data-lang="scala"  markdown="1">
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
-not have an existing Hive deployment can still create a `HiveContext`. When not configured by the
-hive-site.xml, the context automatically creates `metastore_db` in the current directory and
-creates `warehouse` directory indicated by HiveConf, which defaults to `/user/hive/warehouse`.
-Note that you may need to grant write privilege on `/user/hive/warehouse` to the user who starts
-the spark application.
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
 
 {% highlight scala %}
-// sc is an existing SparkContext.
-val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+// warehouse_location points to the default location for managed databases and tables
+val conf = new SparkConf().setAppName("HiveFromSpark").set("spark.sql.warehouse.dir", warehouse_location)
+val spark = SparkSession.builder.config(conf).enableHiveSupport().getOrCreate()
 
-sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-sqlContext.sql("FROM src SELECT key, value").collect().foreach(println)
+spark.sql("FROM src SELECT key, value").collect().foreach(println)
 {% endhighlight %}
 
 </div>
 
 <div data-lang="java"  markdown="1">
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
-the `sql` method a `HiveContext` also provides an `hql` method, which allows queries to be
-expressed in HiveQL.
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
 
 {% highlight java %}
-// sc is an existing JavaSparkContext.
-HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc.sc);
+SparkSession spark = SparkSession.builder().appName("JavaSparkSQL").getOrCreate();
 
-sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
-sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
+spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
+spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
 
 // Queries are expressed in HiveQL.
-Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
+Row[] results = spark.sql("FROM src SELECT key, value").collect();
 
 {% endhighlight %}
 
@@ -1707,18 +1714,25 @@ Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
 
 <div data-lang="python"  markdown="1">
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL.
-{% highlight python %}
-# sc is an existing SparkContext.
-from pyspark.sql import HiveContext
-sqlContext = HiveContext(sc)
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
 
-sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+{% highlight python %}
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+
+spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results = sqlContext.sql("FROM src SELECT key, value").collect()
+results = spark.sql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
 

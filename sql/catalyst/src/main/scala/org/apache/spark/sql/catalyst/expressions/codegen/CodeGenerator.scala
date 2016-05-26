@@ -200,6 +200,11 @@ class CodegenContext {
   var freshNamePrefix = ""
 
   /**
+   * The map from a place holder to a corresponding comment
+   */
+  private val placeHolderToComments = new mutable.HashMap[String, String]
+
+  /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
    */
   def freshName(name: String): String = synchronized {
@@ -706,6 +711,25 @@ class CodegenContext {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.genCode(this))
   }
+
+  /**
+   * get a map of the pair of a place holder and a corresponding comment
+   */
+  def getPlaceHolderToComments(): collection.Map[String, String] = placeHolderToComments
+
+  /**
+   * Register a comment and return the corresponding place holder
+   */
+  def registerComment(text: String): String = {
+    val name = freshName("c")
+    val comment = if (text.contains("\n") || text.contains("\r")) {
+      text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
+    } else {
+      s"// $text"
+    }
+    placeHolderToComments += (name -> comment)
+    s"/*$name*/"
+  }
 }
 
 /**
@@ -714,6 +738,19 @@ class CodegenContext {
  */
 abstract class GeneratedClass {
   def generate(references: Array[Any]): Any
+}
+
+/**
+ * A wrapper for the source code to be compiled by [[CodeGenerator]].
+ */
+class CodeAndComment(val body: String, val comment: collection.Map[String, String])
+  extends Serializable {
+  override def equals(that: Any): Boolean = that match {
+    case t: CodeAndComment if t.body == body => true
+    case _ => false
+  }
+
+  override def hashCode(): Int = body.hashCode
 }
 
 /**
@@ -760,14 +797,14 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  def compile(code: String): GeneratedClass = {
+  def compile(code: CodeAndComment): GeneratedClass = {
     cache.get(code)
   }
 
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: String): GeneratedClass = {
+  private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
     evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
@@ -788,7 +825,7 @@ object CodeGenerator extends Logging {
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    def formatted = CodeFormatter.format(code)
+    lazy val formatted = CodeFormatter.format(code)
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
@@ -797,7 +834,7 @@ object CodeGenerator extends Logging {
     })
 
     try {
-      evaluator.cook("generated.java", code)
+      evaluator.cook("generated.java", code.body)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -819,8 +856,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[String, GeneratedClass]() {
-        override def load(code: String): GeneratedClass = {
+      new CacheLoader[CodeAndComment, GeneratedClass]() {
+        override def load(code: CodeAndComment): GeneratedClass = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()

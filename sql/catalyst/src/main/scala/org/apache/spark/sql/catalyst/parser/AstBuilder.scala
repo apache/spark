@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
@@ -82,37 +83,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   protected def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
 
   /**
-   * Create a plan for a SHOW FUNCTIONS command.
-   */
-  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    if (qualifiedName != null) {
-      val name = visitFunctionName(qualifiedName)
-      ShowFunctions(name.database, Some(name.funcName))
-    } else if (pattern != null) {
-      ShowFunctions(None, Some(string(pattern)))
-    } else {
-      ShowFunctions(None, None)
-    }
-  }
-
-  /**
-   * Create a plan for a DESCRIBE FUNCTION command.
-   */
-  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    val functionName =
-      if (describeFuncName.STRING() != null) {
-        FunctionIdentifier(string(describeFuncName.STRING()), database = None)
-      } else if (describeFuncName.qualifiedName() != null) {
-        visitFunctionName(describeFuncName.qualifiedName)
-      } else {
-        FunctionIdentifier(describeFuncName.getText, database = None)
-      }
-    DescribeFunction(functionName, EXTENDED != null)
-  }
-
-  /**
    * Create a top-level plan with Common Table Expressions.
    */
   override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
@@ -125,14 +95,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           val namedQuery = visitNamedQuery(nCtx)
           (namedQuery.alias, namedQuery)
       }
-
       // Check for duplicate names.
-      ctes.groupBy(_._1).filter(_._2.size > 1).foreach {
-        case (name, _) =>
-          throw new ParseException(
-            s"Name '$name' is used for multiple common table expressions", ctx)
-      }
-
+      checkDuplicateKeys(ctes, ctx)
       With(query, ctes.toMap)
     }
   }
@@ -220,11 +184,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
-    ctx.partitionVal.asScala.map { pVal =>
+    val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText.toLowerCase
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
-    }.toMap
+    }
+    // Check for duplicate partition columns in one spec.
+    checkDuplicateKeys(parts, ctx)
+    parts.toMap
   }
 
   /**
@@ -774,7 +741,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * ******************************************************************************************** */
   /**
    * Create an expression from the given context. This method just passes the context on to the
-   * vistor and only takes care of typing (We assume that the visitor returns an Expression here).
+   * visitor and only takes care of typing (We assume that the visitor returns an Expression here).
    */
   protected def expression(ctx: ParserRuleContext): Expression = typedVisit(ctx)
 
