@@ -60,7 +60,7 @@ Running Spark on YARN requires a binary distribution of Spark which is built wit
 Binary distributions can be downloaded from the [downloads page](http://spark.apache.org/downloads.html) of the project website.
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
-To make Spark runtime jars accessible from YARN side, basically you could specify through `spark.yarn.archive` or `spark.yarn.jars`, for the details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will fall back to zip all the jars under `$SPARK_HOME/jars` and upload to distributed cache.
+To make Spark runtime jars accessible from YARN side, you can specify through `spark.yarn.archive` or `spark.yarn.jars`, for details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will fall back to zip all the jars under `$SPARK_HOME/jars` and upload to the distributed cache.
 
 # Configuration
 
@@ -101,7 +101,7 @@ to the same log file).
 
 If you need a reference to the proper location to put log files in the YARN so that YARN can properly display and aggregate them, use `spark.yarn.app.container.log.dir` in your `log4j.properties`. For example, `log4j.appender.file_appender.File=${spark.yarn.app.container.log.dir}/spark.log`. For streaming applications, configuring `RollingFileAppender` and setting file location to YARN's log directory will avoid disk overflow caused by large log files, and logs can be accessed using YARN's log utility.
 
-To use a custom metrics.properties for the application master and executors, just update the `$SPARK_CONF_DIR/metrics.properties` file, it will automatically uploaded with other configurations, so you don't need to specify it manually with --files.
+To use a custom metrics.properties for the application master and executors, update the `$SPARK_CONF_DIR/metrics.properties` file. It will automatically be uploaded with other configurations, so you don't need to specify it manually with `--files`.
 
 #### Spark Properties
 
