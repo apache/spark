@@ -40,7 +40,7 @@ private[sql] case class InsertIntoDataSourceCommand(
     relation.insert(df, overwrite)
 
     // Invalidate the cache.
-    sparkSession.cacheManager.invalidateCache(logicalRelation)
+    sparkSession.sharedState.cacheManager.invalidateCache(logicalRelation)
 
     Seq.empty[Row]
   }

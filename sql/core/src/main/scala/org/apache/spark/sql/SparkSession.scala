@@ -34,10 +34,9 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql.catalog.Catalog
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Range}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
@@ -51,7 +50,14 @@ import org.apache.spark.util.Utils
 /**
  * The entry point to programming Spark with the Dataset and DataFrame API.
  *
- * To create a SparkSession, use the following builder pattern:
+ * In environments that this has been created upfront (e.g. REPL, notebooks), use the builder
+ * to get an existing session:
+ *
+ * {{{
+ *   SparkSession.builder().getOrCreate()
+ * }}}
+ *
+ * The builder can also be used to create a new session:
  *
  * {{{
  *   SparkSession.builder()
@@ -81,7 +87,7 @@ class SparkSession private(
    * and a catalog that interacts with external systems.
    */
   @transient
-  protected[sql] lazy val sharedState: SharedState = {
+  private[sql] lazy val sharedState: SharedState = {
     existingSharedState.getOrElse(
       SparkSession.reflect[SharedState, SparkContext](
         SparkSession.sharedStateClassName(sparkContext.conf),
@@ -93,7 +99,7 @@ class SparkSession private(
    * functions, and everything else that accepts a [[org.apache.spark.sql.internal.SQLConf]].
    */
   @transient
-  protected[sql] lazy val sessionState: SessionState = {
+  private[sql] lazy val sessionState: SessionState = {
     SparkSession.reflect[SessionState, SparkSession](
       SparkSession.sessionStateClassName(sparkContext.conf),
       self)
@@ -104,10 +110,6 @@ class SparkSession private(
    */
   @transient
   private[sql] val sqlContext: SQLContext = new SQLContext(this)
-
-  protected[sql] def cacheManager: CacheManager = sharedState.cacheManager
-  protected[sql] def listener: SQLListener = sharedState.listener
-  protected[sql] def externalCatalog: ExternalCatalog = sharedState.externalCatalog
 
   /**
    * Runtime configuration interface for Spark.
@@ -178,12 +180,14 @@ class SparkSession private(
   def udf: UDFRegistration = sessionState.udf
 
   /**
+   * :: Experimental ::
    * Returns a [[ContinuousQueryManager]] that allows managing all the
    * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this`.
    *
    * @group basic
    * @since 2.0.0
    */
+  @Experimental
   def streams: ContinuousQueryManager = sessionState.continuousQueryManager
 
   /**
@@ -208,13 +212,11 @@ class SparkSession private(
    * --------------------------------- */
 
   /**
-   * :: Experimental ::
    * Returns a [[DataFrame]] with no rows or columns.
    *
    * @group dataframes
    * @since 2.0.0
    */
-  @Experimental
   @transient
   lazy val emptyDataFrame: DataFrame = {
     createDataFrame(sparkContext.emptyRDD[Row], StructType(Nil))
@@ -449,7 +451,7 @@ class SparkSession private(
    * Creates a [[DataFrame]] from an RDD[Row].
    * User can specify whether the input rows should be converted to Catalyst rows.
    */
-  protected[sql] def internalCreateDataFrame(
+  private[sql] def internalCreateDataFrame(
       catalystRows: RDD[InternalRow],
       schema: StructType): DataFrame = {
     // TODO: use MutableProjection when rowRDD is another DataFrame and the applied
@@ -462,7 +464,7 @@ class SparkSession private(
    * Creates a [[DataFrame]] from an RDD[Row].
    * User can specify whether the input rows should be converted to Catalyst rows.
    */
-  protected[sql] def createDataFrame(
+  private[sql] def createDataFrame(
       rowRDD: RDD[Row],
       schema: StructType,
       needsConversion: Boolean) = {
@@ -502,7 +504,7 @@ class SparkSession private(
     table(sessionState.sqlParser.parseTableIdentifier(tableName))
   }
 
-  protected[sql] def table(tableIdent: TableIdentifier): DataFrame = {
+  private[sql] def table(tableIdent: TableIdentifier): DataFrame = {
     Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
   }
 
@@ -510,7 +512,7 @@ class SparkSession private(
    * Creates a temporary view with a DataFrame. The lifetime of this temporary view is tied to
    * this [[SparkSession]].
    */
-  protected[sql] def createTempView(
+  private[sql] def createTempView(
       viewName: String, df: DataFrame, replaceIfExists: Boolean) = {
     sessionState.catalog.createTempView(
       sessionState.sqlParser.parseTableIdentifier(viewName).table,
@@ -529,11 +531,10 @@ class SparkSession private(
    * @since 2.0.0
    */
   def sql(sqlText: String): DataFrame = {
-    Dataset.ofRows(self, parseSql(sqlText))
+    Dataset.ofRows(self, sessionState.sqlParser.parsePlan(sqlText))
   }
 
   /**
-   * :: Experimental ::
    * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
    * {{{
    *   sparkSession.read.parquet("/path/to/file.parquet")
@@ -543,7 +544,6 @@ class SparkSession private(
    * @group genericdata
    * @since 2.0.0
    */
-  @Experimental
   def read: DataFrameReader = new DataFrameReader(self)
 
 
@@ -577,18 +577,6 @@ class SparkSession private(
     sparkContext.stop()
   }
 
-  protected[sql] def parseSql(sql: String): LogicalPlan = {
-    sessionState.sqlParser.parsePlan(sql)
-  }
-
-  protected[sql] def executeSql(sql: String): QueryExecution = {
-    executePlan(parseSql(sql))
-  }
-
-  protected[sql] def executePlan(plan: LogicalPlan): QueryExecution = {
-    sessionState.executePlan(plan)
-  }
-
   /**
    * Parses the data type in our internal string representation. The data type string should
    * have the same format as the one generated by `toString` in scala.
@@ -601,17 +589,17 @@ class SparkSession private(
   /**
    * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
    */
-  protected[sql] def applySchemaToPythonRDD(
+  private[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
       schemaString: String): DataFrame = {
-    val schema = parseDataType(schemaString).asInstanceOf[StructType]
+    val schema = DataType.fromJson(schemaString).asInstanceOf[StructType]
     applySchemaToPythonRDD(rdd, schema)
   }
 
   /**
    * Apply a schema defined by the schema to an RDD. It is only used by PySpark.
    */
-  protected[sql] def applySchemaToPythonRDD(
+  private[sql] def applySchemaToPythonRDD(
       rdd: RDD[Array[Any]],
       schema: StructType): DataFrame = {
     val rowRdd = rdd.map(r => python.EvaluatePython.fromJava(r, schema).asInstanceOf[InternalRow])

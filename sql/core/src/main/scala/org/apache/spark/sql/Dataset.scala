@@ -58,7 +58,7 @@ private[sql] object Dataset {
   }
 
   def ofRows(sparkSession: SparkSession, logicalPlan: LogicalPlan): DataFrame = {
-    val qe = sparkSession.executePlan(logicalPlan)
+    val qe = sparkSession.sessionState.executePlan(logicalPlan)
     qe.assertAnalyzed()
     new Dataset[Row](sparkSession, logicalPlan, RowEncoder(qe.analyzed.schema))
   }
@@ -165,14 +165,14 @@ class Dataset[T] private[sql](
   // you wrap it with `withNewExecutionId` if this actions doesn't call other action.
 
   def this(sparkSession: SparkSession, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
-    this(sparkSession, sparkSession.executePlan(logicalPlan), encoder)
+    this(sparkSession, sparkSession.sessionState.executePlan(logicalPlan), encoder)
   }
 
   def this(sqlContext: SQLContext, logicalPlan: LogicalPlan, encoder: Encoder[T]) = {
     this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
-  @transient protected[sql] val logicalPlan: LogicalPlan = {
+  @transient private[sql] val logicalPlan: LogicalPlan = {
     def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
       case _: Command |
            _: InsertIntoTable |
@@ -215,7 +215,7 @@ class Dataset[T] private[sql](
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
-  protected[sql] def resolve(colName: String): NamedExpression = {
+  private[sql] def resolve(colName: String): NamedExpression = {
     queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
       .getOrElse {
         throw new AnalysisException(
@@ -223,7 +223,7 @@ class Dataset[T] private[sql](
       }
   }
 
-  protected[sql] def numericColumns: Seq[Expression] = {
+  private[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
       queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
     }
@@ -417,7 +417,7 @@ class Dataset[T] private[sql](
    */
   def explain(extended: Boolean): Unit = {
     val explain = ExplainCommand(queryExecution.logical, extended = extended)
-    sparkSession.executePlan(explain).executedPlan.executeCollect().foreach {
+    sparkSession.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       // scalastyle:off println
       r => println(r.getString(0))
       // scalastyle:on println
@@ -641,7 +641,7 @@ class Dataset[T] private[sql](
   def join(right: Dataset[_], usingColumns: Seq[String], joinType: String): DataFrame = {
     // Analyze the self join. The assumption is that the analyzer will disambiguate left vs right
     // by creating a new instance for one of the branch.
-    val joined = sparkSession.executePlan(
+    val joined = sparkSession.sessionState.executePlan(
       Join(logicalPlan, right.logicalPlan, joinType = JoinType(joinType), None))
       .analyzed.asInstanceOf[Join]
 
@@ -757,7 +757,7 @@ class Dataset[T] private[sql](
     val left = this.logicalPlan
     val right = other.logicalPlan
 
-    val joined = sparkSession.executePlan(Join(left, right, joinType =
+    val joined = sparkSession.sessionState.executePlan(Join(left, right, joinType =
       JoinType(joinType), Some(condition.expr)))
     val leftOutput = joined.analyzed.output.take(left.output.length)
     val rightOutput = joined.analyzed.output.takeRight(right.output.length)
@@ -1263,7 +1263,7 @@ class Dataset[T] private[sql](
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
     val inputPlan = logicalPlan
     val withGroupingKey = AppendColumns(func, inputPlan)
-    val executed = sparkSession.executePlan(withGroupingKey)
+    val executed = sparkSession.sessionState.executePlan(withGroupingKey)
 
     new KeyValueGroupedDataset(
       encoderFor[K],
@@ -2238,7 +2238,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(): this.type = {
-    sparkSession.cacheManager.cacheQuery(this)
+    sparkSession.sharedState.cacheManager.cacheQuery(this)
     this
   }
 
@@ -2260,7 +2260,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def persist(newLevel: StorageLevel): this.type = {
-    sparkSession.cacheManager.cacheQuery(this, None, newLevel)
+    sparkSession.sharedState.cacheManager.cacheQuery(this, None, newLevel)
     this
   }
 
@@ -2273,7 +2273,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def unpersist(blocking: Boolean): this.type = {
-    sparkSession.cacheManager.tryUncacheQuery(this, blocking)
+    sparkSession.sharedState.cacheManager.tryUncacheQuery(this, blocking)
     this
   }
 
@@ -2294,7 +2294,7 @@ class Dataset[T] private[sql](
   lazy val rdd: RDD[T] = {
     val objectType = unresolvedTEncoder.deserializer.dataType
     val deserialized = CatalystSerde.deserialize[T](logicalPlan)
-    sparkSession.executePlan(deserialized).toRdd.mapPartitions { rows =>
+    sparkSession.sessionState.executePlan(deserialized).toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])
     }
   }
@@ -2417,19 +2417,19 @@ class Dataset[T] private[sql](
   /**
    * Converts a JavaRDD to a PythonRDD.
    */
-  protected[sql] def javaToPython: JavaRDD[Array[Byte]] = {
+  private[sql] def javaToPython: JavaRDD[Array[Byte]] = {
     val structType = schema  // capture it for closure
     val rdd = queryExecution.toRdd.map(EvaluatePython.toJava(_, structType))
     EvaluatePython.javaToPython(rdd)
   }
 
-  protected[sql] def collectToPython(): Int = {
+  private[sql] def collectToPython(): Int = {
     withNewExecutionId {
       PythonRDD.collectAndServe(javaToPython.rdd)
     }
   }
 
-  protected[sql] def toPythonIterator(): Int = {
+  private[sql] def toPythonIterator(): Int = {
     withNewExecutionId {
       PythonRDD.toLocalIteratorAndServe(javaToPython.rdd)
     }
