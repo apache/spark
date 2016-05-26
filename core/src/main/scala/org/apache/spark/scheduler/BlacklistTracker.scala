@@ -116,6 +116,10 @@ private[spark] class BlacklistTracker(
 
   // The actual implementation is delegated to strategy
   def nodeBlacklistForStage(stageId: Int): Set[String] = synchronized {
+    // TODO here and elsewhere -- we invalidate the cache way too often.  In general, we should
+    // be able to do an in-place update of the caches.  (a) this is slow and (b) it makes
+    // it really hard to track when the blacklist actually changes (would be *really* nice to
+    // log a msg about node level blacklisting at least)
     if (isBlacklistNodeForStageCacheValid) {
       getNodeBlacklistForStageFromCache(stageId).getOrElse(
         reEvaluateNodeBlacklistForStageAndUpdateCache(stageId))
@@ -192,12 +196,8 @@ private[spark] class BlacklistTracker(
   private def executorsOnBlacklistedNode(
       sched: TaskSchedulerImpl,
       atomTask: StageAndPartition): Set[String] = {
-    val nodeBl = nodeBlacklistForStage(atomTask.stageId).flatMap(sched.getExecutorsAliveOnHost(_)
+    nodeBlacklistForStage(atomTask.stageId).flatMap(sched.getExecutorsAliveOnHost(_)
       .getOrElse(Set.empty[String]))
-    if (nodeBl.nonEmpty) {
-      logInfo(s"${atomTask} is blacklisted on executors ${nodeBl} from node blacklist")
-    }
-    nodeBl
   }
 
   private def reEvaluateExecutorBlacklistAndUpdateCache(
