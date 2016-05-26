@@ -402,7 +402,7 @@ public class UnsafeShuffleWriterSuite {
   public void writeEnoughRecordsToTriggerSortBufferExpansionAndSpillRadixOff() throws Exception {
     conf.set("spark.shuffle.sort.useRadixSort", "false");
     writeEnoughRecordsToTriggerSortBufferExpansionAndSpill();
-    assertEquals(3, spillFilesCreated.size());
+    assertEquals(2, spillFilesCreated.size());
   }
 
   @Test
