@@ -127,7 +127,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
     postMessage(message.receiver.name, rpcMessage, (e) => p.tryFailure(e))
   }
 
-  /** Posts an one-way message. */
+  /** Posts a one-way message. */
   def postOneWayMessage(message: RequestMessage): Unit = {
     postMessage(message.receiver.name, OneWayMessage(message.senderAddress, message.content),
       (e) => throw e)

@@ -97,7 +97,7 @@ space characters into words.
 val words = lines.flatMap(_.split(" "))
 {% endhighlight %}
 
-`flatMap` is an one-to-many DStream operation that creates a new DStream by
+`flatMap` is a one-to-many DStream operation that creates a new DStream by
 generating multiple new records from each record in the source DStream. In this case,
 each line will be split into multiple words and the stream of words is represented as the
 `words` DStream.  Next, we want to count these words.
@@ -249,7 +249,7 @@ space into words.
 words = lines.flatMap(lambda line: line.split(" "))
 {% endhighlight %}
 
-`flatMap` is an one-to-many DStream operation that creates a new DStream by
+`flatMap` is a one-to-many DStream operation that creates a new DStream by
 generating multiple new records from each record in the source DStream. In this case,
 each line will be split into multiple words and the stream of words is represented as the
 `words` DStream.  Next, we want to count these words.

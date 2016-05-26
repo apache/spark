@@ -1025,7 +1025,7 @@ class OneHotEncoder(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, 
     """
     .. note:: Experimental
 
-    An one-hot encoder that maps a column of category indices to a
+    A one-hot encoder that maps a column of category indices to a
     column of binary vectors, with at most a single one-value per row
     that indicates the input category index.
     For example with 5 categories, an input value of 2.0 would map to

@@ -219,7 +219,7 @@ class BlockManagerMaster(
     }
   }
 
-  /** Send an one-way message to the master endpoint, to which we expect it to reply with true. */
+  /** Send a one-way message to the master endpoint, to which we expect it to reply with true. */
   private def tell(message: Any) {
     if (!driverEndpoint.askWithRetry[Boolean](message)) {
       throw new SparkException("BlockManagerMasterEndpoint returned false, expected true.")

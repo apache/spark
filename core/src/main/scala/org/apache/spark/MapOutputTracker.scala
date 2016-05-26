@@ -105,7 +105,7 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  /** Send an one-way message to the trackerEndpoint, to which we expect it to reply with true. */
+  /** Send a one-way message to the trackerEndpoint, to which we expect it to reply with true. */
   protected def sendTracker(message: Any) {
     val response = askTracker[Boolean](message)
     if (response != true) {

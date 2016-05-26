@@ -227,7 +227,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
-   *  - `createCombiner`, which turns a V into a C (e.g., creates an one-element list)
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    *  - `mergeCombiners`, to combine two C's into a single one.
    *
@@ -259,7 +259,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
-   *  - `createCombiner`, which turns a V into a C (e.g., creates an one-element list)
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    *  - `mergeCombiners`, to combine two C's into a single one.
    *

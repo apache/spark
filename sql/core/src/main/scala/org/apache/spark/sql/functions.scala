@@ -2571,7 +2571,7 @@ object functions {
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
    * the order of months are not supported. The following example takes the average stock price for
-   * an one minute window every 10 seconds starting 5 seconds after the hour:
+   * a one minute window every 10 seconds starting 5 seconds after the hour:
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
@@ -2625,7 +2625,7 @@ object functions {
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
    * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
-   * The following example takes the average stock price for an one minute window every 10 seconds:
+   * The following example takes the average stock price for a one minute window every 10 seconds:
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
@@ -2667,7 +2667,7 @@ object functions {
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
    * the order of months are not supported. The windows start beginning at 1970-01-01 00:00:00 UTC.
-   * The following example takes the average stock price for an one minute tumbling window:
+   * The following example takes the average stock price for a one minute tumbling window:
    *
    * {{{
    *   val df = ... // schema => timestamp: TimestampType, stockId: StringType, price: DoubleType
