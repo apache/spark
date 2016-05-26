@@ -295,6 +295,14 @@ case class TruncateTableCommand(
         s"Operation not allowed: TRUNCATE TABLE on temporary tables: '$tableName'")
     }
     val table = catalog.getTableMetadata(tableName)
+    if (table.tableType == CatalogTableType.EXTERNAL) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE on external tables: '$tableName'")
+    }
+    if (table.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE on views: '$tableName'")
+    }
     if (DDLUtils.isDatasourceTable(table) && partitionSpec.isDefined) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
