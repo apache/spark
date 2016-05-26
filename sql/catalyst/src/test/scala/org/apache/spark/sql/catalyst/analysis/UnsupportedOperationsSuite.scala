@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, OutputMode}
-import org.apache.spark.sql.OutputMode._
+import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -197,9 +197,9 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     "window", Window(Nil, Nil, Nil, _), expectedMsg = "non-time-based windows")
 
   // Output modes with aggregation and non-aggregation plans
-  testOutputMode(OutputMode.Append, shouldSupportAggregation = false)
-  testOutputMode(OutputMode.Update, shouldSupportAggregation = true)
-  testOutputMode(OutputMode.Complete, shouldSupportAggregation = true)
+  testOutputMode(Append, shouldSupportAggregation = false)
+  testOutputMode(Update, shouldSupportAggregation = true)
+  testOutputMode(Complete, shouldSupportAggregation = true)
 
   /*
     =======================================================================================

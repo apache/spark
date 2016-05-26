@@ -37,7 +37,7 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAft
 
   test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Append)
+    val sink = new MemorySink(schema, InternalOutputModes.Append)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -71,7 +71,7 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAft
 
   test("directly add data in Update output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Append)
+    val sink = new MemorySink(schema, InternalOutputModes.Update)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)
@@ -105,7 +105,7 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAft
 
   test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
-    val sink = new MemorySink(schema, OutputMode.Complete)
+    val sink = new MemorySink(schema, InternalOutputModes.Complete)
 
     // Before adding data, check output
     assert(sink.latestBatchId === None)

@@ -20,7 +20,8 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfterAll
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{AnalysisException, OutputMode, StreamTest}
+import org.apache.spark.sql.{AnalysisException, StreamTest}
+import org.apache.spark.sql.InternalOutputModes._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStore
 import org.apache.spark.sql.expressions.scalalang.typed
@@ -49,7 +50,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
         .agg(count("*"))
         .as[(Int, Long)]
 
-    testStream(aggregated, OutputMode.Update)(
+    testStream(aggregated, Update)(
       AddData(inputData, 3),
       CheckLastBatch((3, 1)),
       AddData(inputData, 3, 2),
@@ -73,7 +74,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
         .agg(count("*"))
         .as[(Int, Long)]
 
-    testStream(aggregated, OutputMode.Complete)(
+    testStream(aggregated, Complete)(
       AddData(inputData, 3),
       CheckLastBatch((3, 1)),
       AddData(inputData, 2),
@@ -97,7 +98,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
         .as[(Int, Long)]
 
     intercept[AnalysisException] {
-      testStream(aggregated, OutputMode.Append)()
+      testStream(aggregated, Append)()
     }
   }
 
@@ -110,7 +111,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
         .agg(count("*"))
         .as[(Int, Int, Long)]
 
-    testStream(aggregated, OutputMode.Update)(
+    testStream(aggregated, Update)(
       AddData(inputData, 1, 2),
       CheckLastBatch((1, 2, 1), (2, 3, 1)),
       AddData(inputData, 1, 2),
@@ -135,7 +136,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
           .agg(count("*"))
           .as[(Int, Long)]
 
-    testStream(aggregated, OutputMode.Update)(
+    testStream(aggregated, Update)(
       StartStream(),
       AddData(inputData, 1, 2, 3, 4),
       ExpectFailure[SparkException](),
@@ -148,7 +149,7 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
     val inputData = MemoryStream[(String, Int)]
     val aggregated = inputData.toDS().groupByKey(_._1).agg(typed.sumLong(_._2))
 
-    testStream(aggregated, OutputMode.Update)(
+    testStream(aggregated, Update)(
       AddData(inputData, ("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)),
       CheckLastBatch(("a", 30), ("b", 3), ("c", 1))
     )

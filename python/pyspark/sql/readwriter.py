@@ -513,6 +513,8 @@ class DataFrameWriter(object):
         * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
 
+       .. note:: Experimental.
+
         >>> sdf.write.outputMode('append')
         """
         if outputMode is not None:

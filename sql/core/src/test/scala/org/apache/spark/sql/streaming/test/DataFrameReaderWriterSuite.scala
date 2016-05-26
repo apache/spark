@@ -435,15 +435,19 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     }
   }
 
-  test("check outputMode(string) throws expcetion on incorrect mode") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[IllegalArgumentException](w.outputMode("xyz"))
-    Seq("output mode", "unknown", "xyz").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+  test("check outputMode(string) throws exception on unsupported modes") {
+    def testError(outputMode: String): Unit = {
+      val df = spark.read
+        .format("org.apache.spark.sql.streaming.test")
+        .stream()
+      val w = df.write
+      val e = intercept[IllegalArgumentException](w.outputMode(outputMode))
+      Seq("output mode", "unknown", outputMode).foreach { s =>
+        assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      }
     }
+    testError("Update")
+    testError("Xyz")
   }
 
   test("check bucketBy() can only be called on non-continuous queries") {

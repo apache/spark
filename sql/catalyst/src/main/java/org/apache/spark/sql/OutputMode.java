@@ -17,8 +17,13 @@
 
 package org.apache.spark.sql;
 
-public enum OutputMode {
-  Append,
-  Update,
-  Complete
+public class OutputMode {
+
+  public static OutputMode Append() {
+    return InternalOutputModes.Append$.MODULE$;
+  }
+
+  public static OutputMode Complete() {
+    return InternalOutputModes.Complete$.MODULE$;
+  }
 }

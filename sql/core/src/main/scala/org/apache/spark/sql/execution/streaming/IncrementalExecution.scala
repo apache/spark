@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.{OutputMode, SparkSession}
+import org.apache.spark.sql.{InternalOutputModes, OutputMode, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
@@ -59,7 +59,7 @@ class IncrementalExecution private[sql](
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
         val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
-        val returnAllStates = if (outputMode == OutputMode.Complete) true else false
+        val returnAllStates = if (outputMode == InternalOutputModes.Complete) true else false
         operatorId += 1
 
         StateStoreSaveExec(

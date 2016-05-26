@@ -146,10 +146,10 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
     if (latestBatchId.isEmpty || batchId > latestBatchId.get) {
       logDebug(s"Committing batch $batchId to $this")
       outputMode match {
-        case OutputMode.Append | OutputMode.Update =>
+        case InternalOutputModes.Append | InternalOutputModes.Update =>
           batches.append(AddedData(batchId, data.collect()))
 
-        case OutputMode.Complete =>
+        case InternalOutputModes.Complete =>
           batches.clear()
           batches.append(AddedData(batchId, data.collect()))
 
