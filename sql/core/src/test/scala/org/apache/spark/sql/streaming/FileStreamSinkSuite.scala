@@ -26,27 +26,57 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream, MetadataLogFileCatalog}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.sources.DataSourceRegister
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
   import testImplicits._
 
+  test("FileStreamSinkWriter - csv - unpartitioned data") {
+    testUnpartitionedData(new csv.DefaultSource())
+  }
 
-  test("FileStreamSinkWriter - unpartitioned data") {
+  test("FileStreamSinkWriter - json - unpartitioned data") {
+    testUnpartitionedData(new json.DefaultSource())
+  }
+
+  test("FileStreamSinkWriter - parquet - unpartitioned data") {
+    testUnpartitionedData(new parquet.DefaultSource())
+  }
+
+  test("FileStreamSinkWriter - text - unpartitioned data") {
+    testUnpartitionedData(new text.DefaultSource())
+  }
+
+  private def testUnpartitionedData(fileFormat: FileFormat with DataSourceRegister) {
     val path = Utils.createTempDir()
     path.delete()
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fileFormat = new parquet.DefaultSource()
+    val testingAgainstText = fileFormat.isInstanceOf[text.DefaultSource]
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = spark
-        .range(start, end, 1, numPartitions)
-        .select($"id", lit(100).as("data"))
+
+      // The `text` format accepts only one unpartitioned column, and requires the contents be
+      // strings; so we occasionally treat `text` format differently from the other formats.
+      val df = if (testingAgainstText) {
+          // For `text` format, we'll have only one unpartitioned column
+          spark
+            .range(start, end, 1, numPartitions)
+            .map(_.toString).toDF("id")
+        }
+        else {
+          // For the other formats, we'll have two unpartitioned columns
+          spark
+            .range(start, end, 1, numPartitions)
+            .map(_.toString).toDF("id")
+            .select($"id", lit("foo").as("value"))
+        }
+
       val writer = new FileStreamSinkWriter(
         df, fileFormat, path.toString, partitionColumnNames = Nil, hadoopConf, Map.empty)
       writer.write().map(_.path.stripPrefix("file://"))
@@ -56,7 +86,9 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     val files1 = writeRange(0, 10, 2)
     assert(files1.size === 2, s"unexpected number of files: $files1")
     checkFilesExist(path, files1, "file not written")
-    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 10).map(Row(_, 100)))
+    checkAnswer(
+        spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath),
+        (0 until 10).map(_.toString).map { if (testingAgainstText) Row(_) else Row(_, "foo")} )
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(10, 20, 3)
@@ -64,23 +96,49 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     assert(files2.intersect(files1).isEmpty, "old files returned")
     checkFilesExist(path, files2, s"New file not written")
     checkFilesExist(path, files1, s"Old file not found")
-    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
+    checkAnswer(
+        spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath),
+        (0 until 20).map(_.toString).map { if (testingAgainstText) Row(_) else Row(_, "foo")} )
   }
 
-  test("FileStreamSinkWriter - partitioned data") {
+  test("FileStreamSinkWriter - csv - partitioned data") {
+    testPartitionedData(new csv.DefaultSource())
+  }
+
+  test("FileStreamSinkWriter - json - partitioned data") {
+    testPartitionedData(new json.DefaultSource())
+  }
+
+  test("FileStreamSinkWriter - parquet - partitioned data") {
+    testPartitionedData(new parquet.DefaultSource())
+  }
+
+  test("FileStreamSinkWriter - text - partitioned data") {
+    testPartitionedData(new text.DefaultSource())
+  }
+
+  private def testPartitionedData(fileFormat: FileFormat with DataSourceRegister) {
     implicit val e = ExpressionEncoder[java.lang.Long]
     val path = Utils.createTempDir()
     path.delete()
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fileFormat = new parquet.DefaultSource()
+    val testingAgainstText = fileFormat.isInstanceOf[text.DefaultSource]
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = spark
-        .range(start, end, 1, numPartitions)
-        .flatMap(x => Iterator(x, x, x)).toDF("id")
-        .select($"id", lit(100).as("data1"), lit(1000).as("data2"))
-
+      val df = if (testingAgainstText) {
+          // For `text` format, we'll have only one unpartitioned column
+          spark
+            .range(start, end, 1, numPartitions)
+            .flatMap(x => Iterator(x, x, x)).toDF("id")
+            .select($"id", lit("foo").as("value"))
+        } else {
+          // For the other formats, we'll have two unpartitioned columns
+          spark
+            .range(start, end, 1, numPartitions)
+            .flatMap(x => Iterator(x, x, x)).toDF("id")
+            .select($"id", lit("foo").as("value1"), lit("bar").as("value2"))
+        }
       require(df.rdd.partitions.size === numPartitions)
       val writer = new FileStreamSinkWriter(
         df, fileFormat, path.toString, partitionColumnNames = Seq("id"), hadoopConf, Map.empty)
@@ -102,8 +160,12 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     checkFilesExist(path, files1, "file not written")
     checkOneFileWrittenPerKey(0 until 10, files1)
 
-    val answer1 = (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(spark.read.load(path.getCanonicalPath), answer1)
+    val answer1 = if (testingAgainstText) {
+        (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row("foo", _))
+      } else {
+        (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row("foo", "bar", _))
+      }
+    checkAnswer(spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath), answer1)
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(0, 20, 3)
@@ -113,12 +175,38 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     checkFilesExist(path, files1, s"Old file not found")
     checkOneFileWrittenPerKey(0 until 20, files2)
 
-    val answer2 = (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(spark.read.load(path.getCanonicalPath), answer1 ++ answer2)
+    val answer2 = if (testingAgainstText) {
+        (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row("foo", _))
+      }
+      else {
+        (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row("foo", "bar", _))
+      }
+
+    checkAnswer(
+        spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath),
+        answer1 ++ answer2)
   }
 
-  test("FileStreamSink - unpartitioned writing and batch reading") {
-    val inputData = MemoryStream[Int]
+  test("FileStreamSink - csv - unpartitioned writing and batch reading") {
+    testUnpartitionedWritingAndBatchReading(new csv.DefaultSource())
+  }
+
+  test("FileStreamSink - json - unpartitioned writing and batch reading") {
+    testUnpartitionedWritingAndBatchReading(new json.DefaultSource())
+  }
+
+  test("FileStreamSink - parquet - unpartitioned writing and batch reading") {
+    testUnpartitionedWritingAndBatchReading(new parquet.DefaultSource())
+  }
+
+  test("FileStreamSink - text - unpartitioned writing and batch reading") {
+    testUnpartitionedWritingAndBatchReading(new text.DefaultSource())
+  }
+
+  private def testUnpartitionedWritingAndBatchReading(
+      fileFormat: FileFormat with DataSourceRegister) {
+
+    val inputData = MemoryStream[String]
     val df = inputData.toDF()
 
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
@@ -129,18 +217,18 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     try {
       query =
         df.write
-          .format("parquet")
+          .format(fileFormat.shortName())
           .option("checkpointLocation", checkpointDir)
           .startStream(outputDir)
 
-      inputData.addData(1, 2, 3)
+      inputData.addData("1", "2", "3")
 
       failAfter(streamingTimeout) {
         query.processAllAvailable()
       }
 
-      val outputDf = spark.read.parquet(outputDir).as[Int]
-      checkDataset(outputDf, 1, 2, 3)
+      val outputDf = spark.read.format(fileFormat.shortName()).load(outputDir).as[String]
+      checkDataset(outputDf, "1", "2", "3")
 
     } finally {
       if (query != null) {
@@ -149,7 +237,25 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  test("FileStreamSink - partitioned writing and batch reading") {
+  test("FileStreamSink - csv - partitioned writing and batch reading") {
+    testPartitionedWritingAndBatchReading(new csv.DefaultSource())
+  }
+
+  test("FileStreamSink - json - partitioned writing and batch reading") {
+    testPartitionedWritingAndBatchReading(new json.DefaultSource())
+  }
+
+  test("FileStreamSink - parquet - partitioned writing and batch reading") {
+    testPartitionedWritingAndBatchReading(new parquet.DefaultSource())
+  }
+
+  test("FileStreamSink - text - partitioned writing and batch reading") {
+    testPartitionedWritingAndBatchReading(new text.DefaultSource())
+  }
+
+  private def testPartitionedWritingAndBatchReading(
+      fileFormat: FileFormat with DataSourceRegister) {
+
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
 
@@ -160,12 +266,13 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
 
     try {
       query =
-        ds.map(i => (i, i * 1000))
+        ds.map(i => (i, (i * 1000).toString))
           .toDF("id", "value")
           .write
-          .format("parquet")
+          .format(fileFormat.shortName())
           .partitionBy("id")
           .option("checkpointLocation", checkpointDir)
+          .option("header", "true") // this is only for `cvs` to save column names into files
           .startStream(outputDir)
 
       inputData.addData(1, 2, 3)
@@ -173,9 +280,15 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         query.processAllAvailable()
       }
 
-      val outputDf = sqlContext.read.parquet(outputDir)
+      val outputDf =
+        sqlContext
+          .read
+          .format(fileFormat.shortName())
+          .option("header", "true") // this is only for `cvs` to load column names back from files
+          .load(outputDir)
+
       val expectedSchema = new StructType()
-        .add(StructField("value", IntegerType))
+        .add(StructField("value", StringType))
         .add(StructField("id", IntegerType))
       assert(outputDf.schema === expectedSchema)
 
@@ -192,8 +305,8 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
 
       // Verify the data is correctly read
       checkDataset(
-        outputDf.as[(Int, Int)],
-        (1000, 1), (2000, 2), (3000, 3))
+        outputDf.as[(String, Int)],
+        ("1000", 1), ("2000", 2), ("3000", 3))
 
       /** Check some condition on the partitions of the FileScanRDD generated by a DF */
       def checkFileScanPartitions(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
@@ -261,11 +374,14 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     }
 
     testFormat(None) // should not throw error as default format parquet when not specified
+    testFormat(Some("csv"))
+    testFormat(Some("json"))
     testFormat(Some("parquet"))
+    testFormat(Some("text"))
     val e = intercept[UnsupportedOperationException] {
-      testFormat(Some("text"))
+      testFormat(Some("jdbc"))
     }
-    Seq("text", "not support", "stream").foreach { s =>
+    Seq("jdbc", "not support", "stream").foreach { s =>
       assert(e.getMessage.contains(s))
     }
   }

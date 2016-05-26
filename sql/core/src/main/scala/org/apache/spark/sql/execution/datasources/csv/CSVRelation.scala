@@ -19,19 +19,22 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.RecordWriter
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
-import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources.{CompressionCodecs, OutputWriter, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableConfiguration
 
 object CSVRelation extends Logging {
 
@@ -209,5 +212,105 @@ private[sql] class CsvOutputWriter(
   override def close(): Unit = {
     flush()
     recordWriter.close(context)
+  }
+}
+
+/**
+ * A factory for generating [[OutputWriter]]s for writing CSV files. This implemented is different
+ * from the [[CSVOutputWriterFactory]] as this does not use any [[OutputCommitter]]. It simply
+ * writes the data to the path used to generate the output writer. Callers of this factory
+ * has to ensure which files are to be considered as committed.
+ */
+private[sql] class CSVStreamingOutputWriterFactory(
+    sqlConf: SQLConf,
+    dataSchema: StructType,
+    hadoopConf: Configuration,
+    options: Map[String, String]) extends OutputWriterFactory {
+
+  private val csvOptions = new CSVOptions(options)
+
+  private val serializableConf = {
+    val conf = Job.getInstance(hadoopConf).getConfiguration
+    csvOptions.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
+    new SerializableConfiguration(conf)
+  }
+
+  /**
+   * Returns a [[OutputWriter]] that writes data to the give path without using an
+   * [[OutputCommitter]].
+   */
+  override private[sql] def newWriter(path: String): OutputWriter = new OutputWriter {
+
+    private val hadoopTaskAttempId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
+    private val hadoopAttemptContext =
+      new TaskAttemptContextImpl(serializableConf.value, hadoopTaskAttempId)
+
+    // Instance of RecordWriter that does not use OutputCommitter
+    private val recordWriter = createNoCommitterRecordWriter(path, hadoopAttemptContext)
+
+    // create the Generator without separator inserted between 2 records
+    private[this] val text = new Text()
+
+    private val FLUSH_BATCH_SIZE = 1024L
+    private var records: Long = 0L
+    private val csvWriter = new LineCsvWriter(csvOptions, dataSchema.fieldNames.toSeq)
+
+    private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
+      if (field != null) {
+        field.toString
+      } else {
+        csvOptions.nullValue
+      }
+    }
+
+    override def write(row: Row): Unit = {
+      throw new UnsupportedOperationException("call writeInternal")
+    }
+
+    override protected[sql] def writeInternal(row: InternalRow): Unit = {
+      csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), records == 0L && csvOptions.headerFlag)
+      records += 1
+      if (records % FLUSH_BATCH_SIZE == 0) {
+        flush()
+      }
+    }
+
+    private def flush(): Unit = {
+      val lines = csvWriter.flush()
+      if (lines.nonEmpty) {
+        text.set(lines)
+        recordWriter.write(NullWritable.get(), text)
+      }
+    }
+
+    override def close(): Unit = {
+      flush()
+      recordWriter.close(hadoopAttemptContext)
+    }
+  }
+
+  /** Create a [[RecordWriter]] that writes the given path without using an [[OutputCommitter]]. */
+  private def createNoCommitterRecordWriter(
+      path: String,
+      hadoopAttemptContext: TaskAttemptContext): RecordWriter[NullWritable, Text] = {
+    // Custom TextOutputFormat that disable use of committer and writes to the given path
+    val outputFormat = new TextOutputFormat[NullWritable, Text]() {
+      override def getOutputCommitter(c: TaskAttemptContext): OutputCommitter = { null }
+      override def getDefaultWorkFile(c: TaskAttemptContext, ext: String): Path = { new Path(path) }
+    }
+    outputFormat.getRecordWriter(hadoopAttemptContext)
+  }
+
+  /** Disable the use of the older API. */
+  def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter = {
+    throw new UnsupportedOperationException(
+      "this version of newInstance is not supported for " +
+        classOf[CSVStreamingOutputWriterFactory].getSimpleName)
   }
 }

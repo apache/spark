@@ -229,12 +229,17 @@ case class DataSource(
     providingClass.newInstance() match {
       case s: StreamSinkProvider => s.createSink(sparkSession.sqlContext, options, partitionColumns)
 
-      case parquet: parquet.DefaultSource =>
+      // TODO: Remove the `isInstanceOf` check when other formats have been ported
+      case fileFormat: FileFormat
+          if (fileFormat.isInstanceOf[csv.DefaultSource]
+            || fileFormat.isInstanceOf[json.DefaultSource]
+            || fileFormat.isInstanceOf[parquet.DefaultSource]
+            || fileFormat.isInstanceOf[text.DefaultSource]) =>
         val caseInsensitiveOptions = new CaseInsensitiveMap(options)
         val path = caseInsensitiveOptions.getOrElse("path", {
           throw new IllegalArgumentException("'path' is not specified")
         })
-        new FileStreamSink(sparkSession, path, parquet, partitionColumns, options)
+        new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, options)
 
       case _ =>
         throw new UnsupportedOperationException(
