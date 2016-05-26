@@ -177,8 +177,11 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       alias match {
         // because hive use things like `_c0` to build the expanded text
         // currently we cannot support view from "create view v1(c1) as ..."
-        case None => SubqueryAlias(table.identifier.table, sparkSession.parseSql(viewText))
-        case Some(aliasText) => SubqueryAlias(aliasText, sparkSession.parseSql(viewText))
+        case None =>
+          SubqueryAlias(table.identifier.table,
+            sparkSession.sessionState.sqlParser.parsePlan(viewText))
+        case Some(aliasText) =>
+          SubqueryAlias(aliasText, sessionState.sqlParser.parsePlan(viewText))
       }
     } else {
       MetastoreRelation(
