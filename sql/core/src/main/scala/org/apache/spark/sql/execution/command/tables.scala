@@ -289,37 +289,45 @@ case class TruncateTableCommand(
     val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
       throw new AnalysisException(s"Table '$tableName' in TRUNCATE TABLE does not exist.")
-    } else if (catalog.isTemporaryTable(tableName)) {
+    }
+    if (catalog.isTemporaryTable(tableName)) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE on temporary tables: '$tableName'")
+    }
+    val table = catalog.getTableMetadata(tableName)
+    if (DDLUtils.isDatasourceTable(table) && partitionSpec.isDefined) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
+        s"for tables created using the data sources API: '$tableName'")
+    }
+    val locations = if (partitionSpec.isDefined) {
+      catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
     } else {
-      val locations = if (partitionSpec.isDefined) {
-        catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
+      if (table.partitionColumnNames.nonEmpty) {
+        catalog.listPartitions(tableName).map(_.storage.locationUri)
       } else {
-        val table = catalog.getTableMetadata(tableName)
-        if (table.partitionColumnNames.nonEmpty) {
-          catalog.listPartitions(tableName).map(_.storage.locationUri)
-        } else {
-          Seq(table.storage.locationUri)
-        }
+        Seq(table.storage.locationUri)
       }
-      val hadoopConf = sparkSession.sessionState.newHadoopConf()
-      locations.foreach { location =>
-        if (location.isDefined) {
-          val path = new Path(location.get)
-          try {
-            val fs = path.getFileSystem(hadoopConf)
-            fs.delete(path, true)
-            fs.mkdirs(path)
-          } catch {
-            case NonFatal(e) =>
-              throw new AnalysisException(
-                s"Failed to truncate table '$tableName' when removing data of the path: $path " +
-                  s"because of ${e.toString}")
-          }
+    }
+    val hadoopConf = sparkSession.sessionState.newHadoopConf()
+    locations.foreach { location =>
+      if (location.isDefined) {
+        val path = new Path(location.get)
+        try {
+          val fs = path.getFileSystem(hadoopConf)
+          fs.delete(path, true)
+          fs.mkdirs(path)
+        } catch {
+          case NonFatal(e) =>
+            throw new AnalysisException(
+              s"Failed to truncate table '$tableName' when removing data of the path: $path " +
+                s"because of ${e.toString}")
         }
       }
     }
+    // After deleting the data, invalidate the table to make sure we don't keep around a stale
+    // file relation in the metastore cache.
+    sparkSession.sessionState.invalidateTable(tableName.unquotedString)
     Seq.empty[Row]
   }
 }
