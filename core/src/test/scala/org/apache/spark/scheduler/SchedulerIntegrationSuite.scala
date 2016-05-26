@@ -256,14 +256,21 @@ private[spark] abstract class MockBackend(
   def taskUpdate(task: TaskDescription, state: TaskState, result: Any): Unit = {
     val ser = env.serializer.newInstance()
     val resultBytes = ser.serialize(result)
-    // statusUpdate is safe to call from multiple threads, its protected inside taskScheduler
-    taskScheduler.statusUpdate(task.taskId, state, resultBytes)
     if (TaskState.isFinished(state)) {
       synchronized {
         runningTasks -= task
         executorIdToExecutor(task.executorId).freeCores += taskScheduler.CPUS_PER_TASK
         freeCores += taskScheduler.CPUS_PER_TASK
       }
+    }
+    // We need to update internal state first, just because of the assertions in our tests.  When
+    // jobs complete successfully, we want to make sure there aren't any tasks still running.
+    // However, if we update the scheduler first, its possible the dag scheduler thread will realize
+    // the job is done before we update the internal state, and so it looks like there are still
+    // tasks running, though there are not.
+    // statusUpdate is safe to call from multiple threads, its protected inside taskScheduler
+    taskScheduler.statusUpdate(task.taskId, state, resultBytes)
+    if (TaskState.isFinished(state)) {
       reviveOffers()
     }
   }

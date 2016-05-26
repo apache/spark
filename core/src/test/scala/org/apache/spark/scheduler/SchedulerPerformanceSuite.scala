@@ -33,7 +33,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
     join(N, b, c)
   }
 
-  def runJobWithCustomBackend(N: Int, backendWrapper: WrappedBackend): Unit = {
+  def runJobWithCustomBackend(N: Int, backendWrapper: FifoBackend): Unit = {
     // Try to run as many jobs as we can in 10 seconds, get the time per job.  The idea here is to
     // balance:
     // 1) have a big enough job that we're not effected by delays just from waiting for job
@@ -72,7 +72,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
   def runSuccessfulJob(N: Int): Unit = {
-    runJobWithCustomBackend(N, new QueuingWrappedBackend(backend) {
+    runJobWithCustomBackend(N, new FifoBackend(backend) {
       override def handleTask(taskDesc: TaskDescription, task: Task[_], host: String): Unit = {
         // every 5th stage is a ResultStage -- the rest are ShuffleMapStages
         (task.stageId, task.partitionId) match {
@@ -135,24 +135,6 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
   Seq(200, 300, 400, 450, 500, 550).foreach { nodes =>
-    /*
-  ran 1 iterations in 12.9 s (12.9 s per itr)
-  [info] - COMPARE A: Scheduling speed -- large job on 200 node cluster (13 seconds, 861
-   milliseconds)
-  ran 1 iterations in 25.0 s (25.0 s per itr)
-  [info] - COMPARE A: Scheduling speed -- large job on 300 node cluster (25 seconds, 50
-   milliseconds)
-  ran 1 iterations in 34.6 s (34.6 s per itr)
-  [info] - COMPARE A: Scheduling speed -- large job on 400 node cluster (34 seconds,
-   668 milliseconds)
-  ran 1 iterations in 54.0 s (54.0 s per itr)
-  [info] - COMPARE A: Scheduling speed -- large job on 450 node cluster (53 seconds,
-   991 milliseconds)
-  ran 1 iterations in 1.8 m (1.8 m per itr)
-  [info] - COMPARE A: Scheduling speed -- large job on 500 node cluster (1 minute, 48 seconds)
-  ran 1 iterations in 2.3 m (2.3 m per itr)
-  [info] - COMPARE A: Scheduling speed -- large job on 550 node cluster (2 minutes, 19 seconds)
-     */
     testScheduler(
       s"COMPARE A: Scheduling speed -- large job on ${nodes} node cluster",
       extraConfs = Seq(
@@ -163,17 +145,6 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
     }
   }
 
-  /*
-  nHosts = 400; nExecutorsPerHost = 1; nCores = 800
-  ran 2 iterations in 11.7 s (5.9 s per itr)
-  [info] - COMPARE B: Lots of nodes (12 seconds, 679 milliseconds)
-  nHosts = 1; nExecutorsPerHost = 400; nCores = 800
-  ran 3 iterations in 14.2 s (4.7 s per itr)
-  [info] - COMPARE B: Lots of executors, one node (14 seconds, 290 milliseconds)
-  nHosts = 1; nExecutorsPerHost = 1; nCores = 800
-  ran 3 iterations in 11.0 s (3.7 s per itr)
-  [info] - COMPARE B: Super executor (11 seconds, 6 milliseconds)
-   */
   testScheduler(
     s"COMPARE B: Lots of nodes",
     extraConfs = Seq(
@@ -206,7 +177,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
   def runBadExecJob(N: Int, badExecs: Set[String], badHosts: Set[String]): Unit = {
-    val backendWrapper = new QueuingWrappedBackend(backend) {
+    val backendWrapper = new FifoBackend(backend) {
       override def handleTask(taskDesc: TaskDescription, task: Task[_], host: String): Unit = {
         if (badExecs(taskDesc.executorId)) {
           val exc = new RuntimeException(s"bad exec ${taskDesc.executorId}")
@@ -233,21 +204,21 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   val twoBadExecs = Set("0", "15")
 
 
-  // note this is *very* unlikely to succeed without blacklisting, even though its only
+  // note this is *very* unlikely to succeed without blacklisting, even with only
   // one bad executor out of 20.  When a task fails, it gets requeued immediately -- and guess
   // which is the only executor which has a free slot?  Bingo, the one it just failed on
   Seq(
-    ("bad exec with simple blacklist", "false", oneBadExec, Set[String]()),
-    ("two bad execs with simple blacklist", "false", twoBadExecs, Set[String]()),
-    ("bad exec with advanced blacklist", "true", oneBadExec, Set[String]()),
-    ("bad host with advanced blacklist", "true", Set[String](), Set[String]("host-0")),
-    ("bad exec and host with advanced blacklist", "true", oneBadExec, Set[String]("host-3"))
+    ("bad exec with simple blacklist", false, oneBadExec, Set[String]()),
+    ("two bad execs with simple blacklist", false, twoBadExecs, Set[String]()),
+    ("bad exec with advanced blacklist", true, oneBadExec, Set[String]()),
+    ("bad host with advanced blacklist", true, Set[String](), Set[String]("host-0")),
+    ("bad exec and host with advanced blacklist", true, oneBadExec, Set[String]("host-3"))
   ).foreach { case (name, strategy, badExecs, badHosts) =>
     testScheduler(
       s"COMPARE D $name",
       extraConfs = Seq(
         "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
-        "spark.scheduler.blacklist.advancedStrategy" -> strategy
+        "spark.scheduler.blacklist.advancedStrategy" -> strategy.toString
       )
     ) {
       // scalastyle:off println
@@ -262,87 +233,35 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
   }
 
 
-  // scalastyle:off line.size.limit
-
-  /*
-  Here's how you can get into really slow scheduling, even with the simple blacklist.  Say there
-  is just one bad executor.  You've got a bunch of tasks to run, and you schedule all available
-  slots.  Then one task fails on your bad executor.  You don't re-schedule that task on the bad
-  executor, but you do think you've got one open slot, so you try to find the next task you can
-  schedule.  Since you've got a massive backlog of tasks, you just take the next task and schedule
-  it on your bad executor.  The task fails again.
-
-  This repeats a while, and now you've gone through and failed a bunch of tasks on this one bad
-  executor.  But each time, you clear the cache of invalid executors, so you do a bunch of work
-  to recompute the set of OK executors.  This is *really* expensive, and doesn't help you at all
-  anyway.
-
-
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO BlacklistTracker: Blacklisting executors Set() for task StageAndPartition(8,38)
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO TaskSetManager: Starting task 38.0 in stage 8.0 (TID 21056, host-2, partition 38, PROCESS_LOCAL, 5112 bytes)
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO BlacklistTracker: Blacklisting executors Set() for task StageAndPartition(8,39)
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO TaskSetManager: Starting task 39.0 in stage 8.0 (TID 21057, host-0, partition 39, PROCESS_LOCAL, 5112 bytes)
-16/05/23 20:53:57.871 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.871 mock backend thread INFO BlacklistTracker: Blacklisting executors Set() for task StageAndPartition(8,40)
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO DAGScheduler: ShuffleMapStage 5 (RDD at SchedulerIntegrationSuite.scala:360) finished in 1.731 s
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO DAGScheduler: looking for newly runnable stages
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO DAGScheduler: running: Set(ShuffleMapStage 8)
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO DAGScheduler: waiting: Set(ResultStage 9, ShuffleMapStage 6)
-16/05/23 20:53:57.871 dag-scheduler-event-loop INFO DAGScheduler: failed: Set()
-16/05/23 20:53:57.872 mock backend thread INFO TaskSetManager: Starting task 40.0 in stage 8.0 (TID 21058, host-0, partition 40, PROCESS_LOCAL, 5112 bytes)
-16/05/23 20:53:57.872 task-result-getter-2 WARN TaskSetManager: Lost task 39.0 in stage 8.0 (TID 21057, host-0): java.lang.RuntimeException: bad exec 1
-        at org.apache.spark.scheduler.SchedulerPerformanceSuite.backendWithBadExecs(SchedulerPerformanceSuite.scala:218)
-        at org.apache.spark.scheduler.SchedulerPerformanceSuite$$anonfun$runBadExecJob$1.apply$mcV$sp(SchedulerPerformanceSuite.scala:236)
-        at org.apache.spark.scheduler.SchedulerIntegrationSuite$$anon$2.run(SchedulerIntegrationSuite.scala:194)
-
-16/05/23 20:53:57.872 task-result-getter-2 INFO BlacklistTracker: invalidating blacklist cache
-16/05/23 20:53:57.872 dag-scheduler-event-loop INFO DAGScheduler: Submitting ShuffleMapStage 6 (MockRDD 5), which has no missing parents
-16/05/23 20:53:57.872 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.872 mock backend thread INFO BlacklistTracker: Blacklisting executors Set(1) for task StageAndPartition(8,39)
-16/05/23 20:53:57.872 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.872 mock backend thread INFO BlacklistTracker: Blacklisting executors Set() for task StageAndPartition(8,41)
-16/05/23 20:53:57.872 mock backend thread INFO TaskSetManager: Starting task 41.0 in stage 8.0 (TID 21059, host-0, partition 41, PROCESS_LOCAL, 5112 bytes)
-16/05/23 20:53:57.872 task-result-getter-3 INFO TaskSetManager: Lost task 40.0 in stage 8.0 (TID 21058) on executor host-0: java.lang.RuntimeException (bad exec 1) [duplicate 1]
-16/05/23 20:53:57.872 task-result-getter-3 INFO BlacklistTracker: invalidating blacklist cache
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting executors Set(1) for task StageAndPartition(8,40)
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting executors Set(1) for task StageAndPartition(8,39)
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting executors Set() for task StageAndPartition(8,42)
-16/05/23 20:53:57.873 mock backend thread INFO TaskSetManager: Starting task 42.0 in stage 8.0 (TID 21060, host-0, partition 42, PROCESS_LOCAL, 5112 bytes)
-16/05/23 20:53:57.873 task-result-getter-1 INFO TaskSetManager: Lost task 41.0 in stage 8.0 (TID 21059) on executor host-0: java.lang.RuntimeException (bad exec 1) [duplicate 2]
-16/05/23 20:53:57.873 task-result-getter-1 INFO BlacklistTracker: invalidating blacklist cache
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting executors Set(1) for task StageAndPartition(8,41)
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting executors Set(1) for task StageAndPartition(8,40)
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting executors Set(1) for task StageAndPartition(8,39)
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting nodes Set() for stage 8
-16/05/23 20:53:57.873 mock backend thread INFO BlacklistTracker: Blacklisting executors Set() for task StageAndPartition(8,43)
-
-   */
-
-  // scalastyle:on line.size.limit
-
-
   /*
   RESULTS
 
   On a happy cluster, speed is about the same in all modes, ~5s per iteration
 
-  On a bad cluster, slow in all versions, about 2m per iteration (original code, and new code with
+  On a bad cluster, slow in most versions, about 2m per iteration (original code, and new code with
   various strategies).  the reason is that we waste soooooo long looping all tasks through
   the bad nodes, and that has one n^2 penalty.
 
+  The one case where it is *fast* is with the new code, and the node blacklist, since that
+  specifically has an optimization to avoid the n^2 penalty
    */
 
-  abstract class WrappedBackend(backend: MockBackend) {
-    val backendContinue = new AtomicBoolean(true)
-    def runBackend(continue: AtomicBoolean): Unit
-    val backendThread = new Thread("mock backend thread") {
+  /**
+   * Helper to make sure the backend processes tasks in FIFO(-ish) order.  This is important
+   * because if it were LIFO your mock backend will just keep running tasks on one executor --
+   * whatever task gets run first, sends back its result, and the scheduler immediately schedules
+   * another task on the same executor, which keeps repeating.
+   *
+   * The exception to FIFO order is that we send back failures first, to simulate the case where
+   * tasks fail much more quickly then tasks succeed.  If there are any bad executors, this leads
+   * to all tasks getting scheduled there.  Without effective blacklisting, this leads to a lot
+   * of task failures.
+   *
+   * Just implement [[handleTask]]
+   */
+  abstract class FifoBackend(private val backend: MockBackend) {
+    private val backendContinue = new AtomicBoolean(true)
+    private val backendThread = new Thread("mock backend thread") {
       override def run(): Unit = {
         runBackend(backendContinue)
       }
@@ -358,16 +277,18 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
       }
     }
 
-  }
+    private var tasksToFail = List[(TaskDescription, Exception)]()
+    private var tasksToSucceed = List[(TaskDescription, Any)]()
+    private val FAILURES_TILL_SUCCESS = 100
+    private val waitForSuccess = 100
+    private var failuresSinceLastSuccess = 0
 
-  abstract class QueuingWrappedBackend(backend: MockBackend) extends WrappedBackend(backend) {
-    var tasksToFail = List[(TaskDescription, Exception)]()
-    var tasksToSucceed = List[(TaskDescription, Any)]()
-    val FAILURES_TILL_SUCCESS = 100
-    // that is, we get a task failure 100 times as fast as success
-    val waitForSuccess = 100
-    var failuresSinceLastSuccess = 0
-
+    /**
+     *  Mark a task as either a success or failure (by calling [[queueSuccess]] or [[queueFailure]]
+     *  respectively).  This will take of care of sending back the result in the correct
+     *  order.  You *must* call one of those functions for the purposes of this mock (a more
+     *  complex might simulate other conditions.)
+     */
     def handleTask(taskDesc: TaskDescription, task: Task[_], host: String): Unit
 
     def queueSuccess(taskDesc: TaskDescription, result: Any): Unit = {
@@ -378,7 +299,7 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
       tasksToFail :+= taskDesc -> exc
     }
 
-    override def runBackend(continue: AtomicBoolean): Unit = {
+    private def runBackend(continue: AtomicBoolean): Unit = {
       while (continue.get()) {
         // don't *just* keep failing tasks on the same executor.  While there are tasks to fail,
         // we fail them more often, but we fail across all executors.  Furthermore, after X failures
@@ -394,22 +315,16 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
         }
 
         // send a task result.  Prioritize failures, if we haven't had too many failures in a row
-        def failTask(): Unit = {
+        if (tasksToFail.nonEmpty && failuresSinceLastSuccess < FAILURES_TILL_SUCCESS) {
           failuresSinceLastSuccess += 1
           val (toFail, exc) = tasksToFail.head
           tasksToFail = tasksToFail.tail
           backend.taskFailed(toFail, exc)
-        }
-
-        if (tasksToFail.nonEmpty && failuresSinceLastSuccess < FAILURES_TILL_SUCCESS) {
-          failTask()
         } else if (tasksToSucceed.nonEmpty) {
           // we might get here just by some chance of thread-scheduling in this mock.  Tasks fail,
           // but the scheduler thread hasn't processed those before this thread tries to find
-          // another task to respond to.
-          //        if (tasksToFail.nonEmpty && failuresSinceLastSuccess < FAILURES_TILL_SUCCESS) {
-          //          failTask()
-          //        } else {
+          // another task to respond to.  Really this shouldn't be a huge problem, it just means
+          // a few more interspersed successes.
           logInfo(s"tasksToFail.size = ${tasksToFail.size}; " +
             s"tasksToSucceed.size = ${tasksToSucceed.size}; " +
             s"failuresSinceLastSuccess = ${failuresSinceLastSuccess}")
