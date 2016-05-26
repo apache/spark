@@ -437,7 +437,7 @@ class LogisticRegressionWithLBFGS
         lr.setMaxIter(optimizer.getNumIterations())
         lr.setTol(optimizer.getConvergenceTol())
         // Convert our input into a DataFrame
-        val sqlContext = new SQLContext(input.context)
+        val sqlContext = SQLContext.getOrCreate(input.context)
         import sqlContext.implicits._
         val df = input.map(_.asML).toDF()
         // Determine if we should cache the DF
