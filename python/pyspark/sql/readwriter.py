@@ -515,10 +515,11 @@ class DataFrameWriter(object):
 
        .. note:: Experimental.
 
-        >>> sdf.write.outputMode('append')
+        >>> writer = sdf.write.outputMode('append')
         """
-        if outputMode is not None:
-            self._jwrite = self._jwrite.outputMode(outputMode)
+        if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
+            raise ValueError('The output mode must be a non-empty string. Got: %s' % outputMode)
+        self._jwrite = self._jwrite.outputMode(outputMode)
         return self
 
     @since(1.4)
