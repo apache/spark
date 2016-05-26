@@ -46,7 +46,7 @@ In MLlib, we separate TF and IDF to make them flexible.
 `HashingTF` is a `Transformer` which takes sets of terms and converts those sets into 
 fixed-length feature vectors.  In text processing, a "set of terms" might be a bag of words.
 `HashingTF` utilizes the [hashing trick](http://en.wikipedia.org/wiki/Feature_hashing).
-A raw feature is mapped into an index (term) by applying a hash function. Then term frequencies 
+A raw feature is mapped into an index (term) by applying a hash function. The hash function used here is [MurmurHash 3](https://en.wikipedia.org/wiki/MurmurHash).Then term frequencies
 are calculated based on the mapped indices. This approach avoids the need to compute a global 
 term-to-index map, which can be expensive for a large corpus, but it suffers from potential hash 
 collisions, where different raw features may become the same term after hashing. To reduce the 
@@ -55,8 +55,7 @@ of the hash table. Since a simple modulo is used to transform the hash function 
 it is advisable to use a power of two as the feature dimension, otherwise the features will 
 not be mapped evenly to the columns. The default feature dimension is `$2^{18} = 262,144$`.
 An optional binary toggle parameter controls term frequency counts. When set to true all nonzero frequency counts are
-set to 1. This is especially useful for discrete probabilistic models that model binary counts
-rather than integer counts.
+set to 1. This is especially useful for discrete probabilistic models that model binary, rather than integer, counts.
 
 `CountVectorizer` converts text documents to vectors of term counts. Refer to [CountVectorizer
 ](ml-features.html#countvectorizer) for more details.
@@ -151,8 +150,7 @@ for more details on the API.
  term frequency across the corpus. An optional parameter `minDF` also affects the fitting process
  by specifying the minimum number (or fraction if < 1.0) of documents a term must appear in to be
  included in the vocabulary. Another optional binary toggle parameter controls the output vector.
- If set to true all nonzero counts are set to 1. This is especially useful for discrete
- probabilistic models that model binary events rather than integer counts.
+ If set to true all nonzero counts are set to 1. This is especially useful for discrete probabilistic models that model binary, rather than integer, counts.
 
 **Examples**
 
