@@ -24,9 +24,7 @@ private[sql] abstract class DataSourceTest extends QueryTest {
 
   // We want to test some edge cases.
   protected lazy val caseInsensitiveContext: SQLContext = {
-    // We use a new session of SparkSession to create a SQLContext.
-    // Then, we set SQLConf.CASE_SENSITIVE to false.
-    val ctx = new SQLContext(spark.newSession())
+    val ctx = new SQLContext(spark.sparkContext)
     ctx.setConf(SQLConf.CASE_SENSITIVE, false)
     ctx
   }

@@ -915,4 +915,5 @@ object SparkSession {
       case _: ClassNotFoundException | _: NoClassDefFoundError => false
     }
   }
+
 }
