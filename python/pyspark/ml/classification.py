@@ -99,7 +99,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     threshold = Param(Params._dummy(), "threshold",
                       "Threshold in binary classification prediction, in range [0, 1]." +
                       " If threshold and thresholds are both set, they must match." +
-                      "e.g. threshold must be equal to [1-p, p].",
+                      "e.g. if threshold is p, then thresholds must be equal to [1-p, p].",
                       typeConverter=TypeConverters.toFloat)
 
     @keyword_only
@@ -157,10 +157,11 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
     @since("1.4.0")
     def getThreshold(self):
         """
-        Gets the value of threshold or attempt to convert thresholds to threshold if set, or default
-        value if neither are set.
-        This conversion is equivalent to:
-        :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
+        Get threshold for binary classification.
+
+        If :py:attr:`thresholds is set with length 2 (i.e., binary classification),
+        this returns the equivalent threshold: :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
+        Otherwise, returns :py:attr:`threshold` if set or its default value.
         """
         self._checkThresholdConsistency()
         if self.isSet(self.thresholds):
