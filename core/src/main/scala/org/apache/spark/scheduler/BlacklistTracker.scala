@@ -22,6 +22,7 @@ import java.util.concurrent.TimeUnit
 import scala.collection.mutable
 
 import org.apache.spark.SparkConf
+import org.apache.spark.internal.Logging
 import org.apache.spark.util.Clock
 import org.apache.spark.util.SystemClock
 import org.apache.spark.util.ThreadUtils
@@ -37,7 +38,7 @@ import org.apache.spark.util.Utils
  */
 private[spark] class BlacklistTracker(
     sparkConf: SparkConf,
-    clock: Clock = new SystemClock()) extends BlacklistCache{
+    clock: Clock = new SystemClock()) extends BlacklistCache with Logging {
 
   // maintain a ExecutorId --> FailureStatus HashMap
   private val executorIdToFailureStatus: mutable.HashMap[String, FailureStatus] = mutable.HashMap()
@@ -64,11 +65,20 @@ private[spark] class BlacklistTracker(
   def stop(): Unit = {
     scheduler.shutdown()
     scheduler.awaitTermination(10, TimeUnit.SECONDS)
+    logInfo(s"Executor Blacklist callcount =" +
+      s" ${strategy.asInstanceOf[SingleTaskStrategy].executorBlacklistCallCount}")
+    strategy match {
+      case as: AdvancedSingleTaskStrategy =>
+        logInfo(s"Node Blacklist callcount =" +
+          s" ${as.nodeBlacklistCallCount}")
+      case _ => // no op
+    }
   }
 
   // The actual implementation is delegated to strategy
   private[scheduler] def expireExecutorsInBlackList(): Unit = synchronized {
     val updated = strategy.expireExecutorsInBlackList(executorIdToFailureStatus, clock)
+    logInfo(s"Checked for expired blacklist: ${updated}")
     if (updated) {
       invalidateCache()
     }
@@ -76,12 +86,18 @@ private[spark] class BlacklistTracker(
 
   // The actual implementation is delegated to strategy
   def executorBlacklist(
-      sched: TaskSchedulerImpl, stageId: Int, partition: Int): Set[String] = synchronized {
+      sched: TaskSchedulerImpl,
+      stageId: Int,
+      partition: Int): Set[String] = synchronized {
+    // note that this is NOT only called from the dag scheduler event loop
     val atomTask = StageAndPartition(stageId, partition)
     if (!isBlacklistExecutorCacheValid) {
       reEvaluateExecutorBlacklistAndUpdateCache(sched, atomTask, clock)
     } else {
+//      getExecutorBlacklistFromCache(atomTask).getOrElse(Set.empty[String])
       getExecutorBlacklistFromCache(atomTask).getOrElse {
+        // TODO Why is this necessary? (its because we clear the entire map on an invalidate,
+        // and lazily rebuild it)
         reEvaluateExecutorBlacklistAndUpdateCache(sched, atomTask, clock)
       }
     }
@@ -100,6 +116,10 @@ private[spark] class BlacklistTracker(
 
   // The actual implementation is delegated to strategy
   def nodeBlacklistForStage(stageId: Int): Set[String] = synchronized {
+    // TODO here and elsewhere -- we invalidate the cache way too often.  In general, we should
+    // be able to do an in-place update of the caches.  (a) this is slow and (b) it makes
+    // it really hard to track when the blacklist actually changes (would be *really* nice to
+    // log a msg about node level blacklisting at least)
     if (isBlacklistNodeForStageCacheValid) {
       getNodeBlacklistForStageFromCache(stageId).getOrElse(
         reEvaluateNodeBlacklistForStageAndUpdateCache(stageId))
@@ -176,14 +196,15 @@ private[spark] class BlacklistTracker(
   private def executorsOnBlacklistedNode(
       sched: TaskSchedulerImpl,
       atomTask: StageAndPartition): Set[String] = {
-      nodeBlacklistForStage(atomTask.stageId).flatMap(sched.getExecutorsAliveOnHost(_)
-        .getOrElse(Set.empty[String])).toSet
+    nodeBlacklistForStage(atomTask.stageId).flatMap(sched.getExecutorsAliveOnHost(_)
+      .getOrElse(Set.empty[String]))
   }
 
   private def reEvaluateExecutorBlacklistAndUpdateCache(
       sched: TaskSchedulerImpl,
       atomTask: StageAndPartition,
       clock: Clock): Set[String] = {
+    // TODO some kind of logging when the blacklist is *updated*
     val executors = executorsOnBlacklistedNode(sched, atomTask) ++
       strategy.getExecutorBlacklist(executorIdToFailureStatus, atomTask, clock)
     updateBlacklistExecutorCache(atomTask, executors)
@@ -192,7 +213,8 @@ private[spark] class BlacklistTracker(
 
   private def reEvaluateNodeBlacklistForStageAndUpdateCache(stageId: Int): Set[String] = {
     val nodes = strategy.getNodeBlacklistForStage(executorIdToFailureStatus, stageId, clock)
-    updateBlacklistNodeCache(nodes)
+    updateBlacklistNodeForStageCache(stageId, nodes)
+//    updateBlacklistNodeCache(nodes)
     nodes
   }
 }
@@ -200,8 +222,7 @@ private[spark] class BlacklistTracker(
 /**
  * Hide cache details in this trait to make code clean and avoid operation mistake
  */
-private[scheduler] trait BlacklistCache {
-
+private[scheduler] trait BlacklistCache extends Logging {
   // local cache to minimize the the work when query blacklisted executor and node
   private val blacklistExecutorCache = mutable.HashMap.empty[StageAndPartition, Set[String]]
   private val blacklistNodeCache = mutable.Set.empty[String]
@@ -241,6 +262,11 @@ private[scheduler] trait BlacklistCache {
   protected def updateBlacklistNodeForStageCache(
       stageId: Int,
       blacklistNode: Set[String]): Unit = cacheLock.synchronized {
+    // TODO this needs to actually get called, and add unit test
+    val wasBlacklisted = blacklistNodeForStageCache.getOrElse(stageId, Set.empty[String])
+    if (wasBlacklisted != blacklistNode) {
+      logInfo(s"Updating node blacklist for Stage ${stageId} to ${blacklistNode}")
+    }
     if (!_isBlacklistNodeForStageCacheValid) {
       blacklistNodeForStageCache.clear()
     }
@@ -249,6 +275,7 @@ private[scheduler] trait BlacklistCache {
   }
 
   protected def invalidateCache(): Unit = cacheLock.synchronized {
+    logInfo("invalidating blacklist cache")
     _isBlacklistExecutorCacheValid = false
     _isBlacklistNodeCacheValid = false
     _isBlacklistNodeForStageCacheValid = false
