@@ -287,7 +287,7 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
           "file7" -> 1,
           "file8" -> 1,
           "file9" -> 1),
-        options = Map("minPartitions" -> "3"))
+        options = Map("spark.default.parallelism" -> "3"))
 
     checkScan(table.select('c1)) { partitions =>
       assert(partitions.size == 3)
