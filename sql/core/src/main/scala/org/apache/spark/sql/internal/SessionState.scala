@@ -92,7 +92,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * Internal catalog for managing table and database states.
    */
   lazy val catalog = new SessionCatalog(
-    sparkSession.externalCatalog,
+    sparkSession.sharedState.externalCatalog,
     functionResourceLoader,
     functionRegistry,
     conf,
@@ -160,6 +160,8 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
+
+  def executeSql(sql: String): QueryExecution = executePlan(sqlParser.parsePlan(sql))
 
   def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
 
