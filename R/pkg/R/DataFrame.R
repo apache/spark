@@ -2213,13 +2213,7 @@ setMethod("write.df",
           signature(df = "SparkDataFrame", path = "character"),
           function(df, path, source = NULL, mode = "error", ...){
             if (is.null(source)) {
-              if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
-                sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
-              } else if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-                sqlContext <- get(".sparkRHivesc", envir = .sparkREnv)
-              } else {
-                stop("sparkRHive or sparkRSQL context has to be specified")
-              }
+              sqlContext <- getSqlContext()
               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
                                     "org.apache.spark.sql.parquet")
             }
@@ -2281,15 +2275,9 @@ setMethod("saveAsTable",
           signature(df = "SparkDataFrame", tableName = "character"),
           function(df, tableName, source = NULL, mode="error", ...){
             if (is.null(source)) {
-              if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
-                sqlContext <- get(".sparkRSQLsc", envir = .sparkREnv)
-              } else if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-                sqlContext <- get(".sparkRHivesc", envir = .sparkREnv)
-              } else {
-                stop("sparkRHive or sparkRSQL context has to be specified")
-              }
-               source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
-                                     "org.apache.spark.sql.parquet")
+              sqlContext <- getSqlContext()
+              source <- callJMethod(sqlContext, "getConf", "spark.sql.sources.default",
+                                    "org.apache.spark.sql.parquet")
             }
             jmode <- convertToJSaveMode(mode)
             options <- varargsToEnv(...)
