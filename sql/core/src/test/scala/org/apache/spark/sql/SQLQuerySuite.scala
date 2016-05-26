@@ -1864,8 +1864,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     assert(e.message.contains("Failed to find data source: com.databricks.spark.avro. " +
       "Please use Spark package http://spark-packages.org/package/databricks/spark-avro"))
 
+    // data source type is case insensitive
     e = intercept[AnalysisException] {
-      sql(s"select id from `avro`.`file_path`")
+      sql(s"select id from Avro.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
+      "http://spark-packages.org/package/databricks/spark-avro"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from avro.`file_path`")
     }
     assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
       "http://spark-packages.org/package/databricks/spark-avro"))
@@ -1875,6 +1882,11 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     }
     assert(e.message.contains("Table or view not found: " +
       "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `Jdbc`.`file_path`")
+    }
+    assert(e.message.contains("Unsupported data source type for direct query on files: jdbc"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {

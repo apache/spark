@@ -107,20 +107,20 @@ case class DataSource(
               // Found the data source using fully qualified path
               dataSource
             case Failure(error) =>
-              if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
+              if (provider.toLowerCase == "orc" ||
+                  provider.startsWith("org.apache.spark.sql.hive.orc")) {
                 throw new AnalysisException(
                   "The ORC data source must be used with Hive support enabled")
+              } else if (provider.toLowerCase == "avro" ||
+                  provider == "com.databricks.spark.avro") {
+                throw new AnalysisException(
+                  s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
+                    "package http://spark-packages.org/package/databricks/spark-avro")
               } else {
-                if (provider == "avro" || provider == "com.databricks.spark.avro") {
-                  throw new AnalysisException(
-                    s"Failed to find data source: $provider. Please use Spark package " +
-                      "http://spark-packages.org/package/databricks/spark-avro")
-                } else {
-                  throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please find packages at " +
-                      "http://spark-packages.org",
-                    error)
-                }
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please find packages at " +
+                    "http://spark-packages.org",
+                  error)
               }
           }
         } catch {
