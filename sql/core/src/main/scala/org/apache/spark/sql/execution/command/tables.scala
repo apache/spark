@@ -303,20 +303,23 @@ case class TruncateTableCommand(
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE on views: '$tableName'")
     }
-    if (DDLUtils.isDatasourceTable(table) && partitionSpec.isDefined) {
+    val isDatasourceTable = DDLUtils.isDatasourceTable(table)
+    if (isDatasourceTable && partitionSpec.isDefined) {
       throw new AnalysisException(
         s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
         s"for tables created using the data sources API: '$tableName'")
     }
-    val locations = if (partitionSpec.isDefined) {
-      catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
-    } else {
-      if (table.partitionColumnNames.nonEmpty) {
-        catalog.listPartitions(tableName).map(_.storage.locationUri)
-      } else {
-        Seq(table.storage.locationUri)
-      }
+    if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
+        s"for tables that are not partitioned: '$tableName'")
     }
+    val locations =
+      if (isDatasourceTable || table.partitionColumnNames.isEmpty) {
+        Seq(table.storage.locationUri)
+      } else {
+        catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
+      }
     val hadoopConf = sparkSession.sessionState.newHadoopConf()
     locations.foreach { location =>
       if (location.isDefined) {
@@ -336,6 +339,13 @@ case class TruncateTableCommand(
     // After deleting the data, invalidate the table to make sure we don't keep around a stale
     // file relation in the metastore cache.
     sparkSession.sessionState.invalidateTable(tableName.unquotedString)
+    // Also try to drop the contents of the table from the columnar cache
+    try {
+      sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName.quotedString))
+    } catch {
+      case NonFatal(e) =>
+        log.warn(s"Exception when attempting to uncache table '$tableName'", e)
+    }
     Seq.empty[Row]
   }
 }

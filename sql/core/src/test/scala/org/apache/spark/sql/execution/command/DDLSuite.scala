@@ -1137,4 +1137,9 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     assertUnsupported("TRUNCATE TABLE my_view")
   }
 
+  test("truncate table - non-partitioned table (not allowed)") {
+    sql("CREATE TABLE my_tab (age INT, name STRING)")
+    assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+  }
+
 }
