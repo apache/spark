@@ -25,13 +25,12 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.collection.mutable.{Buffer, HashMap, HashSet}
 
-import org.apache.mesos.{Scheduler => MScheduler, SchedulerDriver}
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, _}
 
 import org.apache.spark.{SecurityManager, SparkContext, SparkException, TaskState}
 import org.apache.spark.network.netty.SparkTransportConf
 import org.apache.spark.network.shuffle.mesos.MesosExternalShuffleClient
-import org.apache.spark.rpc.{RpcEndpointAddress}
+import org.apache.spark.rpc.RpcEndpointAddress
 import org.apache.spark.scheduler.{SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
@@ -43,16 +42,16 @@ import org.apache.spark.util.Utils
  * CoarseGrainedSchedulerBackend mechanism. This class is useful for lower and more predictable
  * latency.
  *
- * Unfortunately this has a bit of duplication from MesosSchedulerBackend, but it seems hard to
- * remove this.
+ * Unfortunately this has a bit of duplication from [[MesosFineGrainedSchedulerBackend]],
+ * but it seems hard to remove this.
  */
-private[spark] class CoarseMesosSchedulerBackend(
+private[spark] class MesosCoarseGrainedSchedulerBackend(
     scheduler: TaskSchedulerImpl,
     sc: SparkContext,
     master: String,
     securityManager: SecurityManager)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.rpcEnv)
-  with MScheduler
+  with org.apache.mesos.Scheduler
   with MesosSchedulerUtils {
 
   val MAX_SLAVE_FAILURES = 2     // Blacklist a slave after this many failures
@@ -149,7 +148,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     super.start()
     val driver = createSchedulerDriver(
       master,
-      CoarseMesosSchedulerBackend.this,
+      MesosCoarseGrainedSchedulerBackend.this,
       sc.sparkUser,
       sc.appName,
       sc.conf,
@@ -239,9 +238,10 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  override def offerRescinded(d: SchedulerDriver, o: OfferID) {}
+  override def offerRescinded(d: org.apache.mesos.SchedulerDriver, o: OfferID) {}
 
-  override def registered(d: SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
+  override def registered(
+      d: org.apache.mesos.SchedulerDriver, frameworkId: FrameworkID, masterInfo: MasterInfo) {
     appId = frameworkId.getValue
     mesosExternalShuffleClient.foreach(_.init(appId))
     logInfo("Registered as framework ID " + appId)
@@ -252,15 +252,15 @@ private[spark] class CoarseMesosSchedulerBackend(
     totalCoresAcquired >= maxCores * minRegisteredRatio
   }
 
-  override def disconnected(d: SchedulerDriver) {}
+  override def disconnected(d: org.apache.mesos.SchedulerDriver) {}
 
-  override def reregistered(d: SchedulerDriver, masterInfo: MasterInfo) {}
+  override def reregistered(d: org.apache.mesos.SchedulerDriver, masterInfo: MasterInfo) {}
 
   /**
    * Method called by Mesos to offer resources on slaves. We respond by launching an executor,
    * unless we've already launched more than we wanted to.
    */
-  override def resourceOffers(d: SchedulerDriver, offers: JList[Offer]) {
+  override def resourceOffers(d: org.apache.mesos.SchedulerDriver, offers: JList[Offer]) {
     stateLock.synchronized {
       if (stopCalled) {
         logDebug("Ignoring offers during shutdown")
@@ -282,7 +282,8 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  private def declineUnmatchedOffers(d: SchedulerDriver, offers: Buffer[Offer]): Unit = {
+  private def declineUnmatchedOffers(
+      d: org.apache.mesos.SchedulerDriver, offers: Buffer[Offer]): Unit = {
     offers.foreach { offer =>
       declineOffer(d, offer, Some("unmet constraints"),
         Some(rejectOfferDurationForUnmetConstraints))
@@ -290,7 +291,7 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   private def declineOffer(
-      d: SchedulerDriver,
+      d: org.apache.mesos.SchedulerDriver,
       offer: Offer,
       reason: Option[String] = None,
       refuseSeconds: Option[Long] = None): Unit = {
@@ -319,7 +320,8 @@ private[spark] class CoarseMesosSchedulerBackend(
    * @param d SchedulerDriver
    * @param offers Mesos offers that match attribute constraints
    */
-  private def handleMatchedOffers(d: SchedulerDriver, offers: Buffer[Offer]): Unit = {
+  private def handleMatchedOffers(
+      d: org.apache.mesos.SchedulerDriver, offers: Buffer[Offer]): Unit = {
     val tasks = buildMesosTasks(offers)
     for (offer <- offers) {
       val offerAttributes = toAttributeMap(offer.getAttributesList)
@@ -440,7 +442,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       math.min(offerCPUs, maxCores - totalCoresAcquired))
   }
 
-  override def statusUpdate(d: SchedulerDriver, status: TaskStatus) {
+  override def statusUpdate(d: org.apache.mesos.SchedulerDriver, status: TaskStatus) {
     val taskId = status.getTaskId.getValue
     val slaveId = status.getSlaveId.getValue
     val state = TaskState.fromMesos(status.getState)
@@ -498,7 +500,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  override def error(d: SchedulerDriver, message: String) {
+  override def error(d: org.apache.mesos.SchedulerDriver, message: String) {
     logError(s"Mesos error: $message")
     scheduler.error(message)
   }
@@ -538,14 +540,15 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  override def frameworkMessage(d: SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
+  override def frameworkMessage(
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, b: Array[Byte]) {}
 
   /**
    * Called when a slave is lost or a Mesos task finished. Updates local view on
    * what tasks are running. It also notifies the driver that an executor was removed.
    */
   private def executorTerminated(
-      d: SchedulerDriver,
+      d: org.apache.mesos.SchedulerDriver,
       slaveId: String,
       taskId: String,
       reason: String): Unit = {
@@ -555,11 +558,12 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
   }
 
-  override def slaveLost(d: SchedulerDriver, slaveId: SlaveID): Unit = {
+  override def slaveLost(d: org.apache.mesos.SchedulerDriver, slaveId: SlaveID): Unit = {
     logInfo(s"Mesos slave lost: ${slaveId.getValue}")
   }
 
-  override def executorLost(d: SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int): Unit = {
+  override def executorLost(
+      d: org.apache.mesos.SchedulerDriver, e: ExecutorID, s: SlaveID, status: Int): Unit = {
     logInfo("Mesos executor lost: %s".format(e.getValue))
   }
 

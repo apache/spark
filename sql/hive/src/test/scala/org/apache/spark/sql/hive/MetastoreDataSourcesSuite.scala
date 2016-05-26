@@ -548,7 +548,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }.getMessage.contains("Unable to infer schema"),
       "We should complain that path is not specified.")
 
-    sql("DROP TABLE createdJsonTable")
+    sql("DROP TABLE IF EXISTS createdJsonTable")
   }
 
   test("scan a parquet table created through a CTAS statement") {

@@ -61,8 +61,8 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       checkAnswer(sql("select key,value from table_with_partition"),
         testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
 
-      sql("DROP TABLE table_with_partition")
-      sql("DROP TABLE createAndInsertTest")
+      sql("DROP TABLE IF EXISTS table_with_partition")
+      sql("DROP TABLE IF EXISTS createAndInsertTest")
     }
   }
 }
