@@ -1351,7 +1351,7 @@ test_that("group by, agg functions", {
   unlink(jsonPath3)
 })
 
-test_that("pivot GroupedData column",{
+test_that("pivot GroupedData column", {
     library(magrittr)
     df <- data.frame(
         earnings = c(10000, 10000, 11000, 15000, 12000, 20000, 21000, 22000),
@@ -1360,12 +1360,12 @@ test_that("pivot GroupedData column",{
     )
     SparkRdf <- createDataFrame(sqlContext, df)
     values <- list("R", "Python")
-    sums <- groupBy(SparkRdf, "year") %>% 
-        pivot("course", values) %>% 
+    sums <- groupBy(SparkRdf, "year") %>%
+        pivot("course", values) %>%
         SparkR::summarize(sumOfEarnings = sum(SparkRdf$earnings) ) %>%
         collect()
-    testthat::expect_equal(colnames(sums) %in% c("year", "R", "Python") , c(T,T,T))
-    testthat::expect_equal( sum(df$earnings), sum(sums$R) + sum(sums$Python) )
+    testthat::expect_equal(colnames(sums) %in% c("year", "R", "Python"), c(T, T, T))
+    testthat::expect_equal(sum(df$earnings), sum(sums$R) + sum(sums$Python))
 })
 
 
