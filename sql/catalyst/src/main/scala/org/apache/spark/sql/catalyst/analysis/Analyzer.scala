@@ -109,12 +109,12 @@ class Analyzer(
       TimeWindowing ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
-    Batch("FixNullability", Once,
-      FixNullability),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
       HandleNullInputsForUDF),
+    Batch("FixNullability", Once,
+      FixNullability),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -1461,10 +1461,11 @@ class Analyzer(
   object FixNullability extends Rule[LogicalPlan] {
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case q: LogicalPlan if q.resolved =>
-        val childrenOutput = q.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
+      case p if !p.resolved => p // Skip unresolved nodes.
+      case p: LogicalPlan if p.resolved =>
+        val childrenOutput = p.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
           case (exprId, attributes) =>
-            // If there are multiple Attributes having the same ExpirId, we need to resolve
+            // If there are multiple Attributes having the same ExprId, we need to resolve
             // the conflict of nullable field.
             val nullable = attributes.map(_.nullable).reduce(_ || _)
             attributes.map(attr => attr.withNullability(nullable))
@@ -1473,7 +1474,7 @@ class Analyzer(
         // For an Attribute used by the current LogicalPlan, if it is from its children,
         // we fix the nullable field by using the nullability setting of the corresponding
         // output Attribute from the children.
-        q.transformExpressions {
+        p.transformExpressions {
           case attr: Attribute if attributeMap.contains(attr) =>
             attr.withNullability(attributeMap(attr).nullable)
         }
