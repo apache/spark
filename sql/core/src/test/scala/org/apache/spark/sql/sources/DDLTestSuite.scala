@@ -78,7 +78,7 @@ case class SimpleDDLScan(
 }
 
 class DDLTestSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

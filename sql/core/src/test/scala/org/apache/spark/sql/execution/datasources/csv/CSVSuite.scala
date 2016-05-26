@@ -137,7 +137,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test inferring decimals") {
-    val result = sqlContext.read
+    val result = spark.read
       .format("csv")
       .option("comment", "~")
       .option("header", "true")
