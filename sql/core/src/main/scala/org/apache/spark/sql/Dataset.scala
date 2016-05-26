@@ -2337,13 +2337,10 @@ class Dataset[T] private[sql](
    */
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
-    val columnSchema = schema.map { f =>
-      CatalogColumn(f.name, null, f.nullable)
-    }
     val tableDesc = CatalogTable(
       identifier = TableIdentifier(viewName),
       tableType = CatalogTableType.VIEW,
-      schema = columnSchema,
+      schema = Seq.empty[CatalogColumn],
       storage = CatalogStorageFormat.EmptyStorageFormat)
     CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = false,
       isTemporary = true, sql = "")
@@ -2357,13 +2354,10 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
-    val columnSchema = schema.map { f =>
-      CatalogColumn(f.name, null, f.nullable)
-    }
     val tableDesc = CatalogTable(
       identifier = TableIdentifier(viewName),
       tableType = CatalogTableType.VIEW,
-      schema = columnSchema,
+      schema = Seq.empty[CatalogColumn],
       storage = CatalogStorageFormat.EmptyStorageFormat)
     CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = true,
       isTemporary = true, sql = "")
