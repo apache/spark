@@ -1768,7 +1768,7 @@ class RDD(object):
         Users provide three functions:
 
             - C{createCombiner}, which turns a V into a C (e.g., creates
-              a one-element list)
+              an one-element list)
             - C{mergeValue}, to merge a V into a C (e.g., adds it to the end of
               a list)
             - C{mergeCombiners}, to combine two C's into a single one.

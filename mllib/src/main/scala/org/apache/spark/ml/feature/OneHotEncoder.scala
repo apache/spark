@@ -30,7 +30,7 @@ import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
 
 /**
  * :: Experimental ::
- * A one-hot encoder that maps a column of category indices to a column of binary vectors, with
+ * An one-hot encoder that maps a column of category indices to a column of binary vectors, with
  * at most a single one-value per row that indicates the input category index.
  * For example with 5 categories, an input value of 2.0 would map to an output vector of
  * `[0.0, 0.0, 1.0, 0.0]`.

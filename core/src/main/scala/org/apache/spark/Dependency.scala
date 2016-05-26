@@ -96,7 +96,7 @@ class ShuffleDependency[K: ClassTag, V: ClassTag, C: ClassTag](
 
 /**
  * :: DeveloperApi ::
- * Represents a one-to-one dependency between partitions of the parent and child RDDs.
+ * Represents an one-to-one dependency between partitions of the parent and child RDDs.
  */
 @DeveloperApi
 class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
@@ -106,7 +106,7 @@ class OneToOneDependency[T](rdd: RDD[T]) extends NarrowDependency[T](rdd) {
 
 /**
  * :: DeveloperApi ::
- * Represents a one-to-one dependency between ranges of partitions in the parent and child RDDs.
+ * Represents an one-to-one dependency between ranges of partitions in the parent and child RDDs.
  * @param rdd the parent RDD
  * @param inStart the start of the range in the parent RDD
  * @param outStart the start of the range in the child RDD

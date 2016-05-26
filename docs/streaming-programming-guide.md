@@ -97,7 +97,7 @@ space characters into words.
 val words = lines.flatMap(_.split(" "))
 {% endhighlight %}
 
-`flatMap` is a one-to-many DStream operation that creates a new DStream by
+`flatMap` is an one-to-many DStream operation that creates a new DStream by
 generating multiple new records from each record in the source DStream. In this case,
 each line will be split into multiple words and the stream of words is represented as the
 `words` DStream.  Next, we want to count these words.
@@ -249,7 +249,7 @@ space into words.
 words = lines.flatMap(lambda line: line.split(" "))
 {% endhighlight %}
 
-`flatMap` is a one-to-many DStream operation that creates a new DStream by
+`flatMap` is an one-to-many DStream operation that creates a new DStream by
 generating multiple new records from each record in the source DStream. In this case,
 each line will be split into multiple words and the stream of words is represented as the
 `words` DStream.  Next, we want to count these words.
@@ -612,7 +612,7 @@ as well as to run the receiver(s).
 
 - When running a Spark Streaming program locally, do not use "local" or "local[1]" as the master URL.
   Either of these means that only one thread will be used for running tasks locally. If you are using
-  a input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
+  an input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
   be used to run the receiver, leaving no thread for processing the received data. Hence, when
   running locally, always use "local[*n*]" as the master URL, where *n* > number of receivers to run
   (see [Spark Properties](configuration.html#spark-properties) for information on how to set
@@ -1788,7 +1788,7 @@ This example appends the word counts of network data into a file.
 This behavior is made simple by using `JavaStreamingContext.getOrCreate`. This is used as follows.
 
 {% highlight java %}
-// Create a factory object that can create a and setup a new JavaStreamingContext
+// Create a factory object that can create and setup a new JavaStreamingContext
 JavaStreamingContextFactory contextFactory = new JavaStreamingContextFactory() {
   @Override public JavaStreamingContext create() {
     JavaStreamingContext jssc = new JavaStreamingContext(...);  // new context

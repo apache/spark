@@ -42,7 +42,7 @@ private[spark] abstract class RpcEndpointRef(conf: SparkConf)
   def name: String
 
   /**
-   * Sends a one-way asynchronous message. Fire-and-forget semantics.
+   * Sends an one-way asynchronous message. Fire-and-forget semantics.
    */
   def send(message: Any): Unit
 

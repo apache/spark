@@ -251,7 +251,7 @@ Column (CSC) format in column-major order.  For example, the following dense mat
 5.0 & 6.0
 \end{pmatrix}
 \]`
-is stored in a one-dimensional array `[1.0, 3.0, 5.0, 2.0, 4.0, 6.0]` with the matrix size `(3, 2)`.
+is stored in an one-dimensional array `[1.0, 3.0, 5.0, 2.0, 4.0, 6.0]` with the matrix size `(3, 2)`.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">

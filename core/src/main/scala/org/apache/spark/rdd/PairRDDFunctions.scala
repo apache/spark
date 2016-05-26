@@ -62,7 +62,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
    * Note that V and C can be different -- for example, one might group an RDD of type
    * (Int, Int) into an RDD of type (Int, Seq[Int]). Users provide three functions:
    *
-   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   *  - `createCombiner`, which turns a V into a C (e.g., creates an one-element list)
    *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    *  - `mergeCombiners`, to combine two C's into a single one.
    *
@@ -1054,7 +1054,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
@@ -1142,7 +1142,7 @@ class PairRDDFunctions[K, V](self: RDD[(K, V)])
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }

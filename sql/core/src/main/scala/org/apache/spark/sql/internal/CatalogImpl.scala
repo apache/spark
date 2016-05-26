@@ -356,7 +356,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     sessionCatalog.refreshTable(tableIdent)
 
-    // If this table is cached as a InMemoryRelation, drop the original
+    // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
     val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
