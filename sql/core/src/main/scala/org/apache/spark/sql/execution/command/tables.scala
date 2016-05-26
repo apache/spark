@@ -278,7 +278,7 @@ case class LoadDataCommand(
  *
  * The syntax of this command is:
  * {{{
- *  TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
+ *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
  * }}}
  */
 case class TruncateTableCommand(
@@ -288,9 +288,10 @@ case class TruncateTableCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     if (!catalog.tableExists(tableName)) {
-      logError(s"table '$tableName' in TRUNCATE TABLE does not exist.")
+      throw new AnalysisException(s"Table '$tableName' in TRUNCATE TABLE does not exist.")
     } else if (catalog.isTemporaryTable(tableName)) {
-      logError(s"table '$tableName' in TRUNCATE TABLE is a temporary table.")
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE on temporary tables: '$tableName'")
     } else {
       val locations = if (partitionSpec.isDefined) {
         catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)

@@ -180,7 +180,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @group expertParam
    */
   val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
-    "StorageLevel for intermediate datasets. Cannot be 'NONE'. Default: 'MEMORY_AND_DISK'.",
+    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
 
   /** @group expertGetParam */
@@ -194,7 +194,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @group expertParam
    */
   val finalStorageLevel = new Param[String](this, "finalStorageLevel",
-    "StorageLevel for ALS model factors. Default: 'MEMORY_AND_DISK'.",
+    "StorageLevel for ALS model factors.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess)
 
   /** @group expertGetParam */
