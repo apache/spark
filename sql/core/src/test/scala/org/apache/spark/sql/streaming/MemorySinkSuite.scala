@@ -138,10 +138,11 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAft
   }
 
 
-  test("registering as a table: append mode") {
+  test("registering as a table in Append output mode") {
     val input = MemoryStream[Int]
     val query = input.toDF().write
       .format("memory")
+      .outputMode("append")
       .queryName("memStream")
       .startStream()
     input.addData(1, 2, 3)
@@ -156,6 +157,32 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAft
     checkDataset(
       spark.table("memStream").as[Int],
       1, 2, 3, 4, 5, 6)
+
+    query.stop()
+  }
+
+  test("registering as a table in Complete output mode") {
+    val input = MemoryStream[Int]
+    val query = input.toDF()
+      .groupBy("value")
+      .count()
+      .write
+      .format("memory")
+      .outputMode("complete")
+      .queryName("memStream")
+      .startStream()
+    input.addData(1, 2, 3)
+    query.processAllAvailable()
+
+    checkDataset(
+      spark.table("memStream").as[(Int, Long)],
+      (1, 1L), (2, 1L), (3, 1L))
+
+    input.addData(4, 5, 6)
+    query.processAllAvailable()
+    checkDataset(
+      spark.table("memStream").as[(Int, Long)],
+      (1, 1L), (2, 1L), (3, 1L), (4, 1L), (5, 1L), (6, 1L))
 
     query.stop()
   }

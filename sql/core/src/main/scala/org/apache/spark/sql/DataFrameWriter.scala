@@ -359,10 +359,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointPath.toUri.toString
       }
 
-      if (!Seq(OutputMode.Append, OutputMode.Complete).contains(outputMode)) {
-        throw new IllegalArgumentException(s"Memory sink does not support output mode $outputMode")
-      }
-
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       resultDf.createOrReplaceTempView(queryName)
