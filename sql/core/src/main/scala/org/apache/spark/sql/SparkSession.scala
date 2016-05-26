@@ -584,7 +584,7 @@ class SparkSession private(
    */
   protected[sql] def parseDataType(dataTypeString: String): DataType = {
     DataType.fromJson(dataTypeString)
-  }g
+  }
 
   /**
    * Apply a schema defined by the schemaString to an RDD. It is only used by PySpark.
