@@ -1556,7 +1556,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
+   * :: Deprecated ::
    * (Scala-specific) Returns a new [[Dataset]] where each row has been expanded to zero or more
    * rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. The columns of
    * the input row are implicitly joined with each row that is output by the function.
@@ -1576,10 +1576,23 @@ class Dataset[T] private[sql](
    *   val bookCountPerWord = allWords.groupBy("word").agg(countDistinct("title"))
    * }}}
    *
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()`:
+   *
+   * {{{
+   *   ds.explode(split('words, " ")).as("word")
+   * }}}
+   *
+   * or `flatMap()`:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
+   * }}}
+   *
    * @group untypedrel
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A <: Product : TypeTag](input: Column*)(f: Row => TraversableOnce[A]): DataFrame = {
     val elementSchema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
 
@@ -1596,7 +1609,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * :: Experimental ::
+   * :: Deprecated ::
    * (Scala-specific) Returns a new [[Dataset]] where a single column has been expanded to zero
    * or more rows by the provided function. This is similar to a `LATERAL VIEW` in HiveQL. All
    * columns of the input row are implicitly joined with each value that is output by the function.
@@ -1605,10 +1618,23 @@ class Dataset[T] private[sql](
    *   ds.explode("words", "word") {words: String => words.split(" ")}
    * }}}
    *
+   * Given that this is deprecated, as an alternative, you can explode columns either using
+   * `functions.explode()`:
+   *
+   * {{{
+   *   ds.explode(split('words, " ")).as("word")
+   * }}}
+   *
+   * or `flatMap()`:
+   *
+   * {{{
+   *   ds.flatMap(_.words.split(" "))
+   * }}}
+   *
    * @group untypedrel
    * @since 2.0.0
    */
-  @Experimental
+  @deprecated("use flatMap() or select() with functions.explode() instead", "2.0.0")
   def explode[A, B : TypeTag](inputColumn: String, outputColumn: String)(f: A => TraversableOnce[B])
     : DataFrame = {
     val dataType = ScalaReflection.schemaFor[B].dataType
