@@ -1364,8 +1364,8 @@ test_that("pivot GroupedData column",{
         pivot("course", values) %>% 
         SparkR::summarize(sumOfEarnings = sum(SparkRdf$earnings) ) %>%
         collect()
-    testthat::expect_equal(colnames(sums) %in% c("year", "R", "Python") , c(T,T,T))
-    testthat::expect_equal( sum(df$earnings), sum(sums$R) + sum(sums$Python) )
+    testthat::expect_equal(colnames(sums) %in% c("year", "R", "Python"), c(T, T, T))
+    testthat::expect_equal(sum(df$earnings), sum(sums$R) + sum(sums$Python))
 })
 
 
