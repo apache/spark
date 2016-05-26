@@ -70,29 +70,6 @@ object SQLConf {
       .intConf
       .createWithDefault(10)
 
-  val ALLOW_MULTIPLE_CONTEXTS = SQLConfigBuilder("spark.sql.allowMultipleContexts")
-    .internal()
-    .doc("When set to true, creating multiple SQLContexts/HiveContexts is allowed. " +
-      "When set to false, only one SQLContext/HiveContext is allowed to be created " +
-      "through the constructor (new SQLContexts/HiveContexts created through newSession " +
-      "method is allowed). Please note that this conf needs to be set in Spark Conf. Once " +
-      "a SQLContext/HiveContext has been created, changing the value of this conf will not " +
-      "have effect.")
-    .booleanConf
-    .createWithDefault(false)
-
-  val ALLOW_MULTIPLE_CONTEXTS_ERROR_MESSAGE =
-    SQLConfigBuilder("spark.sql.allowMultipleContexts.errorMessage")
-      .internal()
-      .doc("The error message used by the exception when spark.sql.allowMultipleContexts is " +
-        "set to false.")
-      .stringConf
-      .createWithDefault(
-        "Only one SparkSession/SQLContext/HiveContext may be running in this JVM. " +
-        s"It is recommended to use SQLContext.getOrCreate to get the instantiated " +
-        s"SQLContext/HiveContext. To ignore this error, " +
-        s"set ${ALLOW_MULTIPLE_CONTEXTS.key} = true in SparkConf.")
-
   val COMPRESS_CACHED = SQLConfigBuilder("spark.sql.inMemoryColumnarStorage.compressed")
     .internal()
     .doc("When set to true Spark SQL will automatically select a compression codec for each " +

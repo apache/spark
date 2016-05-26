@@ -34,7 +34,7 @@ class HiveContext private[hive](_sparkSession: SparkSession)
   self =>
 
   def this(sc: SparkContext) = {
-    this(new SparkSession(HiveUtils.withHiveExternalCatalog(sc)))
+    this(SparkSession.builder().sparkContext(HiveUtils.withHiveExternalCatalog(sc)).getOrCreate())
   }
 
   def this(sc: JavaSparkContext) = this(sc.sc)

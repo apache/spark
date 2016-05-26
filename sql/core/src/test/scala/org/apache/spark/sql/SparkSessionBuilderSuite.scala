@@ -17,9 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException, SparkFunSuite}
-import org.apache.spark.sql.internal.SQLConf
-
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -35,23 +33,6 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
       .config("some-config", "v2")
       .getOrCreate()
     initialSession.sparkContext
-  }
-
-  private var originalActiveSparkSession: Option[SparkSession] = _
-  private var originalDefaultSparkSession: Option[SparkSession] = _
-
-  override protected def beforeAll(): Unit = {
-    originalActiveSparkSession = SparkSession.getActiveSession
-    originalDefaultSparkSession = SparkSession.getDefaultSession
-
-    SparkSession.clearActiveSession()
-    SparkSession.clearDefaultSession()
-  }
-
-  override protected def afterAll(): Unit = {
-    // Set these states back.
-    originalActiveSparkSession.foreach(session => SparkSession.setActiveSession(session))
-    originalDefaultSparkSession.foreach(session => SparkSession.setDefaultSession(session))
   }
 
   test("create with config options and propagate them to SparkContext and SparkSession") {
@@ -120,57 +101,5 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     assert(session.sparkContext.conf.get("key1") == "value1")
     assert(session.sparkContext.conf.get("key2") == "value2")
     session.stop()
-  }
-
-  def testCreatingNewSQLContext(allowsMultipleContexts: Boolean): Unit = {
-    val conf =
-      new SparkConf(false)
-        .setMaster("local[*]")
-        .setAppName("test")
-        .set("spark.ui.enabled", "false")
-        .set("spark.driver.allowMultipleContexts", "true")
-        .set(SQLConf.ALLOW_MULTIPLE_CONTEXTS.key, allowsMultipleContexts.toString)
-    val sparkContext = new SparkContext(conf)
-
-    try {
-      if (allowsMultipleContexts) {
-        new SQLContext(sparkContext)
-        // SQLContext.clearActive()
-      } else {
-        // If allowsMultipleContexts is false, make sure we can get the error.
-        val message = intercept[SparkException] {
-          new SQLContext(sparkContext)
-        }.getMessage
-        assert(message.contains("Only one SparkSession/SQLContext/HiveContext may be running"))
-      }
-    } finally {
-      sparkContext.stop()
-    }
-  }
-
-  test("test the flag to disallow creating multiple root SQLContext") {
-    Seq(false, true).foreach { allowMultipleSQLContexts =>
-      val conf =
-        new SparkConf(false)
-          .setMaster("local[*]")
-          .setAppName("test")
-          .set("spark.ui.enabled", "false")
-          .set("spark.driver.allowMultipleContexts", "true")
-          .set(SQLConf.ALLOW_MULTIPLE_CONTEXTS.key, allowMultipleSQLContexts.toString)
-      val sc = new SparkContext(conf)
-      try {
-        val rootSQLContext = new SQLContext(sc)
-        SparkSession.setDefaultSession(rootSQLContext.sparkSession)
-        // Make sure we can successfully create new Session.
-        rootSQLContext.newSession()
-        rootSQLContext.newSession()
-
-        testCreatingNewSQLContext(allowMultipleSQLContexts)
-      } finally {
-        sc.stop()
-        SparkSession.clearActiveSession()
-        SparkSession.clearDefaultSession()
-      }
-    }
   }
 }
