@@ -30,6 +30,10 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -75,20 +79,16 @@ case class DataSource(
 
   /** A map to maintain backward compatibility in case we move data sources around. */
   private val backwardCompatibilityMap = Map(
-    "org.apache.spark.sql.jdbc" ->
-      classOf[jdbc.JdbcRelationProvider].getCanonicalName,
-    "org.apache.spark.sql.jdbc.DefaultSource" ->
-      classOf[jdbc.JdbcRelationProvider].getCanonicalName,
-    "org.apache.spark.sql.json" ->
-      classOf[json.JsonFileFormat].getCanonicalName,
-    "org.apache.spark.sql.json.DefaultSource" ->
-      classOf[json.JsonFileFormat].getCanonicalName,
-    "org.apache.spark.sql.parquet" ->
-      classOf[parquet.ParquetFileFormat].getCanonicalName,
-    "org.apache.spark.sql.parquet.DefaultSource" ->
-      classOf[parquet.ParquetFileFormat].getCanonicalName,
-    "com.databricks.spark.csv" ->
-      classOf[csv.CSVFileFormat].getCanonicalName
+    "org.apache.spark.sql.jdbc" -> classOf[JdbcRelationProvider].getCanonicalName,
+    "org.apache.spark.sql.jdbc.DefaultSource" -> classOf[JdbcRelationProvider].getCanonicalName,
+    "org.apache.spark.sql.json" -> classOf[JsonFileFormat].getCanonicalName,
+    "org.apache.spark.sql.json.DefaultSource" -> classOf[JsonFileFormat].getCanonicalName,
+    "org.apache.spark.sql.parquet" -> classOf[ParquetFileFormat].getCanonicalName,
+    "org.apache.spark.sql.parquet.DefaultSource" -> classOf[ParquetFileFormat].getCanonicalName,
+    "org.apache.spark.ml.source.libsvm.DefaultSource" ->
+      "org.apache.spark.ml.source.libsvm.LibSVMFileFormat",
+    "org.apache.spark.ml.source.libsvm" -> "org.apache.spark.ml.source.libsvm.LibSVMFileFormat",
+    "com.databricks.spark.csv" -> classOf[CSVFileFormat].getCanonicalName
   )
 
   /**
