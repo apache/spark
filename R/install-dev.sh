@@ -40,7 +40,7 @@ if [ ! -z "$R_HOME" ]
     R_SCRIPT_PATH="$R_HOME/bin"
   else
     # if command 'which R' finds no R home, then exit
-    if ! which R >/dev/null; then
+    if ! [ `command -v R` ]; then
       echo "Cannot find R home by running 'which R', please make sure R is properly installed."
       exit 1
     fi
