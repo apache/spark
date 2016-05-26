@@ -143,7 +143,7 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
    * converted to a data source table, using the data source set by spark.sql.sources.default.
    * The table in CTAS statement will be converted when it meets any of the following conditions:
    *   - The CTAS does not specify any of a SerDe (ROW FORMAT SERDE), a File Format (STORED AS), or
-   *     a Storage Hanlder (STORED BY), and the value of hive.default.fileformat in hive-site.xml
+   *     a Storage Handler (STORED BY), and the value of hive.default.fileformat in hive-site.xml
    *     is either TextFile or SequenceFile.
    *   - The CTAS statement specifies TextFile (STORED AS TEXTFILE) as the file format and no SerDe
    *     is specified (no ROW FORMAT SERDE clause).

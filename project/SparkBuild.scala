@@ -39,8 +39,8 @@ object BuildCommons {
 
   private val buildLocation = file(".").getAbsoluteFile.getParentFile
 
-  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer, hiveCompatibility) = Seq(
-    "catalyst", "sql", "hive", "hive-thriftserver", "hivecontext-compatibility"
+  val sqlProjects@Seq(catalyst, sql, hive, hiveThriftServer) = Seq(
+    "catalyst", "sql", "hive", "hive-thriftserver"
   ).map(ProjectRef(buildLocation, _))
 
   val streamingProjects@Seq(
@@ -339,7 +339,7 @@ object SparkBuild extends PomBuild {
 
   val mimaProjects = allProjects.filterNot { x =>
     Seq(
-      spark, hive, hiveThriftServer, hiveCompatibility, catalyst, repl, networkCommon, networkShuffle, networkYarn,
+      spark, hive, hiveThriftServer, catalyst, repl, networkCommon, networkShuffle, networkYarn,
       unsafe, tags, sketch, mllibLocal
     ).contains(x)
   }

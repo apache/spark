@@ -622,7 +622,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("arrayInParquet")
 
-      sessionState.refreshTable("arrayInParquet")
+      sparkSession.catalog.refreshTable("arrayInParquet")
 
       checkAnswer(
         sql("SELECT a FROM arrayInParquet"),
@@ -681,7 +681,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         .mode(SaveMode.Append)
         .saveAsTable("mapInParquet")
 
-      sessionState.refreshTable("mapInParquet")
+      sparkSession.catalog.refreshTable("mapInParquet")
 
       checkAnswer(
         sql("SELECT a FROM mapInParquet"),

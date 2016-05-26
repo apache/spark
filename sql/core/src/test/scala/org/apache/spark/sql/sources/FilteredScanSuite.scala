@@ -40,7 +40,7 @@ case class SimpleFilteredScan(from: Int, to: Int)(@transient val sparkSession: S
   extends BaseRelation
   with PrunedFilteredScan {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(

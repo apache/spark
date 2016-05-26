@@ -55,10 +55,20 @@ object UnsupportedOperationChecker {
         case _: InsertIntoTable =>
           throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
 
-        case Aggregate(_, _, child) if child.isStreaming && outputMode == Append =>
-          throwError(
-            "Aggregations are not supported on streaming DataFrames/Datasets in " +
-              "Append output mode. Consider changing output mode to Update.")
+        case Aggregate(_, _, child) if child.isStreaming =>
+          if (outputMode == Append) {
+            throwError(
+              "Aggregations are not supported on streaming DataFrames/Datasets in " +
+                "Append output mode. Consider changing output mode to Update.")
+          }
+          val moreStreamingAggregates = child.find {
+            case Aggregate(_, _, grandchild) if grandchild.isStreaming => true
+            case _ => false
+          }
+          if (moreStreamingAggregates.nonEmpty) {
+            throwError("Multiple streaming aggregations are not supported with " +
+              "streaming DataFrames/Datasets")
+          }
 
         case Join(left, right, joinType, _) =>
 

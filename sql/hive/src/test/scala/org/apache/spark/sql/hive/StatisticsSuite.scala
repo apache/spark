@@ -17,23 +17,26 @@
 
 package org.apache.spark.sql.hive
 
+import java.io.{File, PrintWriter}
+
 import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.execution.command.AnalyzeTable
+import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SQLTestUtils
 
-class StatisticsSuite extends QueryTest with TestHiveSingleton {
+class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   import hiveContext.sql
 
   test("parse analyze commands") {
     def assertAnalyzeCommand(analyzeCommand: String, c: Class[_]) {
       val parsed = hiveContext.parseSql(analyzeCommand)
       val operators = parsed.collect {
-        case a: AnalyzeTable => a
+        case a: AnalyzeTableCommand => a
         case o => o
       }
 
@@ -49,23 +52,68 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton {
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds='2008-04-09', hr=11) COMPUTE STATISTICS noscan",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 PARTITION(ds, hr) COMPUTE STATISTICS noscan",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
 
     assertAnalyzeCommand(
       "ANALYZE TABLE Table1 COMPUTE STATISTICS nOscAn",
-      classOf[AnalyzeTable])
+      classOf[AnalyzeTableCommand])
+  }
+
+  test("MetastoreRelations fallback to HDFS for size estimation") {
+    val enableFallBackToHdfsForStats = hiveContext.conf.fallBackToHdfsForStatsEnabled
+    try {
+      withTempDir { tempDir =>
+
+        // EXTERNAL OpenCSVSerde table pointing to LOCATION
+
+        val file1 = new File(tempDir + "/data1")
+        val writer1 = new PrintWriter(file1)
+        writer1.write("1,2")
+        writer1.close()
+
+        val file2 = new File(tempDir + "/data2")
+        val writer2 = new PrintWriter(file2)
+        writer2.write("1,2")
+        writer2.close()
+
+        sql(
+          s"""CREATE EXTERNAL TABLE csv_table(page_id INT, impressions INT)
+            ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
+            WITH SERDEPROPERTIES (
+              \"separatorChar\" = \",\",
+              \"quoteChar\"     = \"\\\"\",
+              \"escapeChar\"    = \"\\\\\")
+            LOCATION '$tempDir'
+          """)
+
+        hiveContext.setConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS, true)
+
+        val relation = hiveContext.sessionState.catalog.lookupRelation(TableIdentifier("csv_table"))
+          .asInstanceOf[MetastoreRelation]
+
+        val properties = relation.hiveQlTable.getParameters
+        assert(properties.get("totalSize").toLong <= 0, "external table totalSize must be <= 0")
+        assert(properties.get("rawDataSize").toLong <= 0, "external table rawDataSize must be <= 0")
+
+        val sizeInBytes = relation.statistics.sizeInBytes
+        assert(sizeInBytes === BigInt(file1.length() + file2.length()))
+      }
+    } finally {
+      hiveContext.setConf(SQLConf.ENABLE_FALL_BACK_TO_HDFS_FOR_STATS, enableFallBackToHdfsForStats)
+      sql("DROP TABLE csv_table ")
+    }
   }
 
   ignore("analyze MetastoreRelations") {

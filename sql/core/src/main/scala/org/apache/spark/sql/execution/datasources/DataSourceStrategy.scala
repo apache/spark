@@ -66,7 +66,7 @@ private[sql] object DataSourceAnalysis extends Rule[LogicalPlan] {
           "Cannot overwrite a path that is also being read from.")
       }
 
-      InsertIntoHadoopFsRelation(
+      InsertIntoHadoopFsRelationCommand(
         outputPath,
         t.partitionSchema.fields.map(_.name).map(UnresolvedAttribute(_)),
         t.bucketSpec,
@@ -153,7 +153,7 @@ private[sql] object DataSourceStrategy extends Strategy with Logging {
 
     case i @ logical.InsertIntoTable(l @ LogicalRelation(t: InsertableRelation, _, _),
       part, query, overwrite, false) if part.isEmpty =>
-      ExecutedCommandExec(InsertIntoDataSource(l, query, overwrite)) :: Nil
+      ExecutedCommandExec(InsertIntoDataSourceCommand(l, query, overwrite)) :: Nil
 
     case _ => Nil
   }
