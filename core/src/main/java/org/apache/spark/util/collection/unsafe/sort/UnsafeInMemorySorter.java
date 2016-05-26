@@ -190,7 +190,7 @@ public final class UnsafeInMemorySorter {
       array.getBaseOffset(),
       newArray.getBaseObject(),
       newArray.getBaseOffset(),
-      pos * 8);
+      pos * 8L);
     consumer.freeArray(array);
     array = newArray;
     capacity = calcCapacity();
@@ -289,8 +289,8 @@ public final class UnsafeInMemorySorter {
       } else {
         MemoryBlock unused = new MemoryBlock(
           array.getBaseObject(),
-          array.getBaseOffset() + pos * 8,
-          (array.size() - pos) * 8);
+          array.getBaseOffset() + pos * 8L,
+          (array.size() - pos) * 8L);
         LongArray buffer = new LongArray(unused);
         Sorter<RecordPointerAndKeyPrefix, LongArray> sorter =
           new Sorter<>(new UnsafeSortDataFormat(buffer));
