@@ -58,7 +58,9 @@ case class CreateViewCommand(
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
   require(tableDesc.tableType == CatalogTableType.VIEW)
-  require(tableDesc.viewText.isDefined)
+  if (!isTemporary) {
+    require(tableDesc.viewText.isDefined)
+  }
 
   if (allowExisting && replace) {
     throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
