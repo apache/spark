@@ -18,7 +18,7 @@
 package org.apache.spark.sql.util
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.ContinuousQuery
+import org.apache.spark.sql._
 import org.apache.spark.sql.util.ContinuousQueryListener._
 
 /**
@@ -65,11 +65,23 @@ object ContinuousQueryListener {
   trait Event
 
   /** Event representing the start of a query */
-  class QueryStarted private[sql](val query: ContinuousQuery) extends Event
+  class QueryStarted private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 
   /** Event representing any progress updates in a query */
-  class QueryProgress private[sql](val query: ContinuousQuery) extends Event
+  class QueryProgress private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 
   /** Event representing that termination of a query */
-  class QueryTerminated private[sql](val query: ContinuousQuery) extends Event
+  class QueryTerminated private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 }
+
+/**
+ * :: Experimental ::
+ * Companion object of [[ContinuousQueryListener]] that defines the listener events.
+ */
+@Experimental
+case class ContinuousQueryInfo(
+    name: String,
+    isActive: Boolean,
+    sourceStatuses: Seq[SourceStatus],
+    sinkStatus: SinkStatus,
+    exception: Option[ContinuousQueryException])

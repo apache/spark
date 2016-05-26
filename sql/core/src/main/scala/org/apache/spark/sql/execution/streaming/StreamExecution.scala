@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.util.ContinuousQueryListener
+import org.apache.spark.sql.util.{ContinuousQueryInfo, ContinuousQueryListener}
 import org.apache.spark.sql.util.ContinuousQueryListener._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
@@ -167,7 +167,7 @@ class StreamExecution(
       // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
       // so must mark this as ACTIVE first.
       state = ACTIVE
-      postEvent(new QueryStarted(this)) // Assumption: Does not throw exception.
+      postEvent(new QueryStarted(this.toInfo)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -206,7 +206,7 @@ class StreamExecution(
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(new QueryTerminated(this))
+      postEvent(new QueryTerminated(this.toInfo))
       terminationLatch.countDown()
     }
   }
@@ -374,7 +374,7 @@ class StreamExecution(
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
     committedOffsets ++= availableOffsets
-    postEvent(new QueryProgress(this))
+    postEvent(new QueryProgress(this.toInfo))
   }
 
   private def postEvent(event: ContinuousQueryListener.Event) {
@@ -482,6 +482,15 @@ class StreamExecution(
        |
        |$deathCauseStr
      """.stripMargin
+  }
+
+  private def toInfo: ContinuousQueryInfo = {
+    ContinuousQueryInfo(
+      this.name,
+      this.isActive,
+      this.sourceStatuses,
+      this.sinkStatus,
+      this.exception)
   }
 
   trait State

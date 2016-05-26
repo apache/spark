@@ -52,7 +52,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
         Assert("Incorrect query status in onQueryStarted") {
           val status = listener.startStatus
           assert(status != null)
-          assert(status.active == true)
+          assert(status.isActive == true)
           assert(status.sourceStatuses.size === 1)
           assert(status.sourceStatuses(0).description.contains("Memory"))
 
@@ -74,7 +74,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
             assert(listener.progressStatuses.size === 1)
             val status = listener.progressStatuses.peek()
             assert(status != null)
-            assert(status.active == true)
+            assert(status.isActive == true)
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
             assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
 
@@ -88,7 +88,7 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
             val status = listener.terminationStatus
             assert(status != null)
 
-            assert(status.active === false) // must be inactive by the time onQueryTerm is called
+            assert(status.isActive === false) // must be inactive by the time onQueryTerm is called
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
             assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
           }
@@ -165,9 +165,9 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
     // to catch errors in the async listener events
     @volatile private var asyncTestWaiter = new Waiter
 
-    @volatile var startStatus: QueryStatus = null
-    @volatile var terminationStatus: QueryStatus = null
-    val progressStatuses = new ConcurrentLinkedQueue[QueryStatus]
+    @volatile var startStatus: ContinuousQueryInfo = null
+    @volatile var terminationStatus: ContinuousQueryInfo = null
+    val progressStatuses = new ConcurrentLinkedQueue[ContinuousQueryInfo]
 
     def reset(): Unit = {
       startStatus = null
@@ -183,35 +183,23 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
 
     override def onQueryStarted(queryStarted: QueryStarted): Unit = {
       asyncTestWaiter {
-        startStatus = QueryStatus(queryStarted.query)
+        startStatus = queryStarted.queryInfo
       }
     }
 
     override def onQueryProgress(queryProgress: QueryProgress): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryProgress called before onQueryStarted")
-        progressStatuses.add(QueryStatus(queryProgress.query))
+        progressStatuses.add(queryProgress.queryInfo)
       }
     }
 
     override def onQueryTerminated(queryTerminated: QueryTerminated): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
-        terminationStatus = QueryStatus(queryTerminated.query)
+        terminationStatus = queryTerminated.queryInfo
       }
       asyncTestWaiter.dismiss()
-    }
-  }
-
-  case class QueryStatus(
-    active: Boolean,
-    exception: Option[Exception],
-    sourceStatuses: Array[SourceStatus],
-    sinkStatus: SinkStatus)
-
-  object QueryStatus {
-    def apply(query: ContinuousQuery): QueryStatus = {
-      QueryStatus(query.isActive, query.exception, query.sourceStatuses, query.sinkStatus)
     }
   }
 }
