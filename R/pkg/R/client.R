@@ -38,7 +38,7 @@ determineSparkSubmitBin <- function() {
   if (.Platform$OS.type == "unix") {
     sparkSubmitBinName <- "spark-submit"
   } else {
-    sparkSubmitBinName <- "spark-submit.cmd"
+    sparkSubmitBinName <- "spark-submit2.cmd"
   }
   sparkSubmitBinName
 }
