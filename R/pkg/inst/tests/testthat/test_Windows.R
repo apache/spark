@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-context("test the support SparkR on Windows")
+context("Windows-specific tests")
 
 test_that("sparkJars tag in SparkContext", {
   if (.Platform$OS.type != "windows") {
