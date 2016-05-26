@@ -39,7 +39,7 @@ import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-class DefaultSource extends FileFormat with DataSourceRegister {
+class JsonFileFormat extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "json"
 
@@ -151,7 +151,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
 
   override def hashCode(): Int = getClass.hashCode()
 
-  override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
+  override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 }
 
 private[json] class JsonOutputWriter(

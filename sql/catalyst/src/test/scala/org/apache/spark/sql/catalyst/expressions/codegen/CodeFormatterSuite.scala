@@ -23,9 +23,10 @@ import org.apache.spark.sql.catalyst.util._
 
 class CodeFormatterSuite extends SparkFunSuite {
 
-  def testCase(name: String)(input: String)(expected: String): Unit = {
+  def testCase(name: String)(
+      input: String, comment: Map[String, String] = Map.empty)(expected: String): Unit = {
     test(name) {
-      val sourceCode = new CodeAndComment(input, Map.empty)
+      val sourceCode = new CodeAndComment(input.trim, comment)
       if (CodeFormatter.format(sourceCode).trim !== expected.trim) {
         fail(
           s"""
@@ -43,9 +44,9 @@ class CodeFormatterSuite extends SparkFunSuite {
         |/*project_c2*/
       """.stripMargin,
       Map(
-        "/*project_c4*/" -> "// (((input[0, bigint, false] + 1) + 2) + 3))",
-        "/*project_c3*/" -> "// ((input[0, bigint, false] + 1) + 2)",
-        "/*project_c2*/" -> "// (input[0, bigint, false] + 1)"
+        "project_c4" -> "// (((input[0, bigint, false] + 1) + 2) + 3))",
+        "project_c3" -> "// ((input[0, bigint, false] + 1) + 2)",
+        "project_c2" -> "// (input[0, bigint, false] + 1)"
       ))
 
     val reducedCode = CodeFormatter.stripOverlappingComments(code)
@@ -53,9 +54,11 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("basic example") {
-    """class A {
+    """
+      |class A {
       |blahblah;
-      |}""".stripMargin
+      |}
+    """.stripMargin
   }{
     """
       |/* 001 */ class A {
@@ -65,11 +68,13 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("nested example") {
-    """class A {
+    """
+      |class A {
       | if (c) {
       |duh;
       |}
-      |}""".stripMargin
+      |}
+    """.stripMargin
   } {
     """
       |/* 001 */ class A {
@@ -81,9 +86,11 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("single line") {
-    """class A {
+    """
+      |class A {
       | if (c) {duh;}
-      |}""".stripMargin
+      |}
+    """.stripMargin
   }{
     """
       |/* 001 */ class A {
@@ -93,9 +100,11 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("if else on the same line") {
-    """class A {
+    """
+      |class A {
       | if (c) {duh;} else {boo;}
-      |}""".stripMargin
+      |}
+    """.stripMargin
   }{
     """
       |/* 001 */ class A {
@@ -105,10 +114,12 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("function calls") {
-    """foo(
+    """
+      |foo(
       |a,
       |b,
-      |c)""".stripMargin
+      |c)
+    """.stripMargin
   }{
     """
       |/* 001 */ foo(
@@ -119,10 +130,12 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("single line comments") {
-    """// This is a comment about class A { { { ( (
+    """
+      |// This is a comment about class A { { { ( (
       |class A {
       |class body;
-      |}""".stripMargin
+      |}
+    """.stripMargin
   }{
     """
       |/* 001 */ // This is a comment about class A { { { ( (
@@ -133,10 +146,12 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("single line comments /* */ ") {
-    """/** This is a comment about class A { { { ( ( */
+    """
+      |/** This is a comment about class A { { { ( ( */
       |class A {
       |class body;
-      |}""".stripMargin
+      |}
+    """.stripMargin
   }{
     """
       |/* 001 */ /** This is a comment about class A { { { ( ( */
@@ -147,12 +162,14 @@ class CodeFormatterSuite extends SparkFunSuite {
   }
 
   testCase("multi-line comments") {
-    """  /* This is a comment about
+    """
+      |    /* This is a comment about
       |class A {
       |class body; ...*/
       |class A {
       |class body;
-      |}""".stripMargin
+      |}
+    """.stripMargin
   }{
     """
       |/* 001 */ /* This is a comment about
@@ -164,30 +181,56 @@ class CodeFormatterSuite extends SparkFunSuite {
     """.stripMargin
   }
 
-  // scalastyle:off whitespace.end.of.line
   testCase("reduce empty lines") {
     CodeFormatter.stripExtraNewLines(
-      """class A {
+      """
+        |class A {
         |
         |
-        | /*** comment1 */
+        | /*
+        |  * multi
+        |  * line
+        |  * comment
+        |  */
         |
         | class body;
         |
         |
         | if (c) {duh;}
         | else {boo;}
-        |}""".stripMargin)
+        |}
+      """.stripMargin.trim)
   }{
     """
       |/* 001 */ class A {
-      |/* 002 */   /*** comment1 */
-      |/* 003 */   class body;
-      |/* 004 */ 
-      |/* 005 */   if (c) {duh;}
-      |/* 006 */   else {boo;}
-      |/* 007 */ }
+      |/* 002 */   /*
+      |/* 003 */    * multi
+      |/* 004 */    * line
+      |/* 005 */    * comment
+      |/* 006 */    */
+      |/* 007 */   class body;
+      |/* 008 */
+      |/* 009 */   if (c) {duh;}
+      |/* 010 */   else {boo;}
+      |/* 011 */ }
     """.stripMargin
   }
-  // scalastyle:on whitespace.end.of.line
+
+  testCase("comment place holder")(
+    """
+      |/*c1*/
+      |class A
+      |/*c2*/
+      |class B
+      |/*c1*//*c2*/
+    """.stripMargin, Map("c1" -> "/*abc*/", "c2" -> "/*xyz*/")
+  ) {
+    """
+      |/* 001 */ /*abc*/
+      |/* 002 */ class A
+      |/* 003 */ /*xyz*/
+      |/* 004 */ class B
+      |/* 005 */ /*abc*//*xyz*/
+    """.stripMargin
+  }
 }

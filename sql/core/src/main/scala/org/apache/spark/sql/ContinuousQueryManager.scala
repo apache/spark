@@ -35,7 +35,7 @@ import org.apache.spark.util.{Clock, SystemClock}
  * @since 2.0.0
  */
 @Experimental
-class ContinuousQueryManager(sparkSession: SparkSession) {
+class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)

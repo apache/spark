@@ -591,7 +591,7 @@ case class Expand(
   }
 
   // This operator can reuse attributes (for example making them null when doing a roll up) so
-  // the contraints of the child may no longer be valid.
+  // the constraints of the child may no longer be valid.
   override protected def validConstraints: Set[Expression] = Set.empty[Expression]
 }
 
@@ -734,6 +734,7 @@ case class Distinct(child: LogicalPlan) extends UnaryNode {
  */
 case class Repartition(numPartitions: Int, shuffle: Boolean, child: LogicalPlan)
   extends UnaryNode {
+  require(numPartitions > 0, s"Number of partitions ($numPartitions) must be positive.")
   override def output: Seq[Attribute] = child.output
 }
 

@@ -20,7 +20,6 @@ package org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{AnalysisException, OutputMode}
 import org.apache.spark.sql.OutputMode._
-import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
@@ -29,6 +28,12 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
+
+/** A dummy command for testing unsupported operations. */
+case class DummyCommand() extends LogicalPlan with Command {
+  override def output: Seq[Attribute] = Nil
+  override def children: Seq[LogicalPlan] = Nil
+}
 
 class UnsupportedOperationsSuite extends SparkFunSuite {
 
@@ -71,7 +76,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
   // Commands
   assertNotSupportedInStreamingPlan(
     "commmands",
-    DescribeFunction(FunctionIdentifier("func", database = None), true),
+    DummyCommand(),
     outputMode = Append,
     expectedMsgs = "commands" :: Nil)
 

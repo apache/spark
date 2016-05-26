@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.aggregate
 
-import org.apache.spark.sql.OutputMode
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.execution.SparkPlan
@@ -34,7 +33,7 @@ object Utils {
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
 
-    val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = aggregate.Complete))
+    val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
     SortBasedAggregateExec(
       requiredChildDistributionExpressions = Some(groupingExpressions),
@@ -312,6 +311,8 @@ object Utils {
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = restored)
     }
+    // Note: stateId and returnAllStates are filled in later with preparation rules
+    // in IncrementalExecution.
     val saved = StateStoreSaveExec(
       groupingAttributes, stateId = None, returnAllStates = None, partialMerged2)
 

@@ -19,16 +19,23 @@ package org.apache.spark.sql.streaming
 
 import scala.language.implicitConversions
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class MemorySinkSuite extends StreamTest with SharedSQLContext {
+class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+
   import testImplicits._
 
-  test("add data in Append output mode") {
+  after {
+    sqlContext.streams.active.foreach(_.stop())
+  }
+
+  test("directly add data in Append output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
     val sink = new MemorySink(schema, OutputMode.Append)
 
@@ -62,7 +69,41 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext {
     checkAnswer(sink.allData, 1 to 9)
   }
 
-  test("add data in Complete output mode") {
+  test("directly add data in Update output mode") {
+    implicit val schema = new StructType().add(new StructField("value", IntegerType))
+    val sink = new MemorySink(schema, OutputMode.Append)
+
+    // Before adding data, check output
+    assert(sink.latestBatchId === None)
+    checkAnswer(sink.latestBatchData, Seq.empty)
+    checkAnswer(sink.allData, Seq.empty)
+
+    // Add batch 0 and check outputs
+    sink.addBatch(0, 1 to 3)
+    assert(sink.latestBatchId === Some(0))
+    checkAnswer(sink.latestBatchData, 1 to 3)
+    checkAnswer(sink.allData, 1 to 3)
+
+    // Add batch 1 and check outputs
+    sink.addBatch(1, 4 to 6)
+    assert(sink.latestBatchId === Some(1))
+    checkAnswer(sink.latestBatchData, 4 to 6)
+    checkAnswer(sink.allData, 1 to 6) // new data should get appended to old data
+
+    // Re-add batch 1 with different data, should not be added and outputs should not be changed
+    sink.addBatch(1, 7 to 9)
+    assert(sink.latestBatchId === Some(1))
+    checkAnswer(sink.latestBatchData, 4 to 6)
+    checkAnswer(sink.allData, 1 to 6)
+
+    // Add batch 2 and check outputs
+    sink.addBatch(2, 7 to 9)
+    assert(sink.latestBatchId === Some(2))
+    checkAnswer(sink.latestBatchData, 7 to 9)
+    checkAnswer(sink.allData, 1 to 9)
+  }
+
+  test("directly add data in Complete output mode") {
     implicit val schema = new StructType().add(new StructField("value", IntegerType))
     val sink = new MemorySink(schema, OutputMode.Complete)
 
@@ -96,16 +137,8 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext {
     checkAnswer(sink.allData, 7 to 9)
   }
 
-  test("registering as a table") {
-    testRegisterAsTable()
-  }
 
-  ignore("stress test") {
-    // Ignore the stress test as it takes several minutes to run
-    (0 until 1000).foreach(_ => testRegisterAsTable())
-  }
-
-  private def testRegisterAsTable(): Unit = {
+  test("registering as a table: append mode") {
     val input = MemoryStream[Int]
     val query = input.toDF().write
       .format("memory")
@@ -125,6 +158,31 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext {
       1, 2, 3, 4, 5, 6)
 
     query.stop()
+  }
+
+  ignore("stress test") {
+    // Ignore the stress test as it takes several minutes to run
+    (0 until 1000).foreach { _ =>
+      val input = MemoryStream[Int]
+      val query = input.toDF().write
+        .format("memory")
+        .queryName("memStream")
+        .startStream()
+      input.addData(1, 2, 3)
+      query.processAllAvailable()
+
+      checkDataset(
+        spark.table("memStream").as[Int],
+        1, 2, 3)
+
+      input.addData(4, 5, 6)
+      query.processAllAvailable()
+      checkDataset(
+        spark.table("memStream").as[Int],
+        1, 2, 3, 4, 5, 6)
+
+      query.stop()
+    }
   }
 
   test("error when no name is specified") {

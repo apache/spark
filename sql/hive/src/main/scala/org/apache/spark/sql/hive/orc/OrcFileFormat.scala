@@ -42,7 +42,11 @@ import org.apache.spark.sql.sources.{Filter, _}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class DefaultSource
+/**
+ * [[FileFormat]] for reading ORC files. If this is moved or renamed, please update
+ * [[DataSource]]'s backwardCompatibilityMap.
+ */
+private[sql] class OrcFileFormat
   extends FileFormat with DataSourceRegister with Serializable {
 
   override def shortName(): String = "orc"
@@ -262,7 +266,7 @@ private[orc] case class OrcTableScan(
 
     // Figure out the actual schema from the ORC source (without partition columns) so that we
     // can pick the correct ordinals.  Note that this assumes that all files have the same schema.
-    val orcFormat = new DefaultSource
+    val orcFormat = new OrcFileFormat
     val dataSchema =
       orcFormat
         .inferSchema(sparkSession, Map.empty, inputPaths)
