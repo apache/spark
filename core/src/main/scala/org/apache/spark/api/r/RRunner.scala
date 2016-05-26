@@ -150,8 +150,14 @@ private[spark] class RRunner[U](
 
           dataOut.writeInt(numPartitions)
 
-          dataOut.writeInt(if (isDataFrame && key != null) 2 else
-            if (isDataFrame) 1 else 0)
+          val mode = if (isDataFrame && key != null) {
+            2 // gapply
+          } else if (isDataFrame) {
+            1 // dapply
+          } else {
+            0 // RDD
+          }
+          dataOut.writeInt(mode)
 
           if (isDataFrame) {
             SerDe.writeObject(dataOut, colNames)

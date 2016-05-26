@@ -91,7 +91,6 @@ mode <- SparkR:::readInt(inputCon)
 if (mode > 0) {
   colNames <- SparkR:::readObject(inputCon)
   if (mode == 2) {
-    # TODO pass the key to R function on gapply mode
     key <- SparkR:::readObject(inputCon)
   }
 }
@@ -130,7 +129,11 @@ if (isEmpty != 0) {
           stopifnot(deserializer == "byte")
           stopifnot(class(data) == "data.frame")
         }
-        output <- computeFunc(data)
+        if (mode == 2) {
+          output <- computeFunc(key, data)
+        } else {
+          output <- computeFunc(data)
+        }
         if (serializer == "row") {
           # Transform the result data.frame back to a list of rows
           output <- split(output, seq(nrow(output)))

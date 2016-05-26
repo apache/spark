@@ -345,7 +345,7 @@ case class FlatMapGroupsInRExec(
     groupingAttributes: Seq[Attribute],
     dataAttributes: Seq[Attribute],
     outputObjAttr: Attribute,
-    child: SparkPlan) extends UnaryExecNode with ObjectOperator {
+    child: SparkPlan) extends UnaryExecNode with ObjectProducerExec {
 
   override def output: Seq[Attribute] = outputObjAttr :: Nil
   override def producedAttributes: AttributeSet = AttributeSet(outputObjAttr)
@@ -369,9 +369,9 @@ case class FlatMapGroupsInRExec(
 
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
-      val getKey = deserializeRowToObject(keyDeserializer, groupingAttributes)
-      val getValue = deserializeRowToObject(valueDeserializer, dataAttributes)
-      val outputObject = wrapObjectToRow(outputObjAttr.dataType)
+      val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
+      val getValue = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
+      val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
       val groupNames = groupingAttributes.map(_.name).toArray
 
       val runner = new RRunner[Array[Byte]](

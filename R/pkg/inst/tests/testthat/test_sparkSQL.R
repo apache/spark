@@ -2143,7 +2143,7 @@ test_that("gapply() on a DataFrame", {
     list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
     c("a", "b", "c", "d"))
   expected <- collect(df)
-  df1 <- gapply(df, list("a"), function(x) { x }, schema(df))
+  df1 <- gapply(df, list("a"), function(key, x) { x }, schema(df))
   actual <- collect(df1)
   expect_identical(actual, expected)
 
@@ -2153,8 +2153,8 @@ test_that("gapply() on a DataFrame", {
   df2 <- gapply(
     df,
     list(df$"a", df$"c"),
-    function(x) {
-      y <- data.frame(x$a[1], sum(x$b) > 2)
+    function(key, x) {
+      y <- data.frame(x[, key[[1]]][1], sum(x$b) > 2)
     },
     schema)
   actual <- collect(df2)$e
@@ -2168,8 +2168,8 @@ test_that("gapply() on a DataFrame", {
   df3 <- gapply(
     df,
     list("a", "c"),
-    function(x) {
-      y <- (data.frame(x$a[1], x$c[1], mean(x$b), stringsAsFactors = FALSE))
+    function(key, x) {
+      y <- (data.frame(x[, unlist(key)][1, ], mean(x$b), stringsAsFactors = FALSE))
     },
     schema)
   actual <- collect(arrange(df3, "a", decreasing = FALSE))
