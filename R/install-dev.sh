@@ -41,7 +41,7 @@ if [ ! -z "$R_HOME" ]
   else
     # if command 'which R' finds no R home, then exit
     if ! [ `command -v R` ]; then
-      echo "Cannot find R home by running 'which R', please make sure R is properly installed."
+      echo "Cannot find R home, please make sure R is properly installed."
       exit 1
     fi
     R_SCRIPT_PATH="$(dirname $(which R))"
