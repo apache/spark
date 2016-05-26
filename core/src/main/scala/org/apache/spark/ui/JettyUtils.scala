@@ -25,6 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
 import scala.xml.Node
 
+import org.eclipse.jetty.client.api.Response
+import org.eclipse.jetty.proxy.ProxyServlet
 import org.eclipse.jetty.server.{Request, Server, ServerConnector}
 import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.servlet._
@@ -182,6 +184,67 @@ private[spark] object JettyUtils extends Logging {
         throw new Exception("Could not find resource path for Web UI: " + resourceBase)
     }
     contextHandler.setContextPath(path)
+    contextHandler.addServlet(holder, "/")
+    contextHandler
+  }
+
+  /** Create a handler for proxying request to Workers and Application Drivers */
+  def createProxyHandler(
+      prefix: String,
+      target: String): ServletContextHandler = {
+    val servlet = new ProxyServlet {
+      override def rewriteTarget(request: HttpServletRequest): String = {
+        val path = request.getRequestURI();
+        if (!path.startsWith(prefix)) return null
+
+        val uri = new StringBuilder(target)
+        if (target.endsWith("/")) uri.setLength(uri.length() - 1)
+        val rest = path.substring(prefix.length())
+        if (!rest.isEmpty())
+        {
+          if (!rest.startsWith("/")) {
+            uri.append("/")
+          }
+          uri.append(rest)
+        }
+
+        val query = request.getQueryString()
+        if (query != null) {
+          // Is there at least one path segment ?
+          val separator = "://"
+          if (uri.indexOf("/", uri.indexOf(separator) + separator.length()) < 0) {
+            uri.append("/")
+          }
+          uri.append("?").append(query)
+        }
+        val rewrittenURI = URI.create(uri.toString()).normalize()
+
+        if (!validateDestination(rewrittenURI.getHost(), rewrittenURI.getPort())) {
+          return null
+        }
+
+        rewrittenURI.toString();
+      }
+      override def filterServerResponseHeader(
+        clientRequest: HttpServletRequest,
+        serverResponse: Response,
+        headerName: String,
+        headerValue: String): String = {
+        if (headerName.equalsIgnoreCase("location")) {
+          val targetUri = serverResponse.getRequest().getURI();
+          val toReplace = targetUri.getScheme() + "://" + targetUri.getAuthority();
+          if (headerValue.startsWith(toReplace)) {
+            return clientRequest.getScheme() + "://" + clientRequest.getHeader("host") +
+                prefix + headerValue.substring(toReplace.length())
+          }
+        }
+        super.filterServerResponseHeader(clientRequest, serverResponse, headerName, headerValue);
+      }
+    }
+
+    val contextHandler = new ServletContextHandler
+    val holder = new ServletHolder(servlet)
+    contextHandler.setContextPath(prefix)
     contextHandler.addServlet(holder, "/")
     contextHandler
   }

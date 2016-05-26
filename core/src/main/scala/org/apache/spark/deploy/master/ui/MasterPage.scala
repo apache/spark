@@ -176,7 +176,13 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
   private def workerRow(worker: WorkerInfo): Seq[Node] = {
     <tr>
       <td>
-        <a href={worker.webUiAddress}>{worker.id}</a>
+        {
+          if (parent.master.reverseProxy) {
+            <a href={"/target/" + worker.id + "/"}>{worker.id}</a>
+          } else {
+            <a href={worker.webUiAddress}>{worker.id}</a>
+          }
+        }
       </td>
       <td>{worker.host}:{worker.port}</td>
       <td>{worker.state}</td>
@@ -210,7 +216,11 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
           if (app.isFinished) {
             app.desc.name
           } else {
-            <a href={app.desc.appUiUrl}>{app.desc.name}</a>
+            if (parent.master.reverseProxy) {
+              <a href={"/target/" + app.id + "/"}>{app.desc.name}</a>
+            } else {
+              <a href={app.desc.appUiUrl}>{app.desc.name}</a>
+            }
           }
         }
       </td>
@@ -244,7 +254,12 @@ private[ui] class MasterPage(parent: MasterWebUI) extends WebUIPage("") {
     <tr>
       <td>{driver.id} {killLink}</td>
       <td>{driver.submitDate}</td>
-      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}
+      <td>{driver.worker.map(w =>
+        if (parent.master.reverseProxy) {
+          <a href={"/target/" + w.id.toString + "/"}>{w.id.toString}</a>
+        } else {
+          <a href={w.webUiAddress}>{w.id.toString}</a>
+        }).getOrElse("None")}
       </td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>

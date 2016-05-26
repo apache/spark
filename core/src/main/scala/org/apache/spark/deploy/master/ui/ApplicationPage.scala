@@ -77,7 +77,15 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
             <li><strong>State:</strong> {app.state}</li>
             {
               if (!app.isFinished) {
-                <li><strong><a href={app.desc.appUiUrl}>Application Detail UI</a></strong></li>
+                <li><strong>
+                  {
+                    if (parent.master.reverseProxy) {
+                      <a href={"/target/" + app.id + "/"}>Application Detail UI</a>
+                    } else {
+                      <a href={app.desc.appUiUrl}>Application Detail UI</a>
+                    }
+                  }
+                </strong></li>
               }
             }
           </ul>
@@ -100,19 +108,21 @@ private[ui] class ApplicationPage(parent: MasterWebUI) extends WebUIPage("app") 
   }
 
   private def executorRow(executor: ExecutorDesc): Seq[Node] = {
+    var workerUrlRef = executor.worker.webUiAddress
+    if (parent.master.reverseProxy) workerUrlRef = "/target/" + executor.worker.id + "/"
     <tr>
       <td>{executor.id}</td>
       <td>
-        <a href={executor.worker.webUiAddress}>{executor.worker.id}</a>
+        <a href={workerUrlRef}>{executor.worker.id}</a>
       </td>
       <td>{executor.cores}</td>
       <td>{executor.memory}</td>
       <td>{executor.state}</td>
       <td>
         <a href={"%s/logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stdout</a>
+          .format(workerUrlRef, executor.application.id, executor.id)}>stdout</a>
         <a href={"%s/logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(executor.worker.webUiAddress, executor.application.id, executor.id)}>stderr</a>
+          .format(workerUrlRef, executor.application.id, executor.id)}>stderr</a>
       </td>
     </tr>
   }
