@@ -188,10 +188,10 @@ private[spark] class MesosClusterScheduler(
         mesosDriver.killTask(task.taskId)
         k.success = true
         k.message = "Killing running driver"
-      } else if (removeFromQueuedDrivers(submissionId)) {
+      } else if (removeFromQueuedDriversAndAddToFinishedDrivers(submissionId)) {
         k.success = true
         k.message = "Removed driver while it's still pending"
-      } else if (removeFromPendingRetryDrivers(submissionId)) {
+      } else if (removeFromPendingRetryDriversAndAddToFinishedDrivers(submissionId)) {
         k.success = true
         k.message = "Removed driver while it's being retried"
       } else if (finishedDrivers.exists(_.driverDescription.submissionId.equals(submissionId))) {
@@ -697,6 +697,32 @@ private[spark] class MesosClusterScheduler(
     if (index != -1) {
       pendingRetryDrivers.remove(index)
       pendingRetryDriversState.expunge(id)
+      true
+    } else {
+      false
+    }
+  }
+
+  private def removeFromQueuedDriversAndAddToFinishedDrivers(id: String): Boolean = {
+    val index = queuedDrivers.indexWhere(_.submissionId.equals(id))
+    if (index != -1) {
+      val desc = queuedDrivers.remove(index)
+      queuedDriversState.expunge(id)
+      finishedDrivers += new MesosClusterSubmissionState(desc, TaskID.newBuilder().
+        setValue("").build(), SlaveID.newBuilder().setValue("").build(), None, null, None)
+      true
+    } else {
+      false
+    }
+  }
+
+  private def removeFromPendingRetryDriversAndAddToFinishedDrivers(id: String): Boolean = {
+    val index = pendingRetryDrivers.indexWhere(_.submissionId.equals(id))
+    if (index != -1) {
+      val desc = pendingRetryDrivers.remove(index)
+      pendingRetryDriversState.expunge(id)
+      finishedDrivers += new MesosClusterSubmissionState(desc, TaskID.newBuilder().
+        setValue("").build(), SlaveID.newBuilder().setValue("").build(), None, null, None)
       true
     } else {
       false
