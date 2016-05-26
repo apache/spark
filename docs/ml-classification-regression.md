@@ -390,13 +390,15 @@ interface, and will throw an exception if this constraint is exceeded. See the [
  Still, for linear and logistic regression, models with an increased number of features can be trained 
  using the `LinearRegression` and `LogisticRegression` estimators.
 
-The canonical form of an exponential family distribution is given as:
+Though GLMs may be used with general exponential family distributions, it is common to work only with exponential families that are 
+in their _natural_ or _canonical_ forms. Any distribution can be converted to its canonical form via a simple transform, and this
+assumption simplifies the notation. The form of a [natural exponential family distribution](https://en.wikipedia.org/wiki/Natural_exponential_family) is given as:
 
 $$
-f_Y(y|\theta, \tau) = h(y, \tau)\exp{\left( \frac{\theta \cdot T(y) - A(\theta)}{d(\tau)} \right)}
+f_Y(y|\theta, \tau) = h(y, \tau)\exp{\left( \frac{\theta \cdot y - A(\theta)}{d(\tau)} \right)}
 $$
 
-where $\theta$ is the parameter of interest and $\tau$ is a dispersion parameter. In a GLM the response variable $Y_i$ is assumed to be drawn from an exponential family distribution:
+where $\theta$ is the parameter of interest and $\tau$ is a dispersion parameter. In a GLM the response variable $Y_i$ is assumed to be drawn from a natural exponential family distribution:
 
 $$
 Y_i \sim f\left(\cdot|\theta_i, \tau \right)
@@ -408,7 +410,7 @@ $$
 \mu_i = A'(\theta_i)
 $$
 
-Here, $A'(\theta_i)$ is defined by the form of the exponential family distribution used. GLMs also allow specification
+Here, $A'(\theta_i)$ is defined by the form of the distribution selected. GLMs also allow specification
 of a link function, which defines the relationship between the expected value of the response variable $\mu_i$
 and the so called _linear predictor_ $\eta_i$:
 
@@ -427,7 +429,7 @@ $$
 A GLM finds the regression coefficients $\vec{\beta}$ which maximize the likelihood function.
 
 $$
-\min_{\vec{\beta}} \mathcal{L}(\vec{\theta}|\vec{y},X) =
+\max_{\vec{\beta}} \mathcal{L}(\vec{\theta}|\vec{y},X) =
 \prod_{i=1}^{N} h(y_i, \tau) \exp{\left(\frac{y_i\theta_i - A(\theta_i)}{d(\tau)}\right)}
 $$
 
@@ -435,7 +437,7 @@ where the parameter of interest $\theta_i$ is related to the regression coeffici
 by
 
 $$
-\theta_i = A'(g^{-1}(\vec{x_i} \cdot \vec{\beta}))
+\theta_i = A'^{-1}(g^{-1}(\vec{x_i} \cdot \vec{\beta}))
 $$
 
 Spark's generalized linear regression interface also provides summary statistics for diagnosing the
