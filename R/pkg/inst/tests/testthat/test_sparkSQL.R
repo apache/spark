@@ -32,7 +32,7 @@ markUtf8 <- function(s) {
   s
 }
 
-setHiveContext <- function() {
+setHiveContext <- function(sc) {
   ssc <- callJMethod(sc, "sc")
   hiveCtx <- tryCatch({
     newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
@@ -178,7 +178,7 @@ test_that("create DataFrame from RDD", {
   expect_equal(as.list(collect(where(df, df$name == "John"))),
                list(name = "John", age = 19L, height = 176.5))
 
-  setHiveContext()
+  setHiveContext(sc)
   sql("CREATE TABLE people (name string, age double, height float)")
   df <- read.df(jsonPathNa, "json", schema)
   invisible(insertInto(df, "people"))
@@ -963,8 +963,7 @@ test_that("column calculation", {
 })
 
 test_that("test HiveContext", {
-  ssc <- callJMethod(sc, "sc")
-  setHiveContext()
+  setHiveContext(sc)
   df <- createExternalTable("json", jsonPath, "json")
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
@@ -2140,8 +2139,7 @@ test_that("repartition by columns on DataFrame", {
 })
 
 test_that("Window functions on a DataFrame", {
-  ssc <- callJMethod(sc, "sc")
-  setHiveContext()
+  setHiveContext(sc)
   df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
                         schema = c("key", "value"))
   ws <- orderBy(window.partitionBy("key"), "value")
