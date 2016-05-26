@@ -187,7 +187,6 @@ test_that("create DataFrame from RDD", {
   expect_equal(collect(sql("SELECT height from people WHERE name ='Bob'"))$height,
                c(176.5))
   unsetHiveContext()
-  remove(".sparkRHivesc", envir = .sparkREnv)
 })
 
 test_that("convert NAs to null type in DataFrames", {
