@@ -1011,7 +1011,7 @@ class Dataset[T] private[sql](
    * code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
    */
-  private def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
+  protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
       columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
