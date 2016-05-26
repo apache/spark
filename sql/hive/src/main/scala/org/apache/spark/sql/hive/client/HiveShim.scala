@@ -24,6 +24,7 @@ import java.util.{ArrayList => JArrayList, List => JList, Map => JMap, Set => JS
 import java.util.concurrent.TimeUnit
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.hive.conf.HiveConf
@@ -42,7 +43,6 @@ import org.apache.spark.sql.catalyst.analysis.NoSuchPermanentFunctionException
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, CatalogTablePartition, FunctionResource, FunctionResourceType}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{IntegralType, StringType}
-import org.apache.spark.util.CausedBy
 
 
 /**
@@ -480,8 +480,18 @@ private[client] class Shim_v0_13 extends Shim_v0_12 {
     try {
       Option(hive.getFunction(db, name)).map(fromHiveFunction)
     } catch {
-      case CausedBy(ex: NoSuchObjectException) if ex.getMessage.contains(name) =>
+      case NonFatal(e) if isCausedBy(e, s"$name does not exist") =>
         None
+    }
+  }
+
+  private def isCausedBy(e: Throwable, matchMassage: String): Boolean = {
+    if (e.getMessage.contains(matchMassage)) {
+      true
+    } else if (e.getCause != null) {
+      isCausedBy(e.getCause, matchMassage)
+    } else {
+      false
     }
   }
 

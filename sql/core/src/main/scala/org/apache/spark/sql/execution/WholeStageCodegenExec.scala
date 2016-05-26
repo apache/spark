@@ -333,8 +333,8 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
       """.trim
 
     // try to compile, helpful for debug
-    val cleanedSource =
-      new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments())
+    val cleanedSource = CodeFormatter.stripOverlappingComments(
+      new CodeAndComment(CodeFormatter.stripExtraNewLines(source), ctx.getPlaceHolderToComments()))
 
     logDebug(s"\n${CodeFormatter.format(cleanedSource)}")
     CodeGenerator.compile(cleanedSource)
