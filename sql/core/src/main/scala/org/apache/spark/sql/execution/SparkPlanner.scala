@@ -45,7 +45,7 @@ class SparkPlanner(
 
   override def plan(plan: LogicalPlan): Iterator[SparkPlan] = {
     super.plan(plan).map {
-      _.transform {
+      _.transformUp {
         case PlanLater(p) =>
           // TODO: use the first plan for now, but we will implement plan space exploaration later.
           this.plan(p).next()
