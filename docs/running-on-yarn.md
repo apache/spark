@@ -60,7 +60,7 @@ Running Spark on YARN requires a binary distribution of Spark which is built wit
 Binary distributions can be downloaded from the [downloads page](http://spark.apache.org/downloads.html) of the project website.
 To build Spark yourself, refer to [Building Spark](building-spark.html).
 
-To make Spark runtime jars accessible from YARN side, you can specify through `spark.yarn.archive` or `spark.yarn.jars`, for details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will fall back to zip all the jars under `$SPARK_HOME/jars` and upload to the distributed cache.
+To make Spark runtime jars accessible from YARN side, you can specify `spark.yarn.archive` or `spark.yarn.jars`. For details please refer to [Spark Properties](running-on-yarn.html#spark-properties). If neither `spark.yarn.archive` nor `spark.yarn.jars` is specified, Spark will create a zip file with all jars under `$SPARK_HOME/jars` and upload it to the distributed cache.
 
 # Configuration
 
