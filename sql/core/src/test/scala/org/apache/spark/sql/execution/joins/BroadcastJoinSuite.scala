@@ -42,7 +42,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
   protected var spark: SparkSession = null
 
   /**
-   * Create a new [[SQLContext]] running in local-cluster mode with unsafe and codegen enabled.
+   * Create a new [[SparkSession]] running in local-cluster mode with unsafe and codegen enabled.
    */
   override def beforeAll(): Unit = {
     super.beforeAll()

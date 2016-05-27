@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.util.Utils
 
 class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   test("SPARK-5068: query data when path doesn't exist") {
     withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "true")) {

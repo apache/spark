@@ -47,8 +47,8 @@ case class ListStringCaseClass(l: Seq[String])
  */
 class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
 
-  import hiveContext.udf
-  import hiveContext.implicits._
+  import spark.udf
+  import spark.implicits._
 
   test("spark sql udf test that returns a struct") {
     udf.register("getStruct", (_: Int) => Fields(1, 2, 3, 4, 5))
@@ -151,7 +151,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
    }
 
   test("UDFIntegerToString") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       IntegerCaseClass(1) :: IntegerCaseClass(2) :: Nil).toDF()
     testData.createOrReplaceTempView("integerTable")
 
@@ -166,7 +166,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFToListString") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListString AS '${classOf[UDFToListString].getName}'")
@@ -181,7 +181,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFToListInt") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToListInt AS '${classOf[UDFToListInt].getName}'")
@@ -196,7 +196,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFToStringIntMap") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToStringIntMap " +
@@ -212,7 +212,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFToIntIntMap") {
-    val testData = hiveContext.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
+    val testData = spark.sparkContext.parallelize(StringCaseClass("") :: Nil).toDF()
     testData.createOrReplaceTempView("inputTable")
 
     sql(s"CREATE TEMPORARY FUNCTION testUDFToIntIntMap " +
@@ -228,7 +228,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFListListInt") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) :: Nil).toDF()
@@ -244,7 +244,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFListString") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       ListStringCaseClass(Seq("a", "b", "c")) ::
       ListStringCaseClass(Seq("d", "e")) :: Nil).toDF()
     testData.createOrReplaceTempView("listStringTable")
@@ -259,7 +259,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFStringString") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       StringCaseClass("world") :: StringCaseClass("goodbye") :: Nil).toDF()
     testData.createOrReplaceTempView("stringTable")
 
@@ -278,7 +278,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
   }
 
   test("UDFTwoListList") {
-    val testData = hiveContext.sparkContext.parallelize(
+    val testData = spark.sparkContext.parallelize(
       ListListIntCaseClass(Nil) ::
       ListListIntCaseClass(Seq((1, 2, 3))) ::
       ListListIntCaseClass(Seq((4, 5, 6), (7, 8, 9))) ::

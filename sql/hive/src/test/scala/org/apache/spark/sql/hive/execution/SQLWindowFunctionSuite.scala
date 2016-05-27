@@ -29,7 +29,7 @@ case class WindowData(month: Int, area: String, product: Int)
  * Test suite for SQL window functions.
  */
 class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   test("window function: udaf with aggregate expression") {
     val data = Seq(

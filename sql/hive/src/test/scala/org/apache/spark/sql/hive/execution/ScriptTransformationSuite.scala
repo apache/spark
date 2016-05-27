@@ -29,7 +29,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.types.StringType
 
 class ScriptTransformationSuite extends SparkPlanTest with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   private val noSerdeIOSchema = HiveScriptIOSchema(
     inputRowFormat = Seq.empty,
