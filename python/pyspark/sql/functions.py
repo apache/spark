@@ -1177,7 +1177,7 @@ def sha2(col, numBits):
 
 @since(2.0)
 def hash(*cols):
-    """Calculates the hash code of given columns, and returns the result as a int column.
+    """Calculates the hash code of given columns, and returns the result as an int column.
 
     >>> spark.createDataFrame([('ABC',)], ['a']).select(hash('a').alias('hash')).collect()
     [Row(hash=-757602832)]
