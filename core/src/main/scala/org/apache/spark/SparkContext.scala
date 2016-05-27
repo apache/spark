@@ -369,7 +369,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     _conf.validateSettings()
 
     if (!_conf.contains("spark.master")) {
-      throw new SparkException("A master URL must be set in your configuration")
+      _conf.set("spark.master", "local[4]")
+      logWarning("spark.master is not specified, use local[4] by default")
     }
     if (!_conf.contains("spark.app.name")) {
       throw new SparkException("An application name must be set in your configuration")
