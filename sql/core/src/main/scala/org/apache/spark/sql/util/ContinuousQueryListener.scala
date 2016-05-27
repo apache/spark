@@ -76,7 +76,7 @@ object ContinuousQueryListener {
 
 /**
  * :: Experimental ::
- * Companion object of [[ContinuousQueryListener]] that defines the listener events.
+ * A class that contains information about [[ContinuousQuery]].
  */
 @Experimental
 case class ContinuousQueryInfo(
