@@ -306,7 +306,12 @@ case class AlterTableSerDePropertiesCommand(
       "ALTER TABLE SERDEPROPERTIES")
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    // Do not support setting serde for datasource tables
+    // For datasource tables, disallow setting serde or specifying partition
+    if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
+        "[SERDE | SERDEPROPERTIES] for a specific partition is not supported " +
+        "for tables created with the datasource API")
+    }
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
         "not supported for tables created with the datasource API")

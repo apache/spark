@@ -976,15 +976,19 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Map("k" -> "v", "kay" -> "vee"))
     }
     // set serde properties only
-    sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) " +
-      "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
-    assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
-      Map("k" -> "vvv", "kay" -> "vee"))
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) " +
+        "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
+      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+        Map("k" -> "vvv", "kay" -> "vee"))
+    }
     // set things without explicitly specifying database
     catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
-    assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
-      Map("k" -> "vvv", "kay" -> "veee"))
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
+      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+        Map("k" -> "vvv", "kay" -> "veee"))
+    }
     // table to alter does not exist
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
