@@ -162,7 +162,7 @@ class MinMaxScalerModel private[ml] (
 
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
-    val originalRange = (originalMax.toBreeze - originalMin.toBreeze).toArray
+    val originalRange = (originalMax.asBreeze - originalMin.asBreeze).toArray
     val minArray = originalMin.toArray
 
     val reScale = udf { (vector: Vector) =>

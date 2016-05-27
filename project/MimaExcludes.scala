@@ -775,6 +775,9 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.AlphaComponent"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Experimental"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.DeveloperApi")
+      ) ++ Seq(
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.asBreeze"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.asBreeze")
       )
     case v if v.startsWith("1.6") =>
       Seq(

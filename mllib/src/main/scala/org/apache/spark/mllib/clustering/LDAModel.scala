@@ -205,7 +205,7 @@ class LocalLDAModel private[spark] (
 
   @Since("1.3.0")
   override def describeTopics(maxTermsPerTopic: Int): Array[(Array[Int], Array[Double])] = {
-    val brzTopics = topics.toBreeze.toDenseMatrix
+    val brzTopics = topics.asBreeze.toDenseMatrix
     Range(0, k).map { topicIndex =>
       val topic = normalize(brzTopics(::, topicIndex), 1.0)
       val (termWeights, terms) =
@@ -233,7 +233,7 @@ class LocalLDAModel private[spark] (
    */
   @Since("1.5.0")
   def logLikelihood(documents: RDD[(Long, Vector)]): Double = logLikelihoodBound(documents,
-    docConcentration, topicConcentration, topicsMatrix.toBreeze.toDenseMatrix, gammaShape, k,
+    docConcentration, topicConcentration, topicsMatrix.asBreeze.toDenseMatrix, gammaShape, k,
     vocabSize)
 
   /**
@@ -291,7 +291,7 @@ class LocalLDAModel private[spark] (
       gammaShape: Double,
       k: Int,
       vocabSize: Long): Double = {
-    val brzAlpha = alpha.toBreeze.toDenseVector
+    val brzAlpha = alpha.asBreeze.toDenseVector
     // transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
     val Elogbeta = LDAUtils.dirichletExpectation(lambda.t).t
@@ -344,9 +344,9 @@ class LocalLDAModel private[spark] (
   def topicDistributions(documents: RDD[(Long, Vector)]): RDD[(Long, Vector)] = {
     // Double transpose because dirichletExpectation normalizes by row and we need to normalize
     // by topic (columns of lambda)
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     val expElogbetaBc = documents.sparkContext.broadcast(expElogbeta)
-    val docConcentrationBrz = this.docConcentration.toBreeze
+    val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape
     val k = this.k
 
@@ -367,9 +367,9 @@ class LocalLDAModel private[spark] (
 
   /** Get a method usable as a UDF for [[topicDistributions()]] */
   private[spark] def getTopicDistributionMethod(sc: SparkContext): Vector => Vector = {
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     val expElogbetaBc = sc.broadcast(expElogbeta)
-    val docConcentrationBrz = this.docConcentration.toBreeze
+    val docConcentrationBrz = this.docConcentration.asBreeze
     val gammaShape = this.gammaShape
     val k = this.k
 
@@ -399,14 +399,14 @@ class LocalLDAModel private[spark] (
    */
   @Since("2.0.0")
   def topicDistribution(document: Vector): Vector = {
-    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.toBreeze.toDenseMatrix.t).t)
+    val expElogbeta = exp(LDAUtils.dirichletExpectation(topicsMatrix.asBreeze.toDenseMatrix.t).t)
     if (document.numNonzeros == 0) {
       Vectors.zeros(this.k)
     } else {
       val (gamma, _, _) = OnlineLDAOptimizer.variationalTopicInference(
         document,
         expElogbeta,
-        this.docConcentration.toBreeze,
+        this.docConcentration.asBreeze,
         gammaShape,
         this.k)
       Vectors.dense(normalize(gamma, 1.0).toArray)
@@ -456,7 +456,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
           ("gammaShape" -> gammaShape)))
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
-      val topicsDenseMatrix = topicsMatrix.toBreeze.toDenseMatrix
+      val topicsDenseMatrix = topicsMatrix.asBreeze.toDenseMatrix
       val topics = Range(0, k).map { topicInd =>
         Data(Vectors.dense((topicsDenseMatrix(::, topicInd).toArray)), topicInd)
       }
@@ -480,7 +480,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
 
       val brzTopics = BDM.zeros[Double](vocabSize, k)
       topics.foreach { case Row(vec: Vector, ind: Int) =>
-        brzTopics(::, ind) := vec.toBreeze
+        brzTopics(::, ind) := vec.asBreeze
       }
       val topicsMat = Matrices.fromBreeze(brzTopics)
 
@@ -896,9 +896,9 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       Loader.checkSchema[VertexData](vertexDataFrame.schema)
       Loader.checkSchema[EdgeData](edgeDataFrame.schema)
       val globalTopicTotals: LDA.TopicCounts =
-        dataFrame.first().getAs[Vector](0).toBreeze.toDenseVector
+        dataFrame.first().getAs[Vector](0).asBreeze.toDenseVector
       val vertices: RDD[(VertexId, LDA.TopicCounts)] = vertexDataFrame.rdd.map {
-        case Row(ind: Long, vec: Vector) => (ind, vec.toBreeze.toDenseVector)
+        case Row(ind: Long, vec: Vector) => (ind, vec.asBreeze.toDenseVector)
       }
 
       val edges: RDD[Edge[LDA.TokenCount]] = edgeDataFrame.rdd.map {
