@@ -538,4 +538,25 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
 
     cq.awaitTermination(2000L)
   }
+
+  test("foreach") {
+    import testImplicits._
+
+    val ds = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+      .as[Int]
+
+    val cq = ds.write
+      .format("console")
+      .option("checkpointLocation", newMetadataDir)
+      .trigger(ProcessingTime(2.seconds))
+      .foreach(new ForeachWriter[Int] {
+        override def process(value: Int): Unit = {}
+        override def close(): Unit = {}
+        override def open(version: Long): Unit = {}
+      })
+
+    cq.awaitTermination(2000L)
+  }
 }

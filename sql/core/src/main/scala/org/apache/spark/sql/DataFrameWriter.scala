@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
+import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink, StreamExecution}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -39,7 +39,9 @@ import org.apache.spark.util.Utils
  *
  * @since 1.4.0
  */
-final class DataFrameWriter private[sql](df: DataFrame) {
+final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
+
+  private val df = ds.toDF()
 
   /**
    * Specifies the behavior when data or table already exists. Options include:
@@ -50,7 +52,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def mode(saveMode: SaveMode): DataFrameWriter = {
+  def mode(saveMode: SaveMode): DataFrameWriter[T] = {
     // mode() is used for non-continuous queries
     // outputMode() is used for continuous queries
     assertNotStreaming("mode() can only be called on non-continuous queries")
@@ -67,7 +69,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def mode(saveMode: String): DataFrameWriter = {
+  def mode(saveMode: String): DataFrameWriter[T] = {
     // mode() is used for non-continuous queries
     // outputMode() is used for continuous queries
     assertNotStreaming("mode() can only be called on non-continuous queries")
@@ -106,7 +108,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   @Experimental
-  def trigger(trigger: Trigger): DataFrameWriter = {
+  def trigger(trigger: Trigger): DataFrameWriter[T] = {
     assertStreaming("trigger() can only be called on continuous queries")
     this.trigger = trigger
     this
@@ -117,7 +119,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def format(source: String): DataFrameWriter = {
+  def format(source: String): DataFrameWriter[T] = {
     this.source = source
     this
   }
@@ -127,7 +129,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def option(key: String, value: String): DataFrameWriter = {
+  def option(key: String, value: String): DataFrameWriter[T] = {
     this.extraOptions += (key -> value)
     this
   }
@@ -137,28 +139,28 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 2.0.0
    */
-  def option(key: String, value: Boolean): DataFrameWriter = option(key, value.toString)
+  def option(key: String, value: Boolean): DataFrameWriter[T] = option(key, value.toString)
 
   /**
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  def option(key: String, value: Long): DataFrameWriter = option(key, value.toString)
+  def option(key: String, value: Long): DataFrameWriter[T] = option(key, value.toString)
 
   /**
    * Adds an output option for the underlying data source.
    *
    * @since 2.0.0
    */
-  def option(key: String, value: Double): DataFrameWriter = option(key, value.toString)
+  def option(key: String, value: Double): DataFrameWriter[T] = option(key, value.toString)
 
   /**
    * (Scala-specific) Adds output options for the underlying data source.
    *
    * @since 1.4.0
    */
-  def options(options: scala.collection.Map[String, String]): DataFrameWriter = {
+  def options(options: scala.collection.Map[String, String]): DataFrameWriter[T] = {
     this.extraOptions ++= options
     this
   }
@@ -168,7 +170,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * @since 1.4.0
    */
-  def options(options: java.util.Map[String, String]): DataFrameWriter = {
+  def options(options: java.util.Map[String, String]): DataFrameWriter[T] = {
     this.options(options.asScala)
     this
   }
@@ -191,7 +193,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   @scala.annotation.varargs
-  def partitionBy(colNames: String*): DataFrameWriter = {
+  def partitionBy(colNames: String*): this.type = {
     this.partitioningColumns = Option(colNames)
     this
   }
@@ -205,7 +207,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0
    */
   @scala.annotation.varargs
-  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter = {
+  def bucketBy(numBuckets: Int, colName: String, colNames: String*): DataFrameWriter[T] = {
     this.numBuckets = Option(numBuckets)
     this.bucketColumnNames = Option(colName +: colNames)
     this
@@ -219,7 +221,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0
    */
   @scala.annotation.varargs
-  def sortBy(colName: String, colNames: String*): DataFrameWriter = {
+  def sortBy(colName: String, colNames: String*): DataFrameWriter[T] = {
     this.sortColumnNames = Option(colName +: colNames)
     this
   }
@@ -260,7 +262,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 2.0.0
    */
   @Experimental
-  def queryName(queryName: String): DataFrameWriter = {
+  def queryName(queryName: String): DataFrameWriter[T] = {
     assertStreaming("queryName() can only be called on continuous queries")
     this.extraOptions += ("queryName" -> queryName)
     this
@@ -355,6 +357,35 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         dataSource.createSink(),
         trigger)
     }
+  }
+
+  /**
+   * :: Experimental ::
+   * Starts the execution of the streaming query, which will continually send results to the given
+   * [[ForeachWriter]] as new data arrives. The returned [[ContinuousQuery]] object can be used to
+   * interact with the stream.
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def foreach(writer: ForeachWriter[T]): ContinuousQuery = {
+    val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
+    val checkpointLocation = extraOptions.get("checkpointLocation")
+      .orElse {
+        df.sparkSession.sessionState.conf.checkpointLocation.map { l =>
+          new Path(l, queryName).toUri.toString
+        }
+      }.getOrElse {
+      throw new AnalysisException("checkpointLocation must be specified either " +
+        "through option() or SQLConf")
+    }
+
+    df.sparkSession.sessionState.continuousQueryManager.startQuery(
+      queryName,
+      checkpointLocation,
+      df,
+      new ForeachSink[T](writer)(ds.encoder),
+      trigger)
   }
 
   /**
