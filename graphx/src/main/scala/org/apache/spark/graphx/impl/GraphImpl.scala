@@ -70,6 +70,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     replicatedVertexView.edges.checkpoint()
   }
 
+  override def localCheckpoint(): Graph[VD, ED] = {
+    vertices.localCheckpoint()
+    replicatedVertexView.edges.localCheckpoint()
+    this
+  }
+
   override def isCheckpointed: Boolean = {
     vertices.isCheckpointed && replicatedVertexView.edges.isCheckpointed
   }

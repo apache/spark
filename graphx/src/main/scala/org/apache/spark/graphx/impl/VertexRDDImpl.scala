@@ -77,6 +77,11 @@ class VertexRDDImpl[VD] private[graphx] (
     partitionsRDD.checkpoint()
   }
 
+  override def localCheckpoint(): this.type = {
+    partitionsRDD.localCheckpoint()
+    this
+  }
+
   override def isCheckpointed: Boolean = {
     firstParent[ShippableVertexPartition[VD]].isCheckpointed
   }

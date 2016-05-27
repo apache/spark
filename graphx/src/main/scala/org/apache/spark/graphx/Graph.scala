@@ -105,6 +105,11 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
   def checkpoint(): Unit
 
   /**
+    * Mark this RDD for local checkpointing using Spark's existing caching layer.
+    */
+  def localCheckpoint(): Graph[VD, ED]
+
+  /**
    * Return whether this Graph has been checkpointed or not.
    * This returns true iff both the vertices RDD and edges RDD have been checkpointed.
    */
