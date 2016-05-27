@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
+import java.util.ArrayList
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -54,7 +55,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 
   /**
    * Returns true if this accumulator has been registered.  Note that all accumulators must be
-   * registered before ues, or it will throw exception.
+   * registered before use, or it will throw exception.
    */
   final def isRegistered: Boolean =
     metadata != null && AccumulatorContext.get(metadata.id).isDefined
@@ -255,6 +256,9 @@ private[spark] object AccumulatorContext {
   def clear(): Unit = {
     originals.clear()
   }
+
+  // Identifier for distinguishing SQL metrics from other accumulators
+  private[spark] val SQL_ACCUM_IDENTIFIER = "sql"
 }
 
 
@@ -412,7 +416,7 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
 
 
 class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
-  private val _list: java.util.List[T] = new java.util.ArrayList[T]
+  private val _list: java.util.List[T] = new ArrayList[T]
 
   override def isZero: Boolean = _list.isEmpty
 
@@ -434,7 +438,9 @@ class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def value: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
+  override def value: java.util.List[T] = _list.synchronized {
+    java.util.Collections.unmodifiableList(new ArrayList[T](_list))
+  }
 
   private[spark] def setValue(newValue: java.util.List[T]): Unit = {
     _list.clear()

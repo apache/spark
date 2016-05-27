@@ -176,7 +176,7 @@ private[sql] abstract class BaseWriterContainer(
           val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
           ctor.newInstance(new Path(outputPath), context)
         } else {
-          // The specified output committer is just a OutputCommitter.
+          // The specified output committer is just an OutputCommitter.
           // So, we will use the no-argument constructor.
           val ctor = clazz.getDeclaredConstructor()
           ctor.newInstance()

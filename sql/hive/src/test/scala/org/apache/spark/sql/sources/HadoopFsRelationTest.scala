@@ -91,7 +91,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
         yield Row(s"val_$i", s"val_$i", s"val_$i", s"val_$i", 1, 1, 1, 1))
 
     // Self-join
-    df.registerTempTable("t")
+    df.createOrReplaceTempView("t")
     withTempTable("t") {
       checkAnswer(
         sql(
@@ -337,7 +337,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       intercept[AnalysisException] {
@@ -347,7 +347,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - non-partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       testDF.write.format(dataSourceName).mode(SaveMode.Ignore).saveAsTable("t")
@@ -459,7 +459,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - ErrorIfExists") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       intercept[AnalysisException] {
@@ -474,7 +474,7 @@ abstract class HadoopFsRelationTest extends QueryTest with SQLTestUtils with Tes
   }
 
   test("saveAsTable()/load() - partitioned table - Ignore") {
-    Seq.empty[(Int, String)].toDF().registerTempTable("t")
+    Seq.empty[(Int, String)].toDF().createOrReplaceTempView("t")
 
     withTempTable("t") {
       partitionedTestDF.write

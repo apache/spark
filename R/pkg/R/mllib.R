@@ -66,7 +66,7 @@ setClass("KMeansModel", representation(jobj = "jobj"))
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
-#' df <- createDataFrame(sqlContext, iris)
+#' df <- createDataFrame(iris)
 #' model <- spark.glm(df, Sepal_Length ~ Sepal_Width, family="gaussian")
 #' summary(model)
 #' }
@@ -114,7 +114,7 @@ setMethod(
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' data(iris)
-#' df <- createDataFrame(sqlContext, iris)
+#' df <- createDataFrame(iris)
 #' model <- glm(Sepal_Length ~ Sepal_Width, df, family="gaussian")
 #' summary(model)
 #' }
@@ -391,7 +391,7 @@ setMethod("predict", signature(object = "KMeansModel"),
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(sqlContext, infert)
+#' df <- createDataFrame(infert)
 #' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
 #'}
 setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "formula"),
@@ -414,7 +414,7 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(sqlContext, infert)
+#' df <- createDataFrame(infert)
 #' model <- spark.naiveBayes(df, education ~ ., laplace = 0)
 #' path <- "path/to/model"
 #' write.ml(model, path)
@@ -545,7 +545,7 @@ read.ml <- function(path) {
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- createDataFrame(sqlContext, ovarian)
+#' df <- createDataFrame(ovarian)
 #' model <- spark.survreg(df, Surv(futime, fustat) ~ ecog_ps + rx)
 #' }
 setMethod("spark.survreg", signature(data = "SparkDataFrame", formula = "formula"),

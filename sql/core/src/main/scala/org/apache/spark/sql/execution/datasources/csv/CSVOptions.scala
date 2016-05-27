@@ -111,6 +111,8 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
 
+  val escapeQuotes = getBool("escapeQuotes", true)
+
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'

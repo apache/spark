@@ -120,6 +120,8 @@ class SparkSession(object):
         def appName(self, name):
             """Sets a name for the application, which will be shown in the Spark web UI.
 
+            If no application name is set, a randomly generated name will be used.
+
             :param name: an application name
             """
             return self.config("spark.app.name", name)
@@ -133,18 +135,42 @@ class SparkSession(object):
 
         @since(2.0)
         def getOrCreate(self):
-            """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a new
-            one based on the options set in this builder.
+            """Gets an existing :class:`SparkSession` or, if there is no existing one, creates a
+            new one based on the options set in this builder.
+
+            This method first checks whether there is a valid global default SparkSession, and if
+            yes, return that one. If no valid global default SparkSession exists, the method
+            creates a new SparkSession and assigns the newly created SparkSession as the global
+            default.
+
+            >>> s1 = SparkSession.builder.config("k1", "v1").getOrCreate()
+            >>> s1.conf.get("k1") == s1.sparkContext.getConf().get("k1") == "v1"
+            True
+
+            In case an existing SparkSession is returned, the config options specified
+            in this builder will be applied to the existing SparkSession.
+
+            >>> s2 = SparkSession.builder.config("k2", "v2").getOrCreate()
+            >>> s1.conf.get("k1") == s2.conf.get("k1")
+            True
+            >>> s1.conf.get("k2") == s2.conf.get("k2")
+            True
             """
             with self._lock:
-                from pyspark.conf import SparkConf
                 from pyspark.context import SparkContext
-                from pyspark.sql.context import SQLContext
-                sparkConf = SparkConf()
+                from pyspark.conf import SparkConf
+                session = SparkSession._instantiatedContext
+                if session is None:
+                    sparkConf = SparkConf()
+                    for key, value in self._options.items():
+                        sparkConf.set(key, value)
+                    sc = SparkContext.getOrCreate(sparkConf)
+                    session = SparkSession(sc)
                 for key, value in self._options.items():
-                    sparkConf.set(key, value)
-                sparkContext = SparkContext.getOrCreate(sparkConf)
-                return SQLContext.getOrCreate(sparkContext).sparkSession
+                    session.conf.set(key, value)
+                for key, value in self._options.items():
+                    session.sparkContext._conf.set(key, value)
+                return session
 
     builder = Builder()
 
@@ -175,7 +201,7 @@ class SparkSession(object):
         if jsparkSession is None:
             jsparkSession = self._jvm.SparkSession(self._jsc.sc())
         self._jsparkSession = jsparkSession
-        self._jwrapped = self._jsparkSession.wrapped()
+        self._jwrapped = self._jsparkSession.sqlContext()
         self._wrapped = SQLContext(self._sc, self, self._jwrapped)
         _monkey_patch_RDD(self)
         install_exception_handler()
@@ -186,10 +212,16 @@ class SparkSession(object):
     def newSession(self):
         """
         Returns a new SparkSession as new session, that has separate SQLConf,
-        registered temporary tables and UDFs, but shared SparkContext and
+        registered temporary views and UDFs, but shared SparkContext and
         table cache.
         """
         return self.__class__(self._sc, self._jsparkSession.newSession())
+
+    @property
+    @since(2.0)
+    def sparkContext(self):
+        """Returns the underlying :class:`SparkContext`."""
+        return self._sc
 
     @property
     @since(2.0)
@@ -465,6 +497,8 @@ class SparkSession(object):
                 return (obj, )
             schema = StructType().add("value", datatype)
         else:
+            if isinstance(schema, list):
+                schema = [x.encode('utf-8') if not isinstance(x, str) else x for x in schema]
             prepare = lambda obj: obj
 
         if isinstance(data, RDD):

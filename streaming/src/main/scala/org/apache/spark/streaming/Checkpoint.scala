@@ -154,7 +154,7 @@ object Checkpoint extends Logging {
     Utils.tryWithSafeFinally {
 
       // ObjectInputStream uses the last defined user-defined class loader in the stack
-      // to find classes, which maybe the wrong class loader. Hence, a inherited version
+      // to find classes, which maybe the wrong class loader. Hence, an inherited version
       // of ObjectInputStream is used to explicitly use the current thread's default class
       // loader to find and load classes. This is a well know Java issue and has popped up
       // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)

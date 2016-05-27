@@ -960,13 +960,13 @@ class RDDTests(ReusedPySparkTestCase):
         ]
         data_rdd = self.sc.parallelize(data)
         data_java_rdd = data_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        data_python_rdd = self.sc._jvm.SerDeUtil.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
 
         # conversion between python and java RDD threw exceptions
         data_java_rdd = converted_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        data_python_rdd = self.sc._jvm.SerDeUtil.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
 

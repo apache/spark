@@ -19,9 +19,9 @@
 package org.apache.spark.examples.ml
 
 import org.apache.spark.ml.classification.LogisticRegression
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.sql.{Row, SparkSession}
 
 /**
@@ -70,7 +70,7 @@ object SimpleParamsExample {
     // which supports several methods for specifying parameters.
     val paramMap = ParamMap(lr.maxIter -> 20)
     paramMap.put(lr.maxIter, 30) // Specify 1 Param. This overwrites the original maxIter.
-    paramMap.put(lr.regParam -> 0.1, lr.thresholds -> Array(0.45, 0.55)) // Specify multiple Params.
+    paramMap.put(lr.regParam -> 0.1, lr.thresholds -> Array(0.5, 0.5)) // Specify multiple Params.
 
     // One can also combine ParamMaps.
     val paramMap2 = ParamMap(lr.probabilityCol -> "myProbability") // Change output column name

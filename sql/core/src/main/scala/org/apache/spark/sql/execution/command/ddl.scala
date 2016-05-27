@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils.DATASOURCE_PREFIX
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
@@ -45,7 +46,7 @@ import org.apache.spark.sql.types._
  *     [WITH DBPROPERTIES (property_name=property_value, ...)];
  * }}}
  */
-case class CreateDatabase(
+case class CreateDatabaseCommand(
     databaseName: String,
     ifNotExists: Boolean,
     path: Option[String],
@@ -85,7 +86,7 @@ case class CreateDatabase(
  *    DROP DATABASE [IF EXISTS] database_name [RESTRICT|CASCADE];
  * }}}
  */
-case class DropDatabase(
+case class DropDatabaseCommand(
     databaseName: String,
     ifExists: Boolean,
     cascade: Boolean)
@@ -108,7 +109,7 @@ case class DropDatabase(
  *    ALTER (DATABASE|SCHEMA) database_name SET DBPROPERTIES (property_name=property_value, ...)
  * }}}
  */
-case class AlterDatabaseProperties(
+case class AlterDatabasePropertiesCommand(
     databaseName: String,
     props: Map[String, String])
   extends RunnableCommand {
@@ -134,7 +135,7 @@ case class AlterDatabaseProperties(
  *    DESCRIBE DATABASE [EXTENDED] db_name
  * }}}
  */
-case class DescribeDatabase(
+case class DescribeDatabaseCommand(
     databaseName: String,
     extended: Boolean)
   extends RunnableCommand {
@@ -175,7 +176,7 @@ case class DescribeDatabase(
  *   DROP VIEW [IF EXISTS] [db_name.]view_name;
  * }}}
  */
-case class DropTable(
+case class DropTableCommand(
     tableName: TableIdentifier,
     ifExists: Boolean,
     isView: Boolean) extends RunnableCommand {
@@ -185,7 +186,7 @@ case class DropTable(
     if (!catalog.tableExists(tableName)) {
       if (!ifExists) {
         val objectName = if (isView) "View" else "Table"
-        logError(s"$objectName '${tableName.quotedString}' does not exist")
+        throw new AnalysisException(s"$objectName to drop '$tableName' does not exist")
       }
     } else {
       // If the command DROP VIEW is to drop a table or DROP TABLE is to drop a view
@@ -200,9 +201,10 @@ case class DropTable(
         case _ =>
       })
       try {
-        sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(tableName.quotedString))
+        sparkSession.sharedState.cacheManager.tryUncacheQuery(
+          sparkSession.table(tableName.quotedString))
       } catch {
-        case NonFatal(e) => log.warn(s"${e.getMessage}", e)
+        case NonFatal(e) => log.warn(e.toString, e)
       }
       catalog.invalidateTable(tableName)
       catalog.dropTable(tableName, ifExists)
@@ -220,22 +222,20 @@ case class DropTable(
  *   ALTER VIEW view1 SET TBLPROPERTIES ('key1' = 'val1', 'key2' = 'val2', ...);
  * }}}
  */
-case class AlterTableSetProperties(
+case class AlterTableSetPropertiesCommand(
     tableName: TableIdentifier,
     properties: Map[String, String],
     isView: Boolean)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    val ident = if (isView) "VIEW" else "TABLE"
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
+    DDLUtils.verifyTableProperties(properties.keys.toSeq, s"ALTER $ident")
     val table = catalog.getTableMetadata(tableName)
-    val newProperties = table.properties ++ properties
-    if (DDLUtils.isDatasourceTable(newProperties)) {
-      throw new AnalysisException("ALTER TABLE SET TBLPROPERTIES is not supported for " +
-        "tables defined using the datasource API")
-    }
-    val newTable = table.copy(properties = newProperties)
+    // This overrides old properties
+    val newTable = table.copy(properties = table.properties ++ properties)
     catalog.alterTable(newTable)
     Seq.empty[Row]
   }
@@ -251,7 +251,7 @@ case class AlterTableSetProperties(
  *   ALTER VIEW view1 UNSET TBLPROPERTIES [IF EXISTS] ('key1', 'key2', ...);
  * }}}
  */
-case class AlterTableUnsetProperties(
+case class AlterTableUnsetPropertiesCommand(
     tableName: TableIdentifier,
     propKeys: Seq[String],
     ifExists: Boolean,
@@ -259,18 +259,16 @@ case class AlterTableUnsetProperties(
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    val ident = if (isView) "VIEW" else "TABLE"
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, tableName, isView)
+    DDLUtils.verifyTableProperties(propKeys, s"ALTER $ident")
     val table = catalog.getTableMetadata(tableName)
-    if (DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException(
-        "alter table properties is not supported for datasource tables")
-    }
     if (!ifExists) {
       propKeys.foreach { k =>
         if (!table.properties.contains(k)) {
           throw new AnalysisException(
-            s"attempted to unset non-existent property '$k' in table '$tableName'")
+            s"Attempted to unset non-existent property '$k' in table '$tableName'")
         }
       }
     }
@@ -291,7 +289,7 @@ case class AlterTableUnsetProperties(
  *   ALTER TABLE table [PARTITION spec] SET SERDEPROPERTIES serde_properties;
  * }}}
  */
-case class AlterTableSerDeProperties(
+case class AlterTableSerDePropertiesCommand(
     tableName: TableIdentifier,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
@@ -303,11 +301,15 @@ case class AlterTableSerDeProperties(
     "ALTER TABLE attempted to set neither serde class name nor serde properties")
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    DDLUtils.verifyTableProperties(
+      serdeProperties.toSeq.flatMap(_.keys.toSeq),
+      "ALTER TABLE SERDEPROPERTIES")
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
     // Do not support setting serde for datasource tables
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
-      throw new AnalysisException("ALTER TABLE SET SERDE is not supported for datasource tables")
+      throw new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
+        "not supported for tables created with the datasource API")
     }
     val newTable = table.withNewStorage(
       serde = serdeClassName.orElse(table.storage.serde),
@@ -330,7 +332,7 @@ case class AlterTableSerDeProperties(
  *   ALTER TABLE table ADD [IF NOT EXISTS] PARTITION spec [LOCATION 'loc1']
  * }}}
  */
-case class AlterTableAddPartition(
+case class AlterTableAddPartitionCommand(
     tableName: TableIdentifier,
     partitionSpecsAndLocs: Seq[(TablePartitionSpec, Option[String])],
     ifNotExists: Boolean)
@@ -361,7 +363,7 @@ case class AlterTableAddPartition(
  *   ALTER TABLE table PARTITION spec1 RENAME TO PARTITION spec2;
  * }}}
  */
-case class AlterTableRenamePartition(
+case class AlterTableRenamePartitionCommand(
     tableName: TableIdentifier,
     oldPartition: TablePartitionSpec,
     newPartition: TablePartitionSpec)
@@ -389,7 +391,7 @@ case class AlterTableRenamePartition(
  *   ALTER TABLE table DROP [IF EXISTS] PARTITION spec1[, PARTITION spec2, ...] [PURGE];
  * }}}
  */
-case class AlterTableDropPartition(
+case class AlterTableDropPartitionCommand(
     tableName: TableIdentifier,
     specs: Seq[TablePartitionSpec],
     ifExists: Boolean)
@@ -420,7 +422,7 @@ case class AlterTableDropPartition(
  *    ALTER TABLE table_name [PARTITION partition_spec] SET LOCATION "loc";
  * }}}
  */
-case class AlterTableSetLocation(
+case class AlterTableSetLocationCommand(
     tableName: TableIdentifier,
     partitionSpec: Option[TablePartitionSpec],
     location: String)
@@ -459,7 +461,7 @@ case class AlterTableSetLocation(
 }
 
 
-private[sql] object DDLUtils {
+object DDLUtils {
 
   def isDatasourceTable(props: Map[String, String]): Boolean = {
     props.contains("spark.sql.sources.provider")
@@ -486,6 +488,18 @@ private[sql] object DDLUtils {
           s"Cannot alter a table with ALTER VIEW. Please use ALTER TABLE instead")
       case _ =>
     })
+  }
+
+  /**
+   * If the given table properties (or SerDe properties) contains datasource properties,
+   * throw an exception.
+   */
+  def verifyTableProperties(propKeys: Seq[String], operation: String): Unit = {
+    val datasourceKeys = propKeys.filter(_.startsWith(DATASOURCE_PREFIX))
+    if (datasourceKeys.nonEmpty) {
+      throw new AnalysisException(s"Operation not allowed: $operation property keys may not " +
+        s"start with '$DATASOURCE_PREFIX': ${datasourceKeys.mkString("[", ", ", "]")}")
+    }
   }
 
   def isTablePartitioned(table: CatalogTable): Boolean = {
