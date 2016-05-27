@@ -30,7 +30,7 @@ from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGINT
 
 from pyspark.worker import main as worker_main
 from pyspark.serializers import read_int, write_int
-
+import random
 
 def compute_real_exit_code(exit_code):
     # SystemExit's code can be integer or string, but os._exit only accepts integers
@@ -39,6 +39,8 @@ def compute_real_exit_code(exit_code):
     else:
         return 1
 
+def pre_worker():
+    random.seed()
 
 def worker(sock):
     """
@@ -154,6 +156,7 @@ def manager():
                         outfile.flush()
                         outfile.close()
                         while True:
+                            pre_worker()
                             code = worker(sock)
                             if not reuse or code:
                                 # wait for closing
