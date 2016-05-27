@@ -43,7 +43,7 @@ if __name__ == "__main__":
     data = MLUtils.loadLibSVMFile(sc, "data/mllib/sample_libsvm_data.txt")
 
     # Split data approximately into training (60%) and test (40%)
-    training, test = data.randomSplit([0.6, 0.4], seed=0)
+    training, test = data.randomSplit([0.6, 0.4])
 
     # Train a naive Bayes model.
     model = NaiveBayes.train(training, 1.0)
