@@ -67,6 +67,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
       .filterNot(_ == classOf[StringSpace])
       .filterNot(_ == classOf[StringLPad])
       .filterNot(_ == classOf[StringRPad])
+      .filterNot(_ == classOf[BRound])
       .filterNot(_ == classOf[Round])
   }
 
