@@ -33,6 +33,7 @@ import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.util.Utils
+
 /**
  * An abstract base class for context cleaner tests, which sets up a context with a config
  * suitable for cleaner tests and provides some utility functions. Subclasses can use different
