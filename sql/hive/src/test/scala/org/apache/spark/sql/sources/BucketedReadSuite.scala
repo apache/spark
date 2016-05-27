@@ -362,7 +362,7 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     }
   }
 
-  test("bucket column only need to find in relation") {
+  test("disable bucketing when the output doesn't contain all bucketing columns") {
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
 
