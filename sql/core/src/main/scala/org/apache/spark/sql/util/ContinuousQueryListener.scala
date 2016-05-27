@@ -70,18 +70,28 @@ object ContinuousQueryListener {
   /** Event representing any progress updates in a query */
   class QueryProgress private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 
-  /** Event representing that termination of a query */
-  class QueryTerminated private[sql](val queryInfo: ContinuousQueryInfo) extends Event
+  /**
+   * Event representing that termination of a query
+   *
+   * @param queryInfo
+   * @param exception The excpetion information of the [[ContinuousQuery]] if any. Otherwise, it
+   *                  will be `None`.
+   */
+  class QueryTerminated private[sql](
+      val queryInfo: ContinuousQueryInfo,
+      val exception: Option[String]) extends Event
 }
 
 /**
  * :: Experimental ::
  * A class that contains information about [[ContinuousQuery]].
+ *
+ * @param name The [[ContinuousQuery]] name
+ * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
+ * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
  */
 @Experimental
-case class ContinuousQueryInfo(
-    name: String,
-    isActive: Boolean,
-    sourceStatuses: Seq[SourceStatus],
-    sinkStatus: SinkStatus,
-    exception: Option[ContinuousQueryException])
+class ContinuousQueryInfo private[sql](
+    val name: String,
+    val sourceStatuses: Seq[SourceStatus],
+    val sinkStatus: SinkStatus)

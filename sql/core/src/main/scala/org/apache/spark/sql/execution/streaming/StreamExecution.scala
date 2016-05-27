@@ -206,7 +206,7 @@ class StreamExecution(
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(new QueryTerminated(this.toInfo))
+      postEvent(new QueryTerminated(this.toInfo, this.exception.map(Utils.exceptionString)))
       terminationLatch.countDown()
     }
   }
@@ -485,12 +485,10 @@ class StreamExecution(
   }
 
   private def toInfo: ContinuousQueryInfo = {
-    ContinuousQueryInfo(
+    new ContinuousQueryInfo(
       this.name,
-      this.isActive,
       this.sourceStatuses,
-      this.sinkStatus,
-      this.exception)
+      this.sinkStatus)
   }
 
   trait State

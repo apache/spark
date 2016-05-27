@@ -52,7 +52,6 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
         Assert("Incorrect query status in onQueryStarted") {
           val status = listener.startStatus
           assert(status != null)
-          assert(status.isActive == true)
           assert(status.sourceStatuses.size === 1)
           assert(status.sourceStatuses(0).description.contains("Memory"))
 
@@ -74,7 +73,6 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
             assert(listener.progressStatuses.size === 1)
             val status = listener.progressStatuses.peek()
             assert(status != null)
-            assert(status.isActive == true)
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
             assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
 
@@ -87,8 +85,6 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
           eventually(Timeout(streamingTimeout)) {
             val status = listener.terminationStatus
             assert(status != null)
-
-            assert(status.isActive === false) // must be inactive by the time onQueryTerm is called
             assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
             assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
           }
