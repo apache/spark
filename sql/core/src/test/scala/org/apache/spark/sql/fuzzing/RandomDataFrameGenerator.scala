@@ -24,7 +24,10 @@ import scala.util.Random
 import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
-class RandomDataFrameGenerator(seed: Long, sqlContext: SQLContext) {
+class RandomDataFrameGenerator(
+    seed: Long,
+    @transient val sqlContext: SQLContext)
+  extends Serializable {
 
   private val rand = new Random(seed)
   private val nextId = new AtomicInteger()
