@@ -1826,7 +1826,7 @@ class UserDefinedJythonFunction(object):
     def __del__(self):
         try:
             self._judf.func().lazyFunc().unpersist(False)
-        except py4j.protocol.Py4JJavaError:
+        except:
             # Exception happens if shutting down, doesn't matter.
             pass
 
