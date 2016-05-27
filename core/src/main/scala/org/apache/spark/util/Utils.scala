@@ -2345,17 +2345,19 @@ private[spark] class RedirectThread(
  */
 private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
   var pos: Int = 0
+  var isBufferFull = false
   var buffer = new Array[Int](sizeInBytes)
 
   def write(i: Int): Unit = {
     buffer(pos) = i
     pos = (pos + 1) % buffer.length
+    isBufferFull = isBufferFull || (pos == 0)
   }
 
   override def toString: String = {
     val (end, start) = buffer.splitAt(pos)
     val input = new java.io.InputStream {
-      val iterator = (start ++ end).iterator
+      val iterator = (if (isBufferFull) start ++ end else end).iterator
 
       def read(): Int = if (iterator.hasNext) iterator.next() else -1
     }

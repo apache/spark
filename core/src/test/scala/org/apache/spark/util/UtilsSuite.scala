@@ -691,6 +691,19 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(buffer.toString === "t circular test circular\n")
   }
 
+  test("circular buffer: if the buffer isn't full, print only the contents written") {
+    val buffer = new CircularBuffer(25)
+    val stream = new java.io.PrintStream(buffer, true, "UTF-8")
+
+    // corner case: if nothing was written to the buffer, display nothing
+    assert(buffer.toString === "")
+
+    // scalastyle:off println
+    stream.println("test")
+    // scalastyle:on println
+    assert(buffer.toString === "test\n")
+  }
+
   test("nanSafeCompareDoubles") {
     def shouldMatchDefaultOrder(a: Double, b: Double): Unit = {
       assert(Utils.nanSafeCompareDoubles(a, b) === JDouble.compare(a, b))
