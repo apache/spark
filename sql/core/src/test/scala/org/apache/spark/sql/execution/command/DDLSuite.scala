@@ -171,6 +171,31 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("Create Database using Default Warehouse Path") {
+    withSQLConf(SQLConf.WAREHOUSE_PATH.key -> "") {
+      // Will use the default location if and only if we unset the conf
+      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
+      val catalog = spark.sessionState.catalog
+      val dbName = "db1"
+      try {
+        sql(s"CREATE DATABASE $dbName")
+        val db1 = catalog.getDatabaseMetadata(dbName)
+        val expectedLocation =
+          "file:" + appendTrailingSlash(System.getProperty("user.dir")) +
+            s"spark-warehouse/$dbName.db"
+        assert(db1 == CatalogDatabase(
+          dbName,
+          "",
+          expectedLocation,
+          Map.empty))
+        sql(s"DROP DATABASE $dbName CASCADE")
+        assert(!catalog.databaseExists(dbName))
+      } finally {
+        catalog.reset()
+      }
+    }
+  }
+
   test("Create/Drop Database - location") {
     val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
