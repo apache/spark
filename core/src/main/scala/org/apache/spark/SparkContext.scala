@@ -76,6 +76,8 @@ import org.apache.spark.util._
  *   this config overrides the default configs as well as system properties.
  */
 class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
+  // original log level
+  private val originalLogLevel = org.apache.log4j.Logger.getRootLogger().getLevel
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -362,6 +364,14 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
         s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
     }
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
+  }
+
+  /**
+   * Reset log level to original one when this SparkContext was created.
+   * @since 2.0.0
+   */
+  def resetLogLevel(): Unit = {
+    Utils.setLogLevel(originalLogLevel)
   }
 
   try {
