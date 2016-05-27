@@ -361,4 +361,14 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       assert(error.toString contains "Invalid bucket file")
     }
   }
+
+  test("bucket column only need to find in relation") {
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+
+      hiveContext.table("bucketed_table").select("j").collect()
+
+      hiveContext.table("bucketed_table").groupBy("j").agg(max("k")).collect()
+    }
+  }
 }

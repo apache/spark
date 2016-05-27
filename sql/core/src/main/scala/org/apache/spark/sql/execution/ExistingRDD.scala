@@ -347,15 +347,16 @@ private[sql] object DataSourceScanExec {
         case _ => None
       }
 
-      def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
-        throw new AnalysisException(s"bucket column $colName not found in existing columns " +
-          s"(${output.map(_.name).mkString(", ")})")
-      }
+      def toAttribute(colName: String): Attribute = output.find(_.name == colName).get
 
       bucketSpec.map { spec =>
         val numBuckets = spec.numBuckets
-        val bucketColumns = spec.bucketColumnNames.map(toAttribute)
-        HashPartitioning(bucketColumns, numBuckets)
+        if (spec.bucketColumnNames.forall(colName => output.exists(_.name == colName))) {
+          val bucketColumns = spec.bucketColumnNames.map(toAttribute)
+          HashPartitioning(bucketColumns, numBuckets)
+        } else {
+          UnknownPartitioning(0)
+        }
       }.getOrElse {
         UnknownPartitioning(0)
       }
