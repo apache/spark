@@ -57,9 +57,11 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  require(tableDesc.tableType == CatalogTableType.VIEW)
+  require(tableDesc.tableType == CatalogTableType.VIEW,
+    "The type of the table to created with CREATE VIEW must be 'CatalogTableType.VIEW'.")
   if (!isTemporary) {
-    require(tableDesc.viewText.isDefined)
+    require(tableDesc.viewText.isDefined,
+      "The table to created with CREATE VIEW must have 'viewText'.")
   }
 
   if (allowExisting && replace) {

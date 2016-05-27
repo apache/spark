@@ -52,7 +52,8 @@ case class CatalogStorageFormat(
 
 object CatalogStorageFormat {
   /** Empty storage format for default values and copies. */
-  val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, false, Map.empty)
+  val EmptyStorageFormat = CatalogStorageFormat(locationUri = None, inputFormat = None,
+    outputFormat = None, serde = None, compressed = false, serdeProperties = Map.empty)
 }
 
 /**
