@@ -192,8 +192,9 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
 
   /** Thread pool used for dispatching messages. */
   private val threadpool: ThreadPoolExecutor = {
+    // Use a minimum of 3 threads to avoid deadlocks
     val numThreads = nettyEnv.conf.getInt("spark.rpc.netty.dispatcher.numThreads",
-      math.max(2, Runtime.getRuntime.availableProcessors()))
+      math.max(3, Runtime.getRuntime.availableProcessors()))
     val pool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop")
     for (i <- 0 until numThreads) {
       pool.execute(new MessageLoop)
