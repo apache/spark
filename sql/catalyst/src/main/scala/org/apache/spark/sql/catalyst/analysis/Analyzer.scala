@@ -1889,10 +1889,7 @@ class Analyzer(
           }
 
           val resolved = resolveExpression(unbound, LocalRelation(inputs), throws = true)
-
-          inputs.find(ExpressionEncoder.isNullFlagColumn).map { a =>
-            If(Or(IsNull(a), a), Literal.create(null, resolved.dataType), resolved)
-          }.getOrElse(resolved)
+          ExpressionEncoder.checkNullFlag(inputs, resolved)
       }
     }
   }

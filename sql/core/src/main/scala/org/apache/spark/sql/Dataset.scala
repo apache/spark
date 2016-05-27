@@ -172,7 +172,7 @@ class Dataset[T] private[sql](
     this(sqlContext.sparkSession, logicalPlan, encoder)
   }
 
-  @transient private[sql] val logicalPlan: LogicalPlan = {
+  @transient private val withSideEffects: LogicalPlan = {
     def hasSideEffects(plan: LogicalPlan): Boolean = plan match {
       case _: Command |
            _: InsertIntoTable |
@@ -192,13 +192,22 @@ class Dataset[T] private[sql](
     }
   }
 
+  @transient private[sql] val logicalPlan: LogicalPlan = {
+    val output = withSideEffects.output
+    if (output.exists(ExpressionEncoder.isNullFlagColumn)) {
+      Project(output.filterNot(ExpressionEncoder.isNullFlagColumn), withSideEffects)
+    } else {
+      withSideEffects
+    }
+  }
+
   /**
    * An unresolved version of the internal encoder for the type of this [[Dataset]]. This one is
    * marked implicit so that we can use it when constructing new [[Dataset]] objects that have the
    * same object type (that will be possibly resolved to a different schema).
    */
   private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(encoder)
-  unresolvedTEncoder.validate(logicalPlan.output.filterNot(ExpressionEncoder.isNullFlagColumn))
+  unresolvedTEncoder.validate(logicalPlan.output)
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
@@ -357,7 +366,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, logicalPlan)
+  def as[U : Encoder]: Dataset[U] = Dataset[U](sparkSession, withSideEffects)
 
   /**
    * Converts this strongly typed collection of data to generic `DataFrame` with columns renamed.
@@ -391,8 +400,7 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 1.6.0
    */
-  def schema: StructType =
-    StructType(queryExecution.analyzed.schema.filterNot(ExpressionEncoder.isNullFlagColumn))
+  def schema: StructType = logicalPlan.schema
 
   /**
    * Prints the schema to the console in a nice tree format.
@@ -749,46 +757,27 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
-    val left = this.logicalPlan
-    val right = other.logicalPlan
+    val left = this.withSideEffects
+    val right = other.withSideEffects
 
     val joined = sparkSession.sessionState.executePlan(Join(left, right, joinType =
       JoinType(joinType), Some(condition.expr)))
-    val (leftNullColumn, leftOutput) = joined.analyzed.output.take(left.output.length)
-      .partition(ExpressionEncoder.isNullFlagColumn)
-    val (rightNullColumn, rightOutput) = joined.analyzed.output.takeRight(right.output.length)
-      .partition(ExpressionEncoder.isNullFlagColumn)
+    val leftOutput = joined.analyzed.output.take(left.output.length)
+    val rightOutput = joined.analyzed.output.takeRight(right.output.length)
 
-    val leftData = this.unresolvedTEncoder match {
-      case e if e.flat =>
-        assert(leftNullColumn.isEmpty)
-        assert(leftOutput.length == 1)
-        Alias(leftOutput.head, "_1")()
-      case _ =>
-        if (leftNullColumn.isEmpty) {
-          Alias(CreateStruct(leftOutput), "_1")()
-        } else {
-          assert(leftNullColumn.length == 1)
-          val struct = CreateStruct(leftOutput)
-          val isObjectNull = Or(IsNull(leftNullColumn.head), leftNullColumn.head)
-          Alias(If(isObjectNull, Literal.create(null, struct.dataType), struct), "_1")()
-        }
-
+    val leftData = if (this.unresolvedTEncoder.flat) {
+      assert(leftOutput.length == 1)
+      Alias(leftOutput.head, "_1")()
+    } else {
+      val struct = CreateStruct(leftOutput.filterNot(ExpressionEncoder.isNullFlagColumn))
+      Alias(ExpressionEncoder.checkNullFlag(leftOutput, struct), "_1")()
     }
-    val rightData = other.unresolvedTEncoder match {
-      case e if e.flat =>
-        assert(rightNullColumn.isEmpty)
-        assert(rightOutput.length == 1)
-        Alias(rightOutput.head, "_2")()
-      case _ =>
-        if (rightNullColumn.isEmpty) {
-          Alias(CreateStruct(rightOutput), "_2")()
-        } else {
-          assert(rightNullColumn.length == 1)
-          val struct = CreateStruct(rightOutput)
-          val isObjectNull = Or(IsNull(rightNullColumn.head), rightNullColumn.head)
-          Alias(If(isObjectNull, Literal.create(null, struct.dataType), struct), "_2")()
-        }
+    val rightData = if (other.unresolvedTEncoder.flat) {
+      assert(rightOutput.length == 1)
+      Alias(rightOutput.head, "_2")()
+    } else {
+      val struct = CreateStruct(rightOutput.filterNot(ExpressionEncoder.isNullFlagColumn))
+      Alias(ExpressionEncoder.checkNullFlag(rightOutput, struct), "_2")()
     }
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
@@ -925,7 +914,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def as(alias: String): Dataset[T] = withTypedPlan {
-    SubqueryAlias(alias, logicalPlan)
+    SubqueryAlias(alias, withSideEffects)
   }
 
   /**
@@ -1281,7 +1270,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def groupByKey[K: Encoder](func: T => K): KeyValueGroupedDataset[K, T] = {
-    val inputPlan = logicalPlan
+    val inputPlan = withSideEffects
     val withGroupingKey = AppendColumns(func, inputPlan)
     val executed = sparkSession.sessionState.executePlan(withGroupingKey)
 
@@ -1932,12 +1921,12 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def filter(func: T => Boolean): Dataset[T] = {
-    val deserialized = CatalystSerde.deserialize[T](logicalPlan)
+    val deserialized = CatalystSerde.deserialize[T](withSideEffects)
     val function = Literal.create(func, ObjectType(classOf[T => Boolean]))
     val condition = Invoke(function, "apply", BooleanType, deserialized.output)
     val filter = Filter(condition, deserialized)
 
-    val serializer = if (logicalPlan.output.exists(ExpressionEncoder.isNullFlagColumn)) {
+    val serializer = if (withSideEffects.output.exists(ExpressionEncoder.isNullFlagColumn)) {
       unresolvedTEncoder.serializerWithNullFlag
     } else {
       unresolvedTEncoder.namedSerializer
@@ -1973,7 +1962,7 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def map[U : Encoder](func: T => U): Dataset[U] = withTypedPlan {
-    MapElements[T, U](func, logicalPlan)
+    MapElements[T, U](func, withSideEffects)
   }
 
   /**
@@ -1987,7 +1976,7 @@ class Dataset[T] private[sql](
   @Experimental
   def map[U](func: MapFunction[T, U], encoder: Encoder[U]): Dataset[U] = {
     implicit val uEnc = encoder
-    withTypedPlan(MapElements[T, U](func, logicalPlan))
+    withTypedPlan(MapElements[T, U](func, withSideEffects))
   }
 
   /**
@@ -2002,7 +1991,7 @@ class Dataset[T] private[sql](
   def mapPartitions[U : Encoder](func: Iterator[T] => Iterator[U]): Dataset[U] = {
     new Dataset[U](
       sparkSession,
-      MapPartitions[T, U](func, logicalPlan),
+      MapPartitions[T, U](func, withSideEffects),
       implicitly[Encoder[U]])
   }
 

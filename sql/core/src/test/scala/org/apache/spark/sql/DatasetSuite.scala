@@ -764,20 +764,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkShowString(ds, expected)
   }
 
-  ignore("SPARK-15140: encoder should support null input object") {
-    val ds = Seq(1 -> "a", null).toDS()
-    val result = ds.collect()
-    assert(result.length == 2)
-    assert(result(0) == 1 -> "a")
-    assert(result(1) == null)
-  }
-
   test("SPARK-15441: Dataset outer join") {
     val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
     val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
     val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
-    joined.explain(true)
-    joined.show()
+    val result = joined.collect().toSet
+    assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 }
 
