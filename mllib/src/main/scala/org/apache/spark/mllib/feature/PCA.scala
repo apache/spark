@@ -40,7 +40,7 @@ class PCA @Since("1.4.0") (@Since("1.4.0") val k: Int) {
    */
   @Since("1.4.0")
   def fit(sources: RDD[Vector]): PCAModel = {
-    require(k <= sources.first().size,
+    require(k < sources.first().size,
       s"source vector size is ${sources.first().size} must be greater than k=$k")
 
     val mat = new RowMatrix(sources)
