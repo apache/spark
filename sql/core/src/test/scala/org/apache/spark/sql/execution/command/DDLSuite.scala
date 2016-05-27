@@ -1115,7 +1115,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     import testImplicits._
     val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
     data.write.saveAsTable("rectangles")
-    spark.table("rectangle").cache()
+    spark.catalog.cacheTable("rectangles")
     assume(spark.table("rectangles").collect().nonEmpty, "bad test; table was empty to begin with")
     assume(spark.catalog.isCached("rectangles"), "bad test; table was not cached to begin with")
     sql("TRUNCATE TABLE rectangles")
