@@ -552,6 +552,10 @@ private[spark] class TaskSchedulerImpl(
     dagScheduler.executorAdded(execId, host)
   }
 
+  def getHostForExecutor(execId: String): String = {
+    executorIdToHost(execId)
+  }
+
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
     executorsByHost.get(host).map(_.toSet)
   }

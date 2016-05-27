@@ -239,7 +239,7 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!blacklistTracker.map(_.isExecutorBlacklisted(execId, sched, stageId, index))
+      if (!blacklistTracker.map(_.isExecutorBlacklisted(execId, stageId, index))
             .getOrElse(false)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
@@ -276,7 +276,7 @@ private[spark] class TaskSetManager(
 
     def canRunOnHost(index: Int): Boolean =
       !hasAttemptOnHost(index, host) &&
-        !blacklistTracker.map(_.isExecutorBlacklisted(execId, sched, stageId, index))
+        !blacklistTracker.map(_.isExecutorBlacklisted(execId, stageId, index))
           .getOrElse(false)
 
     if (!speculatableTasks.isEmpty) {
