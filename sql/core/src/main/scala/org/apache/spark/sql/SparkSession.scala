@@ -224,6 +224,18 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
+   * Creates a new [[Dataset]] of type T containing zero elements.
+   *
+   * @return 2.0.0
+   */
+  @Experimental
+  def emptyDataset[T: Encoder]: Dataset[T] = {
+    val encoder = implicitly[Encoder[T]]
+    new Dataset(self, LocalRelation(encoder.schema.toAttributes), encoder)
+  }
+
+  /**
+   * :: Experimental ::
    * Creates a [[DataFrame]] from an RDD of Product (e.g. case classes, tuples).
    *
    * @group dataframes
