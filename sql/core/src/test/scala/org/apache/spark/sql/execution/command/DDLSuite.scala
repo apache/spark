@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFor
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils.DATASOURCE_PREFIX
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -387,7 +387,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.schema == Seq(CatalogColumn("a", "int"), CatalogColumn("b", "int")))
-      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
     }
   }
 
@@ -398,7 +398,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
-      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
         Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
       assert(DDLUtils.getPartitionColumnsFromTableProperties(table) ==
@@ -414,7 +414,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
-      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
         Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
@@ -747,7 +747,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       catalog: SessionCatalog,
       tableIdent: TableIdentifier): Unit = {
     catalog.alterTable(catalog.getTableMetadata(tableIdent).copy(
-      properties = Map("spark.sql.sources.provider" -> "csv")))
+      properties = Map(DATASOURCE_PROVIDER -> "csv")))
   }
 
   private def testSetProperties(isDatasourceTable: Boolean): Unit = {
