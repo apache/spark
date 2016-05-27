@@ -2338,7 +2338,7 @@ class Dataset[T] private[sql](
   @throws[AnalysisException]
   def createTempView(viewName: String): Unit = withPlan {
     val tableDesc = CatalogTable(
-      identifier = TableIdentifier(viewName),
+      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       tableType = CatalogTableType.VIEW,
       schema = Seq.empty[CatalogColumn],
       storage = CatalogStorageFormat.EmptyStorageFormat)
@@ -2355,7 +2355,7 @@ class Dataset[T] private[sql](
    */
   def createOrReplaceTempView(viewName: String): Unit = withPlan {
     val tableDesc = CatalogTable(
-      identifier = TableIdentifier(viewName),
+      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       tableType = CatalogTableType.VIEW,
       schema = Seq.empty[CatalogColumn],
       storage = CatalogStorageFormat.EmptyStorageFormat)
