@@ -19,8 +19,6 @@ package org.apache.spark
 
 import java.lang.ref.WeakReference
 
-import org.apache.spark.util.Utils
-
 import scala.collection.mutable.HashSet
 import scala.language.existentials
 import scala.util.Random
@@ -34,7 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.{RDD, ReliableRDDCheckpointData}
 import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
-
+import org.apache.spark.util.Utils
 /**
  * An abstract base class for context cleaner tests, which sets up a context with a config
  * suitable for cleaner tests and provides some utility functions. Subclasses can use different
@@ -209,6 +207,7 @@ class ContextCleanerSuite extends ContextCleanerSuiteBase {
 
   test("automatically cleanup normal checkpoint") {
     val checkpointDir = Utils.createTempDir()
+    checkpointDir.delete()
     var rdd = newPairRDD()
     sc.setCheckpointDir(checkpointDir.toString)
     rdd.checkpoint()
