@@ -56,7 +56,7 @@ object SQLConf {
   val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
     .stringConf
-    .createWithDefault("${system:user.dir}" + File.separator + "spark-warehouse")
+    .createWithDefault("${system:user.dir}/spark-warehouse")
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
@@ -667,8 +667,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def warehousePath: String = {
     getConf(WAREHOUSE_PATH).replace("${system:user.dir}",
-      new File(System.getProperty("user.dir")).toURI.toURL.toString)
-      .replace(File.separator + File.separator, File.separator)
+      new File(System.getProperty("user.dir")).toURI.toURL.toString).replace("//", "/")
   }
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)

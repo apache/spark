@@ -215,7 +215,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       // to get the default value, unset it
       spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
       assert(spark.sessionState.conf.warehousePath
-        === s"file:${System.getProperty("user.dir")}" + File.separator + "spark-warehouse")
+        === s"file:${System.getProperty("user.dir")}/spark-warehouse")
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
