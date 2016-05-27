@@ -190,6 +190,9 @@ abstract class Expression extends TreeNode[Expression] {
     case single => single :: Nil
   }
 
+  // Marks this as final, verboseString of Expression is NEVER called.
+  final override def verboseString: String = simpleString
+
   override def simpleString: String = toString
 
   override def toString: String = prettyName + flatArguments.mkString("(", ", ", ")")
