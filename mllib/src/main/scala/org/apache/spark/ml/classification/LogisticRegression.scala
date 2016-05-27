@@ -400,7 +400,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
-          initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+          initialCoefficientsWithIntercept.asBreeze.toDenseVector)
 
         /*
            Note that in Logistic Regression, the objective history (loss + regularization)

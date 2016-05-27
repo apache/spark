@@ -223,7 +223,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val initialParameters = Vectors.zeros(numFeatures + 2)
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialParameters.toBreeze.toDenseVector)
+      initialParameters.asBreeze.toDenseVector)
 
     val parameters = {
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
