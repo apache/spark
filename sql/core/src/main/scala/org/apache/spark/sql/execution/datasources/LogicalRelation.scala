@@ -82,5 +82,7 @@ case class LogicalRelation(
       expectedOutputAttributes,
       metastoreTableIdentifier).asInstanceOf[this.type]
 
-  override def simpleString: String = s"Relation[${output.mkString(",")}] $relation"
+  override def simpleString: String = {
+    s"Relation[${output.mkString(",")}] $relation"
+  }
 }

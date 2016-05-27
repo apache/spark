@@ -126,7 +126,13 @@ private[sql] case class AggregateExpression(
     AttributeSet(childReferences)
   }
 
-  override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
+  override def toString: String = {
+    if (isDistinct) {
+      s"$aggregateFunction(distinct, $mode)"
+    } else {
+      s"$aggregateFunction($mode)"
+    }
+  }
 
   override def sql: String = aggregateFunction.sql(isDistinct)
 }

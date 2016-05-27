@@ -69,7 +69,7 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
 
-  override def argString: String = cmd.toString
+  override def argString(verbose: Boolean): String = cmd.toString
 }
 
 

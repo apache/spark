@@ -192,6 +192,8 @@ abstract class Expression extends TreeNode[Expression] {
 
   override def simpleString: String = toString
 
+  override def verboseString: String = simpleString
+
   override def toString: String = prettyName + flatArguments.mkString("(", ", ", ")")
 
   /**

@@ -187,6 +187,10 @@ case class Alias(child: Expression, name: String)(
     case _ => false
   }
 
+  // Since the expression id is not in the first constructor it is missing from the default
+  // tree string.
+  override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
+
   override def sql: String = {
     val qualifierPrefix = qualifier.map(_ + ".").getOrElse("")
     s"${child.sql} AS $qualifierPrefix${quoteIdentifier(name)}"
@@ -297,10 +301,6 @@ case class AttributeReference(
   }
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
-
-  // Since the expression id is not in the first constructor it is missing from the default
-  // tree string.
-  override def simpleString: String = s"$name#${exprId.id}: ${dataType.simpleString}"
 
   override def sql: String = {
     val qualifierPrefix = qualifier.map(_ + ".").getOrElse("")
