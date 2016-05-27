@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, CatalogTableType, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils.DATASOURCE_PREFIX
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.types._
 
@@ -464,7 +464,7 @@ case class AlterTableSetLocationCommand(
 object DDLUtils {
 
   def isDatasourceTable(props: Map[String, String]): Boolean = {
-    props.contains("spark.sql.sources.provider")
+    props.contains(DATASOURCE_PROVIDER)
   }
 
   def isDatasourceTable(table: CatalogTable): Boolean = {
@@ -503,8 +503,7 @@ object DDLUtils {
   }
 
   def isTablePartitioned(table: CatalogTable): Boolean = {
-    table.partitionColumns.nonEmpty ||
-      table.properties.contains("spark.sql.sources.schema.numPartCols")
+    table.partitionColumns.nonEmpty || table.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS)
   }
 
   // A persisted data source table may not store its schema in the catalog. In this case, its schema
@@ -512,15 +511,15 @@ object DDLUtils {
   def getSchemaFromTableProperties(metadata: CatalogTable): Option[StructType] = {
     require(isDatasourceTable(metadata))
     val props = metadata.properties
-    if (props.isDefinedAt("spark.sql.sources.schema")) {
+    if (props.isDefinedAt(DATASOURCE_SCHEMA)) {
       // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
       // After SPARK-6024, we removed this flag.
       // Although we are not using spark.sql.sources.schema any more, we need to still support.
-      props.get("spark.sql.sources.schema").map(DataType.fromJson(_).asInstanceOf[StructType])
+      props.get(DATASOURCE_SCHEMA).map(DataType.fromJson(_).asInstanceOf[StructType])
     } else {
-      metadata.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+      metadata.properties.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
         val parts = (0 until numParts.toInt).map { index =>
-          val part = metadata.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+          val part = metadata.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
           if (part == null) {
             throw new AnalysisException(
               "Could not read schema from the metastore because it is corrupted " +
@@ -543,7 +542,7 @@ object DDLUtils {
       numCols <- props.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").toSeq
       index <- 0 until numCols.toInt
     } yield props.getOrElse(
-      s"spark.sql.sources.schema.${colType}Col.$index",
+      s"$DATASOURCE_SCHEMA_PREFIX${colType}Col.$index",
       throw new AnalysisException(
         s"Corrupted $typeName in catalog: $numCols parts expected, but part $index is missing."
       )
@@ -556,7 +555,7 @@ object DDLUtils {
 
   def getBucketSpecFromTableProperties(metadata: CatalogTable): Option[BucketSpec] = {
     if (isDatasourceTable(metadata)) {
-      metadata.properties.get("spark.sql.sources.schema.numBuckets").map { numBuckets =>
+      metadata.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { numBuckets =>
         BucketSpec(
           numBuckets.toInt,
           getColumnNamesByType(metadata.properties, "bucket", "bucketing columns"),
