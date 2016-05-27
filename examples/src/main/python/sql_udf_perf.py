@@ -31,15 +31,9 @@ def legacy_word_count(rdd):
     return wc.count()
 
 
-def dataframe_udf_word_count(df):
+def dataframe_udf_word_count(tokenizeUDF, df):
     wc = df.select(tokenizeUDF(df['value']).alias("w")).select(explode("w").alias("words")) \
                                                        .groupBy("words").count()
-    return wc.count()
-
-
-def dataframe_jython_udf_word_count(df):
-    wc = df.select(tokenizeJythonUDF(df['value']).alias("w")).select(explode("w").alias("words")) \
-                                                             .groupBy("words").count()
     return wc.count()
 
 
@@ -55,30 +49,34 @@ def benchmark(textInputPath, repeat, number):
     returnUDFType = ArrayType(StringType())
     tokenizeUDF = session.catalog.registerFunction("split", tokenize, returnUDFType)
     tokenizeJythonUDF = session.catalog.registerJythonFunction("split", tokenize, returnUDFType)
-    rdd = sc.textFile(args[0])
+    rdd = sc.textFile(textInputPath)
     rdd.cache()
     rdd.count()
     print("RDD:")
-    print(timeit.repeat(lambda: legacy_word_count(df), repeat=10, number=500))
-    df = session.read.text(args[0])
+    print(timeit.repeat(lambda: legacy_word_count(rdd), repeat=repeat, number=number))
+    df = session.read.text(textInputPath)
     df.cache()
     df.count()
     print("DataFrame Python UDF:")
-    print(timeit.repeat(lambda: dataframe_udf_word_count(df), repeat=10, number=500))
+    print(timeit.repeat(lambda: dataframe_udf_word_count(tokenizeUDF, df), repeat=repeat, number=number))
     print("DataFrame Jython UDF:")
-    print(timeit.repeat(lambda: dataframe_jython_udf_word_count(df), repeat=10, number=500))
+    print(timeit.repeat(lambda: dataframe_udf_word_count(tokenizeJythonUDF, df), repeat=repeat, number=number))
     print("DataFrame Scala UDF:")
-    print(timeit.repeat(lambda: dataframe_scala_udf_word_count(df), repeat=10, number=500))
+    print(timeit.repeat(lambda: dataframe_scala_udf_word_count(df), repeat=repeat, number=number))
 
 
 if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("Usage: sql_udf_perf <inputPath> <repeat> <number>", file=sys.stderr)
+        sys.exit(-1)
+
     session = SparkSession\
         .builder\
         .appName("PythonSQL Per")\
         .getOrCreate()
     sc = session._sc
     spark = session
-    textInputPath = args[0]
-    repeat = args[1]
-    number = args[3]
+    textInputPath = sys.argv[1]
+    repeat = int(sys.argv[2])
+    number = int(sys.argv[3])
     benchmark(textInputPath, repeat, number)
