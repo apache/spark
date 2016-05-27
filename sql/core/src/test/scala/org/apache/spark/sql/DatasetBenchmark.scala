@@ -117,7 +117,7 @@ object DatasetBenchmark {
   }
 
   object ComplexAggregator extends Aggregator[Data, Data, Long] {
-    override def zero: Data = Data(0, "")
+    override def init(data: Data): Data = Data(0, "")
 
     override def reduce(b: Data, a: Data): Data = Data(b.l + a.l, "")
 

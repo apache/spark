@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
-  override def zero: (Long, Long) = (0, 0)
+  override def init(a: (String, Int)): (Long, Long) = (0, 0)
   override def reduce(countAndSum: (Long, Long), input: (String, Int)): (Long, Long) = {
     (countAndSum._1 + 1, countAndSum._2 + input._2)
   }
@@ -43,7 +43,7 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
 case class AggData(a: Int, b: String)
 
 object ClassInputAgg extends Aggregator[AggData, Int, Int] {
-  override def zero: Int = 0
+  override def init(aggData: AggData): Int = 0
   override def reduce(b: Int, a: AggData): Int = b + a.a
   override def finish(reduction: Int): Int = reduction
   override def merge(b1: Int, b2: Int): Int = b1 + b2
@@ -53,7 +53,7 @@ object ClassInputAgg extends Aggregator[AggData, Int, Int] {
 
 
 object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
-  override def zero: (Int, AggData) = 0 -> AggData(0, "0")
+  override def init(aggData: AggData): (Int, AggData) = 0 -> AggData(0, "0")
   override def reduce(b: (Int, AggData), a: AggData): (Int, AggData) = (b._1 + 1, a)
   override def finish(reduction: (Int, AggData)): Int = reduction._1
   override def merge(b1: (Int, AggData), b2: (Int, AggData)): (Int, AggData) =
@@ -64,7 +64,7 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
 
 
 object NameAgg extends Aggregator[AggData, String, String] {
-  def zero: String = ""
+  def init(aggData: AggData): String = ""
   def reduce(b: String, a: AggData): String = a.b + b
   def merge(b1: String, b2: String): String = b1 + b2
   def finish(r: String): String = r
@@ -74,7 +74,7 @@ object NameAgg extends Aggregator[AggData, String, String] {
 
 
 object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[Int]] {
-  def zero: Seq[Int] = Nil
+  def init(aggData: AggData): Seq[Int] = Nil
   def reduce(b: Seq[Int], a: AggData): Seq[Int] = a.a +: b
   def merge(b1: Seq[Int], b2: Seq[Int]): Seq[Int] = b1 ++ b2
   def finish(r: Seq[Int]): Seq[Int] = r
@@ -87,7 +87,7 @@ class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
   extends Aggregator[IN, OUT, OUT] {
 
   private val numeric = implicitly[Numeric[OUT]]
-  override def zero: OUT = numeric.zero
+  override def init(in: IN): OUT = numeric.zero
   override def reduce(b: OUT, a: IN): OUT = numeric.plus(b, f(a))
   override def merge(b1: OUT, b2: OUT): OUT = numeric.plus(b1, b2)
   override def finish(reduction: OUT): OUT = reduction
@@ -96,7 +96,7 @@ class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
 }
 
 object RowAgg extends Aggregator[Row, Int, Int] {
-  def zero: Int = 0
+  def init(row: Row): Int = 0
   def reduce(b: Int, a: Row): Int = a.getInt(0) + b
   def merge(b1: Int, b2: Int): Int = b1 + b2
   def finish(r: Int): Int = r

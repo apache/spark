@@ -88,7 +88,7 @@ case class TypedAggregateExpression(
     bufferSerializer.map(_.toAttribute.asInstanceOf[AttributeReference])
 
   override lazy val initialValues: Seq[Expression] = {
-    val zero = Literal.fromObject(aggregator.zero, bufferExternalType)
+    val zero = Literal.fromObject(aggregator.init(1), bufferExternalType)
     bufferSerializer.map(ReferenceToExpressions(_, zero :: Nil))
   }
 

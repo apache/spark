@@ -54,7 +54,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
 
   static class IntSumOf extends Aggregator<Tuple2<String, Integer>, Integer, Integer> {
     @Override
-    public Integer zero() {
+    public Integer init(Tuple2<String, Integer> t) {
       return 0;
     }
 
