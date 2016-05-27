@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.util.{ContinuousQueryInfo, ContinuousQueryListener}
+import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.sql.util.ContinuousQueryListener._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 

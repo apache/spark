@@ -69,14 +69,15 @@ class ContinuousQueryListenerBus(sparkListenerBus: LiveListenerBus)
     }
   }
 
-  /**
-   * Wrapper for StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark
-   * listener bus.
-   */
-  private case class WrappedContinuousQueryListenerEvent(
-      streamingListenerEvent: ContinuousQueryListener.Event) extends SparkListenerEvent {
+}
 
-    // Do not log streaming events in event log as history server does not support these events.
-    protected[spark] override def logEvent: Boolean = false
-  }
+/**
+ * Wrapper for StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark
+ * listener bus.
+ */
+case class WrappedContinuousQueryListenerEvent(
+  streamingListenerEvent: ContinuousQueryListener.Event) extends SparkListenerEvent {
+
+  // Do not log streaming events in event log as history server does not support these events.
+  protected[spark] override def logEvent: Boolean = false
 }

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.util
 
+import com.fasterxml.jackson.annotation.JsonTypeInfo
+
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
 import org.apache.spark.sql.util.ContinuousQueryListener._
@@ -62,6 +64,10 @@ abstract class ContinuousQueryListener {
 object ContinuousQueryListener {
 
   /** Base type of [[ContinuousQueryListener]] events */
+  @JsonTypeInfo(
+    use = JsonTypeInfo.Id.CLASS,
+    include = JsonTypeInfo.As.PROPERTY,
+    property = "@class")
   trait Event
 
   /** Event representing the start of a query */
@@ -74,24 +80,10 @@ object ContinuousQueryListener {
    * Event representing that termination of a query
    *
    * @param queryInfo
-   * @param exception The excpetion information of the [[ContinuousQuery]] if any. Otherwise, it
+   * @param exception The exception information of the [[ContinuousQuery]] if any. Otherwise, it
    *                  will be `None`.
    */
   class QueryTerminated private[sql](
       val queryInfo: ContinuousQueryInfo,
       val exception: Option[String]) extends Event
 }
-
-/**
- * :: Experimental ::
- * A class that contains information about [[ContinuousQuery]].
- *
- * @param name The [[ContinuousQuery]] name
- * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
- * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
- */
-@Experimental
-class ContinuousQueryInfo private[sql](
-    val name: String,
-    val sourceStatuses: Seq[SourceStatus],
-    val sinkStatus: SinkStatus)
