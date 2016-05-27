@@ -374,6 +374,138 @@ regression model and extracting model summary statistics.
 
 </div>
 
+## Generalized linear regression
+
+Contrasted with linear regression where the output is assumed to follow a Gaussian
+distribution, [generalized linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) (GLMs) are specifications of linear models where the response variable $Y_i$ follows some
+distribution from the [exponential family of distributions](https://en.wikipedia.org/wiki/Exponential_family).
+Spark's `GeneralizedLinearRegression` interface
+allows for flexible specification of GLMs which can be used for various types of
+prediction problems including linear regression, Poisson regression, logistic regression, and others.
+Currently in `spark.ml`, only a subset of the exponential family distributions are supported and they are listed
+[below](#available-families).
+
+**NOTE**: Spark currently only supports up to 4096 features through its `GeneralizedLinearRegression`
+interface, and will throw an exception if this constraint is exceeded. See the [advanced section](ml-advanced) for more details.
+ Still, for linear and logistic regression, models with an increased number of features can be trained 
+ using the `LinearRegression` and `LogisticRegression` estimators.
+
+GLMs require exponential family distributions that can be written in their "canonical" or "natural" form, aka
+[natural exponential family distributions](https://en.wikipedia.org/wiki/Natural_exponential_family). The form of a natural exponential family distribution is given as:
+
+$$
+f_Y(y|\theta, \tau) = h(y, \tau)\exp{\left( \frac{\theta \cdot y - A(\theta)}{d(\tau)} \right)}
+$$
+
+where $\theta$ is the parameter of interest and $\tau$ is a dispersion parameter. In a GLM the response variable $Y_i$ is assumed to be drawn from a natural exponential family distribution:
+
+$$
+Y_i \sim f\left(\cdot|\theta_i, \tau \right)
+$$
+
+where the parameter of interest $\theta_i$ is related to the expected value of the response variable $\mu_i$ by
+
+$$
+\mu_i = A'(\theta_i)
+$$
+
+Here, $A'(\theta_i)$ is defined by the form of the distribution selected. GLMs also allow specification
+of a link function, which defines the relationship between the expected value of the response variable $\mu_i$
+and the so called _linear predictor_ $\eta_i$:
+
+$$
+g(\mu_i) = \eta_i = \vec{x_i}^T \cdot \vec{\beta}
+$$
+
+Often, the link function is chosen such that $A' = g^{-1}$, which yields a simplified relationship
+between the parameter of interest $\theta$ and the linear predictor $\eta$. In this case, the link
+function $g(\mu)$ is said to be the "canonical" link function.
+
+$$
+\theta_i = A'^{-1}(\mu_i) = g(g^{-1}(\eta_i)) = \eta_i
+$$
+
+A GLM finds the regression coefficients $\vec{\beta}$ which maximize the likelihood function.
+
+$$
+\max_{\vec{\beta}} \mathcal{L}(\vec{\theta}|\vec{y},X) =
+\prod_{i=1}^{N} h(y_i, \tau) \exp{\left(\frac{y_i\theta_i - A(\theta_i)}{d(\tau)}\right)}
+$$
+
+where the parameter of interest $\theta_i$ is related to the regression coefficients $\vec{\beta}$
+by
+
+$$
+\theta_i = A'^{-1}(g^{-1}(\vec{x_i} \cdot \vec{\beta}))
+$$
+
+Spark's generalized linear regression interface also provides summary statistics for diagnosing the
+fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
+others.
+
+[See here](http://data.princeton.edu/wws509/notes/) for a more comprehensive review of GLMs and their applications.
+
+###  Available families
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Family</th>
+      <th>Response Type</th>
+      <th>Supported Links</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Gaussian</td>
+      <td>Continuous</td>
+      <td>Identity*, Log, Inverse</td>
+    </tr>
+    <tr>
+      <td>Binomial</td>
+      <td>Binary</td>
+      <td>Logit*, Probit, CLogLog</td>
+    </tr>
+    <tr>
+      <td>Poisson</td>
+      <td>Count</td>
+      <td>Log*, Identity, Sqrt</td>
+    </tr>
+    <tr>
+      <td>Gamma</td>
+      <td>Continuous</td>
+      <td>Inverse*, Idenity, Log</td>
+    </tr>
+    <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
+  </tbody>
+</table>
+
+**Example**
+
+The following example demonstrates training a GLM with a Gaussian response and identity link
+function and extracting model summary statistics.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/GeneralizedLinearRegressionExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GeneralizedLinearRegression.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaGeneralizedLinearRegressionExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
+
+{% include_example python/ml/generalized_linear_regression_example.py %}
+</div>
+
+</div>
+
 
 ## Decision tree regression
 
