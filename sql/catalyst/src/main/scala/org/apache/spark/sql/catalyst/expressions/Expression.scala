@@ -190,7 +190,9 @@ abstract class Expression extends TreeNode[Expression] {
     case single => single :: Nil
   }
 
-  override def simpleStringImpl(verbose: Boolean): String = toString
+  override def simpleString: String = toString
+
+  override def verboseString: String = simpleString
 
   override def toString: String = prettyName + flatArguments.mkString("(", ", ", ")")
 

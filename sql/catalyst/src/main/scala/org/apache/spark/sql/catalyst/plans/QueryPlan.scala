@@ -255,9 +255,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
    */
   protected def statePrefix = if (missingInput.nonEmpty && children.nonEmpty) "!" else ""
 
-  override def simpleStringImpl(verbose: Boolean): String = {
-    statePrefix + super.simpleStringImpl(verbose)
-  }
+  override def simpleString: String = statePrefix + super.simpleString
 
   /**
    * All the subqueries of current plan.

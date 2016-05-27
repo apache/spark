@@ -158,7 +158,7 @@ case class TakeOrderedAndProjectExec(
 
   override def outputOrdering: Seq[SortOrder] = sortOrder
 
-  override def simpleStringImpl(verbose: Boolean): String = {
+  override def simpleString: String = {
     val orderByString = sortOrder.mkString("[", ",", "]")
     val outputString = output.mkString("[", ",", "]")
     s"TakeOrderedAndProject(limit=$limit, orderBy=$orderByString, output=$outputString)"

@@ -760,6 +760,14 @@ case class TungstenAggregate(
   }
 
   override def simpleString: String = {
+    toString(verbose = false)
+  }
+
+  override def verboseString: String = {
+    toString(verbose = true)
+  }
+
+  private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
     testFallbackStartsAt match {
@@ -767,9 +775,14 @@ case class TungstenAggregate(
         val keyString = groupingExpressions.mkString("[", ",", "]")
         val functionString = allAggregateExpressions.mkString("[", ",", "]")
         val outputString = output.mkString("[", ",", "]")
-        s"TungstenAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+
+        if (verbose) {
+          s"Aggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        } else {
+          s"Aggregate(key=$keyString, functions=$functionString)"
+        }
       case Some(fallbackStartsAt) =>
-        s"TungstenAggregateWithControlledFallback $groupingExpressions " +
+        s"AggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }

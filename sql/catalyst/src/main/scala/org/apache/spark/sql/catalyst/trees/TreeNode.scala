@@ -432,12 +432,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   protected def argString(verbose: Boolean): String = {
     productIterator.flatMap {
       case tn: TreeNode[_] if containsChild(tn) => Nil
-      case tn: TreeNode[_] => s"${tn.simpleStringImpl(verbose)}" :: Nil
+      case tn: TreeNode[_] => s"${if (verbose) tn.verboseString else tn.simpleString}" :: Nil
       case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
       case seq: Seq[_] =>
         val output = seq.map {
           case tn: TreeNode[_] =>
-            s"${tn.simpleStringImpl(verbose)}"
+            s"${if (verbose) tn.verboseString else tn.simpleString}"
           case other => other.toString
         }.mkString("[", ", ", "]")
         output :: Nil
@@ -452,16 +452,13 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }.mkString(", ").trim()
   }
 
-  /**
-   * ONE line description of this node.
-   *
-   * This class is final, sub classes SHOULD overrides simpleStringImpl(verbose) to customize
-   * the output.
-   */
-  final def simpleString: String = simpleStringImpl(verbose = false)
+  /** ONE line description of this node. */
+  def simpleString: String = s"$nodeName ${argString(verbose = false)}".trim
 
+
+  /** ONE line description with more information than simpleString. */
   private[sql]
-  def simpleStringImpl(verbose: Boolean): String = s"$nodeName ${argString(verbose)}".trim
+  def verboseString: String = simpleString
 
   override def toString: String = treeString
 
@@ -525,7 +522,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     builder.append(prefix)
-    builder.append(simpleStringImpl(verbose))
+    val headline = if (verbose) verboseString else simpleString
+    builder.append(headline)
     builder.append("\n")
 
     if (innerChildren.nonEmpty) {

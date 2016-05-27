@@ -100,7 +100,15 @@ case class SortBasedAggregateExec(
     }
   }
 
-  override def simpleStringImpl(verbose: Boolean): String = {
+  override def simpleString: String = {
+    toString(verbose = false)
+  }
+
+  override def verboseString: String = {
+    toString(verbose = true)
+  }
+
+  private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
     val keyString = groupingExpressions.mkString("[", ",", "]")

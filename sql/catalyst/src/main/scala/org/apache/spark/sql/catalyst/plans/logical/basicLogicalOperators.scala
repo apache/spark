@@ -455,7 +455,7 @@ case class Range(
     Statistics( sizeInBytes = sizeInBytes )
   }
 
-  override def simpleStringImpl(verbose: Boolean): String = {
+  override def simpleString: String = {
     if (step == 1) {
       s"Range ($start, $end, splits=$numSlices)"
     } else {
