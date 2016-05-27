@@ -24,14 +24,14 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 class InsertSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""))
-    caseInsensitiveContext.read.json(rdd).createOrReplaceTempView("jt")
+    spark.read.json(rdd).createOrReplaceTempView("jt")
     sql(
       s"""
         |CREATE TEMPORARY TABLE jsonTable (a int, b string)
@@ -44,8 +44,8 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
   override def afterAll(): Unit = {
     try {
-      caseInsensitiveContext.dropTempTable("jsonTable")
-      caseInsensitiveContext.dropTempTable("jt")
+      spark.catalog.dropTempView("jsonTable")
+      spark.catalog.dropTempView("jt")
       Utils.deleteRecursively(path)
     } finally {
       super.afterAll()
@@ -111,7 +111,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to less part files.
     val rdd1 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 5)
-    caseInsensitiveContext.read.json(rdd1).createOrReplaceTempView("jt1")
+    spark.read.json(rdd1).createOrReplaceTempView("jt1")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt1
@@ -123,7 +123,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     // Writing the table to more part files.
     val rdd2 = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str$i"}"""), 10)
-    caseInsensitiveContext.read.json(rdd2).createOrReplaceTempView("jt2")
+    spark.read.json(rdd2).createOrReplaceTempView("jt2")
     sql(
       s"""
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt2
@@ -142,8 +142,8 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       (1 to 10).map(i => Row(i * 10, s"str$i"))
     )
 
-    caseInsensitiveContext.dropTempTable("jt1")
-    caseInsensitiveContext.dropTempTable("jt2")
+    spark.catalog.dropTempView("jt1")
+    spark.catalog.dropTempView("jt2")
   }
 
   test("INSERT INTO JSONRelation for now") {
@@ -185,7 +185,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
          |INSERT OVERWRITE TABLE jsonTable SELECT a, b FROM jt
       """.stripMargin)
     // Cached Query Execution
-    caseInsensitiveContext.cacheTable("jsonTable")
+    spark.catalog.cacheTable("jsonTable")
     assertCached(sql("SELECT * FROM jsonTable"))
     checkAnswer(
       sql("SELECT * FROM jsonTable"),
@@ -226,7 +226,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 //      sql("SELECT a * 2, b FROM jt").collect())
 //
 //    // Verify uncaching
-//    caseInsensitiveContext.uncacheTable("jsonTable")
+//    spark.catalog.uncacheTable("jsonTable")
 //    assertCached(sql("SELECT * FROM jsonTable"), 0)
   }
 
@@ -257,6 +257,6 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
       "It is not allowed to insert into a table that is not an InsertableRelation."
     )
 
-    caseInsensitiveContext.dropTempTable("oneToTen")
+    spark.catalog.dropTempView("oneToTen")
   }
 }

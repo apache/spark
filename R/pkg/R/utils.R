@@ -664,3 +664,12 @@ varargsToJProperties <- function(...) {
   }
   props
 }
+
+launchScript <- function(script, combinedArgs, capture = FALSE) {
+  if (.Platform$OS.type == "windows") {
+    scriptWithArgs <- paste(script, combinedArgs, sep = " ")
+    shell(scriptWithArgs, translate = TRUE, wait = capture, intern = capture) # nolint
+  } else {
+    system2(script, combinedArgs, wait = capture, stdout = capture)
+  }
+}

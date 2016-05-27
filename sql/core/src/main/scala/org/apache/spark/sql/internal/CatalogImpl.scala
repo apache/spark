@@ -230,7 +230,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
-    sparkSession.executePlan(cmd).toRdd
+    sparkSession.sessionState.executePlan(cmd).toRdd
     sparkSession.table(tableIdent)
   }
 
@@ -278,7 +278,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
         bucketSpec = None,
         allowExisting = false,
         managedIfNoPath = false)
-    sparkSession.executePlan(cmd).toRdd
+    sparkSession.sessionState.executePlan(cmd).toRdd
     sparkSession.table(tableIdent)
   }
 
@@ -291,7 +291,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def dropTempView(viewName: String): Unit = {
-    sparkSession.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
+    sparkSession.sharedState.cacheManager.tryUncacheQuery(sparkSession.table(viewName))
     sessionCatalog.dropTable(TableIdentifier(viewName), ignoreIfNotExists = true)
   }
 
@@ -302,7 +302,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def isCached(tableName: String): Boolean = {
-    sparkSession.cacheManager.lookupCachedData(sparkSession.table(tableName)).nonEmpty
+    sparkSession.sharedState.cacheManager.lookupCachedData(sparkSession.table(tableName)).nonEmpty
   }
 
   /**
@@ -312,7 +312,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def cacheTable(tableName: String): Unit = {
-    sparkSession.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
+    sparkSession.sharedState.cacheManager.cacheQuery(sparkSession.table(tableName), Some(tableName))
   }
 
   /**
@@ -322,7 +322,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def uncacheTable(tableName: String): Unit = {
-    sparkSession.cacheManager.uncacheQuery(sparkSession.table(tableName))
+    sparkSession.sharedState.cacheManager.uncacheQuery(sparkSession.table(tableName))
   }
 
   /**
@@ -332,7 +332,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   override def clearCache(): Unit = {
-    sparkSession.cacheManager.clearCache()
+    sparkSession.sharedState.cacheManager.clearCache()
   }
 
   /**
@@ -342,7 +342,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
    * @since 2.0.0
    */
   protected[sql] def isCached(qName: Dataset[_]): Boolean = {
-    sparkSession.cacheManager.lookupCachedData(qName).nonEmpty
+    sparkSession.sharedState.cacheManager.lookupCachedData(qName).nonEmpty
   }
 
   /**
@@ -356,19 +356,19 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     val tableIdent = sparkSession.sessionState.sqlParser.parseTableIdentifier(tableName)
     sessionCatalog.refreshTable(tableIdent)
 
-    // If this table is cached as a InMemoryRelation, drop the original
+    // If this table is cached as an InMemoryRelation, drop the original
     // cached version and make the new version cached lazily.
     val logicalPlan = sparkSession.sessionState.catalog.lookupRelation(tableIdent)
     // Use lookupCachedData directly since RefreshTable also takes databaseName.
-    val isCached = sparkSession.cacheManager.lookupCachedData(logicalPlan).nonEmpty
+    val isCached = sparkSession.sharedState.cacheManager.lookupCachedData(logicalPlan).nonEmpty
     if (isCached) {
       // Create a data frame to represent the table.
       // TODO: Use uncacheTable once it supports database name.
       val df = Dataset.ofRows(sparkSession, logicalPlan)
       // Uncache the logicalPlan.
-      sparkSession.cacheManager.tryUncacheQuery(df, blocking = true)
+      sparkSession.sharedState.cacheManager.tryUncacheQuery(df, blocking = true)
       // Cache it again.
-      sparkSession.cacheManager.cacheQuery(df, Some(tableIdent.table))
+      sparkSession.sharedState.cacheManager.cacheQuery(df, Some(tableIdent.table))
     }
   }
 
@@ -383,7 +383,7 @@ private[sql] object CatalogImpl {
     val enc = ExpressionEncoder[T]()
     val encoded = data.map(d => enc.toRow(d).copy())
     val plan = new LocalRelation(enc.schema.toAttributes, encoded)
-    val queryExecution = sparkSession.executePlan(plan)
+    val queryExecution = sparkSession.sessionState.executePlan(plan)
     new Dataset[T](sparkSession, queryExecution, enc)
   }
 

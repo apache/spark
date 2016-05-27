@@ -847,7 +847,7 @@ class DataFrameWriter(object):
 
     @since(1.4)
     def jdbc(self, url, table, mode=None, properties=None):
-        """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
+        """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.
