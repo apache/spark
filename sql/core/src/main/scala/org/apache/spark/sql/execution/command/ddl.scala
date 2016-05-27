@@ -296,7 +296,7 @@ case class AlterTableSerDePropertiesCommand(
     tableName: TableIdentifier,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
-    partition: Option[Map[String, String]])
+    partSpec: Option[TablePartitionSpec])
   extends RunnableCommand {
 
   // should never happen if we parsed things correctly
@@ -310,10 +310,19 @@ case class AlterTableSerDePropertiesCommand(
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("ALTER TABLE SET SERDE is not supported for datasource tables")
     }
-    val newTable = table.withNewStorage(
-      serde = serdeClassName.orElse(table.storage.serde),
-      serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
-    catalog.alterTable(newTable)
+    if (partSpec.isEmpty) {
+      val newTable = table.withNewStorage(
+        serde = serdeClassName.orElse(table.storage.serde),
+        serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
+      catalog.alterTable(newTable)
+    } else {
+      val spec = partSpec.get
+      val part = catalog.getPartition(tableName, spec)
+      val newPart = part.copy(storage = part.storage.copy(
+        serde = serdeClassName.orElse(part.storage.serde),
+        serdeProperties = part.storage.serdeProperties ++ serdeProperties.getOrElse(Map())))
+      catalog.alterPartitions(tableName, Seq(newPart))
+    }
     Seq.empty[Row]
   }
 
