@@ -93,7 +93,7 @@ case class CreateTableAsSelectCommand(
     Seq.empty[Row]
   }
 
-  override def argString: String = {
+  override def argString(verbose: Boolean): String = {
     s"[Database:${tableDesc.database}}, " +
     s"TableName: ${tableDesc.identifier.table}, " +
     s"InsertIntoHiveTable]"

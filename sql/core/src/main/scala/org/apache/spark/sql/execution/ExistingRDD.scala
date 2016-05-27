@@ -120,7 +120,7 @@ private[sql] case class RDDScanExec(
     }
   }
 
-  override def simpleString: String = {
+  override def simpleStringImpl(verbose: Boolean): String = {
     s"Scan $nodeName${output.mkString("[", ",", "]")}"
   }
 }
@@ -179,11 +179,10 @@ private[sql] case class RowDataSourceScanExec(
     }
   }
 
-  override def simpleString: String = {
+  override def simpleStringImpl(verbose: Boolean): String = {
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
       key + ": " + StringUtils.abbreviate(value, 100)
     }
-
     s"$nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
   }
 
@@ -233,7 +232,7 @@ private[sql] case class BatchedDataSourceScanExec(
     throw new UnsupportedOperationException
   }
 
-  override def simpleString: String = {
+  override def simpleStringImpl(verbose: Boolean): String = {
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
       key + ": " + StringUtils.abbreviate(value, 100)
     }

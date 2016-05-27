@@ -126,7 +126,14 @@ private[sql] case class AggregateExpression(
     AttributeSet(childReferences)
   }
 
-  override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
+  override def simpleStringImpl(verbose: Boolean): String = {
+    val args = Seq(
+      if (isDistinct) "distinct" else "",
+      if (verbose) mode.toString else ""
+    ).filterNot(_.isEmpty)
+
+    if (args.isEmpty) s"$prettyName" else s"$prettyName(${args.mkString(", ")})"
+  }
 
   override def sql: String = aggregateFunction.sql(isDistinct)
 }
