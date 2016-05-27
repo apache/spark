@@ -303,7 +303,6 @@ class RowMatrix(DistributedMatrix):
         R = decomp.call("R")
         return QRDecomposition(Q, R)
 
-
     def computeSVD(self, k, computeU=False, rCond=1e-9):
         """
         Computes the singular value decomposition of the RowMatrix.
@@ -376,7 +375,9 @@ class RowMatrix(DistributedMatrix):
         >>> rm.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
         [DenseVector([2.0, 3.0]), DenseVector([6.0, 11.0])]
         """
-        # TODO: Only DenseMatrices are supported on the Scala side.
+        if not isinstance(matrix, DenseMatrix):
+            raise ValueError("Only multiplication with DenseMatrix "
+                             "is supported.")
         j_model = self._java_matrix_wrapper.call("multiply", matrix)
         return RowMatrix(j_model)
 
@@ -698,6 +699,9 @@ class IndexedRowMatrix(DistributedMatrix):
         >>> mat.multiply(DenseMatrix(2, 2, [0, 2, 1, 3])).rows.collect()
         [IndexedRow(0, [2.0,3.0]), IndexedRow(1, [6.0,11.0])]
         """
+        if not isinstance(matrix, DenseMatrix):
+            raise ValueError("Only multiplication with DenseMatrix "
+                             "is supported.")
         return IndexedRowMatrix(self._java_matrix_wrapper.call("multiply", matrix))
 
 
