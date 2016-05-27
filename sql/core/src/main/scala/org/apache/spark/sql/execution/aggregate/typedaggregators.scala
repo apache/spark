@@ -28,7 +28,7 @@ import org.apache.spark.sql.expressions.Aggregator
 
 
 class TypedSumDouble[IN](f: IN => Double) extends Aggregator[IN, Double, Double] {
-  override def zero: Double = 0.0
+  override def init(a: IN): Double = 0.0
   override def reduce(b: Double, a: IN): Double = b + f(a)
   override def merge(b1: Double, b2: Double): Double = b1 + b2
   override def finish(reduction: Double): Double = reduction
@@ -46,7 +46,7 @@ class TypedSumDouble[IN](f: IN => Double) extends Aggregator[IN, Double, Double]
 
 
 class TypedSumLong[IN](f: IN => Long) extends Aggregator[IN, Long, Long] {
-  override def zero: Long = 0L
+  override def init(a: IN): Long = 0L
   override def reduce(b: Long, a: IN): Long = b + f(a)
   override def merge(b1: Long, b2: Long): Long = b1 + b2
   override def finish(reduction: Long): Long = reduction
@@ -64,7 +64,7 @@ class TypedSumLong[IN](f: IN => Long) extends Aggregator[IN, Long, Long] {
 
 
 class TypedCount[IN](f: IN => Any) extends Aggregator[IN, Long, Long] {
-  override def zero: Long = 0
+  override def init(a: IN): Long = 0
   override def reduce(b: Long, a: IN): Long = {
     if (f(a) == null) b else b + 1
   }
@@ -83,7 +83,7 @@ class TypedCount[IN](f: IN => Any) extends Aggregator[IN, Long, Long] {
 
 
 class TypedAverage[IN](f: IN => Double) extends Aggregator[IN, (Double, Long), Double] {
-  override def zero: (Double, Long) = (0.0, 0L)
+  override def init(a: IN): (Double, Long) = (0.0, 0L)
   override def reduce(b: (Double, Long), a: IN): (Double, Long) = (f(a) + b._1, 1 + b._2)
   override def finish(reduction: (Double, Long)): Double = reduction._1 / reduction._2
   override def merge(b1: (Double, Long), b2: (Double, Long)): (Double, Long) = {

@@ -54,10 +54,10 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
 abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
 
   /**
-   * A zero value for this aggregation. Should satisfy the property that any b + zero = b.
+   * A initial value for this aggregation.
    * @since 1.6.0
    */
-  def zero: BUF
+  def init(a: IN): BUF
 
   /**
    * Combine two values to produce a new value.  For performance, the function may modify `b` and
