@@ -623,7 +623,7 @@ class TransformedDStream(DStream):
         self._jdstream_val = None
 
         # Using type() to avoid folding the functions and compacting the DStreams which is not
-        # not strictly a object of TransformedDStream.
+        # not strictly an object of TransformedDStream.
         # Changed here is to avoid bug in KafkaTransformedDStream when calling offsetRanges().
         if (type(prev) is TransformedDStream and
                 not prev.is_cached and not prev.is_checkpointed):

@@ -530,7 +530,7 @@ private[sql] object Expand {
 
   /**
    * Apply the all of the GroupExpressions to every input row, hence we will get
-   * multiple output rows for a input row.
+   * multiple output rows for an input row.
    *
    * @param bitmasks The bitmask set represents the grouping sets
    * @param groupByAliases The aliased original group by expressions
@@ -572,7 +572,7 @@ private[sql] object Expand {
 
 /**
  * Apply a number of projections to every input row, hence we will get multiple output rows for
- * a input row.
+ * an input row.
  *
  * @param projections to apply
  * @param output of all projections.
