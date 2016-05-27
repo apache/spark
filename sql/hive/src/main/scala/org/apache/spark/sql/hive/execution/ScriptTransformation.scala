@@ -157,12 +157,8 @@ case class ScriptTransformation(
                 curLine = reader.readLine()
                 if (curLine == null) {
                   checkFailureAndPropagate()
-                  false
-                } else {
-                  true
+                  return false
                 }
-              } else {
-                true
               }
             } else if (scriptOutputWritable == null) {
               scriptOutputWritable = reusedWritableObject
@@ -170,14 +166,11 @@ case class ScriptTransformation(
               if (scriptOutputReader != null) {
                 if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
                   checkFailureAndPropagate()
-                  false
-                } else {
-                  true
+                  return false
                 }
               } else {
                 try {
                   scriptOutputWritable.readFields(scriptOutputStream)
-                  true
                 } catch {
                   case _: EOFException =>
                     // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
@@ -186,12 +179,12 @@ case class ScriptTransformation(
                     // being terminated. So explicitly waiting for the process to be done.
                     proc.waitFor()
                     checkFailureAndPropagate()
-                    false
+                    return false
                 }
               }
-            } else {
-              true
             }
+
+            true
           } catch {
             case NonFatal(e) =>
               // If this exception is due to abrupt / unclean termination of `proc`,
