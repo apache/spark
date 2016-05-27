@@ -46,6 +46,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
+  test("emptyDataset") {
+    val ds = spark.emptyDataset[Int]
+    assert(ds.count() == 0L)
+    assert(ds.collect() sameElements Array.empty[Int])
+  }
+
   test("range") {
     assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
     assert(spark.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
@@ -673,7 +679,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("runtime null check for RowEncoder") {
     val schema = new StructType().add("i", IntegerType, nullable = false)
-    val df = sqlContext.range(10).map(l => {
+    val df = spark.range(10).map(l => {
       if (l % 5 == 0) {
         Row(null)
       } else {
@@ -689,9 +695,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("row nullability mismatch") {
     val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
-    val rdd = sqlContext.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
+    val rdd = spark.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
     val message = intercept[Exception] {
-      sqlContext.createDataFrame(rdd, schema).collect()
+      spark.createDataFrame(rdd, schema).collect()
     }.getMessage
     assert(message.contains("The 1th field 'b' of input row cannot be null"))
   }

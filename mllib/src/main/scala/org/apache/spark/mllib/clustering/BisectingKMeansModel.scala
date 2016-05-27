@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 
 /**
  * Clustering model produced by [[BisectingKMeans]].
@@ -144,8 +144,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
     val thisClassName = "org.apache.spark.mllib.clustering.BisectingKMeansModel"
 
     def save(sc: SparkContext, model: BisectingKMeansModel, path: String): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)
           ~ ("rootId" -> model.root.index)))
@@ -154,8 +153,7 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
       val data = getNodes(model.root).map(node => Data(node.index, node.size,
         node.centerWithNorm.vector, node.centerWithNorm.norm, node.cost, node.height,
         node.children.map(_.index)))
-      val dataRDD = sc.parallelize(data).toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(data).write.parquet(Loader.dataPath(path))
     }
 
     private def getNodes(node: ClusteringTreeNode): Array[ClusteringTreeNode] = {
@@ -167,8 +165,8 @@ object BisectingKMeansModel extends Loader[BisectingKMeansModel] {
     }
 
     def load(sc: SparkContext, path: String, rootId: Int): BisectingKMeansModel = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val rows = sqlContext.read.parquet(Loader.dataPath(path))
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val rows = spark.read.parquet(Loader.dataPath(path))
       Loader.checkSchema[Data](rows.schema)
       val data = rows.select("index", "size", "center", "norm", "cost", "height", "children")
       val nodes = data.rdd.map(Data.apply).collect().map(d => (d.index, d)).toMap

@@ -178,8 +178,8 @@ object TypeCoercion {
         q transformExpressions {
           case a: AttributeReference =>
             inputMap.get(a.exprId) match {
-              // This can happen when a Attribute reference is born in a non-leaf node, for example
-              // due to a call to an external script like in the Transform operator.
+              // This can happen when an Attribute reference is born in a non-leaf node, for
+              // example due to a call to an external script like in the Transform operator.
               // TODO: Perhaps those should actually be aliases?
               case None => a
               // Leave the same if the dataTypes match.

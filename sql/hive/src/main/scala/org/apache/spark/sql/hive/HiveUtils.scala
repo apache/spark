@@ -391,7 +391,7 @@ private[spark] object HiveUtils extends Logging {
     // Remote means that the metastore server is running in its own process.
     // When the mode is remote, configurations like "javax.jdo.option.ConnectionURL" will not be
     // used (because they are used by remote metastore server that talks to the database).
-    // Because execution Hive should always connects to a embedded derby metastore.
+    // Because execution Hive should always connects to an embedded derby metastore.
     // We have to remove the value of hive.metastore.uris. So, the execution Hive client connects
     // to the actual embedded derby metastore instead of the remote metastore.
     // You can search HiveConf.ConfVars.METASTOREURIS in the code of HiveConf (in Hive's repo).

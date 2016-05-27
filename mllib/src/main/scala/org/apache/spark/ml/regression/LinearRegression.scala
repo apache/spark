@@ -731,7 +731,7 @@ class LinearRegressionSummary private[regression] (
 
 /**
  * LeastSquaresAggregator computes the gradient and loss for a Least-squared loss function,
- * as used in linear regression for samples in sparse or dense vector in a online fashion.
+ * as used in linear regression for samples in sparse or dense vector in an online fashion.
  *
  * Two LeastSquaresAggregator can be merged together to have a summary of loss and gradient of
  * the corresponding joint dataset.

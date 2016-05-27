@@ -21,9 +21,9 @@ import java.io.File
 
 import org.scalatest.Suite
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.ml.util.TempDirectory
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
@@ -46,7 +46,7 @@ trait MLlibTestSparkContext extends TempDirectory { self: Suite =>
   override def afterAll() {
     try {
       Utils.deleteRecursively(new File(checkpointDir))
-      SQLContext.clearActive()
+      SparkSession.clearActiveSession()
       if (spark != null) {
         spark.stop()
       }

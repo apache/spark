@@ -142,9 +142,9 @@ case class FilterExec(condition: Expression, child: SparkPlan)
 
     // To generate the predicates we will follow this algorithm.
     // For each predicate that is not IsNotNull, we will generate them one by one loading attributes
-    // as necessary. For each of both attributes, if there is a IsNotNull predicate we will generate
-    // that check *before* the predicate. After all of these predicates, we will generate the
-    // remaining IsNotNull checks that were not part of other predicates.
+    // as necessary. For each of both attributes, if there is an IsNotNull predicate we will
+    // generate that check *before* the predicate. After all of these predicates, we will generate
+    // the remaining IsNotNull checks that were not part of other predicates.
     // This has the property of not doing redundant IsNotNull checks and taking better advantage of
     // short-circuiting, not loading attributes until they are needed.
     // This is very perf sensitive.
