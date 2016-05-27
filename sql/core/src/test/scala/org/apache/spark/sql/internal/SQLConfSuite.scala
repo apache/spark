@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.internal
 
+import java.io.File
+
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
@@ -204,6 +206,18 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     } finally {
       sparkContext.conf.remove("spark.to.be.or.not.to.be")
       sparkContext.conf.remove("spark.sql.with.or.without.you")
+    }
+  }
+
+  test("default value of WAREHOUSE_PATH") {
+    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
+    try {
+      // to get the default value, unset it
+      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
+      assert(spark.sessionState.conf.warehousePath
+        === s"file:${System.getProperty("user.dir")}" + File.separator + "spark-warehouse")
+    } finally {
+      sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
     }
   }
 
