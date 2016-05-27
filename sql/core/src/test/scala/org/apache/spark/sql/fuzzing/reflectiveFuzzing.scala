@@ -20,14 +20,13 @@ package org.apache.spark.sql.fuzzing
 import java.lang.reflect.InvocationTargetException
 
 import scala.reflect.runtime.{universe => ru}
-import scala.util.{Try, Random}
-import scala.util.control.NonFatal
+import scala.util.{Random, Try}
 
 import scalaz._, Scalaz._
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.plans.JoinType
-import org.apache.spark.sql.types.{BooleanType, AtomicType, DataType}
-import org.apache.spark.sql.{DataFrameTransformation, AnalysisException, Column, DataFrame}
+import org.apache.spark.sql.types._
 
 object ReflectiveFuzzing {
 
@@ -103,9 +102,11 @@ object ReflectiveFuzzing {
           getRandomColumnName(df, typeConstraint).map(df.col)
         }
       } else if (t <:< ru.typeOf[Seq[Column]]) {
-        Seq.fill(Random.nextInt(2) + 1)(getRandomColumnName(df, typeConstraint).map(df.col)).flatten.some
+        Seq.fill(Random.nextInt(2) + 1)(
+          getRandomColumnName(df, typeConstraint).map(df.col)).flatten.some
       } else if (t <:< ru.typeOf[Seq[String]]) {
-        Seq.fill(Random.nextInt(2) + 1)(getRandomColumnName(df, typeConstraint).map(df.col)).flatten.some
+        Seq.fill(Random.nextInt(2) + 1)(
+          getRandomColumnName(df, typeConstraint).map(df.col)).flatten.some
       } else {
         None
       }
@@ -123,7 +124,8 @@ object ReflectiveFuzzing {
         validateValues(vs).recoverWith {
           case e: AnalysisException if e.getMessage.contains("is not a boolean") =>
             Try(getParamValues(df, method, _ == BooleanType).get).flatMap(validateValues)
-          case e: AnalysisException if e.getMessage.contains("is not supported for columns of type") =>
+          case e: AnalysisException
+            if e.getMessage.contains("is not supported for columns of type") =>
             Try(getParamValues(df, method, _.isInstanceOf[AtomicType]).get).flatMap(validateValues)
         }
       }.flatMap(_.toOption)

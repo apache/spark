@@ -18,12 +18,13 @@
 package org.apache.spark
 
 import java.io.Serializable
+import java.util.Properties
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.memory.TaskMemoryManager
 import org.apache.spark.metrics.source.Source
-import org.apache.spark.unsafe.memory.TaskMemoryManager
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener}
 
 
 object TaskContext {
@@ -61,12 +62,11 @@ object TaskContext {
   protected[spark] def unset(): Unit = taskContext.remove()
 
   /**
-   * An empty task context that does not represent an actual task.
+   * An empty task context that does not represent an actual task.  This is only used in tests.
    */
   private[spark] def empty(): TaskContextImpl = {
-    new TaskContextImpl(0, 0, 0, 0, null, null, Seq.empty)
+    new TaskContextImpl(0, 0, 0, 0, null, new Properties, null)
   }
-
 }
 
 
@@ -95,19 +95,19 @@ abstract class TaskContext extends Serializable {
    */
   def isInterrupted(): Boolean
 
-  @deprecated("use isRunningLocally", "1.2.0")
-  def runningLocally(): Boolean
-
   /**
    * Returns true if the task is running locally in the driver program.
-   * @return
+   * @return false
    */
+  @deprecated("Local execution was removed, so this always returns false", "2.0.0")
   def isRunningLocally(): Boolean
 
   /**
    * Adds a (Java friendly) listener to be executed on task completion.
    * This will be called in all situation - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
   def addTaskCompletionListener(listener: TaskCompletionListener): TaskContext
 
@@ -115,18 +115,30 @@ abstract class TaskContext extends Serializable {
    * Adds a listener in the form of a Scala closure to be executed on task completion.
    * This will be called in all situations - success, failure, or cancellation.
    * An example use is for HadoopRDD to register a callback to close the input stream.
+   *
+   * Exceptions thrown by the listener will result in failure of the task.
    */
-  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext
+  def addTaskCompletionListener(f: (TaskContext) => Unit): TaskContext = {
+    addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = f(context)
+    })
+  }
 
   /**
-   * Adds a callback function to be executed on task completion. An example use
-   * is for HadoopRDD to register a callback to close the input stream.
-   * Will be called in any situation - success, failure, or cancellation.
-   *
-   * @param f Callback function.
+   * Adds a listener to be executed on task failure.
+   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
    */
-  @deprecated("use addTaskCompletionListener", "1.2.0")
-  def addOnCompleteCallback(f: () => Unit)
+  def addTaskFailureListener(listener: TaskFailureListener): TaskContext
+
+  /**
+   * Adds a listener to be executed on task failure.
+   * Operations defined here must be idempotent, as `onTaskFailure` can be called multiple times.
+   */
+  def addTaskFailureListener(f: (TaskContext, Throwable) => Unit): TaskContext = {
+    addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = f(context, error)
+    })
+  }
 
   /**
    * The ID of the stage that this task belong to.
@@ -144,16 +156,18 @@ abstract class TaskContext extends Serializable {
    */
   def attemptNumber(): Int
 
-  @deprecated("use attemptNumber", "1.3.0")
-  def attemptId(): Long
-
   /**
    * An ID that is unique to this task attempt (within the same SparkContext, no two task attempts
    * will share the same attempt ID).  This is roughly equivalent to Hadoop's TaskAttemptID.
    */
   def taskAttemptId(): Long
 
-  /** ::DeveloperApi:: */
+  /**
+   * Get a local property set upstream in the driver, or null if it is missing. See also
+   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   */
+  def getLocalProperty(key: String): String
+
   @DeveloperApi
   def taskMetrics(): TaskMetrics
 
@@ -174,22 +188,6 @@ abstract class TaskContext extends Serializable {
    * Register an accumulator that belongs to this task. Accumulators must call this method when
    * deserializing in executors.
    */
-  private[spark] def registerAccumulator(a: Accumulable[_, _]): Unit
+  private[spark] def registerAccumulator(a: AccumulatorV2[_, _]): Unit
 
-  /**
-   * Return the local values of internal accumulators that belong to this task. The key of the Map
-   * is the accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectInternalAccumulators(): Map[Long, Any]
-
-  /**
-   * Return the local values of accumulators that belong to this task. The key of the Map is the
-   * accumulator id and the value of the Map is the latest accumulator local value.
-   */
-  private[spark] def collectAccumulators(): Map[Long, Any]
-
-  /**
-   * Accumulators for tracking internal metrics indexed by the name.
-   */
-  private[spark] val internalMetricsToAccumulators: Map[String, Accumulator[Long]]
 }

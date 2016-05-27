@@ -18,13 +18,12 @@
 // scalastyle:off println
 package org.apache.spark.examples.sql.hive
 
-import com.google.common.io.{ByteStreams, Files}
-
 import java.io.File
 
-import org.apache.spark.{SparkConf, SparkContext}
+import com.google.common.io.{ByteStreams, Files}
+
+import org.apache.spark.SparkConf
 import org.apache.spark.sql._
-import org.apache.spark.sql.hive.HiveContext
 
 object HiveFromSpark {
   case class Record(key: Int, value: String)
@@ -37,15 +36,22 @@ object HiveFromSpark {
 
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
-    val sc = new SparkContext(sparkConf)
 
-    // A hive context adds support for finding tables in the MetaStore and writing queries
-    // using HiveQL. Users who do not have an existing Hive deployment can still create a
-    // HiveContext. When not configured by the hive-site.xml, the context automatically
-    // creates metastore_db and warehouse in the current directory.
-    val hiveContext = new HiveContext(sc)
-    import hiveContext.implicits._
-    import hiveContext.sql
+    // When working with Hive, one must instantiate `SparkSession` with Hive support, including
+    // connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined
+    // functions. Users who do not have an existing Hive deployment can still enable Hive support.
+    // When not configured by the hive-site.xml, the context automatically creates `metastore_db`
+    // in the current directory and creates a directory configured by `spark.sql.warehouse.dir`,
+    // which defaults to the directory `spark-warehouse` in the current directory that the spark
+    // application is started.
+    val spark = SparkSession.builder
+      .config(sparkConf)
+      .enableHiveSupport()
+      .getOrCreate()
+    val sc = spark.sparkContext
+
+    import spark.implicits._
+    import spark.sql
 
     sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
     sql(s"LOAD DATA LOCAL INPATH '${kv1File.getAbsolutePath}' INTO TABLE src")
@@ -63,19 +69,19 @@ object HiveFromSpark {
     val rddFromSql = sql("SELECT key, value FROM src WHERE key < 10 ORDER BY key")
 
     println("Result of RDD.map:")
-    val rddAsStrings = rddFromSql.map {
+    val rddAsStrings = rddFromSql.rdd.map {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }
 
-    // You can also register RDDs as temporary tables within a HiveContext.
+    // You can also use RDDs to create temporary views within a HiveContext.
     val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
-    rdd.toDF().registerTempTable("records")
+    rdd.toDF().createOrReplaceTempView("records")
 
     // Queries can then join RDD data with data stored in Hive.
     println("Result of SELECT *:")
     sql("SELECT * FROM records r JOIN src s ON r.key = s.key").collect().foreach(println)
 
-    sc.stop()
+    spark.stop()
   }
 }
 // scalastyle:on println

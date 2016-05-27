@@ -18,8 +18,6 @@
 package org.apache.spark.mllib.tree.loss
 
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 
 
 /**
@@ -47,7 +45,7 @@ object SquaredError extends Loss {
     - 2.0 * (label - prediction)
   }
 
-  override private[mllib] def computeError(prediction: Double, label: Double): Double = {
+  override private[spark] def computeError(prediction: Double, label: Double): Double = {
     val err = label - prediction
     err * err
   }

@@ -23,9 +23,9 @@ import javax.annotation.concurrent.NotThreadSafe
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.{DeveloperApi, Private}
-import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
+import org.apache.spark.util.NextIterator
 
 /**
  * :: DeveloperApi ::
@@ -97,18 +97,6 @@ abstract class Serializer {
    */
   @Private
   private[spark] def supportsRelocationOfSerializedObjects: Boolean = false
-}
-
-
-@DeveloperApi
-object Serializer {
-  def getSerializer(serializer: Serializer): Serializer = {
-    if (serializer == null) SparkEnv.get.serializer else serializer
-  }
-
-  def getSerializer(serializer: Option[Serializer]): Serializer = {
-    serializer.getOrElse(SparkEnv.get.serializer)
-  }
 }
 
 
@@ -200,10 +188,9 @@ abstract class DeserializationStream {
       try {
         (readKey[Any](), readValue[Any]())
       } catch {
-        case eof: EOFException => {
+        case eof: EOFException =>
           finished = true
           null
-        }
       }
     }
 

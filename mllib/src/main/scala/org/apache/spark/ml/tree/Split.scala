@@ -17,8 +17,10 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.mllib.linalg.Vector
+import java.util.Objects
+
+import org.apache.spark.annotation.{DeveloperApi, Since}
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.mllib.tree.configuration.{FeatureType => OldFeatureType}
 import org.apache.spark.mllib.tree.model.{Split => OldSplit}
 
@@ -73,10 +75,10 @@ private[tree] object Split {
  * @param numCategories  Number of categories for this feature.
  */
 @DeveloperApi
-final class CategoricalSplit private[ml] (
+class CategoricalSplit private[ml] (
     override val featureIndex: Int,
     _leftCategories: Array[Double],
-    private val numCategories: Int)
+    @Since("2.0.0") val numCategories: Int)
   extends Split {
 
   require(_leftCategories.forall(cat => 0 <= cat && cat < numCategories), "Invalid leftCategories" +
@@ -112,12 +114,15 @@ final class CategoricalSplit private[ml] (
     }
   }
 
-  override def equals(o: Any): Boolean = {
-    o match {
-      case other: CategoricalSplit => featureIndex == other.featureIndex &&
-        isLeft == other.isLeft && categories == other.categories
-      case _ => false
-    }
+  override def hashCode(): Int = {
+    val state = Seq(featureIndex, isLeft, categories)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
+  }
+
+  override def equals(o: Any): Boolean = o match {
+    case other: CategoricalSplit => featureIndex == other.featureIndex &&
+      isLeft == other.isLeft && categories == other.categories
+    case _ => false
   }
 
   override private[tree] def toOld: OldSplit = {
@@ -155,7 +160,7 @@ final class CategoricalSplit private[ml] (
  *                    Otherwise, it goes right.
  */
 @DeveloperApi
-final class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold: Double)
+class ContinuousSplit private[ml] (override val featureIndex: Int, val threshold: Double)
   extends Split {
 
   override private[ml] def shouldGoLeft(features: Vector): Boolean = {
@@ -179,6 +184,11 @@ final class ContinuousSplit private[ml] (override val featureIndex: Int, val thr
       case _ =>
         false
     }
+  }
+
+  override def hashCode(): Int = {
+    val state = Seq(featureIndex, threshold)
+    state.map(Objects.hashCode).foldLeft(0)((a, b) => 31 * a + b)
   }
 
   override private[tree] def toOld: OldSplit = {

@@ -23,6 +23,7 @@ import scala.util.control.NonFatal
 import org.apache.spark.{SharedSparkContext, SparkFunSuite}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -90,7 +91,9 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
       df
     } catch {
       case NonFatal(e) =>
+        // scalastyle:off println
         println(df.queryExecution)
+        // scalastyle:on println
         throw e
     }
   }
@@ -106,7 +109,7 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
     "unsupported join type",
     "is neither present in the group by, nor is it an aggregate function",
     "is ambiguous, could be:",
-    "unresolved operator 'Project", //TODO
+    "unresolved operator 'Project", // TODO
     "unresolved operator 'Union", // TODO: disabled to let me find new errors
     "unresolved operator 'Except", // TODO: disabled to let me find new errors
     "unresolved operator 'Intersect", // TODO: disabled to let me find new errors
@@ -119,13 +122,17 @@ class DataFrameFuzzingSuite extends SparkFunSuite with SharedSparkContext {
 
   def applyRandomTransform(df: DataFrame): DataFrame = {
     val tf = getRandomTransformation(df)
+    // scalastyle:off println
     println("    " + tf)
+    // scalastyle:on println
     tf.apply(df)
   }
 
   test("fuzz test") {
       for (i <- 1 to 1000) {
+        // scalastyle:off println
         println(s"Iteration $i")
+        // scalastyle:on println
         try {
           var df = dataGenerator.randomDataFrame(
             numCols = Random.nextInt(2) + 1,

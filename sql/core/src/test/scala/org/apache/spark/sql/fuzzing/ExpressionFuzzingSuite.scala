@@ -24,16 +24,17 @@ import scala.util.{Random, Try}
 
 import org.clapper.classutil.ClassFinder
 
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.RandomDataGenerator
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.analysis.HiveTypeCoercion
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateSafeProjection
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.{BinaryType, DataType, DataTypeTestUtils, DecimalType}
-import org.apache.spark.{Logging, SparkFunSuite}
-
+import org.apache.spark.util.Utils
 
 /**
  * This test suite implements fuzz tests for expression code generation. It uses reflection to
@@ -55,10 +56,10 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
       .filter(_.contains("spark"))
       .map(new File(_))
       .filter(_.exists()).toSeq
-    val allClasses = ClassFinder(classpathEntries).getClasses()
+    val allClasses = ClassFinder(classpathEntries).getClasses().toIterator
     assert(allClasses.nonEmpty, "Could not find Spark classes on classpath.")
     ClassFinder.concreteSubclasses(classOf[Expression].getName, allClasses)
-      .map(c => Class.forName(c.name).asInstanceOf[Class[Expression]]).toSeq
+      .map(c => Utils.classForName(c.name).asInstanceOf[Class[Expression]]).toSeq
       // We should only test evalulable expressions:
       .filterNot(c => classOf[Unevaluable].isAssignableFrom(c))
       // These expressions currently OOM because we try to pass in massive numeric literals:
@@ -77,6 +78,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
   /**
    * Given an expression class, find the constructor which accepts only expressions. If there are
    * multiple such constructors, pick the one with the most parameters.
+   *
    * @return The matching constructor, or None if no appropriate constructor could be found.
    */
   def getBestConstructor(expressionClass: Class[Expression]): Option[Constructor[Expression]] = {
@@ -93,7 +95,7 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
       .filterNot(_.isInstanceOf[DecimalType]) // casts can lead to OOM
       .filterNot(_.isInstanceOf[BinaryType]) // leads to spurious errors in string reverse
     val dataTypesWithGenerators: Map[DataType, () => Any] = allTypes.map { dt =>
-      (dt, RandomDataGenerator.forType(dt, nullable = true, seed=None))
+      (dt, RandomDataGenerator.forType(dt, nullable = true))
     }.filter(_._2.isDefined).toMap.mapValues(_.get)
     val (dt, generator) =
       dataTypesWithGenerators.toSeq(Random.nextInt(dataTypesWithGenerators.size))
@@ -129,7 +131,8 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
           val interpretedProjection = new InterpretedProjection(Seq(expression), inputSchema)
           val interpretedResult = interpretedProjection.apply(inputRow)
 
-          val maybeGenProjection = Try(GenerateProjection.generate(Seq(expression), inputSchema))
+          val maybeGenProjection =
+            Try(GenerateSafeProjection.generate(Seq(expression), inputSchema))
           maybeGenProjection.foreach { generatedProjection =>
             val generatedResult = generatedProjection.apply(inputRow)
             assert(generatedResult === interpretedResult)
@@ -149,12 +152,11 @@ class ExpressionFuzzingSuite extends SparkFunSuite with Logging {
 
 private case object DummyAnalyzer extends RuleExecutor[LogicalPlan] {
   override protected val batches: Seq[Batch] = Seq(
-    Batch("analysis", FixedPoint(100), HiveTypeCoercion.typeCoercionRules: _*)
+    Batch("analysis", FixedPoint(100), TypeCoercion.typeCoercionRules: _*)
   )
 }
 
 private case class DummyPlan(expression: Expression) extends LogicalPlan {
-  override def expressions: Seq[Expression] = Seq(expression)
   override def output: Seq[Attribute] = Seq.empty
   override def children: Seq[LogicalPlan] = Seq.empty
 }

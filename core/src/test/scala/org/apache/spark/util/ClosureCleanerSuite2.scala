@@ -38,14 +38,19 @@ class ClosureCleanerSuite2 extends SparkFunSuite with BeforeAndAfterAll with Pri
   private var closureSerializer: SerializerInstance = null
 
   override def beforeAll(): Unit = {
+    super.beforeAll()
     sc = new SparkContext("local", "test")
     closureSerializer = sc.env.closureSerializer.newInstance()
   }
 
   override def afterAll(): Unit = {
-    sc.stop()
-    sc = null
-    closureSerializer = null
+    try {
+      sc.stop()
+      sc = null
+      closureSerializer = null
+    } finally {
+      super.afterAll()
+    }
   }
 
   // Some fields and methods to reference in inner closures later

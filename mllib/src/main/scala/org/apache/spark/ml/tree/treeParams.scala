@@ -17,20 +17,24 @@
 
 package org.apache.spark.ml.tree
 
-import org.apache.spark.ml.classification.ClassifierParams
+import scala.util.Try
+
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasMaxIter, HasSeed, HasThresholds}
+import org.apache.spark.ml.param.shared._
+import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
-import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
+import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
  * Parameters for Decision Tree-based algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait DecisionTreeParams extends PredictorParams {
+private[ml] trait DecisionTreeParams extends PredictorParams
+  with HasCheckpointInterval with HasSeed {
 
   /**
    * Maximum depth of the tree (>= 0).
@@ -76,7 +80,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
     "Minimum information gain for a split to be considered at a tree node.")
 
   /**
-   * Maximum memory in MB allocated to histogram aggregation.
+   * Maximum memory in MB allocated to histogram aggregation. If too small, then 1 node will be
+   * split per iteration, and its aggregates may exceed this size.
    * (default = 256 MB)
    * @group expertParam
    */
@@ -87,7 +92,8 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   /**
    * If false, the algorithm will pass trees to executors to match instances with nodes.
    * If true, the algorithm will cache node IDs for each instance.
-   * Caching can speed up training of deeper trees.
+   * Caching can speed up training of deeper trees. Users can set how often should the
+   * cache be checkpointed or disable it by setting checkpointInterval.
    * (default = false)
    * @group expertParam
    */
@@ -95,21 +101,6 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
     " algorithm will pass trees to executors to match instances with nodes. If true, the" +
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
-
-  /**
-   * Specifies how often to checkpoint the cached node IDs.
-   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
-   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
-   * [[org.apache.spark.SparkContext]].
-   * Must be >= 1.
-   * (default = 10)
-   * @group expertParam
-   */
-  final val checkpointInterval: IntParam = new IntParam(this, "checkpointInterval", "Specifies" +
-    " how often to checkpoint the cached node IDs.  E.g. 10 means that the cache will get" +
-    " checkpointed every 10 iterations. This is only used if cacheNodeIds is true and if the" +
-    " checkpoint directory is set in the SparkContext. Must be >= 1.",
-    ParamValidators.gtEq(1))
 
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
     maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
@@ -138,6 +129,9 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   /** @group getParam */
   final def getMinInfoGain: Double = $(minInfoGain)
 
+  /** @group setParam */
+  def setSeed(value: Long): this.type = set(seed, value)
+
   /** @group expertSetParam */
   def setMaxMemoryInMB(value: Int): this.type = set(maxMemoryInMB, value)
 
@@ -150,11 +144,16 @@ private[ml] trait DecisionTreeParams extends PredictorParams {
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
-  /** @group expertSetParam */
+  /**
+   * Specifies how often to checkpoint the cached node IDs.
+   * E.g. 10 means that the cache will get checkpointed every 10 iterations.
+   * This is only used if cacheNodeIds is true and if the checkpoint directory is set in
+   * [[org.apache.spark.SparkContext]].
+   * Must be >= 1.
+   * (default = 10)
+   * @group expertSetParam
+   */
   def setCheckpointInterval(value: Int): this.type = set(checkpointInterval, value)
-
-  /** @group expertGetParam */
-  final def getCheckpointInterval: Int = $(checkpointInterval)
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
   private[ml] def getOldStrategy(
@@ -221,6 +220,9 @@ private[ml] object TreeClassifierParams {
   final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
 }
 
+private[ml] trait DecisionTreeClassifierParams
+  extends DecisionTreeParams with TreeClassifierParams
+
 /**
  * Parameters for Decision Tree-based regression algorithms.
  */
@@ -262,12 +264,28 @@ private[ml] object TreeRegressorParams {
   final val supportedImpurities: Array[String] = Array("variance").map(_.toLowerCase)
 }
 
+private[ml] trait DecisionTreeRegressorParams extends DecisionTreeParams
+  with TreeRegressorParams with HasVarianceCol {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
+    } else {
+      newSchema
+    }
+  }
+}
+
 /**
  * Parameters for Decision Tree-based ensemble algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
+private[ml] trait TreeEnsembleParams extends DecisionTreeParams {
 
   /**
    * Fraction of the training data used for learning each decision tree, in range (0, 1].
@@ -286,9 +304,6 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
   /** @group getParam */
   final def getSubsamplingRate: Double = $(subsamplingRate)
 
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
-
   /**
    * Create a Strategy instance to use with the old API.
    * NOTE: The caller should set impurity and seed.
@@ -302,22 +317,8 @@ private[ml] trait TreeEnsembleParams extends DecisionTreeParams with HasSeed {
   }
 }
 
-/**
- * Parameters for Random Forest algorithms.
- *
- * Note: Marked as private and DeveloperApi since this may be made public in the future.
- */
-private[ml] trait RandomForestParams extends TreeEnsembleParams {
-
-  /**
-   * Number of trees to train (>= 1).
-   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
-   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
-   * (default = 20)
-   * @group param
-   */
-  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
-    ParamValidators.gtEq(1))
+/** Used for [[RandomForestParams]] */
+private[ml] trait HasFeatureSubsetStrategy extends Params {
 
   /**
    * The number of features to consider for splits at each tree node.
@@ -330,6 +331,8 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    *  - "onethird": use 1/3 of the features
    *  - "sqrt": use sqrt(number of features)
    *  - "log2": use log2(number of features)
+   *  - "n": when n is in the range (0, 1.0], use n * number of features. When n
+   *         is in the range (1, number of features), use n features.
    * (default = "auto")
    *
    * These various settings are based on the following references:
@@ -345,17 +348,14 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
    */
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
-      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
+      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
+      s", (0.0-1.0], [1-n].",
     (value: String) =>
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase))
+      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
+      || Try(value.toInt).filter(_ > 0).isSuccess
+      || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
-  setDefault(numTrees -> 20, featureSubsetStrategy -> "auto")
-
-  /** @group setParam */
-  def setNumTrees(value: Int): this.type = set(numTrees, value)
-
-  /** @group getParam */
-  final def getNumTrees: Int = $(numTrees)
+  setDefault(featureSubsetStrategy -> "auto")
 
   /** @group setParam */
   def setFeatureSubsetStrategy(value: String): this.type = set(featureSubsetStrategy, value)
@@ -364,28 +364,62 @@ private[ml] trait RandomForestParams extends TreeEnsembleParams {
   final def getFeatureSubsetStrategy: String = $(featureSubsetStrategy).toLowerCase
 }
 
-private[ml] object RandomForestParams {
+/**
+ * Used for [[RandomForestParams]].
+ * This is separated out from [[RandomForestParams]] because of an issue with the
+ * `numTrees` method conflicting with this Param in the Estimator.
+ */
+private[ml] trait HasNumTrees extends Params {
+
+  /**
+   * Number of trees to train (>= 1).
+   * If 1, then no bootstrapping is used.  If > 1, then bootstrapping is done.
+   * TODO: Change to always do bootstrapping (simpler).  SPARK-7130
+   * (default = 20)
+   * @group param
+   */
+  final val numTrees: IntParam = new IntParam(this, "numTrees", "Number of trees to train (>= 1)",
+    ParamValidators.gtEq(1))
+
+  setDefault(numTrees -> 20)
+
+  /** @group setParam */
+  def setNumTrees(value: Int): this.type = set(numTrees, value)
+
+  /** @group getParam */
+  final def getNumTrees: Int = $(numTrees)
+}
+
+/**
+ * Parameters for Random Forest algorithms.
+ */
+private[ml] trait RandomForestParams extends TreeEnsembleParams
+  with HasFeatureSubsetStrategy with HasNumTrees
+
+private[spark] object RandomForestParams {
   // These options should be lowercase.
   final val supportedFeatureSubsetStrategies: Array[String] =
     Array("auto", "all", "onethird", "sqrt", "log2").map(_.toLowerCase)
 }
+
+private[ml] trait RandomForestClassifierParams
+  extends RandomForestParams with TreeClassifierParams
+
+private[ml] trait RandomForestClassificationModelParams extends TreeEnsembleParams
+  with HasFeatureSubsetStrategy with TreeClassifierParams
+
+private[ml] trait RandomForestRegressorParams
+  extends RandomForestParams with TreeRegressorParams
+
+private[ml] trait RandomForestRegressionModelParams extends TreeEnsembleParams
+  with HasFeatureSubsetStrategy with TreeRegressorParams
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.
  *
  * Note: Marked as private and DeveloperApi since this may be made public in the future.
  */
-private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
-
-  /**
-   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
-   * estimator.
-   * (default = 0.1)
-   * @group param
-   */
-  final val stepSize: DoubleParam = new DoubleParam(this, "stepSize", "Step size (a.k.a." +
-    " learning rate) in interval (0, 1] for shrinking the contribution of each estimator",
-    ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true))
+private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasStepSize {
 
   /* TODO: Add this doc when we add this param.  SPARK-7132
    * Threshold for stopping early when runWithValidation is used.
@@ -403,11 +437,19 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
   /** @group setParam */
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-  /** @group setParam */
+  /**
+   * Step size (a.k.a. learning rate) in interval (0, 1] for shrinking the contribution of each
+   * estimator.
+   * (default = 0.1)
+   * @group setParam
+   */
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
-  /** @group getParam */
-  final def getStepSize: Double = $(stepSize)
+  override def validateParams(): Unit = {
+    require(ParamValidators.inRange(0, 1, lowerInclusive = false, upperInclusive = true)(
+      getStepSize), "GBT parameter stepSize should be in interval (0, 1], " +
+      s"but it given invalid value $getStepSize.")
+  }
 
   /** (private[ml]) Create a BoostingStrategy instance to use with the old API. */
   private[ml] def getOldBoostingStrategy(
@@ -420,4 +462,75 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter {
 
   /** Get old Gradient Boosting Loss type */
   private[ml] def getOldLossType: OldLoss
+}
+
+private[ml] object GBTClassifierParams {
+  // The losses below should be lowercase.
+  /** Accessor for supported loss settings: logistic */
+  final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
+}
+
+private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
+
+  /**
+   * Loss function which GBT tries to minimize. (case-insensitive)
+   * Supported: "logistic"
+   * (default = logistic)
+   * @group param
+   */
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
+    " tries to minimize (case-insensitive). Supported options:" +
+    s" ${GBTClassifierParams.supportedLossTypes.mkString(", ")}",
+    (value: String) => GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase))
+
+  setDefault(lossType -> "logistic")
+
+  /** @group getParam */
+  def getLossType: String = $(lossType).toLowerCase
+
+  /** (private[ml]) Convert new loss to old loss. */
+  override private[ml] def getOldLossType: OldLoss = {
+    getLossType match {
+      case "logistic" => OldLogLoss
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTClassifier was given bad loss type: $getLossType")
+    }
+  }
+}
+
+private[ml] object GBTRegressorParams {
+  // The losses below should be lowercase.
+  /** Accessor for supported loss settings: squared (L2), absolute (L1) */
+  final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
+}
+
+private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
+
+  /**
+   * Loss function which GBT tries to minimize. (case-insensitive)
+   * Supported: "squared" (L2) and "absolute" (L1)
+   * (default = squared)
+   * @group param
+   */
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
+    " tries to minimize (case-insensitive). Supported options:" +
+    s" ${GBTRegressorParams.supportedLossTypes.mkString(", ")}",
+    (value: String) => GBTRegressorParams.supportedLossTypes.contains(value.toLowerCase))
+
+  setDefault(lossType -> "squared")
+
+  /** @group getParam */
+  def getLossType: String = $(lossType).toLowerCase
+
+  /** (private[ml]) Convert new loss to old loss. */
+  override private[ml] def getOldLossType: OldLoss = {
+    getLossType match {
+      case "squared" => OldSquaredError
+      case "absolute" => OldAbsoluteError
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTRegressorParams was given bad loss type: $getLossType")
+    }
+  }
 }

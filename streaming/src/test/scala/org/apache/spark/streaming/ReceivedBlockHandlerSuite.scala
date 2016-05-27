@@ -29,17 +29,19 @@ import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
 import org.apache.spark._
-import org.apache.spark.network.nio.NioBlockTransferService
+import org.apache.spark.broadcast.BroadcastManager
+import org.apache.spark.internal.Logging
+import org.apache.spark.memory.StaticMemoryManager
+import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.RpcEnv
 import org.apache.spark.scheduler.LiveListenerBus
-import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.shuffle.hash.HashShuffleManager
+import org.apache.spark.serializer.{KryoSerializer, SerializerManager}
+import org.apache.spark.shuffle.sort.SortShuffleManager
 import org.apache.spark.storage._
 import org.apache.spark.streaming.receiver._
 import org.apache.spark.streaming.util._
 import org.apache.spark.util.{ManualClock, Utils}
-import WriteAheadLogBasedBlockHandler._
-import WriteAheadLogSuite._
+import org.apache.spark.util.io.ChunkedByteBuffer
 
 class ReceivedBlockHandlerSuite
   extends SparkFunSuite
@@ -47,13 +49,20 @@ class ReceivedBlockHandlerSuite
   with Matchers
   with Logging {
 
-  val conf = new SparkConf().set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
+  import WriteAheadLogBasedBlockHandler._
+  import WriteAheadLogSuite._
+
+  val conf = new SparkConf()
+    .set("spark.streaming.receiver.writeAheadLog.rollingIntervalSecs", "1")
+    .set("spark.app.id", "streaming-test")
   val hadoopConf = new Configuration()
   val streamId = 1
   val securityMgr = new SecurityManager(conf)
-  val mapOutputTracker = new MapOutputTrackerMaster(conf)
-  val shuffleManager = new HashShuffleManager(conf)
+  val broadcastManager = new BroadcastManager(true, conf, securityMgr)
+  val mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
+  val shuffleManager = new SortShuffleManager(conf)
   val serializer = new KryoSerializer(conf)
+  var serializerManager = new SerializerManager(serializer, conf)
   val manualClock = new ManualClock
   val blockManagerSize = 10000000
   val blockManagerBuffer = new ArrayBuffer[BlockManager]()
@@ -102,7 +111,10 @@ class ReceivedBlockHandlerSuite
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map(_.data.map(_.toString).toList).getOrElse(List.empty)
+          blockManager
+            .getLocalValues(blockId)
+            .map(_.data.map(_.toString).toList)
+            .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -126,7 +138,10 @@ class ReceivedBlockHandlerSuite
       testBlockStoring(handler) { case (data, blockIds, storeResults) =>
         // Verify the data in block manager is correct
         val storedData = blockIds.flatMap { blockId =>
-          blockManager.getLocal(blockId).map(_.data.map(_.toString).toList).getOrElse(List.empty)
+          blockManager
+            .getLocalValues(blockId)
+            .map(_.data.map(_.toString).toList)
+            .getOrElse(List.empty)
         }.toList
         storedData shouldEqual data
 
@@ -144,7 +159,8 @@ class ReceivedBlockHandlerSuite
           val reader = new FileBasedWriteAheadLogRandomReader(fileSegment.path, hadoopConf)
           val bytes = reader.read(fileSegment)
           reader.close()
-          blockManager.dataDeserialize(generateBlockId(), bytes).toList
+          serializerManager.dataDeserializeStream(
+            generateBlockId(), new ChunkedByteBuffer(bytes).toInputStream()).toList
         }
         loggedData shouldEqual data
       }
@@ -184,7 +200,7 @@ class ReceivedBlockHandlerSuite
   }
 
   test("Test Block - isFullyConsumed") {
-    val sparkConf = new SparkConf()
+    val sparkConf = new SparkConf().set("spark.app.id", "streaming-test")
     sparkConf.set("spark.storage.unrollMemoryThreshold", "512")
     // spark.storage.unrollFraction set to 0.4 for BlockManager
     sparkConf.set("spark.storage.unrollFraction", "0.4")
@@ -192,13 +208,13 @@ class ReceivedBlockHandlerSuite
     blockManager = createBlockManager(12000, sparkConf)
 
     // there is not enough space to store this block in MEMORY,
-    // But BlockManager will be able to sereliaze this block to WAL
+    // But BlockManager will be able to serialize this block to WAL
     // and hence count returns correct value.
      testRecordcount(false, StorageLevel.MEMORY_ONLY,
       IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
 
     // there is not enough space to store this block in MEMORY,
-    // But BlockManager will be able to sereliaze this block to DISK
+    // But BlockManager will be able to serialize this block to DISK
     // and hence count returns correct value.
     testRecordcount(true, StorageLevel.MEMORY_AND_DISK,
       IteratorBlock((List.fill(70)(new Array[Byte](100))).iterator), blockManager, Some(70))
@@ -251,16 +267,18 @@ class ReceivedBlockHandlerSuite
       maxMem: Long,
       conf: SparkConf,
       name: String = SparkContext.DRIVER_IDENTIFIER): BlockManager = {
-    val transfer = new NioBlockTransferService(conf, securityMgr)
-    val manager = new BlockManager(name, rpcEnv, blockManagerMaster, serializer, maxMem, conf,
-      mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
-    manager.initialize("app-id")
-    blockManagerBuffer += manager
-    manager
+    val memManager = new StaticMemoryManager(conf, Long.MaxValue, maxMem, numCores = 1)
+    val transfer = new NettyBlockTransferService(conf, securityMgr, "localhost", numCores = 1)
+    val blockManager = new BlockManager(name, rpcEnv, blockManagerMaster, serializerManager, conf,
+      memManager, mapOutputTracker, shuffleManager, transfer, securityMgr, 0)
+    memManager.setMemoryStore(blockManager.memoryStore)
+    blockManager.initialize("app-id")
+    blockManagerBuffer += blockManager
+    blockManager
   }
 
   /**
-   * Test storing of data using different types of Handler, StorageLevle and ReceivedBlocks
+   * Test storing of data using different types of Handler, StorageLevel and ReceivedBlocks
    * and verify the correct record count
    */
   private def testRecordcount(isBlockManagedBasedBlockHandler: Boolean,
@@ -320,13 +338,14 @@ class ReceivedBlockHandlerSuite
       }
     }
 
-    def dataToByteBuffer(b: Seq[String]) = blockManager.dataSerialize(generateBlockId, b.iterator)
+    def dataToByteBuffer(b: Seq[String]) =
+      serializerManager.dataSerialize(generateBlockId, b.iterator)
 
     val blocks = data.grouped(10).toSeq
 
     storeAndVerify(blocks.map { b => IteratorBlock(b.toIterator) })
     storeAndVerify(blocks.map { b => ArrayBufferBlock(new ArrayBuffer ++= b) })
-    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b)) })
+    storeAndVerify(blocks.map { b => ByteBufferBlock(dataToByteBuffer(b).toByteBuffer) })
   }
 
   /** Test error handling when blocks that cannot be stored */
@@ -352,8 +371,8 @@ class ReceivedBlockHandlerSuite
   /** Instantiate a WriteAheadLogBasedBlockHandler and run a code with it */
   private def withWriteAheadLogBasedBlockHandler(body: WriteAheadLogBasedBlockHandler => Unit) {
     require(WriteAheadLogUtils.getRollingIntervalSecs(conf, isDriver = false) === 1)
-    val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, 1,
-      storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
+    val receivedBlockHandler = new WriteAheadLogBasedBlockHandler(blockManager, serializerManager,
+      1, storageLevel, conf, hadoopConf, tempDirectory.toString, manualClock)
     try {
       body(receivedBlockHandler)
     } finally {

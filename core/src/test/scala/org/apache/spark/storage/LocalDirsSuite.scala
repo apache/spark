@@ -19,11 +19,10 @@ package org.apache.spark.storage
 
 import java.io.File
 
-import org.apache.spark.util.Utils
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
-
+import org.apache.spark.util.{SparkConfWithEnv, Utils}
 
 /**
  * Tests for the spark.local.dir and SPARK_LOCAL_DIRS configuration options.
@@ -45,20 +44,10 @@ class LocalDirsSuite extends SparkFunSuite with BeforeAndAfter {
   test("SPARK_LOCAL_DIRS override also affects driver") {
     // Regression test for SPARK-2975
     assert(!new File("/NONEXISTENT_DIR").exists())
-    // SPARK_LOCAL_DIRS is a valid directory:
-    class MySparkConf extends SparkConf(false) {
-      override def getenv(name: String): String = {
-        if (name == "SPARK_LOCAL_DIRS") System.getProperty("java.io.tmpdir")
-        else super.getenv(name)
-      }
-
-      override def clone: SparkConf = {
-        new MySparkConf().setAll(getAll)
-      }
-    }
     // spark.local.dir only contains invalid directories, but that's not a problem since
     // SPARK_LOCAL_DIRS will override it on both the driver and workers:
-    val conf = new MySparkConf().set("spark.local.dir", "/NONEXISTENT_PATH")
+    val conf = new SparkConfWithEnv(Map("SPARK_LOCAL_DIRS" -> System.getProperty("java.io.tmpdir")))
+      .set("spark.local.dir", "/NONEXISTENT_PATH")
     assert(new File(Utils.getLocalDir(conf)).exists())
   }
 

@@ -2,6 +2,7 @@ assert_true
 case
 coalesce
 current_database
+current_date
 decode
 e
 encode

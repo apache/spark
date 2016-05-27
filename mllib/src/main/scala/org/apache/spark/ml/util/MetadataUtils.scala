@@ -20,12 +20,12 @@ package org.apache.spark.ml.util
 import scala.collection.immutable.HashMap
 
 import org.apache.spark.ml.attribute._
-import org.apache.spark.mllib.linalg.VectorUDT
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.sql.types.StructField
 
 
 /**
- * Helper utilities for tree-based algorithms
+ * Helper utilities for algorithms using ML metadata
  */
 private[spark] object MetadataUtils {
 

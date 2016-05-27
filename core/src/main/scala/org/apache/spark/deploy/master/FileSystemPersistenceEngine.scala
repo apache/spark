@@ -21,7 +21,7 @@ import java.io._
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, Serializer}
 import org.apache.spark.util.Utils
 
@@ -45,7 +45,10 @@ private[master] class FileSystemPersistenceEngine(
   }
 
   override def unpersist(name: String): Unit = {
-    new File(dir + File.separator + name).delete()
+    val f = new File(dir + File.separator + name)
+    if (!f.delete()) {
+      logWarning(s"Error deleting ${f.getPath()}")
+    }
   }
 
   override def read[T: ClassTag](prefix: String): Seq[T] = {

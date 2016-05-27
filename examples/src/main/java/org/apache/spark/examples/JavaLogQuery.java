@@ -20,22 +20,22 @@ package org.apache.spark.examples;
 import com.google.common.collect.Lists;
 import scala.Tuple2;
 import scala.Tuple3;
-import org.apache.spark.SparkConf;
+
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.sql.SparkSession;
 
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
  * Executes a roll up-style query against Apache logs.
- *  
+ *
  * Usage: JavaLogQuery [logFile]
  */
 public final class JavaLogQuery {
@@ -83,10 +83,10 @@ public final class JavaLogQuery {
       String user = m.group(3);
       String query = m.group(5);
       if (!user.equalsIgnoreCase("-")) {
-        return new Tuple3<String, String, String>(ip, user, query);
+        return new Tuple3<>(ip, user, query);
       }
     }
-    return new Tuple3<String, String, String>(null, null, null);
+    return new Tuple3<>(null, null, null);
   }
 
   public static Stats extractStats(String line) {
@@ -100,16 +100,19 @@ public final class JavaLogQuery {
   }
 
   public static void main(String[] args) {
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaLogQuery")
+      .getOrCreate();
 
-    SparkConf sparkConf = new SparkConf().setAppName("JavaLogQuery");
-    JavaSparkContext jsc = new JavaSparkContext(sparkConf);
+    JavaSparkContext jsc = new JavaSparkContext(spark.sparkContext());
 
     JavaRDD<String> dataSet = (args.length == 1) ? jsc.textFile(args[0]) : jsc.parallelize(exampleApacheLogs);
 
     JavaPairRDD<Tuple3<String, String, String>, Stats> extracted = dataSet.mapToPair(new PairFunction<String, Tuple3<String, String, String>, Stats>() {
       @Override
       public Tuple2<Tuple3<String, String, String>, Stats> call(String s) {
-        return new Tuple2<Tuple3<String, String, String>, Stats>(extractKey(s), extractStats(s));
+        return new Tuple2<>(extractKey(s), extractStats(s));
       }
     });
 
@@ -124,6 +127,6 @@ public final class JavaLogQuery {
     for (Tuple2<?,?> t : output) {
       System.out.println(t._1() + "\t" + t._2());
     }
-    jsc.stop();
+    spark.stop();
   }
 }

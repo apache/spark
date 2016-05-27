@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.util.Random
 
-import org.apache.spark.sql.{Row, DataFrame, RandomDataGenerator, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.types._
 
 class RandomDataFrameGenerator(seed: Long, sqlContext: SQLContext) {
@@ -87,7 +87,7 @@ class RandomDataFrameGenerator(seed: Long, sqlContext: SQLContext) {
       allowSpacesInColumnNames: Boolean = false): DataFrame = {
     val schema = randomStructType(numCols, allowComplexTypes, allowSpacesInColumnNames)
     val rows = sqlContext.sparkContext.parallelize(1 to numRows).mapPartitions { iter =>
-      val rowGenerator = RandomDataGenerator.forType(schema, nullable = false, seed = Some(42)).get
+      val rowGenerator = RandomDataGenerator.forType(schema, nullable = false, rand = rand).get
       iter.map(_ => rowGenerator().asInstanceOf[Row])
     }
     sqlContext.createDataFrame(rows, schema)

@@ -19,7 +19,6 @@
 package org.apache.spark.examples.streaming
 
 import org.apache.spark.SparkConf
-import org.apache.spark.HashPartitioner
 import org.apache.spark.streaming._
 
 /**
@@ -44,24 +43,12 @@ object StatefulNetworkWordCount {
 
     StreamingExamples.setStreamingLogLevels()
 
-    val updateFunc = (values: Seq[Int], state: Option[Int]) => {
-      val currentCount = values.sum
-
-      val previousCount = state.getOrElse(0)
-
-      Some(currentCount + previousCount)
-    }
-
-    val newUpdateFunc = (iterator: Iterator[(String, Seq[Int], Option[Int])]) => {
-      iterator.flatMap(t => updateFunc(t._2, t._3).map(s => (t._1, s)))
-    }
-
     val sparkConf = new SparkConf().setAppName("StatefulNetworkWordCount")
     // Create the context with a 1 second batch size
     val ssc = new StreamingContext(sparkConf, Seconds(1))
     ssc.checkpoint(".")
 
-    // Initial RDD input to updateStateByKey
+    // Initial state RDD for mapWithState operation
     val initialRDD = ssc.sparkContext.parallelize(List(("hello", 1), ("world", 1)))
 
     // Create a ReceiverInputDStream on target ip:port and count the
@@ -70,10 +57,17 @@ object StatefulNetworkWordCount {
     val words = lines.flatMap(_.split(" "))
     val wordDstream = words.map(x => (x, 1))
 
-    // Update the cumulative count using updateStateByKey
-    // This will give a Dstream made of state (which is the cumulative count of the words)
-    val stateDstream = wordDstream.updateStateByKey[Int](newUpdateFunc,
-      new HashPartitioner (ssc.sparkContext.defaultParallelism), true, initialRDD)
+    // Update the cumulative count using mapWithState
+    // This will give a DStream made of state (which is the cumulative count of the words)
+    val mappingFunc = (word: String, one: Option[Int], state: State[Int]) => {
+      val sum = one.getOrElse(0) + state.getOption.getOrElse(0)
+      val output = (word, sum)
+      state.update(sum)
+      output
+    }
+
+    val stateDstream = wordDstream.mapWithState(
+      StateSpec.function(mappingFunc).initialState(initialRDD))
     stateDstream.print()
     ssc.start()
     ssc.awaitTermination()

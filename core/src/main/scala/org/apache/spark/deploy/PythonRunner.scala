@@ -17,11 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.net.URI
 import java.io.File
+import java.net.URI
 
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.util.Try
 
 import org.apache.spark.SparkUserAppException
@@ -62,7 +62,7 @@ object PythonRunner {
     // ready to serve connections.
     thread.join()
 
-    // Build up a PYTHONPATH that includes the Spark assembly JAR (where this class is), the
+    // Build up a PYTHONPATH that includes the Spark assembly (where this class is), the
     // python directories in SPARK_HOME (if set), and any files in the pyFiles argument
     val pathElements = new ArrayBuffer[String]
     pathElements ++= formattedPyFiles
@@ -71,7 +71,7 @@ object PythonRunner {
     val pythonPath = PythonUtils.mergePythonPaths(pathElements: _*)
 
     // Launch Python process
-    val builder = new ProcessBuilder(Seq(pythonExec, formattedPythonFile) ++ otherArgs)
+    val builder = new ProcessBuilder((Seq(pythonExec, formattedPythonFile) ++ otherArgs).asJava)
     val env = builder.environment()
     env.put("PYTHONPATH", pythonPath)
     // This is equivalent to setting the -u flag; we use it because ipython doesn't support -u:

@@ -17,12 +17,15 @@
 
 package org.apache.spark.streaming
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll}
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
-import org.apache.spark.rdd.RDDOperationScope
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.streaming.dstream.DStream
 import org.apache.spark.streaming.ui.UIUtils
+import org.apache.spark.util.ManualClock
 
 /**
  * Tests whether scope information is passed from DStream operations to RDDs correctly.
@@ -32,11 +35,18 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
   private val batchDuration: Duration = Seconds(1)
 
   override def beforeAll(): Unit = {
-    ssc = new StreamingContext(new SparkContext("local", "test"), batchDuration)
+    super.beforeAll()
+    val conf = new SparkConf().setMaster("local").setAppName("test")
+    conf.set("spark.streaming.clock", classOf[ManualClock].getName())
+    ssc = new StreamingContext(new SparkContext(conf), batchDuration)
   }
 
   override def afterAll(): Unit = {
-    ssc.stop(stopSparkContext = true)
+    try {
+      ssc.stop(stopSparkContext = true)
+    } finally {
+      super.afterAll()
+    }
   }
 
   before { assertPropertiesNotSet() }
@@ -103,6 +113,8 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
 
   test("scoping nested operations") {
     val inputStream = new DummyInputDStream(ssc)
+    // countByKeyAndWindow internally uses reduceByKeyAndWindow, but only countByKeyAndWindow
+    // should appear in scope
     val countStream = inputStream.countByWindow(Seconds(10), Seconds(1))
     countStream.initialize(Time(0))
 
@@ -137,6 +149,57 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
     testStream(countStream)
   }
 
+  test("transform should allow RDD operations to be captured in scopes") {
+    val inputStream = new DummyInputDStream(ssc)
+    val transformedStream = inputStream.transform { _.map { _ -> 1}.reduceByKey(_ + _) }
+    transformedStream.initialize(Time(0))
+
+    val transformScopeBase = transformedStream.baseScope.map(RDDOperationScope.fromJson)
+    val transformScope1 = transformedStream.getOrCompute(Time(1000)).get.scope
+    val transformScope2 = transformedStream.getOrCompute(Time(2000)).get.scope
+    val transformScope3 = transformedStream.getOrCompute(Time(3000)).get.scope
+
+    // Assert that all children RDDs inherit the DStream operation name correctly
+    assertDefined(transformScopeBase, transformScope1, transformScope2, transformScope3)
+    assert(transformScopeBase.get.name === "transform")
+    assertNestedScopeCorrect(transformScope1.get, 1000)
+    assertNestedScopeCorrect(transformScope2.get, 2000)
+    assertNestedScopeCorrect(transformScope3.get, 3000)
+
+    def assertNestedScopeCorrect(rddScope: RDDOperationScope, batchTime: Long): Unit = {
+      assert(rddScope.name === "reduceByKey")
+      assert(rddScope.parent.isDefined)
+      assertScopeCorrect(transformScopeBase.get, rddScope.parent.get, batchTime)
+    }
+  }
+
+  test("foreachRDD should allow RDD operations to be captured in scope") {
+    val inputStream = new DummyInputDStream(ssc)
+    val generatedRDDs = new ArrayBuffer[RDD[(Int, Int)]]
+    inputStream.foreachRDD { rdd =>
+      generatedRDDs += rdd.map { _ -> 1}.reduceByKey(_ + _)
+    }
+    val batchCounter = new BatchCounter(ssc)
+    ssc.start()
+    val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
+    clock.advance(3000)
+    batchCounter.waitUntilBatchesCompleted(3, 10000)
+    assert(generatedRDDs.size === 3)
+
+    val foreachBaseScope =
+      ssc.graph.getOutputStreams().head.baseScope.map(RDDOperationScope.fromJson)
+    assertDefined(foreachBaseScope)
+    assert(foreachBaseScope.get.name === "foreachRDD")
+
+    val rddScopes = generatedRDDs.map { _.scope }
+    assertDefined(rddScopes: _*)
+    rddScopes.zipWithIndex.foreach { case (rddScope, idx) =>
+      assert(rddScope.get.name === "reduceByKey")
+      assert(rddScope.get.parent.isDefined)
+      assertScopeCorrect(foreachBaseScope.get, rddScope.get.parent.get, (idx + 1) * 1000)
+    }
+  }
+
   /** Assert that the RDD operation scope properties are not set in our SparkContext. */
   private def assertPropertiesNotSet(): Unit = {
     assert(ssc != null)
@@ -149,19 +212,12 @@ class DStreamScopeSuite extends SparkFunSuite with BeforeAndAfter with BeforeAnd
       baseScope: RDDOperationScope,
       rddScope: RDDOperationScope,
       batchTime: Long): Unit = {
-    assertScopeCorrect(baseScope.id, baseScope.name, rddScope, batchTime)
-  }
-
-  /** Assert that the given RDD scope inherits the base name and ID correctly. */
-  private def assertScopeCorrect(
-      baseScopeId: String,
-      baseScopeName: String,
-      rddScope: RDDOperationScope,
-      batchTime: Long): Unit = {
+    val (baseScopeId, baseScopeName) = (baseScope.id, baseScope.name)
     val formattedBatchTime = UIUtils.formatBatchTime(
       batchTime, ssc.graph.batchDuration.milliseconds, showYYYYMMSS = false)
     assert(rddScope.id === s"${baseScopeId}_$batchTime")
     assert(rddScope.name.replaceAll("\\n", " ") === s"$baseScopeName @ $formattedBatchTime")
+    assert(rddScope.parent.isEmpty)  // There should not be any higher scope
   }
 
   /** Assert that all the specified options are defined. */

@@ -26,8 +26,8 @@ private[spark] class CommitDeniedException(
     msg: String,
     jobID: Int,
     splitID: Int,
-    attemptID: Int)
+    attemptNumber: Int)
   extends Exception(msg) {
 
-  def toTaskEndReason: TaskEndReason = TaskCommitDenied(jobID, splitID, attemptID)
+  def toTaskEndReason: TaskEndReason = TaskCommitDenied(jobID, splitID, attemptNumber)
 }

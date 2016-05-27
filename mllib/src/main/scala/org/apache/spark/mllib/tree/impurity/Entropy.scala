@@ -85,7 +85,7 @@ object Entropy extends Impurity {
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param numClasses  Number of classes for label.
  */
-private[tree] class EntropyAggregator(numClasses: Int)
+private[spark] class EntropyAggregator(numClasses: Int)
   extends ImpurityAggregator(numClasses) with Serializable {
 
   /**
@@ -113,7 +113,6 @@ private[tree] class EntropyAggregator(numClasses: Int)
   def getCalculator(allStats: Array[Double], offset: Int): EntropyCalculator = {
     new EntropyCalculator(allStats.view(offset, offset + statsSize).toArray)
   }
-
 }
 
 /**

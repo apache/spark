@@ -26,7 +26,9 @@ import org.apache.spark.annotation.{Experimental, Since}
 @Since("1.0.0")
 @Experimental
 object Algo extends Enumeration {
+  @Since("1.0.0")
   type Algo = Value
+  @Since("1.0.0")
   val Classification, Regression = Value
 
   private[mllib] def fromString(name: String): Algo = name match {

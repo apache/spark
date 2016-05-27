@@ -18,16 +18,17 @@
 package org.apache.spark.storage
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rdd.{RDDOperationScope, RDD}
+import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.util.Utils
 
 @DeveloperApi
 class RDDInfo(
     val id: Int,
-    val name: String,
+    var name: String,
     val numPartitions: Int,
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],
+    val callSite: String = "",
     val scope: Option[RDDOperationScope] = None)
   extends Ordered[RDDInfo] {
 
@@ -36,15 +37,14 @@ class RDDInfo(
   var diskSize = 0L
   var externalBlockStoreSize = 0L
 
-  def isCached: Boolean =
-    (memSize + diskSize + externalBlockStoreSize > 0) && numCachedPartitions > 0
+  def isCached: Boolean = (memSize + diskSize > 0) && numCachedPartitions > 0
 
   override def toString: String = {
     import Utils.bytesToString
     ("RDD \"%s\" (%d) StorageLevel: %s; CachedPartitions: %d; TotalPartitions: %d; " +
-      "MemorySize: %s; ExternalBlockStoreSize: %s; DiskSize: %s").format(
+      "MemorySize: %s; DiskSize: %s").format(
         name, id, storageLevel.toString, numCachedPartitions, numPartitions,
-        bytesToString(memSize), bytesToString(externalBlockStoreSize), bytesToString(diskSize))
+        bytesToString(memSize), bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo): Int = {
@@ -56,6 +56,7 @@ private[spark] object RDDInfo {
   def fromRdd(rdd: RDD[_]): RDDInfo = {
     val rddName = Option(rdd.name).getOrElse(Utils.getFormattedClassName(rdd))
     val parentIds = rdd.dependencies.map(_.rdd.id)
-    new RDDInfo(rdd.id, rddName, rdd.partitions.length, rdd.getStorageLevel, parentIds, rdd.scope)
+    new RDDInfo(rdd.id, rddName, rdd.partitions.length,
+      rdd.getStorageLevel, parentIds, rdd.creationSite.shortForm, rdd.scope)
   }
 }

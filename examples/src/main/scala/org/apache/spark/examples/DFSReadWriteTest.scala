@@ -22,20 +22,19 @@ import java.io.File
 
 import scala.io.Source._
 
-import org.apache.spark.{SparkContext, SparkConf}
-import org.apache.spark.SparkContext._
+import org.apache.spark.sql.SparkSession
 
 /**
-  * Simple test for reading and writing to a distributed
-  * file system.  This example does the following:
-  *
-  *   1. Reads local file
-  *   2. Computes word count on local file
-  *   3. Writes local file to a DFS
-  *   4. Reads the file back from the DFS
-  *   5. Computes word count on the file using Spark
-  *   6. Compares the word count results
-  */
+ * Simple test for reading and writing to a distributed
+ * file system.  This example does the following:
+ *
+ *   1. Reads local file
+ *   2. Computes word count on local file
+ *   3. Writes local file to a DFS
+ *   4. Reads the file back from the DFS
+ *   5. Computes word count on the file using Spark
+ *   6. Compares the word count results
+ */
 object DFSReadWriteTest {
 
   private var localFilePath: File = new File(".")
@@ -88,7 +87,7 @@ object DFSReadWriteTest {
   def runLocalWordCount(fileContents: List[String]): Int = {
     fileContents.flatMap(_.split(" "))
       .flatMap(_.split("\t"))
-      .filter(_.size > 0)
+      .filter(_.nonEmpty)
       .groupBy(w => w)
       .mapValues(_.size)
       .values
@@ -102,11 +101,14 @@ object DFSReadWriteTest {
     val fileContents = readFile(localFilePath.toString())
     val localWordCount = runLocalWordCount(fileContents)
 
-    println("Creating SparkConf")
-    val conf = new SparkConf().setAppName("DFS Read Write Test")
+    println("Creating SparkSession")
+    val spark = SparkSession
+      .builder
+      .appName("DFS Read Write Test")
+      .getOrCreate()
 
     println("Creating SparkContext")
-    val sc = new SparkContext(conf)
+    val sc = spark.sparkContext
 
     println("Writing local file to DFS")
     val dfsFilename = dfsDirPath + "/dfs_read_write_test"
@@ -119,13 +121,13 @@ object DFSReadWriteTest {
     val dfsWordCount = readFileRDD
       .flatMap(_.split(" "))
       .flatMap(_.split("\t"))
-      .filter(_.size > 0)
+      .filter(_.nonEmpty)
       .map(w => (w, 1))
       .countByKey()
       .values
       .sum
 
-    sc.stop()
+    spark.stop()
 
     if (localWordCount == dfsWordCount) {
       println(s"Success! Local Word Count ($localWordCount) " +

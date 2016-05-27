@@ -18,7 +18,6 @@
 package org.apache.spark.sql
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.execution.SparkSqlSerializer
 import org.apache.spark.sql.catalyst.expressions.{GenericMutableRow, SpecificMutableRow}
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -55,15 +54,6 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
     assert(row.isNullAt(0))
   }
 
-  test("serialize w/ kryo") {
-    val row = Seq((1, Seq(1), Map(1 -> 1), BigDecimal(1))).toDF().first()
-    val serializer = new SparkSqlSerializer(ctx.sparkContext.getConf)
-    val instance = serializer.newInstance()
-    val ser = instance.serialize(row)
-    val de = instance.deserialize(ser).asInstanceOf[Row]
-    assert(de === row)
-  }
-
   test("get values by field name on Row created via .toDF") {
     val row = Seq((1, Seq(1))).toDF("a", "b").first()
     assert(row.getAs[Int]("a") === 1)
@@ -84,5 +74,14 @@ class RowSuite extends SparkFunSuite with SharedSQLContext {
     val r1 = Row(Double.NaN)
     val r2 = Row(Double.NaN)
     assert(r1 === r2)
+  }
+
+  test("equals and hashCode") {
+    val r1 = Row("Hello")
+    val r2 = Row("Hello")
+    assert(r1 === r2)
+    assert(r1.hashCode() === r2.hashCode())
+    val r3 = Row("World")
+    assert(r3.hashCode() != r1.hashCode())
   }
 }

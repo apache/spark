@@ -18,42 +18,25 @@
 package org.apache.spark.ml.feature;
 
 import java.io.Serializable;
+import java.util.Arrays;
 import java.util.List;
 
 import scala.Tuple2;
 
-import com.google.common.collect.Lists;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
-import org.apache.spark.api.java.function.Function;
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.api.java.function.Function;
+import org.apache.spark.ml.linalg.Vector;
+import org.apache.spark.ml.linalg.Vectors;
 import org.apache.spark.mllib.linalg.Matrix;
-import org.apache.spark.mllib.linalg.Vector;
-import org.apache.spark.mllib.linalg.Vectors;
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.mllib.linalg.distributed.RowMatrix;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
 
-public class JavaPCASuite implements Serializable {
-  private transient JavaSparkContext jsc;
-  private transient SQLContext sqlContext;
-
-  @Before
-  public void setUp() {
-    jsc = new JavaSparkContext("local", "JavaPCASuite");
-    sqlContext = new SQLContext(jsc);
-  }
-
-  @After
-  public void tearDown() {
-    jsc.stop();
-    jsc = null;
-  }
+public class JavaPCASuite extends SharedSparkSession {
 
   public static class VectorPair implements Serializable {
     private Vector features = Vectors.dense(0.0);
@@ -78,16 +61,32 @@ public class JavaPCASuite implements Serializable {
 
   @Test
   public void testPCA() {
-    List<Vector> points = Lists.newArrayList(
+    List<Vector> points = Arrays.asList(
       Vectors.sparse(5, new int[]{1, 3}, new double[]{1.0, 7.0}),
       Vectors.dense(2.0, 0.0, 3.0, 4.0, 5.0),
       Vectors.dense(4.0, 0.0, 0.0, 6.0, 7.0)
     );
     JavaRDD<Vector> dataRDD = jsc.parallelize(points, 2);
 
-    RowMatrix mat = new RowMatrix(dataRDD.rdd());
+    RowMatrix mat = new RowMatrix(dataRDD.map(
+            new Function<Vector, org.apache.spark.mllib.linalg.Vector>() {
+              public org.apache.spark.mllib.linalg.Vector call(Vector vector) {
+                return new org.apache.spark.mllib.linalg.DenseVector(vector.toArray());
+              }
+            }
+    ).rdd());
+
     Matrix pc = mat.computePrincipalComponents(3);
-    JavaRDD<Vector> expected = mat.multiply(pc).rows().toJavaRDD();
+
+    mat.multiply(pc).rows().toJavaRDD();
+
+    JavaRDD<Vector> expected = mat.multiply(pc).rows().toJavaRDD().map(
+      new Function<org.apache.spark.mllib.linalg.Vector, Vector>() {
+        public Vector call(org.apache.spark.mllib.linalg.Vector vector) {
+          return vector.asML();
+        }
+      }
+    );
 
     JavaRDD<VectorPair> featuresExpected = dataRDD.zip(expected).map(
       new Function<Tuple2<Vector, Vector>, VectorPair>() {
@@ -100,7 +99,7 @@ public class JavaPCASuite implements Serializable {
       }
     );
 
-    DataFrame df = sqlContext.createDataFrame(featuresExpected, VectorPair.class);
+    Dataset<Row> df = spark.createDataFrame(featuresExpected, VectorPair.class);
     PCAModel pca = new PCA()
       .setInputCol("features")
       .setOutputCol("pca_features")

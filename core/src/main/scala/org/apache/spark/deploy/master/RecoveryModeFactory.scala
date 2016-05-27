@@ -17,8 +17,9 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.SparkConf
 import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.Serializer
 
 /**

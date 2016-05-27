@@ -17,35 +17,42 @@
 
 package org.apache.spark.sql.test
 
-import org.apache.spark.sql.{ColumnName, SQLContext}
+import org.apache.spark.SparkConf
+import org.apache.spark.sql.{SparkSession, SQLContext}
 
 
 /**
- * Helper trait for SQL test suites where all tests share a single [[TestSQLContext]].
+ * Helper trait for SQL test suites where all tests share a single [[TestSparkSession]].
  */
-private[sql] trait SharedSQLContext extends SQLTestUtils {
+trait SharedSQLContext extends SQLTestUtils {
+
+  protected val sparkConf = new SparkConf()
 
   /**
-   * The [[TestSQLContext]] to use for all tests in this suite.
+   * The [[TestSparkSession]] to use for all tests in this suite.
    *
    * By default, the underlying [[org.apache.spark.SparkContext]] will be run in local
    * mode with the default test configurations.
    */
-  private var _ctx: TestSQLContext = null
+  private var _spark: TestSparkSession = null
+
+  /**
+   * The [[TestSparkSession]] to use for all tests in this suite.
+   */
+  protected implicit def spark: SparkSession = _spark
 
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected def ctx: TestSQLContext = _ctx
-  protected def sqlContext: TestSQLContext = _ctx
-  protected override def _sqlContext: SQLContext = _ctx
+  protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   /**
-   * Initialize the [[TestSQLContext]].
+   * Initialize the [[TestSparkSession]].
    */
   protected override def beforeAll(): Unit = {
-    if (_ctx == null) {
-      _ctx = new TestSQLContext
+    SparkSession.sqlListener.set(null)
+    if (_spark == null) {
+      _spark = new TestSparkSession(sparkConf)
     }
     // Ensure we have initialized the context before calling parent code
     super.beforeAll()
@@ -56,23 +63,12 @@ private[sql] trait SharedSQLContext extends SQLTestUtils {
    */
   protected override def afterAll(): Unit = {
     try {
-      if (_ctx != null) {
-        _ctx.sparkContext.stop()
-        _ctx = null
+      if (_spark != null) {
+        _spark.stop()
+        _spark = null
       }
     } finally {
       super.afterAll()
-    }
-  }
-
-  /**
-   * Converts $"col name" into an [[Column]].
-   * @since 1.3.0
-   */
-  // This must be duplicated here to preserve binary compatibility with Spark < 1.5.
-  implicit class StringToColumn(val sc: StringContext) {
-    def $(args: Any*): ColumnName = {
-      new ColumnName(sc.s(args: _*))
     }
   }
 }

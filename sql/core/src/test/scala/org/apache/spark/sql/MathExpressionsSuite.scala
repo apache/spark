@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import java.nio.charset.StandardCharsets
+
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 import org.apache.spark.sql.test.SharedSQLContext
@@ -37,9 +39,11 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   private lazy val nullDoubles =
     Seq(NullDoubles(1.0), NullDoubles(2.0), NullDoubles(3.0), NullDoubles(null)).toDF()
 
-  private def testOneToOneMathFunction[@specialized(Int, Long, Float, Double) T](
+  private def testOneToOneMathFunction[
+  @specialized(Int, Long, Float, Double) T,
+  @specialized(Int, Long, Float, Double) U](
       c: Column => Column,
-      f: T => T): Unit = {
+      f: T => U): Unit = {
     checkAnswer(
       doubleData.select(c('a)),
       (1 to 10).map(n => Row(f((n * 0.2 - 1).asInstanceOf[T])))
@@ -165,10 +169,10 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("ceil and ceiling") {
-    testOneToOneMathFunction(ceil, math.ceil)
+    testOneToOneMathFunction(ceil, (d: Double) => math.ceil(d).toLong)
     checkAnswer(
       sql("SELECT ceiling(0), ceiling(1), ceiling(1.5)"),
-      Row(0.0, 1.0, 2.0))
+      Row(0L, 1L, 2L))
   }
 
   test("conv") {
@@ -184,7 +188,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("floor") {
-    testOneToOneMathFunction(floor, math.floor)
+    testOneToOneMathFunction(floor, (d: Double) => math.floor(d).toLong)
   }
 
   test("factorial") {
@@ -203,17 +207,27 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     testOneToOneMathFunction(rint, math.rint)
   }
 
-  test("round") {
+  test("round/bround") {
     val df = Seq(5, 55, 555).map(Tuple1(_)).toDF("a")
     checkAnswer(
       df.select(round('a), round('a, -1), round('a, -2)),
       Seq(Row(5, 10, 0), Row(55, 60, 100), Row(555, 560, 600))
     )
+    checkAnswer(
+      df.select(bround('a), bround('a, -1), bround('a, -2)),
+      Seq(Row(5, 0, 0), Row(55, 60, 100), Row(555, 560, 600))
+    )
 
-    val pi = 3.1415
+    val pi = "3.1415"
     checkAnswer(
       sql(s"SELECT round($pi, -3), round($pi, -2), round($pi, -1), " +
         s"round($pi, 0), round($pi, 1), round($pi, 2), round($pi, 3)"),
+      Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
+        BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
+    )
+    checkAnswer(
+      sql(s"SELECT bround($pi, -3), bround($pi, -2), bround($pi, -1), " +
+        s"bround($pi, 0), bround($pi, 1), bround($pi, 2), bround($pi, 3)"),
       Seq(Row(BigDecimal("0E3"), BigDecimal("0E2"), BigDecimal("0E1"), BigDecimal(3),
         BigDecimal("3.1"), BigDecimal("3.14"), BigDecimal("3.142")))
     )
@@ -228,7 +242,7 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   }
 
   test("signum / sign") {
-    testOneToOneMathFunction[Double](signum, math.signum)
+    testOneToOneMathFunction[Double, Double](signum, math.signum)
 
     checkAnswer(
       sql("SELECT sign(10), signum(-11)"),
@@ -260,9 +274,9 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
   test("unhex") {
     val data = Seq(("1C", "737472696E67")).toDF("a", "b")
     checkAnswer(data.select(unhex('a)), Row(Array[Byte](28.toByte)))
-    checkAnswer(data.select(unhex('b)), Row("string".getBytes))
+    checkAnswer(data.select(unhex('b)), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("unhex(a)"), Row(Array[Byte](28.toByte)))
-    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes))
+    checkAnswer(data.selectExpr("unhex(b)"), Row("string".getBytes(StandardCharsets.UTF_8)))
     checkAnswer(data.selectExpr("""unhex("##")"""), Row(null))
     checkAnswer(data.selectExpr("""unhex("G123")"""), Row(null))
   }
@@ -365,6 +379,16 @@ class MathExpressionsSuite extends QueryTest with SharedSQLContext {
     checkAnswer(
       input.toDF("key", "value").selectExpr("abs(key) a").sort("a"),
       input.map(pair => Row(pair._2)))
+
+    checkAnswer(
+      sql("select abs(0), abs(-1), abs(123), abs(-9223372036854775807), abs(9223372036854775807)"),
+      Row(0, 1, 123, 9223372036854775807L, 9223372036854775807L)
+    )
+
+    checkAnswer(
+      sql("select abs(0.0), abs(-3.14159265), abs(3.14159265)"),
+      Row(BigDecimal("0.0"), BigDecimal("3.14159265"), BigDecimal("3.14159265"))
+    )
   }
 
   test("log2") {

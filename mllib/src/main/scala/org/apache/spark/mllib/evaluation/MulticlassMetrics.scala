@@ -19,8 +19,7 @@ package org.apache.spark.mllib.evaluation
 
 import scala.collection.Map
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.annotation.{Experimental, Since}
+import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.linalg.{Matrices, Matrix}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
@@ -32,15 +31,14 @@ import org.apache.spark.sql.DataFrame
  * @param predictionAndLabels an RDD of (prediction, label) pairs.
  */
 @Since("1.1.0")
-@Experimental
-class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
+class MulticlassMetrics @Since("1.1.0") (predictionAndLabels: RDD[(Double, Double)]) {
 
   /**
    * An auxiliary constructor taking a DataFrame.
    * @param predictionAndLabels a DataFrame with two double columns: prediction and label
    */
   private[mllib] def this(predictionAndLabels: DataFrame) =
-    this(predictionAndLabels.map(r => (r.getDouble(0), r.getDouble(1))))
+    this(predictionAndLabels.rdd.map(r => (r.getDouble(0), r.getDouble(1))))
 
   private lazy val labelCountByClass: Map[Double, Long] = predictionAndLabels.values.countByValue()
   private lazy val labelCount: Long = labelCountByClass.values.sum
@@ -68,7 +66,7 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
    */
   @Since("1.1.0")
   def confusionMatrix: Matrix = {
-    val n = labels.size
+    val n = labels.length
     val values = Array.ofDim[Double](n * n)
     var i = 0
     while (i < n) {
@@ -140,7 +138,9 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns precision
    */
-  lazy val precision: Double = tpByClass.values.sum.toDouble / labelCount
+  @Since("1.1.0")
+  @deprecated("Use accuracy.", "2.0.0")
+  lazy val precision: Double = accuracy
 
   /**
    * Returns recall
@@ -148,23 +148,37 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
    * because sum of all false positives is equal to sum
    * of all false negatives)
    */
-  lazy val recall: Double = precision
+  @Since("1.1.0")
+  @deprecated("Use accuracy.", "2.0.0")
+  lazy val recall: Double = accuracy
 
   /**
    * Returns f-measure
    * (equals to precision and recall because precision equals recall)
    */
-  lazy val fMeasure: Double = precision
+  @Since("1.1.0")
+  @deprecated("Use accuracy.", "2.0.0")
+  lazy val fMeasure: Double = accuracy
+
+  /**
+   * Returns accuracy
+   * (equals to the total number of correctly classified instances
+   * out of the total number of instances.)
+   */
+  @Since("2.0.0")
+  lazy val accuracy: Double = tpByClass.values.sum.toDouble / labelCount
 
   /**
    * Returns weighted true positive rate
    * (equals to precision, recall and f-measure)
    */
+  @Since("1.1.0")
   lazy val weightedTruePositiveRate: Double = weightedRecall
 
   /**
    * Returns weighted false positive rate
    */
+  @Since("1.1.0")
   lazy val weightedFalsePositiveRate: Double = labelCountByClass.map { case (category, count) =>
     falsePositiveRate(category) * count.toDouble / labelCount
   }.sum
@@ -173,6 +187,7 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
    * Returns weighted averaged recall
    * (equals to precision, recall and f-measure)
    */
+  @Since("1.1.0")
   lazy val weightedRecall: Double = labelCountByClass.map { case (category, count) =>
     recall(category) * count.toDouble / labelCount
   }.sum
@@ -180,6 +195,7 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns weighted averaged precision
    */
+  @Since("1.1.0")
   lazy val weightedPrecision: Double = labelCountByClass.map { case (category, count) =>
     precision(category) * count.toDouble / labelCount
   }.sum
@@ -196,6 +212,7 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns weighted averaged f1-measure
    */
+  @Since("1.1.0")
   lazy val weightedFMeasure: Double = labelCountByClass.map { case (category, count) =>
     fMeasure(category, 1.0) * count.toDouble / labelCount
   }.sum
@@ -203,5 +220,6 @@ class MulticlassMetrics(predictionAndLabels: RDD[(Double, Double)]) {
   /**
    * Returns the sequence of labels in ascending order
    */
+  @Since("1.1.0")
   lazy val labels: Array[Double] = tpByClass.keys.toArray.sorted
 }

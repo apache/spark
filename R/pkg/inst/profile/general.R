@@ -17,6 +17,7 @@
 
 .First <- function() {
   packageDir <- Sys.getenv("SPARKR_PACKAGE_DIR")
-  .libPaths(c(packageDir, .libPaths()))
-  Sys.setenv(NOAWT=1)
+  dirs <- strsplit(packageDir, ",")[[1]]
+  .libPaths(c(dirs, .libPaths()))
+  Sys.setenv(NOAWT = 1)
 }

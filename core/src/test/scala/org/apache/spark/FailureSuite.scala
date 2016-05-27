@@ -17,9 +17,10 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.NonSerializable
-
 import java.io.{IOException, NotSerializableException, ObjectInputStream}
+
+import org.apache.spark.memory.TestMemoryConsumer
+import org.apache.spark.util.NonSerializable
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
 // for this because any local variables used in the task closures will rightfully
@@ -149,7 +150,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     // cause is preserved
     val thrownDueToTaskFailure = intercept[SparkException] {
       sc.parallelize(Seq(0)).mapPartitions { iter =>
-        TaskContext.get().taskMemoryManager().allocate(128)
+        val c = new TestMemoryConsumer(TaskContext.get().taskMemoryManager())
+        TaskContext.get().taskMemoryManager().allocatePage(128, c)
         throw new Exception("intentional task failure")
         iter
       }.count()
@@ -159,7 +161,8 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     // If the task succeeded but memory was leaked, then the task should fail due to that leak
     val thrownDueToMemoryLeak = intercept[SparkException] {
       sc.parallelize(Seq(0)).mapPartitions { iter =>
-        TaskContext.get().taskMemoryManager().allocate(128)
+        val c = new TestMemoryConsumer(TaskContext.get().taskMemoryManager())
+        TaskContext.get().taskMemoryManager().allocatePage(128, c)
         iter
       }.count()
     }
@@ -214,6 +217,27 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getCause === null)
     assert(thrown.getMessage.contains("NonDeserializableUserException"))
+    FailureSuiteState.clear()
+  }
+
+  // Run a 3-task map stage where one task fails once.
+  test("failure in tasks in a submitMapStage") {
+    sc = new SparkContext("local[1,2]", "test")
+    val rdd = sc.makeRDD(1 to 3, 3).map { x =>
+      FailureSuiteState.synchronized {
+        FailureSuiteState.tasksRun += 1
+        if (x == 1 && FailureSuiteState.tasksFailed == 0) {
+          FailureSuiteState.tasksFailed += 1
+          throw new Exception("Intentional task failure")
+        }
+      }
+      (x, x)
+    }
+    val dep = new ShuffleDependency[Int, Int, Int](rdd, new HashPartitioner(2))
+    sc.submitMapStage(dep).get()
+    FailureSuiteState.synchronized {
+      assert(FailureSuiteState.tasksRun === 4)
+    }
     FailureSuiteState.clear()
   }
 

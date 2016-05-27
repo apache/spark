@@ -18,7 +18,6 @@
 package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.annotation.DeveloperApi
-import org.apache.spark.rpc.RpcEndpointRef
 
 /**
  * :: DeveloperApi ::
@@ -30,6 +29,7 @@ case class ReceiverInfo(
     name: String,
     active: Boolean,
     location: String,
+    executorId: String,
     lastErrorMessage: String = "",
     lastError: String = "",
     lastErrorTime: Long = -1L

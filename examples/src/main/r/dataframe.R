@@ -24,7 +24,7 @@ sqlContext <- sparkRSQL.init(sc)
 # Create a simple local data.frame
 localDF <- data.frame(name=c("John", "Smith", "Sarah"), age=c(19, 23, 18))
 
-# Convert local data frame to a SparkR DataFrame
+# Convert local data frame to a SparkDataFrame
 df <- createDataFrame(sqlContext, localDF)
 
 # Print its schema
@@ -35,7 +35,7 @@ printSchema(df)
 
 # Create a DataFrame from a JSON file
 path <- file.path(Sys.getenv("SPARK_HOME"), "examples/src/main/resources/people.json")
-peopleDF <- jsonFile(sqlContext, path)
+peopleDF <- read.json(sqlContext, path)
 printSchema(peopleDF)
 
 # Register this DataFrame as a table.

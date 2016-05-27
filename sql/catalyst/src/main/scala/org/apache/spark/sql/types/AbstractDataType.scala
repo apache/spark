@@ -18,8 +18,9 @@
 package org.apache.spark.sql.types
 
 import scala.reflect.ClassTag
-import scala.reflect.runtime.universe.{TypeTag, runtimeMirror}
+import scala.reflect.runtime.universe.{runtimeMirror, TypeTag}
 
+import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.ScalaReflectionLock
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.util.Utils
@@ -84,6 +85,7 @@ private[sql] object TypeCollection {
    * Types that can be ordered/compared. In the long run we should probably make this a trait
    * that can be mixed into each data type, and perhaps create an [[AbstractDataType]].
    */
+  // TODO: Should we consolidate this with RowOrdering.isOrderable?
   val Ordered = TypeCollection(
     BooleanType,
     ByteType, ShortType, IntegerType, LongType,
@@ -126,7 +128,7 @@ protected[sql] object AnyDataType extends AbstractDataType {
  */
 protected[sql] abstract class AtomicType extends DataType {
   private[sql] type InternalType
-  @transient private[sql] val tag: TypeTag[InternalType]
+  private[sql] val tag: TypeTag[InternalType]
   private[sql] val ordering: Ordering[InternalType]
 
   @transient private[sql] val classTag = ScalaReflectionLock.synchronized {
@@ -140,6 +142,7 @@ protected[sql] abstract class AtomicType extends DataType {
  * :: DeveloperApi ::
  * Numeric data types.
  */
+@DeveloperApi
 abstract class NumericType extends AtomicType {
   // Unfortunately we can't get this implicitly as that breaks Spark Serialization. In order for
   // implicitly[Numeric[JvmType]] to be valid, we have to change JvmType from a type variable to a

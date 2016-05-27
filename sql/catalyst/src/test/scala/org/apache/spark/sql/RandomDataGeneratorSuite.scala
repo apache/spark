@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.types._
@@ -32,13 +34,13 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
    */
   def testRandomDataGeneration(dataType: DataType, nullable: Boolean = true): Unit = {
     val toCatalyst = CatalystTypeConverters.createToCatalystConverter(dataType)
-    val generator = RandomDataGenerator.forType(dataType, nullable, Some(33)).getOrElse {
+    val generator = RandomDataGenerator.forType(dataType, nullable, new Random(33)).getOrElse {
       fail(s"Random data generator was not defined for $dataType")
     }
     if (nullable) {
       assert(Iterator.fill(100)(generator()).contains(null))
     } else {
-      assert(Iterator.fill(100)(generator()).forall(_ != null))
+      assert(!Iterator.fill(100)(generator()).contains(null))
     }
     for (_ <- 1 to 10) {
       val generatedValue = generator()
@@ -93,4 +95,15 @@ class RandomDataGeneratorSuite extends SparkFunSuite {
     }
   }
 
+  test("check size of generated map") {
+    val mapType = MapType(IntegerType, IntegerType)
+    for (seed <- 1 to 1000) {
+      val generator = RandomDataGenerator.forType(
+        mapType, nullable = false, rand = new Random(seed)).get
+      val maps = Seq.fill(100)(generator().asInstanceOf[Map[Int, Int]])
+      val expectedTotalElements = 100 / 2 * RandomDataGenerator.MAX_MAP_SIZE
+      val deviation = math.abs(maps.map(_.size).sum - expectedTotalElements)
+      assert(deviation.toDouble / expectedTotalElements < 2e-1)
+    }
+  }
 }

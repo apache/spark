@@ -41,28 +41,28 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   test("use at-least minimum overhead") {
     val f = fixture
     when(f.sc.executorMemory).thenReturn(512)
-    utils.calculateTotalMemory(f.sc) shouldBe 896
+    utils.executorMemory(f.sc) shouldBe 896
   }
 
   test("use overhead if it is greater than minimum value") {
     val f = fixture
     when(f.sc.executorMemory).thenReturn(4096)
-    utils.calculateTotalMemory(f.sc) shouldBe 4505
+    utils.executorMemory(f.sc) shouldBe 4505
   }
 
   test("use spark.mesos.executor.memoryOverhead (if set)") {
     val f = fixture
     when(f.sc.executorMemory).thenReturn(1024)
     f.sparkConf.set("spark.mesos.executor.memoryOverhead", "512")
-    utils.calculateTotalMemory(f.sc) shouldBe 1536
+    utils.executorMemory(f.sc) shouldBe 1536
   }
 
   test("parse a non-empty constraint string correctly") {
     val expectedMap = Map(
-      "tachyon" -> Set("true"),
+      "os" -> Set("centos7"),
       "zone" -> Set("us-east-1a", "us-east-1b")
     )
-    utils.parseConstraintString("tachyon:true;zone:us-east-1a,us-east-1b") should be (expectedMap)
+    utils.parseConstraintString("os:centos7;zone:us-east-1a,us-east-1b") should be (expectedMap)
   }
 
   test("parse an empty constraint string correctly") {
@@ -71,35 +71,35 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
 
   test("throw an exception when the input is malformed") {
     an[IllegalArgumentException] should be thrownBy
-      utils.parseConstraintString("tachyon;zone:us-east")
+      utils.parseConstraintString("os;zone:us-east")
   }
 
   test("empty values for attributes' constraints matches all values") {
-    val constraintsStr = "tachyon:"
+    val constraintsStr = "os:"
     val parsedConstraints = utils.parseConstraintString(constraintsStr)
 
-    parsedConstraints shouldBe Map("tachyon" -> Set())
+    parsedConstraints shouldBe Map("os" -> Set())
 
     val zoneSet = Value.Set.newBuilder().addItem("us-east-1a").addItem("us-east-1b").build()
-    val noTachyonOffer = Map("zone" -> zoneSet)
-    val tachyonTrueOffer = Map("tachyon" -> Value.Text.newBuilder().setValue("true").build())
-    val tachyonFalseOffer = Map("tachyon" -> Value.Text.newBuilder().setValue("false").build())
+    val noOsOffer = Map("zone" -> zoneSet)
+    val centosOffer = Map("os" -> Value.Text.newBuilder().setValue("centos").build())
+    val ubuntuOffer = Map("os" -> Value.Text.newBuilder().setValue("ubuntu").build())
 
-    utils.matchesAttributeRequirements(parsedConstraints, noTachyonOffer) shouldBe false
-    utils.matchesAttributeRequirements(parsedConstraints, tachyonTrueOffer) shouldBe true
-    utils.matchesAttributeRequirements(parsedConstraints, tachyonFalseOffer) shouldBe true
+    utils.matchesAttributeRequirements(parsedConstraints, noOsOffer) shouldBe false
+    utils.matchesAttributeRequirements(parsedConstraints, centosOffer) shouldBe true
+    utils.matchesAttributeRequirements(parsedConstraints, ubuntuOffer) shouldBe true
   }
 
   test("subset match is performed for set attributes") {
     val supersetConstraint = Map(
-      "tachyon" -> Value.Text.newBuilder().setValue("true").build(),
+      "os" -> Value.Text.newBuilder().setValue("ubuntu").build(),
       "zone" -> Value.Set.newBuilder()
         .addItem("us-east-1a")
         .addItem("us-east-1b")
         .addItem("us-east-1c")
         .build())
 
-    val zoneConstraintStr = "tachyon:;zone:us-east-1a,us-east-1c"
+    val zoneConstraintStr = "os:;zone:us-east-1a,us-east-1c"
     val parsedConstraints = utils.parseConstraintString(zoneConstraintStr)
 
     utils.matchesAttributeRequirements(parsedConstraints, supersetConstraint) shouldBe true
@@ -131,10 +131,10 @@ class MesosSchedulerUtilsSuite extends SparkFunSuite with Matchers with MockitoS
   }
 
   test("equality match is performed for text attributes") {
-    val offerAttribs = Map("tachyon" -> Value.Text.newBuilder().setValue("true").build())
+    val offerAttribs = Map("os" -> Value.Text.newBuilder().setValue("centos7").build())
 
-    val trueConstraint = utils.parseConstraintString("tachyon:true")
-    val falseConstraint = utils.parseConstraintString("tachyon:false")
+    val trueConstraint = utils.parseConstraintString("os:centos7")
+    val falseConstraint = utils.parseConstraintString("os:ubuntu")
 
     utils.matchesAttributeRequirements(trueConstraint, offerAttribs) shouldBe true
     utils.matchesAttributeRequirements(falseConstraint, offerAttribs) shouldBe false

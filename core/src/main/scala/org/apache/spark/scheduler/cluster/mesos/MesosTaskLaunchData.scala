@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 
 import org.apache.mesos.protobuf.ByteString
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 /**
  * Wrapper for serializing the data sent when launching Mesos tasks.

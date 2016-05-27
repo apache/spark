@@ -98,9 +98,16 @@ class StreamingKMeansSuite extends SparkFunSuite with TestSuiteBase {
     runStreams(ssc, numBatches, numBatches)
 
     // check that estimated centers are close to true centers
-    // NOTE exact assignment depends on the initialization!
-    assert(centers(0) ~== kMeans.latestModel().clusterCenters(0) absTol 1E-1)
-    assert(centers(1) ~== kMeans.latestModel().clusterCenters(1) absTol 1E-1)
+    // cluster ordering is arbitrary, so choose closest cluster
+    val d0 = Vectors.sqdist(kMeans.latestModel().clusterCenters(0), centers(0))
+    val d1 = Vectors.sqdist(kMeans.latestModel().clusterCenters(0), centers(1))
+    val (c0, c1) = if (d0 < d1) {
+      (centers(0), centers(1))
+    } else {
+      (centers(1), centers(0))
+    }
+    assert(c0 ~== kMeans.latestModel().clusterCenters(0) absTol 1E-1)
+    assert(c1 ~== kMeans.latestModel().clusterCenters(1) absTol 1E-1)
   }
 
   test("detecting dying clusters") {

@@ -17,12 +17,13 @@
 
 package org.apache.spark.sql.hive.client
 
-import scala.collection.JavaConversions._
+import java.util.Collections
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema
 import org.apache.hadoop.hive.serde.serdeConstants
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types._
@@ -38,7 +39,7 @@ class FiltersSuite extends SparkFunSuite with Logging {
   private val varCharCol = new FieldSchema()
   varCharCol.setName("varchar")
   varCharCol.setType(serdeConstants.VARCHAR_TYPE_NAME)
-  testTable.setPartCols(varCharCol :: Nil)
+  testTable.setPartCols(Collections.singletonList(varCharCol))
 
   filterTest("string filter",
     (a("stringcol", StringType) > Literal("test")) :: Nil,
@@ -65,7 +66,7 @@ class FiltersSuite extends SparkFunSuite with Logging {
     "")
 
   private def filterTest(name: String, filters: Seq[Expression], result: String) = {
-    test(name){
+    test(name) {
       val converted = shim.convertFilters(testTable, filters)
       if (converted != result) {
         fail(

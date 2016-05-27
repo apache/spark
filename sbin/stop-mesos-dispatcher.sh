@@ -18,10 +18,16 @@
 #
 # Stop the Mesos Cluster dispatcher on the machine this script is executed on.
 
-sbin=`dirname "$0"`
-sbin=`cd "$sbin"; pwd`
+if [ -z "${SPARK_HOME}" ]; then
+  export SPARK_HOME="$(cd "`dirname "$0"`"/..; pwd)"
+fi
 
-. "$sbin/spark-config.sh"
+. "${SPARK_HOME}/sbin/spark-config.sh"
 
-"$sbin"/spark-daemon.sh stop org.apache.spark.deploy.mesos.MesosClusterDispatcher 1
+if [ "$SPARK_MESOS_DISPATCHER_NUM" = "" ]; then
+  SPARK_MESOS_DISPATCHER_NUM=1
+fi
+
+"${SPARK_HOME}/sbin"/spark-daemon.sh stop org.apache.spark.deploy.mesos.MesosClusterDispatcher \
+    $SPARK_MESOS_DISPATCHER_NUM
 

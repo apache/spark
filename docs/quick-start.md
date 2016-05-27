@@ -33,7 +33,7 @@ Spark's primary abstraction is a distributed collection of items called a Resili
 
 {% highlight scala %}
 scala> val textFile = sc.textFile("README.md")
-textFile: spark.RDD[String] = spark.MappedRDD@2ee9b6e3
+textFile: org.apache.spark.rdd.RDD[String] = README.md MapPartitionsRDD[1] at textFile at <console>:25
 {% endhighlight %}
 
 RDDs have _[actions](programming-guide.html#actions)_, which return values, and _[transformations](programming-guide.html#transformations)_, which return pointers to new RDDs. Let's start with a few actions:
@@ -50,7 +50,7 @@ Now let's use a transformation. We will use the [`filter`](programming-guide.htm
 
 {% highlight scala %}
 scala> val linesWithSpark = textFile.filter(line => line.contains("Spark"))
-linesWithSpark: spark.RDD[String] = spark.FilteredRDD@7dd4af09
+linesWithSpark: org.apache.spark.rdd.RDD[String] = MapPartitionsRDD[2] at filter at <console>:27
 {% endhighlight %}
 
 We can chain together transformations and actions:
@@ -123,10 +123,10 @@ One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can i
 
 {% highlight scala %}
 scala> val wordCounts = textFile.flatMap(line => line.split(" ")).map(word => (word, 1)).reduceByKey((a, b) => a + b)
-wordCounts: spark.RDD[(String, Int)] = spark.ShuffledAggregatedRDD@71f027b8
+wordCounts: org.apache.spark.rdd.RDD[(String, Int)] = ShuffledRDD[8] at reduceByKey at <console>:28
 {% endhighlight %}
 
-Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
+Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations), and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (String, Int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
 
 {% highlight scala %}
 scala> wordCounts.collect()
@@ -163,7 +163,7 @@ One common data flow pattern is MapReduce, as popularized by Hadoop. Spark can i
 >>> wordCounts = textFile.flatMap(lambda line: line.split()).map(lambda word: (word, 1)).reduceByKey(lambda a, b: a+b)
 {% endhighlight %}
 
-Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations) and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
+Here, we combined the [`flatMap`](programming-guide.html#transformations), [`map`](programming-guide.html#transformations), and [`reduceByKey`](programming-guide.html#transformations) transformations to compute the per-word counts in the file as an RDD of (string, int) pairs. To collect the word counts in our shell, we can use the [`collect`](programming-guide.html#actions) action:
 
 {% highlight python %}
 >>> wordCounts.collect()
@@ -181,7 +181,7 @@ Spark also supports pulling data sets into a cluster-wide in-memory cache. This 
 
 {% highlight scala %}
 scala> linesWithSpark.cache()
-res7: spark.RDD[String] = spark.FilteredRDD@17e51082
+res7: linesWithSpark.type = MapPartitionsRDD[2] at filter at <console>:27
 
 scala> linesWithSpark.count()
 res8: Long = 19
@@ -217,13 +217,13 @@ a cluster, as described in the [programming guide](programming-guide.html#initia
 </div>
 
 # Self-Contained Applications
-Now say we wanted to write a self-contained application using the Spark API. We will walk through a
-simple application in both Scala (with SBT), Java (with Maven), and Python.
+Suppose we wish to write a self-contained application using the Spark API. We will walk through a
+simple application in Scala (with sbt), Java (with Maven), and Python.
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
 
-We'll create a very simple Spark application in Scala. So simple, in fact, that it's
+We'll create a very simple Spark application in Scala--so simple, in fact, that it's
 named `SimpleApp.scala`:
 
 {% highlight scala %}
@@ -259,7 +259,7 @@ object which contains information about our
 application. 
 
 Our application depends on the Spark API, so we'll also include an sbt configuration file, 
-`simple.sbt` which explains that Spark is a dependency. This file also adds a repository that 
+`simple.sbt`, which explains that Spark is a dependency. This file also adds a repository that 
 Spark depends on:
 
 {% highlight scala %}
@@ -302,7 +302,7 @@ Lines with a: 46, Lines with b: 23
 
 </div>
 <div data-lang="java" markdown="1">
-This example will use Maven to compile an application jar, but any similar build system will work.
+This example will use Maven to compile an application JAR, but any similar build system will work.
 
 We'll create a very simple Spark application, `SimpleApp.java`:
 
@@ -374,7 +374,7 @@ $ find .
 Now, we can package the application using Maven and execute it with `./bin/spark-submit`.
 
 {% highlight bash %}
-# Package a jar containing your application
+# Package a JAR containing your application
 $ mvn package
 ...
 [INFO] Building jar: {..}/{..}/target/simple-project-1.0.jar

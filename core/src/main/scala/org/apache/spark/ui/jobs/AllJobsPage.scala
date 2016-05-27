@@ -17,15 +17,17 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{HashMap, ListBuffer}
-import scala.xml.{Node, NodeSeq, Unparsed, Utility}
-
 import java.util.Date
 import javax.servlet.http.HttpServletRequest
 
+import scala.collection.mutable.{HashMap, ListBuffer}
+import scala.xml._
+
+import org.apache.commons.lang3.StringEscapeUtils
+
+import org.apache.spark.JobExecutionStatus
 import org.apache.spark.ui.{ToolTips, UIUtils, WebUIPage}
 import org.apache.spark.ui.jobs.UIData.{ExecutorUIData, JobUIData}
-import org.apache.spark.JobExecutionStatus
 
 /** Page showing list of all ongoing and recently finished jobs */
 private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
@@ -71,7 +73,12 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val jobId = jobUIData.jobId
       val status = jobUIData.status
       val (jobName, jobDescription) = getLastStageNameAndDescription(jobUIData)
-      val displayJobDescription = if (jobDescription.isEmpty) jobName else jobDescription
+      val displayJobDescription =
+        if (jobDescription.isEmpty) {
+          jobName
+        } else {
+          UIUtils.makeDescription(jobDescription, "", plainText = true).text
+        }
       val submissionTime = jobUIData.submissionTime.get
       val completionTimeOpt = jobUIData.completionTime
       val completionTime = completionTimeOpt.getOrElse(System.currentTimeMillis())
@@ -82,9 +89,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         case JobExecutionStatus.UNKNOWN => "unknown"
       }
 
-      // The timeline library treats contents as HTML, so we have to escape them; for the
-      // data-title attribute string we have to escape them twice since that's in a string.
+      // The timeline library treats contents as HTML, so we have to escape them. We need to add
+      // extra layers of escaping in order to embed this in a Javascript string literal.
       val escapedDesc = Utility.escape(displayJobDescription)
+      val jsEscapedDesc = StringEscapeUtils.escapeEcmaScript(escapedDesc)
       val jobEventJsonAsStr =
         s"""
            |{
@@ -94,7 +102,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
            |  'end': new Date(${completionTime}),
            |  'content': '<div class="application-timeline-content"' +
            |     'data-html="true" data-placement="top" data-toggle="tooltip"' +
-           |     'data-title="${Utility.escape(escapedDesc)} (Job ${jobId})<br>' +
+           |     'data-title="${jsEscapedDesc} (Job ${jobId})<br>' +
            |     'Status: ${status}<br>' +
            |     'Submitted: ${UIUtils.formatDate(new Date(submissionTime))}' +
            |     '${
@@ -104,7 +112,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                        ""
                      }
                   }">' +
-           |    '${escapedDesc} (Job ${jobId})</div>'
+           |    '${jsEscapedDesc} (Job ${jobId})</div>'
            |}
          """.stripMargin
       jobEventJsonAsStr
@@ -143,7 +151,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
                |    'Removed at ${UIUtils.formatDate(new Date(event.finishTime.get))}' +
                |    '${
                         if (event.finishReason.isDefined) {
-                          s"""<br>Reason: ${event.finishReason.get}"""
+                          s"""<br>Reason: ${event.finishReason.get.replace("\n", " ")}"""
                         } else {
                           ""
                         }
@@ -198,7 +206,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     </div> ++
     <script type="text/javascript">
       {Unparsed(s"drawApplicationTimeline(${groupJsonArrayAsStr}," +
-      s"${eventArrayAsStr}, ${startTime});")}
+      s"${eventArrayAsStr}, ${startTime}, ${UIUtils.getTimeZoneOffset()});")}
     </script>
   }
 
@@ -224,14 +232,17 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       }
       val formattedDuration = duration.map(d => UIUtils.formatDuration(d)).getOrElse("Unknown")
       val formattedSubmissionTime = job.submissionTime.map(UIUtils.formatDate).getOrElse("Unknown")
-      val detailUrl =
-        "%s/jobs/job?id=%s".format(UIUtils.prependBaseUri(parent.basePath), job.jobId)
+      val basePathUri = UIUtils.prependBaseUri(parent.basePath)
+      val jobDescription =
+        UIUtils.makeDescription(lastStageDescription, basePathUri, plainText = false)
+
+      val detailUrl = "%s/jobs/job?id=%s".format(basePathUri, job.jobId)
       <tr id={"job-" + job.jobId}>
         <td sorttable_customkey={job.jobId.toString}>
           {job.jobId} {job.jobGroup.map(id => s"($id)").getOrElse("")}
         </td>
         <td>
-          <span class="description-input" title={lastStageDescription}>{lastStageDescription}</span>
+          {jobDescription}
           <a href={detailUrl} class="name-link">{lastStageName}</a>
         </td>
         <td sorttable_customkey={job.submissionTime.getOrElse(-1).toString}>
@@ -263,6 +274,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     val listener = parent.jobProgresslistener
     listener.synchronized {
       val startTime = listener.startTime
+      val endTime = listener.endTime
       val activeJobs = listener.activeJobs.values.toSeq
       val completedJobs = listener.completedJobs.reverse.toSeq
       val failedJobs = listener.failedJobs.reverse.toSeq
@@ -287,13 +299,20 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       val summary: NodeSeq =
         <div>
           <ul class="unstyled">
-            {if (parent.sc.isDefined) {
-              // Total duration is not meaningful unless the UI is live
-              <li>
-                <strong>Total Uptime: </strong>
-                {UIUtils.formatDuration(System.currentTimeMillis() - startTime)}
-              </li>
-            }}
+            <li>
+              <strong>User:</strong>
+              {parent.getSparkUser}
+            </li>
+            <li>
+              <strong>Total Uptime:</strong>
+              {
+                if (endTime < 0 && parent.sc.isDefined) {
+                  UIUtils.formatDuration(System.currentTimeMillis() - startTime)
+                } else if (endTime > 0) {
+                  UIUtils.formatDuration(endTime - startTime)
+                }
+              }
+            </li>
             <li>
               <strong>Scheduling Mode: </strong>
               {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}

@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 
 class ImplicitOrderingSuite extends SparkFunSuite with LocalSparkContext {
   // Tests that PairRDDFunctions grabs an implicit Ordering in various cases where it should.
-  test("basic inference of Orderings"){
+  test("basic inference of Orderings") {
     sc = new SparkContext("local", "test")
     val rdd = sc.parallelize(1 to 10)
 

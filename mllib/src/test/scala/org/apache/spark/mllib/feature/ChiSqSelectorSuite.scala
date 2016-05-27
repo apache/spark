@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.util.Utils
 
 class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -62,5 +63,30 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
       LabeledPoint(lp.label, model.transform(lp.features))
     }.collect().toSet
     assert(filteredData == preFilteredData)
+  }
+
+  test("model load / save") {
+    val model = ChiSqSelectorSuite.createModel()
+    val tempDir = Utils.createTempDir()
+    val path = tempDir.toURI.toString
+    try {
+      model.save(sc, path)
+      val sameModel = ChiSqSelectorModel.load(sc, path)
+      ChiSqSelectorSuite.checkEqual(model, sameModel)
+    } finally {
+      Utils.deleteRecursively(tempDir)
+    }
+  }
+}
+
+object ChiSqSelectorSuite extends SparkFunSuite {
+
+  def createModel(): ChiSqSelectorModel = {
+    val arr = Array(1, 2, 3, 4)
+    new ChiSqSelectorModel(arr)
+  }
+
+  def checkEqual(a: ChiSqSelectorModel, b: ChiSqSelectorModel): Unit = {
+    assert(a.selectedFeatures.deep == b.selectedFeatures.deep)
   }
 }
