@@ -46,6 +46,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
+  test("emptyDataset") {
+    val ds = spark.emptyDataset[Int]
+    assert(ds.count() == 0L)
+    assert(ds.collect() sameElements Array.empty[Int])
+  }
+
   test("range") {
     assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
     assert(spark.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
