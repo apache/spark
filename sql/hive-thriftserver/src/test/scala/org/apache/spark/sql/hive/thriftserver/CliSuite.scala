@@ -62,14 +62,14 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   /**
    * Run a CLI operation and expect all the queries and expected answers to be returned.
-    *
-    * @param timeout maximum time for the commands to complete
+   *
+   * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
    * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
    *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
-    * @param queriesAndExpectedAnswers one or more tuples of query + answer
+   * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
       timeout: FiniteDuration,
