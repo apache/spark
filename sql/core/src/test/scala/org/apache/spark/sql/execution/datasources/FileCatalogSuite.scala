@@ -32,7 +32,7 @@ class FileCatalogSuite extends SharedSQLContext {
       stringToFile(file, "text")
 
       val path = new Path(file.getCanonicalPath)
-      val catalog = new ListingFileCatalog(sqlContext.sparkSession, Seq(path), Map.empty, None) {
+      val catalog = new ListingFileCatalog(spark, Seq(path), Map.empty, None) {
         def leafFilePaths: Seq[Path] = leafFiles.keys.toSeq
         def leafDirPaths: Seq[Path] = leafDirToChildrenFiles.keys.toSeq
       }
@@ -56,11 +56,11 @@ class FileCatalogSuite extends SharedSQLContext {
       require(qualifiedFilePath.toString.startsWith("file:"))
 
       val catalog1 = new ListingFileCatalog(
-        sqlContext.sparkSession, Seq(unqualifiedDirPath), Map.empty, None)
+        spark, Seq(unqualifiedDirPath), Map.empty, None)
       assert(catalog1.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
 
       val catalog2 = new ListingFileCatalog(
-        sqlContext.sparkSession, Seq(unqualifiedFilePath), Map.empty, None)
+        spark, Seq(unqualifiedFilePath), Map.empty, None)
       assert(catalog2.allFiles.map(_.getPath) === Seq(qualifiedFilePath))
 
     }
