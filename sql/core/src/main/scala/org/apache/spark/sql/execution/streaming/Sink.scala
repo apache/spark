@@ -27,7 +27,7 @@ import org.apache.spark.sql.DataFrame
 trait Sink {
 
   /**
-   * Adds a batch of data to this sink.  The data for a given `batchId` is deterministic and if
+   * Adds a batch of data to this sink. The data for a given `batchId` is deterministic and if
    * this method is called more than once with the same batchId (which will happen in the case of
    * failures), then `data` should only be added once.
    */

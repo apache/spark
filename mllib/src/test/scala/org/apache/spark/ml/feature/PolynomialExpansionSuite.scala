@@ -20,11 +20,11 @@ package org.apache.spark.ml.feature
 import org.scalatest.exceptions.TestFailedException
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.Row
 
 class PolynomialExpansionSuite
@@ -59,7 +59,7 @@ class PolynomialExpansionSuite
     Vectors.sparse(19, Array.empty, Array.empty))
 
   test("Polynomial expansion with default parameter") {
-    val df = sqlContext.createDataFrame(data.zip(twoDegreeExpansion)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(twoDegreeExpansion)).toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
@@ -76,7 +76,7 @@ class PolynomialExpansionSuite
   }
 
   test("Polynomial expansion with setter") {
-    val df = sqlContext.createDataFrame(data.zip(threeDegreeExpansion)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(threeDegreeExpansion)).toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")
@@ -94,7 +94,7 @@ class PolynomialExpansionSuite
   }
 
   test("Polynomial expansion with degree 1 is identity on vectors") {
-    val df = sqlContext.createDataFrame(data.zip(data)).toDF("features", "expected")
+    val df = spark.createDataFrame(data.zip(data)).toDF("features", "expected")
 
     val polynomialExpansion = new PolynomialExpansion()
       .setInputCol("features")

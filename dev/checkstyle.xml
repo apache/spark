@@ -64,6 +64,8 @@
         <property name="message" value="No trailing whitespace allowed."/>
     </module>
 
+    <module name="NewlineAtEndOfFile"/>
+
     <module name="TreeWalker">
         <module name="OuterTypeFilename"/>
         <module name="IllegalTokenText">

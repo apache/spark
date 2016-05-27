@@ -23,17 +23,17 @@ import org.json4s.JsonDSL._
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{PredictionModel, Predictor}
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite._
 import org.apache.spark.ml.tree.impl.RandomForest
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.Vector
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
 
 
@@ -45,7 +45,7 @@ import org.apache.spark.sql.functions._
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Predictor[Vector, DecisionTreeRegressor, DecisionTreeRegressionModel]
   with DecisionTreeRegressorParams with DefaultParamsWritable {
 
@@ -83,22 +83,35 @@ final class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val 
   /** @group setParam */
   def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
-  override protected def train(dataset: DataFrame): DecisionTreeRegressionModel = {
+  override protected def train(dataset: Dataset[_]): DecisionTreeRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))
     val oldDataset: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     val strategy = getOldStrategy(categoricalFeatures)
+
+    val instr = Instrumentation.create(this, oldDataset)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(oldDataset, strategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeRegressionModel]
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Train a decision tree on an RDD */
   private[ml] def train(data: RDD[LabeledPoint],
       oldStrategy: OldStrategy): DecisionTreeRegressionModel = {
+    val instr = Instrumentation.create(this, data)
+    instr.logParams(params: _*)
+
     val trees = RandomForest.run(data, oldStrategy, numTrees = 1, featureSubsetStrategy = "all",
-      seed = $(seed), parentUID = Some(uid))
-    trees.head.asInstanceOf[DecisionTreeRegressionModel]
+      seed = $(seed), instr = Some(instr), parentUID = Some(uid))
+
+    val m = trees.head.asInstanceOf[DecisionTreeRegressionModel]
+    instr.logSuccess(m)
+    m
   }
 
   /** (private[ml]) Create a Strategy instance to use with the old API. */
@@ -129,7 +142,7 @@ object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor
  */
 @Since("1.4.0")
 @Experimental
-final class DecisionTreeRegressionModel private[ml] (
+class DecisionTreeRegressionModel private[ml] (
     override val uid: String,
     override val rootNode: Node,
     override val numFeatures: Int)
@@ -158,15 +171,16 @@ final class DecisionTreeRegressionModel private[ml] (
     rootNode.predictImpl(features).impurityStats.calculate()
   }
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     transformImpl(dataset)
   }
 
-  override protected def transformImpl(dataset: DataFrame): DataFrame = {
+  override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val predictUDF = udf { (features: Vector) => predict(features) }
     val predictVarianceUDF = udf { (features: Vector) => predictVariance(features) }
-    var output = dataset
+    var output = dataset.toDF()
     if ($(predictionCol).nonEmpty) {
       output = output.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
     }

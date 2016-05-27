@@ -20,17 +20,17 @@ package org.apache.spark.ml.clustering
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dataset
 
 class BisectingKMeansSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   final val k = 5
-  @transient var dataset: DataFrame = _
+  @transient var dataset: Dataset[_] = _
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    dataset = KMeansSuite.generateKMeansData(sqlContext, 50, 3, k)
+    dataset = KMeansSuite.generateKMeansData(spark, 50, 3, k)
   }
 
   test("default parameters") {

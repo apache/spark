@@ -312,18 +312,17 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
   /** Args that have cleaned such that differences in expression id should not affect equality */
   protected lazy val cleanArgs: Seq[Any] = {
     def cleanArg(arg: Any): Any = arg match {
+      // Children are checked using sameResult above.
+      case tn: TreeNode[_] if containsChild(tn) => null
       case e: Expression => cleanExpression(e).canonicalized
       case other => other
     }
 
     productIterator.map {
-      // Children are checked using sameResult above.
-      case tn: TreeNode[_] if containsChild(tn) => null
-      case e: Expression => cleanArg(e)
       case s: Option[_] => s.map(cleanArg)
       case s: Seq[_] => s.map(cleanArg)
       case m: Map[_, _] => m.mapValues(cleanArg)
-      case other => other
+      case other => cleanArg(other)
     }.toSeq
   }
 }

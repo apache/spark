@@ -121,6 +121,6 @@ private[sql] object FrequentItems extends Logging {
       StructField(v._1 + "_freqItems", ArrayType(v._2, false))
     }
     val schema = StructType(outputCols).toAttributes
-    Dataset.ofRows(df.sqlContext, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
+    Dataset.ofRows(df.sparkSession, LocalRelation.fromExternalRows(schema, Seq(resultRow)))
   }
 }

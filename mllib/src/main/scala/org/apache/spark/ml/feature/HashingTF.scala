@@ -20,17 +20,22 @@ package org.apache.spark.ml.feature
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.attribute.AttributeGroup
-import org.apache.spark.ml.param.{BooleanParam, IntParam, ParamMap, ParamValidators}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.types.{ArrayType, StructType}
 
 /**
  * :: Experimental ::
  * Maps a sequence of terms to their term frequencies using the hashing trick.
+ * Currently we use Austin Appleby's MurmurHash 3 algorithm (MurmurHash3_x86_32)
+ * to calculate the hash code value for the term object.
+ * Since a simple modulo is used to transform the hash function to a column index,
+ * it is advisable to use a power of two as the numFeatures parameter;
+ * otherwise the features will not be mapped evenly to the columns.
  */
 @Experimental
 class HashingTF(override val uid: String)
@@ -77,10 +82,12 @@ class HashingTF(override val uid: String)
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema)
     val hashingTF = new feature.HashingTF($(numFeatures)).setBinary($(binary))
-    val t = udf { terms: Seq[_] => hashingTF.transform(terms) }
+    // TODO: Make the hashingTF.transform natively in ml framework to avoid extra conversion.
+    val t = udf { terms: Seq[_] => hashingTF.transform(terms).asML }
     val metadata = outputSchema($(outputCol)).metadata
     dataset.select(col("*"), t(col($(inputCol))).as($(outputCol), metadata))
   }

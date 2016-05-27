@@ -23,11 +23,16 @@ import org.apache.spark.sql.types._
 
 /**
  * Returns the first value of `child` for a group of rows. If the first value of `child`
- * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on a already
+ * is `null`, it returns `null` (respecting nulls). Even if [[First]] is used on an already
  * sorted column, if we do partial aggregation and final aggregation (when mergeExpression
  * is used) its result will not be deterministic (unless the input table is sorted and has
  * a single partition, and we use a single reducer to do the aggregation.).
  */
+@ExpressionDescription(
+  usage = """_FUNC_(expr) - Returns the first value of `child` for a group of rows.
+    _FUNC_(expr,isIgnoreNull=false) - Returns the first value of `child` for a group of rows.
+      If isIgnoreNull is true, returns only non-null values.
+    """)
 case class First(child: Expression, ignoreNullsExpr: Expression) extends DeclarativeAggregate {
 
   def this(child: Expression) = this(child, Literal.create(false, BooleanType))

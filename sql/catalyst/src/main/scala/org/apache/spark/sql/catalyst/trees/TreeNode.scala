@@ -71,7 +71,9 @@ object CurrentOrigin {
   }
 }
 
+// scalastyle:off
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
+// scalastyle:on
   self: BaseType =>
 
   val origin: Origin = CurrentOrigin.get
@@ -83,6 +85,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def children: Seq[BaseType]
 
   lazy val containsChild: Set[TreeNode[_]] = children.toSet
+
+  private lazy val _hashCode: Int = scala.util.hashing.MurmurHash3.productHash(this)
+  override def hashCode(): Int = _hashCode
 
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
@@ -408,8 +413,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
-  /** Returns the name of this type of TreeNode.  Defaults to the class name. */
-  def nodeName: String = getClass.getSimpleName
+  /**
+   * Returns the name of this type of TreeNode.  Defaults to the class name.
+   * Note that we remove the "Exec" suffix for physical operators here.
+   */
+  def nodeName: String = getClass.getSimpleName.replaceAll("Exec$", "")
 
   /**
    * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
@@ -426,7 +434,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case other => other :: Nil
   }.mkString(", ")
 
-  /** String representation of this node without any children */
+  /** String representation of this node without any children. */
   def simpleString: String = s"$nodeName $argString".trim
 
   override def toString: String = treeString
@@ -459,50 +467,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
-   * All the nodes that will be used to generate tree string.
-   *
-   * For example:
-   *
-   *   WholeStageCodegen
-   *   +-- SortMergeJoin
-   *       |-- InputAdapter
-   *       |   +-- Sort
-   *       +-- InputAdapter
-   *           +-- Sort
-   *
-   * the treeChildren of WholeStageCodegen will be Seq(Sort, Sort), it will generate a tree string
-   * like this:
-   *
-   *   WholeStageCodegen
-   *   : +- SortMergeJoin
-   *   :    :- INPUT
-   *   :    :- INPUT
-   *   :-  Sort
-   *   :-  Sort
-   */
-  protected def treeChildren: Seq[BaseType] = children
-
-  /**
-   * All the nodes that are parts of this node.
-   *
-   * For example:
-   *
-   *   WholeStageCodegen
-   *   +- SortMergeJoin
-   *      |-- InputAdapter
-   *      |   +-- Sort
-   *      +-- InputAdapter
-   *          +-- Sort
-   *
-   * the innerChildren of WholeStageCodegen will be Seq(SortMergeJoin), it will generate a tree
-   * string like this:
-   *
-   *   WholeStageCodegen
-   *   : +- SortMergeJoin
-   *   :    :- INPUT
-   *   :    :- INPUT
-   *   :-  Sort
-   *   :-  Sort
+   * All the nodes that are parts of this node, this is used by subquries.
    */
   protected def innerChildren: Seq[BaseType] = Nil
 
@@ -514,7 +479,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    * `lastChildren` for the root node should be empty.
    */
   def generateTreeString(
-      depth: Int, lastChildren: Seq[Boolean], builder: StringBuilder): StringBuilder = {
+      depth: Int,
+      lastChildren: Seq[Boolean],
+      builder: StringBuilder,
+      prefix: String = ""): StringBuilder = {
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
         val prefixFragment = if (isLast) "   " else ":  "
@@ -525,6 +493,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       builder.append(branch)
     }
 
+    builder.append(prefix)
     builder.append(simpleString)
     builder.append("\n")
 
@@ -534,9 +503,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       innerChildren.last.generateTreeString(depth + 2, lastChildren :+ false :+ true, builder)
     }
 
-    if (treeChildren.nonEmpty) {
-      treeChildren.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder))
-      treeChildren.last.generateTreeString(depth + 1, lastChildren :+ true, builder)
+    if (children.nonEmpty) {
+      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder, prefix))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, prefix)
     }
 
     builder

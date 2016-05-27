@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
-import org.apache.spark.sql.execution.columnar.InMemoryColumnarTableScan
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
@@ -31,7 +31,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
   def rddIdOf(tableName: String): Int = {
     val plan = table(tableName).queryExecution.sparkPlan
     plan.collect {
-      case InMemoryColumnarTableScan(_, _, relation) =>
+      case InMemoryTableScanExec(_, _, relation) =>
         relation.cachedColumnBuffers.id
       case _ =>
         fail(s"Table $tableName is not cached\n" + plan)
@@ -97,18 +97,18 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
 
   test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
-      hiveContext.uncacheTable("src")
+      spark.catalog.uncacheTable("src")
     }
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
     sql("CACHE TABLE src")
     assertCached(table("src"))
-    assert(hiveContext.isCached("src"), "Table 'src' should be cached")
+    assert(spark.catalog.isCached("src"), "Table 'src' should be cached")
 
     sql("UNCACHE TABLE src")
     assertCached(table("src"), 0)
-    assert(!hiveContext.isCached("src"), "Table 'src' should not be cached")
+    assert(!spark.catalog.isCached("src"), "Table 'src' should not be cached")
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {
@@ -166,7 +166,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
     tempPath.delete()
     table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
     sql("DROP TABLE IF EXISTS refreshTable")
-    createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
     checkAnswer(
       table("refreshTable"),
       table("src").collect())
@@ -190,7 +190,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
 
     // Drop the table and create it again.
     sql("DROP TABLE refreshTable")
-    createExternalTable("refreshTable", tempPath.toString, "parquet")
+    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
     // It is not cached.
     assert(!isCached("refreshTable"), "refreshTable should not be cached.")
     // Refresh the table. REFRESH TABLE command should not make a uncached
@@ -211,7 +211,7 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
 
     cacheTable("cachedTable")
     val sparkPlan = sql("SELECT * FROM cachedTable").queryExecution.sparkPlan
-    assert(sparkPlan.collect { case e: InMemoryColumnarTableScan => e }.size === 1)
+    assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 1)
 
     sql("DROP TABLE cachedTable")
   }

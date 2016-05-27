@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Properties
+
 import scala.collection.mutable
 import scala.util.{Random, Try}
 import scala.util.control.NonFatal
@@ -71,6 +73,7 @@ class UnsafeFixedWidthAggregationMapSuite
         taskAttemptId = Random.nextInt(10000),
         attemptNumber = 0,
         taskMemoryManager = taskMemoryManager,
+        localProperties = new Properties,
         metricsSystem = null))
 
       try {

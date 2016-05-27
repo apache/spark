@@ -31,7 +31,7 @@
     <sbt.project.name>streaming-kafka-beta</sbt.project.name>
   </properties>
   <packaging>jar</packaging>
-  <name>Spark Project External Kafka</name>
+  <name>Spark Integration for Kafka 0.10</name>
   <url>http://spark.apache.org/</url>
 
   <dependencies>
@@ -88,7 +88,7 @@
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-test-tags_${scala.binary.version}</artifactId>
+      <artifactId>spark-tags_${scala.binary.version}</artifactId>
     </dependency>
   </dependencies>
   <build>

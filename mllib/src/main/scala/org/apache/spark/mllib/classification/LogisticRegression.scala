@@ -200,7 +200,7 @@ object LogisticRegressionModel extends Loader[LogisticRegressionModel] {
 /**
  * Train a classification model for Binary Logistic Regression
  * using Stochastic Gradient Descent. By default L2 regularization is used,
- * which can be changed via [[LogisticRegressionWithSGD.optimizer]].
+ * which can be changed via `LogisticRegressionWithSGD.optimizer`.
  * NOTE: Labels used in Logistic Regression should be {0, 1, ..., k - 1}
  * for k classes multi-label classification problem.
  * Using [[LogisticRegressionWithLBFGS]] is recommended over this.
@@ -228,6 +228,7 @@ class LogisticRegressionWithSGD private[mllib] (
    * numIterations: 100, regParm: 0.01, miniBatchFraction: 1.0}.
    */
   @Since("0.8.0")
+  @deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
   def this() = this(1.0, 100, 0.01, 1.0)
 
   override protected[mllib] def createModel(weights: Vector, intercept: Double) = {
@@ -240,6 +241,7 @@ class LogisticRegressionWithSGD private[mllib] (
  * NOTE: Labels used in Logistic Regression should be {0, 1}
  */
 @Since("0.8.0")
+@deprecated("Use ml.classification.LogisticRegression or LogisticRegressionWithLBFGS", "2.0.0")
 object LogisticRegressionWithSGD {
   // NOTE(shivaram): We use multiple train methods instead of default arguments to support
   // Java programs.
@@ -429,15 +431,15 @@ class LogisticRegressionWithLBFGS
         if (userSuppliedWeights) {
           val uid = Identifiable.randomUID("logreg-static")
           lr.setInitialModel(new org.apache.spark.ml.classification.LogisticRegressionModel(
-            uid, initialWeights, 1.0))
+            uid, initialWeights.asML, 1.0))
         }
         lr.setFitIntercept(addIntercept)
         lr.setMaxIter(optimizer.getNumIterations())
         lr.setTol(optimizer.getConvergenceTol())
         // Convert our input into a DataFrame
-        val sqlContext = new SQLContext(input.context)
+        val sqlContext = SQLContext.getOrCreate(input.context)
         import sqlContext.implicits._
-        val df = input.toDF()
+        val df = input.map(_.asML).toDF()
         // Determine if we should cache the DF
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
         // Train our model

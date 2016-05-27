@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.execution.streaming.state
 
-import java.util.Timer
 import java.util.concurrent.{ScheduledFuture, TimeUnit}
 
 import scala.collection.mutable
@@ -51,7 +50,7 @@ trait StateStore {
   def get(key: UnsafeRow): Option[UnsafeRow]
 
   /** Put a new value for a key. */
-  def put(key: UnsafeRow, value: UnsafeRow)
+  def put(key: UnsafeRow, value: UnsafeRow): Unit
 
   /**
    * Remove keys that match the following condition.
@@ -63,7 +62,7 @@ trait StateStore {
    */
   def commit(): Long
 
-  /** Cancel all the updates that have been made to the store. */
+  /** Abort all the updates that have been made to the store. */
   def abort(): Unit
 
   /**
@@ -109,12 +108,12 @@ case class KeyRemoved(key: UnsafeRow) extends StoreUpdate
 /**
  * Companion object to [[StateStore]] that provides helper methods to create and retrieve stores
  * by their unique ids. In addition, when a SparkContext is active (i.e. SparkEnv.get is not null),
- * it also runs a periodic background tasks to do maintenance on the loaded stores. For each
- * store, tt uses the [[StateStoreCoordinator]] to ensure whether the current loaded instance of
+ * it also runs a periodic background task to do maintenance on the loaded stores. For each
+ * store, it uses the [[StateStoreCoordinator]] to ensure whether the current loaded instance of
  * the store is the active instance. Accordingly, it either keeps it loaded and performs
  * maintenance, or unloads the store.
  */
-private[state] object StateStore extends Logging {
+private[sql] object StateStore extends Logging {
 
   val MAINTENANCE_INTERVAL_CONFIG = "spark.streaming.stateStore.maintenanceInterval"
   val MAINTENANCE_INTERVAL_DEFAULT_SECS = 60
@@ -156,6 +155,10 @@ private[state] object StateStore extends Logging {
     loadedProviders.contains(storeId)
   }
 
+  def isMaintenanceRunning: Boolean = loadedProviders.synchronized {
+    maintenanceTask != null
+  }
+
   /** Unload and stop all state store providers */
   def stop(): Unit = loadedProviders.synchronized {
     loadedProviders.clear()
@@ -188,44 +191,44 @@ private[state] object StateStore extends Logging {
    */
   private def doMaintenance(): Unit = {
     logDebug("Doing maintenance")
-    loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
-      try {
-        if (verifyIfStoreInstanceActive(id)) {
-          provider.doMaintenance()
-        } else {
-          unload(id)
-          logInfo(s"Unloaded $provider")
+    if (SparkEnv.get == null) {
+      stop()
+    } else {
+      loadedProviders.synchronized { loadedProviders.toSeq }.foreach { case (id, provider) =>
+        try {
+          if (verifyIfStoreInstanceActive(id)) {
+            provider.doMaintenance()
+          } else {
+            unload(id)
+            logInfo(s"Unloaded $provider")
+          }
+        } catch {
+          case NonFatal(e) =>
+            logWarning(s"Error managing $provider, stopping management thread")
+            stop()
         }
-      } catch {
-        case NonFatal(e) =>
-          logWarning(s"Error managing $provider")
       }
     }
   }
 
   private def reportActiveStoreInstance(storeId: StateStoreId): Unit = {
-    try {
+    if (SparkEnv.get != null) {
       val host = SparkEnv.get.blockManager.blockManagerId.host
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       coordinatorRef.foreach(_.reportActiveInstance(storeId, host, executorId))
       logDebug(s"Reported that the loaded instance $storeId is active")
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Error reporting active instance of $storeId")
     }
   }
 
   private def verifyIfStoreInstanceActive(storeId: StateStoreId): Boolean = {
-    try {
+    if (SparkEnv.get != null) {
       val executorId = SparkEnv.get.blockManager.blockManagerId.executorId
       val verified =
         coordinatorRef.map(_.verifyIfInstanceActive(storeId, executorId)).getOrElse(false)
-      logDebug(s"Verified whether the loaded instance $storeId is active: $verified" )
+      logDebug(s"Verified whether the loaded instance $storeId is active: $verified")
       verified
-    } catch {
-      case NonFatal(e) =>
-        logWarning(s"Error verifying active instance of $storeId")
-        false
+    } else {
+      false
     }
   }
 

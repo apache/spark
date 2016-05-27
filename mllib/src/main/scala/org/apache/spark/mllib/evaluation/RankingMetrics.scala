@@ -140,7 +140,7 @@ class RankingMetrics[T: ClassTag](predictionAndLabels: RDD[(Array[T], Array[T])]
         var i = 0
         while (i < n) {
           val gain = 1.0 / math.log(i + 2)
-          if (labSet.contains(pred(i))) {
+          if (i < pred.length && labSet.contains(pred(i))) {
             dcg += gain
           }
           if (i < labSetSize) {

@@ -47,19 +47,19 @@ class StatsReportListener extends SparkListener with Logging {
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     implicit val sc = stageCompleted
     this.logInfo(s"Finished stage: ${getStatusDetail(stageCompleted.stageInfo)}")
-    showMillisDistribution("task runtime:", (info, _) => Some(info.duration), taskInfoMetrics)
+    showMillisDistribution("task runtime:", (info, _) => info.duration, taskInfoMetrics)
 
     // Shuffle write
     showBytesDistribution("shuffle bytes written:",
-      (_, metric) => metric.shuffleWriteMetrics.map(_.bytesWritten), taskInfoMetrics)
+      (_, metric) => metric.shuffleWriteMetrics.bytesWritten, taskInfoMetrics)
 
     // Fetch & I/O
     showMillisDistribution("fetch wait time:",
-      (_, metric) => metric.shuffleReadMetrics.map(_.fetchWaitTime), taskInfoMetrics)
+      (_, metric) => metric.shuffleReadMetrics.fetchWaitTime, taskInfoMetrics)
     showBytesDistribution("remote bytes read:",
-      (_, metric) => metric.shuffleReadMetrics.map(_.remoteBytesRead), taskInfoMetrics)
+      (_, metric) => metric.shuffleReadMetrics.remoteBytesRead, taskInfoMetrics)
     showBytesDistribution("task result size:",
-      (_, metric) => Some(metric.resultSize), taskInfoMetrics)
+      (_, metric) => metric.resultSize, taskInfoMetrics)
 
     // Runtime breakdown
     val runtimePcts = taskInfoMetrics.map { case (info, metrics) =>
@@ -95,17 +95,17 @@ private[spark] object StatsReportListener extends Logging {
 
   def extractDoubleDistribution(
     taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)],
-    getMetric: (TaskInfo, TaskMetrics) => Option[Double]): Option[Distribution] = {
-    Distribution(taskInfoMetrics.flatMap { case (info, metric) => getMetric(info, metric) })
+    getMetric: (TaskInfo, TaskMetrics) => Double): Option[Distribution] = {
+    Distribution(taskInfoMetrics.map { case (info, metric) => getMetric(info, metric) })
   }
 
   // Is there some way to setup the types that I can get rid of this completely?
   def extractLongDistribution(
     taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)],
-    getMetric: (TaskInfo, TaskMetrics) => Option[Long]): Option[Distribution] = {
+    getMetric: (TaskInfo, TaskMetrics) => Long): Option[Distribution] = {
     extractDoubleDistribution(
       taskInfoMetrics,
-      (info, metric) => { getMetric(info, metric).map(_.toDouble) })
+      (info, metric) => { getMetric(info, metric).toDouble })
   }
 
   def showDistribution(heading: String, d: Distribution, formatNumber: Double => String) {
@@ -117,9 +117,9 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showDistribution(
-    heading: String,
-    dOpt: Option[Distribution],
-    formatNumber: Double => String) {
+      heading: String,
+      dOpt: Option[Distribution],
+      formatNumber: Double => String) {
     dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
   }
 
@@ -129,17 +129,17 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showDistribution(
-    heading: String,
-    format: String,
-    getMetric: (TaskInfo, TaskMetrics) => Option[Double],
-    taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
+      heading: String,
+      format: String,
+      getMetric: (TaskInfo, TaskMetrics) => Double,
+      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
     showDistribution(heading, extractDoubleDistribution(taskInfoMetrics, getMetric), format)
   }
 
   def showBytesDistribution(
-    heading: String,
-    getMetric: (TaskInfo, TaskMetrics) => Option[Long],
-    taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
+      heading: String,
+      getMetric: (TaskInfo, TaskMetrics) => Long,
+      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
     showBytesDistribution(heading, extractLongDistribution(taskInfoMetrics, getMetric))
   }
 
@@ -157,9 +157,9 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showMillisDistribution(
-    heading: String,
-    getMetric: (TaskInfo, TaskMetrics) => Option[Long],
-    taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
+      heading: String,
+      getMetric: (TaskInfo, TaskMetrics) => Long,
+      taskInfoMetrics: Seq[(TaskInfo, TaskMetrics)]) {
     showMillisDistribution(heading, extractLongDistribution(taskInfoMetrics, getMetric))
   }
 
@@ -190,7 +190,7 @@ private case class RuntimePercentage(executorPct: Double, fetchPct: Option[Doubl
 private object RuntimePercentage {
   def apply(totalTime: Long, metrics: TaskMetrics): RuntimePercentage = {
     val denom = totalTime.toDouble
-    val fetchTime = metrics.shuffleReadMetrics.map(_.fetchWaitTime)
+    val fetchTime = Some(metrics.shuffleReadMetrics.fetchWaitTime)
     val fetch = fetchTime.map(_ / denom)
     val exec = (metrics.executorRunTime - fetchTime.getOrElse(0L)) / denom
     val other = 1.0 - (exec + fetch.getOrElse(0d))

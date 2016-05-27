@@ -42,6 +42,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] with Logging {
    */
   def analyzed: Boolean = _analyzed
 
+  /** Returns true if this subtree contains any streaming data sources. */
+  def isStreaming: Boolean = children.exists(_.isStreaming == true)
+
   /**
    * Returns a copy of this node where `rule` has been recursively applied first to all of its
    * children and then itself (post-order). When `rule` does not apply to a given node, it is left
@@ -310,7 +313,8 @@ abstract class UnaryNode extends LogicalPlan {
       // (product of children).
       sizeInBytes = 1
     }
-    Statistics(sizeInBytes = sizeInBytes)
+
+    child.statistics.copy(sizeInBytes = sizeInBytes)
   }
 }
 

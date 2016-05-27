@@ -960,13 +960,13 @@ class RDDTests(ReusedPySparkTestCase):
         ]
         data_rdd = self.sc.parallelize(data)
         data_java_rdd = data_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        data_python_rdd = self.sc._jvm.SerDeUtil.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
 
         # conversion between python and java RDD threw exceptions
         data_java_rdd = converted_rdd._to_java_object_rdd()
-        data_python_rdd = self.sc._jvm.SerDe.javaToPython(data_java_rdd)
+        data_python_rdd = self.sc._jvm.SerDeUtil.javaToPython(data_java_rdd)
         converted_rdd = RDD(data_python_rdd, self.sc)
         self.assertEqual(2, converted_rdd.count())
 
@@ -1913,6 +1913,13 @@ class ContextTests(unittest.TestCase):
     def test_get_or_create(self):
         with SparkContext.getOrCreate() as sc:
             self.assertTrue(SparkContext.getOrCreate() is sc)
+
+    def test_parallelize_eager_cleanup(self):
+        with SparkContext() as sc:
+            temp_files = os.listdir(sc._temp_dir)
+            rdd = sc.parallelize([0, 1, 2])
+            post_parallalize_temp_files = os.listdir(sc._temp_dir)
+            self.assertEqual(temp_files, post_parallalize_temp_files)
 
     def test_stop(self):
         sc = SparkContext()

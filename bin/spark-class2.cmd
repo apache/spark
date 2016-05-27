@@ -36,7 +36,7 @@ if exist "%SPARK_HOME%\RELEASE" (
 )
 
 if not exist "%SPARK_JARS_DIR%"\ (
-  echo Failed to find Spark assembly JAR.
+  echo Failed to find Spark jars directory.
   echo You need to build Spark before running this program.
   exit /b 1
 )

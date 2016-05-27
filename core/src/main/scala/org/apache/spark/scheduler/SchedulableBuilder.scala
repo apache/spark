@@ -34,9 +34,9 @@ import org.apache.spark.util.Utils
 private[spark] trait SchedulableBuilder {
   def rootPool: Pool
 
-  def buildPools()
+  def buildPools(): Unit
 
-  def addTaskSetManager(manager: Schedulable, properties: Properties)
+  def addTaskSetManager(manager: Schedulable, properties: Properties): Unit
 }
 
 private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)

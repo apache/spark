@@ -116,7 +116,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
         StructField("freq", LongType))
       val schema = StructType(fields)
       val rowDataRDD = model.freqItemsets.map { x =>
-        Row(x.items, x.freq)
+        Row(x.items.toSeq, x.freq)
       }
       sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
     }
@@ -326,6 +326,10 @@ object FPGrowth {
     @Since("1.3.0")
     def javaItems: java.util.List[Item] = {
       items.toList.asJava
+    }
+
+    override def toString: String = {
+      s"${items.mkString("{", ",", "}")}: $freq"
     }
   }
 }

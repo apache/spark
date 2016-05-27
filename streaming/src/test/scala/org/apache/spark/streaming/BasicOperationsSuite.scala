@@ -538,10 +538,9 @@ class BasicOperationsSuite extends TestSuiteBase {
         val stateObj = state.getOrElse(new StateObject)
         values.sum match {
           case 0 => stateObj.expireCounter += 1 // no new values
-          case n => { // has new values, increment and reset expireCounter
+          case n => // has new values, increment and reset expireCounter
             stateObj.counter += n
             stateObj.expireCounter = 0
-          }
         }
         stateObj.expireCounter match {
           case 2 => None // seen twice with no new values, give it the boot

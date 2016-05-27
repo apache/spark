@@ -25,7 +25,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.param._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Dataset
 
 trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
 
@@ -98,7 +98,7 @@ trait DefaultReadWriteTest extends TempDirectory { self: Suite =>
   def testEstimatorAndModelReadWrite[
     E <: Estimator[M] with MLWritable, M <: Model[M] with MLWritable](
       estimator: E,
-      dataset: DataFrame,
+      dataset: Dataset[_],
       testParams: Map[String, Any],
       checkModelData: (M, M) => Unit): Unit = {
     // Set some Params to make sure set Params are serialized.

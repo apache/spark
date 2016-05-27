@@ -151,7 +151,7 @@ trait Row extends Serializable {
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
-   *   StructType -> org.apache.spark.sql.Row (or Product)
+   *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
   def apply(i: Int): Any = get(i)
@@ -176,7 +176,7 @@ trait Row extends Serializable {
    *   BinaryType -> byte array
    *   ArrayType -> scala.collection.Seq (use getList for java.util.List)
    *   MapType -> scala.collection.Map (use getJavaMap for java.util.Map)
-   *   StructType -> org.apache.spark.sql.Row (or Product)
+   *   StructType -> org.apache.spark.sql.Row
    * }}}
    */
   def get(i: Int): Any
@@ -338,7 +338,7 @@ trait Row extends Serializable {
    * Returns the index of a given field name.
    *
    * @throws UnsupportedOperationException when schema is not defined.
-   * @throws IllegalArgumentException when fieldName do not exist.
+   * @throws IllegalArgumentException when a field `name` does not exist.
    */
   def fieldIndex(name: String): Int = {
     throw new UnsupportedOperationException("fieldIndex on a Row without schema is undefined.")

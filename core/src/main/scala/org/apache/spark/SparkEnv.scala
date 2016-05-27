@@ -31,7 +31,6 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.internal.Logging
 import org.apache.spark.memory.{MemoryManager, StaticMemoryManager, UnifiedMemoryManager}
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.network.BlockTransferService
 import org.apache.spark.network.netty.NettyBlockTransferService
 import org.apache.spark.rpc.{RpcEndpoint, RpcEndpointRef, RpcEnv}
 import org.apache.spark.scheduler.{LiveListenerBus, OutputCommitCoordinator}
@@ -61,10 +60,8 @@ class SparkEnv (
     val mapOutputTracker: MapOutputTracker,
     val shuffleManager: ShuffleManager,
     val broadcastManager: BroadcastManager,
-    val blockTransferService: BlockTransferService,
     val blockManager: BlockManager,
     val securityManager: SecurityManager,
-    val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
     val memoryManager: MemoryManager,
     val outputCommitCoordinator: OutputCommitCoordinator,
@@ -77,7 +74,7 @@ class SparkEnv (
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
-  private var driverTmpDirToDelete: Option[String] = None
+  private[spark] var driverTmpDir: Option[String] = None
 
   private[spark] def stop() {
 
@@ -94,21 +91,17 @@ class SparkEnv (
       rpcEnv.shutdown()
       rpcEnv.awaitTermination()
 
-      // Note that blockTransferService is stopped by BlockManager since it is started by it.
-
       // If we only stop sc, but the driver process still run as a services then we need to delete
       // the tmp dir, if not, it will create too many tmp dirs.
-      // We only need to delete the tmp dir create by driver, because sparkFilesDir is point to the
-      // current working dir in executor which we do not need to delete.
-      driverTmpDirToDelete match {
-        case Some(path) => {
+      // We only need to delete the tmp dir create by driver
+      driverTmpDir match {
+        case Some(path) =>
           try {
             Utils.deleteRecursively(new File(path))
           } catch {
             case e: Exception =>
               logWarning(s"Exception while deleting Spark temp dir: $path", e)
           }
-        }
         case None => // We just need to delete tmp dir created by driver, so do nothing on executor
       }
     }
@@ -285,8 +278,10 @@ object SparkEnv extends Logging {
       }
     }
 
+    val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
+
     val mapOutputTracker = if (isDriver) {
-      new MapOutputTrackerMaster(conf)
+      new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
     } else {
       new MapOutputTrackerWorker(conf)
     }
@@ -299,9 +294,8 @@ object SparkEnv extends Logging {
 
     // Let the user specify short names for shuffle managers
     val shortShuffleMgrNames = Map(
-      "hash" -> "org.apache.spark.shuffle.hash.HashShuffleManager",
-      "sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager",
-      "tungsten-sort" -> "org.apache.spark.shuffle.sort.SortShuffleManager")
+      "sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName,
+      "tungsten-sort" -> classOf[org.apache.spark.shuffle.sort.SortShuffleManager].getName)
     val shuffleMgrName = conf.get("spark.shuffle.manager", "sort")
     val shuffleMgrClass = shortShuffleMgrNames.getOrElse(shuffleMgrName.toLowerCase, shuffleMgrName)
     val shuffleManager = instantiateClass[ShuffleManager](shuffleMgrClass)
@@ -314,7 +308,8 @@ object SparkEnv extends Logging {
         UnifiedMemoryManager(conf, numUsableCores)
       }
 
-    val blockTransferService = new NettyBlockTransferService(conf, securityManager, numUsableCores)
+    val blockTransferService =
+      new NettyBlockTransferService(conf, securityManager, hostname, numUsableCores)
 
     val blockManagerMaster = new BlockManagerMaster(registerOrLookupEndpoint(
       BlockManagerMaster.DRIVER_ENDPOINT_NAME,
@@ -325,8 +320,6 @@ object SparkEnv extends Logging {
     val blockManager = new BlockManager(executorId, rpcEnv, blockManagerMaster,
       serializerManager, conf, memoryManager, mapOutputTracker, shuffleManager,
       blockTransferService, securityManager, numUsableCores)
-
-    val broadcastManager = new BroadcastManager(isDriver, conf, securityManager)
 
     val metricsSystem = if (isDriver) {
       // Don't start metrics system right now for Driver.
@@ -341,15 +334,6 @@ object SparkEnv extends Logging {
       val ms = MetricsSystem.createMetricsSystem("executor", conf, securityManager)
       ms.start()
       ms
-    }
-
-    // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
-    // this is a temporary directory; in distributed mode, this is the executor's current working
-    // directory.
-    val sparkFilesDir: String = if (isDriver) {
-      Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
-    } else {
-      "."
     }
 
     val outputCommitCoordinator = mockOutputCommitCoordinator.getOrElse {
@@ -368,10 +352,8 @@ object SparkEnv extends Logging {
       mapOutputTracker,
       shuffleManager,
       broadcastManager,
-      blockTransferService,
       blockManager,
       securityManager,
-      sparkFilesDir,
       metricsSystem,
       memoryManager,
       outputCommitCoordinator,
@@ -381,7 +363,8 @@ object SparkEnv extends Logging {
     // called, and we only need to do it for driver. Because driver may run as a service, and if we
     // don't delete this tmp dir when sc is stopped, then will create too many tmp dirs.
     if (isDriver) {
-      envInstance.driverTmpDirToDelete = Some(sparkFilesDir)
+      val sparkFilesDir = Utils.createTempDir(Utils.getLocalDir(conf), "userFiles").getAbsolutePath
+      envInstance.driverTmpDir = Some(sparkFilesDir)
     }
 
     envInstance

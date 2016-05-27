@@ -26,7 +26,7 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
@@ -106,6 +106,8 @@ private[this] object SharedFactory {
  * Extracts json object from a json string based on json path specified, and returns json string
  * of the extracted json object. It will return null if the input json string is invalid.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(json_txt, path) - Extract a json object from path")
 case class GetJsonObject(json: Expression, path: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -319,6 +321,10 @@ case class GetJsonObject(json: Expression, path: Expression)
   }
 }
 
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(jsonStr, p1, p2, ..., pn) - like get_json_object, but it takes multiple names and return a tuple. All the input parameters and output column types are string.")
+// scalastyle:on line.size.limit
 case class JsonTuple(children: Seq[Expression])
   extends Generator with CodegenFallback {
 
@@ -350,9 +356,9 @@ case class JsonTuple(children: Seq[Expression])
   // and count the number of foldable fields, we'll use this later to optimize evaluation
   @transient private lazy val constantFields: Int = foldableFieldNames.count(_ != null)
 
-  override def elementTypes: Seq[(DataType, Boolean, String)] = fieldExpressions.zipWithIndex.map {
-    case (_, idx) => (StringType, true, s"c$idx")
-  }
+  override def elementSchema: StructType = StructType(fieldExpressions.zipWithIndex.map {
+    case (_, idx) => StructField(s"c$idx", StringType, nullable = true)
+  })
 
   override def prettyName: String = "json_tuple"
 

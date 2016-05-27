@@ -75,8 +75,8 @@ class DecisionTreeModel @Since("1.0.0") (
    * @return JavaRDD of predictions for each of the given data points
    */
   @Since("1.2.0")
-  def predict(features: JavaRDD[Vector]): JavaRDD[Double] = {
-    predict(features.rdd)
+  def predict(features: JavaRDD[Vector]): JavaRDD[java.lang.Double] = {
+    predict(features.rdd).toJavaRDD().asInstanceOf[JavaRDD[java.lang.Double]]
   }
 
   /**

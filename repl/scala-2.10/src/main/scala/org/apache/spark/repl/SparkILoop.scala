@@ -43,7 +43,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -129,7 +129,6 @@ class SparkILoop(
   // NOTE: Must be public for visibility
   @DeveloperApi
   var sparkContext: SparkContext = _
-  var sqlContext: SQLContext = _
 
   override def echoCommandMessage(msg: String) {
     intp.reporter printMessage msg
@@ -1004,7 +1003,7 @@ class SparkILoop(
 
   // NOTE: Must be public for visibility
   @DeveloperApi
-  def createSparkContext(): SparkContext = {
+  def createSparkSession(): SparkSession = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
     val jars = SparkILoop.getAddedJars
     val conf = new SparkConf()
@@ -1020,26 +1019,18 @@ class SparkILoop(
     if (execUri != null) {
       conf.set("spark.executor.uri", execUri)
     }
-    sparkContext = new SparkContext(conf)
-    logInfo("Created spark context..")
-    sparkContext
-  }
 
-  @DeveloperApi
-  def createSQLContext(): SQLContext = {
-    val name = "org.apache.spark.sql.hive.HiveContext"
-    val loader = Utils.getContextOrSparkClassLoader
-    try {
-      sqlContext = loader.loadClass(name).getConstructor(classOf[SparkContext])
-        .newInstance(sparkContext).asInstanceOf[SQLContext]
-      logInfo("Created sql context (with Hive support)..")
+    val builder = SparkSession.builder.config(conf)
+    val sparkSession = if (SparkSession.hiveClassesArePresent) {
+      logInfo("Creating Spark session with Hive support")
+      builder.enableHiveSupport().getOrCreate()
+    } else {
+      logInfo("Creating Spark session")
+      builder.getOrCreate()
     }
-    catch {
-      case _: java.lang.ClassNotFoundException | _: java.lang.NoClassDefFoundError =>
-        sqlContext = new SQLContext(sparkContext)
-        logInfo("Created sql context..")
-    }
-    sqlContext
+    sparkContext = sparkSession.sparkContext
+    Signaling.cancelOnInterrupt(sparkContext)
+    sparkSession
   }
 
   private def getMaster(): String = {

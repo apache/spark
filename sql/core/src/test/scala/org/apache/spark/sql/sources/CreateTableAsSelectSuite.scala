@@ -22,23 +22,24 @@ import java.io.{File, IOException}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
   private var path: File = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
     path = Utils.createTempDir()
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    caseInsensitiveContext.read.json(rdd).registerTempTable("jt")
+    spark.read.json(rdd).createOrReplaceTempView("jt")
   }
 
   override def afterAll(): Unit = {
     try {
-      caseInsensitiveContext.dropTempTable("jt")
+      spark.catalog.dropTempView("jt")
     } finally {
       super.afterAll()
     }
@@ -63,7 +64,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    caseInsensitiveContext.dropTempTable("jsonTable")
+    spark.catalog.dropTempView("jsonTable")
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT based on the file without write permission") {
@@ -104,7 +105,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       sql("SELECT a, b FROM jsonTable"),
       sql("SELECT a, b FROM jt").collect())
 
-    val message = intercept[AnalysisException]{
+    val message = intercept[ParseException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
@@ -115,9 +116,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
         |SELECT a * 4 FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains(s"a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
-      "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
+    assert(message.toLowerCase.contains("operation not allowed"))
 
     // Overwrite the temporary table.
     sql(
@@ -133,7 +132,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       sql("SELECT * FROM jsonTable"),
       sql("SELECT a * 4 FROM jt").collect())
 
-    caseInsensitiveContext.dropTempTable("jsonTable")
+    spark.catalog.dropTempView("jsonTable")
     // Explicitly delete the data.
     if (path.exists()) Utils.deleteRecursively(path)
 
@@ -151,11 +150,11 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
       sql("SELECT * FROM jsonTable"),
       sql("SELECT b FROM jt").collect())
 
-    caseInsensitiveContext.dropTempTable("jsonTable")
+    spark.catalog.dropTempView("jsonTable")
   }
 
   test("CREATE TEMPORARY TABLE AS SELECT with IF NOT EXISTS is not allowed") {
-    val message = intercept[AnalysisException]{
+    val message = intercept[ParseException]{
       sql(
         s"""
         |CREATE TEMPORARY TABLE IF NOT EXISTS jsonTable
@@ -166,9 +165,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
         |SELECT b FROM jt
       """.stripMargin)
     }.getMessage
-    assert(
-      message.contains("a CREATE TEMPORARY TABLE statement does not allow IF NOT EXISTS clause."),
-      "CREATE TEMPORARY TABLE IF NOT EXISTS should not be allowed.")
+    assert(message.toLowerCase.contains("operation not allowed"))
   }
 
   test("a CTAS statement with column definitions is not allowed") {

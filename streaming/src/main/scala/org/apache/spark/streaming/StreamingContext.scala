@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import java.io.{InputStream, NotSerializableException}
+import java.util.Properties
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.Map
@@ -25,6 +26,7 @@ import scala.collection.mutable.Queue
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
+import org.apache.commons.lang.SerializationUtils
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{BytesWritable, LongWritable, Text}
@@ -198,6 +200,10 @@ class StreamingContext private[streaming] (
 
   private val startSite = new AtomicReference[CallSite](null)
 
+  // Copy of thread-local properties from SparkContext. These properties will be set in all tasks
+  // submitted by this StreamingContext after start.
+  private[streaming] val savedProperties = new AtomicReference[Properties](new Properties)
+
   private[streaming] def getStartSite(): CallSite = startSite.get()
 
   private var shutdownHookRef: AnyRef = _
@@ -316,7 +322,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream from network source hostname:port, where data is received
+   * Create an input stream from network source hostname:port, where data is received
    * as serialized blocks (serialized using the Spark's serializer) that can be directly
    * pushed into the block manager without deserializing them. This is the most efficient
    * way to receive data.
@@ -335,7 +341,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
@@ -353,7 +359,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system.
@@ -373,7 +379,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
    * Files must be written to the monitored directory by "moving" them from another
    * location within the same file system. File names starting with . are ignored.
@@ -397,7 +403,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Create a input stream that monitors a Hadoop-compatible filesystem
+   * Create an input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
    * as Text and input format as TextInputFormat). Files must be written to the
    * monitored directory by "moving" them from another location within the same
@@ -573,6 +579,8 @@ class StreamingContext private[streaming] (
               sparkContext.setCallSite(startSite.get)
               sparkContext.clearJobGroup()
               sparkContext.setLocalProperty(SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL, "false")
+              savedProperties.set(SerializationUtils.clone(
+                sparkContext.localProperties.get()).asInstanceOf[Properties])
               scheduler.start()
             }
             state = StreamingContextState.ACTIVE

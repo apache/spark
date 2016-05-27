@@ -19,12 +19,14 @@ package org.apache.spark.mllib.linalg
 
 import java.util.Random
 
+import scala.collection.mutable.{Map => MutableMap}
+
 import breeze.linalg.{CSCMatrix, Matrix => BM}
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar._
-import scala.collection.mutable.{Map => MutableMap}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.{linalg => newlinalg}
 import org.apache.spark.mllib.util.TestingUtils._
 
 class MatricesSuite extends SparkFunSuite {
@@ -522,5 +524,91 @@ class MatricesSuite extends SparkFunSuite {
       assert(m.transpose.rowIter.toSeq === cols)
       assert(m.transpose.colIter.toSeq === rows)
     }
+  }
+
+  test("conversions between new local linalg and mllib linalg") {
+    val dm: DenseMatrix = new DenseMatrix(3, 2, Array(0.0, 0.0, 1.0, 0.0, 2.0, 3.5))
+    val sm: SparseMatrix = dm.toSparse
+    val sm0: Matrix = sm.asInstanceOf[Matrix]
+    val dm0: Matrix = dm.asInstanceOf[Matrix]
+
+    def compare(oldM: Matrix, newM: newlinalg.Matrix): Unit = {
+      assert(oldM.toArray === newM.toArray)
+      assert(oldM.numCols === newM.numCols)
+      assert(oldM.numRows === newM.numRows)
+    }
+
+    val newSM: newlinalg.SparseMatrix = sm.asML
+    val newDM: newlinalg.DenseMatrix = dm.asML
+    val newSM0: newlinalg.Matrix = sm0.asML
+    val newDM0: newlinalg.Matrix = dm0.asML
+    assert(newSM0.isInstanceOf[newlinalg.SparseMatrix])
+    assert(newDM0.isInstanceOf[newlinalg.DenseMatrix])
+    compare(sm, newSM)
+    compare(dm, newDM)
+    compare(sm0, newSM0)
+    compare(dm0, newDM0)
+
+    val oldSM: SparseMatrix = SparseMatrix.fromML(newSM)
+    val oldDM: DenseMatrix = DenseMatrix.fromML(newDM)
+    val oldSM0: Matrix = Matrices.fromML(newSM0)
+    val oldDM0: Matrix = Matrices.fromML(newDM0)
+    assert(oldSM0.isInstanceOf[SparseMatrix])
+    assert(oldDM0.isInstanceOf[DenseMatrix])
+    compare(oldSM, newSM)
+    compare(oldDM, newDM)
+    compare(oldSM0, newSM0)
+    compare(oldDM0, newDM0)
+  }
+
+  test("implicit conversions between new local linalg and mllib linalg") {
+
+    def mllibMatrixToTriple(m: Matrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mllibDenseMatrixToTriple(m: DenseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mllibSparseMatrixToTriple(m: SparseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mlMatrixToTriple(m: newlinalg.Matrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mlDenseMatrixToTriple(m: newlinalg.DenseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def mlSparseMatrixToTriple(m: newlinalg.SparseMatrix): (Array[Double], Int, Int) =
+      (m.toArray, m.numCols, m.numRows)
+
+    def compare(m1: (Array[Double], Int, Int), m2: (Array[Double], Int, Int)): Unit = {
+      assert(m1._1 === m2._1)
+      assert(m1._2 === m2._2)
+      assert(m1._3 === m2._3)
+    }
+
+    val dm: DenseMatrix = new DenseMatrix(3, 2, Array(0.0, 0.0, 1.0, 0.0, 2.0, 3.5))
+    val sm: SparseMatrix = dm.toSparse
+    val sm0: Matrix = sm.asInstanceOf[Matrix]
+    val dm0: Matrix = dm.asInstanceOf[Matrix]
+
+    val newSM: newlinalg.SparseMatrix = sm.asML
+    val newDM: newlinalg.DenseMatrix = dm.asML
+    val newSM0: newlinalg.Matrix = sm0.asML
+    val newDM0: newlinalg.Matrix = dm0.asML
+
+    import org.apache.spark.mllib.linalg.MatrixImplicits._
+
+    compare(mllibMatrixToTriple(dm0), mllibMatrixToTriple(newDM0))
+    compare(mllibMatrixToTriple(sm0), mllibMatrixToTriple(newSM0))
+
+    compare(mllibDenseMatrixToTriple(dm), mllibDenseMatrixToTriple(newDM))
+    compare(mllibSparseMatrixToTriple(sm), mllibSparseMatrixToTriple(newSM))
+
+    compare(mlMatrixToTriple(dm0), mlMatrixToTriple(newDM))
+    compare(mlMatrixToTriple(sm0), mlMatrixToTriple(newSM0))
+
+    compare(mlDenseMatrixToTriple(dm), mlDenseMatrixToTriple(newDM))
+    compare(mlSparseMatrixToTriple(sm), mlSparseMatrixToTriple(newSM))
   }
 }

@@ -17,10 +17,11 @@
 
 package org.apache.spark.deploy
 
-import java.io.{ByteArrayInputStream, DataInputStream}
+import java.io.{ByteArrayInputStream, DataInputStream, IOException}
 import java.lang.reflect.Method
 import java.security.PrivilegedExceptionAction
-import java.util.{Arrays, Comparator}
+import java.text.DateFormat
+import java.util.{Arrays, Comparator, Date}
 
 import scala.collection.JavaConverters._
 import scala.concurrent.duration._
@@ -34,6 +35,8 @@ import org.apache.hadoop.fs.FileSystem.Statistics
 import org.apache.hadoop.hdfs.security.token.delegation.DelegationTokenIdentifier
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.apache.hadoop.security.token.{Token, TokenIdentifier}
+import org.apache.hadoop.security.token.delegation.AbstractDelegationTokenIdentifier
 
 import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.annotation.DeveloperApi
@@ -152,10 +155,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesRead = f()
       Some(() => f() - baselineBytesRead)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem input data", e)
         None
-      }
     }
   }
 
@@ -174,10 +176,9 @@ class SparkHadoopUtil extends Logging {
       val baselineBytesWritten = f()
       Some(() => f() - baselineBytesWritten)
     } catch {
-      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) => {
+      case e @ (_: NoSuchMethodException | _: ClassNotFoundException) =>
         logDebug("Couldn't find method for retrieving thread-level FileSystem output data", e)
         None
-      }
     }
   }
 
@@ -315,7 +316,7 @@ class SparkHadoopUtil extends Logging {
    */
   def substituteHadoopVariables(text: String, hadoopConf: Configuration): String = {
     text match {
-      case HADOOP_CONF_PATTERN(matched) => {
+      case HADOOP_CONF_PATTERN(matched) =>
         logDebug(text + " matched " + HADOOP_CONF_PATTERN)
         val key = matched.substring(13, matched.length() - 1) // remove ${hadoopconf- .. }
         val eval = Option[String](hadoopConf.get(key))
@@ -330,11 +331,9 @@ class SparkHadoopUtil extends Logging {
           // Continue to substitute more variables.
           substituteHadoopVariables(eval.get, hadoopConf)
         }
-      }
-      case _ => {
+      case _ =>
         logDebug(text + " didn't match " + HADOOP_CONF_PATTERN)
         text
-      }
     }
   }
 
@@ -360,6 +359,50 @@ class SparkHadoopUtil extends Logging {
     val confKey = s"fs.${scheme}.impl.disable.cache"
     newConf.setBoolean(confKey, true)
     newConf
+  }
+
+  /**
+   * Dump the credentials' tokens to string values.
+   *
+   * @param credentials credentials
+   * @return an iterator over the string values. If no credentials are passed in: an empty list
+   */
+  private[spark] def dumpTokens(credentials: Credentials): Iterable[String] = {
+    if (credentials != null) {
+      credentials.getAllTokens.asScala.map(tokenToString)
+    } else {
+      Seq()
+    }
+  }
+
+  /**
+   * Convert a token to a string for logging.
+   * If its an abstract delegation token, attempt to unmarshall it and then
+   * print more details, including timestamps in human-readable form.
+   *
+   * @param token token to convert to a string
+   * @return a printable string value.
+   */
+  private[spark] def tokenToString(token: Token[_ <: TokenIdentifier]): String = {
+    val df = DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+    val buffer = new StringBuilder(128)
+    buffer.append(token.toString)
+    try {
+      val ti = token.decodeIdentifier
+      buffer.append("; ").append(ti)
+      ti match {
+        case dt: AbstractDelegationTokenIdentifier =>
+          // include human times and the renewer, which the HDFS tokens toString omits
+          buffer.append("; Renewer: ").append(dt.getRenewer)
+          buffer.append("; Issued: ").append(df.format(new Date(dt.getIssueDate)))
+          buffer.append("; Max Date: ").append(df.format(new Date(dt.getMaxDate)))
+        case _ =>
+      }
+    } catch {
+      case e: IOException =>
+        logDebug("Failed to decode $token: $e", e)
+    }
+    buffer.toString
   }
 }
 
@@ -388,7 +431,7 @@ object SparkHadoopUtil {
 
   def get: SparkHadoopUtil = {
     // Check each time to support changing to/from YARN
-    val yarnMode = java.lang.Boolean.valueOf(
+    val yarnMode = java.lang.Boolean.parseBoolean(
         System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       yarn

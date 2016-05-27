@@ -23,12 +23,22 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
 
+import org.json4s.DefaultFormats
+import org.json4s.JsonDSL._
+import org.json4s.jackson.JsonMethods.{compact, render}
+
+import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.internal.Logging
+import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.{DataFrame, Row, SQLContext}
+import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -566,4 +576,88 @@ object PrefixSpan extends Logging {
 @Since("1.5.0")
 class PrefixSpanModel[Item] @Since("1.5.0") (
     @Since("1.5.0") val freqSequences: RDD[PrefixSpan.FreqSequence[Item]])
-  extends Serializable
+  extends Saveable with Serializable {
+
+  /**
+   * Save this model to the given path.
+   * It only works for Item datatypes supported by DataFrames.
+   *
+   * This saves:
+   *  - human-readable (JSON) model metadata to path/metadata/
+   *  - Parquet formatted data to path/data/
+   *
+   * The model may be loaded using [[PrefixSpanModel.load]].
+   *
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("2.0.0")
+  override def save(sc: SparkContext, path: String): Unit = {
+    PrefixSpanModel.SaveLoadV1_0.save(this, path)
+  }
+
+  override protected val formatVersion: String = "1.0"
+}
+
+@Since("2.0.0")
+object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
+
+  @Since("2.0.0")
+  override def load(sc: SparkContext, path: String): PrefixSpanModel[_] = {
+    PrefixSpanModel.SaveLoadV1_0.load(sc, path)
+  }
+
+  private[fpm] object SaveLoadV1_0 {
+
+    private val thisFormatVersion = "1.0"
+
+    private val thisClassName = "org.apache.spark.mllib.fpm.PrefixSpanModel"
+
+    def save(model: PrefixSpanModel[_], path: String): Unit = {
+      val sc = model.freqSequences.sparkContext
+      val sqlContext = SQLContext.getOrCreate(sc)
+
+      val metadata = compact(render(
+        ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
+      sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
+
+      // Get the type of item class
+      val sample = model.freqSequences.first().sequence(0)(0)
+      val className = sample.getClass.getCanonicalName
+      val classSymbol = runtimeMirror(getClass.getClassLoader).staticClass(className)
+      val tpe = classSymbol.selfType
+
+      val itemType = ScalaReflection.schemaFor(tpe).dataType
+      val fields = Array(StructField("sequence", ArrayType(ArrayType(itemType))),
+        StructField("freq", LongType))
+      val schema = StructType(fields)
+      val rowDataRDD = model.freqSequences.map { x =>
+        Row(x.sequence, x.freq)
+      }
+      sqlContext.createDataFrame(rowDataRDD, schema).write.parquet(Loader.dataPath(path))
+    }
+
+    def load(sc: SparkContext, path: String): PrefixSpanModel[_] = {
+      implicit val formats = DefaultFormats
+      val sqlContext = SQLContext.getOrCreate(sc)
+
+      val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
+      assert(className == thisClassName)
+      assert(formatVersion == thisFormatVersion)
+
+      val freqSequences = sqlContext.read.parquet(Loader.dataPath(path))
+      val sample = freqSequences.select("sequence").head().get(0)
+      loadImpl(freqSequences, sample)
+    }
+
+    def loadImpl[Item: ClassTag](freqSequences: DataFrame, sample: Item): PrefixSpanModel[Item] = {
+      val freqSequencesRDD = freqSequences.select("sequence", "freq").rdd.map { x =>
+        val sequence = x.getAs[Seq[Seq[Item]]](0).map(_.toArray).toArray
+        val freq = x.getLong(1)
+        new PrefixSpan.FreqSequence(sequence, freq)
+      }
+      new PrefixSpanModel(freqSequencesRDD)
+    }
+  }
+}

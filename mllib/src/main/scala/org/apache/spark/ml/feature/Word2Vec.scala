@@ -22,12 +22,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors, VectorUDT}
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -135,7 +136,8 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   /** @group setParam */
   def setMinCount(value: Int): this.type = set(minCount, value)
 
-  override def fit(dataset: DataFrame): Word2VecModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
     val input = dataset.select($(inputCol)).rdd.map(_.getAs[Seq[String]](0))
     val wordVectors = new feature.Word2Vec()
@@ -219,12 +221,13 @@ class Word2VecModel private[ml] (
    * Transform a sentence column to a vector column to represent the whole sentence. The transform
    * is performed by averaging all word vectors it contains.
    */
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val vectors = wordVectors.getVectors
       .mapValues(vv => Vectors.dense(vv.map(_.toDouble)))
       .map(identity) // mapValues doesn't return a serializable map (SI-7005)
-    val bVectors = dataset.sqlContext.sparkContext.broadcast(vectors)
+    val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
     val d = $(vectorSize)
     val word2Vec = udf { sentence: Seq[String] =>
       if (sentence.size == 0) {

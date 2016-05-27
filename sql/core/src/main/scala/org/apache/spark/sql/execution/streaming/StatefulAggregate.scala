@@ -50,10 +50,11 @@ trait StatefulOperator extends SparkPlan {
  * For each input tuple, the key is calculated and the value from the [[StateStore]] is added
  * to the stream (in addition to the input tuple) if present.
  */
-case class StateStoreRestore(
+case class StateStoreRestoreExec(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
-    child: SparkPlan) extends execution.UnaryNode with StatefulOperator {
+    child: SparkPlan)
+  extends execution.UnaryExecNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(
@@ -62,7 +63,7 @@ case class StateStoreRestore(
       storeVersion = getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
-      new StateStoreConf(sqlContext.conf),
+      sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         val getKey = GenerateUnsafeProjection.generate(keyExpressions, child.output)
         iter.flatMap { row =>
@@ -78,10 +79,11 @@ case class StateStoreRestore(
 /**
  * For each input tuple, the key is calculated and the tuple is `put` into the [[StateStore]].
  */
-case class StateStoreSave(
+case class StateStoreSaveExec(
     keyExpressions: Seq[Attribute],
     stateId: Option[OperatorStateId],
-    child: SparkPlan) extends execution.UnaryNode with StatefulOperator {
+    child: SparkPlan)
+  extends execution.UnaryExecNode with StatefulOperator {
 
   override protected def doExecute(): RDD[InternalRow] = {
     child.execute().mapPartitionsWithStateStore(
@@ -90,7 +92,7 @@ case class StateStoreSave(
       storeVersion = getStateId.batchId,
       keyExpressions.toStructType,
       child.output.toStructType,
-      new StateStoreConf(sqlContext.conf),
+      sqlContext.sessionState,
       Some(sqlContext.streams.stateStoreCoordinator)) { case (store, iter) =>
         new Iterator[InternalRow] {
           private[this] val baseIterator = iter

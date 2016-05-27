@@ -21,6 +21,8 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.clustering.{KMeans => NewKMeans}
+import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.linalg.BLAS.{axpy, scal}
 import org.apache.spark.mllib.util.MLUtils
@@ -30,9 +32,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.util.random.XORShiftRandom
 
 /**
- * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
- * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
- * they are executed together with joint passes over the data for efficiency.
+ * K-means clustering with a k-means++ like initialization mode
+ * (the k-means|| algorithm by Bahmani et al).
  *
  * This is an iterative algorithm that will make multiple passes over the data, so any RDDs given
  * to it should be cached by the user.
@@ -107,35 +108,20 @@ class KMeans private (
   }
 
   /**
-   * :: Experimental ::
-   * Number of runs of the algorithm to execute in parallel.
+   * This function has no effect since Spark 2.0.0.
    */
   @Since("1.4.0")
-  @deprecated("Support for runs is deprecated. This param will have no effect in 2.0.0.", "1.6.0")
-  def getRuns: Int = runs
-
-  /**
-   * :: Experimental ::
-   * Set the number of runs of the algorithm to execute in parallel. We initialize the algorithm
-   * this many times with random starting conditions (configured by the initialization mode), then
-   * return the best clustering found over any run. Default: 1.
-   */
-  @Since("0.8.0")
-  @deprecated("Support for runs is deprecated. This param will have no effect in 2.0.0.", "1.6.0")
-  def setRuns(runs: Int): this.type = {
-    internalSetRuns(runs)
+  def getRuns: Int = {
+    logWarning("Getting number of runs has no effect since Spark 2.0.0.")
+    runs
   }
 
-  // Internal version of setRuns for Python API, this should be removed at the same time as setRuns
-  // this is done to avoid deprecation warnings in our build.
-  private[mllib] def internalSetRuns(runs: Int): this.type = {
-    if (runs <= 0) {
-      throw new IllegalArgumentException("Number of runs must be positive")
-    }
-    if (runs != 1) {
-      logWarning("Setting number of runs is deprecated and will have no effect in 2.0.0")
-    }
-    this.runs = runs
+  /**
+   * This function has no effect since Spark 2.0.0.
+   */
+  @Since("0.8.0")
+  def setRuns(runs: Int): this.type = {
+    logWarning("Setting number of runs has no effect since Spark 2.0.0.")
     this
   }
 
@@ -212,6 +198,12 @@ class KMeans private (
    */
   @Since("0.8.0")
   def run(data: RDD[Vector]): KMeansModel = {
+    run(data, None)
+  }
+
+  private[spark] def run(
+      data: RDD[Vector],
+      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     if (data.getStorageLevel == StorageLevel.NONE) {
       logWarning("The input data is not directly cached, which may hurt performance if its"
@@ -224,7 +216,7 @@ class KMeans private (
     val zippedData = data.zip(norms).map { case (v, norm) =>
       new VectorWithNorm(v, norm)
     }
-    val model = runAlgorithm(zippedData)
+    val model = runAlgorithm(zippedData, instr)
     norms.unpersist()
 
     // Warn at the end of the run as well, for increased visibility.
@@ -238,7 +230,9 @@ class KMeans private (
   /**
    * Implementation of K-Means algorithm.
    */
-  private def runAlgorithm(data: RDD[VectorWithNorm]): KMeansModel = {
+  private def runAlgorithm(
+      data: RDD[VectorWithNorm],
+      instr: Option[Instrumentation[NewKMeans]]): KMeansModel = {
 
     val sc = data.sparkContext
 
@@ -253,16 +247,14 @@ class KMeans private (
     }
 
     val centers = initialModel match {
-      case Some(kMeansCenters) => {
+      case Some(kMeansCenters) =>
         Array(kMeansCenters.clusterCenters.map(s => new VectorWithNorm(s)))
-      }
-      case None => {
+      case None =>
         if (initializationMode == KMeans.RANDOM) {
           initRandom(data)
         } else {
           initKMeansParallel(data)
         }
-      }
     }
     val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
     logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
@@ -276,6 +268,8 @@ class KMeans private (
 
     val iterationStartTime = System.nanoTime()
 
+    instr.map(_.logNumFeatures(centers(0)(0).vector.size))
+
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
       type WeightedPoint = (Vector, Long)
@@ -285,7 +279,7 @@ class KMeans private (
       }
 
       val activeCenters = activeRuns.map(r => centers(r)).toArray
-      val costAccums = activeRuns.map(_ => sc.accumulator(0.0))
+      val costAccums = activeRuns.map(_ => sc.doubleAccumulator)
 
       val bcActiveCenters = sc.broadcast(activeCenters)
 
@@ -302,7 +296,7 @@ class KMeans private (
         points.foreach { point =>
           (0 until runs).foreach { i =>
             val (bestCenter, cost) = KMeans.findClosest(thisActiveCenters(i), point)
-            costAccums(i) += cost
+            costAccums(i).add(cost)
             val sum = sums(i)(bestCenter)
             axpy(1.0, point.vector, sum)
             counts(i)(bestCenter) += 1
@@ -501,8 +495,7 @@ object KMeans {
    * @param data Training points as an `RDD` of `Vector` types.
    * @param k Number of clusters to create.
    * @param maxIterations Maximum number of iterations allowed.
-   * @param runs Number of runs to execute in parallel. The best model according to the cost
-   *             function will be returned. (default: 1)
+   * @param runs This param has no effect since Spark 2.0.0.
    * @param initializationMode The initialization algorithm. This can either be "random" or
    *                           "k-means||". (default: "k-means||")
    * @param seed Random seed for cluster initialization. Default is to generate seed based
@@ -518,7 +511,6 @@ object KMeans {
       seed: Long): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
-      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .setSeed(seed)
       .run(data)
@@ -530,8 +522,7 @@ object KMeans {
    * @param data Training points as an `RDD` of `Vector` types.
    * @param k Number of clusters to create.
    * @param maxIterations Maximum number of iterations allowed.
-   * @param runs Number of runs to execute in parallel. The best model according to the cost
-   *             function will be returned. (default: 1)
+   * @param runs This param has no effect since Spark 2.0.0.
    * @param initializationMode The initialization algorithm. This can either be "random" or
    *                           "k-means||". (default: "k-means||")
    */
@@ -544,7 +535,6 @@ object KMeans {
       initializationMode: String): KMeansModel = {
     new KMeans().setK(k)
       .setMaxIterations(maxIterations)
-      .internalSetRuns(runs)
       .setInitializationMode(initializationMode)
       .run(data)
   }

@@ -183,7 +183,7 @@ public final class JavaRecoverableNetworkWordCount {
     return ssc;
   }
 
-  public static void main(String[] args) {
+  public static void main(String[] args) throws Exception {
     if (args.length != 4) {
       System.err.println("You arguments were " + Arrays.asList(args));
       System.err.println(

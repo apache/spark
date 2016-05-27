@@ -79,7 +79,7 @@ private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
           val resultAttrs = udfs.zipWithIndex.map { case (u, i) =>
             AttributeReference(s"pythonUDF$i", u.dataType)()
           }
-          val evaluation = BatchPythonEvaluation(validUdfs, child.output ++ resultAttrs, child)
+          val evaluation = BatchEvalPythonExec(validUdfs, child.output ++ resultAttrs, child)
           attributeMap ++= validUdfs.zip(resultAttrs)
           evaluation
         } else {
@@ -105,7 +105,7 @@ private[spark] object ExtractPythonUDFs extends Rule[SparkPlan] {
       val newPlan = extract(rewritten)
       if (newPlan.output != plan.output) {
         // Trim away the new UDF value if it was only used for filtering or something.
-        execution.Project(plan.output, newPlan)
+        execution.ProjectExec(plan.output, newPlan)
       } else {
         newPlan
       }

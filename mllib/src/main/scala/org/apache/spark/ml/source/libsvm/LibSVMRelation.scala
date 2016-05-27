@@ -26,21 +26,18 @@ import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 import org.apache.spark.annotation.Since
-import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.mllib.linalg.{Vector, Vectors, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, DataFrameReader, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, JoinedRow}
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
-import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, HadoopFileLinesReader, PartitionedFile}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
-import org.apache.spark.util.collection.BitSet
 
 private[libsvm] class LibSVMOutputWriter(
     path: String,
@@ -88,12 +85,12 @@ private[libsvm] class LibSVMOutputWriter(
  * optionally specify options, for example:
  * {{{
  *   // Scala
- *   val df = sqlContext.read.format("libsvm")
+ *   val df = spark.read.format("libsvm")
  *     .option("numFeatures", "780")
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = sqlContext.read().format("libsvm")
+ *   Dataset<Row> df = spark.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}
@@ -108,9 +105,13 @@ private[libsvm] class LibSVMOutputWriter(
  *  - "vectorType": feature vector type, "sparse" (default) or "dense".
  *
  *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
+ *
+ * Note that this class is public for documentation purpose. Please don't use this class directly.
+ * Rather, use the data source API as illustrated above.
  */
+// If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
 @Since("1.6.0")
-class DefaultSource extends FileFormat with DataSourceRegister {
+class LibSVMFileFormat extends FileFormat with DataSourceRegister {
 
   @Since("1.6.0")
   override def shortName(): String = "libsvm"
@@ -126,7 +127,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def inferSchema(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     Some(
@@ -136,7 +137,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def prepareRead(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       options: Map[String, String],
       files: Seq[FileStatus]): Map[String, String] = {
     def computeNumFeatures(): Int = {
@@ -149,7 +150,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
         throw new IOException("Multiple input paths are not supported for libsvm data.")
       }
 
-      val sc = sqlContext.sparkContext
+      val sc = sparkSession.sparkContext
       val parsed = MLUtils.parseLibSVMFile(sc, path, sc.defaultParallelism)
       MLUtils.computeNumFeatures(parsed)
     }
@@ -162,7 +163,7 @@ class DefaultSource extends FileFormat with DataSourceRegister {
   }
 
   override def prepareWrite(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       job: Job,
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
@@ -178,58 +179,26 @@ class DefaultSource extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def buildInternalScan(
-      sqlContext: SQLContext,
-      dataSchema: StructType,
-      requiredColumns: Array[String],
-      filters: Array[Filter],
-      bucketSet: Option[BitSet],
-      inputFiles: Seq[FileStatus],
-      broadcastedConf: Broadcast[SerializableConfiguration],
-      options: Map[String, String]): RDD[InternalRow] = {
-    // TODO: This does not handle cases where column pruning has been performed.
-
-    verifySchema(dataSchema)
-    val dataFiles = inputFiles.filterNot(_.getPath.getName startsWith "_")
-
-    val path = if (dataFiles.length == 1) dataFiles.head.getPath.toUri.toString
-    else if (dataFiles.isEmpty) throw new IOException("No input path specified for libsvm data")
-    else throw new IOException("Multiple input paths are not supported for libsvm data.")
-
-    val numFeatures = options.getOrElse("numFeatures", "-1").toInt
-    val vectorType = options.getOrElse("vectorType", "sparse")
-
-    val sc = sqlContext.sparkContext
-    val baseRdd = MLUtils.loadLibSVMFile(sc, path, numFeatures)
-    val sparse = vectorType == "sparse"
-    baseRdd.map { pt =>
-      val features = if (sparse) pt.features.toSparse else pt.features.toDense
-      Row(pt.label, features)
-    }.mapPartitions { externalRows =>
-      val converter = RowEncoder(dataSchema)
-      externalRows.map(converter.toRow)
-    }
-  }
-
   override def buildReader(
-      sqlContext: SQLContext,
+      sparkSession: SparkSession,
       dataSchema: StructType,
       partitionSchema: StructType,
       requiredSchema: StructType,
       filters: Seq[Filter],
-      options: Map[String, String]): (PartitionedFile) => Iterator[InternalRow] = {
+      options: Map[String, String],
+      hadoopConf: Configuration): (PartitionedFile) => Iterator[InternalRow] = {
+    verifySchema(dataSchema)
     val numFeatures = options("numFeatures").toInt
     assert(numFeatures > 0)
 
     val sparse = options.getOrElse("vectorType", "sparse") == "sparse"
 
-    val broadcastedConf = sqlContext.sparkContext.broadcast(
-      new SerializableConfiguration(new Configuration(sqlContext.sparkContext.hadoopConfiguration))
-    )
+    val broadcastedHadoopConf =
+      sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
       val points =
-        new HadoopFileLinesReader(file, broadcastedConf.value.value)
+        new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
           .map(_.toString.trim)
           .filterNot(line => line.isEmpty || line.startsWith("#"))
           .map { line =>
@@ -237,23 +206,19 @@ class DefaultSource extends FileFormat with DataSourceRegister {
             LabeledPoint(label, Vectors.sparse(numFeatures, indices, values))
           }
 
-      val converter = RowEncoder(requiredSchema)
-
-      val unsafeRowIterator = points.map { pt =>
-        val features = if (sparse) pt.features.toSparse else pt.features.toDense
-        converter.toRow(Row(pt.label, features))
+      val converter = RowEncoder(dataSchema)
+      val fullOutput = dataSchema.map { f =>
+        AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
+      }
+      val requiredOutput = fullOutput.filter { a =>
+        requiredSchema.fieldNames.contains(a.name)
       }
 
-      def toAttribute(f: StructField): AttributeReference =
-        AttributeReference(f.name, f.dataType, f.nullable, f.metadata)()
+      val requiredColumns = GenerateUnsafeProjection.generate(requiredOutput, fullOutput)
 
-      // Appends partition values
-      val fullOutput = (requiredSchema ++ partitionSchema).map(toAttribute)
-      val joinedRow = new JoinedRow()
-      val appendPartitionColumns = GenerateUnsafeProjection.generate(fullOutput, fullOutput)
-
-      unsafeRowIterator.map { dataRow =>
-        appendPartitionColumns(joinedRow(dataRow, file.partitionValues))
+      points.map { pt =>
+        val features = if (sparse) pt.features.toSparse else pt.features.toDense
+        requiredColumns(converter.toRow(Row(pt.label, features)))
       }
     }
   }

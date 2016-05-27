@@ -30,7 +30,7 @@ export LC_ALL=C
 
 # NOTE: These should match those in the release publishing script
 HADOOP2_MODULE_PROFILES="-Phive-thriftserver -Pyarn -Phive"
-MVN="build/mvn --force"
+MVN="build/mvn"
 HADOOP_PROFILES=(
     hadoop-2.2
     hadoop-2.3

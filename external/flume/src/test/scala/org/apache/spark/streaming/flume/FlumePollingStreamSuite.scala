@@ -24,10 +24,10 @@ import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import org.scalatest.BeforeAndAfter
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
@@ -35,10 +35,12 @@ import org.apache.spark.streaming.{Seconds, StreamingContext, TestOutputStream}
 import org.apache.spark.streaming.dstream.ReceiverInputDStream
 import org.apache.spark.util.{ManualClock, Utils}
 
-class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Logging {
+class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   val maxAttempts = 5
   val batchDuration = Seconds(1)
+
+  @transient private var _sc: SparkContext = _
 
   val conf = new SparkConf()
     .setMaster("local[2]")
@@ -46,6 +48,17 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
     .set("spark.streaming.clock", "org.apache.spark.util.ManualClock")
 
   val utils = new PollingFlumeTestUtils
+
+  override def beforeAll(): Unit = {
+    _sc = new SparkContext(conf)
+  }
+
+  override def afterAll(): Unit = {
+    if (_sc != null) {
+      _sc.stop()
+      _sc = null
+    }
+  }
 
   test("flume polling test") {
     testMultipleTimes(testFlumePolling)
@@ -98,7 +111,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
 
   def writeAndVerify(sinkPorts: Seq[Int]): Unit = {
     // Set up the streaming context and input streams
-    val ssc = new StreamingContext(conf, batchDuration)
+    val ssc = new StreamingContext(_sc, batchDuration)
     val addresses = sinkPorts.map(port => new InetSocketAddress("localhost", port))
     val flumeStream: ReceiverInputDStream[SparkFlumeEvent] =
       FlumeUtils.createPollingStream(ssc, addresses, StorageLevel.MEMORY_AND_DISK,
@@ -109,7 +122,7 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
 
     ssc.start()
     try {
-      utils.sendDatAndEnsureAllDataHasBeenReceived()
+      utils.sendDataAndEnsureAllDataHasBeenReceived()
       val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
       clock.advance(batchDuration.milliseconds)
 
@@ -123,7 +136,8 @@ class FlumePollingStreamSuite extends SparkFunSuite with BeforeAndAfter with Log
         utils.assertOutput(headers.asJava, bodies.asJava)
       }
     } finally {
-      ssc.stop()
+      // here stop ssc only, but not underlying sparkcontext
+      ssc.stop(false)
     }
   }
 

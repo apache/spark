@@ -45,6 +45,18 @@ class IllegalArgumentException(CapturedException):
     """
 
 
+class ContinuousQueryException(CapturedException):
+    """
+    Exception that stopped a :class:`ContinuousQuery`.
+    """
+
+
+class QueryExecutionException(CapturedException):
+    """
+    Failed to execute a query.
+    """
+
+
 def capture_sql_exception(f):
     def deco(*a, **kw):
         try:
@@ -55,8 +67,14 @@ def capture_sql_exception(f):
                                              e.java_exception.getStackTrace()))
             if s.startswith('org.apache.spark.sql.AnalysisException: '):
                 raise AnalysisException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.catalyst.analysis'):
+                raise AnalysisException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('org.apache.spark.sql.catalyst.parser.ParseException: '):
                 raise ParseException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.ContinuousQueryException: '):
+                raise ContinuousQueryException(s.split(': ', 1)[1], stackTrace)
+            if s.startswith('org.apache.spark.sql.execution.QueryExecutionException: '):
+                raise QueryExecutionException(s.split(': ', 1)[1], stackTrace)
             if s.startswith('java.lang.IllegalArgumentException: '):
                 raise IllegalArgumentException(s.split(': ', 1)[1], stackTrace)
             raise

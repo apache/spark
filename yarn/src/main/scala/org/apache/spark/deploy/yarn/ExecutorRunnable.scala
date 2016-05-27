@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.yarn
 
 import java.io.File
-import java.net.URI
 import java.nio.ByteBuffer
 import java.util.Collections
 
@@ -55,7 +54,8 @@ private[yarn] class ExecutorRunnable(
     executorMemory: Int,
     executorCores: Int,
     appId: String,
-    securityMgr: SecurityManager)
+    securityMgr: SecurityManager,
+    localResources: Map[String, LocalResource])
   extends Runnable with Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
@@ -77,9 +77,7 @@ private[yarn] class ExecutorRunnable(
     val ctx = Records.newRecord(classOf[ContainerLaunchContext])
       .asInstanceOf[ContainerLaunchContext]
 
-    val localResources = prepareLocalResources
     ctx.setLocalResources(localResources.asJava)
-
     ctx.setEnvironment(env.asJava)
 
     val credentials = UserGroupInformation.getCurrentUser().getCredentials()
@@ -88,7 +86,7 @@ private[yarn] class ExecutorRunnable(
     ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
     val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores,
-      appId, localResources)
+      appId)
 
     logInfo(s"""
       |===============================================================================
@@ -136,8 +134,7 @@ private[yarn] class ExecutorRunnable(
       hostname: String,
       executorMemory: Int,
       executorCores: Int,
-      appId: String,
-      localResources: HashMap[String, LocalResource]): List[String] = {
+      appId: String): List[String] = {
     // Extra options for the JVM
     val javaOpts = ListBuffer[String]()
 
@@ -214,15 +211,10 @@ private[yarn] class ExecutorRunnable(
       Seq("--user-class-path", "file:" + absPath)
     }.toSeq
 
+    YarnSparkHadoopUtil.addOutOfMemoryErrorArgument(javaOpts)
     val commands = prefixEnv ++ Seq(
       YarnSparkHadoopUtil.expandEnvironment(Environment.JAVA_HOME) + "/bin/java",
-      "-server",
-      // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
-      // Not killing the task leaves various aspects of the executor and (to some extent) the jvm in
-      // an inconsistent state.
-      // TODO: If the OOM is not recoverable by rescheduling it on different node, then do
-      // 'something' to fail job ... akin to blacklisting trackers in mapred ?
-      YarnSparkHadoopUtil.getOutOfMemoryErrorArgument) ++
+      "-server") ++
       javaOpts ++
       Seq("org.apache.spark.executor.CoarseGrainedExecutorBackend",
         "--driver-url", masterAddress.toString,
@@ -237,53 +229,6 @@ private[yarn] class ExecutorRunnable(
 
     // TODO: it would be nicer to just make sure there are no null commands here
     commands.map(s => if (s == null) "null" else s).toList
-  }
-
-  private def setupDistributedCache(
-      file: String,
-      rtype: LocalResourceType,
-      localResources: HashMap[String, LocalResource],
-      timestamp: String,
-      size: String,
-      vis: String): Unit = {
-    val uri = new URI(file)
-    val amJarRsrc = Records.newRecord(classOf[LocalResource])
-    amJarRsrc.setType(rtype)
-    amJarRsrc.setVisibility(LocalResourceVisibility.valueOf(vis))
-    amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
-    amJarRsrc.setTimestamp(timestamp.toLong)
-    amJarRsrc.setSize(size.toLong)
-    localResources(uri.getFragment()) = amJarRsrc
-  }
-
-  private def prepareLocalResources: HashMap[String, LocalResource] = {
-    logInfo("Preparing Local resources")
-    val localResources = HashMap[String, LocalResource]()
-
-    if (System.getenv("SPARK_YARN_CACHE_FILES") != null) {
-      val timeStamps = System.getenv("SPARK_YARN_CACHE_FILES_TIME_STAMPS").split(',')
-      val fileSizes = System.getenv("SPARK_YARN_CACHE_FILES_FILE_SIZES").split(',')
-      val distFiles = System.getenv("SPARK_YARN_CACHE_FILES").split(',')
-      val visibilities = System.getenv("SPARK_YARN_CACHE_FILES_VISIBILITIES").split(',')
-      for( i <- 0 to distFiles.length - 1) {
-        setupDistributedCache(distFiles(i), LocalResourceType.FILE, localResources, timeStamps(i),
-          fileSizes(i), visibilities(i))
-      }
-    }
-
-    if (System.getenv("SPARK_YARN_CACHE_ARCHIVES") != null) {
-      val timeStamps = System.getenv("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS").split(',')
-      val fileSizes = System.getenv("SPARK_YARN_CACHE_ARCHIVES_FILE_SIZES").split(',')
-      val distArchives = System.getenv("SPARK_YARN_CACHE_ARCHIVES").split(',')
-      val visibilities = System.getenv("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES").split(',')
-      for( i <- 0 to distArchives.length - 1) {
-        setupDistributedCache(distArchives(i), LocalResourceType.ARCHIVE, localResources,
-          timeStamps(i), fileSizes(i), visibilities(i))
-      }
-    }
-
-    logInfo("Prepared Local resources " + localResources)
-    localResources
   }
 
   private def prepareEnvironment(container: Container): HashMap[String, String] = {

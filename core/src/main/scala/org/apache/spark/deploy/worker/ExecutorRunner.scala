@@ -179,16 +179,14 @@ private[deploy] class ExecutorRunner(
       val message = "Command exited with code " + exitCode
       worker.send(ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode)))
     } catch {
-      case interrupted: InterruptedException => {
+      case interrupted: InterruptedException =>
         logInfo("Runner thread for executor " + fullId + " interrupted")
         state = ExecutorState.KILLED
         killProcess(None)
-      }
-      case e: Exception => {
+      case e: Exception =>
         logError("Error running executor", e)
         state = ExecutorState.FAILED
         killProcess(Some(e.toString))
-      }
     }
   }
 }

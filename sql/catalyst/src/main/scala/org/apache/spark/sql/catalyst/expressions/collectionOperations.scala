@@ -26,6 +26,9 @@ import org.apache.spark.sql.types._
 /**
  * Given an array or map, returns its size.
  */
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns the size of an array or a map.",
+  extended = " > SELECT _FUNC_(array('b', 'd', 'c', 'a'));\n 4")
 case class Size(child: Expression) extends UnaryExpression with ExpectsInputTypes {
   override def dataType: DataType = IntegerType
   override def inputTypes: Seq[AbstractDataType] = Seq(TypeCollection(ArrayType, MapType))
@@ -35,7 +38,7 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
     case _: MapType => value.asInstanceOf[MapData].numElements()
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, c => s"${ev.value} = ($c).numElements();")
   }
 }
@@ -44,6 +47,11 @@ case class Size(child: Expression) extends UnaryExpression with ExpectsInputType
  * Sorts the input array in ascending / descending order according to the natural ordering of
  * the array elements and returns it.
  */
+// scalastyle:off line.size.limit
+@ExpressionDescription(
+  usage = "_FUNC_(array(obj1, obj2, ...), ascendingOrder) - Sorts the input array in ascending order according to the natural ordering of the array elements.",
+  extended = " > SELECT _FUNC_(array('b', 'd', 'c', 'a'), true);\n 'a', 'b', 'c', 'd'")
+// scalastyle:on line.size.limit
 case class SortArray(base: Expression, ascendingOrder: Expression)
   extends BinaryExpression with ExpectsInputTypes with CodegenFallback {
 
@@ -125,6 +133,9 @@ case class SortArray(base: Expression, ascendingOrder: Expression)
 /**
  * Checks if the array (left) has the element (right)
  */
+@ExpressionDescription(
+  usage = "_FUNC_(array, value) - Returns TRUE if the array contains the value.",
+  extended = " > SELECT _FUNC_(array(1, 2, 3), 2);\n true")
 case class ArrayContains(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes {
 
@@ -170,7 +181,7 @@ case class ArrayContains(left: Expression, right: Expression)
     }
   }
 
-  override def genCode(ctx: CodegenContext, ev: ExprCode): String = {
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     nullSafeCodeGen(ctx, ev, (arr, value) => {
       val i = ctx.freshName("i")
       val getValue = ctx.getValue(arr, right.dataType, i)

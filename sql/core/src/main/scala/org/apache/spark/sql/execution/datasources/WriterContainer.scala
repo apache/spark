@@ -27,19 +27,19 @@ import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.spark._
 import org.apache.spark.internal.Logging
 import org.apache.spark.mapred.SparkHadoopMapRedUtil
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.UnsafeKVExternalSorter
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.sources.{HadoopFsRelation, OutputWriter, OutputWriterFactory}
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
-import org.apache.spark.util.SerializableConfiguration
+import org.apache.spark.util.{SerializableConfiguration, Utils}
+
 
 /** A container for all the details required when writing to a table. */
 case class WriteRelation(
-    sqlContext: SQLContext,
+    sparkSession: SparkSession,
     dataSchema: StructType,
     path: String,
     prepareJobForWrite: Job => OutputWriterFactory,
@@ -67,7 +67,7 @@ private[sql] abstract class BaseWriterContainer(
   @transient private val jobContext: JobContext = job
 
   private val speculationEnabled: Boolean =
-    relation.sqlContext.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
+    relation.sparkSession.sparkContext.conf.getBoolean("spark.speculation", defaultValue = false)
 
   // The following fields are initialized and used on both driver and executor side.
   @transient protected var outputCommitter: OutputCommitter = _
@@ -176,7 +176,7 @@ private[sql] abstract class BaseWriterContainer(
           val ctor = clazz.getDeclaredConstructor(classOf[Path], classOf[TaskAttemptContext])
           ctor.newInstance(new Path(outputPath), context)
         } else {
-          // The specified output committer is just a OutputCommitter.
+          // The specified output committer is just an OutputCommitter.
           // So, we will use the no-argument constructor.
           val ctor = clazz.getDeclaredConstructor()
           ctor.newInstance()
@@ -247,19 +247,16 @@ private[sql] class DefaultWriterContainer(
 
     // If anything below fails, we should abort the task.
     try {
-      while (iterator.hasNext) {
-        val internalRow = iterator.next()
-        writer.writeInternal(internalRow)
-      }
-
-      commitTask()
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        while (iterator.hasNext) {
+          val internalRow = iterator.next()
+          writer.writeInternal(internalRow)
+        }
+        commitTask()
+      }(catchBlock = abortTask())
     } catch {
-      case cause: Throwable =>
-        logError("Aborting task.", cause)
-        // call failure callbacks first, so we could have a chance to cleanup the writer.
-        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(cause)
-        abortTask()
-        throw new SparkException("Task failed while writing rows.", cause)
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows", t)
     }
 
     def commitTask(): Unit = {
@@ -413,37 +410,37 @@ private[sql] class DynamicPartitionWriterContainer(
     // If anything below fails, we should abort the task.
     var currentWriter: OutputWriter = null
     try {
-      var currentKey: UnsafeRow = null
-      while (sortedIterator.next()) {
-        val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
-        if (currentKey != nextKey) {
-          if (currentWriter != null) {
-            currentWriter.close()
-            currentWriter = null
+      Utils.tryWithSafeFinallyAndFailureCallbacks {
+        var currentKey: UnsafeRow = null
+        while (sortedIterator.next()) {
+          val nextKey = getBucketingKey(sortedIterator.getKey).asInstanceOf[UnsafeRow]
+          if (currentKey != nextKey) {
+            if (currentWriter != null) {
+              currentWriter.close()
+              currentWriter = null
+            }
+            currentKey = nextKey.copy()
+            logDebug(s"Writing partition: $currentKey")
+
+            currentWriter = newOutputWriter(currentKey, getPartitionString)
           }
-          currentKey = nextKey.copy()
-          logDebug(s"Writing partition: $currentKey")
-
-          currentWriter = newOutputWriter(currentKey, getPartitionString)
+          currentWriter.writeInternal(sortedIterator.getValue)
         }
-        currentWriter.writeInternal(sortedIterator.getValue)
-      }
-      if (currentWriter != null) {
-        currentWriter.close()
-        currentWriter = null
-      }
+        if (currentWriter != null) {
+          currentWriter.close()
+          currentWriter = null
+        }
 
-      commitTask()
-    } catch {
-      case cause: Throwable =>
-        logError("Aborting task.", cause)
-        // call failure callbacks first, so we could have a chance to cleanup the writer.
-        TaskContext.get().asInstanceOf[TaskContextImpl].markTaskFailed(cause)
+        commitTask()
+      }(catchBlock = {
         if (currentWriter != null) {
           currentWriter.close()
         }
         abortTask()
-        throw new SparkException("Task failed while writing rows.", cause)
+      })
+    } catch {
+      case t: Throwable =>
+        throw new SparkException("Task failed while writing rows", t)
     }
   }
 }

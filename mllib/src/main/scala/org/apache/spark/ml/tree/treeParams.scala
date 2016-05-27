@@ -17,13 +17,15 @@
 
 package org.apache.spark.ml.tree
 
+import scala.util.Try
+
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
 import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
-import org.apache.spark.mllib.tree.loss.{Loss => OldLoss}
+import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
 /**
@@ -329,6 +331,8 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    *  - "onethird": use 1/3 of the features
    *  - "sqrt": use sqrt(number of features)
    *  - "log2": use log2(number of features)
+   *  - "n": when n is in the range (0, 1.0], use n * number of features. When n
+   *         is in the range (1, number of features), use n features.
    * (default = "auto")
    *
    * These various settings are based on the following references:
@@ -344,9 +348,12 @@ private[ml] trait HasFeatureSubsetStrategy extends Params {
    */
   final val featureSubsetStrategy: Param[String] = new Param[String](this, "featureSubsetStrategy",
     "The number of features to consider for splits at each tree node." +
-      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}",
+      s" Supported options: ${RandomForestParams.supportedFeatureSubsetStrategies.mkString(", ")}" +
+      s", (0.0-1.0], [1-n].",
     (value: String) =>
-      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase))
+      RandomForestParams.supportedFeatureSubsetStrategies.contains(value.toLowerCase)
+      || Try(value.toInt).filter(_ > 0).isSuccess
+      || Try(value.toDouble).filter(_ > 0).filter(_ <= 1.0).isSuccess)
 
   setDefault(featureSubsetStrategy -> "auto")
 
@@ -455,4 +462,75 @@ private[ml] trait GBTParams extends TreeEnsembleParams with HasMaxIter with HasS
 
   /** Get old Gradient Boosting Loss type */
   private[ml] def getOldLossType: OldLoss
+}
+
+private[ml] object GBTClassifierParams {
+  // The losses below should be lowercase.
+  /** Accessor for supported loss settings: logistic */
+  final val supportedLossTypes: Array[String] = Array("logistic").map(_.toLowerCase)
+}
+
+private[ml] trait GBTClassifierParams extends GBTParams with TreeClassifierParams {
+
+  /**
+   * Loss function which GBT tries to minimize. (case-insensitive)
+   * Supported: "logistic"
+   * (default = logistic)
+   * @group param
+   */
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
+    " tries to minimize (case-insensitive). Supported options:" +
+    s" ${GBTClassifierParams.supportedLossTypes.mkString(", ")}",
+    (value: String) => GBTClassifierParams.supportedLossTypes.contains(value.toLowerCase))
+
+  setDefault(lossType -> "logistic")
+
+  /** @group getParam */
+  def getLossType: String = $(lossType).toLowerCase
+
+  /** (private[ml]) Convert new loss to old loss. */
+  override private[ml] def getOldLossType: OldLoss = {
+    getLossType match {
+      case "logistic" => OldLogLoss
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTClassifier was given bad loss type: $getLossType")
+    }
+  }
+}
+
+private[ml] object GBTRegressorParams {
+  // The losses below should be lowercase.
+  /** Accessor for supported loss settings: squared (L2), absolute (L1) */
+  final val supportedLossTypes: Array[String] = Array("squared", "absolute").map(_.toLowerCase)
+}
+
+private[ml] trait GBTRegressorParams extends GBTParams with TreeRegressorParams {
+
+  /**
+   * Loss function which GBT tries to minimize. (case-insensitive)
+   * Supported: "squared" (L2) and "absolute" (L1)
+   * (default = squared)
+   * @group param
+   */
+  val lossType: Param[String] = new Param[String](this, "lossType", "Loss function which GBT" +
+    " tries to minimize (case-insensitive). Supported options:" +
+    s" ${GBTRegressorParams.supportedLossTypes.mkString(", ")}",
+    (value: String) => GBTRegressorParams.supportedLossTypes.contains(value.toLowerCase))
+
+  setDefault(lossType -> "squared")
+
+  /** @group getParam */
+  def getLossType: String = $(lossType).toLowerCase
+
+  /** (private[ml]) Convert new loss to old loss. */
+  override private[ml] def getOldLossType: OldLoss = {
+    getLossType match {
+      case "squared" => OldSquaredError
+      case "absolute" => OldAbsoluteError
+      case _ =>
+        // Should never happen because of check in setter method.
+        throw new RuntimeException(s"GBTRegressorParams was given bad loss type: $getLossType")
+    }
+  }
 }
