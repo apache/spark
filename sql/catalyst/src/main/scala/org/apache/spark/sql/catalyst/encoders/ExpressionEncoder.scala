@@ -20,9 +20,9 @@ package org.apache.spark.sql.catalyst.encoders
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
-import org.apache.spark.sql.{AnalysisException, Encoder}
+import org.apache.spark.sql.Encoder
 import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, NewInstance}
@@ -119,15 +119,15 @@ object ExpressionEncoder {
     val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
       if (enc.flat) {
         enc.deserializer.transform {
-          case b: BoundReference => b.copy(ordinal = index)
+          case g: GetColumnByOrdinal => g.copy(ordinal = index)
         }
       } else {
-        val input = BoundReference(index, enc.schema, nullable = true)
+        val input = GetColumnByOrdinal(index, enc.schema)
         val deserialized = enc.deserializer.transformUp {
           case UnresolvedAttribute(nameParts) =>
             assert(nameParts.length == 1)
             UnresolvedExtractValue(input, Literal(nameParts.head))
-          case BoundReference(ordinal, dt, _) => GetStructField(input, ordinal)
+          case GetColumnByOrdinal(ordinal, _) => GetStructField(input, ordinal)
         }
         If(IsNull(input), Literal.create(null, deserialized.dataType), deserialized)
       }

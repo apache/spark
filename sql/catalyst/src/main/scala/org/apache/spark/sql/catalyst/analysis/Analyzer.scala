@@ -1925,15 +1925,14 @@ class Analyzer(
             inputAttributes
           }
 
-          validateBoundReference(deserializer, inputs)
-
-          val unbound = deserializer transform {
-            case b: BoundReference => inputs(b.ordinal)
+          validateTupleColumns(deserializer, inputs)
+          val ordinalResolved = deserializer transform {
+            case GetColumnByOrdinal(ordinal, _) => inputs(ordinal)
           }
-          val resolved = resolveExpression(unbound, LocalRelation(inputs), throws = true)
-
-          validateGetStructField(resolved)
-          resolved
+          val attrResolved = resolveExpression(
+            ordinalResolved, LocalRelation(inputs), throws = true)
+          validateInnerTupleFields(attrResolved)
+          attrResolved
       }
     }
 
@@ -1943,14 +1942,15 @@ class Analyzer(
     }
 
     /**
-     * Deserializer expression may contains `BoundReference`s instead of `AttributeReference`s
-     * (e.g. if it's from a tuple encoder or tupled encoder), we should check if their
-     * ordinals match the real schema.
+     * For each Tuple field, we use [[GetColumnByOrdinal]] to get its corresponding column by
+     * position.  However, the actual number of columns may be different from the number of Tuple
+     * fields.  This method is used to check the number of columns and fields, and throw an
+     * exception if they do not match.
      */
-    private def validateBoundReference(deserializer: Expression, inputs: Seq[Attribute]): Unit = {
+    private def validateTupleColumns(deserializer: Expression, inputs: Seq[Attribute]): Unit = {
       var maxOrdinal = -1
       deserializer.foreach {
-        case b: BoundReference => if (b.ordinal > maxOrdinal) maxOrdinal = b.ordinal
+        case GetColumnByOrdinal(ordinal, _) => if (ordinal > maxOrdinal) maxOrdinal = ordinal
         case _ =>
       }
       if (maxOrdinal >= 0 && maxOrdinal != inputs.length - 1) {
@@ -1959,11 +1959,12 @@ class Analyzer(
     }
 
     /**
-     * Deserializer expression may contains `GetStructField`s instead of `UnresolvedExtractValue`s
-     * (e.g. if we are encoding a nested tuple), we should check if their ordinals match the real
-     * schema.
+     * For each inner Tuple field, we use [[GetStructField]] to get its corresponding struct field
+     * by position.  However, the actual number of struct fields may be different from the number
+     * of inner Tuple fields.  This method is used to check the number of struct fields and inner
+     * Tuple fields, and throw an exception if they do not match.
      */
-    private def validateGetStructField(deserializer: Expression): Unit = {
+    private def validateInnerTupleFields(deserializer: Expression): Unit = {
       val exprToMaxOrdinal = scala.collection.mutable.HashMap.empty[Expression, Int]
       deserializer foreach {
         case g: GetStructField =>
