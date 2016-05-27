@@ -61,7 +61,7 @@ final class ShuffleInMemorySorter {
   /**
    * How many records could be inserted, because part of the array should be left for sorting.
    */
-  private int capacity = 0;
+  private int usableCapacity = 0;
 
   private int initialSize;
 
@@ -71,7 +71,7 @@ final class ShuffleInMemorySorter {
     this.initialSize = initialSize;
     this.useRadixSort = useRadixSort;
     this.array = consumer.allocateArray(initialSize);
-    this.capacity = calcCapacity();
+    this.usableCapacity = calcCapacity();
   }
 
   private int calcCapacity() {
@@ -95,7 +95,7 @@ final class ShuffleInMemorySorter {
     if (consumer != null) {
       consumer.freeArray(array);
       array = consumer.allocateArray(initialSize);
-      capacity = calcCapacity();
+      usableCapacity = calcCapacity();
     }
     pos = 0;
   }
@@ -111,11 +111,11 @@ final class ShuffleInMemorySorter {
     );
     consumer.freeArray(array);
     array = newArray;
-    capacity = calcCapacity();
+    usableCapacity = calcCapacity();
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos < capacity;
+    return pos < usableCapacity;
   }
 
   public long getMemoryUsage() {

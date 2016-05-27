@@ -92,7 +92,7 @@ public final class UnsafeInMemorySorter {
   /**
    * How many records could be inserted, because part of the array should be left for sorting.
    */
-  private int capacity = 0;
+  private int usableCapacity = 0;
 
   private long initialSize;
 
@@ -131,7 +131,7 @@ public final class UnsafeInMemorySorter {
       this.radixSortSupport = null;
     }
     this.array = array;
-    this.capacity = calcCapacity();
+    this.usableCapacity = calcCapacity();
   }
 
   private int calcCapacity() {
@@ -154,7 +154,7 @@ public final class UnsafeInMemorySorter {
     if (consumer != null) {
       consumer.freeArray(array);
       array = consumer.allocateArray(initialSize);
-      capacity = calcCapacity();
+      usableCapacity = calcCapacity();
     }
     pos = 0;
   }
@@ -178,7 +178,7 @@ public final class UnsafeInMemorySorter {
   }
 
   public boolean hasSpaceForAnotherRecord() {
-    return pos + 1 < capacity;
+    return pos + 1 < usableCapacity;
   }
 
   public void expandPointerArray(LongArray newArray) {
@@ -193,7 +193,7 @@ public final class UnsafeInMemorySorter {
       pos * 8L);
     consumer.freeArray(array);
     array = newArray;
-    capacity = calcCapacity();
+    usableCapacity = calcCapacity();
   }
 
   /**
