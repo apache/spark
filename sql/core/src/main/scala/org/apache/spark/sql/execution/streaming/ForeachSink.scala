@@ -23,13 +23,22 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     data.as[T].foreachPartition { iter =>
-      writer.open(batchId)
-      try {
-        while (iter.hasNext) {
-          writer.process(iter.next())
+      if (writer.open(batchId)) {
+        var isFailed = false
+        try {
+          while (iter.hasNext) {
+            writer.process(iter.next())
+          }
+        } catch {
+          case e: Throwable =>
+            isFailed = true
+            writer.close(true, e)
         }
-      } finally {
-        writer.close()
+        if (!isFailed) {
+          writer.close(false, null)
+        }
+      } else {
+        writer.close(false, null)
       }
     }
   }

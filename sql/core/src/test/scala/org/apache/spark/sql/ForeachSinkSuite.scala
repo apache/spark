@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable
 
 import org.apache.spark.TaskContext
-import org.apache.spark.sql.execution.streaming.MemoryStream
+import org.apache.spark.sql.{ForeachWriter, StreamTest}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ForeachSinkSuite extends StreamTest with SharedSQLContext {
@@ -39,10 +39,11 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext {
 
           private val events = mutable.ArrayBuffer[ForeachWriterEvent.Event]()
 
-          override def open(version: Long): Unit = {
+          override def open(version: Long): Boolean = {
             events += ForeachWriterEvent.Open(
               partition = TaskContext.getPartitionId(),
               version = version)
+            true
           }
 
           override def process(value: Int): Unit = {
@@ -51,7 +52,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext {
               value = value)
           }
 
-          override def close(): Unit = {
+          override def close(isFailed: Boolean, error: Throwable): Unit = {
             events += ForeachWriterEvent.Close(partition = TaskContext.getPartitionId())
             ForeachWriterEvent.addEvents(events)
           }

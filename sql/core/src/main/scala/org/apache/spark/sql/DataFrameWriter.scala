@@ -369,6 +369,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Experimental
   def foreach(writer: ForeachWriter[T]): ContinuousQuery = {
+    assertNotBucketed()
+    assertStreaming("startStream() can only be called on continuous queries")
+
     val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
     val checkpointLocation = extraOptions.get("checkpointLocation")
       .orElse {
@@ -376,15 +379,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           new Path(l, queryName).toUri.toString
         }
       }.getOrElse {
-      throw new AnalysisException("checkpointLocation must be specified either " +
-        "through option() or SQLConf")
+        throw new AnalysisException("checkpointLocation must be specified either " +
+          "through option() or SQLConf")
     }
 
     df.sparkSession.sessionState.continuousQueryManager.startQuery(
       queryName,
       checkpointLocation,
       df,
-      new ForeachSink[T](writer)(ds.encoder),
+      new ForeachSink[T](ds.sparkSession.sparkContext.clean(writer))(ds.unresolvedTEncoder),
       trigger)
   }
 
