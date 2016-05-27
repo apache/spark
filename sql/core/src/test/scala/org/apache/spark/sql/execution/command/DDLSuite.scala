@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFor
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils.DATASOURCE_PREFIX
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -489,63 +490,19 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("alter table: set properties") {
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    assert(catalog.getTableMetadata(tableIdent).properties.isEmpty)
-    // set table properties
-    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
-    assert(catalog.getTableMetadata(tableIdent).properties ==
-      Map("andrew" -> "or14", "kor" -> "bel"))
-    // set table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
-    assert(catalog.getTableMetadata(tableIdent).properties ==
-      Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
-    }
-    // throw exception for datasource tables
-    convertToDatasourceTable(catalog, tableIdent)
-    val e = intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 SET TBLPROPERTIES ('sora' = 'bol')")
-    }
-    assert(e.getMessage.contains("datasource"))
+    testSetProperties(isDatasourceTable = false)
+  }
+
+  test("alter table: set properties (datasource table)") {
+    testSetProperties(isDatasourceTable = true)
   }
 
   test("alter table: unset properties") {
-    val catalog = spark.sessionState.catalog
-    val tableIdent = TableIdentifier("tab1", Some("dbx"))
-    createDatabase(catalog, "dbx")
-    createTable(catalog, tableIdent)
-    // unset table properties
-    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan')")
-    sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
-    assert(catalog.getTableMetadata(tableIdent).properties == Map("p" -> "an", "c" -> "lan"))
-    // unset table properties without explicitly specifying database
-    catalog.setCurrentDatabase("dbx")
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
-    assert(catalog.getTableMetadata(tableIdent).properties == Map("c" -> "lan"))
-    // table to alter does not exist
-    intercept[AnalysisException] {
-      sql("ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
-    }
-    // property to unset does not exist
-    val e = intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
-    }
-    assert(e.getMessage.contains("xyz"))
-    // property to unset does not exist, but "IF EXISTS" is specified
-    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
-    assert(catalog.getTableMetadata(tableIdent).properties.isEmpty)
-    // throw exception for datasource tables
-    convertToDatasourceTable(catalog, tableIdent)
-    val e1 = intercept[AnalysisException] {
-      sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('sora')")
-    }
-    assert(e1.getMessage.contains("datasource"))
+    testUnsetProperties(isDatasourceTable = false)
+  }
+
+  test("alter table: unset properties (datasource table)") {
+    testUnsetProperties(isDatasourceTable = true)
   }
 
   test("alter table: set serde") {
@@ -768,6 +725,78 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       properties = Map("spark.sql.sources.provider" -> "csv")))
   }
 
+  private def testSetProperties(isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    def getProps: Map[String, String] = {
+      catalog.getTableMetadata(tableIdent).properties.filterKeys { k =>
+        !isDatasourceTable || !k.startsWith(DATASOURCE_PREFIX)
+      }
+    }
+    assert(getProps.isEmpty)
+    // set table properties
+    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('andrew' = 'or14', 'kor' = 'bel')")
+    assert(getProps == Map("andrew" -> "or14", "kor" -> "bel"))
+    // set table properties without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 SET TBLPROPERTIES ('kor' = 'belle', 'kar' = 'bol')")
+    assert(getProps == Map("andrew" -> "or14", "kor" -> "belle", "kar" -> "bol"))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist SET TBLPROPERTIES ('winner' = 'loser')")
+    }
+    // datasource table property keys are not allowed
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER TABLE tab1 SET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo' = 'loser')")
+    }
+    assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+  }
+
+  private def testUnsetProperties(isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    def getProps: Map[String, String] = {
+      catalog.getTableMetadata(tableIdent).properties.filterKeys { k =>
+        !isDatasourceTable || !k.startsWith(DATASOURCE_PREFIX)
+      }
+    }
+    // unset table properties
+    sql("ALTER TABLE dbx.tab1 SET TBLPROPERTIES ('j' = 'am', 'p' = 'an', 'c' = 'lan', 'x' = 'y')")
+    sql("ALTER TABLE dbx.tab1 UNSET TBLPROPERTIES ('j')")
+    assert(getProps == Map("p" -> "an", "c" -> "lan", "x" -> "y"))
+    // unset table properties without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('p')")
+    assert(getProps == Map("c" -> "lan", "x" -> "y"))
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist UNSET TBLPROPERTIES ('c' = 'lan')")
+    }
+    // property to unset does not exist
+    val e = intercept[AnalysisException] {
+      sql("ALTER TABLE tab1 UNSET TBLPROPERTIES ('c', 'xyz')")
+    }
+    assert(e.getMessage.contains("xyz"))
+    // property to unset does not exist, but "IF EXISTS" is specified
+    sql("ALTER TABLE tab1 UNSET TBLPROPERTIES IF EXISTS ('c', 'xyz')")
+    assert(getProps == Map("x" -> "y"))
+    // datasource table property keys are not allowed
+    val e2 = intercept[AnalysisException] {
+      sql(s"ALTER TABLE tab1 UNSET TBLPROPERTIES ('${DATASOURCE_PREFIX}foo')")
+    }
+    assert(e2.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+  }
+
   private def testSetLocation(isDatasourceTable: Boolean): Unit = {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
@@ -870,6 +899,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     intercept[AnalysisException] {
       sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
     }
+    // serde properties must not be a datasource property
+    val e = intercept[AnalysisException] {
+      sql(s"ALTER TABLE tab1 SET SERDEPROPERTIES ('${DATASOURCE_PREFIX}foo'='wah')")
+    }
+    assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
   }
 
   private def testAddPartitions(isDatasourceTable: Boolean): Unit = {
@@ -1089,6 +1123,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         assert(message.contains("Please enable Hive support when selecting the regular tables"))
       }
     }
+  }
+
+  test("create table with datasource properties (not allowed)") {
+    assertUnsupported("CREATE TABLE my_tab TBLPROPERTIES ('spark.sql.sources.me'='anything')")
+    assertUnsupported("CREATE TABLE my_tab ROW FORMAT SERDE 'serde' " +
+      "WITH SERDEPROPERTIES ('spark.sql.sources.me'='anything')")
   }
 
   test("drop default database") {
