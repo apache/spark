@@ -508,8 +508,6 @@ class DataFrameWriter(object):
 
         * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
            the sink
-        * `update`:Only the changed rows in the streaming DataFrame/Dataset will be written to
-           the sink every time there is some updates
         * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
            every time these is some updates
 
