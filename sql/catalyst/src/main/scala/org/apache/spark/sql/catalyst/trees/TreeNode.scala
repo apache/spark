@@ -546,7 +546,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
 
   protected def jsonFields: List[JField] = {
     val fieldNames = getConstructorParameterNames(getClass)
-    val fieldValues = productIterator.toSeq ++ otherCopyArgs
+    val fieldValues = fieldNames.map { name =>
+        this.getClass.getMethod(name).invoke(this)
+    }
     assert(fieldNames.length == fieldValues.length, s"${getClass.getSimpleName} fields: " +
       fieldNames.mkString(", ") + s", values: " + fieldValues.map(_.toString).mkString(", "))
 
