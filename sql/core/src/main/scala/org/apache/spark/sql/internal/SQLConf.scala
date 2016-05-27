@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.internal
 
-import java.io.File
 import java.util.{NoSuchElementException, Properties}
 import java.util.concurrent.TimeUnit
 
@@ -56,7 +55,7 @@ object SQLConf {
   val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
     .stringConf
-    .createWithDefault("${system:user.dir}/spark-warehouse")
+    .createWithDefault("file:${system:user.dir}/spark-warehouse")
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
@@ -666,8 +665,7 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def variableSubstituteDepth: Int = getConf(VARIABLE_SUBSTITUTE_DEPTH)
 
   def warehousePath: String = {
-    getConf(WAREHOUSE_PATH).replace("${system:user.dir}",
-      new File(System.getProperty("user.dir")).toURI.toURL.toString).replace("//", "/")
+    getConf(WAREHOUSE_PATH).replace("${system:user.dir}", System.getProperty("user.dir"))
   }
 
   override def orderByOrdinal: Boolean = getConf(ORDER_BY_ORDINAL)
