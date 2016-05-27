@@ -31,7 +31,7 @@ import org.apache.spark.graphx.{Edge, EdgeContext, Graph, VertexId}
 import org.apache.spark.mllib.linalg.{Matrices, Matrix, Vector, Vectors}
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
@@ -446,9 +446,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         docConcentration: Vector,
         topicConcentration: Double,
         gammaShape: Double): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
-
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
       val k = topicsMatrix.numCols
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
@@ -461,8 +459,8 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
       val topicsDenseMatrix = topicsMatrix.toBreeze.toDenseMatrix
       val topics = Range(0, k).map { topicInd =>
         Data(Vectors.dense((topicsDenseMatrix(::, topicInd).toArray)), topicInd)
-      }.toSeq
-      sc.parallelize(topics, 1).toDF().write.parquet(Loader.dataPath(path))
+      }
+      spark.createDataFrame(topics).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     def load(
@@ -472,8 +470,8 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         topicConcentration: Double,
         gammaShape: Double): LocalLDAModel = {
       val dataPath = Loader.dataPath(path)
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataFrame = sqlContext.read.parquet(dataPath)
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val dataFrame = spark.read.parquet(dataPath)
 
       Loader.checkSchema[Data](dataFrame.schema)
       val topics = dataFrame.collect()
@@ -853,8 +851,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         topicConcentration: Double,
         iterationTimes: Array[Double],
         gammaShape: Double): Unit = {
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
 
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
@@ -866,18 +863,17 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(Loader.metadataPath(path))
 
       val newPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
-      sc.parallelize(Seq(Data(Vectors.fromBreeze(globalTopicTotals)))).toDF()
-        .write.parquet(newPath)
+      spark.createDataFrame(Seq(Data(Vectors.fromBreeze(globalTopicTotals)))).write.parquet(newPath)
 
       val verticesPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
-      graph.vertices.map { case (ind, vertex) =>
+      spark.createDataFrame(graph.vertices.map { case (ind, vertex) =>
         VertexData(ind, Vectors.fromBreeze(vertex))
-      }.toDF().write.parquet(verticesPath)
+      }).write.parquet(verticesPath)
 
       val edgesPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
-      graph.edges.map { case Edge(srcId, dstId, prop) =>
+      spark.createDataFrame(graph.edges.map { case Edge(srcId, dstId, prop) =>
         EdgeData(srcId, dstId, prop)
-      }.toDF().write.parquet(edgesPath)
+      }).write.parquet(edgesPath)
     }
 
     def load(
@@ -891,10 +887,10 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
       val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
       val edgeDataPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataFrame = sqlContext.read.parquet(dataPath)
-      val vertexDataFrame = sqlContext.read.parquet(vertexDataPath)
-      val edgeDataFrame = sqlContext.read.parquet(edgeDataPath)
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val dataFrame = spark.read.parquet(dataPath)
+      val vertexDataFrame = spark.read.parquet(vertexDataPath)
+      val edgeDataFrame = spark.read.parquet(edgeDataPath)
 
       Loader.checkSchema[Data](dataFrame.schema)
       Loader.checkSchema[VertexData](vertexDataFrame.schema)

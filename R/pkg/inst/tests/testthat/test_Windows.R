@@ -14,23 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-context("include an external JAR in SparkContext")
-
-runScript <- function() {
-  sparkHome <- Sys.getenv("SPARK_HOME")
-  sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
-  jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
-  scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/testthat/jarTest.R")
-  submitPath <- file.path(sparkHome, paste("bin/", determineSparkSubmitBin(), sep = ""))
-  combinedArgs <- paste(jarPath, scriptPath, sep = " ")
-  res <- launchScript(submitPath, combinedArgs, capture = TRUE)
-  tail(res, 2)
-}
+context("Windows-specific tests")
 
 test_that("sparkJars tag in SparkContext", {
-  testOutput <- runScript()
-  helloTest <- testOutput[1]
-  expect_equal(helloTest, "Hello, Dave")
-  basicFunction <- testOutput[2]
-  expect_equal(basicFunction, "4")
+  if (.Platform$OS.type != "windows") {
+    skip("This test is only for Windows, skipped")
+  }
+  testOutput <- launchScript("ECHO", "a/b/c", capture = TRUE)
+  abcPath <- testOutput[1]
+  expect_equal(abcPath, "a\\b\\c")
 })

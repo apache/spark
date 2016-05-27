@@ -392,3 +392,4 @@ You can inspect the search path in R with [`search()`](https://stat.ethz.ch/R-ma
 
  - The method `table` has been removed and replaced by `tableToDF`.
  - The class `DataFrame` has been renamed to `SparkDataFrame` to avoid name conflicts.
+ - The `sqlContext` parameter is no longer required for these functions: `createDataFrame`, `as.DataFrame`, `read.json`, `jsonFile`, `read.parquet`, `parquetFile`, `read.text`, `sql`, `tables`, `tableNames`, `cacheTable`, `uncacheTable`, `clearCache`, `dropTempTable`, `read.df`, `loadDF`, `createExternalTable`

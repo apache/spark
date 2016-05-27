@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.command.CreateTableAsSelectLogicalPlan
 import org.apache.spark.sql.execution.datasources.{Partition => _, _}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -74,9 +75,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // TODO: the following code is duplicated with FindDataSourceTable.readDataSourceTable
 
         def schemaStringFromParts: Option[String] = {
-          table.properties.get("spark.sql.sources.schema.numParts").map { numParts =>
+          table.properties.get(DATASOURCE_SCHEMA_NUMPARTS).map { numParts =>
             val parts = (0 until numParts.toInt).map { index =>
-              val part = table.properties.get(s"spark.sql.sources.schema.part.$index").orNull
+              val part = table.properties.get(s"$DATASOURCE_SCHEMA_PART_PREFIX$index").orNull
               if (part == null) {
                 throw new AnalysisException(
                   "Could not read schema from the metastore because it is corrupted " +
@@ -91,9 +92,9 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         }
 
         def getColumnNames(colType: String): Seq[String] = {
-          table.properties.get(s"spark.sql.sources.schema.num${colType.capitalize}Cols").map {
+          table.properties.get(s"$DATASOURCE_SCHEMA.num${colType.capitalize}Cols").map {
             numCols => (0 until numCols.toInt).map { index =>
-              table.properties.getOrElse(s"spark.sql.sources.schema.${colType}Col.$index",
+              table.properties.getOrElse(s"$DATASOURCE_SCHEMA_PREFIX${colType}Col.$index",
                 throw new AnalysisException(
                   s"Could not read $colType columns from the metastore because it is corrupted " +
                     s"(missing part $index of it, $numCols parts are expected)."))
@@ -104,8 +105,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // Originally, we used spark.sql.sources.schema to store the schema of a data source table.
         // After SPARK-6024, we removed this flag.
         // Although we are not using spark.sql.sources.schema any more, we need to still support.
-        val schemaString =
-          table.properties.get("spark.sql.sources.schema").orElse(schemaStringFromParts)
+        val schemaString = table.properties.get(DATASOURCE_SCHEMA).orElse(schemaStringFromParts)
 
         val userSpecifiedSchema =
           schemaString.map(s => DataType.fromJson(s).asInstanceOf[StructType])
@@ -115,7 +115,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
         // from userSpecifiedSchema.
         val partitionColumns = getColumnNames("part")
 
-        val bucketSpec = table.properties.get("spark.sql.sources.schema.numBuckets").map { n =>
+        val bucketSpec = table.properties.get(DATASOURCE_SCHEMA_NUMBUCKETS).map { n =>
           BucketSpec(n.toInt, getColumnNames("bucket"), getColumnNames("sort"))
         }
 
@@ -126,7 +126,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
             userSpecifiedSchema = userSpecifiedSchema,
             partitionColumns = partitionColumns,
             bucketSpec = bucketSpec,
-            className = table.properties("spark.sql.sources.provider"),
+            className = table.properties(DATASOURCE_PROVIDER),
             options = options)
 
         LogicalRelation(
@@ -166,7 +166,7 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
     val qualifiedTableName = getQualifiedTableName(tableIdent)
     val table = client.getTable(qualifiedTableName.database, qualifiedTableName.name)
 
-    if (table.properties.get("spark.sql.sources.provider").isDefined) {
+    if (table.properties.get(DATASOURCE_PROVIDER).isDefined) {
       val dataSourceTable = cachedDataSourceTables(qualifiedTableName)
       val qualifiedTable = SubqueryAlias(qualifiedTableName.name, dataSourceTable)
       // Then, if alias is specified, wrap the table with a Subquery using the alias.

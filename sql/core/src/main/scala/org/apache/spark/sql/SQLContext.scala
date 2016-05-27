@@ -57,9 +57,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
-class SQLContext private[sql](
-    val sparkSession: SparkSession,
-    val isRootContext: Boolean)
+class SQLContext private[sql](val sparkSession: SparkSession)
   extends Logging with Serializable {
 
   self =>
@@ -69,13 +67,9 @@ class SQLContext private[sql](
   // Note: Since Spark 2.0 this class has become a wrapper of SparkSession, where the
   // real functionality resides. This class remains mainly for backward compatibility.
 
-  private[sql] def this(sparkSession: SparkSession) = {
-    this(sparkSession, true)
-  }
-
   @deprecated("Use SparkSession.builder instead", "2.0.0")
   def this(sc: SparkContext) = {
-    this(new SparkSession(sc))
+    this(SparkSession.builder().sparkContext(sc).getOrCreate())
   }
 
   @deprecated("Use SparkSession.builder instead", "2.0.0")
