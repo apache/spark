@@ -376,6 +376,40 @@ class SparkSession private(
     Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
 
+  /* ------------------------------- *
+   |  Methods for creating DataSets  |
+   * ------------------------------- */
+
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Example ==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
+   *   val ds = spark.createDataset(data)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
@@ -384,6 +418,17 @@ class SparkSession private(
     Dataset[T](self, plan)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
@@ -392,6 +437,24 @@ class SparkSession private(
     Dataset[T](self, plan)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a [[java.util.List]] of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Java Example ==
+   *
+   * {{{
+   *     List<String> data = Arrays.asList("hello", "world");
+   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
