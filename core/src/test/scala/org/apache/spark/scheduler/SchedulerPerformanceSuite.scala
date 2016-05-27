@@ -309,7 +309,9 @@ class SchedulerPerformanceSuite extends SchedulerIntegrationSuite[MultiExecutorM
         while (backend.hasTasksWaitingToRun) {
           val taskDescription = backend.beginTask()
           val host = backend.executorIdToExecutor(taskDescription.executorId).host
-          val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
+          val taskSet = taskScheduler.synchronized {
+            taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
+          }
           val task = taskSet.tasks(taskDescription.index)
           handleTask(taskDescription, task, host)
         }
