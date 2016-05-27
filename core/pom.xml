@@ -339,6 +339,9 @@
     <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <resources>
       <resource>
+        <directory>${project.basedir}/src/main/resources</directory>
+      </resource>
+      <resource>
         <!-- Include the properties file to provide the build information. -->
         <directory>${project.build.directory}/extra-resources</directory>
         <filtering>true</filtering>
