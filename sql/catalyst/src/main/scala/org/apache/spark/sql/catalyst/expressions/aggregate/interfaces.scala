@@ -24,14 +24,19 @@ import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.types._
 
 /** The mode of an [[AggregateFunction]]. */
-private[sql] sealed trait AggregateMode
+private[sql] sealed trait AggregateMode {
+  /** Prefix used in explain to indicate the aggregate mode. */
+  def prefix: String
+}
 
 /**
  * An [[AggregateFunction]] with [[Partial]] mode is used for partial aggregation.
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the aggregation buffer is returned.
  */
-private[sql] case object Partial extends AggregateMode
+private[sql] case object Partial extends AggregateMode {
+  override def prefix: String = "partial_"
+}
 
 /**
  * An [[AggregateFunction]] with [[PartialMerge]] mode is used to merge aggregation buffers
@@ -39,7 +44,9 @@ private[sql] case object Partial extends AggregateMode
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the aggregation buffer is returned.
  */
-private[sql] case object PartialMerge extends AggregateMode
+private[sql] case object PartialMerge extends AggregateMode {
+  override def prefix: String = "merge_"
+}
 
 /**
  * An [[AggregateFunction]] with [[Final]] mode is used to merge aggregation buffers
@@ -47,7 +54,9 @@ private[sql] case object PartialMerge extends AggregateMode
  * This function updates the given aggregation buffer by merging multiple aggregation buffers.
  * When it has processed all input rows, the final result of this function is returned.
  */
-private[sql] case object Final extends AggregateMode
+private[sql] case object Final extends AggregateMode {
+  override def prefix: String = ""
+}
 
 /**
  * An [[AggregateFunction]] with [[Complete]] mode is used to evaluate this function directly
@@ -55,7 +64,9 @@ private[sql] case object Final extends AggregateMode
  * This function updates the given aggregation buffer with the original input of this
  * function. When it has processed all input rows, the final result of this function is returned.
  */
-private[sql] case object Complete extends AggregateMode
+private[sql] case object Complete extends AggregateMode {
+  override def prefix: String = ""
+}
 
 /**
  * A place holder expressions used in code-gen, it does not change the corresponding value
@@ -126,7 +137,9 @@ private[sql] case class AggregateExpression(
     AttributeSet(childReferences)
   }
 
-  override def toString: String = s"($aggregateFunction,mode=$mode,isDistinct=$isDistinct)"
+  override def toString: String = {
+    mode.prefix + aggregateFunction.toAggString(isDistinct)
+  }
 
   override def sql: String = aggregateFunction.sql(isDistinct)
 }
@@ -202,6 +215,12 @@ sealed abstract class AggregateFunction extends Expression with ImplicitCastInpu
   def sql(isDistinct: Boolean): String = {
     val distinct = if (isDistinct) "DISTINCT " else ""
     s"$prettyName($distinct${children.map(_.sql).mkString(", ")})"
+  }
+
+  /** String representation used in explain plans. */
+  def toAggString(isDistinct: Boolean): String = {
+    val start = if (isDistinct) "(distinct " else "("
+    prettyName + flatArguments.mkString(start, ", ", ")")
   }
 }
 
