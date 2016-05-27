@@ -655,4 +655,15 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       assert(msg.contains("CSV data source does not support array<string> data type"))
     }
   }
+
+  test("SPARK-15585 set null at quote") {
+    val cars = spark.read
+      .format("csv")
+      .option("header", "true")
+      .option("quote", null)
+      .load(testFile(carsUnbalancedQuotesFile))
+
+    verifyCars(cars, withHeader = true, checkValues = false)
+  }
+
 }
