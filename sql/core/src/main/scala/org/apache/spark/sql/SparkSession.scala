@@ -223,11 +223,16 @@ class SparkSession private(
   }
 
   /**
-   * Creates a new [[Dataset]] containing zero elements.
+   * :: Experimental ::
+   * Creates a new [[Dataset]] of type T containing zero elements.
+   *
    * @return 2.0.0
    */
   @Experimental
-  def emptyDataset[T: Encoder]: Dataset[T] = emptyDataFrame.as[T]
+  def emptyDataset[T: Encoder]: Dataset[T] = {
+    val encoder = implicitly[Encoder[T]]
+    new Dataset(self, LocalRelation(encoder.schema.toAttributes), encoder)
+  }
 
   /**
    * :: Experimental ::

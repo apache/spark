@@ -49,7 +49,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("emptyDataset") {
     val ds = spark.emptyDataset[Int]
     assert(ds.count() == 0L)
-    assert(ds.collect() == Array.empty[Int])
+    assert(ds.collect() sameElements Array.empty[Int])
   }
 
   test("range") {
