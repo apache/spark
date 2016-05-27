@@ -153,24 +153,9 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       fail(message, cause)
     } finally {
       process.destroy()
-      val message =
-        s"""
-           |=======================
-           |CliSuite success output
-           |=======================
-           |Spark SQL CLI command line: ${command.mkString(" ")}
-           |
-           |Console outputs:
-           |
-           |${buffer.mkString("\n")}
-           |===========================
-           |End CliSuite success output
-           |===========================
-         """.stripMargin
-      fail(message)
     }
   }
-/*
+
   test("Simple commands") {
     val dataFilePath =
       Thread.currentThread().getContextClassLoader.getResource("data/files/small_kv.txt")
@@ -253,10 +238,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute, Seq("-e", "!echo \"This is a test for Spark-11624\";"))(
       "" -> "This is a test for Spark-11624")
   }
-*/
+
   test("list jars") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
-    runCliWithin(3.minute)(
+    runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
       s"LIST JARS;" -> "TestUDTF.jar"
     )
@@ -264,7 +249,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("list jar <jarfile>") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
-    runCliWithin(3.minute)(
+    runCliWithin(2.minute)(
       s"ADD JAR $jarFile;" -> "",
       s"List JAR $jarFile;" -> "TestUDTF.jar"
     )
@@ -273,7 +258,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("list files") {
     val dataFilePath = Thread.currentThread().
       getContextClassLoader.getResource("data/files/small_kv.txt")
-    runCliWithin(3.minute)(
+    runCliWithin(2.minute)(
       s"ADD FILE $dataFilePath;" -> "",
       s"LIST FILES;" -> "small_kv.txt"
     )
@@ -282,7 +267,7 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
   test("list file <filepath>") {
     val dataFilePath = Thread.currentThread().
       getContextClassLoader.getResource("data/files/small_kv.txt")
-    runCliWithin(3.minute)(
+    runCliWithin(2.minute)(
       s"ADD FILE $dataFilePath;" -> "",
       s"LIST FILE $dataFilePath;" -> "small_kv.txt"
     )
