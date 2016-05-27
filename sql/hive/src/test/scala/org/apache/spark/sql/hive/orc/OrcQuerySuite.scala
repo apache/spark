@@ -459,8 +459,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
         val df = spark.read.orc(file).where("_2 == true")
         val actual = stripSparkFilter(df).count()
 
-        // ORC filter should be applied and the total count should be less than
-        // the original data.
+        // ORC filter should be applied and the total count should be 0.
         assert(actual === 0)
       }
     }
