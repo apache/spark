@@ -20,15 +20,15 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.functions.udf
 
 class QuantileDiscretizerSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("Test observed number of buckets and their sizes match expected values") {
-    val sqlCtx = SQLContext.getOrCreate(sc)
-    import sqlCtx.implicits._
+    val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+    import spark.implicits._
 
     val datasetSize = 100000
     val numBuckets = 5
@@ -53,8 +53,8 @@ class QuantileDiscretizerSuite
   }
 
   test("Test transform method on unseen data") {
-    val sqlCtx = SQLContext.getOrCreate(sc)
-    import sqlCtx.implicits._
+    val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+    import spark.implicits._
 
     val trainDF = sc.parallelize(1.0 to 100.0 by 1.0).map(Tuple1.apply).toDF("input")
     val testDF = sc.parallelize(-10.0 to 110.0 by 1.0).map(Tuple1.apply).toDF("input")
@@ -82,8 +82,8 @@ class QuantileDiscretizerSuite
   }
 
   test("Verify resulting model has parent") {
-    val sqlCtx = SQLContext.getOrCreate(sc)
-    import sqlCtx.implicits._
+    val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+    import spark.implicits._
 
     val df = sc.parallelize(1 to 100).map(Tuple1.apply).toDF("input")
     val discretizer = new QuantileDiscretizer()

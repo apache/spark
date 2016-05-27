@@ -101,7 +101,7 @@ private[sql] class FindDataSourceTable(sparkSession: SparkSession) extends Rule[
         userSpecifiedSchema = userSpecifiedSchema,
         partitionColumns = partitionColumns,
         bucketSpec = bucketSpec,
-        className = table.properties("spark.sql.sources.provider"),
+        className = table.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER),
         options = options)
 
     LogicalRelation(

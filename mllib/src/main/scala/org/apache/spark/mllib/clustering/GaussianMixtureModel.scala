@@ -29,7 +29,7 @@ import org.apache.spark.mllib.linalg.{Matrix, Vector}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.{Loader, MLUtils, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.{Row, SparkSession}
 
 /**
  * Multivariate Gaussian Mixture Model (GMM) consisting of k Gaussians, where points
@@ -143,9 +143,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
         path: String,
         weights: Array[Double],
         gaussians: Array[MultivariateGaussian]): Unit = {
-
-      val sqlContext = SQLContext.getOrCreate(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render
@@ -156,13 +154,13 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
       val dataArray = Array.tabulate(weights.length) { i =>
         Data(weights(i), gaussians(i).mu, gaussians(i).sigma)
       }
-      sc.parallelize(dataArray, 1).toDF().write.parquet(Loader.dataPath(path))
+      spark.createDataFrame(dataArray).repartition(1).write.parquet(Loader.dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
-      val sqlContext = SQLContext.getOrCreate(sc)
-      val dataFrame = sqlContext.read.parquet(dataPath)
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val dataFrame = spark.read.parquet(dataPath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)
       val dataArray = dataFrame.select("weight", "mu", "sigma").collect()
@@ -172,7 +170,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
           (weight, new MultivariateGaussian(mu, sigma))
       }.unzip
 
-      new GaussianMixtureModel(weights.toArray, gaussians.toArray)
+      new GaussianMixtureModel(weights, gaussians)
     }
   }
 
@@ -189,7 +187,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
           s"GaussianMixtureModel requires weights of length $k " +
           s"got weights of length ${model.weights.length}")
         require(model.gaussians.length == k,
-          s"GaussianMixtureModel requires gaussians of length $k" +
+          s"GaussianMixtureModel requires gaussians of length $k " +
           s"got gaussians of length ${model.gaussians.length}")
         model
       case _ => throw new Exception(

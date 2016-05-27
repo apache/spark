@@ -529,7 +529,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] to a external database table via JDBC. In the case the
+   * Saves the content of the [[DataFrame]] to an external database table via JDBC. In the case the
    * table already exists in the external database, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
    *
@@ -639,7 +639,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * This will overwrite `orc.compress`. </li>
    *
    * @since 1.5.0
-   * @note Currently, this method can only be used together with `HiveContext`.
+   * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
     assertNotStreaming("orc() can only be called on non-continuous queries")
