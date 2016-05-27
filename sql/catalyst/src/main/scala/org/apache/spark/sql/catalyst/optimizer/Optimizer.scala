@@ -1597,7 +1597,9 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
  */
 object EmbedSerializerInFilter extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject)) =>
+    case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject))
+      if s.schema == d.child.schema =>
+
       val numObjects = condition.collect {
         case a: Attribute if a == d.output.head => a
       }.length
