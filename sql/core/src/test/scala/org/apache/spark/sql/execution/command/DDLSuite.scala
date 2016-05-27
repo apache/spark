@@ -741,14 +741,12 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     sql("DROP TABLE dbx.tab1")
     assert(catalog.listTables("dbx") == Nil)
     sql("DROP TABLE IF EXISTS dbx.tab1")
-    // no exception will be thrown
-    sql("DROP TABLE dbx.tab1")
+    intercept[AnalysisException] {
+      sql("DROP TABLE dbx.tab1")
+    }
   }
 
-  test("drop view in SQLContext") {
-    // SQLContext does not support create view. Log an error message, if tab1 does not exists
-    sql("DROP VIEW tab1")
-
+  test("drop view") {
     val catalog = spark.sessionState.catalog
     val tableIdent = TableIdentifier("tab1", Some("dbx"))
     createDatabase(catalog, "dbx")

@@ -35,7 +35,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * A data source for reading text files.
  */
-class DefaultSource extends FileFormat with DataSourceRegister {
+class TextFileFormat extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
 

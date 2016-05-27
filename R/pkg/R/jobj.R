@@ -77,6 +77,11 @@ print.jobj <- function(x, ...) {
   cat("Java ref type", name, "id", x$id, "\n", sep = " ")
 }
 
+getClassName.jobj <- function(x) {
+  cls <- callJMethod(x, "getClass")
+  callJMethod(cls, "getName")
+}
+
 cleanup.jobj <- function(jobj) {
   if (isValidJobj(jobj)) {
     objId <- jobj$id

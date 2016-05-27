@@ -32,7 +32,7 @@ if __name__ == "__main__":
         .appName("PythonPi")\
         .getOrCreate()
 
-    sc = spark._sc
+    sc = spark.sparkContext
 
     partitions = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     n = 100000 * partitions

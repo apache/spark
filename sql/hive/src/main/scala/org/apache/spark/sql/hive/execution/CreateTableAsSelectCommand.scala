@@ -86,7 +86,7 @@ case class CreateTableAsSelectCommand(
         throw new AnalysisException(s"$tableIdentifier already exists.")
       }
     } else {
-      sparkSession.executePlan(InsertIntoTable(
+      sparkSession.sessionState.executePlan(InsertIntoTable(
         metastoreRelation, Map(), query, overwrite = true, ifNotExists = false)).toRdd
     }
 

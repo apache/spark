@@ -279,13 +279,13 @@ class ShowCreateTableSuite extends QueryTest with SQLTestUtils with TestHiveSing
 
   private def checkCreateTableOrView(table: TableIdentifier, checkType: String): Unit = {
     val db = table.database.getOrElse("default")
-    val expected = spark.externalCatalog.getTable(db, table.table)
+    val expected = spark.sharedState.externalCatalog.getTable(db, table.table)
     val shownDDL = sql(s"SHOW CREATE TABLE ${table.quotedString}").head().getString(0)
     sql(s"DROP $checkType ${table.quotedString}")
 
     try {
       sql(shownDDL)
-      val actual = spark.externalCatalog.getTable(db, table.table)
+      val actual = spark.sharedState.externalCatalog.getTable(db, table.table)
       checkCatalogTables(expected, actual)
     } finally {
       sql(s"DROP $checkType IF EXISTS ${table.table}")

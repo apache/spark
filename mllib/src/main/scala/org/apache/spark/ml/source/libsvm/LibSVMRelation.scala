@@ -90,7 +90,7 @@ private[libsvm] class LibSVMOutputWriter(
  *     .load("data/mllib/sample_libsvm_data.txt")
  *
  *   // Java
- *   DataFrame df = spark.read().format("libsvm")
+ *   Dataset<Row> df = spark.read().format("libsvm")
  *     .option("numFeatures, "780")
  *     .load("data/mllib/sample_libsvm_data.txt");
  * }}}
@@ -105,9 +105,13 @@ private[libsvm] class LibSVMOutputWriter(
  *  - "vectorType": feature vector type, "sparse" (default) or "dense".
  *
  *  @see [[https://www.csie.ntu.edu.tw/~cjlin/libsvmtools/datasets/ LIBSVM datasets]]
+ *
+ * Note that this class is public for documentation purpose. Please don't use this class directly.
+ * Rather, use the data source API as illustrated above.
  */
+// If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
 @Since("1.6.0")
-class DefaultSource extends FileFormat with DataSourceRegister {
+class LibSVMFileFormat extends FileFormat with DataSourceRegister {
 
   @Since("1.6.0")
   override def shortName(): String = "libsvm"
