@@ -116,7 +116,7 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     )
 
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1('$DATASOURCE_SCHEMA_NUMPARTS')"),
+      sql(s"SHOW TBLPROPERTIES parquet_tab1('$DATASOURCE_SCHEMA_NUMPARTS')"),
       Row("1"))
   }
 
