@@ -448,6 +448,14 @@ class Analyzer(
       }
     }
 
+    /**
+     * Data source formats that were not supported in direct query on file
+     */
+    private final val unsupportedFileQuerySource = Set(
+      "org.apache.spark.sql.jdbc",
+      "org.apache.spark.sql.jdbc.DefaultSource",
+      "jdbc")
+
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
         val table = lookupTableFromCatalog(u)
@@ -496,7 +504,13 @@ class Analyzer(
           // The plan will get resolved later.
           // Note that we are testing (!db_exists || !table_exists) because the catalog throws
           // an exception from tableExists if the database does not exist.
-          u
+          // Note: JDBC data sources are not supported in direct query on file
+          if (unsupportedFileQuerySource.contains(table.database.get.toLowerCase)) {
+            throw new AnalysisException("Unsupported data source type for direct query on files: " +
+              s"${table.database.get.toLowerCase}")
+          } else {
+            u
+          }
         } else {
           lookupTableFromCatalog(u)
         }
