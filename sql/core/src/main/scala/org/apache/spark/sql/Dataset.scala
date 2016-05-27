@@ -133,7 +133,7 @@ private[sql] object Dataset {
  *
  * and in Java:
  * {{{
- *   // To create Dataset<Row> using SparkSession 
+ *   // To create Dataset<Row> using SparkSession
  *   Dataset<Row> people = spark.read().parquet("...");
  *   Dataset<Row> department = spark.read().parquet("...");
  *
