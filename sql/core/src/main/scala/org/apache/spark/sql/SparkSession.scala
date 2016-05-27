@@ -223,6 +223,13 @@ class SparkSession private(
   }
 
   /**
+   * Creates a new [[Dataset]] containing zero elements.
+   * @return 2.0.0
+   */
+  @Experimental
+  def emptyDataset[T: Encoder]: Dataset[T] = emptyDataFrame.as[T]
+
+  /**
    * :: Experimental ::
    * Creates a [[DataFrame]] from an RDD of Product (e.g. case classes, tuples).
    *
