@@ -97,7 +97,7 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     val plan = ds.queryExecution.executedPlan
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
-      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[SerializeFromObjectExec]).isDefined)
+      p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[FilterExec]).isDefined)
     assert(ds.collect() === Array(0, 6))
   }
 

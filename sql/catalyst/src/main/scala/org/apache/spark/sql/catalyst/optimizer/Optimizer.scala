@@ -1598,29 +1598,15 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
 object EmbedSerializerInFilter extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject)) =>
-      val numObjects = condition.collect {
-        case a: Attribute if a == d.output.head => a
-      }.length
-
-      if (numObjects > 1) {
-        // If the filter condition references the object more than one times, we should not embed
-        // deserializer in it as the deserialization will happen many times and slow down the
-        // execution.
-        // TODO: we can still embed it if we can make sure subexpression elimination works here.
-        s
-      } else {
-        val newCondition = condition transform {
-          case a: Attribute if a == d.output.head => d.deserializer
-        }
-        val filter = Filter(newCondition, d.child)
-
-        // Adds an extra Project here, to preserve the output expr id of `SerializeFromObject`.
-        // We will remove it later in RemoveAliasOnlyProject rule.
-        val objAttrs = filter.output.zip(s.output).map { case (fout, sout) =>
-          Alias(fout, fout.name)(exprId = sout.exprId)
-        }
-        Project(objAttrs, filter)
+      val bound = BindReferences.bindReference(condition, d.outputObjAttr :: Nil)
+      val conditionWithSerialization = ReferenceToExpressions(bound, d.deserializer :: Nil)
+      val filter = Filter(conditionWithSerialization, d.child)
+      // Adds an extra Project here, to preserve the output expr id of `SerializeFromObject`.
+      // We will remove it later in RemoveAliasOnlyProject rule.
+      val attrs = filter.output.zip(s.output).map { case (fout, sout) =>
+        Alias(fout, fout.name)(exprId = sout.exprId)
       }
+      Project(attrs, filter)
   }
 }
 
