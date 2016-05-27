@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  */
 class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
-  import hiveContext.implicits._
+  import spark.implicits._
 
   var jsonFilePath: String = _
 
@@ -548,7 +548,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }.getMessage.contains("Unable to infer schema"),
       "We should complain that path is not specified.")
 
-    sql("DROP TABLE createdJsonTable")
+    sql("DROP TABLE IF EXISTS createdJsonTable")
   }
 
   test("scan a parquet table created through a CTAS statement") {

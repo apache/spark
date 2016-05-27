@@ -255,6 +255,23 @@ case class CreateDataSourceTableAsSelectCommand(
 
 
 object CreateDataSourceTableUtils extends Logging {
+
+  // TODO: Actually replace usages with these variables (SPARK-15584)
+
+  val DATASOURCE_PREFIX = "spark.sql.sources."
+  val DATASOURCE_PROVIDER = DATASOURCE_PREFIX + "provider"
+  val DATASOURCE_WRITEJOBUUID = DATASOURCE_PREFIX + "writeJobUUID"
+  val DATASOURCE_OUTPUTPATH = DATASOURCE_PREFIX + "output.path"
+  val DATASOURCE_SCHEMA_PREFIX = DATASOURCE_PREFIX + "schema."
+  val DATASOURCE_SCHEMA_NUMPARTS = DATASOURCE_SCHEMA_PREFIX + "numParts"
+  val DATASOURCE_SCHEMA_NUMPARTCOLS = DATASOURCE_SCHEMA_PREFIX + "numPartCols"
+  val DATASOURCE_SCHEMA_NUMBUCKETS = DATASOURCE_SCHEMA_PREFIX + "numBuckets"
+  val DATASOURCE_SCHEMA_NUMBUCKETCOLS = DATASOURCE_SCHEMA_PREFIX + "numBucketCols"
+  val DATASOURCE_SCHEMA_PART_PREFIX = DATASOURCE_SCHEMA_PREFIX + "part."
+  val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
+  val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
+  val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
+
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.

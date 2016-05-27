@@ -37,7 +37,7 @@ setOldClass("jobj")
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' ct <- crosstab(df, "title", "gender")
 #' }
 setMethod("crosstab",
@@ -62,7 +62,7 @@ setMethod("crosstab",
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' cov <- cov(df, "title", "gender")
 #' }
 setMethod("cov",
@@ -91,7 +91,7 @@ setMethod("cov",
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' corr <- corr(df, "title", "gender")
 #' corr <- corr(df, "title", "gender", method = "pearson")
 #' }
@@ -120,7 +120,7 @@ setMethod("corr",
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' fi = freqItems(df, c("title", "gender"))
 #' }
 setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
@@ -157,7 +157,7 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
 #' @export
 #' @examples
 #' \dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' quantiles <- approxQuantile(df, "key", c(0.5, 0.8), 0.0)
 #' }
 setMethod("approxQuantile",
@@ -185,7 +185,7 @@ setMethod("approxQuantile",
 #' @export
 #' @examples
 #'\dontrun{
-#' df <- jsonFile(sqlContext, "/path/to/file.json")
+#' df <- read.json("/path/to/file.json")
 #' sample <- sampleBy(df, "key", fractions, 36)
 #' }
 setMethod("sampleBy",
