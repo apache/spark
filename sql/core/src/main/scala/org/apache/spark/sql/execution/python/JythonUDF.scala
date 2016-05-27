@@ -55,6 +55,8 @@ private[sql] class JythonUDF(
     this(name, func, sfunc, dataType, children)
   }
 
+  // This is the constructor we expect to be called from Python, converts the Python code to a
+  // wrapped Scala function.
   def this(name: String, func: JythonFunction, dataType: DataType, children: Seq[Expression]) {
     this(name, func, func.toScalaFunc(JythonConverter.build(dataType), children.size), dataType,
       children)

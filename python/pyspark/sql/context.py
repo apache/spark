@@ -207,8 +207,8 @@ class SQLContext(object):
     def registerJythonFunction(self, name, f, returnType=StringType()):
         """
         Register a function to be executed using Jython on the workers.
-        The function passed in must either be a string containing Python your python lambda,
-        or if you have dill installed on the driver a bare lambda.
+        The function passed in must either be a string containing your python lambda expression,
+        or if you have dill installed on the driver a lambda dill can extract the source for.
         Note that not all Python code will execute in Jython and not all Python
         code will execute well in Jython. However, for some UDFs, executing in Jython
         may be faster as we can avoid copying the data from the JVM to the Python
