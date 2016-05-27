@@ -57,8 +57,25 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
 
   def plan(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
-    val iter = strategies.view.flatMap(_(plan)).toIterator
+    val iter = strategies.view.flatMap(_(plan)).toIterator.flatMap { physicalPlan =>
+      val placeholders = collectPlaceholders(physicalPlan)
+
+      (Iterator(physicalPlan) /: placeholders.toIterator) {
+        case (physicalPlans, (placeholder, logicalPlan)) =>
+          val children = this.plan(logicalPlan)
+          physicalPlans.flatMap { physicalPlan =>
+            children.map { child =>
+              physicalPlan.transformUp {
+                case `placeholder` => child
+              }
+            }
+          }
+      }
+    }
+    // TODO: We will need to prune bad plans to prevent from combinatorial explosion.
     assert(iter.hasNext, s"No plan for $plan")
     iter
   }
+
+  protected def collectPlaceholders(plan: PhysicalPlan): Seq[(PhysicalPlan, LogicalPlan)]
 }
