@@ -17,12 +17,37 @@
 
 package org.apache.spark.sql;
 
+import org.apache.spark.annotation.Experimental;
+
+/**
+ * :: Experimental ::
+ *
+ * OutputMode is used to what data will be written to a streaming sink when there is
+ * new data available in a streaming DataFrame/Dataset.
+ *
+ * @since 2.0.0
+ */
+@Experimental
 public class OutputMode {
 
+  /**
+   * OutputMode in which only the new rows in the streaming DataFrame/Dataset will be
+   * written to the sink. This output mode can be only be used in queries that do not
+   * contain any aggregation.
+   *
+   * @since 2.0.0
+   */
   public static OutputMode Append() {
     return InternalOutputModes.Append$.MODULE$;
   }
 
+  /**
+   * OutputMode in which all the rows in the streaming DataFrame/Dataset will be written
+   * to the sink every time these is some updates. This output mode can only be used in queries
+   * that contain aggregations.
+   *
+   * @since 2.0.0
+   */
   public static OutputMode Complete() {
     return InternalOutputModes.Complete$.MODULE$;
   }

@@ -84,10 +84,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
 
   /**
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
-   *   - `OutputMode.Append()`:   only the new rows in the streaming DataFrame/Dataset will be
+   *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
    *                            written to the sink
    *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
-   *                            to the sink every time these is some updates
+   *                              to the sink every time these is some updates
    *
    * @since 2.0.0
    */
