@@ -34,6 +34,7 @@ import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructType}
+import org.apache.spark.util.Utils
 
 class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   private val escapedIdentifier = "`(.+)`".r
@@ -1109,4 +1110,37 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       }
     }
   }
+
+  test("truncate table - datasource table") {
+    import testImplicits._
+    val data = (1 to 10).map { i => (i, i) }.toDF("width", "length")
+    data.write.saveAsTable("rectangles")
+    spark.catalog.cacheTable("rectangles")
+    assume(spark.table("rectangles").collect().nonEmpty, "bad test; table was empty to begin with")
+    assume(spark.catalog.isCached("rectangles"), "bad test; table was not cached to begin with")
+    sql("TRUNCATE TABLE rectangles")
+    assert(spark.table("rectangles").collect().isEmpty)
+    assert(!spark.catalog.isCached("rectangles"))
+    // truncating partitioned data source tables is not supported
+    data.write.partitionBy("length").saveAsTable("rectangles2")
+    assertUnsupported("TRUNCATE TABLE rectangles PARTITION (width=1)")
+    assertUnsupported("TRUNCATE TABLE rectangles2 PARTITION (width=1)")
+  }
+
+  test("truncate table - external table, temporary table, view (not allowed)") {
+    import testImplicits._
+    val path = Utils.createTempDir().getAbsolutePath
+    (1 to 10).map { i => (i, i) }.toDF("a", "b").createTempView("my_temp_tab")
+    sql(s"CREATE EXTERNAL TABLE my_ext_tab LOCATION '$path'")
+    sql(s"CREATE VIEW my_view AS SELECT 1")
+    assertUnsupported("TRUNCATE TABLE my_temp_tab")
+    assertUnsupported("TRUNCATE TABLE my_ext_tab")
+    assertUnsupported("TRUNCATE TABLE my_view")
+  }
+
+  test("truncate table - non-partitioned table (not allowed)") {
+    sql("CREATE TABLE my_tab (age INT, name STRING)")
+    assertUnsupported("TRUNCATE TABLE my_tab PARTITION (age=10)")
+  }
+
 }
