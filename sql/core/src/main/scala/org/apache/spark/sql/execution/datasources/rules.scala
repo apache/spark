@@ -38,6 +38,10 @@ private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[Lo
           sparkSession,
           paths = u.tableIdentifier.table :: Nil,
           className = u.tableIdentifier.database.get)
+        if (dataSource.isFileFormat() == Option(false)) {
+          throw new AnalysisException("Unsupported data source type for direct query on files: " +
+            s"${u.tableIdentifier.database.get}")
+        }
         val plan = LogicalRelation(dataSource.resolveRelation())
         u.alias.map(a => SubqueryAlias(u.alias.get, plan)).getOrElse(plan)
       } catch {

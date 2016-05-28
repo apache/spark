@@ -169,6 +169,37 @@ case class DataSource(
     }
   }
 
+  /**
+   * Check if this data source does not extends [[FileFormat]].
+   * If failed to load the class, return None.
+   */
+  def isFileFormat(): Option[Boolean] = {
+    val provider = backwardCompatibilityMap.getOrElse(className, className)
+    val provider2 = s"$provider.DefaultSource"
+    val loader = Utils.getContextOrSparkClassLoader
+    val serviceLoader = ServiceLoader.load(classOf[DataSourceRegister], loader)
+
+    serviceLoader.asScala.filter(_.shortName().equalsIgnoreCase(provider)).toList match {
+      // the provider format did not match any given registered aliases
+      case Nil =>
+        try {
+          Try(loader.loadClass(provider)).orElse(Try(loader.loadClass(provider2))) match {
+            case Success(dataSource) =>
+              Option(dataSource.newInstance().isInstanceOf[FileFormat])
+            case Failure(error) => None
+          }
+        } catch {
+          case e: Exception => None
+        }
+      case head :: Nil =>
+        // there is exactly one registered alias
+        Option(head.getClass.newInstance().isInstanceOf[FileFormat])
+      case sources =>
+        // There are multiple registered aliases for the input
+        None
+    }
+  }
+
   private def inferFileFormatSchema(format: FileFormat): StructType = {
     userSpecifiedSchema.orElse {
       val caseInsensitiveOptions = new CaseInsensitiveMap(options)

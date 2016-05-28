@@ -1886,7 +1886,13 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     e = intercept[AnalysisException] {
       sql(s"select id from `Jdbc`.`file_path`")
     }
-    assert(e.message.contains("Unsupported data source type for direct query on files: jdbc"))
+    assert(e.message.contains("Unsupported data source type for direct query on files: Jdbc"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.execution.datasources.jdbc`.`file_path`")
+    }
+    assert(e.message.contains("Unsupported data source type for direct query on files: " +
+      "org.apache.spark.sql.execution.datasources.jdbc"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {

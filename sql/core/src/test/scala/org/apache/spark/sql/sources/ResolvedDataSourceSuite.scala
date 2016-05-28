@@ -61,6 +61,15 @@ class ResolvedDataSourceSuite extends SparkFunSuite {
         classOf[org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat])
   }
 
+  test("csv") {
+    assert(
+      getProvidingClass("csv") ===
+        classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat])
+    assert(
+      getProvidingClass("com.databricks.spark.csv") ===
+        classOf[org.apache.spark.sql.execution.datasources.csv.CSVFileFormat])
+  }
+
   test("error message for unknown data sources") {
     val error1 = intercept[AnalysisException] {
       getProvidingClass("avro")
