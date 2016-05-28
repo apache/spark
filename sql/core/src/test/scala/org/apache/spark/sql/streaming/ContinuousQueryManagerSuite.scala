@@ -232,7 +232,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
-        datasets.map { ds =>
+        datasets.zipWithIndex.map { case (ds, i) =>
           @volatile var query: StreamExecution = null
           try {
             val df = ds.toDF
@@ -241,7 +241,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
             query =
               df.write
                 .format("memory")
-                .queryName(s"query${Random.nextInt(100000)}")
+                .queryName(s"query$i")
                 .option("checkpointLocation", metadataRoot)
                 .outputMode("append")
                 .startStream()

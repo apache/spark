@@ -97,8 +97,11 @@ class StreamingAggregationSuite extends StreamTest with SharedSQLContext with Be
         .agg(count("*"))
         .as[(Int, Long)]
 
-    intercept[AnalysisException] {
+    val e = intercept[AnalysisException] {
       testStream(aggregated, Append)()
+    }
+    Seq("append", "not supported").foreach { m =>
+      assert(e.getMessage.toLowerCase.contains(m.toLowerCase))
     }
   }
 

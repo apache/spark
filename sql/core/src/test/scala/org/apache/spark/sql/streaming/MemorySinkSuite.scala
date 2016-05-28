@@ -251,7 +251,7 @@ class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAft
       intsToDF(expected)(schema))
   }
 
-  implicit def intsToDF(seq: Seq[Int])(implicit schema: StructType): DataFrame = {
+  private implicit def intsToDF(seq: Seq[Int])(implicit schema: StructType): DataFrame = {
     require(schema.fields.size === 1)
     sqlContext.createDataset(seq).toDF(schema.fieldNames.head)
   }

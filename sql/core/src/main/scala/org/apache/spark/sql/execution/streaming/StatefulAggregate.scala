@@ -103,6 +103,11 @@ case class StateStoreSaveExec(
 
   override def output: Seq[Attribute] = child.output
 
+  /**
+   * Save all the rows to the state store, and return all the rows in the state store.
+   * Note that this returns an iterator that pipelines the saving to store with downstream
+   * processing.
+   */
   private def saveAndReturnUpdated(
       store: StateStore,
       iter: Iterator[InternalRow]): Iterator[InternalRow] = {
@@ -128,6 +133,11 @@ case class StateStoreSaveExec(
     }
   }
 
+  /**
+   * Save all the rows to the state store, and return all the rows in the state store.
+   * Note that the saving to store is blocking; only after all the rows have been saved
+   * is the iterator on the update store data is generated.
+   */
   private def saveAndReturnAll(
       store: StateStore,
       iter: Iterator[InternalRow]): Iterator[InternalRow] = {

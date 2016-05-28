@@ -154,7 +154,8 @@ class MemorySink(val schema: StructType, outputMode: OutputMode) extends Sink wi
           batches.append(AddedData(batchId, data.collect()))
 
         case _ =>
-          throw new IllegalArgumentException("Data source ")
+          throw new IllegalArgumentException(
+            s"Output mode $outputMode is not supported by MemorySink")
       }
     } else {
       logDebug(s"Skipping already committed batch: $batchId")
