@@ -347,12 +347,10 @@ private[sql] object DataSourceScanExec {
         case _ => None
       }
 
-      def toAttribute(colName: String): Attribute = output.find(_.name == colName).get
-
       bucketSpec.map { spec =>
         val numBuckets = spec.numBuckets
-        if (spec.bucketColumnNames.forall(colName => output.exists(_.name == colName))) {
-          val bucketColumns = spec.bucketColumnNames.map(toAttribute)
+        val bucketColumns = spec.bucketColumnNames.flatMap { n => output.find(_.name == n) }
+        if (bucketColumns.size == spec.bucketColumnNames.size) {
           HashPartitioning(bucketColumns, numBuckets)
         } else {
           UnknownPartitioning(0)

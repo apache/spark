@@ -366,9 +366,10 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
     withTable("bucketed_table") {
       df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
 
-      hiveContext.table("bucketed_table").select("j").collect()
+      checkAnswer(hiveContext.table("bucketed_table").select("j"), df1.select("j"))
 
-      hiveContext.table("bucketed_table").groupBy("j").agg(max("k")).collect()
+      checkAnswer(hiveContext.table("bucketed_table").groupBy("j").agg(max("k")),
+        df1.groupBy("j").agg(max("k")))
     }
   }
 }
