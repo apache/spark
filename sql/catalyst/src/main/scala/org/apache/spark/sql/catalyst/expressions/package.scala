@@ -89,7 +89,7 @@ package object expressions  {
   implicit class AttributeSeq(attrs: Seq[Attribute]) {
     /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
     def toStructType: StructType = {
-      StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
+      StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable, a.metadata)))
     }
   }
 
