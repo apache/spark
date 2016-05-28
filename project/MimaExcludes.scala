@@ -775,6 +775,12 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.AlphaComponent"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Experimental"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.DeveloperApi")
+      ) ++ Seq(
+        // [] Replace SQLContext by SparkSession in MLLIB
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.util.MLWriter.sqlContext"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.util.MLWriter.context"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.util.MLReader.sqlContext"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.util.MLReader.context")
       )
     case v if v.startsWith("1.6") =>
       Seq(

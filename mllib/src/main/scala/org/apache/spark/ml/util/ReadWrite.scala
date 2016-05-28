@@ -33,35 +33,33 @@ import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 /**
  * Trait for [[MLWriter]] and [[MLReader]].
  */
 private[util] sealed trait BaseReadWrite {
-  private var optionSQLContext: Option[SQLContext] = None
+  private var optionSparkSession: Option[SparkSession] = None
 
   /**
-   * Sets the SQL context to use for saving/loading.
+   * Sets the Spark Session to use for saving/loading.
    */
   @Since("1.6.0")
-  def context(sqlContext: SQLContext): this.type = {
-    optionSQLContext = Option(sqlContext)
+  def context(sparkSession: SparkSession): this.type = {
+    optionSparkSession = Option(sparkSession)
     this
   }
 
   /**
-   * Returns the user-specified SQL context or the default.
+   * Returns the user-specified Spark Session or the default.
    */
-  protected final def sqlContext: SQLContext = {
-    if (optionSQLContext.isEmpty) {
-      optionSQLContext = Some(SQLContext.getOrCreate(SparkContext.getOrCreate()))
+  protected final def sparkSession: SparkSession = {
+    if (optionSparkSession.isEmpty) {
+      optionSparkSession = Some(SparkSession.builder().getOrCreate())
     }
-    optionSQLContext.get
+    optionSparkSession.get
   }
-
-  protected final def sparkSession: SparkSession = sqlContext.sparkSession
 
   /** Returns the underlying [[SparkContext]]. */
   protected final def sc: SparkContext = sparkSession.sparkContext
@@ -116,7 +114,7 @@ abstract class MLWriter extends BaseReadWrite with Logging {
   }
 
   // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
+  override def context(sparkSession: SparkSession): this.type = super.context(sparkSession)
 }
 
 /**
@@ -160,7 +158,7 @@ abstract class MLReader[T] extends BaseReadWrite {
   def load(path: String): T
 
   // override for Java compatibility
-  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
+  override def context(sparkSession: SparkSession): this.type = super.context(sparkSession)
 }
 
 /**
