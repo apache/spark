@@ -118,7 +118,11 @@ private[sql] case class JythonFunction(src: String, pythonVars: String, imports:
   val code = s"""
               |import os
               |import sys
-              |sys.path.extend(os.environ["PYTHONPATH"].split(":"))
+              |if "PYTHONPATH" in os.environ:
+              |  sys.path.extend(os.environ["PYTHONPATH"].split(":"))
+              |if "SPARK_HOME" in os.environ:
+              |  sys.path.extend([os.environ["SPARK_HOME"] + "/python/",
+              |    os.environ["SPARK_HOME"] + "/python/lib/py4j-0.10.1-src.zip"])
               |
               |${preImports}
               |
