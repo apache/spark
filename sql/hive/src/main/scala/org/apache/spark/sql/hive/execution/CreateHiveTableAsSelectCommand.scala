@@ -26,16 +26,17 @@ import org.apache.spark.sql.hive.MetastoreRelation
 
 /**
  * Create table and insert the query result into it.
+ *
  * @param tableDesc the Table Describe, which may contains serde, storage handler etc.
  * @param query the query whose result will be insert into the new relation
- * @param allowExisting allow continue working if it's already exists, otherwise
+ * @param ignoreIfExists allow continue working if it's already exists, otherwise
  *                      raise exception
  */
 private[hive]
-case class CreateTableAsSelectCommand(
+case class CreateHiveTableAsSelectCommand(
     tableDesc: CatalogTable,
     query: LogicalPlan,
-    allowExisting: Boolean)
+    ignoreIfExists: Boolean)
   extends RunnableCommand {
 
   private val tableIdentifier = tableDesc.identifier
@@ -80,7 +81,7 @@ case class CreateTableAsSelectCommand(
     // add the relation into catalog, just in case of failure occurs while data
     // processing.
     if (sparkSession.sessionState.catalog.tableExists(tableIdentifier)) {
-      if (allowExisting) {
+      if (ignoreIfExists) {
         // table already exists, will do nothing, to keep consistent with Hive
       } else {
         throw new AnalysisException(s"$tableIdentifier already exists.")
