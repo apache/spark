@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming;
+package test.org.apache.spark.java8.dstream;
 
 import java.io.Serializable;
 import java.util.*;
@@ -33,6 +33,7 @@ import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.PairFunction;
+import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaMapWithStateDStream;

@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package test.org.apache.spark.java8
+
+import org.apache.spark.SharedSparkContext
+import org.apache.spark.SparkFunSuite
 
 /**
  * Test cases where JDK8-compiled Scala user code is used with Spark.
