@@ -811,7 +811,7 @@ class DataFrameWriter(object):
         if nullValue is not None:
             self.option("nullValue", nullValue)
         if escapeQuotes is not None:
-            self.option("escapeQuotes", nullValue)
+            self.option("escapeQuotes", escapeQuotes)
         self._jwrite.csv(path)
 
     @since(1.5)
