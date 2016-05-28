@@ -297,7 +297,7 @@ class LinearRegression @Since("1.3.0") (@Since("1.3.0") override val uid: String
 
     val initialCoefficients = Vectors.zeros(numFeatures)
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialCoefficients.toBreeze.toDenseVector)
+      initialCoefficients.asBreeze.toDenseVector)
 
     val (coefficients, objectiveHistory) = {
       /*

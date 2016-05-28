@@ -552,7 +552,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sparkSession.createTempView(tableName, df, replaceIfExists = true)
+    df.createOrReplaceTempView(tableName)
   }
 
   /**
