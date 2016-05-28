@@ -19,6 +19,7 @@ package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.Analyzer
+import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.execution.SparkPlanner
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.hive.client.HiveClient
@@ -73,6 +74,13 @@ private[hive] class HiveSessionState(sparkSession: SparkSession)
       override val extendedCheckRules = Seq(PreWriteCheck(conf, catalog))
     }
   }
+
+  /**
+   * Logical query plan optimizer that takes into account Hive.
+   */
+  override lazy val optimizer: Optimizer =
+    new HiveOptimizer(sparkSession, catalog, conf, experimentalMethods)
+
 
   /**
    * Planner that takes into account Hive-specific strategies.

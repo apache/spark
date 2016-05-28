@@ -251,6 +251,12 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val HIVE_PARTITION_PRUNER_FOR_STATS = SQLConfigBuilder("spark.sql.hive.partitionPrunerForStats")
+    .doc("When true, some predicates will be pushed down into MetastoreRelation so that " +
+      "determining if partitions that are involved are small enough to use auto broadcast joins.")
+    .booleanConf
+    .createWithDefault(false)
+
   val NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView")
     .internal()
     .doc("When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
@@ -576,6 +582,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  def hivePartitionPrunerForStats: Boolean = getConf(HIVE_PARTITION_PRUNER_FOR_STATS)
 
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
