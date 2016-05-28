@@ -113,10 +113,10 @@ Deprecations:
  In `spark.ml.regression.LinearRegressionSummary`, the `model` field has been deprecated.
 * [SPARK-13784](https://issues.apache.org/jira/browse/SPARK-13784):
  In `spark.ml.regression.RandomForestRegressionModel` and `spark.ml.classification.RandomForestClassificationModel`,
- the `numTrees` parameter has been deprecated in favor of new method `getNumTrees`.
+ the `numTrees` parameter has been deprecated in favor of `getNumTrees` method.
 * [SPARK-13761](https://issues.apache.org/jira/browse/SPARK-13761):
  In `spark.ml.param.Params`, the `validateParams` method has been deprecated.
- We move all functionality in overridden methods to `PipelineStage.transformSchema`.
+ We move all functionality in overridden methods to the corresponding `transformSchema`.
 * [SPARK-14829](https://issues.apache.org/jira/browse/SPARK-14829):
  In `spark.mllib` package, `LinearRegressionWithSGD`, `LassoWithSGD`, `RidgeRegressionWithSGD` and `LogisticRegressionWithSGD` have been deprecated.
  We encourage users to use `spark.ml.regression.LinearRegresson` and `spark.ml.classification.LogisticRegresson`.
@@ -137,10 +137,10 @@ Changes of behavior:
  Fix a bug of `PowerIterationClustering` which will likely change its result.
 * [SPARK-13048](https://issues.apache.org/jira/browse/SPARK-13048):
  `LDA` using the `EM` optimizer will keep the last checkpoint by default, if checkpointing is being used.
-* [SPARK-13048](https://issues.apache.org/jira/browse/SPARK-13048):
+* [SPARK-12153](https://issues.apache.org/jira/browse/SPARK-12153):
  `Word2Vec` now respects sentence boundaries. Previously, it did not handle them correctly.
 * [SPARK-10574](https://issues.apache.org/jira/browse/SPARK-10574):
- `HashingTF` uses `MurmurHash3` as default hash algorithm in both spark.ml and spark.mllib.
+ `HashingTF` uses `MurmurHash3` as default hash algorithm in both `spark.ml` and `spark.mllib`.
 * [SPARK-14768](https://issues.apache.org/jira/browse/SPARK-14768):
  We remove `expectedType` argument for PySpark `Param`.
 * [SPARK-14931](https://issues.apache.org/jira/browse/SPARK-14931):
