@@ -325,6 +325,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * @param jsonRDD input RDD with one JSON object per record
    * @since 1.4.0
    */
+  @deprecated("Use json(dataset) instead.", "2.0.0")
   def json(jsonRDD: JavaRDD[String]): DataFrame = json(jsonRDD.rdd)
 
   /**
@@ -335,16 +336,31 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * input once to determine the input schema.
    *
    * @param jsonRDD input RDD with one JSON object per record
-   * @since 1.4.0
+   * @since 1.4.0*
    */
+  @deprecated("Use json(dataset) instead.", "2.0.0")
   def json(jsonRDD: RDD[String]): DataFrame = {
+    json(sparkSession.createDataset(jsonRDD))
+  }
+
+  /**
+    * Loads an `Dataset[String]` storing JSON objects (one object per record) and
+    * returns the result as a [[DataFrame]].
+    *
+    * Unless the schema is specified using [[schema]] function, this function goes through the
+    * input once to determine the input schema.
+    *
+    * @param jsonDataset input Dataset with one JSON object per record
+    * @since 2.0.0
+    */
+  def json(jsonDataset: Dataset[String]): DataFrame = {
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
     val columnNameOfCorruptRecord =
       parsedOptions.columnNameOfCorruptRecord
         .getOrElse(sparkSession.sessionState.conf.columnNameOfCorruptRecord)
     val schema = userSpecifiedSchema.getOrElse {
       InferSchema.infer(
-        jsonRDD,
+        jsonDataset.rdd,
         columnNameOfCorruptRecord,
         parsedOptions)
     }
@@ -354,7 +370,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
       LogicalRDD(
         schema.toAttributes,
         JacksonParser.parse(
-          jsonRDD,
+          jsonDataset.rdd,
           schema,
           columnNameOfCorruptRecord,
           parsedOptions))(sparkSession))
