@@ -17,21 +17,22 @@
 
 // scalastyle:off println
 
-// $example on$
 package org.apache.spark.examples.ml
-// $example off$
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.functions._
-import org.apache.spark.sql.types.{StructType, DoubleType}
+
+// $example on$
 import org.apache.spark.ml.regression.IsotonicRegression
+// $example off$
+import org.apache.spark.sql.functions._
+import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.types.{DoubleType, StructType}
 
 /**
-  * An example demonstrating Isotonic Regression.
-  * Run with
-  * {{{
-  * bin/run-example ml.IsotonicRegressionExample
-  * }}}
-  */
+ * An example demonstrating Isotonic Regression.
+ * Run with
+ * {{{
+ * bin/run-example ml.IsotonicRegressionExample
+ * }}}
+ */
 object IsotonicRegressionExample {
 
   def main(args: Array[String]): Unit = {
@@ -45,7 +46,6 @@ object IsotonicRegressionExample {
     val ir = new IsotonicRegression().setIsotonic(true)
       .setLabelCol("label").setFeaturesCol("features").setWeightCol("weight")
 
-    // $example on$
     val dataReader = spark.read
     dataReader.schema(new StructType().add("label", DoubleType).add("features", DoubleType))
 
