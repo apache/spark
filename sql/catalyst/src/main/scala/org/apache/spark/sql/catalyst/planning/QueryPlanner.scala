@@ -72,10 +72,12 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
           }
       }
     }
-    // TODO: We will need to prune bad plans to prevent from combinatorial explosion.
-    assert(iter.hasNext, s"No plan for $plan")
-    iter
+    val pruned = prunePlans(iter)
+    assert(pruned.hasNext, s"No plan for $plan")
+    pruned
   }
 
   protected def collectPlaceholders(plan: PhysicalPlan): Seq[(PhysicalPlan, LogicalPlan)]
+
+  protected def prunePlans(plans: Iterator[PhysicalPlan]): Iterator[PhysicalPlan]
 }

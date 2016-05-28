@@ -49,6 +49,12 @@ class SparkPlanner(
     }
   }
 
+  override protected def prunePlans(plans: Iterator[SparkPlan]): Iterator[SparkPlan] = {
+    // TODO: We will need to prune bad plans when we improve plan space exploration
+    //       to prevent from combinatorial explosion.
+    plans
+  }
+
   /**
    * Used to build table scan operators where complex projection and filtering are done using
    * separate physical operators.  This function returns the given scan operator with Project and
