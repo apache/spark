@@ -74,7 +74,8 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   lazy val sparkPlan: SparkPlan = {
     SparkSession.setActiveSession(sparkSession)
-    // TODO: use next() here for now, but we will need to choice the best plan.
+    // TODO: We use next(), i.e. take the first one of plans returned by the planner, here for now,
+    //       but we will need to choice the best plan.
     planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
