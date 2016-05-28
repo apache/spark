@@ -32,17 +32,19 @@ import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.catalog._
-import org.apache.spark.sql.catalyst.expressions.{AttributeMap, AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.hive.client.HiveClient
-
+import org.apache.spark.sql.types.{DataType, BooleanType}
 
 private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
-    alias: Option[String])
+    alias: Option[String],
+    var partitionPruningPred: Seq[Expression] = Seq.empty[Expression])
     (val catalogTable: CatalogTable,
      @transient private val client: HiveClient,
      @transient private val sparkSession: SparkSession)
@@ -53,7 +55,9 @@ private[hive] case class MetastoreRelation(
       databaseName == relation.databaseName &&
         tableName == relation.tableName &&
         alias == relation.alias &&
-        output == relation.output
+        output == relation.output &&
+        partitionPruningPred.size == relation.partitionPruningPred.size &&
+        (partitionPruningPred, relation.partitionPruningPred).zipped.forall(_ semanticEquals _)
     case _ => false
   }
 
@@ -132,8 +136,16 @@ private[hive] case class MetastoreRelation(
         } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
           try {
             val hadoopConf = sparkSession.sessionState.newHadoopConf()
-            val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
-            fs.getContentSummary(hiveQlTable.getPath).getLength
+            if (partitionPruningPred.isEmpty) {
+              val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
+              fs.getContentSummary(hiveQlTable.getPath).getLength
+            } else {
+              val partitions = prunePartitions(getHiveQlPartitions(partitionPruningPred))
+              partitions.map { partition =>
+                val fs: FileSystem = partition.getDataLocation.getFileSystem(hadoopConf)
+                fs.getContentSummary(partition.getDataLocation).getLength
+              }.sum
+            }
           } catch {
             case e: IOException =>
               logWarning("Failed to get table size from hdfs.", e)
@@ -183,11 +195,41 @@ private[hive] case class MetastoreRelation(
     }
   }
 
+  /**
+   * Prunes partitions not involve the query plan.
+   *
+   * @param partitions All partitions of the relation.
+   * @return Partitions that are involved in the query plan.
+   */
+  private[hive] def prunePartitions(partitions: Seq[Partition]) = {
+    val boundPruningPred = partitionPruningPred.reduceLeftOption(And).map { pred =>
+      require(
+        pred.dataType == BooleanType,
+        s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
+      BindReferences.bindReference(pred, partitionKeys)
+    }
+    boundPruningPred match {
+      case None => partitions
+      case Some(shouldKeep) => partitions.filter { part =>
+        val dataTypes = partitionKeys.map(_.dataType)
+        val castedValues = part.getValues.asScala.zip(dataTypes)
+          .map { case (value, dataType) => Cast(Literal(value), dataType).eval(null) }
+
+        // Only partitioned values are needed here, since the predicate has already been bound to
+        // partition key attribute references.
+        val row = InternalRow.fromSeq(castedValues)
+        shouldKeep.eval(row).asInstanceOf[Boolean]
+      }
+    }
+  }
+
   /** Only compare database and tablename, not alias. */
   override def sameResult(plan: LogicalPlan): Boolean = {
     plan match {
       case mr: MetastoreRelation =>
-        mr.databaseName == databaseName && mr.tableName == tableName
+        mr.databaseName == databaseName && mr.tableName == tableName &&
+          partitionPruningPred.size == mr.partitionPruningPred.size &&
+          (partitionPruningPred, mr.partitionPruningPred).zipped.forall(_ semanticEquals _)
       case _ => false
     }
   }
@@ -243,6 +285,7 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias)(catalogTable, client, sparkSession)
+    MetastoreRelation(databaseName, tableName, alias, partitionPruningPred)(
+      catalogTable, client, sparkSession)
   }
 }

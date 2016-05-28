@@ -52,8 +52,7 @@ case class PartitionPruner(conf: SQLConf) extends Rule[LogicalPlan] with Predica
             predicate.references.subsetOf(partitionKeyIds)
         }
         relation.partitionPruningPred = pruningPredicates
-        filter
-        //filter.withNewChildren(relation.newInstance(pruningPredicates) :: Nil)
+        filter.withNewChildren(relation :: Nil)
     }
   }
 }
