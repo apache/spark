@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.sql.Row
@@ -24,17 +25,21 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.types.IntegerType
 
-
+/**
+ * Parser test cases for rules defined in [[CatalystSqlParser]] / [[AstBuilder]].
+ *
+ * There is also SparkSqlParserSuite in sql/core module for parser rules defined in sql/core module.
+ */
 class PlanParserSuite extends PlanTest {
   import CatalystSqlParser._
   import org.apache.spark.sql.catalyst.dsl.expressions._
   import org.apache.spark.sql.catalyst.dsl.plans._
 
-  def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
+  private def assertEqual(sqlCommand: String, plan: LogicalPlan): Unit = {
     comparePlans(parsePlan(sqlCommand), plan)
   }
 
-  def intercept(sqlCommand: String, messages: String*): Unit = {
+  private def intercept(sqlCommand: String, messages: String*): Unit = {
     val e = intercept[ParseException](parsePlan(sqlCommand))
     messages.foreach { message =>
       assert(e.message.contains(message))
@@ -51,25 +56,6 @@ class PlanParserSuite extends PlanTest {
   test("explain") {
     intercept("EXPLAIN logical SELECT 1", "Unsupported SQL statement")
     intercept("EXPLAIN formatted SELECT 1", "Unsupported SQL statement")
-  }
-
-  test("show functions") {
-    assertEqual("show functions", ShowFunctions(None, None))
-    assertEqual("show functions foo", ShowFunctions(None, Some("foo")))
-    assertEqual("show functions foo.bar", ShowFunctions(Some("foo"), Some("bar")))
-    assertEqual("show functions 'foo\\\\.*'", ShowFunctions(None, Some("foo\\.*")))
-    intercept("show functions foo.bar.baz", "Unsupported function name")
-  }
-
-  test("describe function") {
-    assertEqual("describe function bar",
-      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = false))
-    assertEqual("describe function extended bar",
-      DescribeFunction(FunctionIdentifier("bar", database = None), isExtended = true))
-    assertEqual("describe function foo.bar",
-      DescribeFunction(FunctionIdentifier("bar", database = Option("foo")), isExtended = false))
-    assertEqual("describe function extended f.bar",
-      DescribeFunction(FunctionIdentifier("bar", database = Option("f")), isExtended = true))
   }
 
   test("set operations") {

@@ -53,7 +53,7 @@ if __name__ == "__main__":
         .appName("ParquetInputFormat")\
         .getOrCreate()
 
-    sc = spark._sc
+    sc = spark.sparkContext
 
     parquet_rdd = sc.newAPIHadoopFile(
         path,

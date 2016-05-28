@@ -41,7 +41,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     path.delete()
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fileFormat = new parquet.DefaultSource()
+    val fileFormat = new parquet.ParquetFileFormat()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
       val df = spark
@@ -73,7 +73,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
     path.delete()
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fileFormat = new parquet.DefaultSource()
+    val fileFormat = new parquet.ParquetFileFormat()
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
       val df = spark
@@ -173,7 +173,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         query.processAllAvailable()
       }
 
-      val outputDf = sqlContext.read.parquet(outputDir)
+      val outputDf = spark.read.parquet(outputDir)
       val expectedSchema = new StructType()
         .add(StructField("value", IntegerType))
         .add(StructField("id", IntegerType))
