@@ -54,6 +54,7 @@ def benchmark(textInputPath, repeat, number):
     rdd.count()
     print("RDD:")
     print(timeit.repeat(lambda: legacy_word_count(rdd), repeat=repeat, number=number))
+    rdd.unpersist()
     df = session.read.text(textInputPath)
     df.cache()
     df.count()
