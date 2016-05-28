@@ -38,7 +38,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.hive.client.HiveClient
-import org.apache.spark.sql.types.{DataType, BooleanType}
+import org.apache.spark.sql.types.BooleanType
 
 private[hive] case class MetastoreRelation(
     databaseName: String,
