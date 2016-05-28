@@ -359,7 +359,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    */
   def setLogLevel(logLevel: String) {
     val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
-    if (!validLevels.contains(logLevel)) {
+    // let's allow lowcase or mixed case too
+    if (!validLevels.contains(logLevel.toUpperCase)) {
       throw new IllegalArgumentException(
         s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
     }

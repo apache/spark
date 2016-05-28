@@ -51,7 +51,7 @@ class ReplSuite extends SparkFunSuite {
     System.setProperty(CONF_EXECUTOR_CLASSPATH, classpath)
 
     Main.conf.set("spark.master", master)
-    Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out)))
+    Main.doMain(Array("-classpath", classpath), new SparkILoop(in, new PrintWriter(out, true)))
 
     if (oldExecutorClasspath != null) {
       System.setProperty(CONF_EXECUTOR_CLASSPATH, oldExecutorClasspath)
@@ -448,5 +448,27 @@ class ReplSuite extends SparkFunSuite {
       """.stripMargin)
     assertDoesNotContain("AssertionError", output)
     assertDoesNotContain("Exception", output)
+  }
+
+  test("reset log level") {
+    val logger = org.apache.log4j.Logger.getRootLogger()
+    val output1 = runInterpreter("local",
+      """
+        |sc.setLogLevel("debug")
+        |sc.range(1, 10)
+      """.stripMargin
+    )
+    println(output1)
+    assertContains("DEBUG ClosureCleaner", output1)
+ /*
+    val output2 = runInterpreter("local",
+      """
+        |sc.setLogLevel("debug")
+        |sc.resetLogLevel
+        |sc.range(1, 10)
+      """.stripMargin
+    )
+    assertDoesNotContain("DEBUG ClosureCleaner", output2)
+    */
   }
 }
