@@ -23,6 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
@@ -145,8 +146,31 @@ case class AlterTableRenameCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, oldName, isView)
+    val table = catalog.getTableMetadata(oldName)
+    // For datasource tables, we also need to update the "path" serde property
+    if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
+      val newPath = catalog.defaultTablePath(newName)
+      val newTable = table.withNewStorage(
+        serdeProperties = table.storage.serdeProperties ++ Map("path" -> newPath))
+      catalog.alterTable(newTable)
+    }
+    // Also uncache the table. If an exception is thrown here we can just assume it is uncached;
+    // this can happen with Hive tables when the underlying catalog is in-memory.
+    val wasCached = Try(sparkSession.catalog.isCached(oldName.unquotedString)).getOrElse(false)
+    if (wasCached) {
+      try {
+        sparkSession.catalog.uncacheTable(oldName.unquotedString)
+      } catch {
+        case NonFatal(e) => log.warn(e.toString, e)
+      }
+    }
+    // Invalidate the table last, otherwise uncaching the table would load the logical plan
+    // back into the hive metastore cache
     catalog.invalidateTable(oldName)
     catalog.renameTable(oldName, newName)
+    if (wasCached) {
+      sparkSession.catalog.cacheTable(newName.unquotedString)
+    }
     Seq.empty[Row]
   }
 
