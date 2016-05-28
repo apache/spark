@@ -116,7 +116,7 @@ statement
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD | DELETE | LIST) identifier .*?                          #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
@@ -172,6 +172,8 @@ unsupportedHiveNativeCommands
     | kw1=ROLLBACK
     | kw1=DFS
     | kw1=DELETE kw2=FROM
+    | kw1=RELOAD kw2=FUNCTION
+    | kw1=SOURCE
     ;
 
 createTableHeader
@@ -641,11 +643,11 @@ nonReserved
     | SORT | CLUSTER | DISTRIBUTE | UNSET | TBLPROPERTIES | SKEWED | STORED | DIRECTORIES | LOCATION
     | EXCHANGE | ARCHIVE | UNARCHIVE | FILEFORMAT | TOUCH | COMPACT | CONCATENATE | CHANGE
     | CASCADE | RESTRICT | BUCKETS | CLUSTERED | SORTED | PURGE | INPUTFORMAT | OUTPUTFORMAT
-    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | LIST
+    | DBPROPERTIES | DFS | TRUNCATE | COMPUTE | SOURCE | LIST
     | STATISTICS | ANALYZE | PARTITIONED | EXTERNAL | DEFINED | RECORDWRITER
-    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | VALUES | COMMENT | ROLE
-    | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL | INPATH
-    | ASC | DESC | LIMIT | RENAME | SETS
+    | REVOKE | GRANT | LOCK | UNLOCK | MSCK | REPAIR | EXPORT | IMPORT | LOAD | RELOAD | VALUES | COMMENT
+    | ROLE | ROLES | COMPACTIONS | PRINCIPALS | TRANSACTIONS | INDEX | INDEXES | LOCKS | OPTION | LOCAL
+    | INPATH | ASC | DESC | LIMIT | RENAME | SETS
     | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
     | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
@@ -842,6 +844,7 @@ DFS: 'DFS';
 TRUNCATE: 'TRUNCATE';
 ANALYZE: 'ANALYZE';
 COMPUTE: 'COMPUTE';
+SOURCE: 'SOURCE';
 LIST: 'LIST';
 STATISTICS: 'STATISTICS';
 PARTITIONED: 'PARTITIONED';
@@ -856,6 +859,7 @@ REPAIR: 'REPAIR';
 EXPORT: 'EXPORT';
 IMPORT: 'IMPORT';
 LOAD: 'LOAD';
+RELOAD: 'RELOAD';
 ROLE: 'ROLE';
 ROLES: 'ROLES';
 COMPACTIONS: 'COMPACTIONS';
