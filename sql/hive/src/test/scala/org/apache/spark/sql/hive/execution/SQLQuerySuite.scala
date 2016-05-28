@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
@@ -381,9 +382,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   def checkRelation(
       tableName: String,
       isDataSourceParquet: Boolean,
+      format: String,
       userSpecifiedLocation: Option[String] = None): Unit = {
     val relation = EliminateSubqueryAliases(
       sessionState.catalog.lookupRelation(TableIdentifier(tableName)))
+    val catalogTable =
+      sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
     relation match {
       case LogicalRelation(r: HadoopFsRelation, _, _) =>
         if (!isDataSourceParquet) {
@@ -396,6 +400,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.options("path") === location)
           case None => // OK.
         }
+        assert(
+          catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
 
       case r: MetastoreRelation =>
         if (isDataSourceParquet) {
@@ -408,11 +414,12 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             assert(r.catalogTable.storage.locationUri.get === location)
           case None => // OK.
         }
+        // Also make sure that the format is the desired format.
+        assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
     }
 
     // When a user-specified location is defined, the table type needs to be EXTERNAL.
-    val actualTableType =
-      sessionState.catalog.getTableMetadata(TableIdentifier(tableName)).tableType
+    val actualTableType = catalogTable.tableType
     userSpecifiedLocation match {
       case Some(location) =>
         assert(actualTableType === CatalogTableType.EXTERNAL)
@@ -426,6 +433,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
     setConf(SQLConf.CONVERT_CTAS, true)
 
+    val defaultDataSource = sessionState.conf.defaultDataSourceName
     try {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
@@ -433,35 +441,35 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       }.getMessage
       assert(message.contains("already exists"))
-      checkRelation("ctas1", true)
+      checkRelation("ctas1", true, defaultDataSource)
       sql("DROP TABLE ctas1")
 
       // Specifying database name for query can be converted to data source write path
       // is not allowed right now.
       sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", true)
+      checkRelation("ctas1", true, defaultDataSource)
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as textfile" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "text")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as sequencefile" +
             " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "sequence")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "rcfile")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "orc")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "parquet")
       sql("DROP TABLE ctas1")
     } finally {
       setConf(SQLConf.CONVERT_CTAS, originalConf)
@@ -472,34 +480,36 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("CTAS without serde with location") {
     withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
       withTempDir { dir =>
+        val defaultDataSource = sessionState.conf.defaultDataSourceName
+
         val tempLocation = dir.getCanonicalPath
         sql(s"CREATE EXTERNAL TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", true, Some(s"file:$tempLocation/c1"))
+        checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c1"))
         sql("DROP TABLE ctas1")
 
         // EXTERNAL is optional because when location is specified,
         // the table will not be a managed table.
         sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c2'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", true, Some(s"file:$tempLocation/c2"))
+        checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c2"))
         sql("DROP TABLE ctas1")
 
         sql(s"CREATE EXTERNAL TABLE ctas1 stored as textfile LOCATION 'file:$tempLocation/c3'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", false, Some(s"file:$tempLocation/c3"))
+        checkRelation("ctas1", false, "text", Some(s"file:$tempLocation/c3"))
         sql("DROP TABLE ctas1")
 
         // EXTERNAL is optional because when location is specified,
         // the table will not be a managed table.
         sql(s"CREATE TABLE ctas1 stored as sequenceFile LOCATION 'file:$tempLocation/c4'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", false, Some(s"file:$tempLocation/c4"))
+        checkRelation("ctas1", false, "sequence", Some(s"file:$tempLocation/c4"))
         sql("DROP TABLE ctas1")
 
         sql(s"CREATE external TABLE ctas1 stored as rcfile LOCATION 'file:$tempLocation/c5'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-        checkRelation("ctas1", false, Some(s"file:$tempLocation/c5"))
+        checkRelation("ctas1", false, "rcfile", Some(s"file:$tempLocation/c5"))
         sql("DROP TABLE ctas1")
       }
     }
