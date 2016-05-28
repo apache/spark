@@ -59,7 +59,7 @@ object IsotonicRegressionExample {
 
     // Create isotonic regression model from training data.
     // Isotonic parameter defaults to true so it is only shown for demonstration
-    val model = ir.fit(training).setPredictionCol("prediction")
+    val model = ir.fit(training)
 
     // Create tuples of predicted and real labels.
     val result = model.transform(test)
