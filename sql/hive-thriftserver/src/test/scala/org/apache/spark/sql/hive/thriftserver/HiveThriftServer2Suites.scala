@@ -43,6 +43,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.ProcessTestUtils.ProcessOutputCapturer
 import org.apache.spark.util.{ThreadUtils, Utils}
 
@@ -223,7 +224,6 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
   }
 
   test("test multiple session") {
-    import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null
     var defaultV2: String = null
     var data: ArrayBuffer[Int] = null
@@ -706,7 +706,6 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
     s"""$startScript
        |  --master local
        |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$metastoreJdbcUri
-       |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
        |  --hiveconf ${ConfVars.HIVE_SERVER2_THRIFT_BIND_HOST}=localhost
        |  --hiveconf ${ConfVars.HIVE_SERVER2_TRANSPORT_MODE}=$mode
        |  --hiveconf ${ConfVars.HIVE_SERVER2_LOGGING_OPERATION_LOG_LOCATION}=$operationLogPath
@@ -714,6 +713,7 @@ abstract class HiveThriftServer2Test extends SparkFunSuite with BeforeAndAfterAl
        |  --driver-class-path $driverClassPath
        |  --driver-java-options -Dlog4j.debug
        |  --conf spark.ui.enabled=false
+       |  --conf ${SQLConf.WAREHOUSE_PATH.key}=$warehousePath
        |  ${extraConf.mkString("\n")}
      """.stripMargin.split("\\s+").toSeq
   }

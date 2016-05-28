@@ -39,6 +39,7 @@ import org.apache.thrift.transport.TSocket
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.hive.HiveUtils
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.ShutdownHookManager
 
 /**
@@ -104,6 +105,11 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     sessionState.cmdProperties.entrySet().asScala.foreach { item =>
       val key = item.getKey.toString
       val value = item.getValue.toString
+      if (key == "hive.metastore.warehouse.dir") {
+        throw new RuntimeException(
+          "hive.metastore.warehouse.dir is deprecated. Instead, use " +
+          s"${SQLConf.WAREHOUSE_PATH.key} to specify the default location of database.")
+      }
       // We do not propagate metastore options to the execution copy of hive.
       if (key != "javax.jdo.option.ConnectionURL") {
         conf.set(key, value)
