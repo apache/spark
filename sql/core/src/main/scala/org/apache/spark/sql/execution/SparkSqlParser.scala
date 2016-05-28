@@ -936,7 +936,29 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       comment = comment)
 
     selectQuery match {
-      case Some(q) => CreateTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
+      case Some(q) =>
+        val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
+        if (conf.convertCTAS && !hasStorageProperties) {
+          val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+          val options = rowStorage.serdeProperties ++ fileStorage.serdeProperties
+          val optionsWithPath = if (location.isDefined) {
+            options + ("path" -> location.get)
+          } else {
+            options
+          }
+          CreateTableUsingAsSelect(
+            tableIdent = tableDesc.identifier,
+            provider = conf.defaultDataSourceName,
+            temporary = false,
+            partitionColumns = tableDesc.partitionColumnNames.toArray,
+            bucketSpec = None,
+            mode = mode,
+            options = optionsWithPath,
+            q
+          )
+        } else {
+          CreateTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
+        }
       case None => CreateTableCommand(tableDesc, ifNotExists)
     }
   }

@@ -447,52 +447,20 @@ private[hive] class HiveMetastoreCatalog(sparkSession: SparkSession) extends Log
       case p: LogicalPlan if p.resolved => p
 
       case p @ CreateTableAsSelectLogicalPlan(table, child, allowExisting) =>
-        val schema = if (table.schema.nonEmpty) {
-          table.schema
+        val desc = if (table.storage.serde.isEmpty) {
+          // add default serde
+          table.withNewStorage(
+            serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
         } else {
-          child.output.map { a =>
-            CatalogColumn(a.name, a.dataType.catalogString, a.nullable)
-          }
+          table
         }
 
-        val desc = table.copy(schema = schema)
+        val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
 
-        if (sessionState.convertCTAS && table.storage.serde.isEmpty) {
-          // Do the conversion when spark.sql.hive.convertCTAS is true and the query
-          // does not specify any storage format (file format and storage handler).
-          if (table.identifier.database.isDefined) {
-            throw new AnalysisException(
-              "Cannot specify database name in a CTAS statement " +
-                "when spark.sql.hive.convertCTAS is set to true.")
-          }
-
-          val mode = if (allowExisting) SaveMode.Ignore else SaveMode.ErrorIfExists
-          CreateTableUsingAsSelect(
-            TableIdentifier(desc.identifier.table),
-            sessionState.conf.defaultDataSourceName,
-            temporary = false,
-            Array.empty[String],
-            bucketSpec = None,
-            mode,
-            options = Map.empty[String, String],
-            child
-          )
-        } else {
-          val desc = if (table.storage.serde.isEmpty) {
-            // add default serde
-            table.withNewStorage(
-              serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
-          } else {
-            table
-          }
-
-          val QualifiedTableName(dbName, tblName) = getQualifiedTableName(table)
-
-          execution.CreateTableAsSelectCommand(
-            desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
-            child,
-            allowExisting)
-        }
+        execution.CreateHiveTableAsSelectCommand(
+          desc.copy(identifier = TableIdentifier(tblName, Some(dbName))),
+          child,
+          allowExisting)
     }
   }
 
