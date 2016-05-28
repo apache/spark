@@ -35,6 +35,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -44,7 +45,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -2329,8 +2330,14 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @throws[AnalysisException]
-  def createTempView(viewName: String): Unit = {
-    sparkSession.createTempView(viewName, toDF(), replaceIfExists = false)
+  def createTempView(viewName: String): Unit = withPlan {
+    val tableDesc = CatalogTable(
+      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      tableType = CatalogTableType.VIEW,
+      schema = Seq.empty[CatalogColumn],
+      storage = CatalogStorageFormat.EmptyStorageFormat)
+    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = false,
+      isTemporary = true, sql = "")
   }
 
   /**
@@ -2340,8 +2347,14 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.0.0
    */
-  def createOrReplaceTempView(viewName: String): Unit = {
-    sparkSession.createTempView(viewName, toDF(), replaceIfExists = true)
+  def createOrReplaceTempView(viewName: String): Unit = withPlan {
+    val tableDesc = CatalogTable(
+      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      tableType = CatalogTableType.VIEW,
+      schema = Seq.empty[CatalogColumn],
+      storage = CatalogStorageFormat.EmptyStorageFormat)
+    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = true,
+      isTemporary = true, sql = "")
   }
 
   /**
