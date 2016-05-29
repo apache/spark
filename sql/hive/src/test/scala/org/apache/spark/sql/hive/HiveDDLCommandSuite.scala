@@ -50,7 +50,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("Test CTAS #1") {
     val s1 =
-      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+      """CREATE TABLE IF NOT EXISTS mydb.page_view
         |(viewTime INT,
         |userid BIGINT,
         |page_url STRING,
@@ -90,7 +90,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("Test CTAS #2") {
     val s2 =
-      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+      """CREATE TABLE IF NOT EXISTS mydb.page_view
         |(viewTime INT,
         |userid BIGINT,
         |page_url STRING,
@@ -188,6 +188,12 @@ class HiveDDLCommandSuite extends PlanTest {
   test("CTAS statement with a PARTITIONED BY clause is not allowed") {
     assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
       " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
+  }
+
+  test("CTAS statement with an EXTERNAL keyword is not allowed") {
+    assertUnsupported(
+      s"CREATE EXTERNAL TABLE ctas1 stored as textfile LOCATION 'test'" +
+        " AS SELECT key FROM (SELECT 1 as key) tmp")
   }
 
   test("unsupported operations") {
