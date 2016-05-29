@@ -445,12 +445,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
           if (!splitsByLocation.contains(location)) {
             splitsByLocation(location) = new Array[Long](numReducers)
           }
-          var i = 0
-          while (i < numReducers) {
-            val byteSize = status.getSizeForBlock(i)
-            splitsByLocation(location)(i) += byteSize
+          for (index <- 0 until numReducers) {
+            val byteSize = status.getSizeForBlock(index)
+            splitsByLocation(location)(index) += byteSize
             sumOfAllBytes += byteSize
-            i += 1
           }
         }
     }
@@ -460,21 +458,17 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
       val bytesOfReduces = new Array[Long](numReducers)
       val blockManagerIdMaps = new HashMap[Int, BlockManagerId]
       val splitIndexOfLocation = new Array[HashSet[Int]](numOfLocations)
-      var i = 0
-      var j = 0
+      var locIndex = 0
       //caclulate the bytesize of each reducer
       splitsByLocation.toSeq.map(
-        s => {
-          val (blockManagerId, byteSize) = s
-          blockManagerIdMaps(i) = blockManagerId
-          splitIndexOfLocation(i) = new HashSet[Int]
-          j = 0
-          byteSize.map(
-            b => {
-              bytesOfReduces(j) += b
-              j += 1
-            })
-          i += 1
+        kvItems => {
+          val (blockManagerId, byteSizes) = kvItems
+          blockManagerIdMaps(locIndex) = blockManagerId
+          splitIndexOfLocation(locIndex) = new HashSet[Int]
+          for (index <- 0 until byteSizes.length) {
+            bytesOfReduces(index) += byteSizes(index)
+          }
+          locIndex += 1
         })
 
       val indexOfBytesOfReduces = new HashMap[Int, Long]
@@ -486,47 +480,47 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 
       //Divide the tasks into n groups according to the number of nodes and data size,
       // ensuring that the data size for each group is nearly equal to achieve load balancing.
-      for (i <- sortedIndexOfBytesOfReducer.indices) {
-        var minIndex = 0
-        for (j <- 1 until numOfLocations) {
-          if (splitSumOfByteSizeOfLocation(j) < splitSumOfByteSizeOfLocation(minIndex)) {
-            minIndex = j
+      for (index <- sortedIndexOfBytesOfReducer.indices) {
+        var minLocIndex = 0
+        for (locIndex <- 1 until numOfLocations) {
+          if (splitSumOfByteSizeOfLocation(locIndex) < splitSumOfByteSizeOfLocation(minLocIndex)) {
+            minLocIndex = locIndex
           }
         }
-        val (index, byteSize) = sortedIndexOfBytesOfReducer(i)
-        splitSumOfByteSizeOfLocation(minIndex) += byteSize
-        splitIndexOfLocation(minIndex).add(index)
+        val (loc, byteSize) = sortedIndexOfBytesOfReducer(index)
+        splitSumOfByteSizeOfLocation(minLocIndex) += byteSize
+        splitIndexOfLocation(minLocIndex).add(loc)
       }
 
       // Determine the amount of local data if the tasks of every group are executed on every node.
       // Thus, a n × n matrix is created.
       val splitBytesOfLocationsAndGroup = new Array[Array[Long]](numOfLocations)
-      for (i <- splitBytesOfLocationsAndGroup.indices) {
-        splitBytesOfLocationsAndGroup(i) = new Array[Long](numOfLocations)
+      for (index <- splitBytesOfLocationsAndGroup.indices) {
+        splitBytesOfLocationsAndGroup(index) = new Array[Long](numOfLocations)
       }
-      for (i <- splitIndexOfLocation.indices) {
-        val iter: Iterator[Int] = splitIndexOfLocation(i).iterator
+      for (row <- splitIndexOfLocation.indices) {
+        val iter: Iterator[Int] = splitIndexOfLocation(row).iterator
         while (iter.hasNext) {
           val index = iter.next()
           val bytesOfLocations: Seq[(BlockManagerId, Long)] = splitsByLocation.toSeq.map(s => (s._1, s._2(index)))
-          for (j <- bytesOfLocations.indices) {
-            splitBytesOfLocationsAndGroup(i)(j) += bytesOfLocations(j)._2
+          for (col <- bytesOfLocations.indices) {
+            splitBytesOfLocationsAndGroup(row)(col) += bytesOfLocations(col)._2
           }
         }
       }
       //Choose the largest value in the matrix to identify which group is allocated to which node.
       // Mark the row and column at which the selected group is located to ensure that the group
       // is not chosen next time. Goto Step 4 until no group is available.
-      for (i <- 0 until numOfLocations) {
+      for (index <- 0 until numOfLocations) {
         var maxCol = 0
         var maxRow = 0
         var maxValue = splitBytesOfLocationsAndGroup(maxRow)(maxCol)
-        for (j <- splitBytesOfLocationsAndGroup.indices) {
-          for (k <- splitBytesOfLocationsAndGroup(j).indices) {
-            if (splitBytesOfLocationsAndGroup(j)(k) > maxValue) {
-              maxRow = j
-              maxCol = k
-              maxValue = splitBytesOfLocationsAndGroup(j)(k)
+        for (row <- splitBytesOfLocationsAndGroup.indices) {
+          for (col <- splitBytesOfLocationsAndGroup(row).indices) {
+            if (splitBytesOfLocationsAndGroup(row)(col) > maxValue) {
+              maxRow = row
+              maxCol = col
+              maxValue = splitBytesOfLocationsAndGroup(row)(col)
             }
           }
         }
@@ -535,11 +529,11 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
           val index = iter.next()
           preferredLocationsOfReduces(index) = blockManagerIdMaps(maxCol)
         }
-        for (j <- splitBytesOfLocationsAndGroup.indices) {
-          splitBytesOfLocationsAndGroup(j)(maxCol) = -1
+        for (row <- splitBytesOfLocationsAndGroup.indices) {
+          splitBytesOfLocationsAndGroup(row)(maxCol) = -1
         }
-        for (k <- splitBytesOfLocationsAndGroup.indices) {
-          splitBytesOfLocationsAndGroup(maxRow)(k) = -1
+        for (col <- splitBytesOfLocationsAndGroup.indices) {
+          splitBytesOfLocationsAndGroup(maxRow)(col) = -1
         }
       }
       Some(preferredLocationsOfReduces)
