@@ -60,7 +60,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
     val iter = strategies.iterator.flatMap(_(plan)).flatMap { physicalPlan =>
       val placeholders = collectPlaceholders(physicalPlan)
 
-      placeholders.toIterator.foldLeft(Iterator(physicalPlan)) {
+      placeholders.iterator.foldLeft(Iterator(physicalPlan)) {
         case (physicalPlans, (placeholder, logicalPlan)) =>
           val children = this.plan(logicalPlan)
           physicalPlans.flatMap { physicalPlan =>
