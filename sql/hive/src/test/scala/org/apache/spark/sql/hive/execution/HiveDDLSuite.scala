@@ -56,6 +56,13 @@ class HiveDDLSuite
     fs.exists(filesystemPath)
   }
 
+  private def assertUnsupported(query: String): Unit = {
+    val e = intercept[AnalysisException] {
+      sql(query)
+    }
+    assert(e.getMessage.toLowerCase.contains("operation not allowed"))
+  }
+
   test("drop tables") {
     withTable("tab1") {
       val tabName = "tab1"
@@ -587,5 +594,25 @@ class HiveDDLSuite
         )
       ))
     }
+  }
+
+  test("Hive style CTAS statement with EXTERNAL keyword") {
+    withTable("ctas1") {
+      withTempDir { dir =>
+        val tempLocation = s"${dir.getCanonicalPath}/test"
+        // EXTERNAL keyword is not allowed in a CTAS statement.
+        assertUnsupported(
+          s"CREATE EXTERNAL TABLE ctas1 stored as textfile LOCATION '$tempLocation'" +
+            " AS SELECT key FROM (SELECT 1 as key) tmp")
+
+        sql(s"CREATE TABLE ctas1 stored as textfile LOCATION '$tempLocation'" +
+          " AS SELECT key FROM (SELECT 1 as key) tmp")
+      }
+    }
+  }
+
+  test("Hive style CTAS statement with PARTITIONED BY clause") {
+    assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
+      " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
   }
 }

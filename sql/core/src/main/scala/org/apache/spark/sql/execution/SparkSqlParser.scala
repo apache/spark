@@ -937,6 +937,24 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     selectQuery match {
       case Some(q) =>
+        // Hive does not allow to use a CTAS statement to create a partitioned table.
+        if (tableDesc.partitionColumnNames.nonEmpty) {
+          val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
+            "create a partitioned table using Hive's file formats. " +
+            "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
+            "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
+            "CTAS statement."
+          throw operationNotAllowed(errorMessage, ctx)
+        }
+
+        // CTAS statement does not allow the EXTERNAL keyword.
+        if (external) {
+          val errorMessage = "CREATE EXTERNAL TABLE ... AS SELECT. " +
+            "Please remove the EXTERNAL keyword. As long as a user-specified location is " +
+            "provided, the data of the table will not be deleted when dropping the table."
+          throw operationNotAllowed(errorMessage, ctx)
+        }
+
         val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
         if (conf.convertCTAS && !hasStorageProperties) {
           val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists

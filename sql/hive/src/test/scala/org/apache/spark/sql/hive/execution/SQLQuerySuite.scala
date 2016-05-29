@@ -483,31 +483,27 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         val defaultDataSource = sessionState.conf.defaultDataSourceName
 
         val tempLocation = dir.getCanonicalPath
-        sql(s"CREATE EXTERNAL TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
+        sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
         checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c1"))
         sql("DROP TABLE ctas1")
 
-        // EXTERNAL is optional because when location is specified,
-        // the table will not be a managed table.
         sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c2'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
         checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c2"))
         sql("DROP TABLE ctas1")
 
-        sql(s"CREATE EXTERNAL TABLE ctas1 stored as textfile LOCATION 'file:$tempLocation/c3'" +
+        sql(s"CREATE TABLE ctas1 stored as textfile LOCATION 'file:$tempLocation/c3'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
         checkRelation("ctas1", false, "text", Some(s"file:$tempLocation/c3"))
         sql("DROP TABLE ctas1")
 
-        // EXTERNAL is optional because when location is specified,
-        // the table will not be a managed table.
         sql(s"CREATE TABLE ctas1 stored as sequenceFile LOCATION 'file:$tempLocation/c4'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
         checkRelation("ctas1", false, "sequence", Some(s"file:$tempLocation/c4"))
         sql("DROP TABLE ctas1")
 
-        sql(s"CREATE external TABLE ctas1 stored as rcfile LOCATION 'file:$tempLocation/c5'" +
+        sql(s"CREATE TABLE ctas1 stored as rcfile LOCATION 'file:$tempLocation/c5'" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
         checkRelation("ctas1", false, "rcfile", Some(s"file:$tempLocation/c5"))
         sql("DROP TABLE ctas1")
