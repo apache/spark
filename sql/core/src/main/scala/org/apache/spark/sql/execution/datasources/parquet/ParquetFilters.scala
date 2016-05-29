@@ -131,8 +131,6 @@ private[sql] object ParquetFilters {
       (n: String, v: Any) => FilterApi.gt(floatColumn(n), v.asInstanceOf[java.lang.Float])
     case DoubleType =>
       (n: String, v: Any) => FilterApi.gt(doubleColumn(n), v.asInstanceOf[java.lang.Double])
-
-    // See https://issues.apache.org/jira/browse/SPARK-11153
     case StringType =>
       (n: String, v: Any) =>
         FilterApi.gt(binaryColumn(n),
