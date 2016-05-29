@@ -155,7 +155,7 @@ class PlannerSuite extends SharedSQLContext {
       val path = file.getCanonicalPath
       testData.write.parquet(path)
       val df = spark.read.parquet(path)
-      spark.sqlContext.registerDataFrameAsTable(df, "testPushed")
+      df.createOrReplaceTempView("testPushed")
 
       withTempTable("testPushed") {
         val exp = sql("select * from testPushed where key = 15").queryExecution.sparkPlan

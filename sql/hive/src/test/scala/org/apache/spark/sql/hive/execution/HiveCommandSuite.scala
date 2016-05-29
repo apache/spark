@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
-import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.test.SQLTestUtils
 
@@ -101,24 +101,22 @@ class HiveCommandSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
 
   test("show tblproperties of data source tables - basic") {
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1")
-        .filter(s"key = 'spark.sql.sources.provider'"),
-      Row("spark.sql.sources.provider", "org.apache.spark.sql.parquet.DefaultSource") :: Nil
+      sql("SHOW TBLPROPERTIES parquet_tab1").filter(s"key = '$DATASOURCE_PROVIDER'"),
+      Row(DATASOURCE_PROVIDER, "org.apache.spark.sql.parquet.DefaultSource") :: Nil
     )
 
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1(spark.sql.sources.provider)"),
+      sql(s"SHOW TBLPROPERTIES parquet_tab1($DATASOURCE_PROVIDER)"),
       Row("org.apache.spark.sql.parquet.DefaultSource") :: Nil
     )
 
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1")
-        .filter(s"key = 'spark.sql.sources.schema.numParts'"),
-      Row("spark.sql.sources.schema.numParts", "1") :: Nil
+      sql("SHOW TBLPROPERTIES parquet_tab1").filter(s"key = '$DATASOURCE_SCHEMA_NUMPARTS'"),
+      Row(DATASOURCE_SCHEMA_NUMPARTS, "1") :: Nil
     )
 
     checkAnswer(
-      sql("SHOW TBLPROPERTIES parquet_tab1('spark.sql.sources.schema.numParts')"),
+      sql(s"SHOW TBLPROPERTIES parquet_tab1('$DATASOURCE_SCHEMA_NUMPARTS')"),
       Row("1"))
   }
 

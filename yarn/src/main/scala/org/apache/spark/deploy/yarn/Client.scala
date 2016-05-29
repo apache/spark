@@ -375,6 +375,9 @@ private[spark] class Client(
     val distributedNames = new HashSet[String]
     YarnSparkHadoopUtil.get.obtainTokenForHiveMetastore(sparkConf, hadoopConf, credentials)
     YarnSparkHadoopUtil.get.obtainTokenForHBase(sparkConf, hadoopConf, credentials)
+    if (credentials != null) {
+      logDebug(YarnSparkHadoopUtil.get.dumpTokens(credentials).mkString("\n"))
+    }
 
     val replication = sparkConf.get(STAGING_FILE_REPLICATION).map(_.toShort)
       .getOrElse(fs.getDefaultReplication(destDir))

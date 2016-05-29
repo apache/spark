@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
+package test.org.apache.spark.java8;
 
 import java.io.File;
 import java.io.Serializable;
@@ -33,6 +33,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.Accumulator;
+import org.apache.spark.AccumulatorParam;
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -45,8 +47,8 @@ import org.apache.spark.util.Utils;
  * Most of these tests replicate org.apache.spark.JavaAPISuite using java 8
  * lambda syntax.
  */
-public class Java8APISuite implements Serializable {
-  static int foreachCalls = 0;
+public class Java8RDDAPISuite implements Serializable {
+  private static int foreachCalls = 0;
   private transient JavaSparkContext sc;
 
   @Before
