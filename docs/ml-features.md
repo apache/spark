@@ -251,12 +251,12 @@ frequently and don't carry as much meaning.
 `StopWordsRemover` takes as input a sequence of strings (e.g. the output
 of a [Tokenizer](ml-features.html#tokenizer)) and drops all the stop
 words from the input sequences. The list of stopwords is specified by
-the `stopWords` parameter. Default stop words for some languages are provided
-("danish", "dutch", "english", "finnish", "french", "german", "hungarian", "italian",
-"norwegian", "portuguese", "russian", "spanish", "swedish" and "turkish"),
-which are accessible by calling `StopWordsRemover.loadDefaultStopWords(language)`.
-A boolean parameter `caseSensitive` indicates if the matches should be case
-sensitive (false by default).
+the `stopWords` parameter. Default stop words for some languages are accessible 
+by calling `StopWordsRemover.loadDefaultStopWords(language)`, for which available 
+options are "danish", "dutch", "english", "finnish", "french", "german", "hungarian", 
+"italian", "norwegian", "portuguese", "russian", "spanish", "swedish" and "turkish". 
+A boolean parameter `caseSensitive` indicates if the matches should be case sensitive 
+(false by default).
 
 **Examples**
 
