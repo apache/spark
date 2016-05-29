@@ -1270,10 +1270,11 @@ setMethod("dapplyCollect",
 
 #' gapply
 #'
-#' Apply a R function to each group of a DataFrame. The group is defined by an input
-#' grouping column.
+#' Apply a R function to each group of a DataFrame. The group is defined by input
+#' grouping columns.
 #'
 #' @param x A SparkDataFrame
+#' @param cols Grouping columns
 #' @param func A function to be applied to each group partition specified by grouping
 #'             column of the SparkDataFrame.
 #'             The output of func is a local R data.frame.
@@ -1299,8 +1300,8 @@ setMethod("dapplyCollect",
 #' df1 <- gapply(
 #'   df,
 #'   list("a", "c"),
-#'   function(x) {
-#'     y <- data.frame(x$a[1], x$c[1], mean(x$b), stringsAsFactors = FALSE)
+#'   function(key, x) {
+#'     y <- data.frame(x[, unlist(key)][1, ], mean(x$b), stringsAsFactors = FALSE)
 #'   },
 #' schema)
 #' collect(df1)
@@ -1322,7 +1323,7 @@ setMethod("dapplyCollect",
 #' df1 <- gapply(
 #'   df,
 #'   list(df$"Species"),
-#'   function(x) {
+#'   function(key, x) {
 #'     m <- suppressWarnings(lm(Sepal_Length ~
 #'     Sepal_Width + Petal_Length + Petal_Width, x))
 #'     data.frame(t(coef(m)))
@@ -1339,8 +1340,8 @@ setMethod("dapplyCollect",
 #'}
 setMethod("gapply",
           signature(x = "SparkDataFrame"),
-          function(x, col, func, schema) {
-            grouped <- do.call("groupBy", c(x, col))
+          function(x, cols, func, schema) {
+            grouped <- do.call("groupBy", c(x, cols))
             gapply(grouped, func, schema)
           })
 

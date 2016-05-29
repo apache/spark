@@ -201,8 +201,9 @@ readMultipleObjectsWithKeys <- function(inputCon) {
   # readMultipleObjectsWithKeys will read multiple continuous objects from
   # a DataOutputStream. There is no preceding field telling the count
   # of the objects, so the number of objects varies, we try to read
-  # all objects in a loop until the end of the stream. The rows in
-  # the stream are separated by grouping-key boundary
+  # all objects in a loop until the end of the stream. This function
+  # is for use by gapply. Each group of rows is followed by the grouping
+  # key for this group which is then followed by next group.
   data <- list()
   subData <- list()
   while (TRUE) {
@@ -211,7 +212,7 @@ readMultipleObjectsWithKeys <- function(inputCon) {
     if (type == "") {
       break
     } else if (type == "r") {
-      # key boundary detected
+      # A grouping boundary detected
       readTypedObject(inputCon, type)
       data[[length(data) + 1L]] <- subData
       subData <- list()

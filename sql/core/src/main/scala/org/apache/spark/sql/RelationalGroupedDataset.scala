@@ -402,7 +402,7 @@ class RelationalGroupedDataset protected[sql](
    *
    * @since 2.0.0
    */
-  def flatMapGroupsInR(
+  private[sql] def flatMapGroupsInR(
       f: Array[Byte],
       packageNames: Array[Byte],
       broadcastVars: Array[Object],

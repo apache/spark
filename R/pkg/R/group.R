@@ -148,10 +148,13 @@ createMethods()
 #' Applies a R function to each group in the input GroupedData
 #'
 #' @param x a GroupedData
+#' @param func A function to be applied to each group partition specified by GroupedData.
+#'             The output of func is a local R data.frame.
+#' @param schema The schema of the resulting SparkDataFrame after the function is applied.
+#'               It must match the output of func.
 #' @return a SparkDataFrame
 #' @rdname gapply
 #' @name gapply
-#' @family agg_funcs
 #' @examples
 #' \dontrun{
 #' Computes the arithmetic mean of the second column by grouping
@@ -167,8 +170,8 @@ createMethods()
 #' df1 <- gapply(
 #'   df,
 #'   list("a", "c"),
-#'   function(x) {
-#'     y <- data.frame(x$a[1], x$c[1], mean(x$b), stringsAsFactors = FALSE)
+#'   function(key, x) {
+#'     y <- data.frame(x[, unlist(key)][1, ], mean(x$b), stringsAsFactors = FALSE)
 #'   },
 #' schema)
 #' collect(df1)

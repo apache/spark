@@ -163,7 +163,8 @@ private[spark] class RRunner[U](
             SerDe.writeObject(dataOut, colNames)
           }
 
-          if (key != null) {
+          // Write key - the grouping columns for gapply mode
+          if (mode == 2) {
             SerDe.writeObject(dataOut, key)
           }
 

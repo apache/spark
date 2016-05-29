@@ -364,8 +364,6 @@ case class FlatMapGroupsInRExec(
     } else {
       SerializationFormats.BYTE
     }
-    val (deserializerForR, colNames) =
-      (SerializationFormats.ROW, inputSchema.fieldNames)
 
     child.execute().mapPartitionsInternal { iter =>
       val grouped = GroupedIterator(iter, groupingAttributes, child.output)
@@ -375,8 +373,8 @@ case class FlatMapGroupsInRExec(
       val groupNames = groupingAttributes.map(_.name).toArray
 
       val runner = new RRunner[Array[Byte]](
-        func, deserializerForR, serializerForR, packageNames, broadcastVars,
-        isDataFrame = true, colNames = colNames, key = groupNames)
+        func, SerializationFormats.ROW, serializerForR, packageNames, broadcastVars,
+        isDataFrame = true, colNames = inputSchema.fieldNames, key = groupNames)
 
       val hasGroups = grouped.hasNext
       val groupedRBytes = grouped.flatMap { case (key, rowIter) =>
