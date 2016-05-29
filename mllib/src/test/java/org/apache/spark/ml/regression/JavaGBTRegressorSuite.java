@@ -73,7 +73,7 @@ public class JavaGBTRegressorSuite extends SharedSparkSession {
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
-      model.save(path);
+      model.write().overwrite().save(path);
       GBTRegressionModel sameModel = GBTRegressionModel.load(path);
       TreeTests.checkEqual(model, sameModel);
     } finally {

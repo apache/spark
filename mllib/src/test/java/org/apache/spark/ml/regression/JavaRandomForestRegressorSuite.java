@@ -97,7 +97,7 @@ public class JavaRandomForestRegressorSuite extends SharedSparkSession {
     File tempDir = Utils.createTempDir(System.getProperty("java.io.tmpdir"), "spark");
     String path = tempDir.toURI().toString();
     try {
-      model.save(path);
+      model.write().overwrite().save(path);
       RandomForestRegressionModel sameModel = RandomForestRegressionModel.load(path);
       TreeTests.checkEqual(model, sameModel);
     } finally {
