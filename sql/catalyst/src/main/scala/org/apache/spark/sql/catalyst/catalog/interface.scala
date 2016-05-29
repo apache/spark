@@ -59,14 +59,15 @@ case class CatalogStorageFormat(
         ""
       }
     val output =
-      Seq(locationUri.map(si => s"Location:$si").getOrElse(""),
-        inputFormat.map(si => s"InputFormat:$si").getOrElse(""),
-        outputFormat.map(si => s"OutputFormat:$si").getOrElse(""),
+      Seq(locationUri.map("Location:" + _).getOrElse(""),
+        inputFormat.map("InputFormat:" + _).getOrElse(""),
+        outputFormat.map("OutputFormat:" + _).getOrElse(""),
         if (compressed) "Compressed:Yes" else "Compressed:No",
-        serde.map(si => s"Serde:$si").getOrElse(""),
+        serde.map("Serde:" + _).getOrElse(""),
         serdePropsToString)
     output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
   }
+
 }
 
 object CatalogStorageFormat {
@@ -91,7 +92,7 @@ case class CatalogColumn(
       Seq(s"`$name`",
         dataType,
         if (nullable) "NULL" else "NOT NULL",
-        comment.map(c => s"($c)").getOrElse(""))
+        comment.map("(" + _ + ")").getOrElse(""))
     output.filter(_.nonEmpty).mkString(" ")
   }
 
@@ -171,9 +172,9 @@ case class CatalogTable(
 
   override def toString: String = {
     val tableProperties = properties.map(p => p._1 + "=" + p._2).mkString("[", ", ", "]")
-    val partitionColumns = partitionColumnNames.map(o => s"`$o`").mkString("[", ", ", "]")
-    val sortColumns = sortColumnNames.map(o => s"`$o`").mkString("[", ", ", "]")
-    val bucketColumns = bucketColumnNames.map(o => s"`$o`").mkString("[", ", ", "]")
+    val partitionColumns = partitionColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+    val sortColumns = sortColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
+    val bucketColumns = bucketColumnNames.map("`" + _ + "`").mkString("[", ", ", "]")
 
     val output =
       Seq(s"Table:${identifier.quotedString}",
@@ -186,9 +187,9 @@ case class CatalogTable(
         if (numBuckets != -1) s"Num Buckets:$numBuckets" else "",
         if (bucketColumnNames.nonEmpty) s"Bucket Columns:$bucketColumns" else "",
         if (sortColumnNames.nonEmpty) s"Sort Columns:$sortColumns" else "",
-        viewOriginalText.map(si => s"Original View:$si").getOrElse(""),
-        viewText.map(si => s"View:$si").getOrElse(""),
-        comment.map(si => s"Comment:$si").getOrElse(""),
+        viewOriginalText.map("Original View:" + _).getOrElse(""),
+        viewText.map("View:" + _).getOrElse(""),
+        comment.map("Comment:" + _).getOrElse(""),
         if (properties.nonEmpty) s"Properties:$tableProperties" else "",
         s"$storage")
 
