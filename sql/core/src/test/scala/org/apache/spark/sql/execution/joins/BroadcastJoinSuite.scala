@@ -48,7 +48,7 @@ class BroadcastJoinSuite extends QueryTest with SQLTestUtils {
       .setMaster("local-cluster[2,1,1024]")
       .setAppName("testing")
     val sc = new SparkContext(conf)
-    spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+    spark = SparkSession.builder.getOrCreate()
   }
 
   override def afterAll(): Unit = {
