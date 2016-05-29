@@ -18,9 +18,9 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.ml.linalg.Vectors
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
-import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.sql.{DataFrame, Row}
 
@@ -184,7 +184,7 @@ class IsotonicRegressionSuite
   test("should support all NumericType labels and not support other types") {
     val ir = new IsotonicRegression()
     MLTestingUtils.checkNumericTypes[IsotonicRegressionModel, IsotonicRegression](
-      ir, isClassification = false, spark) { (expected, actual) =>
+      ir, spark, isClassification = false) { (expected, actual) =>
         assert(expected.boundaries === actual.boundaries)
         assert(expected.predictions === actual.predictions)
       }

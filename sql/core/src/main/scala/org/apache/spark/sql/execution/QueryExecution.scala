@@ -60,20 +60,20 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   lazy val analyzed: LogicalPlan = {
-    SQLContext.setActive(sparkSession.wrapped)
+    SparkSession.setActiveSession(sparkSession)
     sparkSession.sessionState.analyzer.execute(logical)
   }
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     assertSupported()
-    sparkSession.cacheManager.useCachedData(analyzed)
+    sparkSession.sharedState.cacheManager.useCachedData(analyzed)
   }
 
   lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)
 
   lazy val sparkPlan: SparkPlan = {
-    SQLContext.setActive(sparkSession.wrapped)
+    SparkSession.setActiveSession(sparkSession)
     planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 

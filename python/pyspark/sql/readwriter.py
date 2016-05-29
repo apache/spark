@@ -47,19 +47,19 @@ def to_str(value):
 class DataFrameReader(object):
     """
     Interface used to load a :class:`DataFrame` from external storage systems
-    (e.g. file systems, key-value stores, etc). Use :func:`SQLContext.read`
+    (e.g. file systems, key-value stores, etc). Use :func:`spark.read`
     to access this.
 
     .. versionadded:: 1.4
     """
 
-    def __init__(self, sqlContext):
-        self._jreader = sqlContext._ssql_ctx.read()
-        self._sqlContext = sqlContext
+    def __init__(self, spark):
+        self._jreader = spark._ssql_ctx.read()
+        self._spark = spark
 
     def _df(self, jdf):
         from pyspark.sql.dataframe import DataFrame
-        return DataFrame(jdf, self._sqlContext)
+        return DataFrame(jdf, self._spark)
 
     @since(1.4)
     def format(self, source):
@@ -67,7 +67,7 @@ class DataFrameReader(object):
 
         :param source: string, name of the data source, e.g. 'json', 'parquet'.
 
-        >>> df = sqlContext.read.format('json').load('python/test_support/sql/people.json')
+        >>> df = spark.read.format('json').load('python/test_support/sql/people.json')
         >>> df.dtypes
         [('age', 'bigint'), ('name', 'string')]
 
@@ -87,7 +87,7 @@ class DataFrameReader(object):
         """
         if not isinstance(schema, StructType):
             raise TypeError("schema should be StructType")
-        jschema = self._sqlContext._ssql_ctx.parseDataType(schema.json())
+        jschema = self._spark._ssql_ctx.parseDataType(schema.json())
         self._jreader = self._jreader.schema(jschema)
         return self
 
@@ -115,12 +115,12 @@ class DataFrameReader(object):
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
 
-        >>> df = sqlContext.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
+        >>> df = spark.read.load('python/test_support/sql/parquet_partitioned', opt1=True,
         ...     opt2=1, opt3='str')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
 
-        >>> df = sqlContext.read.format('json').load(['python/test_support/sql/people.json',
+        >>> df = spark.read.format('json').load(['python/test_support/sql/people.json',
         ...     'python/test_support/sql/people1.json'])
         >>> df.dtypes
         [('age', 'bigint'), ('aka', 'string'), ('name', 'string')]
@@ -133,7 +133,7 @@ class DataFrameReader(object):
         if path is not None:
             if type(path) != list:
                 path = [path]
-            return self._df(self._jreader.load(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+            return self._df(self._jreader.load(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         else:
             return self._df(self._jreader.load())
 
@@ -148,7 +148,7 @@ class DataFrameReader(object):
         :param schema: optional :class:`StructType` for the input schema.
         :param options: all other string options
 
-        >>> df = sqlContext.read.format('text').stream('python/test_support/sql/streaming')
+        >>> df = spark.read.format('text').stream('python/test_support/sql/streaming')
         >>> df.isStreaming
         True
         """
@@ -193,6 +193,9 @@ class DataFrameReader(object):
                                         set, it uses the default value, ``true``.
         :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is
                                         set, it uses the default value, ``false``.
+        :param allowNonNumericNumbers: allows using non-numeric numbers such as "NaN", "Infinity",
+                                       "-Infinity", "INF", "-INF", which are convertd to floating
+                                       point numbers, ``true``.
         :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character
                                                    using backslash quoting mechanism. If None is
                                                    set, it uses the default value, ``false``.
@@ -211,11 +214,11 @@ class DataFrameReader(object):
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
                                           it uses the default value ``_corrupt_record``.
 
-        >>> df1 = sqlContext.read.json('python/test_support/sql/people.json')
+        >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
         [('age', 'bigint'), ('name', 'string')]
         >>> rdd = sc.textFile('python/test_support/sql/people.json')
-        >>> df2 = sqlContext.read.json(rdd)
+        >>> df2 = spark.read.json(rdd)
         >>> df2.dtypes
         [('age', 'bigint'), ('name', 'string')]
 
@@ -241,9 +244,9 @@ class DataFrameReader(object):
         if columnNameOfCorruptRecord is not None:
             self.option("columnNameOfCorruptRecord", columnNameOfCorruptRecord)
         if isinstance(path, basestring):
-            return self._df(self._jreader.json(path))
-        elif type(path) == list:
-            return self._df(self._jreader.json(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+            path = [path]
+        if type(path) == list:
+            return self._df(self._jreader.json(self._spark._sc._jvm.PythonUtils.toSeq(path)))
         elif isinstance(path, RDD):
             def func(iterator):
                 for x in iterator:
@@ -254,7 +257,7 @@ class DataFrameReader(object):
                     yield x
             keyed = path.mapPartitions(func)
             keyed._bypass_serializer = True
-            jrdd = keyed._jrdd.map(self._sqlContext._jvm.BytesToString())
+            jrdd = keyed._jrdd.map(self._spark._jvm.BytesToString())
             return self._df(self._jreader.json(jrdd))
         else:
             raise TypeError("path can be only string or RDD")
@@ -265,9 +268,9 @@ class DataFrameReader(object):
 
         :param tableName: string, name of the table.
 
-        >>> df = sqlContext.read.parquet('python/test_support/sql/parquet_partitioned')
-        >>> df.registerTempTable('tmpTable')
-        >>> sqlContext.read.table('tmpTable').dtypes
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
+        >>> df.createOrReplaceTempView('tmpTable')
+        >>> spark.read.table('tmpTable').dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
         return self._df(self._jreader.table(tableName))
@@ -276,28 +279,31 @@ class DataFrameReader(object):
     def parquet(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
-        >>> df = sqlContext.read.parquet('python/test_support/sql/parquet_partitioned')
+        >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
-        return self._df(self._jreader.parquet(_to_seq(self._sqlContext._sc, paths)))
+        return self._df(self._jreader.parquet(_to_seq(self._spark._sc, paths)))
 
     @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+        If the directory structure of the text files contains partitioning information,
+        those are ignored in the resulting DataFrame. To include partitioning information as
+        columns, use ``read.format('text').load(...)``.
 
         Each line in the text file is a new row in the resulting DataFrame.
 
         :param paths: string, or list of strings, for input path(s).
 
-        >>> df = sqlContext.read.text('python/test_support/sql/text-test.txt')
+        >>> df = spark.read.text('python/test_support/sql/text-test.txt')
         >>> df.collect()
         [Row(value=u'hello'), Row(value=u'this')]
         """
         if isinstance(paths, basestring):
             path = [paths]
-        return self._df(self._jreader.text(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+        return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
@@ -356,9 +362,9 @@ class DataFrameReader(object):
                 * ``DROPMALFORMED`` : ignores the whole corrupted records.
                 * ``FAILFAST`` : throws an exception when it meets corrupted records.
 
-        >>> df = sqlContext.read.csv('python/test_support/sql/ages.csv')
+        >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
-        [('C0', 'string'), ('C1', 'string')]
+        [('_c0', 'string'), ('_c1', 'string')]
         """
         if schema is not None:
             self.schema(schema)
@@ -396,16 +402,15 @@ class DataFrameReader(object):
             self.option("mode", mode)
         if isinstance(path, basestring):
             path = [path]
-        return self._df(self._jreader.csv(self._sqlContext._sc._jvm.PythonUtils.toSeq(path)))
+        return self._df(self._jreader.csv(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(1.5)
     def orc(self, path):
         """Loads an ORC file, returning the result as a :class:`DataFrame`.
 
-        ::Note: Currently ORC support is only available together with
-        :class:`HiveContext`.
+        .. note:: Currently ORC support is only available together with Hive support.
 
-        >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
@@ -415,42 +420,45 @@ class DataFrameReader(object):
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
              predicates=None, properties=None):
         """
-        Construct a :class:`DataFrame` representing the database table accessible
-        via JDBC URL `url` named `table` and connection `properties`.
+        Construct a :class:`DataFrame` representing the database table named ``table``
+        accessible via JDBC URL ``url`` and connection ``properties``.
 
-        The `column` parameter could be used to partition the table, then it will
-        be retrieved in parallel based on the parameters passed to this function.
+        Partitions of the table will be retrieved in parallel if either ``column`` or
+        ``predicates`` is specified.
 
-        The `predicates` parameter gives a list expressions suitable for inclusion
-        in WHERE clauses; each one defines one partition of the :class:`DataFrame`.
+        If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
-        ::Note: Don't create too many partitions in parallel on a large cluster;
+        .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.
 
-        :param url: a JDBC URL
-        :param table: name of table
-        :param column: the column used to partition
-        :param lowerBound: the lower bound of partition column
-        :param upperBound: the upper bound of the partition column
+        :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
+        :param table: the name of the table
+        :param column: the name of an integer column that will be used for partitioning;
+                       if this parameter is specified, then ``numPartitions``, ``lowerBound``
+                       (inclusive), and ``upperBound`` (exclusive) will form partition strides
+                       for generated WHERE clause expressions used to split the column
+                       ``column`` evenly
+        :param lowerBound: the minimum value of ``column`` used to decide partition stride
+        :param upperBound: the maximum value of ``column`` used to decide partition stride
         :param numPartitions: the number of partitions
-        :param predicates: a list of expressions
-        :param properties: JDBC database connection arguments, a list of arbitrary string
-                           tag/value. Normally at least a "user" and "password" property
-                           should be included.
+        :param predicates: a list of expressions suitable for inclusion in WHERE clauses;
+                           each one defines one partition of the :class:`DataFrame`
+        :param properties: a dictionary of JDBC database connection arguments; normally,
+                           at least a "user" and "password" property should be included
         :return: a DataFrame
         """
         if properties is None:
             properties = dict()
-        jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
+        jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
         if column is not None:
             if numPartitions is None:
-                numPartitions = self._sqlContext._sc.defaultParallelism
+                numPartitions = self._spark._sc.defaultParallelism
             return self._df(self._jreader.jdbc(url, table, column, int(lowerBound), int(upperBound),
                                                int(numPartitions), jprop))
         if predicates is not None:
-            gateway = self._sqlContext._sc._gateway
+            gateway = self._spark._sc._gateway
             jpredicates = utils.toJArray(gateway, gateway.jvm.java.lang.String, predicates)
             return self._df(self._jreader.jdbc(url, table, jpredicates, jprop))
         return self._df(self._jreader.jdbc(url, table, jprop))
@@ -466,7 +474,7 @@ class DataFrameWriter(object):
     """
     def __init__(self, df):
         self._df = df
-        self._sqlContext = df.sql_ctx
+        self._spark = df.sql_ctx
         self._jwrite = df._jdf.write()
 
     def _cq(self, jcq):
@@ -531,14 +539,14 @@ class DataFrameWriter(object):
         """
         if len(cols) == 1 and isinstance(cols[0], (list, tuple)):
             cols = cols[0]
-        self._jwrite = self._jwrite.partitionBy(_to_seq(self._sqlContext._sc, cols))
+        self._jwrite = self._jwrite.partitionBy(_to_seq(self._spark._sc, cols))
         return self
 
     @since(2.0)
     def queryName(self, queryName):
         """Specifies the name of the :class:`ContinuousQuery` that can be started with
         :func:`startStream`. This name must be unique among all the currently active queries
-        in the associated SQLContext
+        in the associated SparkSession.
 
         .. note:: Experimental.
 
@@ -573,7 +581,7 @@ class DataFrameWriter(object):
             trigger = ProcessingTime(processingTime)
         if trigger is None:
             raise ValueError('A trigger was not provided. Supported triggers: processingTime.')
-        self._jwrite = self._jwrite.trigger(trigger._to_java_trigger(self._sqlContext))
+        self._jwrite = self._jwrite.trigger(trigger._to_java_trigger(self._spark))
         return self
 
     @since(1.4)
@@ -761,7 +769,7 @@ class DataFrameWriter(object):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None):
+            header=None, nullValue=None, escapeQuotes=None):
         """Saves the content of the [[DataFrame]] in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -782,6 +790,9 @@ class DataFrameWriter(object):
                       value, ``"``.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
+        :param escapeQuotes: A flag indicating whether values containing quotes should always
+                             be enclosed in quotes. If None is set, it uses the default value
+                             ``true``, escaping all values containing a quote character.
         :param header: writes the names of columns as the first line. If None is set, it uses
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
@@ -802,14 +813,15 @@ class DataFrameWriter(object):
             self.option("header", header)
         if nullValue is not None:
             self.option("nullValue", nullValue)
+        if escapeQuotes is not None:
+            self.option("escapeQuotes", nullValue)
         self._jwrite.csv(path)
 
     @since(1.5)
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
-        ::Note: Currently ORC support is only available together with
-        :class:`HiveContext`.
+        .. note:: Currently ORC support is only available together with Hive support.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.
@@ -823,7 +835,7 @@ class DataFrameWriter(object):
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
                             This will overwrite ``orc.compress``.
 
-        >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -835,9 +847,9 @@ class DataFrameWriter(object):
 
     @since(1.4)
     def jdbc(self, url, table, mode=None, properties=None):
-        """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
+        """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster;\
+        .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
@@ -854,7 +866,7 @@ class DataFrameWriter(object):
         """
         if properties is None:
             properties = dict()
-        jprop = JavaClass("java.util.Properties", self._sqlContext._sc._gateway._gateway_client)()
+        jprop = JavaClass("java.util.Properties", self._spark._sc._gateway._gateway_client)()
         for k in properties:
             jprop.setProperty(k, properties[k])
         self._jwrite.mode(mode).jdbc(url, table, jprop)
@@ -864,28 +876,32 @@ def _test():
     import doctest
     import os
     import tempfile
+    import py4j
     from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext, HiveContext
+    from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    try:
+        spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+    except py4j.protocol.Py4JError:
+        spark = SparkSession(sc)
 
     globs['tempfile'] = tempfile
     globs['os'] = os
     globs['sc'] = sc
-    globs['sqlContext'] = SQLContext(sc)
-    globs['hiveContext'] = HiveContext._createForTesting(sc)
-    globs['df'] = globs['sqlContext'].read.parquet('python/test_support/sql/parquet_partitioned')
+    globs['spark'] = spark
+    globs['df'] = spark.read.parquet('python/test_support/sql/parquet_partitioned')
     globs['sdf'] = \
-        globs['sqlContext'].read.format('text').stream('python/test_support/sql/streaming')
+        spark.read.format('text').stream('python/test_support/sql/streaming')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    sc.stop()
     if failure_count:
         exit(-1)
 

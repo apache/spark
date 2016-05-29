@@ -23,6 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -43,6 +44,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.mapPartitions(_ => Iterator(1)),
       1, 1, 1)
+  }
+
+  test("emptyDataset") {
+    val ds = spark.emptyDataset[Int]
+    assert(ds.count() == 0L)
+    assert(ds.collect() sameElements Array.empty[Int])
   }
 
   test("range") {
@@ -78,6 +85,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("coalesce, repartition") {
     val data = (1 to 100).map(i => ClassData(i.toString, i))
     val ds = data.toDS()
+
+    intercept[IllegalArgumentException] {
+      ds.coalesce(0)
+    }
+
+    intercept[IllegalArgumentException] {
+      ds.repartition(0)
+    }
 
     assert(ds.repartition(10).rdd.partitions.length == 10)
     checkDataset(
@@ -203,17 +218,24 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("b", 2))
   }
 
+  test("filter and then select") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.filter(_._1 == "b").select(expr("_1").as[String]),
+      "b")
+  }
+
   test("foreach") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    val acc = sparkContext.accumulator(0)
-    ds.foreach(v => acc += v._2)
+    val acc = sparkContext.longAccumulator
+    ds.foreach(v => acc.add(v._2))
     assert(acc.value == 6)
   }
 
   test("foreachPartition") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
-    val acc = sparkContext.accumulator(0)
-    ds.foreachPartition(_.foreach(v => acc += v._2))
+    val acc = sparkContext.longAccumulator
+    ds.foreachPartition(_.foreach(v => acc.add(v._2)))
     assert(acc.value == 6)
   }
 
@@ -419,20 +441,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.toString == "[_1: int, _2: int]")
   }
 
-  test("showString: Kryo encoder") {
-    implicit val kryoEncoder = Encoders.kryo[KryoData]
-    val ds = Seq(KryoData(1), KryoData(2)).toDS()
-
-    val expectedAnswer = """+-----------+
-                           ||      value|
-                           |+-----------+
-                           ||KryoData(1)|
-                           ||KryoData(2)|
-                           |+-----------+
-                           |""".stripMargin
-    assert(ds.showString(10) === expectedAnswer)
-  }
-
   test("Kryo encoder") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
@@ -505,7 +513,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val schema = StructType(Seq(
       StructField("f", StructType(Seq(
         StructField("a", StringType, nullable = true),
-        StructField("b", IntegerType, nullable = false)
+        StructField("b", IntegerType, nullable = true)
       )), nullable = true)
     ))
 
@@ -659,9 +667,19 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(DatasetTransform.addOne(dataset), 2, 3, 4)
   }
 
+  test("dataset.rdd with generic case class") {
+    val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS()
+    val ds2 = ds.map(g => Generic(g.id, g.value))
+    assert(ds.rdd.map(r => r.id).count === 2)
+    assert(ds2.rdd.map(r => r.id).count === 2)
+
+    val ds3 = ds.map(g => new java.lang.Long(g.id))
+    assert(ds3.rdd.map(r => r).count === 2)
+  }
+
   test("runtime null check for RowEncoder") {
     val schema = new StructType().add("i", IntegerType, nullable = false)
-    val df = sqlContext.range(10).map(l => {
+    val df = spark.range(10).map(l => {
       if (l % 5 == 0) {
         Row(null)
       } else {
@@ -672,9 +690,88 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val message = intercept[Exception] {
       df.collect()
     }.getMessage
-    assert(message.contains("The 0th field of input row cannot be null"))
+    assert(message.contains("The 0th field 'i' of input row cannot be null"))
+  }
+
+  test("row nullability mismatch") {
+    val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
+    val rdd = spark.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
+    val message = intercept[Exception] {
+      spark.createDataFrame(rdd, schema).collect()
+    }.getMessage
+    assert(message.contains("The 1th field 'b' of input row cannot be null"))
+  }
+
+  test("createTempView") {
+    val dataset = Seq(1, 2, 3).toDS()
+    dataset.createOrReplaceTempView("tempView")
+
+    // Overrrides the existing temporary view with same name
+    // No exception should be thrown here.
+    dataset.createOrReplaceTempView("tempView")
+
+    // Throws AnalysisException if temp view with same name already exists
+    val e = intercept[AnalysisException](
+      dataset.createTempView("tempView"))
+    intercept[AnalysisException](dataset.createTempView("tempView"))
+    assert(e.message.contains("already exists"))
+    dataset.sparkSession.catalog.dropTempView("tempView")
+  }
+
+  test("SPARK-15381: physical object operator should define `reference` correctly") {
+    val df = Seq(1 -> 2).toDF("a", "b")
+    checkAnswer(df.map(row => row)(RowEncoder(df.schema)).select("b", "a"), Row(2, 1))
+  }
+
+  private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
+    val numRows = expected.split("\n").length - 4
+    val actual = ds.showString(numRows, truncate = true)
+
+    if (expected != actual) {
+      fail(
+        "Dataset.showString() gives wrong result:\n\n" + sideBySide(
+          "== Expected ==\n" + expected,
+          "== Actual ==\n" + actual
+        ).mkString("\n")
+      )
+    }
+  }
+
+  test("SPARK-15550 Dataset.show() should show contents of the underlying logical plan") {
+    val df = Seq((1, "foo", "extra"), (2, "bar", "extra")).toDF("b", "a", "c")
+    val ds = df.as[ClassData]
+    val expected =
+      """+---+---+-----+
+        ||  b|  a|    c|
+        |+---+---+-----+
+        ||  1|foo|extra|
+        ||  2|bar|extra|
+        |+---+---+-----+
+        |""".stripMargin
+
+    checkShowString(ds, expected)
+  }
+
+  test("SPARK-15550 Dataset.show() should show inner nested products as rows") {
+    val ds = Seq(
+      NestedStruct(ClassData("foo", 1)),
+      NestedStruct(ClassData("bar", 2))
+    ).toDS()
+
+    val expected =
+      """+-------+
+        ||      f|
+        |+-------+
+        ||[foo,1]|
+        ||[bar,2]|
+        |+-------+
+        |""".stripMargin
+
+    checkShowString(ds, expected)
   }
 }
+
+case class Generic[T](id: T, value: Double)
 
 case class OtherTuple(_1: String, _2: Int)
 

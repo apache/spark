@@ -53,12 +53,6 @@ case class Person(name: String, age: Int, contacts: Seq[Contact])
 
 class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
-  def getTempFilePath(prefix: String, suffix: String = ""): File = {
-    val tempFile = File.createTempFile(prefix, suffix)
-    tempFile.delete()
-    tempFile
-  }
-
   test("Read/write All Types") {
     val data = (0 to 255).map { i =>
       (s"$i", i, i.toLong, i.toFloat, i.toDouble, i.toShort, i.toByte, i % 2 == 0)
@@ -98,7 +92,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("Creating case class RDD table") {
     val data = (1 to 100).map(i => (i, s"val_$i"))
-    sparkContext.parallelize(data).toDF().registerTempTable("t")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("t")
     withTempTable("t") {
       checkAnswer(sql("SELECT * FROM t"), data.toDF().collect())
     }
@@ -171,7 +165,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   test("Compression options for writing to an ORC file (SNAPPY, ZLIB and NONE)") {
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "ZLIB")
+        .option("compression", "ZLIB")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -180,7 +174,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "SNAPPY")
+        .option("compression", "SNAPPY")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -189,7 +183,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "NONE")
+        .option("compression", "NONE")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -201,7 +195,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
   ignore("LZO compression options for writing to an ORC file not supported in Hive 1.2.1") {
     withTempPath { file =>
       spark.range(0, 10).write
-        .option("orc.compress", "LZO")
+        .option("compression", "LZO")
         .orc(file.getCanonicalPath)
       val expectedCompressionKind =
         OrcFileOperator.getFileReader(file.getCanonicalPath).get.getCompression
@@ -223,7 +217,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), (data ++ data).map(Row.fromTuple))
@@ -233,7 +227,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withOrcTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(table("t"), data.map(Row.fromTuple))
@@ -324,7 +318,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
              """.stripMargin)
 
           val emptyDF = Seq.empty[(Int, String)].toDF("key", "value").coalesce(1)
-          emptyDF.registerTempTable("empty")
+          emptyDF.createOrReplaceTempView("empty")
 
           // This creates 1 empty ORC file with Hive ORC SerDe.  We are using this trick because
           // Spark SQL ORC data source always avoids write empty ORC files.
@@ -340,7 +334,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
           assert(errorMessage.contains("Unable to infer schema for ORC"))
 
           val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-          singleRowDF.registerTempTable("single")
+          singleRowDF.createOrReplaceTempView("single")
 
           spark.sql(
             s"""INSERT INTO TABLE empty_orc
@@ -422,7 +416,7 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
                """.stripMargin)
 
             val singleRowDF = Seq((0, "foo")).toDF("key", "value").coalesce(1)
-            singleRowDF.registerTempTable("single")
+            singleRowDF.createOrReplaceTempView("single")
 
             spark.sql(
               s"""INSERT INTO TABLE dummy_orc

@@ -31,7 +31,7 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   override def afterEach(): Unit = {
     try {
@@ -52,7 +52,7 @@ class HiveDDLSuite
         new Path(new Path(dbPath.get), tableIdentifier.table).toString
       }
     val filesystemPath = new Path(expectedTablePath)
-    val fs = filesystemPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
+    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }
 
@@ -72,7 +72,7 @@ class HiveDDLSuite
     }
   }
 
-  test("drop managed tables in default database") {
+  test("drop external tables in default database") {
     withTempDir { tmpDir =>
       val tabName = "tab1"
       withTable(tabName) {
@@ -86,15 +86,12 @@ class HiveDDLSuite
           """.stripMargin)
 
         val hiveTable =
-          hiveContext.sessionState.catalog
-            .getTableMetadata(TableIdentifier(tabName, Some("default")))
-        // It is a managed table, although it uses external in SQL
-        assert(hiveTable.tableType == CatalogTableType.MANAGED)
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
-        // The data are deleted since the table type is not EXTERNAL
-        assert(tmpDir.listFiles == null)
+        assert(tmpDir.listFiles.nonEmpty)
       }
     }
   }
@@ -115,8 +112,7 @@ class HiveDDLSuite
         }
 
         val hiveTable =
-          hiveContext.sessionState.catalog
-            .getTableMetadata(TableIdentifier(tabName, Some("default")))
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         // This data source table is external table
         assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
@@ -129,7 +125,7 @@ class HiveDDLSuite
   }
 
   test("create table and view with comment") {
-    val catalog = hiveContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tabName = "tab1"
     withTable(tabName) {
       sql(s"CREATE TABLE $tabName(c1 int) COMMENT 'BLABLA'")
@@ -145,7 +141,7 @@ class HiveDDLSuite
   }
 
   test("add/drop partitions - external table") {
-    val catalog = hiveContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
       val basePath = tmpDir.getCanonicalPath
       val partitionPath_1stCol_part1 = new File(basePath + "/ds=2008-04-08")
@@ -186,10 +182,17 @@ class HiveDDLSuite
         // After data insertion, all the directory are not empty
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
+        val message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
+        }
+        assert(message.getMessage.contains(
+          "Partition spec is invalid. The spec (ds, unknowncol) must be contained within the " +
+            "partition spec (ds, hr) defined in table '`default`.`exttable_with_partitions`'"))
+
         sql(
           s"""
              |ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08'),
-             |PARTITION (ds='2008-04-09', hr='12')
+             |PARTITION (hr='12')
           """.stripMargin)
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
           Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
@@ -237,7 +240,7 @@ class HiveDDLSuite
       val oldViewName = "view1"
       val newViewName = "view2"
       withView(oldViewName, newViewName) {
-        val catalog = hiveContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
 
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
@@ -255,7 +258,7 @@ class HiveDDLSuite
       spark.range(10).write.saveAsTable(tabName)
       val viewName = "view1"
       withView(viewName) {
-        val catalog = hiveContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
 
         assert(catalog.getTableMetadata(TableIdentifier(viewName))
@@ -282,7 +285,7 @@ class HiveDDLSuite
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         }.getMessage
         assert(message.contains(
-          "attempted to unset non-existent property 'p' in table '`view1`'"))
+          "Attempted to unset non-existent property 'p' in table '`view1`'"))
       }
     }
   }
@@ -294,7 +297,7 @@ class HiveDDLSuite
       val oldViewName = "view1"
       val newViewName = "view2"
       withView(oldViewName, newViewName) {
-        val catalog = hiveContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
@@ -386,7 +389,7 @@ class HiveDDLSuite
     val catalog = spark.sessionState.catalog
     val dbName = "db1"
     val tabName = "tab1"
-    val fs = new Path(tmpDir.toString).getFileSystem(hiveContext.sessionState.newHadoopConf())
+    val fs = new Path(tmpDir.toString).getFileSystem(spark.sessionState.newHadoopConf())
     withTable(tabName) {
       if (dirExists) {
         assert(tmpDir.listFiles.isEmpty)
@@ -436,7 +439,7 @@ class HiveDDLSuite
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         val dbName = "db1"
-        val fs = new Path(path).getFileSystem(hiveContext.sessionState.newHadoopConf())
+        val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
         val dbPath = new Path(path)
         // the database directory does not exist
         assert(!fs.exists(dbPath))

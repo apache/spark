@@ -49,6 +49,7 @@ import org.apache.spark.storage.*;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.util.Utils;
 
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.junit.Assert.*;
 import static org.mockito.Answers.RETURNS_SMART_NULLS;
@@ -223,6 +224,25 @@ public class UnsafeExternalSorterSuite {
 
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
+  }
+
+  @Test
+  public void testSortTimeMetric() throws Exception {
+    final UnsafeExternalSorter sorter = newSorter();
+    long prevSortTime = sorter.getSortTimeNanos();
+    assertEquals(prevSortTime, 0);
+
+    sorter.insertRecord(null, 0, 0, 0);
+    sorter.spill();
+    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
+    prevSortTime = sorter.getSortTimeNanos();
+
+    sorter.spill();  // no sort needed
+    assertEquals(sorter.getSortTimeNanos(), prevSortTime);
+
+    sorter.insertRecord(null, 0, 0, 0);
+    UnsafeSorterIterator iter = sorter.getSortedIterator();
+    assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
   }
 
   @Test

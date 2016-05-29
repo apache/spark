@@ -1480,6 +1480,48 @@ Apart from these, the following properties are also available, and may be useful
 </table>
 
 
+#### Spark SQL
+Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// spark is an existing SparkSession
+spark.sql("SET -v").show(numRows = 200, truncate = false)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// spark is an existing SparkSession
+spark.sql("SET -v").show(200, false);
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+# spark is an existing SparkSession
+spark.sql("SET -v").show(n=200, truncate=False)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+# sqlContext is an existing sqlContext.
+properties <- sql(sqlContext, "SET -v")
+showDF(properties, numRows = 200, truncate = FALSE)
+{% endhighlight %}
+
+</div>
+</div>
+
+
 #### Spark Streaming
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>

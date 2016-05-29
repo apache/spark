@@ -69,11 +69,12 @@ class MulticlassMetricsSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(math.abs(metrics.fMeasure(1.0, 2.0) - f2measure1) < delta)
     assert(math.abs(metrics.fMeasure(2.0, 2.0) - f2measure2) < delta)
 
-    assert(math.abs(metrics.recall -
+    assert(math.abs(metrics.accuracy -
       (2.0 + 3.0 + 1.0) / ((2 + 3 + 1) + (1 + 1 + 1))) < delta)
-    assert(math.abs(metrics.recall - metrics.precision) < delta)
-    assert(math.abs(metrics.recall - metrics.fMeasure) < delta)
-    assert(math.abs(metrics.recall - metrics.weightedRecall) < delta)
+    assert(math.abs(metrics.accuracy - metrics.precision) < delta)
+    assert(math.abs(metrics.accuracy - metrics.recall) < delta)
+    assert(math.abs(metrics.accuracy - metrics.fMeasure) < delta)
+    assert(math.abs(metrics.accuracy - metrics.weightedRecall) < delta)
     assert(math.abs(metrics.weightedFalsePositiveRate -
       ((4.0 / 9) * fpRate0 + (4.0 / 9) * fpRate1 + (1.0 / 9) * fpRate2)) < delta)
     assert(math.abs(metrics.weightedPrecision -

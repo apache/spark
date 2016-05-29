@@ -22,7 +22,7 @@ import java.io.File
 
 import com.google.common.io.{ByteStreams, Files}
 
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 
 object HiveFromSpark {
@@ -37,10 +37,13 @@ object HiveFromSpark {
   def main(args: Array[String]) {
     val sparkConf = new SparkConf().setAppName("HiveFromSpark")
 
-    // A hive context adds support for finding tables in the MetaStore and writing queries
-    // using HiveQL. Users who do not have an existing Hive deployment can still create a
-    // HiveContext. When not configured by the hive-site.xml, the context automatically
-    // creates metastore_db and warehouse in the current directory.
+    // When working with Hive, one must instantiate `SparkSession` with Hive support, including
+    // connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined
+    // functions. Users who do not have an existing Hive deployment can still enable Hive support.
+    // When not configured by the hive-site.xml, the context automatically creates `metastore_db`
+    // in the current directory and creates a directory configured by `spark.sql.warehouse.dir`,
+    // which defaults to the directory `spark-warehouse` in the current directory that the spark
+    // application is started.
     val spark = SparkSession.builder
       .config(sparkConf)
       .enableHiveSupport()
@@ -70,9 +73,9 @@ object HiveFromSpark {
       case Row(key: Int, value: String) => s"Key: $key, Value: $value"
     }
 
-    // You can also register RDDs as temporary tables within a HiveContext.
+    // You can also use RDDs to create temporary views within a HiveContext.
     val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
-    rdd.toDF().registerTempTable("records")
+    rdd.toDF().createOrReplaceTempView("records")
 
     // Queries can then join RDD data with data stored in Hive.
     println("Result of SELECT *:")

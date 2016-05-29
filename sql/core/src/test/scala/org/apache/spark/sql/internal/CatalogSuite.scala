@@ -58,7 +58,7 @@ class CatalogSuite
   }
 
   private def createTempTable(name: String): Unit = {
-    sessionCatalog.createTempTable(name, Range(1, 2, 3, 4, Seq()), overrideIfExists = true)
+    sessionCatalog.createTempView(name, Range(1, 2, 3, 4), overrideIfExists = true)
   }
 
   private def dropTable(name: String, db: Option[String] = None): Unit = {

@@ -54,9 +54,16 @@ abstract class PartitioningAwareFileCatalog(
     } else {
       prunePartitions(filters, partitionSpec()).map {
         case PartitionDirectory(values, path) =>
-          Partition(
-            values,
-            leafDirToChildrenFiles(path).filterNot(_.getPath.getName startsWith "_"))
+          val files: Seq[FileStatus] = leafDirToChildrenFiles.get(path) match {
+            case Some(existingDir) =>
+              // Directory has children files in it, return them
+              existingDir.filterNot(_.getPath.getName.startsWith("_"))
+
+            case None =>
+              // Directory does not exist, or has no children files
+              Nil
+          }
+          Partition(values, files)
       }
     }
     logTrace("Selected files after partition pruning:\n\t" + selectedPartitions.mkString("\n\t"))
@@ -161,17 +168,17 @@ abstract class PartitioningAwareFileCatalog(
    *
    * By default, the paths of the dataset provided by users will be base paths.
    * Below are three typical examples,
-   * Case 1) `sqlContext.read.parquet("/path/something=true/")`: the base path will be
+   * Case 1) `spark.read.parquet("/path/something=true/")`: the base path will be
    * `/path/something=true/`, and the returned DataFrame will not contain a column of `something`.
-   * Case 2) `sqlContext.read.parquet("/path/something=true/a.parquet")`: the base path will be
+   * Case 2) `spark.read.parquet("/path/something=true/a.parquet")`: the base path will be
    * still `/path/something=true/`, and the returned DataFrame will also not contain a column of
    * `something`.
-   * Case 3) `sqlContext.read.parquet("/path/")`: the base path will be `/path/`, and the returned
+   * Case 3) `spark.read.parquet("/path/")`: the base path will be `/path/`, and the returned
    * DataFrame will have the column of `something`.
    *
    * Users also can override the basePath by setting `basePath` in the options to pass the new base
    * path to the data source.
-   * For example, `sqlContext.read.option("basePath", "/path/").parquet("/path/something=true/")`,
+   * For example, `spark.read.option("basePath", "/path/").parquet("/path/something=true/")`,
    * and the returned DataFrame will have the column of `something`.
    */
   private def basePaths: Set[Path] = {

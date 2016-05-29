@@ -27,12 +27,13 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.Instance
+import org.apache.spark.ml.linalg._
+import org.apache.spark.ml.linalg.BLAS._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.evaluation.BinaryClassificationMetrics
-import org.apache.spark.mllib.linalg._
-import org.apache.spark.mllib.linalg.BLAS._
+import org.apache.spark.mllib.linalg.VectorImplicits._
 import org.apache.spark.mllib.stat.MultivariateOnlineSummarizer
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
@@ -399,7 +400,7 @@ class LogisticRegression @Since("1.2.0") (
         }
 
         val states = optimizer.iterations(new CachedDiffFunction(costFun),
-          initialCoefficientsWithIntercept.toBreeze.toDenseVector)
+          initialCoefficientsWithIntercept.asBreeze.toDenseVector)
 
         /*
            Note that in Logistic Regression, the objective history (loss + regularization)
@@ -613,7 +614,7 @@ class LogisticRegressionModel private[spark] (
   }
 
   /**
-   * Returns a [[MLWriter]] instance for this ML instance.
+   * Returns a [[org.apache.spark.ml.util.MLWriter]] instance for this ML instance.
    *
    * For [[LogisticRegressionModel]], this does NOT currently save the training [[summary]].
    * An option to save [[summary]] may be added in the future.
@@ -685,7 +686,7 @@ object LogisticRegressionModel extends MLReadable[LogisticRegressionModel] {
 /**
  * MultiClassSummarizer computes the number of distinct labels and corresponding counts,
  * and validates the data to see if the labels used for k class multi-label classification
- * are in the range of {0, 1, ..., k - 1} in a online fashion.
+ * are in the range of {0, 1, ..., k - 1} in an online fashion.
  *
  * Two MultilabelSummarizer can be merged together to have a statistical summary of the
  * corresponding joint dataset.
@@ -745,7 +746,7 @@ private[classification] class MultiClassSummarizer extends Serializable {
   def countInvalid: Long = totalInvalidCnt
 
   /** @return The number of distinct labels in the input dataset. */
-  def numClasses: Int = distinctMap.keySet.max + 1
+  def numClasses: Int = if (distinctMap.isEmpty) 0 else distinctMap.keySet.max + 1
 
   /** @return The weightSum of each label in the input dataset. */
   def histogram: Array[Double] = {
@@ -922,7 +923,7 @@ class BinaryLogisticRegressionSummary private[classification] (
 
 /**
  * LogisticAggregator computes the gradient and loss for binary logistic loss function, as used
- * in binary classification for instances in sparse or dense vector in a online fashion.
+ * in binary classification for instances in sparse or dense vector in an online fashion.
  *
  * Note that multinomial logistic loss is not supported yet!
  *
