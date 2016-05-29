@@ -19,6 +19,7 @@ package org.apache.spark.network.yarn
 import java.io.{DataOutputStream, File, FileOutputStream}
 
 import scala.annotation.tailrec
+import scala.language.postfixOps
 
 import org.apache.commons.io.FileUtils
 import org.apache.hadoop.yarn.api.records.ApplicationId
