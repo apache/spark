@@ -947,14 +947,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           throw operationNotAllowed(errorMessage, ctx)
         }
 
-        // CTAS statement does not allow the EXTERNAL keyword.
-        if (external) {
-          val errorMessage = "CREATE EXTERNAL TABLE ... AS SELECT. " +
-            "Please remove the EXTERNAL keyword. As long as a user-specified location is " +
-            "provided, the data of the table will not be deleted when dropping the table."
-          throw operationNotAllowed(errorMessage, ctx)
-        }
-
         val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
         if (conf.convertCTAS && !hasStorageProperties) {
           val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists

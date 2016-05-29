@@ -29,9 +29,8 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.TestHive
-import org.apache.spark.sql.test.SQLTestUtils
 
-class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
+class HiveDDLCommandSuite extends PlanTest {
   val parser = TestHive.sessionState.sqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
@@ -51,7 +50,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
 
   test("Test CTAS #1") {
     val s1 =
-      """CREATE TABLE IF NOT EXISTS mydb.page_view
+      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
         |(viewTime INT,
         |userid BIGINT,
         |page_url STRING,
@@ -59,7 +58,6 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
         |ip STRING COMMENT 'IP Address of the User',
         |country STRING COMMENT 'country of origination')
         |COMMENT 'This is the staging page view table'
-        |PARTITIONED BY (dt STRING COMMENT 'date type', hour STRING COMMENT 'hour of the day')
         |STORED AS RCFILE
         |LOCATION '/user/external/page_view'
         |TBLPROPERTIES ('p1'='v1', 'p2'='v2')
@@ -77,16 +75,12 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
       CatalogColumn("page_url", "string") ::
       CatalogColumn("referrer_url", "string") ::
       CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) ::
-      CatalogColumn("dt", "string", comment = Some("date type")) ::
-      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.partitionColumns ==
-      CatalogColumn("dt", "string", comment = Some("date type")) ::
-      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+    assert(desc.partitionColumns == Seq.empty[CatalogColumn])
     assert(desc.storage.inputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileInputFormat"))
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde ==
@@ -96,7 +90,7 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
 
   test("Test CTAS #2") {
     val s2 =
-      """CREATE TABLE IF NOT EXISTS mydb.page_view
+      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
         |(viewTime INT,
         |userid BIGINT,
         |page_url STRING,
@@ -104,7 +98,6 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
         |ip STRING COMMENT 'IP Address of the User',
         |country STRING COMMENT 'country of origination')
         |COMMENT 'This is the staging page view table'
-        |PARTITIONED BY (dt STRING COMMENT 'date type', hour STRING COMMENT 'hour of the day')
         |ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'
         | STORED AS
         | INPUTFORMAT 'parquet.hive.DeprecatedParquetInputFormat'
@@ -125,16 +118,12 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
       CatalogColumn("page_url", "string") ::
       CatalogColumn("referrer_url", "string") ::
       CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) ::
-      CatalogColumn("dt", "string", comment = Some("date type")) ::
-      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
     // TODO will be SQLText
     assert(desc.comment == Some("This is the staging page view table"))
     assert(desc.viewText.isEmpty)
     assert(desc.viewOriginalText.isEmpty)
-    assert(desc.partitionColumns ==
-      CatalogColumn("dt", "string", comment = Some("date type")) ::
-      CatalogColumn("hour", "string", comment = Some("hour of the day")) :: Nil)
+    assert(desc.partitionColumns == Seq.empty[CatalogColumn])
     assert(desc.storage.serdeProperties == Map())
     assert(desc.storage.inputFormat == Some("parquet.hive.DeprecatedParquetInputFormat"))
     assert(desc.storage.outputFormat == Some("parquet.hive.DeprecatedParquetOutputFormat"))
@@ -194,12 +183,6 @@ class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
-  }
-
-  test("CTAS statement with an EXTERNAL keyword is not allowed") {
-    assertUnsupported(
-      s"CREATE EXTERNAL TABLE ctas1 stored as textfile LOCATION 'test'" +
-        " AS SELECT key FROM (SELECT 1 as key) tmp")
   }
 
   test("CTAS statement with a PARTITIONED BY clause is not allowed") {
