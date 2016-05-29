@@ -266,7 +266,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAl
       assert(sql(sql_two_branch_caseWhen)
         .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
     } finally {
-      sql(s"set ${SQLConf.MAX_CASES_BRANCHES}=$original")
+      spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, s"$original")
     }
   }
 
