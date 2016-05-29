@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.serde.serdeConstants
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
@@ -31,8 +29,9 @@ import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{Generate, ScriptTransformation}
 import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.test.TestHive
+import org.apache.spark.sql.test.SQLTestUtils
 
-class HiveDDLCommandSuite extends PlanTest {
+class HiveDDLCommandSuite extends PlanTest with SQLTestUtils {
   val parser = TestHive.sessionState.sqlParser
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
@@ -52,7 +51,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("Test CTAS #1") {
     val s1 =
-      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+      """CREATE TABLE IF NOT EXISTS mydb.page_view
         |(viewTime INT,
         |userid BIGINT,
         |page_url STRING,
@@ -97,7 +96,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("Test CTAS #2") {
     val s2 =
-      """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
+      """CREATE TABLE IF NOT EXISTS mydb.page_view
         |(viewTime INT,
         |userid BIGINT,
         |page_url STRING,
@@ -195,6 +194,17 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.storage.outputFormat == Some("org.apache.hadoop.hive.ql.io.RCFileOutputFormat"))
     assert(desc.storage.serde == Some("org.apache.hadoop.hive.serde2.columnar.ColumnarSerDe"))
     assert(desc.properties == Map(("tbl_p1" -> "p11"), ("tbl_p2" -> "p22")))
+  }
+
+  test("CTAS statement with an EXTERNAL keyword is not allowed") {
+    assertUnsupported(
+      s"CREATE EXTERNAL TABLE ctas1 stored as textfile LOCATION 'test'" +
+        " AS SELECT key FROM (SELECT 1 as key) tmp")
+  }
+
+  test("CTAS statement with a PARTITIONED BY clause is not allowed") {
+    assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
+      " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
   }
 
   test("unsupported operations") {
