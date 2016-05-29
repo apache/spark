@@ -234,22 +234,24 @@ setCheckpointDir <- function(sc, dirName) {
 #'   lapply(list, func)
 #'
 #' Known limitations:
-#'  - variable scoping and capture: compared to R's rich support for variable resolutions, the
-# distributed nature of SparkR limits how variables are resolved at runtime. All the variables
-# that are available through lexical scoping are embedded in the closure of the function and
-# available as read-only variables within the function. The environment variables should be
-# stored into temporary variables outside the function, and not directly accessed within the
-# function.
+#' \itemize{
+#'    \item variable scoping and capture: compared to R's rich support for variable resolutions,
+#'    the distributed nature of SparkR limits how variables are resolved at runtime. All the
+#'    variables that are available through lexical scoping are embedded in the closure of the
+#'    function and available as read-only variables within the function. The environment variables
+#'    should be stored into temporary variables outside the function, and not directly accessed
+#'    within the function.
 #'
-#'  - loading external packages: In order to use a package, you need to load it inside the
-#'    closure. For example, if you rely on the MASS module, here is how you would use it:
-#'\dontrun{
-#' train <- function(hyperparam) {
-#'   library(MASS)
-#'   lm.ridge(“y ~ x+z”, data, lambda=hyperparam)
-#'   model
+#'   \item loading external packages: In order to use a package, you need to load it inside the
+#'   closure. For example, if you rely on the MASS module, here is how you would use it:
+#'   \preformatted{
+#'     train <- function(hyperparam) {
+#'       library(MASS)
+#'       lm.ridge(“y ~ x+z”, data, lambda=hyperparam)
+#'       model
+#'     }
+#'   }
 #' }
-#'}
 #'
 #' @rdname spark.lapply
 #' @param sc Spark Context to use

@@ -197,11 +197,10 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#' Make predictions from a generalized linear model
-#'
 #' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #' similarly to R's predict().
 #'
+#' @title predict
 #' @param object A fitted generalized linear model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"
@@ -218,11 +217,10 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' Make predictions from a naive Bayes model
-#'
-#' Makes predictions from a model produced by spark.naiveBayes(),
+#' Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
 #' similarly to R package e1071's predict.
 #'
+#' @title predict
 #' @param object A fitted naive Bayes model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"
@@ -357,10 +355,9 @@ setMethod("summary", signature(object = "KMeansModel"),
                    cluster = cluster, is.loaded = is.loaded))
           })
 
-#' Make predictions from a k-means model
+#' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
-#' Make predictions from a model produced by spark.kmeans().
-#'
+#' @title predict
 #' @param object A fitted k-means model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"
@@ -582,11 +579,10 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             return(list(coefficients = coefficients))
           })
 
-#' Make predictions from an AFT survival regression model
-#'
-#' Make predictions from a model produced by spark.survreg(),
+#' Makes predictions from an AFT survival regression model or a model produced by spark.survreg(),
 #' similarly to R package survival's predict.
 #'
+#' @title predict
 #' @param object A fitted AFT survival regression model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"

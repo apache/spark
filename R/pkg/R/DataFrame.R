@@ -630,8 +630,9 @@ setMethod("repartition",
 #' @param x A SparkDataFrame
 #' @return A StringRRDD of JSON objects
 #' @family SparkDataFrame functions
-#' @rdname tojson
-#' @noRd
+#' @rdname toJSON
+#' @name toJSON
+#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -852,6 +853,8 @@ setMethod("nrow",
             count(x)
           })
 
+#' ncol
+#'
 #' Returns the number of columns in a SparkDataFrame
 #'
 #' @param x a SparkDataFrame
@@ -874,6 +877,8 @@ setMethod("ncol",
             length(columns(x))
           })
 
+#' dim
+#'
 #' Returns the dimensions (number of rows and columns) of a SparkDataFrame
 #' @param x a SparkDataFrame
 #'
@@ -895,6 +900,8 @@ setMethod("dim",
             c(count(x), ncol(x))
           })
 
+#' collect
+#'
 #' Collects all the elements of a SparkDataFrame and coerces them into an R data.frame.
 #'
 #' @param x A SparkDataFrame
@@ -992,6 +999,8 @@ setMethod("limit",
             dataFrame(res)
           })
 
+#' take
+#'
 #' Take the first NUM rows of a SparkDataFrame and return a the results as a data.frame
 #'
 #' @family SparkDataFrame functions
@@ -1042,6 +1051,8 @@ setMethod("head",
             take(x, num)
           })
 
+#' first
+#'
 #' Return the first row of a SparkDataFrame
 #'
 #' @param x A SparkDataFrame
@@ -1070,7 +1081,10 @@ setMethod("first",
 #'
 #' @param x A SparkDataFrame
 #'
-#' @noRd
+#' @family SparkDataFrame functions
+#' @rdname toRDD
+#' @name toRDD
+#' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -2047,6 +2061,7 @@ setMethod("merge",
             joinRes
           })
 
+#' generateAliasesForIntersectedCols
 #'
 #' Creates a list of columns by replacing the intersected ones with aliases.
 #' The name of the alias column is formed by concatanating the original column name and a suffix.
@@ -2174,20 +2189,22 @@ setMethod("except",
             dataFrame(excepted)
           })
 
-#' Save the contents of the SparkDataFrame to a data source
+#' write.df
 #'
-#' The data source is specified by the `source` and a set of options (...).
-#' If `source` is not specified, the default data source configured by
-#' spark.sql.sources.default will be used.
+#' Save the contents of the SparkDataFrame to a data source. The data source is specified by the
+#' `source` and a set of options (...). If `source` is not specified, the default data source
+#' configured by spark.sql.sources.default will be used.
 #'
-#' Additionally, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes: \cr
-#'  append: Contents of this SparkDataFrame are expected to be appended to existing data. \cr
-#'  overwrite: Existing data is expected to be overwritten by the contents of this
-#'     SparkDataFrame. \cr
-#'  error: An exception is expected to be thrown. \cr
-#'  ignore: The save operation is expected to not save the contents of the SparkDataFrame
-#'     and to not change the existing data. \cr
+#' Additionally, mode is used to specify the behavior of the save operation when data already
+#' exists in the data source. There are four modes:
+#' \itemize{
+#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'         SparkDataFrame.
+#'   \item error: An exception is expected to be thrown.
+#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'         and to not change the existing data.
+#' }
 #'
 #' @param df A SparkDataFrame
 #' @param path A name for the table
@@ -2515,7 +2532,9 @@ setMethod("attach",
 #' environment. Then, the given expression is evaluated in this new
 #' environment.
 #'
+#' @title with
 #' @rdname with
+#' @family SparkDataFrame functions
 #' @title Evaluate a R expression in an environment constructed from a SparkDataFrame
 #' @param data (SparkDataFrame) SparkDataFrame to use for constructing an environment.
 #' @param expr (expression) Expression to evaluate.
@@ -2767,18 +2786,21 @@ setMethod("histogram",
             return(histStats)
           })
 
-#' Saves the content of the SparkDataFrame to an external database table via JDBC
+#' write.jdbc
 #'
-#' Additional JDBC database connection properties can be set (...)
+#' Saves the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
+#' database connection properties can be set (...)
 #'
 #' Also, mode is used to specify the behavior of the save operation when
-#' data already exists in the data source. There are four modes: \cr
-#'  append: Contents of this SparkDataFrame are expected to be appended to existing data. \cr
-#'  overwrite: Existing data is expected to be overwritten by the contents of this
-#'     SparkDataFrame. \cr
-#'  error: An exception is expected to be thrown. \cr
-#'  ignore: The save operation is expected to not save the contents of the SparkDataFrame
-#'     and to not change the existing data. \cr
+#' data already exists in the data source. There are four modes:
+#' \itemize{
+#'   \item append: Contents of this SparkDataFrame are expected to be appended to existing data.
+#'   \item overwrite: Existing data is expected to be overwritten by the contents of this
+#'         SparkDataFrame.
+#'   \item error: An exception is expected to be thrown.
+#'   \item ignore: The save operation is expected to not save the contents of the SparkDataFrame
+#'         and to not change the existing data.
+#' }
 #'
 #' @param x A SparkDataFrame
 #' @param url JDBC database url of the form `jdbc:subprotocol:subname`
