@@ -161,7 +161,6 @@ createMethods()
 #' on the first and third columns. Output the grouping values and the average.
 #'
 #' df <- createDataFrame (
-#' sqlContext,
 #' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
 #'   c("a", "b", "c", "d"))
 #'

@@ -1289,7 +1289,6 @@ setMethod("dapplyCollect",
 #' on the first and third columns. Output the grouping values and the average.
 #'
 #' df <- createDataFrame (
-#' sqlContext,
 #' list(list(1L, 1, "1", 0.1), list(1L, 2, "1", 0.2), list(3L, 3, "3", 0.3)),
 #'   c("a", "b", "c", "d"))
 #'
@@ -1314,7 +1313,7 @@ setMethod("dapplyCollect",
 #' using 'Sepal_Length' as a target variable, 'Sepal_Width', 'Petal_Length'
 #' and 'Petal_Width' as training features.
 #' 
-#' df <- createDataFrame (sqlContext, iris)
+#' df <- createDataFrame (iris)
 #' schema <- structType(structField("(Intercept)", "double"),
 #'   structField("Sepal_Width", "double"),structField("Petal_Length", "double"),
 #'   structField("Petal_Width", "double"))
