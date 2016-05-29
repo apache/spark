@@ -12,16 +12,20 @@ It also supports a rich set of higher-level tools including [Spark SQL](sql-prog
 
 # Downloading
 
-Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. The downloads page 
-contains Spark packages for many popular HDFS versions. If you'd like to build Spark from 
-scratch, visit [Building Spark](building-spark.html).
+Get Spark from the [downloads page](http://spark.apache.org/downloads.html) of the project website. This documentation is for Spark version {{site.SPARK_VERSION}}. Spark uses Hadoop's client libraries for HDFS and YARN. Downloads are pre-packaged for a handful of popular Hadoop versions.
+Users can also download a "Hadoop free" binary and run Spark with any Hadoop version
+[by augmenting Spark's classpath](hadoop-provided.html). 
+
+If you'd like to build Spark from 
+source, visit [Building Spark](building-spark.html).
+
 
 Spark runs on both Windows and UNIX-like systems (e.g. Linux, Mac OS). It's easy to run
 locally on one machine --- all you need is to have `java` installed on your system `PATH`,
 or the `JAVA_HOME` environment variable pointing to a Java installation.
 
-Spark runs on Java 6+, Python 2.6+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}} uses
-Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version 
+Spark runs on Java 7+, Python 2.6+/3.4+ and R 3.1+. For the Scala API, Spark {{site.SPARK_VERSION}}
+uses Scala {{site.SCALA_BINARY_VERSION}}. You will need to use a compatible Scala version
 ({{site.SCALA_BINARY_VERSION}}.x).
 
 # Running the Examples and Shell
@@ -54,13 +58,13 @@ Example applications are also provided in Python. For example,
 
     ./bin/spark-submit examples/src/main/python/pi.py 10
 
-Spark also provides an experimental R API since 1.4 (only DataFrames APIs included).
+Spark also provides an experimental [R API](sparkr.html) since 1.4 (only DataFrames APIs included).
 To run Spark interactively in a R interpreter, use `bin/sparkR`:
 
     ./bin/sparkR --master local[2]
 
 Example applications are also provided in R. For example,
-    
+
     ./bin/spark-submit examples/src/main/r/dataframe.R
 
 # Launching on a Cluster
@@ -69,7 +73,6 @@ The Spark [cluster mode overview](cluster-overview.html) explains the key concep
 Spark can run both by itself, or over several existing cluster managers. It currently provides several
 options for deployment:
 
-* [Amazon EC2](ec2-scripts.html): our EC2 scripts let you launch a cluster in about 5 minutes
 * [Standalone Deploy Mode](spark-standalone.html): simplest way to deploy Spark on a private cluster
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
@@ -83,10 +86,9 @@ options for deployment:
   in all supported languages (Scala, Java, Python, R)
 * Modules built on Spark:
   * [Spark Streaming](streaming-programming-guide.html): processing real-time data streams
-  * [Spark SQL and DataFrames](sql-programming-guide.html): support for structured data and relational queries
+  * [Spark SQL, Datasets, and DataFrames](sql-programming-guide.html): support for structured data and relational queries
   * [MLlib](mllib-guide.html): built-in machine learning library
   * [GraphX](graphx-programming-guide.html): Spark's new API for graph processing
-  * [Bagel (Pregel on Spark)](bagel-programming-guide.html): older, simple graph processing model
 
 **API Docs:**
 
@@ -100,7 +102,7 @@ options for deployment:
 * [Cluster Overview](cluster-overview.html): overview of concepts and components when running on a cluster
 * [Submitting Applications](submitting-applications.html): packaging and deploying applications
 * Deployment modes:
-  * [Amazon EC2](ec2-scripts.html): scripts that let you launch a cluster on EC2 in about 5 minutes
+  * [Amazon EC2](https://github.com/amplab/spark-ec2): scripts that let you launch a cluster on EC2 in about 5 minutes
   * [Standalone Deploy Mode](spark-standalone.html): launch a standalone cluster quickly without a third-party cluster manager
   * [Mesos](running-on-mesos.html): deploy a private cluster using
       [Apache Mesos](http://mesos.apache.org)
@@ -114,7 +116,6 @@ options for deployment:
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
-* [3<sup>rd</sup> Party Hadoop Distributions](hadoop-third-party-distributions.html): using common Hadoop distributions
 * Integration with other storage systems:
   * [OpenStack Swift](storage-openstack-swift.html)
 * [Building Spark](building-spark.html): build Spark using the Maven system
@@ -129,8 +130,8 @@ options for deployment:
 * [StackOverflow tag `apache-spark`](http://stackoverflow.com/questions/tagged/apache-spark)
 * [Mailing Lists](http://spark.apache.org/mailing-lists.html): ask questions about Spark here
 * [AMP Camps](http://ampcamp.berkeley.edu/): a series of training camps at UC Berkeley that featured talks and
-  exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/3/),
-  [slides](http://ampcamp.berkeley.edu/3/) and [exercises](http://ampcamp.berkeley.edu/3/exercises/) are
+  exercises about Spark, Spark Streaming, Mesos, and more. [Videos](http://ampcamp.berkeley.edu/6/),
+  [slides](http://ampcamp.berkeley.edu/6/) and [exercises](http://ampcamp.berkeley.edu/6/exercises/) are
   available online for free.
 * [Code Examples](http://spark.apache.org/examples.html): more are also available in the `examples` subfolder of Spark ([Scala]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/scala/org/apache/spark/examples),
  [Java]({{site.SPARK_GITHUB_URL}}/tree/master/examples/src/main/java/org/apache/spark/examples),

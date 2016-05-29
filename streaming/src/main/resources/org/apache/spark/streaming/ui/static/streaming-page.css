@@ -31,7 +31,7 @@
 }
 
 .tooltip-inner {
-  max-width: 500px !important; // Make sure we only have one line tooltip
+  max-width: 500px !important; /* Make sure we only have one line tooltip */
 }
 
 .line {

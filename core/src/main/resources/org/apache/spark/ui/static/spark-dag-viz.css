@@ -122,3 +122,7 @@
   stroke: #52C366;
   stroke-width: 2px;
 }
+
+.tooltip-inner {
+  white-space: pre-wrap;
+}

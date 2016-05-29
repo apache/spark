@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
+function drawApplicationTimeline(groupArray, eventObjArray, startTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $("#application-timeline")[0];
@@ -26,7 +26,10 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
     editable: false,
     showCurrentTime: false,
     min: startTime,
-    zoomable: false
+    zoomable: false,
+    moment: function (date) {
+      return vis.moment(date).utcOffset(offset);
+    }
   };
 
   var applicationTimeline = new vis.Timeline(container);
@@ -41,7 +44,7 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
     $(".item.range.job.application-timeline-object").each(function() {
       var getSelectorForJobEntry = function(baseElem) {
         var jobIdText = $($(baseElem).find(".application-timeline-content")[0]).text();
-        var jobId = jobIdText.match("\\(Job (\\d+)\\)")[1];
+        var jobId = jobIdText.match("\\(Job (\\d+)\\)$")[1];
        return "#job-" + jobId;
       };
 
@@ -66,15 +69,28 @@ function drawApplicationTimeline(groupArray, eventObjArray, startTime) {
   setupJobEventAction();
 
   $("span.expand-application-timeline").click(function() {
+    var status = window.localStorage.getItem("expand-application-timeline") == "true";
+    status = !status;
+
     $("#application-timeline").toggleClass('collapsed');
 
     // Switch the class of the arrow from open to closed.
     $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-application-timeline-arrow').toggleClass('arrow-closed');
+
+    window.localStorage.setItem("expand-application-timeline", "" + status);
   });
 }
 
-function drawJobTimeline(groupArray, eventObjArray, startTime) {
+$(function (){
+  if (window.localStorage.getItem("expand-application-timeline") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-application-timeline", "false");
+    $("span.expand-application-timeline").trigger('click');
+  }
+});
+
+function drawJobTimeline(groupArray, eventObjArray, startTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $('#job-timeline')[0];
@@ -86,6 +102,9 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
     showCurrentTime: false,
     min: startTime,
     zoomable: false,
+    moment: function (date) {
+      return vis.moment(date).utcOffset(offset);
+    }
   };
 
   var jobTimeline = new vis.Timeline(container);
@@ -100,7 +119,7 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
     $(".item.range.stage.job-timeline-object").each(function() {
       var getSelectorForStageEntry = function(baseElem) {
         var stageIdText = $($(baseElem).find(".job-timeline-content")[0]).text();
-        var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)")[1].split(".");
+        var stageIdAndAttempt = stageIdText.match("\\(Stage (\\d+\\.\\d+)\\)$")[1].split(".");
         return "#stage-" + stageIdAndAttempt[0] + "-" + stageIdAndAttempt[1];
       };
 
@@ -125,15 +144,28 @@ function drawJobTimeline(groupArray, eventObjArray, startTime) {
   setupStageEventAction();
 
   $("span.expand-job-timeline").click(function() {
+    var status = window.localStorage.getItem("expand-job-timeline") == "true";
+    status = !status;
+
     $("#job-timeline").toggleClass('collapsed');
 
     // Switch the class of the arrow from open to closed.
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-open');
     $(this).find('.expand-job-timeline-arrow').toggleClass('arrow-closed');
+
+    window.localStorage.setItem("expand-job-timeline", "" + status);
   });
 }
 
-function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, maxFinishTime) {
+$(function (){
+  if (window.localStorage.getItem("expand-job-timeline") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-job-timeline", "false");
+    $("span.expand-job-timeline").trigger('click');
+  }
+});
+
+function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, maxFinishTime, offset) {
   var groups = new vis.DataSet(groupArray);
   var items = new vis.DataSet(eventObjArray);
   var container = $("#task-assignment-timeline")[0]
@@ -147,7 +179,10 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
     showCurrentTime: false,
     min: minLaunchTime,
     max: maxFinishTime,
-    zoomable: false
+    zoomable: false,
+    moment: function (date) {
+      return vis.moment(date).utcOffset(offset);
+    }
   };
 
   var taskTimeline = new vis.Timeline(container)
@@ -176,13 +211,26 @@ function drawTaskAssignmentTimeline(groupArray, eventObjArray, minLaunchTime, ma
   setupZoomable("#task-assignment-timeline-zoom-lock", taskTimeline);
 
   $("span.expand-task-assignment-timeline").click(function() {
+    var status = window.localStorage.getItem("expand-task-assignment-timeline") == "true";
+    status = !status;
+
     $("#task-assignment-timeline").toggleClass("collapsed");
 
      // Switch the class of the arrow from open to closed.
     $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-open");
     $(this).find(".expand-task-assignment-timeline-arrow").toggleClass("arrow-closed");
+
+    window.localStorage.setItem("expand-task-assignment-timeline", "" + status);
   });
 }
+
+$(function (){
+  if (window.localStorage.getItem("expand-task-assignment-timeline") == "true") {
+    // Set it to false so that the click function can revert it
+    window.localStorage.setItem("expand-task-assignment-timeline", "false");
+    $("span.expand-task-assignment-timeline").trigger('click');
+  }
+});
 
 function setupExecutorEventAction() {
   $(".item.box.executor").each(function () {

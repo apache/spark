@@ -19,23 +19,21 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 
-import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
- * An Schedulable entity that represent collection of Pools or TaskSetManagers
+ * An Schedulable entity that represents collection of Pools or TaskSetManagers
  */
-
 private[spark] class Pool(
     val poolName: String,
     val schedulingMode: SchedulingMode,
     initMinShare: Int,
     initWeight: Int)
-  extends Schedulable
-  with Logging {
+  extends Schedulable with Logging {
 
   val schedulableQueue = new ConcurrentLinkedQueue[Schedulable]
   val schedulableNameToSchedulable = new ConcurrentHashMap[String, Schedulable]
@@ -55,6 +53,9 @@ private[spark] class Pool(
         new FairSchedulingAlgorithm()
       case SchedulingMode.FIFO =>
         new FIFOSchedulingAlgorithm()
+      case _ =>
+        val msg = "Unsupported scheduling mode: $schedulingMode. Use FAIR or FIFO instead."
+        throw new IllegalArgumentException(msg)
     }
   }
 
@@ -74,7 +75,7 @@ private[spark] class Pool(
     if (schedulableNameToSchedulable.containsKey(schedulableName)) {
       return schedulableNameToSchedulable.get(schedulableName)
     }
-    for (schedulable <- schedulableQueue) {
+    for (schedulable <- schedulableQueue.asScala) {
       val sched = schedulable.getSchedulableByName(schedulableName)
       if (sched != null) {
         return sched
@@ -83,13 +84,13 @@ private[spark] class Pool(
     null
   }
 
-  override def executorLost(executorId: String, host: String) {
-    schedulableQueue.foreach(_.executorLost(executorId, host))
+  override def executorLost(executorId: String, host: String, reason: ExecutorLossReason) {
+    schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
   override def checkSpeculatableTasks(): Boolean = {
     var shouldRevive = false
-    for (schedulable <- schedulableQueue) {
+    for (schedulable <- schedulableQueue.asScala) {
       shouldRevive |= schedulable.checkSpeculatableTasks()
     }
     shouldRevive
@@ -98,7 +99,7 @@ private[spark] class Pool(
   override def getSortedTaskSetQueue: ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]
     val sortedSchedulableQueue =
-      schedulableQueue.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
+      schedulableQueue.asScala.toSeq.sortWith(taskSetSchedulingAlgorithm.comparator)
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue
     }

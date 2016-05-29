@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 
 /**

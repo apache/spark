@@ -34,10 +34,6 @@ private[spark] class PartitionedAppendOnlyMap[K, V]
     destructiveSortedIterator(comparator)
   }
 
-  def writablePartitionedIterator(): WritablePartitionedIterator = {
-    WritablePartitionedIterator.fromIterator(super.iterator)
-  }
-
   def insert(partition: Int, key: K, value: V): Unit = {
     update((partition, key), value)
   }

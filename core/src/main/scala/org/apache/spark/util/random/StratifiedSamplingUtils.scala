@@ -24,7 +24,7 @@ import scala.reflect.ClassTag
 
 import org.apache.commons.math3.distribution.PoissonDistribution
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /**
@@ -196,7 +196,7 @@ private[spark] object StratifiedSamplingUtils extends Logging {
    *
    * The sampling function has a unique seed per partition.
    */
-  def getBernoulliSamplingFunction[K, V](rdd: RDD[(K,  V)],
+  def getBernoulliSamplingFunction[K, V](rdd: RDD[(K, V)],
       fractions: Map[K, Double],
       exact: Boolean,
       seed: Long): (Int, Iterator[(K, V)]) => Iterator[(K, V)] = {

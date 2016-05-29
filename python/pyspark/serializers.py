@@ -44,8 +44,8 @@ which contains two batches of two objects:
 
 >>> rdd.glom().collect()
 [[0, 1, 2, 3], [4, 5, 6, 7], [8, 9, 10, 11], [12, 13, 14, 15]]
->>> rdd._jrdd.count()
-8L
+>>> int(rdd._jrdd.count())
+8
 >>> sc.stop()
 """
 
@@ -272,7 +272,7 @@ class AutoBatchedSerializer(BatchedSerializer):
             if size < best:
                 batch *= 2
             elif size > best * 10 and batch > 1:
-                batch /= 2
+                batch //= 2
 
     def __repr__(self):
         return "AutoBatchedSerializer(%s)" % self.serializer
@@ -359,6 +359,7 @@ def _hack_namedtuple(cls):
     def __reduce__(self):
         return (_restore, (name, fields, tuple(self)))
     cls.__reduce__ = __reduce__
+    cls._is_namedtuple_ = True
     return cls
 
 
@@ -556,4 +557,6 @@ def write_with_length(obj, stream):
 
 if __name__ == '__main__':
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

@@ -17,9 +17,9 @@
 
 package org.apache.spark.ml.attribute
 
-import org.scalatest.FunSuite
+import org.apache.spark.SparkFunSuite
 
-class AttributeGroupSuite extends FunSuite {
+class AttributeGroupSuite extends SparkFunSuite {
 
   test("attribute group") {
     val attrs = Array(

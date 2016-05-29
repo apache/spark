@@ -20,7 +20,7 @@ from __future__ import print_function
 import sys
 from random import Random
 
-from pyspark import SparkContext
+from pyspark.sql import SparkSession
 
 numEdges = 200
 numVertices = 100
@@ -30,8 +30,8 @@ rand = Random(42)
 def generateGraph():
     edges = set()
     while len(edges) < numEdges:
-        src = rand.randrange(0, numEdges)
-        dst = rand.randrange(0, numEdges)
+        src = rand.randrange(0, numVertices)
+        dst = rand.randrange(0, numVertices)
         if src != dst:
             edges.add((src, dst))
     return edges
@@ -41,7 +41,13 @@ if __name__ == "__main__":
     """
     Usage: transitive_closure [partitions]
     """
-    sc = SparkContext(appName="PythonTransitiveClosure")
+    spark = SparkSession\
+        .builder\
+        .appName("PythonTransitiveClosure")\
+        .getOrCreate()
+
+    sc = spark.sparkContext
+
     partitions = int(sys.argv[1]) if len(sys.argv) > 1 else 2
     tc = sc.parallelize(generateGraph(), partitions).cache()
 
@@ -67,4 +73,4 @@ if __name__ == "__main__":
 
     print("TC has %i edges" % tc.count())
 
-    sc.stop()
+    spark.stop()

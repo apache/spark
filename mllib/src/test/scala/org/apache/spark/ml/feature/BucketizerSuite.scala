@@ -19,15 +19,19 @@ package org.apache.spark.ml.feature
 
 import scala.util.Random
 
-import org.scalatest.FunSuite
-
-import org.apache.spark.SparkException
-import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.ParamsSuite
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.sql.{DataFrame, Row}
 
-class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
+class BucketizerSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
+
+  test("params") {
+    ParamsSuite.checkParams(new Bucketizer)
+  }
 
   test("Bucket continuous features, without -inf,inf") {
     // Check a set of valid feature values.
@@ -35,7 +39,7 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     val validData = Array(-0.5, -0.3, 0.0, 0.2)
     val expectedBuckets = Array(0.0, 0.0, 1.0, 1.0)
     val dataFrame: DataFrame =
-      sqlContext.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
+      spark.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
 
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
@@ -51,13 +55,13 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     // Check for exceptions when using a set of invalid feature values.
     val invalidData1: Array[Double] = Array(-0.9) ++ validData
     val invalidData2 = Array(0.51) ++ validData
-    val badDF1 = sqlContext.createDataFrame(invalidData1.zipWithIndex).toDF("feature", "idx")
+    val badDF1 = spark.createDataFrame(invalidData1.zipWithIndex).toDF("feature", "idx")
     withClue("Invalid feature value -0.9 was not caught as an invalid feature!") {
       intercept[SparkException] {
         bucketizer.transform(badDF1).collect()
       }
     }
-    val badDF2 = sqlContext.createDataFrame(invalidData2.zipWithIndex).toDF("feature", "idx")
+    val badDF2 = spark.createDataFrame(invalidData2.zipWithIndex).toDF("feature", "idx")
     withClue("Invalid feature value 0.51 was not caught as an invalid feature!") {
       intercept[SparkException] {
         bucketizer.transform(badDF2).collect()
@@ -70,7 +74,7 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     val validData = Array(-0.9, -0.5, -0.3, 0.0, 0.2, 0.5, 0.9)
     val expectedBuckets = Array(0.0, 1.0, 1.0, 2.0, 2.0, 3.0, 3.0)
     val dataFrame: DataFrame =
-      sqlContext.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
+      spark.createDataFrame(validData.zip(expectedBuckets)).toDF("feature", "expected")
 
     val bucketizer: Bucketizer = new Bucketizer()
       .setInputCol("feature")
@@ -108,9 +112,17 @@ class BucketizerSuite extends FunSuite with MLlibTestSparkContext {
     val lsResult = Vectors.dense(data.map(x => BucketizerSuite.linearSearchForBuckets(splits, x)))
     assert(bsResult ~== lsResult absTol 1e-5)
   }
+
+  test("read/write") {
+    val t = new Bucketizer()
+      .setInputCol("myInputCol")
+      .setOutputCol("myOutputCol")
+      .setSplits(Array(0.1, 0.8, 0.9))
+    testDefaultReadWrite(t)
+  }
 }
 
-private object BucketizerSuite extends FunSuite {
+private object BucketizerSuite extends SparkFunSuite {
   /** Brute force search for buckets.  Bucket i is defined by the range [split(i), split(i+1)). */
   def linearSearchForBuckets(splits: Array[Double], feature: Double): Double = {
     require(feature >= splits.head)

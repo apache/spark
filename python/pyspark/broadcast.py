@@ -99,11 +99,26 @@ class Broadcast(object):
 
     def unpersist(self, blocking=False):
         """
-        Delete cached copies of this broadcast on the executors.
+        Delete cached copies of this broadcast on the executors. If the
+        broadcast is used after this is called, it will need to be
+        re-sent to each executor.
+
+        :param blocking: Whether to block until unpersisting has completed
         """
         if self._jbroadcast is None:
             raise Exception("Broadcast can only be unpersisted in driver")
         self._jbroadcast.unpersist(blocking)
+
+    def destroy(self):
+        """
+        Destroy all data and metadata related to this broadcast variable.
+        Use this with caution; once a broadcast variable has been destroyed,
+        it cannot be used again. This method blocks until destroy has
+        completed.
+        """
+        if self._jbroadcast is None:
+            raise Exception("Broadcast can only be destroyed in driver")
+        self._jbroadcast.destroy()
         os.unlink(self._path)
 
     def __reduce__(self):
@@ -115,4 +130,6 @@ class Broadcast(object):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod()
+    (failure_count, test_count) = doctest.testmod()
+    if failure_count:
+        exit(-1)

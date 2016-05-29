@@ -17,13 +17,18 @@
 
 package org.apache.spark
 
-import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
-import org.scalatest.{BeforeAndAfter, FunSuite, Matchers}
+import org.scalatest.{BeforeAndAfter, Matchers}
+
+import org.apache.spark.util.ThreadUtils
 
 
-class FutureActionSuite extends FunSuite with BeforeAndAfter with Matchers with LocalSparkContext {
+class FutureActionSuite
+  extends SparkFunSuite
+  with BeforeAndAfter
+  with Matchers
+  with LocalSparkContext {
 
   before {
     sc = new SparkContext("local", "FutureActionSuite")
@@ -32,7 +37,7 @@ class FutureActionSuite extends FunSuite with BeforeAndAfter with Matchers with 
   test("simple async action") {
     val rdd = sc.parallelize(1 to 10, 2)
     val job = rdd.countAsync()
-    val res = Await.result(job, Duration.Inf)
+    val res = ThreadUtils.awaitResult(job, Duration.Inf)
     res should be (10)
     job.jobIds.size should be (1)
   }
@@ -40,7 +45,7 @@ class FutureActionSuite extends FunSuite with BeforeAndAfter with Matchers with 
   test("complex async action") {
     val rdd = sc.parallelize(1 to 15, 3)
     val job = rdd.takeAsync(10)
-    val res = Await.result(job, Duration.Inf)
+    val res = ThreadUtils.awaitResult(job, Duration.Inf)
     res should be (1 to 10)
     job.jobIds.size should be (2)
   }

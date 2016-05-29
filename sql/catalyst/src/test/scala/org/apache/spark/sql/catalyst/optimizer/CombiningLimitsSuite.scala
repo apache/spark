@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class CombiningLimitsSuite extends PlanTest {
 
@@ -34,7 +34,8 @@ class CombiningLimitsSuite extends PlanTest {
       Batch("Constant Folding", FixedPoint(10),
         NullPropagation,
         ConstantFolding,
-        BooleanSimplification) :: Nil
+        BooleanSimplification,
+        SimplifyConditionals) :: Nil
   }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
@@ -71,7 +72,7 @@ class CombiningLimitsSuite extends PlanTest {
 
     comparePlans(optimized, correctAnswer)
   }
-  
+
   test("limits: combines two limits after ColumnPruning") {
     val originalQuery =
       testRelation
@@ -79,7 +80,7 @@ class CombiningLimitsSuite extends PlanTest {
         .limit(2)
         .select('a)
         .limit(5)
-        
+
     val optimized = Optimize.execute(originalQuery.analyze)
     val correctAnswer =
       testRelation

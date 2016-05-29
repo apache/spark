@@ -44,33 +44,18 @@ Important classes of Spark SQL and DataFrames:
 from __future__ import absolute_import
 
 
-def since(version):
-    def deco(f):
-        f.__doc__ = f.__doc__.rstrip() + "\n\n.. versionadded:: %s" % version
-        return f
-    return deco
-
-# fix the module name conflict for Python 3+
-import sys
-from . import _types as types
-modname = __name__ + '.types'
-types.__name__ = modname
-# update the __module__ for all objects, make them picklable
-for v in types.__dict__.values():
-    if hasattr(v, "__module__") and v.__module__.endswith('._types'):
-        v.__module__ = modname
-sys.modules[modname] = types
-del modname, sys
-
 from pyspark.sql.types import Row
 from pyspark.sql.context import SQLContext, HiveContext
+from pyspark.sql.session import SparkSession
 from pyspark.sql.column import Column
-from pyspark.sql.dataframe import DataFrame, SchemaRDD, DataFrameNaFunctions, DataFrameStatFunctions
+from pyspark.sql.dataframe import DataFrame, DataFrameNaFunctions, DataFrameStatFunctions
 from pyspark.sql.group import GroupedData
 from pyspark.sql.readwriter import DataFrameReader, DataFrameWriter
 from pyspark.sql.window import Window, WindowSpec
 
+
 __all__ = [
-    'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column', 'Row',
-    'DataFrameNaFunctions', 'DataFrameStatFunctions', 'Window', 'WindowSpec',
+    'SparkSession', 'SQLContext', 'HiveContext', 'DataFrame', 'GroupedData', 'Column',
+    'Row', 'DataFrameNaFunctions', 'DataFrameStatFunctions', 'Window', 'WindowSpec',
+    'DataFrameReader', 'DataFrameWriter'
 ]

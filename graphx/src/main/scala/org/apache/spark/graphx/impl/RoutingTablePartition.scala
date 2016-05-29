@@ -17,24 +17,16 @@
 
 package org.apache.spark.graphx.impl
 
-import scala.reflect.ClassTag
-
-import org.apache.spark.Partitioner
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
-
 import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.GraphXPrimitiveKeyOpenHashMap
-
-import org.apache.spark.graphx.impl.RoutingTablePartition.RoutingTableMessage
+import org.apache.spark.util.collection.{BitSet, PrimitiveVector}
 
 private[graphx]
 object RoutingTablePartition {
   /**
    * A message from an edge partition to a vertex specifying the position in which the edge
    * partition references the vertex (src, dst, or both). The edge partition is encoded in the lower
-   * 30 bytes of the Int, and the position is encoded in the upper 2 bytes of the Int.
+   * 30 bits of the Int, and the position is encoded in the upper 2 bits of the Int.
    */
   type RoutingTableMessage = (VertexId, Int)
 
@@ -110,10 +102,10 @@ private[graphx]
 class RoutingTablePartition(
     private val routingTable: Array[(Array[VertexId], BitSet, BitSet)]) extends Serializable {
   /** The maximum number of edge partitions this `RoutingTablePartition` is built to join with. */
-  val numEdgePartitions: Int = routingTable.size
+  val numEdgePartitions: Int = routingTable.length
 
   /** Returns the number of vertices that will be sent to the specified edge partition. */
-  def partitionSize(pid: PartitionID): Int = routingTable(pid)._1.size
+  def partitionSize(pid: PartitionID): Int = routingTable(pid)._1.length
 
   /** Returns an iterator over all vertex ids stored in this `RoutingTablePartition`. */
   def iterator: Iterator[VertexId] = routingTable.iterator.flatMap(_._1.iterator)

@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.types
 
-import org.apache.spark.SparkException
-import org.scalatest.FunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 
-class DataTypeSuite extends FunSuite {
+class DataTypeSuite extends SparkFunSuite {
 
   test("construct an ArrayType") {
     val array = ArrayType(StringType)
@@ -32,6 +31,37 @@ class DataTypeSuite extends FunSuite {
     val map = MapType(StringType, IntegerType)
 
     assert(MapType(StringType, IntegerType, true) === map)
+  }
+
+  test("construct with add") {
+    val struct = (new StructType)
+      .add("a", IntegerType, true)
+      .add("b", LongType, false)
+      .add("c", StringType, true)
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with add from StructField") {
+    // Test creation from StructField type
+    val struct = (new StructType)
+      .add(StructField("a", IntegerType, true))
+      .add(StructField("b", LongType, false))
+      .add(StructField("c", StringType, true))
+
+    assert(StructField("b", LongType, false) === struct("b"))
+  }
+
+  test("construct with String DataType") {
+    // Test creation with DataType as String
+    val struct = (new StructType)
+      .add("a", "int", true)
+      .add("b", "long", false)
+      .add("c", "string", true)
+
+    assert(StructField("a", IntegerType, true) === struct("a"))
+    assert(StructField("b", LongType, false) === struct("b"))
+    assert(StructField("c", StringType, true) === struct("c"))
   }
 
   test("extract fields from a StructType") {
@@ -72,7 +102,7 @@ class DataTypeSuite extends FunSuite {
 
   test("fieldsMap returns map of name to StructField") {
     val struct = StructType(
-      StructField("a", LongType) :: 
+      StructField("a", LongType) ::
       StructField("b", FloatType) :: Nil)
 
     val mapped = StructType.fieldsMap(struct.fields)
@@ -91,8 +121,10 @@ class DataTypeSuite extends FunSuite {
 
     val right = StructType(List())
     val merged = left.merge(right)
-    
-    assert(merged === left)
+
+    assert(DataType.equalsIgnoreCompatibleNullability(merged, left))
+    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
   }
 
   test("merge where left is empty") {
@@ -105,8 +137,9 @@ class DataTypeSuite extends FunSuite {
 
     val merged = left.merge(right)
 
-    assert(right === merged)
-
+    assert(DataType.equalsIgnoreCompatibleNullability(merged, right))
+    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
   }
 
   test("merge where both are non-empty") {
@@ -124,7 +157,10 @@ class DataTypeSuite extends FunSuite {
 
     val merged = left.merge(right)
 
-    assert(merged === expected)
+    assert(DataType.equalsIgnoreCompatibleNullability(merged, expected))
+    assert(merged("a").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("b").metadata.getBoolean(StructType.metadataKeyForOptionalField))
+    assert(merged("c").metadata.getBoolean(StructType.metadataKeyForOptionalField))
   }
 
   test("merge where right contains type conflict") {
@@ -134,10 +170,34 @@ class DataTypeSuite extends FunSuite {
 
     val right = StructType(
       StructField("b", LongType) :: Nil)
-    
+
     intercept[SparkException] {
       left.merge(right)
     }
+  }
+
+  test("existsRecursively") {
+    val struct = StructType(
+      StructField("a", LongType) ::
+      StructField("b", FloatType) :: Nil)
+    assert(struct.existsRecursively(_.isInstanceOf[LongType]))
+    assert(struct.existsRecursively(_.isInstanceOf[StructType]))
+    assert(!struct.existsRecursively(_.isInstanceOf[IntegerType]))
+
+    val mapType = MapType(struct, StringType)
+    assert(mapType.existsRecursively(_.isInstanceOf[LongType]))
+    assert(mapType.existsRecursively(_.isInstanceOf[StructType]))
+    assert(mapType.existsRecursively(_.isInstanceOf[StringType]))
+    assert(mapType.existsRecursively(_.isInstanceOf[MapType]))
+    assert(!mapType.existsRecursively(_.isInstanceOf[IntegerType]))
+
+    val arrayType = ArrayType(mapType)
+    assert(arrayType.existsRecursively(_.isInstanceOf[LongType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[StructType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[StringType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[MapType]))
+    assert(arrayType.existsRecursively(_.isInstanceOf[ArrayType]))
+    assert(!arrayType.existsRecursively(_.isInstanceOf[IntegerType]))
   }
 
   def checkDataTypeJsonRepr(dataType: DataType): Unit = {
@@ -155,7 +215,7 @@ class DataTypeSuite extends FunSuite {
   checkDataTypeJsonRepr(FloatType)
   checkDataTypeJsonRepr(DoubleType)
   checkDataTypeJsonRepr(DecimalType(10, 5))
-  checkDataTypeJsonRepr(DecimalType.Unlimited)
+  checkDataTypeJsonRepr(DecimalType.SYSTEM_DEFAULT)
   checkDataTypeJsonRepr(DateType)
   checkDataTypeJsonRepr(TimestampType)
   checkDataTypeJsonRepr(StringType)
@@ -188,15 +248,15 @@ class DataTypeSuite extends FunSuite {
   checkDefaultSize(LongType, 8)
   checkDefaultSize(FloatType, 4)
   checkDefaultSize(DoubleType, 8)
-  checkDefaultSize(DecimalType(10, 5), 4096)
-  checkDefaultSize(DecimalType.Unlimited, 4096)
+  checkDefaultSize(DecimalType(10, 5), 8)
+  checkDefaultSize(DecimalType.SYSTEM_DEFAULT, 16)
   checkDefaultSize(DateType, 4)
-  checkDefaultSize(TimestampType, 12)
-  checkDefaultSize(StringType, 4096)
-  checkDefaultSize(BinaryType, 4096)
+  checkDefaultSize(TimestampType, 8)
+  checkDefaultSize(StringType, 20)
+  checkDefaultSize(BinaryType, 100)
   checkDefaultSize(ArrayType(DoubleType, true), 800)
-  checkDefaultSize(ArrayType(StringType, false), 409600)
-  checkDefaultSize(MapType(IntegerType, StringType, true), 410000)
+  checkDefaultSize(ArrayType(StringType, false), 2000)
+  checkDefaultSize(MapType(IntegerType, StringType, true), 2400)
   checkDefaultSize(MapType(IntegerType, ArrayType(DoubleType), false), 80400)
   checkDefaultSize(structType, 812)
 
@@ -250,11 +310,11 @@ class DataTypeSuite extends FunSuite {
     expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
-    to = MapType(StringType,  ArrayType(IntegerType, false), valueContainsNull = true),
+    to = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
     expected = false)
   checkEqualsIgnoreCompatibleNullability(
     from = MapType(StringType, ArrayType(IntegerType, false), valueContainsNull = true),
-    to = MapType(StringType,  ArrayType(IntegerType, true), valueContainsNull = true),
+    to = MapType(StringType, ArrayType(IntegerType, true), valueContainsNull = true),
     expected = true)
 
 

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+// scalastyle:off println
 package main.scala
 
 import scala.collection.mutable.{ListBuffer, Queue}
@@ -40,7 +41,7 @@ object SparkSqlExample {
     import sqlContext._
 
     val people = sc.makeRDD(1 to 100, 10).map(x => Person(s"Name$x", x)).toDF()
-    people.registerTempTable("people")
+    people.createOrReplaceTempView("people")
     val teenagers = sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
     val teenagerNames = teenagers.map(t => "Name: " + t(0)).collect()
     teenagerNames.foreach(println)
@@ -51,9 +52,10 @@ object SparkSqlExample {
         System.exit(-1)
       }
     }
-    
+
     test(teenagerNames.size == 7, "Unexpected number of selected elements: " + teenagerNames)
     println("Test succeeded")
     sc.stop()
   }
 }
+// scalastyle:on println

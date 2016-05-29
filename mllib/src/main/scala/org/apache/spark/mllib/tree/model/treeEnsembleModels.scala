@@ -24,9 +24,10 @@ import org.json4s._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkContext
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vector
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo
@@ -35,25 +36,32 @@ import org.apache.spark.mllib.tree.configuration.EnsembleCombiningStrategy._
 import org.apache.spark.mllib.tree.loss.Loss
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
-
 /**
- * :: Experimental ::
  * Represents a random forest model.
  *
  * @param algo algorithm for the ensemble model, either Classification or Regression
  * @param trees tree ensembles
  */
-@Experimental
-class RandomForestModel(override val algo: Algo, override val trees: Array[DecisionTreeModel])
+@Since("1.2.0")
+class RandomForestModel @Since("1.2.0") (
+    @Since("1.2.0") override val algo: Algo,
+    @Since("1.2.0") override val trees: Array[DecisionTreeModel])
   extends TreeEnsembleModel(algo, trees, Array.fill(trees.length)(1.0),
     combiningStrategy = if (algo == Classification) Vote else Average)
   with Saveable {
 
   require(trees.forall(_.algo == algo))
 
+  /**
+   *
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       RandomForestModel.SaveLoadV1_0.thisClassName)
@@ -62,10 +70,18 @@ class RandomForestModel(override val algo: Algo, override val trees: Array[Decis
   override protected def formatVersion: String = RandomForestModel.formatVersion
 }
 
+@Since("1.3.0")
 object RandomForestModel extends Loader[RandomForestModel] {
 
   private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
+  /**
+   *
+   * @param sc  Spark context used for loading model files.
+   * @param path  Path specifying the directory to which the model was saved.
+   * @return  Model instance
+   */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): RandomForestModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
@@ -90,23 +106,28 @@ object RandomForestModel extends Loader[RandomForestModel] {
 }
 
 /**
- * :: Experimental ::
  * Represents a gradient boosted trees model.
  *
  * @param algo algorithm for the ensemble model, either Classification or Regression
  * @param trees tree ensembles
  * @param treeWeights tree ensemble weights
  */
-@Experimental
-class GradientBoostedTreesModel(
-    override val algo: Algo,
-    override val trees: Array[DecisionTreeModel],
-    override val treeWeights: Array[Double])
+@Since("1.2.0")
+class GradientBoostedTreesModel @Since("1.2.0") (
+    @Since("1.2.0") override val algo: Algo,
+    @Since("1.2.0") override val trees: Array[DecisionTreeModel],
+    @Since("1.2.0") override val treeWeights: Array[Double])
   extends TreeEnsembleModel(algo, trees, treeWeights, combiningStrategy = Sum)
   with Saveable {
 
   require(trees.length == treeWeights.length)
 
+  /**
+   * @param sc  Spark context used to save model data.
+   * @param path  Path specifying the directory in which to save this model.
+   *              If the directory already exists, this method throws an exception.
+   */
+  @Since("1.3.0")
   override def save(sc: SparkContext, path: String): Unit = {
     TreeEnsembleModel.SaveLoadV1_0.save(sc, path, this,
       GradientBoostedTreesModel.SaveLoadV1_0.thisClassName)
@@ -119,6 +140,7 @@ class GradientBoostedTreesModel(
    * @return an array with index i having the losses or errors for the ensemble
    *         containing the first i+1 trees
    */
+  @Since("1.4.0")
   def evaluateEachIteration(
       data: RDD[LabeledPoint],
       loss: Loss): Array[Double] = {
@@ -159,9 +181,13 @@ class GradientBoostedTreesModel(
   override protected def formatVersion: String = GradientBoostedTreesModel.formatVersion
 }
 
+/**
+ */
+@Since("1.3.0")
 object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   /**
+   * :: DeveloperApi ::
    * Compute the initial predictions and errors for a dataset for the first
    * iteration of gradient boosting.
    * @param data: training data.
@@ -171,6 +197,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to every sample.
    */
+  @Since("1.4.0")
+  @DeveloperApi
   def computeInitialPredictionAndError(
       data: RDD[LabeledPoint],
       initTreeWeight: Double,
@@ -184,6 +212,7 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
   }
 
   /**
+   * :: DeveloperApi ::
    * Update a zipped predictionError RDD
    * (as obtained with computeInitialPredictionAndError)
    * @param data: training data.
@@ -194,6 +223,8 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
    * @return a RDD with each element being a zip of the prediction and error
    *         corresponding to each sample.
    */
+  @Since("1.4.0")
+  @DeveloperApi
   def updatePredictionError(
     data: RDD[LabeledPoint],
     predictionAndError: RDD[(Double, Double)],
@@ -213,6 +244,12 @@ object GradientBoostedTreesModel extends Loader[GradientBoostedTreesModel] {
 
   private[mllib] def formatVersion: String = TreeEnsembleModel.SaveLoadV1_0.thisFormatVersion
 
+  /**
+   * @param sc  Spark context used for loading model files.
+   * @param path  Path specifying the directory to which the model was saved.
+   * @return  Model instance
+   */
+  @Since("1.3.0")
   override def load(sc: SparkContext, path: String): GradientBoostedTreesModel = {
     val (loadedClassName, version, jsonMetadata) = Loader.loadMetadata(sc, path)
     val classNameV1_0 = SaveLoadV1_0.thisClassName
@@ -376,8 +413,7 @@ private[tree] object TreeEnsembleModel extends Logging {
     case class EnsembleNodeData(treeId: Int, node: NodeData)
 
     def save(sc: SparkContext, path: String, model: TreeEnsembleModel, className: String): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
 
       // SPARK-6120: We do a hacky check here so users understand why save() is failing
       //             when they run the ML guide example.
@@ -387,7 +423,7 @@ private[tree] object TreeEnsembleModel extends Logging {
         val driverMemory = sc.getConf.getOption("spark.driver.memory")
           .orElse(Option(System.getenv("SPARK_DRIVER_MEMORY")))
           .map(Utils.memoryStringToMb)
-          .getOrElse(512)
+          .getOrElse(Utils.DEFAULT_DRIVER_MEM_MB)
         if (driverMemory <= memThreshold) {
           logWarning(s"$className.save() was called, but it may fail because of too little" +
             s" driver memory (${driverMemory}m)." +
@@ -413,8 +449,8 @@ private[tree] object TreeEnsembleModel extends Logging {
       // Create Parquet data.
       val dataRDD = sc.parallelize(model.trees.zipWithIndex).flatMap { case (tree, treeId) =>
         tree.topNode.subtreeIterator.toSeq.map(node => NodeData(treeId, node))
-      }.toDF()
-      dataRDD.write.parquet(Loader.dataPath(path))
+      }
+      spark.createDataFrame(dataRDD).write.parquet(Loader.dataPath(path))
     }
 
     /**
@@ -435,10 +471,10 @@ private[tree] object TreeEnsembleModel extends Logging {
         sc: SparkContext,
         path: String,
         treeAlgo: String): Array[DecisionTreeModel] = {
-      val datapath = Loader.dataPath(path)
-      val sqlContext = new SQLContext(sc)
-      val nodes = sqlContext.read.parquet(datapath).map(NodeData.apply)
-      val trees = constructTrees(nodes)
+      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      import spark.implicits._
+      val nodes = spark.read.parquet(Loader.dataPath(path)).map(NodeData.apply)
+      val trees = constructTrees(nodes.rdd)
       trees.map(new DecisionTreeModel(_, Algo.fromString(treeAlgo)))
     }
   }

@@ -63,7 +63,7 @@ from the application's monitoring UI (`http://<driver-node>:4040`).
 
 # CPU Cores
 
-Spark scales well to tens of CPU cores per machine because it performes minimal sharing between
+Spark scales well to tens of CPU cores per machine because it performs minimal sharing between
 threads. You should likely provision at least **8-16 cores** per machine. Depending on the CPU
 cost of your workload, you may also need more: once data is in memory, most applications are
 either CPU- or network-bound.

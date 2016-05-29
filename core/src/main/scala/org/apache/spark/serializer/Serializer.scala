@@ -19,12 +19,13 @@ package org.apache.spark.serializer
 
 import java.io._
 import java.nio.ByteBuffer
+import javax.annotation.concurrent.NotThreadSafe
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkConf, SparkEnv}
+import org.apache.spark.SparkEnv
 import org.apache.spark.annotation.{DeveloperApi, Private}
-import org.apache.spark.util.{Utils, ByteBufferInputStream, NextIterator}
+import org.apache.spark.util.NextIterator
 
 /**
  * :: DeveloperApi ::
@@ -99,23 +100,15 @@ abstract class Serializer {
 }
 
 
-@DeveloperApi
-object Serializer {
-  def getSerializer(serializer: Serializer): Serializer = {
-    if (serializer == null) SparkEnv.get.serializer else serializer
-  }
-
-  def getSerializer(serializer: Option[Serializer]): Serializer = {
-    serializer.getOrElse(SparkEnv.get.serializer)
-  }
-}
-
-
 /**
  * :: DeveloperApi ::
  * An instance of a serializer, for use by one thread at a time.
+ *
+ * It is legal to create multiple serialization / deserialization streams from the same
+ * SerializerInstance as long as those streams are all used within the same thread.
  */
 @DeveloperApi
+@NotThreadSafe
 abstract class SerializerInstance {
   def serialize[T: ClassTag](t: T): ByteBuffer
 
@@ -177,6 +170,7 @@ abstract class DeserializationStream {
       } catch {
         case eof: EOFException =>
           finished = true
+          null
       }
     }
 
@@ -194,10 +188,9 @@ abstract class DeserializationStream {
       try {
         (readKey[Any](), readValue[Any]())
       } catch {
-        case eof: EOFException => {
+        case eof: EOFException =>
           finished = true
           null
-        }
       }
     }
 

@@ -27,7 +27,7 @@ import org.scalatest.{BeforeAndAfterEach, Suite}
  * This resets the properties after each individual test.
  *
  * The order in which fixtures are mixed in affects the order in which they are invoked by tests.
- * If we have a suite `MySuite extends FunSuite with Foo with Bar`, then
+ * If we have a suite `MySuite extends SparkFunSuite with Foo with Bar`, then
  * Bar's `super` is Foo, so Bar's beforeEach() will and afterEach() methods will be invoked first
  * by the rest runner.
  *
@@ -43,7 +43,7 @@ private[spark] trait ResetSystemProperties extends BeforeAndAfterEach { this: Su
   var oldProperties: Properties = null
 
   override def beforeEach(): Unit = {
-    // we need SerializationUtils.clone instead of `new Properties(System.getProperties()` because
+    // we need SerializationUtils.clone instead of `new Properties(System.getProperties())` because
     // the later way of creating a copy does not copy the properties but it initializes a new
     // Properties object with the given properties as defaults. They are not recognized at all
     // by standard Scala wrapper over Java Properties then.

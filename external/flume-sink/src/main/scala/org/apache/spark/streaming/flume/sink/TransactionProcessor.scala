@@ -22,7 +22,7 @@ import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
 
 import scala.util.control.Breaks
 
-import org.apache.flume.{Transaction, Channel}
+import org.apache.flume.{Channel, Transaction}
 
 // Flume forces transactions to be thread-local (horrible, I know!)
 // So the sink basically spawns a new thread to pull the events out within a transaction.
@@ -110,7 +110,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
         eventBatch.setErrorMsg("Something went wrong. Channel was " +
           "unable to create a transaction!")
       }
-      txOpt.foreach(tx => {
+      txOpt.foreach { tx =>
         tx.begin()
         val events = new util.ArrayList[SparkSinkEvent](maxBatchSize)
         val loop = new Breaks
@@ -143,9 +143,9 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
           eventBatch.setErrorMsg(msg)
         } else {
           // At this point, the events are available, so fill them into the event batch
-          eventBatch = new EventBatch("",seqNum, events)
+          eventBatch = new EventBatch("", seqNum, events)
         }
-      })
+      }
     } catch {
       case interrupted: InterruptedException =>
         // Don't pollute logs if the InterruptedException came from this being stopped
@@ -156,9 +156,9 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
         logWarning("Error while processing transaction.", e)
         eventBatch.setErrorMsg(e.getMessage)
         try {
-          txOpt.foreach(tx => {
+          txOpt.foreach { tx =>
             rollbackAndClose(tx, close = true)
-          })
+          }
         } finally {
           txOpt = None
         }
@@ -174,7 +174,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
    */
   private def processAckOrNack() {
     batchAckLatch.await(transactionTimeout, TimeUnit.SECONDS)
-    txOpt.foreach(tx => {
+    txOpt.foreach { tx =>
       if (batchSuccess) {
         try {
           logDebug("Committing transaction")
@@ -197,7 +197,7 @@ private class TransactionProcessor(val channel: Channel, val seqNum: String,
         // cause issues. This is required to ensure the TransactionProcessor instance is not leaked
         parent.removeAndGetProcessor(seqNum)
       }
-    })
+    }
   }
 
   /**

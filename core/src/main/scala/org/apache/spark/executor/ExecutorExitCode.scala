@@ -39,6 +39,12 @@ object ExecutorExitCode {
   /** ExternalBlockStore failed to create a local temporary directory after many attempts. */
   val EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR = 55
 
+  /**
+   * Executor is unable to send heartbeats to the driver more than
+   * "spark.executor.heartbeat.maxFailures" times.
+   */
+  val HEARTBEAT_FAILURE = 56
+
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
       case UNCAUGHT_EXCEPTION => "Uncaught exception"
@@ -51,6 +57,8 @@ object ExecutorExitCode {
       // TODO: replace external block store with concrete implementation name
       case EXTERNAL_BLOCK_STORE_FAILED_TO_CREATE_DIR =>
         "ExternalBlockStore failed to create a local temporary directory."
+      case HEARTBEAT_FAILURE =>
+        "Unable to send heartbeats to driver."
       case _ =>
         "Unknown executor exit code (" + exitCode + ")" + (
           if (exitCode > 128) {

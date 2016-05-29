@@ -44,6 +44,20 @@ from pyspark import SparkContext
 from pyspark.streaming import StreamingContext
 
 
+# Get or register a Broadcast variable
+def getWordBlacklist(sparkContext):
+    if ('wordBlacklist' not in globals()):
+        globals()['wordBlacklist'] = sparkContext.broadcast(["a", "b", "c"])
+    return globals()['wordBlacklist']
+
+
+# Get or register an Accumulator
+def getDroppedWordsCounter(sparkContext):
+    if ('droppedWordsCounter' not in globals()):
+        globals()['droppedWordsCounter'] = sparkContext.accumulator(0)
+    return globals()['droppedWordsCounter']
+
+
 def createContext(host, port, outputPath):
     # If you do not see this printed, that means the StreamingContext has been loaded
     # from the new checkpoint
@@ -60,8 +74,22 @@ def createContext(host, port, outputPath):
     wordCounts = words.map(lambda x: (x, 1)).reduceByKey(lambda x, y: x + y)
 
     def echo(time, rdd):
-        counts = "Counts at time %s %s" % (time, rdd.collect())
+        # Get or register the blacklist Broadcast
+        blacklist = getWordBlacklist(rdd.context)
+        # Get or register the droppedWordsCounter Accumulator
+        droppedWordsCounter = getDroppedWordsCounter(rdd.context)
+
+        # Use blacklist to drop words and use droppedWordsCounter to count them
+        def filterFunc(wordCount):
+            if wordCount[0] in blacklist.value:
+                droppedWordsCounter.add(wordCount[1])
+                False
+            else:
+                True
+
+        counts = "Counts at time %s %s" % (time, rdd.filter(filterFunc).collect())
         print(counts)
+        print("Dropped %d word(s) totally" % droppedWordsCounter.value)
         print("Appending to " + os.path.abspath(outputPath))
         with open(outputPath, 'a') as f:
             f.write(counts + "\n")
