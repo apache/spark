@@ -18,36 +18,42 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.Strategy
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, ReturnAnswer, Union}
+import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LocalRelation, LogicalPlan, ReturnAnswer, Union}
 import org.apache.spark.sql.test.SharedSQLContext
 
 class SparkPlannerSuite extends SharedSQLContext {
   import testImplicits._
 
-  private var planned = 0
-
-  private object MayPlanRecursively extends Strategy {
-    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case ReturnAnswer(child) =>
-        planned += 1
-        planLater(child) :: planLater(plan) :: Nil
-      case Union(children) =>
-        planned += 1
-        UnionExec(children.map(planLater)) :: planLater(plan) :: Nil
-      case LocalRelation(output, data) =>
-        planned += 1
-        LocalTableScanExec(output, data) :: planLater(plan) :: Nil
-      case _ => Nil
-    }
-  }
-
   test("Ensure to go down only the first branch, not any other possible branches") {
+
+    case object NeverPlanned extends LeafNode {
+      override def output: Seq[Attribute] = Nil
+    }
+
+    var planned = 0
+    object TestStrategy extends Strategy {
+      def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        case ReturnAnswer(child) =>
+          planned += 1
+          planLater(child) :: planLater(NeverPlanned) :: Nil
+        case Union(children) =>
+          planned += 1
+          UnionExec(children.map(planLater)) :: planLater(NeverPlanned) :: Nil
+        case LocalRelation(output, data) =>
+          planned += 1
+          LocalTableScanExec(output, data) :: planLater(NeverPlanned) :: Nil
+        case NeverPlanned =>
+          fail("QueryPlanner should not go down to this branch.")
+        case _ => Nil
+      }
+    }
+
     try {
-      spark.experimental.extraStrategies = MayPlanRecursively :: Nil
+      spark.experimental.extraStrategies = TestStrategy :: Nil
 
       val ds = Seq("a", "b", "c").toDS().union(Seq("d", "e", "f").toDS())
 
-      planned = 0
       assert(ds.collect().toSeq === Seq("a", "b", "c", "d", "e", "f"))
       assert(planned === 4)
     } finally {
