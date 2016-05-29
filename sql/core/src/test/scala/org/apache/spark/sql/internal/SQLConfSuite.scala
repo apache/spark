@@ -17,12 +17,35 @@
 
 package org.apache.spark.sql.internal
 
+import org.scalatest.BeforeAndAfterAll
+
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
-class SQLConfSuite extends QueryTest with SharedSQLContext {
+class SQLConfSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAll {
+  import testImplicits._
+
   private val testKey = "test.key.0"
   private val testVal = "test.val.0"
+
+  override def beforeAll() {
+    super.beforeAll()
+    sql("DROP TABLE IF EXISTS testData")
+    spark
+      .range(10)
+      .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
+      .write
+      .saveAsTable("testData")
+  }
+
+  override def afterAll(): Unit = {
+    try {
+      sql("DROP TABLE IF EXISTS testData")
+    } finally {
+      super.afterAll()
+    }
+  }
 
   test("propagate from spark conf") {
     // We create a new context here to avoid order dependence with other tests that might call
@@ -216,6 +239,35 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
         === s"file:${System.getProperty("user.dir")}/spark-warehouse")
     } finally {
       sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
+    }
+  }
+
+  test("MAX_CASES_BRANCHES") {
+    val original = spark.conf.get(SQLConf.MAX_CASES_BRANCHES)
+    try {
+      val sql_one_branch_caseWhen = "SELECT CASE WHEN a = 1 THEN 1 END FROM testData"
+      val sql_two_branch_caseWhen = "SELECT CASE WHEN a = 1 THEN 1 ELSE 0 END FROM testData"
+      // When the value is zero, case when will not be part of wholestage codegen
+      spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "0")
+      assert(!sql(sql_one_branch_caseWhen)
+        .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      assert(!sql(sql_two_branch_caseWhen)
+        .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+
+      // When the value is one, if case when has one branch, we still enable codegen for case when.
+      spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "1")
+      assert(sql(sql_one_branch_caseWhen)
+        .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      assert(!sql(sql_two_branch_caseWhen)
+        .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+
+      spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "2")
+      assert(sql(sql_one_branch_caseWhen)
+        .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      assert(sql(sql_two_branch_caseWhen)
+        .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+    } finally {
+      sql(s"set ${SQLConf.MAX_CASES_BRANCHES}=$original")
     }
   }
 
