@@ -247,14 +247,13 @@ class SQLConfSuite extends QueryTest with SharedSQLContext with BeforeAndAfterAl
     try {
       val sql_one_branch_caseWhen = "SELECT CASE WHEN a = 1 THEN 1 END FROM testData"
       val sql_two_branch_caseWhen = "SELECT CASE WHEN a = 1 THEN 1 ELSE 0 END FROM testData"
-      // When the value is zero, case when will not be part of wholestage codegen
+
       spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "0")
       assert(!sql(sql_one_branch_caseWhen)
         .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
       assert(!sql(sql_two_branch_caseWhen)
         .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
 
-      // When the value is one, if case when has one branch, we still enable codegen for case when.
       spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "1")
       assert(sql(sql_one_branch_caseWhen)
         .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
