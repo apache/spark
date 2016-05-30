@@ -109,10 +109,14 @@ private[parquet] object CatalystReadSupport {
    */
   def clipParquetSchema(parquetSchema: MessageType, catalystSchema: StructType): MessageType = {
     val clippedParquetFields = clipParquetGroupFields(parquetSchema.asGroupType(), catalystSchema)
-    Types
-      .buildMessage()
-      .addFields(clippedParquetFields: _*)
-      .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+    if (clippedParquetFields.isEmpty) {
+      CatalystSchemaConverter.EMPTY_MESSAGE
+    } else {
+      Types
+        .buildMessage()
+        .addFields(clippedParquetFields: _*)
+        .named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME)
+    }
   }
 
   private def clipParquetType(parquetType: Type, catalystType: DataType): Type = {

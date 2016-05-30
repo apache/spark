@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkContext, SparkFunSuite}
 
 /**
  * Test cases for the builder pattern of [[SparkSession]].
@@ -89,5 +89,17 @@ class SparkSessionBuilderSuite extends SparkFunSuite {
     val newSession = SparkSession.builder().master("local").getOrCreate()
     assert(newSession != activeSession)
     newSession.stop()
+  }
+
+  test("create SparkContext first then SparkSession") {
+    sparkContext.stop()
+    val conf = new SparkConf().setAppName("test").setMaster("local").set("key1", "value1")
+    val sparkContext2 = new SparkContext(conf)
+    val session = SparkSession.builder().config("key2", "value2").getOrCreate()
+    assert(session.conf.get("key1") == "value1")
+    assert(session.conf.get("key2") == "value2")
+    assert(session.sparkContext.conf.get("key1") == "value1")
+    assert(session.sparkContext.conf.get("key2") == "value2")
+    session.stop()
   }
 }

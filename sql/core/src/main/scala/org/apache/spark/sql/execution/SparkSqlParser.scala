@@ -24,7 +24,7 @@ import org.antlr.v4.runtime.{ParserRuleContext, Token}
 import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
-import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -368,17 +368,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * For example:
    * {{{
    *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
-   *   [COLUMNS (col1, col2)]
    * }}}
    */
   override def visitTruncateTable(ctx: TruncateTableContext): LogicalPlan = withOrigin(ctx) {
-    if (ctx.identifierList != null) {
-      throw operationNotAllowed("TRUNCATE TABLE ... COLUMNS", ctx)
-    }
     TruncateTableCommand(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec)
-    )
+      Option(ctx.partitionSpec).map(visitNonOptionalPartitionSpec))
   }
 
   /**
@@ -491,6 +486,37 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitDescribeDatabase(ctx: DescribeDatabaseContext): LogicalPlan = withOrigin(ctx) {
     DescribeDatabaseCommand(ctx.identifier.getText, ctx.EXTENDED != null)
+  }
+
+  /**
+   * Create a plan for a DESCRIBE FUNCTION command.
+   */
+  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    val functionName =
+      if (describeFuncName.STRING() != null) {
+        FunctionIdentifier(string(describeFuncName.STRING()), database = None)
+      } else if (describeFuncName.qualifiedName() != null) {
+        visitFunctionName(describeFuncName.qualifiedName)
+      } else {
+        FunctionIdentifier(describeFuncName.getText, database = None)
+      }
+    DescribeFunctionCommand(functionName, EXTENDED != null)
+  }
+
+  /**
+   * Create a plan for a SHOW FUNCTIONS command.
+   */
+  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
+    import ctx._
+    if (qualifiedName != null) {
+      val name = visitFunctionName(qualifiedName)
+      ShowFunctionsCommand(name.database, Some(name.funcName))
+    } else if (pattern != null) {
+      ShowFunctionsCommand(None, Some(string(pattern)))
+    } else {
+      ShowFunctionsCommand(None, None)
+    }
   }
 
   /**
@@ -876,8 +902,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
-      .getOrElse(EmptyStorageFormat)
-    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat).getOrElse(EmptyStorageFormat)
+      .getOrElse(CatalogStorageFormat.EmptyStorageFormat)
+    val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
+      .getOrElse(CatalogStorageFormat.EmptyStorageFormat)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
@@ -950,15 +977,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
   }
 
-  /** Empty storage format for default values and copies. */
-  private val EmptyStorageFormat = CatalogStorageFormat(None, None, None, None, false, Map.empty)
-
   /**
    * Create a [[CatalogStorageFormat]].
    */
   override def visitTableFileFormat(
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    EmptyStorageFormat.copy(
+    CatalogStorageFormat.EmptyStorageFormat.copy(
       inputFormat = Option(string(ctx.inFmt)),
       outputFormat = Option(string(ctx.outFmt)))
   }
@@ -971,7 +995,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val source = ctx.identifier.getText
     HiveSerDe.sourceToSerDe(source, conf) match {
       case Some(s) =>
-        EmptyStorageFormat.copy(
+        CatalogStorageFormat.EmptyStorageFormat.copy(
           inputFormat = s.inputFormat,
           outputFormat = s.outputFormat,
           serde = s.serde)
@@ -1011,7 +1035,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitRowFormatSerde(
       ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
     import ctx._
-    EmptyStorageFormat.copy(
+    CatalogStorageFormat.EmptyStorageFormat.copy(
       serde = Option(string(name)),
       serdeProperties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
@@ -1041,7 +1065,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             ctx)
           "line.delim" -> value
         }
-    EmptyStorageFormat.copy(serdeProperties = entries.toMap)
+    CatalogStorageFormat.EmptyStorageFormat.copy(serdeProperties = entries.toMap)
   }
 
   /**
@@ -1155,7 +1179,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       identifier = visitTableIdentifier(name),
       tableType = CatalogTableType.VIEW,
       schema = schema,
-      storage = EmptyStorageFormat,
+      storage = CatalogStorageFormat.EmptyStorageFormat,
       properties = properties,
       viewOriginalText = sql,
       viewText = sql,

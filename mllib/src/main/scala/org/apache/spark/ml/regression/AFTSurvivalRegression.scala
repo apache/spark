@@ -223,7 +223,7 @@ class AFTSurvivalRegression @Since("1.6.0") (@Since("1.6.0") override val uid: S
     val initialParameters = Vectors.zeros(numFeatures + 2)
 
     val states = optimizer.iterations(new CachedDiffFunction(costFun),
-      initialParameters.toBreeze.toDenseVector)
+      initialParameters.asBreeze.toDenseVector)
 
     val parameters = {
       val arrayBuilder = mutable.ArrayBuilder.make[Double]
@@ -396,7 +396,7 @@ object AFTSurvivalRegressionModel extends MLReadable[AFTSurvivalRegressionModel]
 
 /**
  * AFTAggregator computes the gradient and loss for a AFT loss function,
- * as used in AFT survival regression for samples in sparse or dense vector in a online fashion.
+ * as used in AFT survival regression for samples in sparse or dense vector in an online fashion.
  *
  * The loss function and likelihood function under the AFT model based on:
  * Lawless, J. F., Statistical Models and Methods for Lifetime Data,

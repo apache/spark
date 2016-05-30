@@ -402,7 +402,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       Project(inputDataCols ++ inputPartCols, df.logicalPlan)
     }.getOrElse(df.logicalPlan)
 
-    df.sparkSession.executePlan(
+    df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
         UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
@@ -524,12 +524,12 @@ final class DataFrameWriter private[sql](df: DataFrame) {
             mode,
             extraOptions.toMap,
             df.logicalPlan)
-        df.sparkSession.executePlan(cmd).toRdd
+        df.sparkSession.sessionState.executePlan(cmd).toRdd
     }
   }
 
   /**
-   * Saves the content of the [[DataFrame]] to a external database table via JDBC. In the case the
+   * Saves the content of the [[DataFrame]] to an external database table via JDBC. In the case the
    * table already exists in the external database, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
    *
@@ -639,7 +639,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * This will overwrite `orc.compress`. </li>
    *
    * @since 1.5.0
-   * @note Currently, this method can only be used together with `HiveContext`.
+   * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
     assertNotStreaming("orc() can only be called on non-continuous queries")
@@ -684,6 +684,9 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * the separator can be part of the value.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
+   * <li>`escapeQuotes` (default `true`): a flag indicating whether values containing
+   * quotes should always be enclosed in quotes. Default is to escape all values containing
+   * a quote character.</li>
    * <li>`header` (default `false`): writes the names of columns as the first line.</li>
    * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be

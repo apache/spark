@@ -110,6 +110,14 @@ class DataFrameWindowSuite extends QueryTest with SharedSQLContext {
       Row(2, 2, 1, 5.0d / 3.0d, 3, 5, 2, 3, 2, 2, 1.0d, 0.5d) :: Nil)
   }
 
+  test("window function should fail if order by clause is not specified") {
+    val df = Seq((1, "1"), (2, "2"), (1, "2"), (2, "2")).toDF("key", "value")
+    val e = intercept[AnalysisException](
+      // Here we missed .orderBy("key")!
+      df.select(row_number().over(Window.partitionBy("value"))).collect())
+    assert(e.message.contains("requires window to be ordered"))
+  }
+
   test("aggregation and rows between") {
     val df = Seq((1, "1"), (2, "1"), (2, "2"), (1, "1"), (2, "2")).toDF("key", "value")
     df.createOrReplaceTempView("window_table")

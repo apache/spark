@@ -44,13 +44,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types._
 import org.apache.spark.util.SerializableConfiguration
 
-private[sql] class DefaultSource
+private[sql] class ParquetFileFormat
   extends FileFormat
   with DataSourceRegister
   with Logging
@@ -62,7 +63,7 @@ private[sql] class DefaultSource
 
   override def hashCode(): Int = getClass.hashCode()
 
-  override def equals(other: Any): Boolean = other.isInstanceOf[DefaultSource]
+  override def equals(other: Any): Boolean = other.isInstanceOf[ParquetFileFormat]
 
   override def prepareWrite(
       sparkSession: SparkSession,
@@ -141,7 +142,7 @@ private[sql] class DefaultSource
     // Should we merge schemas from all Parquet part-files?
     val shouldMergeSchemas =
       parameters
-          .get(ParquetRelation.MERGE_SCHEMA)
+          .get(ParquetFileFormat.MERGE_SCHEMA)
           .map(_.toBoolean)
           .getOrElse(sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 
@@ -217,7 +218,7 @@ private[sql] class DefaultSource
             .orElse(filesByType.data.headOption)
             .toSeq
       }
-    ParquetRelation.mergeSchemasInParallel(filesToTouch, sparkSession)
+    ParquetFileFormat.mergeSchemasInParallel(filesToTouch, sparkSession)
   }
 
   case class FileTypes(
@@ -521,7 +522,8 @@ private[sql] class ParquetOutputWriter(
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
           val configuration = context.getConfiguration
-          val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+          val uniqueWriteJobId = configuration.get(
+            CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
           val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
@@ -543,7 +545,7 @@ private[sql] class ParquetOutputWriter(
   override def close(): Unit = recordWriter.close(context)
 }
 
-private[sql] object ParquetRelation extends Logging {
+private[sql] object ParquetFileFormat extends Logging {
   // Whether we should merge schemas collected from all Parquet part-files.
   private[sql] val MERGE_SCHEMA = "mergeSchema"
 
@@ -822,9 +824,9 @@ private[sql] object ParquetRelation extends Logging {
           if (footers.isEmpty) {
             Iterator.empty
           } else {
-            var mergedSchema = ParquetRelation.readSchemaFromFooter(footers.head, converter)
+            var mergedSchema = ParquetFileFormat.readSchemaFromFooter(footers.head, converter)
             footers.tail.foreach { footer =>
-              val schema = ParquetRelation.readSchemaFromFooter(footer, converter)
+              val schema = ParquetFileFormat.readSchemaFromFooter(footer, converter)
               try {
                 mergedSchema = mergedSchema.merge(schema)
               } catch { case cause: SparkException =>

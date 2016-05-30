@@ -639,7 +639,7 @@ class JDBCSuite extends SparkFunSuite
   test("test credentials in the properties are not in plan output") {
     val df = sql("SELECT * FROM parts")
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
-    spark.executePlan(explain).executedPlan.executeCollect().foreach {
+    spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
     }
     // test the JdbcRelation toString output
@@ -651,7 +651,7 @@ class JDBCSuite extends SparkFunSuite
   test("test credentials in the connection url are not in the plan output") {
     val df = spark.read.jdbc(urlWithUserAndPass, "TEST.PEOPLE", new Properties)
     val explain = ExplainCommand(df.queryExecution.logical, extended = true)
-    spark.executePlan(explain).executedPlan.executeCollect().foreach {
+    spark.sessionState.executePlan(explain).executedPlan.executeCollect().foreach {
       r => assert(!List("testPass", "testUser").exists(r.toString.contains))
     }
   }

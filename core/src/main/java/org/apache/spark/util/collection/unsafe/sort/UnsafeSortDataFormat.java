@@ -75,10 +75,10 @@ public final class UnsafeSortDataFormat
   public void copyRange(LongArray src, int srcPos, LongArray dst, int dstPos, int length) {
     Platform.copyMemory(
       src.getBaseObject(),
-      src.getBaseOffset() + srcPos * 16,
+      src.getBaseOffset() + srcPos * 16L,
       dst.getBaseObject(),
-      dst.getBaseOffset() + dstPos * 16,
-      length * 16);
+      dst.getBaseOffset() + dstPos * 16L,
+      length * 16L);
   }
 
   @Override

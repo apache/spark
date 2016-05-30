@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.sql.catalyst.plans.logical
 
 /**
- * Test cases where JDK8-compiled Scala user code is used with Spark.
+ * A logical node that represents a non-query command to be executed by the system.  For example,
+ * commands can be used by parsers to represent DDL operations.  Commands, unlike queries, are
+ * eagerly executed.
  */
-class JDK8ScalaSuite extends SparkFunSuite with SharedSparkContext {
-  test("basic RDD closure test (SPARK-6152)") {
-    sc.parallelize(1 to 1000).map(x => x * x).count()
-  }
-}
+trait Command

@@ -1304,7 +1304,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator: LongAccumulator = {
     val acc = new LongAccumulator
@@ -1313,7 +1313,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
@@ -1322,7 +1322,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator: DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -1331,7 +1331,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -2253,6 +2253,9 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       if (activeContext.get() == null) {
         setActiveContext(new SparkContext(config), allowMultipleContexts = false)
+      }
+      if (config.getAll.nonEmpty) {
+        logWarning("Use an existing SparkContext, some configuration may not take effect.")
       }
       activeContext.get()
     }

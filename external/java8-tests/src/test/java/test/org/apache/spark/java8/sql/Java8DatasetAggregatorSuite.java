@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.sources;
+package test.org.apache.spark.java8.sql;
 
 import java.util.Arrays;
 
@@ -26,6 +26,7 @@ import scala.Tuple2;
 import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.KeyValueGroupedDataset;
 import org.apache.spark.sql.expressions.javalang.typed;
+import test.org.apache.spark.sql.JavaDatasetAggregatorSuiteBase;
 
 /**
  * Suite that replicates tests in JavaDatasetAggregatorSuite using lambda syntax.
@@ -42,7 +43,7 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
   public void testTypedAggregationCount() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.count(v -> v));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 2), tuple2("b", 1)), agged.collectAsList());
+    Assert.assertEquals(Arrays.asList(tuple2("a", 2L), tuple2("b", 1L)), agged.collectAsList());
   }
 
   @Test
@@ -56,6 +57,6 @@ public class Java8DatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase 
   public void testTypedAggregationSumLong() {
     KeyValueGroupedDataset<String, Tuple2<String, Integer>> grouped = generateGroupedDataset();
     Dataset<Tuple2<String, Long>> agged = grouped.agg(typed.sumLong(v -> (long)v._2()));
-    Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
+    Assert.assertEquals(Arrays.asList(tuple2("a", 3L), tuple2("b", 3L)), agged.collectAsList());
   }
 }
