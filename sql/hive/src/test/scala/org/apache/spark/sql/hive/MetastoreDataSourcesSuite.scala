@@ -27,7 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  */
 class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
-  import hiveContext.implicits._
+  import spark.implicits._
 
   var jsonFilePath: String = _
 
@@ -548,7 +548,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }.getMessage.contains("Unable to infer schema"),
       "We should complain that path is not specified.")
 
-    sql("DROP TABLE createdJsonTable")
+    sql("DROP TABLE IF EXISTS createdJsonTable")
   }
 
   test("scan a parquet table created through a CTAS statement") {
@@ -700,7 +700,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
           val schema = StructType((1 to 5000).map(i => StructField(s"c_$i", StringType, true)))
 
           // Manually create a metastore data source table.
-          CreateDataSourceTableUtils.createDataSourceTable(
+          createDataSourceTable(
             sparkSession = spark,
             tableIdent = TableIdentifier("wide_schema"),
             userSpecifiedSchema = Some(schema),
@@ -737,8 +737,8 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
             "path" -> sessionState.catalog.hiveDefaultTableFilePath(TableIdentifier(tableName)))
         ),
         properties = Map(
-          "spark.sql.sources.provider" -> "json",
-          "spark.sql.sources.schema" -> schema.json,
+          DATASOURCE_PROVIDER -> "json",
+          DATASOURCE_SCHEMA -> schema.json,
           "EXTERNAL" -> "FALSE"))
 
       sharedState.externalCatalog.createTable("default", hiveTable, ignoreIfExists = false)
@@ -762,13 +762,13 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val metastoreTable = sharedState.externalCatalog.getTable("default", tableName)
       val expectedPartitionColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
 
-      val numPartCols = metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt
+      val numPartCols = metastoreTable.properties(DATASOURCE_SCHEMA_NUMPARTCOLS).toInt
       assert(numPartCols == 2)
 
       val actualPartitionColumns =
         StructType(
           (0 until numPartCols).map { index =>
-            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.partCol.$index"))
+            df.schema(metastoreTable.properties(s"$DATASOURCE_SCHEMA_PARTCOL_PREFIX$index"))
           })
       // Make sure partition columns are correctly stored in metastore.
       assert(
@@ -798,19 +798,19 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val expectedBucketByColumns = StructType(df.schema("d") :: df.schema("b") :: Nil)
       val expectedSortByColumns = StructType(df.schema("c") :: Nil)
 
-      val numBuckets = metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt
+      val numBuckets = metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETS).toInt
       assert(numBuckets == 8)
 
-      val numBucketCols = metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt
+      val numBucketCols = metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt
       assert(numBucketCols == 2)
 
-      val numSortCols = metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt
+      val numSortCols = metastoreTable.properties(DATASOURCE_SCHEMA_NUMSORTCOLS).toInt
       assert(numSortCols == 1)
 
       val actualBucketByColumns =
         StructType(
           (0 until numBucketCols).map { index =>
-            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.bucketCol.$index"))
+            df.schema(metastoreTable.properties(s"$DATASOURCE_SCHEMA_BUCKETCOL_PREFIX$index"))
           })
       // Make sure bucketBy columns are correctly stored in metastore.
       assert(
@@ -821,7 +821,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       val actualSortByColumns =
         StructType(
           (0 until numSortCols).map { index =>
-            df.schema(metastoreTable.properties(s"spark.sql.sources.schema.sortCol.$index"))
+            df.schema(metastoreTable.properties(s"$DATASOURCE_SCHEMA_SORTCOL_PREFIX$index"))
           })
       // Make sure sortBy columns are correctly stored in metastore.
       assert(
@@ -913,7 +913,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
     withTempDir { tempPath =>
       val schema = StructType((1 to 5).map(i => StructField(s"c_$i", StringType)))
 
-      CreateDataSourceTableUtils.createDataSourceTable(
+      createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("not_skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
@@ -928,7 +928,7 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       assert(sharedState.externalCatalog.getTable("default", "not_skip_hive_metadata").schema
         .forall(column => CatalystSqlParser.parseDataType(column.dataType) == StringType))
 
-      CreateDataSourceTableUtils.createDataSourceTable(
+      createDataSourceTable(
         sparkSession = spark,
         tableIdent = TableIdentifier("skip_hive_metadata"),
         userSpecifiedSchema = Some(schema),
@@ -960,10 +960,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         )
 
         val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
-        assert(metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt === 1)
-        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numBuckets"))
-        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numBucketCols"))
-        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numSortCols"))
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMPARTCOLS).toInt === 1)
+        assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMBUCKETS))
+        assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMBUCKETCOLS))
+        assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMSORTCOLS))
 
         checkAnswer(table("t"), Row(2, 1))
       }
@@ -984,10 +984,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         )
 
         val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
-        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numPartCols"))
-        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
-        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
-        assert(metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt === 1)
+        assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS))
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETS).toInt === 2)
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt === 1)
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMSORTCOLS).toInt === 1)
 
         checkAnswer(table("t"), Row(1, 2))
       }
@@ -1006,10 +1006,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         )
 
         val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
-        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numPartCols"))
-        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
-        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
-        assert(!metastoreTable.properties.contains("spark.sql.sources.schema.numSortCols"))
+        assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMPARTCOLS))
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETS).toInt === 2)
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt === 1)
+        assert(!metastoreTable.properties.contains(DATASOURCE_SCHEMA_NUMSORTCOLS))
 
         checkAnswer(table("t"), Row(1, 2))
       }
@@ -1031,10 +1031,10 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
         )
 
         val metastoreTable = sharedState.externalCatalog.getTable("default", "t")
-        assert(metastoreTable.properties("spark.sql.sources.schema.numPartCols").toInt === 1)
-        assert(metastoreTable.properties("spark.sql.sources.schema.numBuckets").toInt === 2)
-        assert(metastoreTable.properties("spark.sql.sources.schema.numBucketCols").toInt === 1)
-        assert(metastoreTable.properties("spark.sql.sources.schema.numSortCols").toInt === 1)
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMPARTCOLS).toInt === 1)
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETS).toInt === 2)
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMBUCKETCOLS).toInt === 1)
+        assert(metastoreTable.properties(DATASOURCE_SCHEMA_NUMSORTCOLS).toInt === 1)
 
         checkAnswer(table("t"), Row(2, 3, 1))
       }

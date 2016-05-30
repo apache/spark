@@ -70,16 +70,15 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext(
-    @transient override val sparkSession: TestHiveSparkSession,
-    isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) {
+    @transient override val sparkSession: TestHiveSparkSession)
+  extends SQLContext(sparkSession) {
 
   def this(sc: SparkContext) {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
+    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)))
   }
 
   override def newSession(): TestHiveContext = {
-    new TestHiveContext(sparkSession.newSession(), false)
+    new TestHiveContext(sparkSession.newSession())
   }
 
   override def sharedState: TestHiveSharedState = sparkSession.sharedState
