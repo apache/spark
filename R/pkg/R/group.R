@@ -131,12 +131,14 @@ methods <- c("avg", "max", "mean", "min", "sum")
 #' Pivot GroupedData column to expand unique values of this column into set of column named accordingly and perform
 #' aggregation. Same purpose as dcast in reshape2 or pivot table in Excel
 #' 
-#' @param x: a GroupedData object
-#' @param by: name of column to pivot data by
-#' @param values: a unique list of values that will be translated to columns in the output SparkDataFrame. 
+#' @param x a GroupedData object
+#' @param by name of column to pivot data by
+#' @param values a unique list of values that will be translated to columns in the output SparkDataFrame. 
 #' If not given it will be computed on the fly which will influence performance
 #' @return GroupedData object
 #' @rdname pivot
+#' @family agg
+#' @name pivot
 #' @export 
 #' @examples 
 #' \dontrun{
@@ -156,8 +158,8 @@ methods <- c("avg", "max", "mean", "min", "sum")
 
 setMethod("pivot",
           signature(x = "GroupedData"),
-          function(x, colname, values=NULL){
-              if (is.null(values)) {
+          function(x, colname, values=list()){
+              if (length(values) == 0) {
                   result <- SparkR:::callJMethod(x@sgd, "pivot", colname)
               }else {
                   stopifnot(length(values) == length(unique(values)))
