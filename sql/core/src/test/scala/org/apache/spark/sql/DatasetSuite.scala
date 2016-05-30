@@ -767,6 +767,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assertResult(Seq(ClassData("bar", 2))) {
       ds.filter(_.b > 1).collect().toSeq
     }
+  }
 
   test("transformed dataset correctly solve the attributes") {
     val dataset = Seq(1, 2, 3).toDS()
