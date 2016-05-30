@@ -1360,7 +1360,7 @@ test_that("pivot GroupedData column", {
         course = c("R", "Python", "R", "Python", "R", "Python", "R", "Python"),
         year = c(2013, 2013, 2014, 2014, 2015, 2015, 2016, 2016)
   )
-  SparkRdf <- createDataFrame(sqlContext, df)
+  SparkRdf <- createDataFrame(df)
   values <- list("R", "Python")
   sums <- collect(SparkR::summarize(pivot(groupBy(SparkRdf, "year"), "course", values),
                                     earnings_sum = sum(SparkRdf$earnings)) )
