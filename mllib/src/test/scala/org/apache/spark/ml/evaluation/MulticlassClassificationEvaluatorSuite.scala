@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.mllib.util.TestingUtils._
 
 class MulticlassClassificationEvaluatorSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -39,5 +40,52 @@ class MulticlassClassificationEvaluatorSuite
 
   test("should support all NumericType labels and not support other types") {
     MLTestingUtils.checkNumericTypes(new MulticlassClassificationEvaluator, spark)
+  }
+
+  test("Multiclass Classification Evaluator") {
+    val labelAndScores = spark.createDataFrame(Seq(
+      (0.0, 0.0),
+      (1.0, 1.0),
+      (2.0, 2.0),
+      (1.0, 2.0),
+      (0.0, 2.0))).toDF("label", "prediction")
+
+    /**
+     * Using the following Python code to evaluate metrics.
+     *
+     * > from sklearn.metrics import *
+     * > y_true = [0, 1, 2, 1, 0]
+     * > y_pred = [0, 1, 2, 2, 2]
+     * > f1 = f1_score(y_true, y_pred, average='weighted')
+     * > precision = precision_score(y_true, y_pred, average='micro')
+     * > recall = recall_score(y_true, y_pred, average='micro')
+     * > weighted_precision = precision_score(y_true, y_pred, average='weighted')
+     * > weighted_recall = recall_score(y_true, y_pred, average='weighted')
+     * > accuracy = accuracy_score(y_true, y_pred)
+     */
+
+    // default = weighted f1
+    val evaluator = new MulticlassClassificationEvaluator()
+    assert(evaluator.evaluate(labelAndScores) ~== 0.633333 absTol 0.01)
+
+    // micro precision
+    evaluator.setMetricName("precision")
+    assert(evaluator.evaluate(labelAndScores) ~== 0.6 absTol 0.01)
+
+    // micro recall
+    evaluator.setMetricName("recall")
+    assert(evaluator.evaluate(labelAndScores) ~== 0.6 absTol 0.01)
+
+    // weighted precision
+    evaluator.setMetricName("weightedPrecision")
+    assert(evaluator.evaluate(labelAndScores) ~== 0.866667 absTol 0.01)
+
+    // weighted recall
+    evaluator.setMetricName("weightedRecall")
+    assert(evaluator.evaluate(labelAndScores) ~== 0.6 absTol 0.01)
+
+    // accuracy
+    evaluator.setMetricName("accuracy")
+    assert(evaluator.evaluate(labelAndScores) ~== 0.6 absTol 0.01)
   }
 }
