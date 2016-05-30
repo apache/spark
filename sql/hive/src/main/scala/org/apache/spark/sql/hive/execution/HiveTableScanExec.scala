@@ -152,8 +152,9 @@ case class HiveTableScanExec(
       }
     }
     val numOutputRows = longMetric("numOutputRows")
+    val outputSchema = schema
     rdd.mapPartitionsInternal { iter =>
-      val proj = UnsafeProjection.create(schema)
+      val proj = UnsafeProjection.create(outputSchema)
       iter.map { r =>
         numOutputRows += 1
         proj(r)
