@@ -2346,29 +2346,22 @@ private[spark] class RedirectThread(
 private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
   var pos: Int = 0
   var isBufferFull = false
-  var buffer = new Array[Int](sizeInBytes)
+  var buffer = new Array[Byte](sizeInBytes)
 
-  def write(i: Int): Unit = {
-    buffer(pos) = i
+  def write(input: Int): Unit = {
+    buffer(pos) = input.toByte
     pos = (pos + 1) % buffer.length
     isBufferFull = isBufferFull || (pos == 0)
   }
-
+  
   override def toString: String = {
-    val (end, start) = buffer.splitAt(pos)
-    val input = new java.io.InputStream {
-      val iterator = (if (isBufferFull) start ++ end else end).iterator
+    val end = new String(buffer, 0, pos, StandardCharsets.UTF_8)
 
-      def read(): Int = if (iterator.hasNext) iterator.next() else -1
+    if (isBufferFull) {
+      val start = new String(buffer, pos, buffer.length - pos, StandardCharsets.UTF_8)
+      start + end
+    } else {
+      end
     }
-    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
-    val stringBuilder = new StringBuilder
-    var line = reader.readLine()
-    while (line != null) {
-      stringBuilder.append(line)
-      stringBuilder.append("\n")
-      line = reader.readLine()
-    }
-    stringBuilder.toString()
   }
 }

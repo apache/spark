@@ -686,9 +686,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     val stream = new java.io.PrintStream(buffer, true, "UTF-8")
 
     // scalastyle:off println
-    stream.println("test circular test circular test circular test circular test circular")
+    stream.print("test circular\n test circular\r test circular\n test circular\r test circular\n")
     // scalastyle:on println
-    assert(buffer.toString === "t circular test circular\n")
+    assert(buffer.toString === " circular\r test circular\n")
   }
 
   test("circular buffer: if the buffer isn't full, print only the contents written") {
@@ -699,9 +699,9 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(buffer.toString === "")
 
     // scalastyle:off println
-    stream.println("test")
+    stream.print("test")
     // scalastyle:on println
-    assert(buffer.toString === "test\n")
+    assert(buffer.toString === "test")
   }
 
   test("nanSafeCompareDoubles") {
