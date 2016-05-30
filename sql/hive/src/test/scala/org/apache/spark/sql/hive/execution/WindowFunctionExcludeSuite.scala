@@ -918,27 +918,27 @@ class WindowFunctionExcludeSuite extends QueryTest with SQLTestUtils with TestHi
           |select col1, col2, col3, sum(col2) over
           |(partition by col1 order by col3
           |range between unbounded preceding and current row exclude current row )
-          |from table2 where col1 < 20 order by col1
+          |from table2 where col1 < 20 order by col1, col2
         """.stripMargin),
       Seq(
+        Row(6, 7, 4, 21),
+        Row(6, 7, 8, 58),
+        Row(6, 9, 10, 77),
         Row(6, 10, 1, null),
         Row(6, 11, 4, 17),
-        Row(6, 7, 4, 21),
-        Row(6, 15, 8, 50),
-        Row(6, 15, 8, 50),
-        Row(6, 7, 8, 58),
         Row(6, 12, 10, 74),
-        Row(6, 9, 10, 77),
         Row(6, 13, 11, 86),
-        Row(7, 10, 1, null),
-        Row(7, 11, 4, 17),
+        Row(6, 15, 8, 50),
+        Row(6, 15, 8, 50),
         Row(7, 7, 4, 21),
         Row(7, 7, 8, 58),
-        Row(7, 15, 8, 50),
-        Row(7, 15, 8, 50),
         Row(7, 9, 10, 77),
+        Row(7, 10, 1, null),
+        Row(7, 11, 4, 17),
         Row(7, 12, 10, 74),
-        Row(7, 13, 11, 86)
+        Row(7, 13, 11, 86),
+        Row(7, 15, 8, 50),
+        Row(7, 15, 8, 50)
       )
     )
   }
