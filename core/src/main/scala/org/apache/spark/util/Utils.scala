@@ -2353,7 +2353,7 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
     pos = (pos + 1) % buffer.length
     isBufferFull = isBufferFull || (pos == 0)
   }
-  
+
   override def toString: String = {
     val end = new String(buffer, 0, pos, StandardCharsets.UTF_8)
 
