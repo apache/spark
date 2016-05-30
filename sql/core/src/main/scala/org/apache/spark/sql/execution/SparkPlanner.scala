@@ -44,8 +44,8 @@ class SparkPlanner(
       BasicOperators :: Nil)
 
   override protected def collectPlaceholders(plan: SparkPlan): Seq[(SparkPlan, LogicalPlan)] = {
-    plan.collect { case placeholder @ PlanLater(logicalPlan) =>
-      placeholder -> logicalPlan
+    plan.collect {
+      case placeholder @ PlanLater(logicalPlan) => placeholder -> logicalPlan
     }
   }
 
