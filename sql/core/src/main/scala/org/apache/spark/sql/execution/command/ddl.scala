@@ -293,7 +293,7 @@ case class AlterTableSerDePropertiesCommand(
     tableName: TableIdentifier,
     serdeClassName: Option[String],
     serdeProperties: Option[Map[String, String]],
-    partition: Option[Map[String, String]])
+    partSpec: Option[TablePartitionSpec])
   extends RunnableCommand {
 
   // should never happen if we parsed things correctly
@@ -306,15 +306,29 @@ case class AlterTableSerDePropertiesCommand(
       "ALTER TABLE SERDEPROPERTIES")
     val catalog = sparkSession.sessionState.catalog
     val table = catalog.getTableMetadata(tableName)
-    // Do not support setting serde for datasource tables
+    // For datasource tables, disallow setting serde or specifying partition
+    if (partSpec.isDefined && DDLUtils.isDatasourceTable(table)) {
+      throw new AnalysisException("Operation not allowed: ALTER TABLE SET " +
+        "[SERDE | SERDEPROPERTIES] for a specific partition is not supported " +
+        "for tables created with the datasource API")
+    }
     if (serdeClassName.isDefined && DDLUtils.isDatasourceTable(table)) {
       throw new AnalysisException("Operation not allowed: ALTER TABLE SET SERDE is " +
         "not supported for tables created with the datasource API")
     }
-    val newTable = table.withNewStorage(
-      serde = serdeClassName.orElse(table.storage.serde),
-      serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
-    catalog.alterTable(newTable)
+    if (partSpec.isEmpty) {
+      val newTable = table.withNewStorage(
+        serde = serdeClassName.orElse(table.storage.serde),
+        serdeProperties = table.storage.serdeProperties ++ serdeProperties.getOrElse(Map()))
+      catalog.alterTable(newTable)
+    } else {
+      val spec = partSpec.get
+      val part = catalog.getPartition(tableName, spec)
+      val newPart = part.copy(storage = part.storage.copy(
+        serde = serdeClassName.orElse(part.storage.serde),
+        serdeProperties = part.storage.serdeProperties ++ serdeProperties.getOrElse(Map())))
+      catalog.alterPartitions(tableName, Seq(newPart))
+    }
     Seq.empty[Row]
   }
 

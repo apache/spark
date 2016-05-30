@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.datasources
 
 import java.io.File
 
+import scala.language.reflectiveCalls
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.catalyst.util._
