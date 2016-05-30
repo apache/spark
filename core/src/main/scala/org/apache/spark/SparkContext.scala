@@ -2389,7 +2389,7 @@ object SparkContext extends Logging {
     if (sparkHome != null) {
       res.setSparkHome(sparkHome)
     }
-    if (jars != null && !jars.isEmpty) {
+    if (jars != null && jars.nonEmpty) {
       res.setJars(jars)
     }
     res.setExecutorEnv(environment.toSeq)

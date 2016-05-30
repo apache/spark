@@ -41,7 +41,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
- * The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
+ * The entry point for working with structured data (rows and columns) in Spark 1.x.
  *
  * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class
  * here for backward compatibility.

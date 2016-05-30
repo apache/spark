@@ -29,7 +29,7 @@ public abstract class ShuffleClient implements Closeable {
   public void init(String appId) { }
 
   /**
-   * Fetch a sequence of blocks from a remote node asynchronously,
+   * Fetches a sequence of blocks from a remote node asynchronously.
    *
    * Note that this API takes a sequence so the implementation can batch requests, and does not
    * return a future so the underlying implementation can invoke onBlockFetchSuccess as soon as

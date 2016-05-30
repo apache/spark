@@ -124,10 +124,12 @@ public class TaskMemoryManager {
   }
 
   /**
-   * Acquire N bytes of memory for a consumer. If there is no enough memory, it will call
-   * spill() of consumers to release more memory.
+   * Acquire {@code required} bytes of memory for a {@code consumer}.
+   * If there is not enough memory, it will call
+   * {@link MemoryConsumer#spill(long, MemoryConsumer)} on {@code consumers}
+   * (and if that is not enough even on the requesting {@code consumer}) to release more memory.
    *
-   * @return number of bytes successfully granted (<= N).
+   * @return number of bytes successfully granted (<= {@code required}).
    */
   public long acquireExecutionMemory(long required, MemoryConsumer consumer) {
     assert(required >= 0);
@@ -182,7 +184,7 @@ public class TaskMemoryManager {
       }
 
       consumers.add(consumer);
-      logger.debug("Task {} acquire {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
+      logger.debug("Task {} acquired {} for {}", taskAttemptId, Utils.bytesToString(got), consumer);
       return got;
     }
   }
