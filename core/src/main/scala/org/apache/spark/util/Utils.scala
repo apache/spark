@@ -2344,9 +2344,9 @@ private[spark] class RedirectThread(
  * the toString method.
  */
 private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
-  var pos: Int = 0
-  var isBufferFull = false
-  var buffer = new Array[Byte](sizeInBytes)
+  private var pos: Int = 0
+  private var isBufferFull = false
+  private val buffer = new Array[Byte](sizeInBytes)
 
   def write(input: Int): Unit = {
     buffer(pos) = input.toByte
@@ -2355,13 +2355,13 @@ private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.Ou
   }
 
   override def toString: String = {
-    val end = new String(buffer, 0, pos, StandardCharsets.UTF_8)
-
-    if (isBufferFull) {
-      val start = new String(buffer, pos, buffer.length - pos, StandardCharsets.UTF_8)
-      start + end
-    } else {
-      end
+    if (!isBufferFull) {
+      return new String(buffer, 0, pos, StandardCharsets.UTF_8)
     }
+
+    val nonCircularBuffer = new Array[Byte](sizeInBytes)
+    System.arraycopy(buffer, pos, nonCircularBuffer, 0, buffer.length - pos)
+    System.arraycopy(buffer, 0, nonCircularBuffer, buffer.length - pos, pos)
+    new String(nonCircularBuffer, StandardCharsets.UTF_8)
   }
 }
