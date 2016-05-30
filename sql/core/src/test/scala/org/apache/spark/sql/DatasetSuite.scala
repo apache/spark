@@ -706,7 +706,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val dataset = Seq(1, 2, 3).toDS()
     dataset.createOrReplaceTempView("tempView")
 
-    // Overrrides the existing temporary view with same name
+    // Overrides the existing temporary view with same name
     // No exception should be thrown here.
     dataset.createOrReplaceTempView("tempView")
 
@@ -768,6 +768,20 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         |""".stripMargin
 
     checkShowString(ds, expected)
+  }
+
+  test(
+    "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
+  ) {
+    val ds = Seq(1 -> "foo", 2 -> "bar").toDF("b", "a").as[ClassData]
+
+    assertResult(Seq(ClassData("foo", 1), ClassData("bar", 2))) {
+      ds.collect().toSeq
+    }
+
+    assertResult(Seq(ClassData("bar", 2))) {
+      ds.filter(_.b > 1).collect().toSeq
+    }
   }
 }
 
