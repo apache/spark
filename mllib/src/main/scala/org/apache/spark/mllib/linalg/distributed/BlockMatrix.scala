@@ -275,7 +275,7 @@ class BlockMatrix @Since("1.3.0") (
     val rows = blocks.flatMap { case ((blockRowIdx, blockColIdx), mat) =>
       mat.rowIter.zipWithIndex.map {
         case (vector, rowIdx) =>
-          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.toBreeze)
+          blockRowIdx * rowsPerBlock + rowIdx -> (blockColIdx, vector.asBreeze)
       }
     }.groupByKey().map { case (rowIdx, vectors) =>
       val numberNonZeroPerRow = vectors.map(_._2.activeSize).sum.toDouble / cols.toDouble
@@ -367,12 +367,12 @@ class BlockMatrix @Since("1.3.0") (
           }
           if (a.isEmpty) {
             val zeroBlock = BM.zeros[Double](b.head.numRows, b.head.numCols)
-            val result = binMap(zeroBlock, b.head.toBreeze)
+            val result = binMap(zeroBlock, b.head.asBreeze)
             new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           } else if (b.isEmpty) {
             new MatrixBlock((blockRowIndex, blockColIndex), a.head)
           } else {
-            val result = binMap(a.head.toBreeze, b.head.toBreeze)
+            val result = binMap(a.head.asBreeze, b.head.asBreeze)
             new MatrixBlock((blockRowIndex, blockColIndex), Matrices.fromBreeze(result))
           }
       }
@@ -479,7 +479,7 @@ class BlockMatrix @Since("1.3.0") (
               case _ =>
                 throw new SparkException(s"Unrecognized matrix type ${rightBlock.getClass}.")
             }
-            ((leftRowIndex, rightColIndex), C.toBreeze)
+            ((leftRowIndex, rightColIndex), C.asBreeze)
           }
         }
       }.reduceByKey(resultPartitioner, (a, b) => a + b).mapValues(Matrices.fromBreeze)

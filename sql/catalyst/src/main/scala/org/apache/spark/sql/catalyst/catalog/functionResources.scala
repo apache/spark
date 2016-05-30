@@ -26,7 +26,7 @@ object JarResource extends FunctionResourceType("jar")
 
 object FileResource extends FunctionResourceType("file")
 
-// We do not allow users to specify a archive because it is YARN specific.
+// We do not allow users to specify an archive because it is YARN specific.
 // When loading resources, we will throw an exception and ask users to
 // use --archive with spark submit.
 object ArchiveResource extends FunctionResourceType("archive")

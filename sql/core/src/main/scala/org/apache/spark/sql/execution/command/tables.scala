@@ -22,6 +22,9 @@ import java.net.URI
 import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
+
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -36,9 +39,9 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 case class CreateTableAsSelectLogicalPlan(
-  tableDesc: CatalogTable,
-  child: LogicalPlan,
-  allowExisting: Boolean) extends UnaryNode with Command {
+    tableDesc: CatalogTable,
+    child: LogicalPlan,
+    allowExisting: Boolean) extends UnaryNode with Command {
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
@@ -60,7 +63,7 @@ case class CreateTableAsSelectLogicalPlan(
  *   LIKE [other_db_name.]existing_table_name
  * }}}
  */
-case class CreateTableLike(
+case class CreateTableLikeCommand(
     targetTable: TableIdentifier,
     sourceTable: TableIdentifier,
     ifNotExists: Boolean) extends RunnableCommand {
@@ -112,9 +115,11 @@ case class CreateTableLike(
  *   [AS select_statement];
  * }}}
  */
-case class CreateTable(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
+case class CreateTableCommand(table: CatalogTable, ifNotExists: Boolean) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
+    DDLUtils.verifyTableProperties(table.properties.keys.toSeq, "CREATE TABLE")
+    DDLUtils.verifyTableProperties(table.storage.serdeProperties.keys.toSeq, "CREATE TABLE")
     sparkSession.sessionState.catalog.createTable(table, ifNotExists)
     Seq.empty[Row]
   }
@@ -131,7 +136,7 @@ case class CreateTable(table: CatalogTable, ifNotExists: Boolean) extends Runnab
  *    ALTER VIEW view1 RENAME TO view2;
  * }}}
  */
-case class AlterTableRename(
+case class AlterTableRenameCommand(
     oldName: TableIdentifier,
     newName: TableIdentifier,
     isView: Boolean)
@@ -156,7 +161,7 @@ case class AlterTableRename(
  *  [PARTITION (partcol1=val1, partcol2=val2 ...)]
  * }}}
  */
-case class LoadData(
+case class LoadDataCommand(
     table: TableIdentifier,
     path: String,
     isLocal: Boolean,
@@ -271,6 +276,83 @@ case class LoadData(
 }
 
 /**
+ * A command to truncate table.
+ *
+ * The syntax of this command is:
+ * {{{
+ *   TRUNCATE TABLE tablename [PARTITION (partcol1=val1, partcol2=val2 ...)]
+ * }}}
+ */
+case class TruncateTableCommand(
+    tableName: TableIdentifier,
+    partitionSpec: Option[TablePartitionSpec]) extends RunnableCommand {
+
+  override def run(spark: SparkSession): Seq[Row] = {
+    val catalog = spark.sessionState.catalog
+    if (!catalog.tableExists(tableName)) {
+      throw new AnalysisException(s"Table '$tableName' in TRUNCATE TABLE does not exist.")
+    }
+    if (catalog.isTemporaryTable(tableName)) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE on temporary tables: '$tableName'")
+    }
+    val table = catalog.getTableMetadata(tableName)
+    if (table.tableType == CatalogTableType.EXTERNAL) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE on external tables: '$tableName'")
+    }
+    if (table.tableType == CatalogTableType.VIEW) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE on views: '$tableName'")
+    }
+    val isDatasourceTable = DDLUtils.isDatasourceTable(table)
+    if (isDatasourceTable && partitionSpec.isDefined) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
+        s"for tables created using the data sources API: '$tableName'")
+    }
+    if (table.partitionColumnNames.isEmpty && partitionSpec.isDefined) {
+      throw new AnalysisException(
+        s"Operation not allowed: TRUNCATE TABLE ... PARTITION is not supported " +
+        s"for tables that are not partitioned: '$tableName'")
+    }
+    val locations =
+      if (isDatasourceTable || table.partitionColumnNames.isEmpty) {
+        Seq(table.storage.locationUri)
+      } else {
+        catalog.listPartitions(tableName, partitionSpec).map(_.storage.locationUri)
+      }
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    locations.foreach { location =>
+      if (location.isDefined) {
+        val path = new Path(location.get)
+        try {
+          val fs = path.getFileSystem(hadoopConf)
+          fs.delete(path, true)
+          fs.mkdirs(path)
+        } catch {
+          case NonFatal(e) =>
+            throw new AnalysisException(
+              s"Failed to truncate table '$tableName' when removing data of the path: $path " +
+                s"because of ${e.toString}")
+        }
+      }
+    }
+    // After deleting the data, invalidate the table to make sure we don't keep around a stale
+    // file relation in the metastore cache.
+    spark.sessionState.invalidateTable(tableName.unquotedString)
+    // Also try to drop the contents of the table from the columnar cache
+    try {
+      spark.sharedState.cacheManager.tryUncacheQuery(spark.table(tableName.quotedString))
+    } catch {
+      case NonFatal(e) =>
+        log.warn(s"Exception when attempting to uncache table '$tableName'", e)
+    }
+    Seq.empty[Row]
+  }
+}
+
+/**
  * Command that looks like
  * {{{
  *   DESCRIBE [EXTENDED|FORMATTED] table_name;
@@ -361,7 +443,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     table.properties.filterNot {
       // Hides schema properties that hold user-defined schema, partition columns, and bucketing
       // information since they are already extracted and shown in other parts.
-      case (key, _) => key.startsWith("spark.sql.sources.schema")
+      case (key, _) => key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA)
     }.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
@@ -391,16 +473,17 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
       append(buffer, "Sort Columns:", sortColumns.mkString("[", ", ", "]"), "")
     }
 
-    DDLUtils.getBucketSpecFromTableProperties(metadata).map { bucketSpec =>
-      appendBucketInfo(
-        bucketSpec.numBuckets,
-        bucketSpec.bucketColumnNames,
-        bucketSpec.sortColumnNames)
-    }.getOrElse {
-      appendBucketInfo(
-        metadata.numBuckets,
-        metadata.bucketColumnNames,
-        metadata.sortColumnNames)
+    DDLUtils.getBucketSpecFromTableProperties(metadata) match {
+      case Some(bucketSpec) =>
+        appendBucketInfo(
+          bucketSpec.numBuckets,
+          bucketSpec.bucketColumnNames,
+          bucketSpec.sortColumnNames)
+      case None =>
+        appendBucketInfo(
+          metadata.numBuckets,
+          metadata.bucketColumnNames,
+          metadata.sortColumnNames)
     }
   }
 
@@ -777,7 +860,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val props = metadata.properties
 
-    builder ++= s"USING ${props("spark.sql.sources.provider")}\n"
+    builder ++= s"USING ${props(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)}\n"
 
     val dataSourceOptions = metadata.storage.serdeProperties.filterNot {
       case (key, value) =>

@@ -109,7 +109,8 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
     Batch("Decimal Optimizations", fixedPoint,
       DecimalAggregates) ::
     Batch("Typed Filter Optimization", fixedPoint,
-      EmbedSerializerInFilter) ::
+      EmbedSerializerInFilter,
+      RemoveAliasOnlyProject) ::
     Batch("LocalRelation", fixedPoint,
       ConvertToLocalRelation) ::
     Batch("OptimizeCodegen", Once,
@@ -672,7 +673,7 @@ object FoldablePropagation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val foldableMap = AttributeMap(plan.flatMap {
       case Project(projectList, _) => projectList.collect {
-        case a: Alias if a.resolved && a.child.foldable => (a.toAttribute, a)
+        case a: Alias if a.child.foldable => (a.toAttribute, a)
       }
       case _ => Nil
     })
@@ -925,7 +926,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
         // If the first branch is a true literal, remove the entire CaseWhen and use the value
         // from that. Note that CaseWhen.branches should never be empty, and as a result the
-        // headOption (rather than head) added above is just a extra (and unnecessary) safeguard.
+        // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
     }
   }
@@ -1611,7 +1612,14 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
         val newCondition = condition transform {
           case a: Attribute if a == d.output.head => d.deserializer
         }
-        Filter(newCondition, d.child)
+        val filter = Filter(newCondition, d.child)
+
+        // Adds an extra Project here, to preserve the output expr id of `SerializeFromObject`.
+        // We will remove it later in RemoveAliasOnlyProject rule.
+        val objAttrs = filter.output.zip(s.output).map { case (fout, sout) =>
+          Alias(fout, fout.name)(exprId = sout.exprId)
+        }
+        Project(objAttrs, filter)
       }
   }
 }

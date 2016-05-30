@@ -110,7 +110,7 @@ def determine_modules_to_test(changed_modules):
     ['graphx', 'examples']
     >>> x = [x.name for x in determine_modules_to_test([modules.sql])]
     >>> x # doctest: +NORMALIZE_WHITESPACE
-    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver', 'hivecontext-compatibility',
+    ['sql', 'hive', 'mllib', 'examples', 'hive-thriftserver',
      'pyspark-sql', 'sparkr', 'pyspark-mllib', 'pyspark-ml']
     """
     modules_to_test = set()

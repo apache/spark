@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SQLTestUtils
  * A suite for testing view related functionality.
  */
 class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   override def beforeAll(): Unit = {
     // Create a simple table with two columns: id and id1

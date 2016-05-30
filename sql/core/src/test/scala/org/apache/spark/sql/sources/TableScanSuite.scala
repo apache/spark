@@ -38,7 +38,7 @@ class SimpleScanSource extends RelationProvider {
 case class SimpleScan(from: Int, to: Int)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(StructField("i", IntegerType, nullable = false) :: Nil)
@@ -70,7 +70,7 @@ case class AllDataTypesScan(
   extends BaseRelation
   with TableScan {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType = userSpecifiedSchema
 
@@ -106,7 +106,7 @@ case class AllDataTypesScan(
 }
 
 class TableScanSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   private lazy val tableWithSchemaExpected = (1 to 10).map { i =>
     Row(
@@ -241,7 +241,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       Nil
     )
 
-    assert(expectedSchema == caseInsensitiveContext.table("tableWithSchema").schema)
+    assert(expectedSchema == spark.table("tableWithSchema").schema)
 
     checkAnswer(
       sql(
@@ -297,7 +297,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
 
   test("Caching")  {
     // Cached Query Execution
-    caseInsensitiveContext.cacheTable("oneToTen")
+    spark.catalog.cacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"))
     checkAnswer(
       sql("SELECT * FROM oneToTen"),
@@ -325,7 +325,7 @@ class TableScanSuite extends DataSourceTest with SharedSQLContext {
       (2 to 10).map(i => Row(i, i - 1)).toSeq)
 
     // Verify uncaching
-    caseInsensitiveContext.uncacheTable("oneToTen")
+    spark.catalog.uncacheTable("oneToTen")
     assertCached(sql("SELECT * FROM oneToTen"), 0)
   }
 

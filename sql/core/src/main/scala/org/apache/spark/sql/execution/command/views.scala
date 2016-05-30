@@ -57,8 +57,12 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  require(tableDesc.tableType == CatalogTableType.VIEW)
-  require(tableDesc.viewText.isDefined)
+  require(tableDesc.tableType == CatalogTableType.VIEW,
+    "The type of the table to created with CREATE VIEW must be 'CatalogTableType.VIEW'.")
+  if (!isTemporary) {
+    require(tableDesc.viewText.isDefined,
+      "The table to created with CREATE VIEW must have 'viewText'.")
+  }
 
   if (allowExisting && replace) {
     throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")
@@ -79,7 +83,7 @@ case class CreateViewCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // If the plan cannot be analyzed, throw an exception and don't proceed.
-    val qe = sparkSession.executePlan(child)
+    val qe = sparkSession.sessionState.executePlan(child)
     qe.assertAnalyzed()
     val analyzedPlan = qe.analyzed
 
@@ -132,7 +136,7 @@ case class CreateViewCommand(
         val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
           case (attr, col) => Alias(attr, col.name)()
         }
-        sparkSession.executePlan(Project(projectList, analyzedPlan)).analyzed
+        sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
       }
     }
 
@@ -153,7 +157,7 @@ case class CreateViewCommand(
             val projectList = analyzedPlan.output.zip(tableDesc.schema).map {
               case (attr, col) => Alias(attr, col.name)()
             }
-            sparkSession.executePlan(Project(projectList, analyzedPlan)).analyzed
+            sparkSession.sessionState.executePlan(Project(projectList, analyzedPlan)).analyzed
           }
         new SQLBuilder(logicalPlan).toSQL
       } else {
