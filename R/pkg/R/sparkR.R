@@ -114,6 +114,19 @@ sparkR.init <- function(
   sparkExecutorEnv = list(),
   sparkJars = "",
   sparkPackages = "") {
+  .Deprecated("sparkR.session.getOrCreate")
+  sparkR.sparkContext(master, appName, sparkHome, sparkEnvir, sparkExecutorEnv, sparkJars,
+     sparkPackages)
+}
+
+sparkR.sparkContext <- function(
+  master = "",
+  appName = "SparkR",
+  sparkHome = Sys.getenv("SPARK_HOME"),
+  sparkEnvir = list(),
+  sparkExecutorEnv = list(),
+  sparkJars = "",
+  sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat(paste("Re-using existing Spark Context.",
@@ -239,21 +252,22 @@ sparkR.init <- function(
 #'}
 
 sparkRSQL.init <- function(jsc = NULL) {
-  if (exists(".sparkRSQLsc", envir = .sparkREnv)) {
-    return(get(".sparkRSQLsc", envir = .sparkREnv))
+  .Deprecated("sparkR.session.getOrCreate")
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    return(get(".sparkRsession", envir = .sparkREnv))
   }
 
   # If jsc is NULL, create a Spark Context
   sc <- if (is.null(jsc)) {
-    sparkR.init()
+    sparkR.sparkContext()
   } else {
     jsc
   }
-
   sqlContext <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                             "createSQLContext",
                             sc)
-  assign(".sparkRSQLsc", sqlContext, envir = .sparkREnv)
+  assign(".sparkRsession", sqlContext, envir = .sparkREnv)
   sqlContext
 }
 
@@ -270,13 +284,15 @@ sparkRSQL.init <- function(jsc = NULL) {
 #'}
 
 sparkRHive.init <- function(jsc = NULL) {
-  if (exists(".sparkRHivesc", envir = .sparkREnv)) {
-    return(get(".sparkRHivesc", envir = .sparkREnv))
+  .Deprecated("sparkR.session.getOrCreate")
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    return(get(".sparkRsession", envir = .sparkREnv))
   }
 
   # If jsc is NULL, create a Spark Context
   sc <- if (is.null(jsc)) {
-    sparkR.init()
+    sparkR.sparkContext()
   } else {
     jsc
   }
@@ -289,8 +305,43 @@ sparkRHive.init <- function(jsc = NULL) {
     stop("Spark SQL is not built with Hive support")
   })
 
-  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  assign(".sparkRsession", hiveCtx, envir = .sparkREnv)
   hiveCtx
+}
+
+#' Get the existing SparkSession or initialize a new SparkSession.
+#'
+#' @export
+#' @examples
+#'\dontrun{
+#' sparkR.session.getOrCreate()
+#' df <- read.json(path)
+#'}
+#' @note since 2.0.0
+
+sparkR.session.getOrCreate <- function(
+  master = "",
+  appName = "SparkR",
+  sparkHome = Sys.getenv("SPARK_HOME"),
+  sparkConfig = list(),
+  sparkExecutorEnv = list(),
+  sparkJars = "",
+  sparkPackages = "",
+  ...) {
+
+  if (!exists(".sparkRjsc", envir = .sparkREnv)) {
+    sparkR.sparkContext(master, appName, sparkHome, sparkEnvir, sparkExecutorEnv, sparkJars,
+       sparkPackages)
+  }
+
+  if (exists(".sparkRsession", envir = .sparkREnv)) {
+    sparkSession <- get(".sparkRsession", envir = .sparkREnv)
+    # TODO: apply config
+  } else {
+    sparkSession <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getOrCreateSparkSession")
+    assign(".sparkRsession", sparkSession, envir = .sparkREnv)
+  }
+  sparkSession
 }
 
 #' Assigns a group ID to all the jobs started by this thread until the group ID is set to a

@@ -26,12 +26,21 @@ import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.api.r.SerDe
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, RelationalGroupedDataset, Row, SaveMode, SQLContext}
+import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions.GenericRowWithSchema
+import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.types._
 
 private[sql] object SQLUtils {
   SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
+
+  def getOrCreateSparkSession(jsc: JavaSparkContext): SparkSession = {
+    if (SparkSession.hiveClassesArePresent) {
+      SparkSession.builder().sparkContext(HiveUtils.withHiveExternalCatalog(jsc.sc)).getOrCreate()
+    } else {
+      SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
+    }
+  }
 
   def createSQLContext(jsc: JavaSparkContext): SQLContext = {
     SQLContext.getOrCreate(jsc.sc)
