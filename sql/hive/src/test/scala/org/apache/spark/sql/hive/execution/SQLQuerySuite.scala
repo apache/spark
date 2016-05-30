@@ -1549,9 +1549,21 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
         |SELECT 'blarr'
       """.stripMargin)
+
+    // project list is the same order of paritioning columns in table definition
     checkAnswer(
       sql("SELECT p1, p2, p3, p4, p5, c1 FROM table_with_partition"),
       Row("a", "b", "c", "d", "e", "blarr") :: Nil)
+
+    // project list does not have the same order of paritioning columns in table definition
+    checkAnswer(
+      sql("SELECT p2, p3, p4, p1, p5, c1 FROM table_with_partition"),
+      Row("b", "c", "d", "a", "e", "blarr") :: Nil)
+
+    // project list contains partial partition columns in table definition
+    checkAnswer(
+      sql("SELECT p2, p1, p5, c1 FROM table_with_partition"),
+      Row("b", "a", "e", "blarr") :: Nil)
   }
 
   test("SPARK-14981: DESC not supported for sorting columns") {
