@@ -83,6 +83,6 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   /** Collects placeholders marked as [[planLater]] by strategy and its [[LogicalPlan]]s */
   protected def collectPlaceholders(plan: PhysicalPlan): Seq[(PhysicalPlan, LogicalPlan)]
 
-  /** Prunes bad plans to prevent from combinatorial explosion. */
+  /** Prunes bad plans to prevent combinatorial explosion. */
   protected def prunePlans(plans: Iterator[PhysicalPlan]): Iterator[PhysicalPlan]
 }
