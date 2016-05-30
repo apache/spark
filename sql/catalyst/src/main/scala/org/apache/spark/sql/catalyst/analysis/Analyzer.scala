@@ -524,6 +524,10 @@ class Analyzer(
           val newVersion = oldVersion.newInstance()
           (oldVersion, newVersion)
 
+        case oldVersion: SerializeFromObject
+            if oldVersion.outputSet.intersect(conflictingAttributes).nonEmpty =>
+          (oldVersion, oldVersion.copy(serializer = oldVersion.serializer.map(_.newInstance())))
+
         // Handle projects that create conflicting aliases.
         case oldVersion @ Project(projectList, _)
             if findAliases(projectList).intersect(conflictingAttributes).nonEmpty =>
