@@ -1537,6 +1537,24 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(fs.exists(path), "This is an external table, so the data should not have been dropped")
   }
 
+  test("select partitioned table") {
+    sql(
+      s"""
+         |CREATE TABLE table_with_partition(c1 string)
+         |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+       """.stripMargin
+    )
+    sql(
+      """
+        |INSERT OVERWRITE TABLE table_with_partition
+        |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+        |SELECT 'blarr'
+      """. stripMargin)
+    checkAnswer(
+      sql("SELECT p1, p2, p3, p4, p5, c1 FROM table_with_partition"),
+      Row("a", "b", "c", "d", "e", "blarr") :: Nil)
+  }
+
   test("SPARK-14981: DESC not supported for sorting columns") {
     withTable("t") {
       val cause = intercept[ParseException] {
