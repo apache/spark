@@ -63,7 +63,7 @@ computeHelper <- function(mode, partition, serializer, deserializer, key,
   }
 
   # Computation time
-  computeElap <- elapsedSecs()
+  computeElap <- SparkR:::elapsedSecs()
 
   if (serializer == "byte") {
     SparkR:::writeRawSerialize(outputCon, output)
