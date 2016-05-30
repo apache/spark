@@ -62,10 +62,8 @@ computeHelper <- function(mode, partition, serializer, deserializer, key,
     output <- computeFunc(partition, inputData)
   }
 
-  # Timing computing
-  # TODO calling elapsedSecs() function directly, makes the test cases and stylecheck
-  # to fail
-  computeElap <- proc.time()[3]
+  # Computation time
+  computeElap <- elapsedSecs()
 
   if (serializer == "byte") {
     SparkR:::writeRawSerialize(outputCon, output)
