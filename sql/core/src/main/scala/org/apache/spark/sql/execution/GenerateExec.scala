@@ -113,7 +113,7 @@ case class GenerateExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     boundGenerator match {
-      case e: Explode => codegenExplode(e, ctx, input, row)
+      case e: Explode => codegenExplode(e.child, ctx, input, row)
     }
   }
 
@@ -151,7 +151,7 @@ case class GenerateExec(
         ExprCode(s"$javaType $value = $getter;", "false", value)
       }
     }
-    val values = e.child.dataType match {
+    val values = e.dataType match {
       case ArrayType(dataType, nullable) =>
         // Add unwrapping here for tuples.
         Seq(accessor("", "col", dataType, nullable))
