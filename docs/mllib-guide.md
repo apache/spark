@@ -142,9 +142,9 @@ Changes of behavior:
 * [SPARK-10574](https://issues.apache.org/jira/browse/SPARK-10574):
  `HashingTF` uses `MurmurHash3` as default hash algorithm in both `spark.ml` and `spark.mllib`.
 * [SPARK-14768](https://issues.apache.org/jira/browse/SPARK-14768):
- We remove `expectedType` argument for PySpark `Param`.
+ The `expectedType` argument for PySpark `Param` was removed.
 * [SPARK-14931](https://issues.apache.org/jira/browse/SPARK-14931):
- We change some default `Param` values which were mismatched between pipelines in Scala and Python.
+ Some default `Param` values, which were mismatched between pipelines in Scala and Python, have been changed.
 * [SPARK-13600](https://issues.apache.org/jira/browse/SPARK-13600):
  `QuantileDiscretizer` now uses `spark.sql.DataFrameStatFunctions.approxQuantile` to find splits (previously used custom sampling logic).
  The output buckets will differ for same input data and params.
