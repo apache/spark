@@ -54,7 +54,7 @@ function makeIdNumeric(id) {
 }
 
 function formatDate(date) {
-  if (date <= 0) return "n/a";
+  if (date <= 0) return "-";
   else return date.split(".")[0].replace("T", " ");
 }
 
