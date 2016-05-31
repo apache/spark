@@ -67,6 +67,28 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       TableIdentifier("tmp"), ignoreIfNotExists = true)
   }
 
+  test("drop cache on overwrite") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("overwrite").parquet(path)
+      val df = sqlContext.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      sqlContext.range(10).write.mode("overwrite").parquet(path)
+      assert(sqlContext.read.parquet(path).count() == 10)
+    }
+  }
+
+  test("drop cache on append") {
+    withTempDir { dir =>
+      val path = dir.toString
+      spark.range(1000).write.mode("append").parquet(path)
+      val df = sqlContext.read.parquet(path).cache()
+      assert(df.count() == 1000)
+      sqlContext.range(10).write.mode("append").parquet(path)
+      assert(sqlContext.read.parquet(path).count() == 1010)
+    }
+  }
+
   test("self-join") {
     // 4 rows, cells of column 1 of row 2 and row 4 are null
     val data = (1 to 4).map { i =>

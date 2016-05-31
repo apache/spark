@@ -91,8 +91,12 @@ private[sql] case class InsertIntoHadoopFsRelationCommand(
           throw new IOException(s"Unable to clear output " +
             s"directory $qualifiedOutputPath prior to writing to it")
         }
+        // Invalidate all caches with this in path
+        sparkSession.sharedState.cacheManager.invalidateCachedPath(fs, qualifiedOutputPath)
         true
       case (SaveMode.Append, _) | (SaveMode.Overwrite, _) | (SaveMode.ErrorIfExists, false) =>
+        // Invalidate all caches with this in path
+      sparkSession.sharedState.cacheManager.invalidateCachedPath(fs, qualifiedOutputPath)
         true
       case (SaveMode.Ignore, exists) =>
         !exists
