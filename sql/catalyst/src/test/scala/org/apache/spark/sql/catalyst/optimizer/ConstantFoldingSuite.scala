@@ -33,8 +33,8 @@ class ConstantFoldingSuite extends PlanTest {
     val batches =
       Batch("AnalysisNodes", Once,
         EliminateSubqueryAliases) ::
-      Batch("ConstantFolding", FixedPoint(10),
-        OptimizeIn(SimpleCatalystConf(caseSensitiveAnalysis = true)),
+      Batch("ConstantFolding", Once,
+        OptimizeIn(SimpleCatalystConf(true)),
         ConstantFolding,
         BooleanSimplification) :: Nil
   }
@@ -104,8 +104,8 @@ class ConstantFoldingSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select(
-          'a + Literal(5) as Symbol("c1"),
-          'a + Literal(5) as Symbol("c2"),
+          Literal(5) + 'a as Symbol("c1"),
+          'a + Literal(2) + Literal(3) as Symbol("c2"),
           Literal(2) * 'a + Literal(4) as Symbol("c3"),
           'a * Literal(7) as Symbol("c4"))
         .analyze
@@ -149,7 +149,7 @@ class ConstantFoldingSuite extends PlanTest {
     val correctAnswer =
       testRelation
         .select(
-          'a + 5 as Symbol("c1"),
+          Literal(5) + 'a as Symbol("c1"),
           Literal(3) as Symbol("c2"))
         .analyze
 
@@ -260,24 +260,6 @@ class ConstantFoldingSuite extends PlanTest {
       testRelation
         .select('a)
         .where(Literal(true))
-        .analyze
-
-    comparePlans(optimized, correctAnswer)
-  }
-
-  test("Constant folding test: associative property") {
-    val originalQuery =
-      testRelation
-        .select((Literal(3) + ((Literal(1) + 'a) + 2)) + 4, 'b * 2 * 3 * 4, 'a + 1 + 'b + 2)
-
-    val optimized = Optimize.execute(originalQuery.analyze)
-
-    val correctAnswer =
-      testRelation
-        .select(
-          ('a + 10).as("((3 + ((1 + a) + 2)) + 4)"),
-          ('b * 24).as("(((b * 2) * 3) * 4)"),
-          ('a + 'b + 3).as("(((a + 1) + b) + 2)"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

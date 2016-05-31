@@ -94,6 +94,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
+      ReorderAssociativeOperator,
       LikeSimplification,
       BooleanSimplification,
       SimplifyConditionals,
@@ -738,10 +739,9 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
 }
 
 /**
- * Replaces [[Expression Expressions]] that can be statically evaluated with
- * equivalent [[Literal]] values.
+ * Reorder associative integral-type operators and fold all constants into one.
  */
-object ConstantFolding extends Rule[LogicalPlan] {
+object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def isAssociativelyFoldable(e: Expression): Boolean =
     e.isInstanceOf[BinaryArithmetic] &&
       e.dataType.isInstanceOf[IntegralType] &&
@@ -761,15 +761,6 @@ object ConstantFolding extends Rule[LogicalPlan] {
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
-      // Skip redundant folding of literals. This rule is technically not necessary. Placing this
-      // here avoids running the next rule for Literal values, which would create a new Literal
-      // object and running eval unnecessarily.
-      case l: Literal => l
-
-      // Fold expressions that are foldable.
-      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
-
-      // Use associative property for integral type
       case e if isAssociativelyFoldable(e) =>
         val (foldables, others) = getOperandList(e).partition(_.foldable)
         if (foldables.size > 1) {
@@ -777,16 +768,34 @@ object ConstantFolding extends Rule[LogicalPlan] {
             case a: Add =>
               val foldableExpr = foldables.reduce((x, y) => Add(x, y))
               val c = Literal.create(foldableExpr.eval(EmptyRow), e.dataType)
-              Add(others.reduce((x, y) => Add(x, y)), c)
+              if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
             case m: Multiply =>
               val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
               val c = Literal.create(foldableExpr.eval(EmptyRow), e.dataType)
-              Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+              if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
             case _ => e
           }
         } else {
           e
         }
+    }
+  }
+}
+
+/**
+ * Replaces [[Expression Expressions]] that can be statically evaluated with
+ * equivalent [[Literal]] values.
+ */
+object ConstantFolding extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      // Skip redundant folding of literals. This rule is technically not necessary. Placing this
+      // here avoids running the next rule for Literal values, which would create a new Literal
+      // object and running eval unnecessarily.
+      case l: Literal => l
+
+      // Fold expressions that are foldable.
+      case e if e.foldable => Literal.create(e.eval(EmptyRow), e.dataType)
     }
   }
 }
