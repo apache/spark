@@ -173,7 +173,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         query.processAllAvailable()
       }
 
-      val outputDf = sqlContext.read.parquet(outputDir)
+      val outputDf = spark.read.parquet(outputDir)
       val expectedSchema = new StructType()
         .add(StructField("value", IntegerType))
         .add(StructField("id", IntegerType))

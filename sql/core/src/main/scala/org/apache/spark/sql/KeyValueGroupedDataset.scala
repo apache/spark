@@ -29,8 +29,8 @@ import org.apache.spark.sql.execution.QueryExecution
 /**
  * :: Experimental ::
  * A [[Dataset]] has been logically grouped by a user specified grouping key.  Users should not
- * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupBy` on an existing
- * [[Dataset]].
+ * construct a [[KeyValueGroupedDataset]] directly, but should instead call `groupByKey` on
+ * an existing [[Dataset]].
  *
  * @since 2.0.0
  */
@@ -73,7 +73,8 @@ class KeyValueGroupedDataset[K, V] private[sql](
       groupingAttributes)
 
   /**
-   * Returns a [[Dataset]] that contains each unique key.
+   * Returns a [[Dataset]] that contains each unique key. This is equivalent to doing mapping
+   * over the Dataset to extract the keys and then running a distinct operation on those.
    *
    * @since 1.6.0
    */
@@ -204,7 +205,6 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * Internal helper function for building typed aggregations that return tuples.  For simplicity
    * and code reuse, we do this without the help of the type system and then use helper functions
    * that cast appropriately for the user facing interface.
-   * TODO: does not handle aggregations that return nonflat results,
    */
   protected def aggUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)

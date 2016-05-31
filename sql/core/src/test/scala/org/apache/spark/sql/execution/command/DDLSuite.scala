@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFor
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
-import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils.DATASOURCE_PREFIX
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils._
 import org.apache.spark.sql.execution.datasources.BucketSpec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -132,7 +132,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         sql(s"CREATE DATABASE db2")
         val pathInCatalog = new Path(catalog.getDatabaseMetadata("db2").locationUri).toUri
         assert("file" === pathInCatalog.getScheme)
-        val expectedPath = appendTrailingSlash(sqlContext.conf.warehousePath) + "db2.db"
+        val expectedPath = appendTrailingSlash(spark.sessionState.conf.warehousePath) + "db2.db"
         assert(expectedPath === pathInCatalog.getPath)
       }
 
@@ -145,7 +145,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
 
         databaseNames.foreach { dbName =>
@@ -171,8 +171,33 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     }
   }
 
+  test("Create Database using Default Warehouse Path") {
+    withSQLConf(SQLConf.WAREHOUSE_PATH.key -> "") {
+      // Will use the default location if and only if we unset the conf
+      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
+      val catalog = spark.sessionState.catalog
+      val dbName = "db1"
+      try {
+        sql(s"CREATE DATABASE $dbName")
+        val db1 = catalog.getDatabaseMetadata(dbName)
+        val expectedLocation =
+          "file:" + appendTrailingSlash(System.getProperty("user.dir")) +
+            s"spark-warehouse/$dbName.db"
+        assert(db1 == CatalogDatabase(
+          dbName,
+          "",
+          expectedLocation,
+          Map.empty))
+        sql(s"DROP DATABASE $dbName CASCADE")
+        assert(!catalog.databaseExists(dbName))
+      } finally {
+        catalog.reset()
+      }
+    }
+  }
+
   test("Create/Drop Database - location") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val databaseNames = Seq("db1", "`database`")
     withTempDir { tmpDir =>
       val path = tmpDir.toString
@@ -200,7 +225,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
 
         databaseNames.foreach { dbName =>
@@ -231,7 +256,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     withTempDir { tmpDir =>
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val databaseNames = Seq("db1", "`database`")
 
         databaseNames.foreach { dbName =>
@@ -300,7 +325,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("drop non-empty database in restrict mode") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val dbName = "db1"
     sql(s"CREATE DATABASE $dbName")
 
@@ -322,7 +347,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("drop non-empty database in cascade mode") {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val dbName = "db1"
     sql(s"CREATE DATABASE $dbName")
 
@@ -362,7 +387,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.schema == Seq(CatalogColumn("a", "int"), CatalogColumn("b", "int")))
-      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
     }
   }
 
@@ -373,7 +398,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
-      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
         Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
       assert(DDLUtils.getPartitionColumnsFromTableProperties(table) ==
@@ -389,7 +414,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       val table = catalog.getTableMetadata(TableIdentifier("tbl"))
       assert(table.tableType == CatalogTableType.MANAGED)
       assert(table.schema.isEmpty) // partitioned datasource table is not hive-compatible
-      assert(table.properties("spark.sql.sources.provider") == "parquet")
+      assert(table.properties(DATASOURCE_PROVIDER) == "parquet")
       assert(DDLUtils.getSchemaFromTableProperties(table) ==
         Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
@@ -441,7 +466,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         "RENAME TEMPORARY TABLE from '`tab1`' to '`default`.`tab2`': " +
           "cannot specify database name 'default' in the destination table"))
 
-      val catalog = sqlContext.sessionState.catalog
+      val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1")))
     }
   }
@@ -476,7 +501,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       assert(e.getMessage.contains(
         "RENAME TEMPORARY TABLE from '`tab1`' to '`tab2`': destination table already exists"))
 
-      val catalog = sqlContext.sessionState.catalog
+      val catalog = spark.sessionState.catalog
       assert(catalog.listTables("default") == Seq(TableIdentifier("tab1"), TableIdentifier("tab2")))
     }
   }
@@ -511,6 +536,14 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   test("alter table: set serde (datasource table)") {
     testSetSerde(isDatasourceTable = true)
+  }
+
+  test("alter table: set serde partition") {
+    testSetSerdePartition(isDatasourceTable = false)
+  }
+
+  test("alter table: set serde partition (datasource table)") {
+    testSetSerdePartition(isDatasourceTable = true)
   }
 
   test("alter table: bucketing is not supported") {
@@ -722,7 +755,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       catalog: SessionCatalog,
       tableIdent: TableIdentifier): Unit = {
     catalog.alterTable(catalog.getTableMetadata(tableIdent).copy(
-      properties = Map("spark.sql.sources.provider" -> "csv")))
+      properties = Map(DATASOURCE_PROVIDER -> "csv")))
   }
 
   private def testSetProperties(isDatasourceTable: Boolean): Unit = {
@@ -904,6 +937,62 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       sql(s"ALTER TABLE tab1 SET SERDEPROPERTIES ('${DATASOURCE_PREFIX}foo'='wah')")
     }
     assert(e.getMessage.contains(DATASOURCE_PREFIX + "foo"))
+  }
+
+  private def testSetSerdePartition(isDatasourceTable: Boolean): Unit = {
+    val catalog = spark.sessionState.catalog
+    val tableIdent = TableIdentifier("tab1", Some("dbx"))
+    val spec = Map("a" -> "1", "b" -> "2")
+    createDatabase(catalog, "dbx")
+    createTable(catalog, tableIdent)
+    createTablePartition(catalog, spec, tableIdent)
+    createTablePartition(catalog, Map("a" -> "1", "b" -> "3"), tableIdent)
+    createTablePartition(catalog, Map("a" -> "2", "b" -> "2"), tableIdent)
+    createTablePartition(catalog, Map("a" -> "2", "b" -> "3"), tableIdent)
+    if (isDatasourceTable) {
+      convertToDatasourceTable(catalog, tableIdent)
+    }
+    assert(catalog.getPartition(tableIdent, spec).storage.serde.isEmpty)
+    assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties.isEmpty)
+    // set table serde and/or properties (should fail on datasource tables)
+    if (isDatasourceTable) {
+      val e1 = intercept[AnalysisException] {
+        sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'whatever'")
+      }
+      val e2 = intercept[AnalysisException] {
+        sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
+          "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+      }
+      assert(e1.getMessage.contains("datasource"))
+      assert(e2.getMessage.contains("datasource"))
+    } else {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'org.apache.jadoop'")
+      assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.jadoop"))
+      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties.isEmpty)
+      sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) SET SERDE 'org.apache.madoop' " +
+        "WITH SERDEPROPERTIES ('k' = 'v', 'kay' = 'vee')")
+      assert(catalog.getPartition(tableIdent, spec).storage.serde == Some("org.apache.madoop"))
+      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+        Map("k" -> "v", "kay" -> "vee"))
+    }
+    // set serde properties only
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE dbx.tab1 PARTITION (a=1, b=2) " +
+        "SET SERDEPROPERTIES ('k' = 'vvv', 'kay' = 'vee')")
+      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+        Map("k" -> "vvv", "kay" -> "vee"))
+    }
+    // set things without explicitly specifying database
+    catalog.setCurrentDatabase("dbx")
+    maybeWrapException(isDatasourceTable) {
+      sql("ALTER TABLE tab1 PARTITION (a=1, b=2) SET SERDEPROPERTIES ('kay' = 'veee')")
+      assert(catalog.getPartition(tableIdent, spec).storage.serdeProperties ==
+        Map("k" -> "vvv", "kay" -> "veee"))
+    }
+    // table to alter does not exist
+    intercept[AnalysisException] {
+      sql("ALTER TABLE does_not_exist SET SERDEPROPERTIES ('x' = 'y')")
+    }
   }
 
   private def testAddPartitions(isDatasourceTable: Boolean): Unit = {

@@ -365,7 +365,8 @@ class ExpressionEncoderSuite extends PlanTest with AnalysisTest {
           Arrays.deepEquals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
         case (b1: Array[_], b2: Array[_]) =>
           Arrays.equals(b1.asInstanceOf[Array[AnyRef]], b2.asInstanceOf[Array[AnyRef]])
-        case (left: Comparable[Any], right: Comparable[Any]) => left.compareTo(right) == 0
+        case (left: Comparable[_], right: Comparable[_]) =>
+          left.asInstanceOf[Comparable[Any]].compareTo(right) == 0
         case _ => input == convertedBack
       }
 

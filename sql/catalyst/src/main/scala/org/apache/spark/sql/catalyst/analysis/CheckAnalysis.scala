@@ -215,7 +215,7 @@ trait CheckAnalysis extends PredicateHelper {
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
-                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"because its data type ${expr.dataType.simpleString} is not an orderable " +
                     s"data type.")
               }
 

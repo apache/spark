@@ -301,8 +301,8 @@ object GradientDescent extends Logging {
       currentWeights: Vector,
       convergenceTol: Double): Boolean = {
     // To compare with convergence tolerance.
-    val previousBDV = previousWeights.toBreeze.toDenseVector
-    val currentBDV = currentWeights.toBreeze.toDenseVector
+    val previousBDV = previousWeights.asBreeze.toDenseVector
+    val currentBDV = currentWeights.asBreeze.toDenseVector
 
     // This represents the difference of updated weights in the iteration.
     val solutionVecDiff: Double = norm(previousBDV - currentBDV)
