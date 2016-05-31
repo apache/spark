@@ -336,7 +336,7 @@ trait FileCatalog {
 
 
 /**
- * Helper methods for gathering metadata from HDFS.
+ * Helper methods for gathering metadata in hadoop-related files.
  */
 private[sql] object HadoopFsRelation extends Logging {
 
@@ -463,7 +463,8 @@ private[sql] object HadoopFsRelation extends Logging {
     mutable.LinkedHashSet(hadoopFakeStatuses: _*)
   }
 
-  def isFilesSplittable(files: Seq[FileStatus], conf: Configuration): Boolean = {
+  // Return true iff all the input files can be split by `LineRecordReader`
+  def canSplitFiles(files: Seq[FileStatus], conf: Configuration): Boolean = {
     files.forall { file =>
       val codec = (new CompressionCodecFactory(conf)).getCodec(file.getPath)
       codec == null || codec.isInstanceOf[SplittableCompressionCodec]

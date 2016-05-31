@@ -144,8 +144,9 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
           val bytesPerCore = totalBytes / defaultParallelism
           val maxSplitBytes = {
-            // Check if all the input files are splittable
-            if (HadoopFsRelation.isFilesSplittable(
+            // Since `LineRecordReader` in hadoop cannot split files compressed by some codecs
+            // (e.g., gzip), check if all the input files are splittable here.
+            if (HadoopFsRelation.canSplitFiles(
                 selectedPartitions.flatMap(_.files),
                 files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))) {
               Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
