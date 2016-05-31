@@ -149,7 +149,9 @@ createMethods()
 #'
 #' @param x a GroupedData
 #' @param func A function to be applied to each group partition specified by GroupedData.
-#'             The output of func is a local R data.frame.
+#'             The function `func` takes as argument a key - grouping columns and
+#'             a data frame - a local R data.frame.
+#'             The output of `func` is a local R data.frame.
 #' @param schema The schema of the resulting SparkDataFrame after the function is applied.
 #'               It must match the output of func.
 #' @return a SparkDataFrame

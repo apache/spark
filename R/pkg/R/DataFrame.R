@@ -1274,8 +1274,9 @@ setMethod("dapplyCollect",
 #' @param x A SparkDataFrame
 #' @param cols Grouping columns
 #' @param func A function to be applied to each group partition specified by grouping
-#'             column of the SparkDataFrame.
-#'             The output of func is a local R data.frame.
+#'             column of the SparkDataFrame. The function `func` takes as argument
+#'             a key - grouping columns and a data frame - a local R data.frame.
+#'             The output of `func` is a local R data.frame.
 #' @param schema The schema of the resulting SparkDataFrame after the function is applied.
 #'               It must match the output of func.
 #' @family SparkDataFrame functions
