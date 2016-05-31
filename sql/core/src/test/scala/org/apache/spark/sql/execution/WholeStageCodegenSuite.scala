@@ -111,6 +111,6 @@ class WholeStageCodegenSuite extends SparkPlanTest with SharedSQLContext {
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
-    assert(ds.collect() === Array(("a", 10.0), ("b", 3.0), ("c", 1.0)))
+    assert(ds.collect().toSet === Set(("a", 10.0), ("b", 3.0), ("c", 1.0)))
   }
 }

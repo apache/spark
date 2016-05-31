@@ -185,6 +185,7 @@ object Metadata {
         JString(x)
       case x: Metadata =>
         toJsonValue(x.map)
+      case null => JNull
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
@@ -208,6 +209,7 @@ object Metadata {
         x.##
       case x: Metadata =>
         hash(x.map)
+      case null => 0
       case other =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }

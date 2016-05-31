@@ -62,8 +62,8 @@ class EliminateSerializationSuite extends PlanTest {
 
     val expected = AppendColumnsWithObject(
       func.asInstanceOf[Any => Any],
-      productEncoder[(Int, Int)].namedExpressions,
-      intEncoder.namedExpressions,
+      productEncoder[(Int, Int)].serializerWithNullFlag,
+      intEncoder.serializerWithNullFlag,
       input).analyze
 
     comparePlans(optimized, expected)

@@ -424,8 +424,8 @@ class SparkSession private(
   @Experimental
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
-    val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d).copy())
+    val attributes = enc.serializerWithNullFlag.map(_.toAttribute)
+    val encoded = data.map(d => enc.toRowWithNullFlag(d).copy())
     val plan = new LocalRelation(attributes, encoded)
     Dataset[T](self, plan)
   }
@@ -443,8 +443,10 @@ class SparkSession private(
   @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
-    val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d))
+    val attributes = enc.serializerWithNullFlag.map(_.toAttribute)
+    val encoded = data.mapPartitions { it =>
+      it.map(enc.toRowWithNullFlag)
+    }
     val plan = LogicalRDD(attributes, encoded)(self)
     Dataset[T](self, plan)
   }
