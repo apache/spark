@@ -19,11 +19,12 @@
 
 setOldClass("jobj")
 
+#' crosstab
+#'
 #' Computes a pair-wise frequency table of the given columns. Also known as a contingency
 #' table. The number of distinct values for each column should be less than 1e4. At most 1e6
 #' non-zero pair frequencies will be returned.
 #'
-#' @title Statistic functions for SparkDataFrames
 #' @param col1 name of the first column. Distinct items will make the first item of each row.
 #' @param col2 name of the second column. Distinct items will make the column names of the output.
 #' @return a local R data.frame representing the contingency table. The first column of each row
@@ -47,9 +48,10 @@ setMethod("crosstab",
             collect(dataFrame(sct))
           })
 
-#' Calculates the sample covariance of two numerical columns of a SparkDataFrame.
+#' cov
 #'
-#' @title Statistic functions for SparkDataFrames
+#' Calculate the sample covariance of two numerical columns of a SparkDataFrame.
+#'
 #' @param x A SparkDataFrame
 #' @param col1 the name of the first column
 #' @param col2 the name of the second column
@@ -71,11 +73,12 @@ setMethod("cov",
             callJMethod(statFunctions, "cov", col1, col2)
           })
 
+#' corr
+#'
 #' Calculates the correlation of two columns of a SparkDataFrame.
 #' Currently only supports the Pearson Correlation Coefficient.
 #' For Spearman Correlation, consider using RDD methods found in MLlib's Statistics.
 #'
-#' @title Statistic functions for SparkDataFrames
 #' @param x A SparkDataFrame
 #' @param col1 the name of the first column
 #' @param col2 the name of the second column
@@ -100,12 +103,13 @@ setMethod("corr",
             callJMethod(statFunctions, "corr", col1, col2, method)
           })
 
+#' freqItems
+#'
 #' Finding frequent items for columns, possibly with false positives.
 #' Using the frequent element count algorithm described in
 #' \href{http://dx.doi.org/10.1145/762471.762473}{A simple algorithm for finding frequent elements
 #' in streams and bags}, proposed by Karp, Schenker, and Papadimitriou.
 #'
-#' @title Statistic functions for SparkDataFrames
 #' @param x A SparkDataFrame.
 #' @param cols A vector column names to search frequent items in.
 #' @param support (Optional) The minimum frequency for an item to be considered `frequent`.
@@ -127,9 +131,10 @@ setMethod("freqItems", signature(x = "SparkDataFrame", cols = "character"),
             collect(dataFrame(sct))
           })
 
+#' approxQuantile
+#'
 #' Calculates the approximate quantiles of a numerical column of a SparkDataFrame.
 #'
-#' @title Statistic functions for SparkDataFrames
 #' The result of this algorithm has the following deterministic bound:
 #' If the SparkDataFrame has N elements and if we request the quantile at probability \strong{p} up
 #' to error \strong{err}, then the algorithm will return a sample \strong{x} from the
@@ -165,9 +170,10 @@ setMethod("approxQuantile",
                         as.list(probabilities), relativeError)
           })
 
+#' sampleBy
+#'
 #' Returns a stratified sample without replacement based on the fraction given on each stratum.
 #'
-#' @title Statistic functions for SparkDataFrames
 #' @param x A SparkDataFrame
 #' @param col column that defines strata
 #' @param fractions A named list giving sampling fraction for each stratum. If a stratum is

@@ -630,9 +630,8 @@ setMethod("repartition",
 #' @param x A SparkDataFrame
 #' @return A StringRRDD of JSON objects
 #' @family SparkDataFrame functions
-#' @rdname toJSON
-#' @name toJSON
-#' @export
+#' @rdname tojson
+#' @noRd
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
@@ -1082,9 +1081,8 @@ setMethod("first",
 #' @param x A SparkDataFrame
 #'
 #' @family SparkDataFrame functions
-#' @rdname toRDD
-#' @name toRDD
-#' @export
+#' @rdname tordd
+#' @noRd
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
