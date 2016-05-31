@@ -52,6 +52,50 @@ trait Impurity extends Serializable {
   @Since("1.0.0")
   @DeveloperApi
   def calculate(count: Double, sum: Double, sumSquares: Double): Double
+
+  /**
+   * :: DeveloperApi ::
+   * Compute a test-statistic p-value quality measure from left and right split populations
+   * @param calcL impurity calculator for the left split population
+   * @param calcR impurity calculator for the right split population
+   * @return The p-value for the null hypothesis; that left and right split populations
+   * represent the same distribution
+   * @note Unless overridden this method will fail with an exception, for backward compatability
+   */
+  @Since("2.0.0")
+  @DeveloperApi
+  def calculate(calcL: ImpurityCalculator, calcR: ImpurityCalculator): Double =
+    throw new UnsupportedOperationException("Impurity.calculate")
+
+  /**
+   * :: DeveloperApi ::
+   * Determine if this impurity measure is a test-statistic measure
+   * @return True if this is a split quality measure based on a test statistic (i.e. returns a
+   * p-value) or false otherwise.
+   * @note Unless overridden this method returns false by default, for backward compatability
+   */
+  @Since("2.0.0")
+  @DeveloperApi
+  def isTestStatistic: Boolean = false
+}
+
+/**
+ * :: DeveloperApi ::
+ * Utility functions for Impurity measures
+ */
+@Since("2.0.0")
+@DeveloperApi
+object Impurity {
+  /**
+   * :: DeveloperApi ::
+   * Convert a test-statistic p-value into a "larger-is-better" gain value.
+   * @param pval The test statistic p-value
+   * @return The negative logarithm of the p-value.  Any p-values smaller than 10^-20 are clipped
+   * to 10^-20 to prevent arithmetic errors
+   */
+  @Since("2.0.0")
+  @DeveloperApi
+  def pValToGain(pval: Double): Double = -math.log(math.max(1e-20, pval))
 }
 
 /**

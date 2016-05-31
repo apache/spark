@@ -162,7 +162,7 @@ class DecisionTree(object):
           indexed from 0: {0, 1, ..., k-1}.
         :param impurity:
           Criterion used for information gain calculation.
-          Supported values: "gini" or "entropy".
+          Supported values: "gini", "entropy" or "chisquared".
           (default: "gini")
         :param maxDepth:
           Maximum depth of tree (e.g. depth 0 means 1 leaf node, depth 1

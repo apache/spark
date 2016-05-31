@@ -237,6 +237,41 @@ class DecisionTreeClassifierSuite
     compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
   }
 
+  test("split quality using chi-squared and minimum gain") {
+    // Generate a data set where the 1st feature is useful and the others are noise
+    val features = Vector.fill(200) {
+      Array.fill(3) { scala.util.Random.nextInt(2).toDouble }
+    }
+    val labels = features.map { fv =>
+      LabeledPoint(if (fv(0) == 1.0) 1.0 else 0.0, Vectors.dense(fv))
+    }
+    val rdd = sc.parallelize(labels)
+
+    // two-class learning problem
+    val numClasses = 2
+    // all binary features
+    val catFeatures = Map(Vector.tabulate(features.head.length) { j => (j, 2) } : _*)
+
+    // Chi-squared split quality with a p-value threshold of 0.01 should allow
+    // only the first feature to be used since the others are uncorrelated noise
+    val train: DataFrame = TreeTests.setMetadata(rdd, catFeatures, numClasses)
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("chisquared")
+      .setMaxDepth(5)
+      .setMinInfoGain(0.01)
+    val treeModel = dt.fit(train)
+
+    // The tree should use exactly one of the 3 features: featue(0)
+    val featImps = treeModel.featureImportances
+    assert(treeModel.depth === 1)
+    assert(featImps.size === 3)
+    assert(featImps(0) === 1.0)
+    assert(featImps(1) === 0.0)
+    assert(featImps(2) === 0.0)
+
+    compareAPIs(rdd, dt, catFeatures, numClasses)
+  }
+
   test("predictRaw and predictProbability") {
     val rdd = continuousDataPointsForMulticlassRDD
     val dt = new DecisionTreeClassifier()

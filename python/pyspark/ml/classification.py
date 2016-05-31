@@ -664,7 +664,7 @@ class TreeClassifierParams(object):
 
     .. versionadded:: 1.4.0
     """
-    supportedImpurities = ["entropy", "gini"]
+    supportedImpurities = ["entropy", "gini", "chisquared"]
 
     impurity = Param(Params._dummy(), "impurity",
                      "Criterion used for information gain calculation (case-insensitive). " +

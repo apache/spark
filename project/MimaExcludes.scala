@@ -139,6 +139,10 @@ object MimaExcludes {
       ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.SparkMasterRegex.MESOS_REGEX"),
       // [SPARK-16240] ML persistence backward compatibility for LDA
       ProblemFilters.exclude[MissingTypesProblem]("org.apache.spark.ml.clustering.LDA$"),
+      // [SPARK-15699][ML] Add chi-squared test statistic as a split quality metric
+      ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.mllib.tree.impurity.ChiSquared.calculate"),
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.tree.impurity.Impurity.calculate"),
+      ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.tree.impurity.Impurity.isTestStatistic"),
       // [SPARK-17717] Add Find and Exists method to Catalog.
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.getDatabase"),
       ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.catalog.Catalog.getTable"),

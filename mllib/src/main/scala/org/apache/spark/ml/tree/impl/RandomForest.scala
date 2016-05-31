@@ -29,7 +29,7 @@ import org.apache.spark.ml.regression.DecisionTreeRegressionModel
 import org.apache.spark.ml.tree._
 import org.apache.spark.ml.util.Instrumentation
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
+import org.apache.spark.mllib.tree.impurity.{Impurity, ImpurityCalculator}
 import org.apache.spark.mllib.tree.model.ImpurityStats
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -670,14 +670,32 @@ private[spark] object RandomForest extends Logging {
     val leftImpurity = leftImpurityCalculator.calculate() // Note: This equals 0 if count = 0
     val rightImpurity = rightImpurityCalculator.calculate()
 
-    val leftWeight = leftCount / totalCount.toDouble
-    val rightWeight = rightCount / totalCount.toDouble
+    val gain = metadata.impurity match {
+      case imp if (imp.isTestStatistic) =>
+        // For split quality measures based on a test-statistic, run the test on the
+        // left and right sub-populations to get a p-value for the null hypothesis
+        val pval = imp.calculate(leftImpurityCalculator, rightImpurityCalculator)
+        // Transform the test statistic p-val into a larger-is-better gain value
+        Impurity.pValToGain(pval)
 
-    val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+      case _ =>
+        // Default purity-gain logic:
+        // measure the weighted decrease in impurity from parent to the left and right
+        val leftWeight = leftCount / totalCount.toDouble
+        val rightWeight = rightCount / totalCount.toDouble
+
+        impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
+    }
+
+    // If the impurity being used is a test statistic p-val, apply a standard transform into
+    // a larger-is-better gain value for the minimum-gain threshold
+    val minGain =
+      if (metadata.impurity.isTestStatistic) Impurity.pValToGain(metadata.minInfoGain)
+      else metadata.minInfoGain
 
     // if information gain doesn't satisfy minimum information gain,
     // then this split is invalid, return invalid information gain stats.
-    if (gain < metadata.minInfoGain) {
+    if (gain < minGain) {
       return ImpurityStats.getInvalidImpurityStats(parentImpurityCalculator)
     }
 

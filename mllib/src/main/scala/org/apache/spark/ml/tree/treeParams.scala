@@ -26,7 +26,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.mllib.tree.impurity.{ChiSquared => OldChiSquared, Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, ClassificationLoss => OldClassificationLoss, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -213,7 +213,7 @@ private[ml] trait TreeClassifierParams extends Params {
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
-   * Supported: "entropy" and "gini".
+   * Supported: "entropy", "gini", "chisquared".
    * (default = gini)
    * @group param
    */
@@ -240,6 +240,7 @@ private[ml] trait TreeClassifierParams extends Params {
     getImpurity match {
       case "entropy" => OldEntropy
       case "gini" => OldGini
+      case "chisquared" => OldChiSquared
       case _ =>
         // Should never happen because of check in setter method.
         throw new RuntimeException(
@@ -251,7 +252,7 @@ private[ml] trait TreeClassifierParams extends Params {
 private[ml] object TreeClassifierParams {
   // These options should be lowercase.
   final val supportedImpurities: Array[String] =
-    Array("entropy", "gini").map(_.toLowerCase(Locale.ROOT))
+    Array("entropy", "gini", "chisquared").map(_.toLowerCase(Locale.ROOT))
 }
 
 private[ml] trait DecisionTreeClassifierParams
