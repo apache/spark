@@ -309,14 +309,14 @@ trait CheckAnalysis extends PredicateHelper {
           case s: SimpleCatalogRelation =>
             failAnalysis(
               s"""
-                 |Please enable Hive support when selecting the regular tables:
+                 |Hive support is required to select over the following tables:
                  |${s.catalogTable.identifier}
                """.stripMargin)
 
           case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
             failAnalysis(
               s"""
-                 |Please enable Hive support when inserting the regular tables:
+                 |Hive support is required to insert into the following tables:
                  |${s.catalogTable.identifier}
                """.stripMargin)
 
