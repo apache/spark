@@ -322,7 +322,15 @@ class DDLCommandSuite extends PlanTest {
   test("create table - column repeated in partitioning columns") {
     val query = "CREATE TABLE tab1 (key INT, value STRING) PARTITIONED BY (key INT, hr STRING)"
     val e = intercept[ParseException] { parser.parsePlan(query) }
-    assert(e.getMessage.contains("Column repeated in partitioning columns: [key]"))
+    assert(e.getMessage.contains("Column repeated in partitioning column(s) or " +
+      "duplicate column name key in the table definition: [\"key\"]"))
+  }
+
+  test("create table - duplicate column name key in the table definition") {
+    val query = "CREATE TABLE tab1 (key INT, key STRING)"
+    val e = intercept[ParseException] { parser.parsePlan(query) }
+    assert(e.getMessage.contains("Column repeated in partitioning column(s) or " +
+      "duplicate column name key in the table definition: [\"key\"]"))
   }
 
   test("create table using - with partitioned by") {
