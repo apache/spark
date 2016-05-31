@@ -138,22 +138,22 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           }
 
         case _ =>
-          val defaultMaxSplitBytes = {
-            // Check if all the input files are splittable
-            if (HadoopFsRelation.isFilesSplittable(
-                selectedPartitions.flatMap(_.files),
-                files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))) {
-              files.sparkSession.sessionState.conf.filesMaxPartitionBytes
-            } else {
-              Long.MaxValue
-            }
-          }
+          val defaultMaxSplitBytes = files.sparkSession.sessionState.conf.filesMaxPartitionBytes
           val openCostInBytes = files.sparkSession.sessionState.conf.filesOpenCostInBytes
           val defaultParallelism = files.sparkSession.sparkContext.defaultParallelism
           val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
           val bytesPerCore = totalBytes / defaultParallelism
-          val maxSplitBytes = Math.min(defaultMaxSplitBytes,
-            Math.max(openCostInBytes, bytesPerCore))
+          val maxSplitBytes = {
+            // Check if all the input files are splittable
+            if (HadoopFsRelation.isFilesSplittable(
+                selectedPartitions.flatMap(_.files),
+                files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))) {
+              Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+            } else {
+              Long.MaxValue
+            }
+          }
+
           logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
             s"open cost is considered as scanning $openCostInBytes bytes.")
 
