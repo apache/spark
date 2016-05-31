@@ -212,46 +212,11 @@ class SessionCatalog(
    * If no such database is specified, create it in the current database.
    */
   def createTable(tableDefinition: CatalogTable, ignoreIfExists: Boolean): Unit = {
-    val tableId = tableDefinition.identifier
-    val db = formatDatabaseName(tableId.database.getOrElse(getCurrentDatabase))
-    val table = formatTableName(tableId.table)
+    val db = formatDatabaseName(tableDefinition.identifier.database.getOrElse(getCurrentDatabase))
+    val table = formatTableName(tableDefinition.identifier.table)
     val newTableDefinition = tableDefinition.copy(identifier = TableIdentifier(table, Some(db)))
     requireDbExists(db)
-
-    if (
-      // If this is an external data source table...
-      tableDefinition.properties.contains("spark.sql.sources.provider") &&
-      newTableDefinition.tableType == CatalogTableType.EXTERNAL &&
-      // ... that is not persisted as Hive compatible format (external tables in Hive compatible
-      // format always set `locationUri` to the actual data location and should NOT be hacked as
-      // following.)
-      tableDefinition.storage.locationUri.isEmpty
-    ) {
-      // !! HACK ALERT !!
-      //
-      // Due to a restriction of Hive metastore, here we have to set `locationUri` to a temporary
-      // directory that doesn't exist yet but can definitely be successfully created, and then
-      // delete it right after creating the external data source table. This location will be
-      // persisted to Hive metastore as standard Hive table location URI, but Spark SQL doesn't
-      // really use it. Also, since we only do this workaround for external tables, deleting the
-      // directory after the fact doesn't do any harm.
-      //
-      // Please refer to https://issues.apache.org/jira/browse/SPARK-15269 for more details.
-
-      val tempPath =
-        new Path(defaultTablePath(tableId).stripSuffix(Path.SEPARATOR) + "-__PLACEHOLDER__")
-
-      try {
-        externalCatalog.createTable(
-          db,
-          newTableDefinition.withNewStorage(locationUri = Some(tempPath.toString)),
-          ignoreIfExists)
-      } finally {
-        FileSystem.get(tempPath.toUri, hadoopConf).delete(tempPath, true)
-      }
-    } else {
-      externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
-    }
+    externalCatalog.createTable(db, newTableDefinition, ignoreIfExists)
   }
 
   /**
