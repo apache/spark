@@ -1268,8 +1268,8 @@ setMethod("dapplyCollect",
 
 #' gapply
 #'
-#' Apply a R function to each group of a DataFrame. The group is defined by input
-#' grouping columns.
+#' Group the SparkDataFrame using the specified columns and apply the R function to each
+#' group. The group is defined by input grouping columns.
 #'
 #' @param x A SparkDataFrame
 #' @param cols Grouping columns
