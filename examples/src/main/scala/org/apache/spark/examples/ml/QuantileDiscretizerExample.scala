@@ -38,6 +38,7 @@ object QuantileDiscretizerExample {
       .setInputCol("hour")
       .setOutputCol("result")
       .setNumBuckets(3)
+      .setRelativeError(0)
 
     val result = discretizer.fit(df).transform(df)
     result.show()
