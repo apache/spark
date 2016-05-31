@@ -363,4 +363,15 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     sc.stop()
     assert(result == null)
   }
+
+  test("log level case-insensitive and reset log level") {
+    sc = new SparkContext(new SparkConf().setAppName("test").setMaster("local"))
+    val originalLevel = org.apache.log4j.Logger.getRootLogger().getLevel
+    sc.setLogLevel("debug")
+    assert(org.apache.log4j.Logger.getRootLogger().getLevel === org.apache.log4j.Level.DEBUG)
+    sc.setLogLevel("INfo")
+    assert( org.apache.log4j.Logger.getRootLogger().getLevel=== org.apache.log4j.Level.INFO)
+    sc.resetLogLevel()
+    assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
+  }
 }
