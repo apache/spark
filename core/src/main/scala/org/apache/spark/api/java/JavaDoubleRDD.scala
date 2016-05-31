@@ -202,6 +202,16 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double])
    */
   def sampleVariance(): JDouble = srdd.sampleVariance()
 
+  /**
+   * Compute the population standard deviation of this RDD's elements.
+   */
+  def popStdev(): JDouble = srdd.popStdev()
+
+  /**
+   * Compute the population variance of this RDD's elements.
+   */
+  def popVariance(): JDouble = srdd.popVariance()
+
   /** Return the approximate mean of the elements in this RDD. */
   def meanApprox(timeout: Long, confidence: JDouble): PartialResult[BoundedDouble] =
     srdd.meanApprox(timeout, confidence)

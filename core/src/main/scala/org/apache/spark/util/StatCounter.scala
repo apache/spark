@@ -105,7 +105,10 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   def min: Double = minValue
 
   /** Return the variance of the values. */
-  def variance: Double = {
+  def variance: Double = sampleVariance
+
+  /** Return the population variance of the values. */
+  def popVariance: Double = {
     if (n == 0) {
       Double.NaN
     } else {
@@ -126,7 +129,10 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   }
 
   /** Return the standard deviation of the values. */
-  def stdev: Double = math.sqrt(variance)
+  def stdev: Double = math.sqrt(sampleVariance)
+
+  /** Return the population standard deviation of the values. */
+  def popStdev: Double = math.sqrt(popVariance)
 
   /**
    * Return the sample standard deviation of the values, which corrects for bias in estimating the

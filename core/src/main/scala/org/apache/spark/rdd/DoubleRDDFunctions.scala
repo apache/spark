@@ -74,6 +74,20 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   }
 
   /**
+   * Compute the population standard deviation of this RDD's elements.
+   */
+  def popStdev(): Double = self.withScope {
+    stats().popStdev
+  }
+
+  /**
+   * Compute the population variance of this RDD's elements.
+   */
+  def popVariance(): Double = self.withScope {
+    stats().popVariance
+  }
+
+  /**
    * Approximate operation to return the mean within a timeout.
    */
   def meanApprox(
