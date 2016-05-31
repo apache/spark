@@ -375,9 +375,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case c: CreateTableUsing if c.temporary && !c.allowExisting =>
+        logWarning(
+          s"CREATE TEMPORARY TABLE tableName USING... is deprecated, please use CREATE " +
+            s"TEMPORARY VIEW viewName USING... instead")
         ExecutedCommandExec(
-          CreateTempTableUsing(
-            c.tableIdent, c.userSpecifiedSchema, c.provider, c.options)) :: Nil
+          CreateTempViewUsing(
+            c.tableIdent, c.userSpecifiedSchema, replace = true, c.provider, c.options)) :: Nil
 
       case c: CreateTableUsing if !c.temporary =>
         val cmd =
@@ -416,6 +419,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             c.child)
         ExecutedCommandExec(cmd) :: Nil
 
+      case c: CreateTempViewUsing =>
+        ExecutedCommandExec(c) :: Nil
       case _ => Nil
     }
   }

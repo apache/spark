@@ -25,7 +25,7 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.internal.config._
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchPartitionException, NoSuchTableException}
+import org.apache.spark.sql.catalyst.analysis.{DatabaseAlreadyExistsException, NoSuchPartitionException, NoSuchTableException, TempTableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogStorageFormat}
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTablePartition, SessionCatalog}
@@ -113,6 +113,10 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
 
   private def appendTrailingSlash(path: String): String = {
     if (!path.endsWith(File.separator)) path + File.separator else path
+  }
+
+  private def testFile(fileName: String): String = {
+    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
   }
 
   test("the qualified path of a database is stored in the catalog") {
@@ -419,6 +423,25 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         Some(new StructType().add("a", IntegerType).add("b", IntegerType)))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
         Some(BucketSpec(5, Seq("a"), Seq("b"))))
+    }
+  }
+
+  test("create temporary view using") {
+    val csvFile = testFile("cars.csv")
+    withView("testview") {
+      sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1: String, c2: String)  USING " +
+        "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +
+        s"OPTIONS (PATH '$csvFile')")
+
+      checkAnswer(
+        sql("select c1, c2 from testview order by c1 limit 1"),
+          Row("1997", "Ford") :: Nil)
+
+      // Fails if creating a new view with the same name
+      intercept[TempTableAlreadyExistsException] {
+        sql(s"CREATE TEMPORARY VIEW testview USING " +
+          s"org.apache.spark.sql.execution.datasources.csv.CSVFileFormat OPTIONS (PATH '$csvFile')")
+      }
     }
   }
 
