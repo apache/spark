@@ -1124,7 +1124,7 @@ Assume that we have a DataFrame with the columns `id`, `hour`:
 ~~~
 
 `hour` is a continuous feature with `Double` type. We want to turn the continuous feature into
-a categorical one. Given `numBuckets = 3`, we should get the following DataFrame:
+a categorical one. Given `numBuckets = 3`, and computing exact quantiles (by setting `relativeError = 0`), we should get the following DataFrame:
 
 ~~~
  id | hour | result
