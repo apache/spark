@@ -221,40 +221,31 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("MAX_CASES_BRANCHES") {
-    import testImplicits._
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      val sql_one_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 END FROM tab1"
+      val sql_two_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 ELSE 0 END FROM tab1"
 
-    val original = spark.conf.get(SQLConf.MAX_CASES_BRANCHES)
-    try {
-      withTable("tab1") {
-        spark
-          .range(10)
-          .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
-          .write
-          .saveAsTable("tab1")
-
-        val sql_one_branch_caseWhen = "SELECT CASE WHEN a = 1 THEN 1 END FROM tab1"
-        val sql_two_branch_caseWhen = "SELECT CASE WHEN a = 1 THEN 1 ELSE 0 END FROM tab1"
-
-        spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "0")
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "0") {
         assert(!sql(sql_one_branch_caseWhen)
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
         assert(!sql(sql_two_branch_caseWhen)
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
 
-        spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "1")
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "1") {
         assert(sql(sql_one_branch_caseWhen)
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
         assert(!sql(sql_two_branch_caseWhen)
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
 
-        spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, "2")
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "2") {
         assert(sql(sql_one_branch_caseWhen)
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
         assert(sql(sql_two_branch_caseWhen)
           .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
       }
-    } finally {
-      spark.conf.set(SQLConf.MAX_CASES_BRANCHES.key, s"$original")
     }
   }
 }
