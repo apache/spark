@@ -162,7 +162,7 @@ setGeneric("pipeRDD", function(x, command, env = list()) { standardGeneric("pipe
 
 # @rdname pivot
 # @export
-setGeneric("pivot", function(x, colname, values=list()) {  standardGeneric("pivot") })
+setGeneric("pivot", function(x, colname, values = list()) { standardGeneric("pivot") })
 
 # @rdname reduce
 # @export

@@ -1362,10 +1362,10 @@ test_that("pivot GroupedData column", {
   )
   SparkRdf <- createDataFrame(sqlContext, df)
   values <- list("R", "Python")
-  sums <- collect(SparkR::summarize(pivot(groupBy(SparkRdf, "year"), "course", values),
-                                    earnings_sum = sum(SparkRdf$earnings)) )
-  testthat::expect_equal(colnames(sums) %in% c("year", "R", "Python"), c(T, T, T))
-  testthat::expect_equal(sum(df$earnings), sum(sums$R) + sum(sums$Python))
+  sums <- collect(summarize(pivot(groupBy(SparkRdf, "year"), "course", values),
+                earnings_sum = sum(SparkRdf$earnings)))
+  expect_equal(colnames(sums) %in% c("year", "R", "Python"), c(T, T, T))
+  expect_equal(sum(df$earnings), sum(sums$R) + sum(sums$Python))
 })
 
 

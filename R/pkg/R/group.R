@@ -158,14 +158,16 @@ methods <- c("avg", "max", "mean", "min", "sum")
 
 setMethod("pivot",
           signature(x = "GroupedData"),
-          function(x, colname, values=list()){
+          function(x, colname, values = list()){
               if (length(values) == 0) {
-                  result <- SparkR:::callJMethod(x@sgd, "pivot", colname)
-              }else {
-                  stopifnot(length(values) == length(unique(values)))
-                  result <- SparkR:::callJMethod(x@sgd, "pivot", colname, values)
+                  result <- callJMethod(x@sgd, "pivot", colname)
+              } else {
+                  if(length(values) == length(unique(values))) {
+                    stop("Values in list are not unique")   
+                  }
+                  result <- callJMethod(x@sgd, "pivot", colname, values)
               }
-              SparkR:::groupedData(result)
+              groupedData(result)
           })
 
 
