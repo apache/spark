@@ -174,7 +174,10 @@ case class InsertIntoHiveTable(
     val columnsCnt = tableDesc.getProperties.getProperty("columns").split(",").size
 
     if (columnsCnt + numDynamicPartitions != child.output.size) {
-      throw new SparkException(ErrorMsg.TARGET_TABLE_COLUMN_MISMATCH.getMsg)
+      throw new SparkException(s"Cannot insert into target table ${tableDesc.getTableName} " +
+        s"because column number are different: target table has $columnsCnt column(s) and " +
+        s"$numDynamicPartitions dynamic partition column(s), but input has ${child.output.size} " +
+        s"column(s).")
     }
 
     // By this time, the partition map must match the table's partition columns
