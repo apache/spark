@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, InternalOutputModes, OutputMode}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 
@@ -29,8 +29,7 @@ object UnsupportedOperationChecker {
   def checkForBatch(plan: LogicalPlan): Unit = {
     plan.foreachUp {
       case p if p.isStreaming =>
-        throwError(
-          "Queries with streaming sources must be executed with write.startStream()")(p)
+        throwError("Queries with streaming sources must be executed with write.startStream()")(p)
 
       case _ =>
     }
@@ -43,10 +42,10 @@ object UnsupportedOperationChecker {
         "Queries without streaming sources cannot be executed with write.startStream()")(plan)
     }
 
-    plan.foreachUp { implicit plan =>
+    plan.foreachUp { implicit subPlan =>
 
       // Operations that cannot exists anywhere in a streaming plan
-      plan match {
+      subPlan match {
 
         case _: Command =>
           throwError("Commands like CreateTable*, AlterTable*, Show* are not supported with " +
@@ -54,21 +53,6 @@ object UnsupportedOperationChecker {
 
         case _: InsertIntoTable =>
           throwError("InsertIntoTable is not supported with streaming DataFrames/Datasets")
-
-        case Aggregate(_, _, child) if child.isStreaming =>
-          if (outputMode == Append) {
-            throwError(
-              "Aggregations are not supported on streaming DataFrames/Datasets in " +
-                "Append output mode. Consider changing output mode to Update.")
-          }
-          val moreStreamingAggregates = child.find {
-            case Aggregate(_, _, grandchild) if grandchild.isStreaming => true
-            case _ => false
-          }
-          if (moreStreamingAggregates.nonEmpty) {
-            throwError("Multiple streaming aggregations are not supported with " +
-              "streaming DataFrames/Datasets")
-          }
 
         case Join(left, right, joinType, _) =>
 
@@ -119,10 +103,10 @@ object UnsupportedOperationChecker {
         case GroupingSets(_, _, child, _) if child.isStreaming =>
           throwError("GroupingSets is not supported on streaming DataFrames/Datasets")
 
-        case GlobalLimit(_, _) | LocalLimit(_, _) if plan.children.forall(_.isStreaming) =>
+        case GlobalLimit(_, _) | LocalLimit(_, _) if subPlan.children.forall(_.isStreaming) =>
           throwError("Limits are not supported on streaming DataFrames/Datasets")
 
-        case Sort(_, _, _) | SortPartitions(_, _) if plan.children.forall(_.isStreaming) =>
+        case Sort(_, _, _) | SortPartitions(_, _) if subPlan.children.forall(_.isStreaming) =>
           throwError("Sorting is not supported on streaming DataFrames/Datasets")
 
         case Sample(_, _, _, _, child) if child.isStreaming =>
@@ -137,6 +121,27 @@ object UnsupportedOperationChecker {
 
         case _ =>
       }
+    }
+
+    // Checks related to aggregations
+    val aggregates = plan.collect { case a @ Aggregate(_, _, _) if a.isStreaming => a }
+    outputMode match {
+      case InternalOutputModes.Append if aggregates.nonEmpty =>
+        throwError(
+          s"$outputMode output mode not supported when there are streaming aggregations on " +
+            s"streaming DataFrames/DataSets")(plan)
+
+      case InternalOutputModes.Complete | InternalOutputModes.Update if aggregates.isEmpty =>
+        throwError(
+          s"$outputMode output mode not supported when there are no streaming aggregations on " +
+            s"streaming DataFrames/Datasets")(plan)
+
+      case _ =>
+    }
+    if (aggregates.size > 1) {
+      throwError(
+        "Multiple streaming aggregations are not supported with " +
+          "streaming DataFrames/Datasets")(plan)
     }
   }
 
