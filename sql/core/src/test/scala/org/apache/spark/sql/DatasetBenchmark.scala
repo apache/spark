@@ -72,6 +72,47 @@ object DatasetBenchmark {
     benchmark
   }
 
+  def backToBackMapPrimitive(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
+    import spark.implicits._
+
+    val df = spark.range(1, numRows).select($"id".as("l"))
+    val benchmark = new Benchmark("back-to-back map for primitive", numRows)
+    val func = (d: Long) => d+1
+
+    val rdd = spark.sparkContext.range(1, numRows).map(l => l.toLong)
+    benchmark.addCase("RDD") { iter =>
+      var res = rdd
+      var i = 0
+      while (i < numChains) {
+        res = rdd.map(func)
+        i += 1
+      }
+      res.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("DataFrame") { iter =>
+      var res = df
+      var i = 0
+      while (i < numChains) {
+        res = res.select($"l" + 1 as "l")
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark.addCase("Dataset") { iter =>
+      var res = df.as[Long]
+      var i = 0
+      while (i < numChains) {
+        res = res.map(func)
+        i += 1
+      }
+      res.queryExecution.toRdd.foreach(_ => Unit)
+    }
+
+    benchmark
+  }
+  
   def backToBackFilter(spark: SparkSession, numRows: Long, numChains: Int): Benchmark = {
     import spark.implicits._
 
@@ -166,19 +207,31 @@ object DatasetBenchmark {
     val numChains = 10
 
     val benchmark = backToBackMap(spark, numRows, numChains)
-    val benchmark2 = backToBackFilter(spark, numRows, numChains)
-    val benchmark3 = aggregate(spark, numRows)
+    val benchmark2 = backToBackMapPrimitive(spark, numRows, numChains)
+    val benchmark3 = backToBackFilter(spark, numRows, numChains)
+    val benchmark4 = aggregate(spark, numRows)
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    back-to-back map:                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    RDD                                      1935 / 2105         51.7          19.3       1.0X
-    DataFrame                                 756 /  799        132.3           7.6       2.6X
-    Dataset                                  7359 / 7506         13.6          73.6       0.3X
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+    back-to-back map:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD                                           5144 / 5330         19.4          51.4       1.0X
+    DataFrame                                     6878 / 7133         14.5          68.8       0.7X
+    Dataset                                     13760 / 14076          7.3         137.6       0.4X
     */
     benchmark.run()
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+    back-to-back map for primitive:          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD                                           1963 / 2172         50.9          19.6       1.0X
+    DataFrame                                     1563 / 1746         64.0          15.6       1.3X
+    Dataset                                       5640 / 5810         17.7          56.4       0.3X
+    */
+    benchmark2.run()
 
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
@@ -189,7 +242,7 @@ object DatasetBenchmark {
     DataFrame                                 103 /  127        967.4           1.0      19.1X
     Dataset                                  4343 / 4477         23.0          43.4       0.5X
     */
-    benchmark2.run()
+    benchmark3.run()
 
     /*
     Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
@@ -201,6 +254,6 @@ object DatasetBenchmark {
     Dataset sum using Aggregator             4111 / 4282         24.3          41.1       0.5X
     Dataset complex Aggregator               8782 / 9036         11.4          87.8       0.2X
     */
-    benchmark3.run()
+    benchmark4.run()
   }
 }
