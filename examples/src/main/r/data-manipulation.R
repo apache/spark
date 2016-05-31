@@ -20,8 +20,7 @@
 # The data set is made up of 227,496 rows x 14 columns. 
 
 # To run this example use
-# ./bin/sparkR --packages com.databricks:spark-csv_2.10:1.0.3
-#     examples/src/main/r/data-manipulation.R <path_to_csv>
+# ./bin/spark-submit examples/src/main/r/data-manipulation.R <path_to_csv>
 
 # Load SparkR library into your R session
 library(SparkR)
@@ -29,7 +28,7 @@ library(SparkR)
 args <- commandArgs(trailing = TRUE)
 
 if (length(args) != 1) {
-  print("Usage: data-manipulation.R <path-to-flights.csv")
+  print("Usage: data-manipulation.R <path-to-flights.csv>")
   print("The data can be downloaded from: http://s3-us-west-2.amazonaws.com/sparkr-data/flights.csv")
   q("no")
 }
@@ -53,7 +52,7 @@ SFO_df <- flights_df[flights_df$dest == "SFO", ]
 SFO_DF <- createDataFrame(sqlContext, SFO_df)
 
 #  Directly create a SparkDataFrame from the source data
-flightsDF <- read.df(sqlContext, flightsCsvPath, source = "com.databricks.spark.csv", header = "true")
+flightsDF <- read.df(sqlContext, flightsCsvPath, source = "csv", header = "true")
 
 # Print the schema of this SparkDataFrame
 printSchema(flightsDF)

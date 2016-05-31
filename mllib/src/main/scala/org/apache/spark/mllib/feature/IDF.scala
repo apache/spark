@@ -204,7 +204,7 @@ private object IDFModel {
    * Transforms a term frequency (TF) vector to a TF-IDF vector with a IDF vector
    *
    * @param idf an IDF vector
-   * @param v a term frequence vector
+   * @param v a term frequency vector
    * @return a TF-IDF vector
    */
   def transform(idf: Vector, v: Vector): Vector = {

@@ -296,7 +296,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>
-    Set the max size of the file by which the executor logs will be rolled over.
+    Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -308,7 +308,7 @@ Apart from these, the following properties are also available, and may be useful
     Set the strategy of rolling of executor logs. By default it is disabled. It can
     be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
     use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
-    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
     the maximum file size for rolling.
   </td>
 </tr>
@@ -1478,6 +1478,48 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
 </table>
+
+
+#### Spark SQL
+Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// spark is an existing SparkSession
+spark.sql("SET -v").show(numRows = 200, truncate = false)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// spark is an existing SparkSession
+spark.sql("SET -v").show(200, false);
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+# spark is an existing SparkSession
+spark.sql("SET -v").show(n=200, truncate=False)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+# sqlContext is an existing sqlContext.
+properties <- sql(sqlContext, "SET -v")
+showDF(properties, numRows = 200, truncate = FALSE)
+{% endhighlight %}
+
+</div>
+</div>
 
 
 #### Spark Streaming

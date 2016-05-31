@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.UsingJoin
@@ -123,11 +124,16 @@ trait CheckAnalysis extends PredicateHelper {
               }
             }
 
-            query match {
+            // Skip projects and subquery aliases added by the Analyzer and the SQLBuilder.
+            def cleanQuery(p: LogicalPlan): LogicalPlan = p match {
+              case SubqueryAlias(_, child) => cleanQuery(child)
+              case Project(_, child) => cleanQuery(child)
+              case child => child
+            }
+
+            cleanQuery(query) match {
               case a: Aggregate => checkAggregate(a)
               case Filter(_, a: Aggregate) => checkAggregate(a)
-              case Project(_, a: Aggregate) => checkAggregate(a)
-              case Project(_, Filter(_, a: Aggregate)) => checkAggregate(a)
               case fail => failAnalysis(s"Correlated scalar subqueries must be Aggregated: $fail")
             }
             s
@@ -209,7 +215,7 @@ trait CheckAnalysis extends PredicateHelper {
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
-                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"because its data type ${expr.dataType.simpleString} is not an orderable " +
                     s"data type.")
               }
 
@@ -236,16 +242,15 @@ trait CheckAnalysis extends PredicateHelper {
           case s @ SetOperation(left, right) if left.output.length != right.output.length =>
             failAnalysis(
               s"${s.nodeName} can only be performed on tables with the same number of columns, " +
-               s"but the left table has ${left.output.length} columns and the right has " +
-               s"${right.output.length}")
+                s"but the left table has ${left.output.length} columns and the right has " +
+                s"${right.output.length}")
 
           case s: Union if s.children.exists(_.output.length != s.children.head.output.length) =>
             val firstError = s.children.find(_.output.length != s.children.head.output.length).get
             failAnalysis(
-              s"""
-                |Unions can only be performed on tables with the same number of columns,
-                | but one table has '${firstError.output.length}' columns and another table has
-                | '${s.children.head.output.length}' columns""".stripMargin)
+              s"Unions can only be performed on tables with the same number of columns, " +
+                s"but one table has '${firstError.output.length}' columns and another table has " +
+                s"'${s.children.head.output.length}' columns")
 
           case p if p.expressions.exists(ScalarSubquery.hasCorrelatedScalarSubquery) =>
             p match {
@@ -299,6 +304,20 @@ trait CheckAnalysis extends PredicateHelper {
                  |Failure when resolving conflicting references in Except:
                  |$plan
                  |Conflicting attributes: ${conflictingAttributes.mkString(",")}
+               """.stripMargin)
+
+          case s: SimpleCatalogRelation =>
+            failAnalysis(
+              s"""
+                 |Please enable Hive support when selecting the regular tables:
+                 |${s.catalogTable.identifier}
+               """.stripMargin)
+
+          case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
+            failAnalysis(
+              s"""
+                 |Please enable Hive support when inserting the regular tables:
+                 |${s.catalogTable.identifier}
                """.stripMargin)
 
           case o if !o.resolved =>

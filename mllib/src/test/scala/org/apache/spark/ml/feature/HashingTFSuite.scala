@@ -19,12 +19,12 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.feature.{HashingTF => MLlibHashingTF}
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -34,7 +34,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("hashingTF") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, "a a b b c d".split(" ").toSeq)
     )).toDF("id", "words")
     val n = 100
@@ -54,7 +54,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("applying binary term freqs") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, "a a b c c c".split(" ").toSeq)
     )).toDF("id", "words")
     val n = 100

@@ -20,15 +20,12 @@ package org.apache.spark.sql.jdbc
 import java.sql.Connection
 import java.util.Properties
 
-import org.scalatest.Ignore
-
 import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.types.{ArrayType, DecimalType}
 import org.apache.spark.tags.DockerTest
 
 @DockerTest
-@Ignore
 class PostgresIntegrationSuite extends DockerJDBCIntegrationSuite {
   override val db = new DatabaseOnDocker {
     override val imageName = "postgres:9.4.5"

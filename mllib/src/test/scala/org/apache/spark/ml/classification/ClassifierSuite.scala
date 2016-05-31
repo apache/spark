@@ -19,10 +19,10 @@ package org.apache.spark.ml.classification
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.ml.classification.ClassifierSuite.MockClassifier
+import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -32,7 +32,7 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("extractLabeledPoints") {
     def getTestData(labels: Seq[Double]): DataFrame = {
       val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      sqlContext.createDataFrame(data)
+      spark.createDataFrame(data)
     }
 
     val c = new MockClassifier
@@ -72,7 +72,7 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
   test("getNumClasses") {
     def getTestData(labels: Seq[Double]): DataFrame = {
       val data = labels.map { label: Double => LabeledPoint(label, Vectors.dense(0.0)) }
-      sqlContext.createDataFrame(data)
+      spark.createDataFrame(data)
     }
 
     val c = new MockClassifier

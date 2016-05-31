@@ -36,11 +36,11 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
   import testImplicits._
 
   after {
-    sqlContext.streams.active.foreach(_.stop())
-    assert(sqlContext.streams.active.isEmpty)
+    spark.streams.active.foreach(_.stop())
+    assert(spark.streams.active.isEmpty)
     assert(addedListeners.isEmpty)
     // Make sure we don't leak any events to the next test
-    sqlContext.sparkContext.listenerBus.waitUntilEmpty(10000)
+    spark.sparkContext.listenerBus.waitUntilEmpty(10000)
   }
 
   test("single listener") {
@@ -112,17 +112,17 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
       val listener1 = new QueryStatusCollector
       val listener2 = new QueryStatusCollector
 
-      sqlContext.streams.addListener(listener1)
+      spark.streams.addListener(listener1)
       assert(isListenerActive(listener1) === true)
       assert(isListenerActive(listener2) === false)
-      sqlContext.streams.addListener(listener2)
+      spark.streams.addListener(listener2)
       assert(isListenerActive(listener1) === true)
       assert(isListenerActive(listener2) === true)
-      sqlContext.streams.removeListener(listener1)
+      spark.streams.removeListener(listener1)
       assert(isListenerActive(listener1) === false)
       assert(isListenerActive(listener2) === true)
     } finally {
-      addedListeners.foreach(sqlContext.streams.removeListener)
+      addedListeners.foreach(spark.streams.removeListener)
     }
   }
 
@@ -146,18 +146,18 @@ class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with
   private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
     try {
       failAfter(1 minute) {
-        sqlContext.streams.addListener(listener)
+        spark.streams.addListener(listener)
         body
       }
     } finally {
-      sqlContext.streams.removeListener(listener)
+      spark.streams.removeListener(listener)
     }
   }
 
   private def addedListeners(): Array[ContinuousQueryListener] = {
     val listenerBusMethod =
       PrivateMethod[ContinuousQueryListenerBus]('listenerBus)
-    val listenerBus = sqlContext.streams invokePrivate listenerBusMethod()
+    val listenerBus = spark.streams invokePrivate listenerBusMethod()
     listenerBus.listeners.toArray.map(_.asInstanceOf[ContinuousQueryListener])
   }
 

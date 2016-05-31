@@ -168,7 +168,15 @@ case class InsertIntoHiveTable(
 
     // All partition column names in the format of "<column name 1>/<column name 2>/..."
     val partitionColumns = fileSinkConf.getTableInfo.getProperties.getProperty("partition_columns")
-    val partitionColumnNames = Option(partitionColumns).map(_.split("/")).orNull
+    val partitionColumnNames = Option(partitionColumns).map(_.split("/")).getOrElse(Array.empty)
+
+    // By this time, the partition map must match the table's partition columns
+    if (partitionColumnNames.toSet != partition.keySet) {
+      throw new SparkException(
+        s"""Requested partitioning does not match the ${table.tableName} table:
+           |Requested partitions: ${partition.keys.mkString(",")}
+           |Table partitions: ${table.partitionKeys.map(_.name).mkString(",")}""".stripMargin)
+    }
 
     // Validate partition spec if there exist any dynamic partitions
     if (numDynamicPartitions > 0) {
@@ -203,7 +211,7 @@ case class InsertIntoHiveTable(
       val warningMessage =
         s"$outputCommitterClass may be an output committer that writes data directly to " +
           "the final location. Because speculation is enabled, this output committer may " +
-          "cause data loss (see the case in SPARK-10063). If possible, please use a output " +
+          "cause data loss (see the case in SPARK-10063). If possible, please use an output " +
           "committer that does not have this behavior (e.g. FileOutputCommitter)."
       logWarning(warningMessage)
     }
@@ -242,7 +250,7 @@ case class InsertIntoHiveTable(
         orderedPartitionSpec.put(entry.getName, partitionSpec.getOrElse(entry.getName, ""))
       }
 
-      // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
+      // inheritTableSpecs is set to true. It should be set to false for an IMPORT query
       // which is currently considered as a Hive native command.
       val inheritTableSpecs = true
       // TODO: Correctly set isSkewedStoreAsSubdir.
@@ -288,7 +296,7 @@ case class InsertIntoHiveTable(
     }
 
     // Invalidate the cache.
-    sqlContext.cacheManager.invalidateCache(table)
+    sqlContext.sharedState.cacheManager.invalidateCache(table)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

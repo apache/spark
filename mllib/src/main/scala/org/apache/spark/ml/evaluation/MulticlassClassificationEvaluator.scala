@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
- * Evaluator for multiclass classification, which expects two input columns: score and label.
+ * Evaluator for multiclass classification, which expects two input columns: prediction and label.
  */
 @Since("1.5.0")
 @Experimental
@@ -40,15 +40,15 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
 
   /**
    * param for metric name in evaluation (supports `"f1"` (default), `"precision"`, `"recall"`,
-   * `"weightedPrecision"`, `"weightedRecall"`)
+   * `"weightedPrecision"`, `"weightedRecall"`, `"accuracy"`)
    * @group param
    */
   @Since("1.5.0")
   val metricName: Param[String] = {
     val allowedParams = ParamValidators.inArray(Array("f1", "precision",
-      "recall", "weightedPrecision", "weightedRecall"))
+      "recall", "weightedPrecision", "weightedRecall", "accuracy"))
     new Param(this, "metricName", "metric name in evaluation " +
-      "(f1|precision|recall|weightedPrecision|weightedRecall)", allowedParams)
+      "(f1|precision|recall|weightedPrecision|weightedRecall|accuracy)", allowedParams)
   }
 
   /** @group getParam */
@@ -82,22 +82,17 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
-      case "precision" => metrics.precision
-      case "recall" => metrics.recall
+      case "precision" => metrics.accuracy
+      case "recall" => metrics.accuracy
       case "weightedPrecision" => metrics.weightedPrecision
       case "weightedRecall" => metrics.weightedRecall
+      case "accuracy" => metrics.accuracy
     }
     metric
   }
 
   @Since("1.5.0")
-  override def isLargerBetter: Boolean = $(metricName) match {
-    case "f1" => true
-    case "precision" => true
-    case "recall" => true
-    case "weightedPrecision" => true
-    case "weightedRecall" => true
-  }
+  override def isLargerBetter: Boolean = true
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): MulticlassClassificationEvaluator = defaultCopy(extra)

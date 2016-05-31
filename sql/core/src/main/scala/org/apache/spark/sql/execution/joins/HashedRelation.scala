@@ -398,9 +398,9 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       0)
   }
 
-  private def acquireMemory(size: Long): Unit = {
+  private def ensureAcquireMemory(size: Long): Unit = {
     // do not support spilling
-    val got = mm.acquireExecutionMemory(size, MemoryMode.ON_HEAP, this)
+    val got = acquireMemory(size)
     if (got < size) {
       freeMemory(got)
       throw new SparkException(s"Can't acquire $size bytes memory to build hash relation, " +
@@ -408,15 +408,12 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     }
   }
 
-  private def freeMemory(size: Long): Unit = {
-    mm.releaseExecutionMemory(size, MemoryMode.ON_HEAP, this)
-  }
-
   private def init(): Unit = {
     if (mm != null) {
+      require(capacity < 512000000, "Cannot broadcast more than 512 millions rows")
       var n = 1
       while (n < capacity) n *= 2
-      acquireMemory(n * 2 * 8 + (1 << 20))
+      ensureAcquireMemory(n * 2L * 8 + (1 << 20))
       array = new Array[Long](n * 2)
       mask = n * 2 - 2
       page = new Array[Long](1 << 17)  // 1M bytes
@@ -538,7 +535,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
       if (used >= (1 << 30)) {
         sys.error("Can not build a HashedRelation that is larger than 8G")
       }
-      acquireMemory(used * 8L * 2)
+      ensureAcquireMemory(used * 8L * 2)
       val newPage = new Array[Long](used * 2)
       Platform.copyMemory(page, Platform.LONG_ARRAY_OFFSET, newPage, Platform.LONG_ARRAY_OFFSET,
         cursor - Platform.LONG_ARRAY_OFFSET)
@@ -591,7 +588,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     var old_array = array
     val n = array.length
     numKeys = 0
-    acquireMemory(n * 2 * 8L)
+    ensureAcquireMemory(n * 2 * 8L)
     array = new Array[Long](n * 2)
     mask = n * 2 - 2
     var i = 0
@@ -613,7 +610,7 @@ private[execution] final class LongToUnsafeRowMap(val mm: TaskMemoryManager, cap
     // Convert to dense mode if it does not require more memory or could fit within L1 cache
     if (range < array.length || range < 1024) {
       try {
-        acquireMemory((range + 1) * 8)
+        ensureAcquireMemory((range + 1) * 8)
       } catch {
         case e: SparkException =>
           // there is no enough memory to convert
@@ -792,7 +789,7 @@ private[joins] object LongHashedRelation {
       sizeEstimate: Int,
       taskMemoryManager: TaskMemoryManager): LongHashedRelation = {
 
-    val map: LongToUnsafeRowMap = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
+    val map = new LongToUnsafeRowMap(taskMemoryManager, sizeEstimate)
     val keyGenerator = UnsafeProjection.create(key)
 
     // Create a mapping of key -> rows

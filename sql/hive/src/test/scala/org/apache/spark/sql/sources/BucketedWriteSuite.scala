@@ -69,7 +69,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
 
   def tableDir: File = {
-    val identifier = hiveContext.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
+    val identifier = spark.sessionState.sqlParser.parseTableIdentifier("bucketed_table")
     new File(URI.create(hiveContext.sessionState.catalog.hiveDefaultTableFilePath(identifier)))
   }
 
@@ -105,7 +105,7 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
       }
 
       // Read the bucket file into a dataframe, so that it's easier to test.
-      val readBack = sqlContext.read.format(source)
+      val readBack = spark.read.format(source)
         .load(bucketFile.getAbsolutePath)
         .select(columns: _*)
 

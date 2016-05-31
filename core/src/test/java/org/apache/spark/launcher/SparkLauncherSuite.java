@@ -94,7 +94,7 @@ public class SparkLauncherSuite {
     SparkLauncher launcher = new SparkLauncher(env)
       .setSparkHome(System.getProperty("spark.test.home"))
       .setMaster("local")
-      .setAppResource("spark-internal")
+      .setAppResource(SparkLauncher.NO_RESOURCE)
       .addSparkArg(opts.CONF,
         String.format("%s=-Dfoo=ShouldBeOverriddenBelow", SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS))
       .setConf(SparkLauncher.DRIVER_EXTRA_JAVA_OPTIONS,

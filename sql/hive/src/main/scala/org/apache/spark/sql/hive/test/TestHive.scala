@@ -25,10 +25,8 @@ import scala.collection.mutable
 import scala.language.implicitConversions
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.ql.processors._
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 
 import org.apache.spark.{SparkConf, SparkContext}
@@ -72,16 +70,15 @@ object TestHive
  * test cases that rely on TestHive must be serialized.
  */
 class TestHiveContext(
-    @transient override val sparkSession: TestHiveSparkSession,
-    isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) {
+    @transient override val sparkSession: TestHiveSparkSession)
+  extends SQLContext(sparkSession) {
 
   def this(sc: SparkContext) {
-    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)), true)
+    this(new TestHiveSparkSession(HiveUtils.withHiveExternalCatalog(sc)))
   }
 
   override def newSession(): TestHiveContext = {
-    new TestHiveContext(sparkSession.newSession(), false)
+    new TestHiveContext(sparkSession.newSession())
   }
 
   override def sharedState: TestHiveSharedState = sparkSession.sharedState
