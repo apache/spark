@@ -53,7 +53,7 @@ object DatasetBenchmark {
       var res = df
       var i = 0
       while (i < numChains) {
-        res = res.select($"l" + 1 as "l")
+        res = res.select($"l" + 1 as "l", $"s")
         i += 1
       }
       res.queryExecution.toRdd.foreach(_ => Unit)
