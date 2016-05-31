@@ -67,7 +67,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
       val placeholders = collectPlaceholders(candidate)
 
       if (placeholders.isEmpty) {
-        // Return the candidate as is because it does not contain placeholders.
+        // Take the candidate as is because it does not contain placeholders.
         Iterator(candidate)
       } else {
         // Plan the logical plan marked as [[planLater]] and replace the placeholders.
@@ -87,6 +87,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
         }
       }
     }
+
     val pruned = prunePlans(plans)
     assert(pruned.hasNext, s"No plan for $plan")
     pruned
