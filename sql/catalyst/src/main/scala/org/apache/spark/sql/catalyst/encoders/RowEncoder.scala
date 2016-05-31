@@ -88,7 +88,7 @@ object RowEncoder {
         udtClass,
         Nil,
         dataType = ObjectType(udtClass), false)
-      Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+      Invoke(obj, "serialize", udt, inputObject :: Nil)
 
     case TimestampType =>
       StaticInvoke(
