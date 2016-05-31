@@ -253,21 +253,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (1, 1), (2, 2))
   }
 
-  test("joinWith, expression condition, outer join") {
-    val nullInteger = null.asInstanceOf[Integer]
-    val nullString = null.asInstanceOf[String]
-    val ds1 = Seq(ClassNullableData("a", 1),
-      ClassNullableData("c", 3)).toDS()
-    val ds2 = Seq(("a", new Integer(1)),
-      ("b", new Integer(2))).toDS()
-
-    checkDataset(
-      ds1.joinWith(ds2, $"_1" === $"a", "outer"),
-      (ClassNullableData("a", 1), ("a", new Integer(1))),
-      (ClassNullableData("c", 3), (nullString, nullInteger)),
-      (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
-  }
-
   test("joinWith tuple with primitive, expression") {
     val ds1 = Seq(1, 1, 2).toDS()
     val ds2 = Seq(("a", 1), ("b", 2)).toDS()
@@ -506,7 +491,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val e = intercept[AnalysisException] {
       ds.as[ClassData2]
     }
-    assert(e.getMessage.contains("cannot resolve '`c`' given input columns: [a, b]"), e.getMessage)
+    assert(e.getMessage.contains("cannot resolve '`c`'"))
   }
 
   test("runtime nullability check") {
@@ -782,6 +767,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assertResult(Seq(ClassData("bar", 2))) {
       ds.filter(_.b > 1).collect().toSeq
     }
+  }
+
+  test("SPARK-15140: encoder should support null object") {
+    val ds = Seq(1 -> "a", null).toDS()
+    val result = ds.collect()
+    assert(result.length == 2)
+    assert(result(0) == 1 -> "a")
+    assert(result(1) == null)
   }
 
   test("SPARK-15441: Dataset outer join") {

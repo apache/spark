@@ -220,9 +220,10 @@ private[sql] trait SQLTestData { self =>
   }
 
   protected lazy val person: DataFrame = {
-    val df = spark.sparkContext.parallelize(
+    val rdd = spark.sparkContext.parallelize(
       Person(0, "mike", 30) ::
-      Person(1, "jim", 20) :: Nil).toDF()
+      Person(1, "jim", 20) :: Nil)
+    val df = spark.createDataFrame(rdd)
     df.createOrReplaceTempView("person")
     df
   }

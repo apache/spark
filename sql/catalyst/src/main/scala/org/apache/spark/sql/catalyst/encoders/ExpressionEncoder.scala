@@ -52,7 +52,7 @@ object ExpressionEncoder {
     val cls = mirror.runtimeClass(tpe)
     val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
-    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = false)
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
     val serializer = ScalaReflection.serializerFor[T](inputObject)
     val deserializer = ScalaReflection.deserializerFor[T]
 
@@ -180,10 +180,6 @@ object ExpressionEncoder {
 
   def nullFlagColumn(inputObject: Expression): NamedExpression = {
     Alias(IsNull(inputObject), nullFlagName)(explicitMetadata = Some(nullFlagMeta))
-  }
-
-  def isNullFlagColumn(f: StructField): Boolean = {
-    f.dataType == BooleanType && f.metadata.contains(nullFlagName)
   }
 
   def isNullFlagColumn(a: Attribute): Boolean = {

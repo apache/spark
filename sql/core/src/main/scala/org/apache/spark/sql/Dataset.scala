@@ -209,13 +209,13 @@ class Dataset[T] private[sql](
 
   /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
   private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
-    unresolvedTEncoder.resolve(logicalPlan.output, OuterScopes.outerScopes)
+    unresolvedTEncoder.resolve(withSideEffects.output, OuterScopes.outerScopes)
 
   /**
    * The encoder where the expressions used to construct an object from an input row have been
    * bound to the ordinals of this [[Dataset]]'s output schema.
    */
-  private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
+  private[sql] val boundTEncoder = resolvedTEncoder.bind(withSideEffects.output)
 
   private implicit def classTag = unresolvedTEncoder.clsTag
 
@@ -223,7 +223,7 @@ class Dataset[T] private[sql](
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
 
   private[sql] def resolve(colName: String): NamedExpression = {
-    queryExecution.analyzed.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
+    logicalPlan.resolveQuoted(colName, sparkSession.sessionState.analyzer.resolver)
       .getOrElse {
         throw new AnalysisException(
           s"""Cannot resolve column name "$colName" among (${schema.fieldNames.mkString(", ")})""")
@@ -232,7 +232,7 @@ class Dataset[T] private[sql](
 
   private[sql] def numericColumns: Seq[Expression] = {
     schema.fields.filter(_.dataType.isInstanceOf[NumericType]).map { n =>
-      queryExecution.analyzed.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
+      logicalPlan.resolveQuoted(n.name, sparkSession.sessionState.analyzer.resolver).get
     }
   }
 
@@ -344,7 +344,7 @@ class Dataset[T] private[sql](
    */
   // This is declared with parentheses to prevent the Scala compiler from treating
   // `ds.toDF("1")` as invoking this toDF and then apply on the returned DataFrame.
-  def toDF(): DataFrame = new Dataset[Row](sparkSession, queryExecution, RowEncoder(schema))
+  def toDF(): DataFrame = Dataset.ofRows(sparkSession, logicalPlan)
 
   /**
    * :: Experimental ::
@@ -899,7 +899,7 @@ class Dataset[T] private[sql](
    */
   def col(colName: String): Column = colName match {
     case "*" =>
-      Column(ResolvedStar(queryExecution.analyzed.output))
+      Column(ResolvedStar(logicalPlan.output))
     case _ =>
       val expr = resolve(colName)
       Column(expr)
@@ -1655,7 +1655,7 @@ class Dataset[T] private[sql](
    */
   def withColumn(colName: String, col: Column): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
+    val output = logicalPlan.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
       val columns = output.map { field =>
@@ -1676,7 +1676,7 @@ class Dataset[T] private[sql](
    */
   private[spark] def withColumn(colName: String, col: Column, metadata: Metadata): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
+    val output = logicalPlan.output
     val shouldReplace = output.exists(f => resolver(f.name, colName))
     if (shouldReplace) {
       val columns = output.map { field =>
@@ -1701,7 +1701,7 @@ class Dataset[T] private[sql](
    */
   def withColumnRenamed(existingName: String, newName: String): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val output = queryExecution.analyzed.output
+    val output = logicalPlan.output
     val shouldRename = output.exists(f => resolver(f.name, existingName))
     if (shouldRename) {
       val columns = output.map { col =>
@@ -1759,11 +1759,11 @@ class Dataset[T] private[sql](
   def drop(col: Column): DataFrame = {
     val expression = col match {
       case Column(u: UnresolvedAttribute) =>
-        queryExecution.analyzed.resolveQuoted(
+        logicalPlan.resolveQuoted(
           u.name, sparkSession.sessionState.analyzer.resolver).getOrElse(u)
       case Column(expr: Expression) => expr
     }
-    val attrs = this.logicalPlan.output
+    val attrs = logicalPlan.output
     val colsAfterDrop = attrs.filter { attr =>
       attr != expression
     }.map(attr => Column(attr))
