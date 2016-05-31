@@ -1183,9 +1183,7 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadab
 
     >>> df = spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", seed=123, relativeError=0.01)
-    >>> qds.getSeed()
-    123
+    ...     inputCol="values", outputCol="buckets", relativeError=0.01)
     >>> qds.getRelativeError()
     0.01
     >>> bucketizer = qds.fit(df)
