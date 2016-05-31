@@ -84,6 +84,13 @@ object ScalarSubquery {
       case _ => false
     }.isDefined
   }
+
+  def hasScalarSubquery(e: Expression): Boolean = {
+    e.find {
+      case e: ScalarSubquery => true
+      case _ => false
+    }.isDefined
+  }
 }
 
 /**

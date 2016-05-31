@@ -100,6 +100,8 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("uncorrelated scalar subquery on a DataFrame generated query") {
     val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
     df.createOrReplaceTempView("subqueryData")
+    val t1 = Seq((1, 1), (2, 2)).toDF("c1", "c2")
+    t1.createOrReplaceTempView("t1")
 
     checkAnswer(
       sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
@@ -120,6 +122,16 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       sql("select (select min(value) from subqueryData" +
         " where key = (select max(key) from subqueryData) - 1)"),
       Array(Row("two"))
+    )
+
+    checkAnswer(
+      sql("select (select 1 as col) from t1"),
+      Array(Row(1), Row(1))
+    )
+
+    checkAnswer(
+      sql("select c1 + (select min(key) from subqueryData) from t1"),
+      Array(Row(2), Row(3))
     )
   }
 

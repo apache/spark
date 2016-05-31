@@ -1468,7 +1468,8 @@ object DecimalAggregates extends Rule[LogicalPlan] {
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data)) =>
+    case p @ Project(projectList, LocalRelation(output, data))
+        if !p.expressions.exists(ScalarSubquery.hasScalarSubquery) =>
       val projection = new InterpretedProjection(projectList, output)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
   }
