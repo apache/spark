@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.{Arrays, Properties, ServiceLoader, UUID}
+import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
@@ -76,8 +76,6 @@ import org.apache.spark.util._
  *   this config overrides the default configs as well as system properties.
  */
 class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationClient {
-  // original log level
-  private val originalLogLevel = org.apache.log4j.Logger.getRootLogger().getLevel
 
   // The call site where this SparkContext was constructed.
   private val creationSite: CallSite = Utils.getCallSite()
@@ -360,19 +358,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def setLogLevel(logLevel: String) {
     val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
     // let's allow lowcase or mixed case too
-    if (!validLevels.contains(logLevel.toUpperCase)) {
+    if (!validLevels.contains(logLevel.toUpperCase(Locale.ENGLISH))) {
       throw new IllegalArgumentException(
         s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
     }
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
-  }
-
-  /**
-   * Reset log level to original one when this SparkContext was created.
-   * @since 2.0.0
-   */
-  def resetLogLevel(): Unit = {
-    Utils.setLogLevel(originalLogLevel)
   }
 
   try {
