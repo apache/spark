@@ -184,6 +184,9 @@
     <test.java.home>${java.home}</test.java.home>
     <test.exclude.tags></test.exclude.tags>
 
+    <!-- When using different JDKs for the build, we can't use Zinc for the jdk8 part. -->
+    <useZincForJdk8>true</useZincForJdk8>
+
     <!-- Package to use when relocating shaded classes. -->
     <spark.shade.packageName>org.spark_project</spark.shade.packageName>
 
@@ -2574,6 +2577,42 @@
       <properties>
         <test.java.home>${env.JAVA_HOME}</test.java.home>
       </properties>
+    </profile>
+
+    <profile>
+      <id>java7</id>
+      <activation>
+        <property><name>env.JAVA_7_HOME</name></property>
+      </activation>
+      <properties>
+        <useZincForJdk8>false</useZincForJdk8>
+      </properties>
+      <build>
+        <pluginManagement>
+          <plugins>
+            <plugin>
+              <groupId>org.apache.maven.plugins</groupId>
+              <artifactId>maven-compiler-plugin</artifactId>
+              <configuration>
+                <compilerArgs combine.children="append">
+                  <arg>-bootclasspath</arg>
+                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                </compilerArgs>
+              </configuration>
+            </plugin>
+            <plugin>
+              <groupId>net.alchim31.maven</groupId>
+              <artifactId>scala-maven-plugin</artifactId>
+              <configuration>
+                <args combine.children="append">
+                  <arg>-javabootclasspath</arg>
+                  <arg>${env.JAVA_7_HOME}/jre/lib/rt.jar</arg>
+                </args>
+              </configuration>
+            </plugin>
+          </plugins>
+        </pluginManagement>
+      </build>
     </profile>
 
     <profile>
