@@ -50,7 +50,7 @@ import org.apache.spark.unsafe.types.UTF8String
  *   BinaryType -> byte array
  *   ArrayType -> scala.collection.Seq or Array
  *   MapType -> scala.collection.Map
- *   StructType -> org.apache.spark.sql.Row or Product
+ *   StructType -> org.apache.spark.sql.Row
  * }}}
  */
 object RowEncoder {
@@ -120,11 +120,15 @@ object RowEncoder {
 
     case t @ ArrayType(et, _) => et match {
       case BooleanType | ByteType | ShortType | IntegerType | LongType | FloatType | DoubleType =>
+        // TODO: validate input type for primitive array.
         NewInstance(
           classOf[GenericArrayData],
           inputObject :: Nil,
           dataType = t)
-      case _ => MapObjects(serializerFor(_, et), inputObject, externalDataTypeForInput(et))
+      case _ => MapObjects(
+        element => serializerFor(ValidateExternalType(element, et), et),
+        inputObject,
+        ObjectType(classOf[Object]))
     }
 
     case t @ MapType(kt, vt, valueNullable) =>
@@ -150,8 +154,9 @@ object RowEncoder {
     case StructType(fields) =>
       val nonNullOutput = CreateNamedStruct(fields.zipWithIndex.flatMap { case (field, index) =>
         val fieldValue = serializerFor(
-          GetExternalRowField(
-            inputObject, index, field.name, externalDataTypeForInput(field.dataType)),
+          ValidateExternalType(
+            GetExternalRowField(inputObject, index, field.name),
+            field.dataType),
           field.dataType
         )
         val convertedField = if (field.nullable) {
@@ -183,7 +188,7 @@ object RowEncoder {
    * can be `scala.math.BigDecimal`, `java.math.BigDecimal`, or
    * `org.apache.spark.sql.types.Decimal`.
    */
-  private def externalDataTypeForInput(dt: DataType): DataType = dt match {
+  def externalDataTypeForInput(dt: DataType): DataType = dt match {
     // In order to support both Decimal and java/scala BigDecimal in external row, we make this
     // as java.lang.Object.
     case _: DecimalType => ObjectType(classOf[java.lang.Object])
@@ -192,7 +197,7 @@ object RowEncoder {
     case _ => externalDataTypeFor(dt)
   }
 
-  private def externalDataTypeFor(dt: DataType): DataType = dt match {
+  def externalDataTypeFor(dt: DataType): DataType = dt match {
     case _ if ScalaReflection.isNativeType(dt) => dt
     case TimestampType => ObjectType(classOf[java.sql.Timestamp])
     case DateType => ObjectType(classOf[java.sql.Date])
