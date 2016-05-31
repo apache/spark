@@ -1560,4 +1560,23 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(sql("SELECT * FROM tbl"), Row(1, "a"))
     }
   }
+
+  test("spark-15557 promote string test") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(c1 string, c2 string)")
+      sql("insert into tbl values ('3', '2.3')")
+      checkAnswer(
+        sql("select (cast (99 as decimal(19,6)) + cast('3' as decimal)) * cast('2.3' as decimal)"),
+        Row(204.0)
+      )
+      checkAnswer(
+        sql("select (cast(99 as decimal(19,6)) + '3') *'2.3' from tbl"),
+        Row(234.6)
+      )
+      checkAnswer(
+        sql("select (cast(99 as decimal(19,6)) + c1) * c2 from tbl"),
+        Row(234.6)
+      )
+    }
+  }
 }
