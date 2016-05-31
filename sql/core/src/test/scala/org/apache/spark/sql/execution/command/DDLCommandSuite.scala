@@ -319,6 +319,12 @@ class DDLCommandSuite extends PlanTest {
     assert(ct.table.storage.locationUri == Some("/something/anything"))
   }
 
+  test("create table - column repeated in partitioning columns") {
+    val query = "CREATE TABLE tab1 (key INT, value STRING) PARTITIONED BY (key INT, hr STRING)"
+    val e = intercept[ParseException] { parser.parsePlan(query) }
+    assert(e.getMessage.contains("Column repeated in partitioning columns: [key]"))
+  }
+
   test("create table using - with partitioned by") {
     val query = "CREATE TABLE my_tab(a INT, b STRING) USING parquet PARTITIONED BY (a)"
     val expected = CreateTableUsing(

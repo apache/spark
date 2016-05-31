@@ -937,7 +937,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     selectQuery match {
       case Some(q) => CreateTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
-      case None => CreateTableCommand(tableDesc, ifNotExists)
+      case None =>
+        val partitionColsInTable = partitionCols.map(_.name).toSet.intersect(cols.map(_.name).toSet)
+        if (partitionColsInTable.nonEmpty) {
+          throw new ParseException(s"Column repeated in partitioning columns: " +
+            partitionColsInTable.mkString("[", ",", "]"), ctx)
+        }
+        CreateTableCommand(tableDesc, ifNotExists)
     }
   }
 
