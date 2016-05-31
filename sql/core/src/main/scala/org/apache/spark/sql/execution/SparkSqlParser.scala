@@ -902,9 +902,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     }
     validateRowFormatFileFormat(ctx.rowFormat, ctx.createFileFormat, ctx)
     val fileStorage = Option(ctx.createFileFormat).map(visitCreateFileFormat)
-      .getOrElse(CatalogStorageFormat.EmptyStorageFormat)
+      .getOrElse(CatalogStorageFormat.empty)
     val rowStorage = Option(ctx.rowFormat).map(visitRowFormat)
-      .getOrElse(CatalogStorageFormat.EmptyStorageFormat)
+      .getOrElse(CatalogStorageFormat.empty)
     val location = Option(ctx.locationSpec).map(visitLocationSpec)
     // If we are creating an EXTERNAL table, then the LOCATION field is required
     if (external && location.isEmpty) {
@@ -982,7 +982,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitTableFileFormat(
       ctx: TableFileFormatContext): CatalogStorageFormat = withOrigin(ctx) {
-    CatalogStorageFormat.EmptyStorageFormat.copy(
+    CatalogStorageFormat.empty.copy(
       inputFormat = Option(string(ctx.inFmt)),
       outputFormat = Option(string(ctx.outFmt)))
   }
@@ -995,7 +995,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val source = ctx.identifier.getText
     HiveSerDe.sourceToSerDe(source, conf) match {
       case Some(s) =>
-        CatalogStorageFormat.EmptyStorageFormat.copy(
+        CatalogStorageFormat.empty.copy(
           inputFormat = s.inputFormat,
           outputFormat = s.outputFormat,
           serde = s.serde)
@@ -1035,7 +1035,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   override def visitRowFormatSerde(
       ctx: RowFormatSerdeContext): CatalogStorageFormat = withOrigin(ctx) {
     import ctx._
-    CatalogStorageFormat.EmptyStorageFormat.copy(
+    CatalogStorageFormat.empty.copy(
       serde = Option(string(name)),
       serdeProperties = Option(tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
@@ -1065,7 +1065,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             ctx)
           "line.delim" -> value
         }
-    CatalogStorageFormat.EmptyStorageFormat.copy(serdeProperties = entries.toMap)
+    CatalogStorageFormat.empty.copy(serdeProperties = entries.toMap)
   }
 
   /**
@@ -1179,12 +1179,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       identifier = visitTableIdentifier(name),
       tableType = CatalogTableType.VIEW,
       schema = schema,
-      storage = CatalogStorageFormat.EmptyStorageFormat,
+      storage = CatalogStorageFormat.empty,
       properties = properties,
       viewOriginalText = sql,
       viewText = sql,
       comment = comment)
-    CreateViewCommand(tableDesc, plan(query), allowExist, replace, isTemporary, command(ctx))
+    CreateViewCommand(tableDesc, plan(query), allowExist, replace, isTemporary)
   }
 
   /**
