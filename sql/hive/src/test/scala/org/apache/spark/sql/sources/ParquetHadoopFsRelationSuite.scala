@@ -58,7 +58,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         StructType(dataSchema.fields :+ StructField("p1", IntegerType, nullable = true))
 
       checkQueries(
-        hiveContext.read.format(dataSourceName)
+        spark.read.format(dataSourceName)
           .option("dataSchema", dataSchemaWithPartition.json)
           .load(file.getCanonicalPath))
     }
@@ -76,7 +76,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         .format("parquet")
         .save(s"${dir.getCanonicalPath}/_temporary")
 
-      checkAnswer(hiveContext.read.format("parquet").load(dir.getCanonicalPath), df.collect())
+      checkAnswer(spark.read.format("parquet").load(dir.getCanonicalPath), df.collect())
     }
   }
 
@@ -104,7 +104,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
 
       // This shouldn't throw anything.
       df.write.format("parquet").mode(SaveMode.Overwrite).save(path)
-      checkAnswer(hiveContext.read.format("parquet").load(path), df)
+      checkAnswer(spark.read.format("parquet").load(path), df)
     }
   }
 
@@ -114,7 +114,7 @@ class ParquetHadoopFsRelationSuite extends HadoopFsRelationTest {
         // Parquet doesn't allow field names with spaces.  Here we are intentionally making an
         // exception thrown from the `ParquetRelation2.prepareForWriteJob()` method to trigger
         // the bug.  Please refer to spark-8079 for more details.
-        hiveContext.range(1, 10)
+        spark.range(1, 10)
           .withColumnRenamed("id", "a b")
           .write
           .format("parquet")

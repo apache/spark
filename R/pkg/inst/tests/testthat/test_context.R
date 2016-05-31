@@ -28,7 +28,7 @@ test_that("Check masked functions", {
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
                      "summary", "transform", "drop", "window", "as.data.frame")
   namesOfMaskedCompletely <- c("cov", "filter", "sample")
-  if (as.numeric(R.version$major) == 3 && as.numeric(R.version$minor) > 2) {
+  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
     namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
     namesOfMaskedCompletely <- c("endsWith", "startsWith", namesOfMaskedCompletely)
   }
@@ -58,7 +58,7 @@ test_that("repeatedly starting and stopping SparkR SQL", {
   for (i in 1:4) {
     sc <- sparkR.init()
     sqlContext <- sparkRSQL.init(sc)
-    df <- createDataFrame(sqlContext, data.frame(a = 1:20))
+    df <- createDataFrame(data.frame(a = 1:20))
     expect_equal(count(df), 20)
     sparkR.stop()
   }
@@ -129,13 +129,13 @@ test_that("getClientModeSparkSubmitOpts() returns spark-submit args from whiteli
 test_that("sparkJars sparkPackages as comma-separated strings", {
   expect_warning(processSparkJars(" a, b "))
   jars <- suppressWarnings(processSparkJars(" a, b "))
-  expect_equal(jars, c("a", "b"))
+  expect_equal(lapply(jars, basename), list("a", "b"))
 
   jars <- suppressWarnings(processSparkJars(" abc ,, def "))
-  expect_equal(jars, c("abc", "def"))
+  expect_equal(lapply(jars, basename), list("abc", "def"))
 
   jars <- suppressWarnings(processSparkJars(c(" abc ,, def ", "", "xyz", " ", "a,b")))
-  expect_equal(jars, c("abc", "def", "xyz", "a", "b"))
+  expect_equal(lapply(jars, basename), list("abc", "def", "xyz", "a", "b"))
 
   p <- processSparkPackages(c("ghi", "lmn"))
   expect_equal(p, c("ghi", "lmn"))

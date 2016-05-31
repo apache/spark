@@ -366,7 +366,7 @@ object Decimal {
   val ROUND_CEILING = BigDecimal.RoundingMode.CEILING
   val ROUND_FLOOR = BigDecimal.RoundingMode.FLOOR
 
-  /** Maximum number of decimal digits a Int can represent */
+  /** Maximum number of decimal digits an Int can represent */
   val MAX_INT_DIGITS = 9
 
   /** Maximum number of decimal digits a Long can represent */

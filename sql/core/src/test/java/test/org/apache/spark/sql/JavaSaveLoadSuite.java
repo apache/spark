@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package test.org.apache.spark.sql.sources;
+package test.org.apache.spark.sql;
 
 import java.io.File;
 import java.io.IOException;
