@@ -193,9 +193,6 @@ class DataFrameReader(object):
                                         set, it uses the default value, ``true``.
         :param allowNumericLeadingZero: allows leading zeros in numbers (e.g. 00012). If None is
                                         set, it uses the default value, ``false``.
-        :param allowNonNumericNumbers: allows using non-numeric numbers such as "NaN", "Infinity",
-                                       "-Infinity", "INF", "-INF", which are convertd to floating
-                                       point numbers, ``true``.
         :param allowBackslashEscapingAnyCharacter: allows accepting quoting of all character
                                                    using backslash quoting mechanism. If None is
                                                    set, it uses the default value, ``false``.
@@ -847,7 +844,7 @@ class DataFrameWriter(object):
 
     @since(1.4)
     def jdbc(self, url, table, mode=None, properties=None):
-        """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
+        """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.

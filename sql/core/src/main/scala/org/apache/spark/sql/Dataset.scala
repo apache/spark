@@ -35,6 +35,7 @@ import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
 import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
@@ -44,7 +45,7 @@ import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
 import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
-import org.apache.spark.sql.execution.command.ExplainCommand
+import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
 import org.apache.spark.sql.execution.python.EvaluatePython
@@ -121,7 +122,7 @@ private[sql] object Dataset {
  *
  * A more concrete example in Scala:
  * {{{
- *   // To create Dataset[Row] using SQLContext
+ *   // To create Dataset[Row] using SparkSession
  *   val people = spark.read.parquet("...")
  *   val department = spark.read.parquet("...")
  *
@@ -133,7 +134,7 @@ private[sql] object Dataset {
  *
  * and in Java:
  * {{{
- *   // To create Dataset<Row> using SQLContext
+ *   // To create Dataset<Row> using SparkSession
  *   Dataset<Row> people = spark.read().parquet("...");
  *   Dataset<Row> department = spark.read().parquet("...");
  *
@@ -145,11 +146,8 @@ private[sql] object Dataset {
  *
  * @groupname basic Basic Dataset functions
  * @groupname action Actions
- * @groupname untypedrel Untyped Language Integrated Relational Queries
- * @groupname typedrel Typed Language Integrated Relational Queries
- * @groupname func Functional Transformations
- * @groupname rdd RDD Operations
- * @groupname output Output Operations
+ * @groupname untypedrel Untyped transformations
+ * @groupname typedrel Typed transformations
  *
  * @since 1.6.0
  */
@@ -237,19 +235,13 @@ class Dataset[T] private[sql](
    */
   private[sql] def showString(_numRows: Int, truncate: Boolean = true): String = {
     val numRows = _numRows.max(0)
-    val takeResult = take(numRows + 1)
+    val takeResult = toDF().take(numRows + 1)
     val hasMoreData = takeResult.length > numRows
     val data = takeResult.take(numRows)
 
     // For array values, replace Seq and Array with square brackets
     // For cells that are beyond 20 characters, replace it with the first 17 and "..."
-    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map {
-      case r: Row => r
-      case tuple: Product => Row.fromTuple(tuple)
-      case definedByCtor: DefinedByConstructorParams =>
-        Row.fromSeq(ScalaReflection.getConstructorParameterValues(definedByCtor))
-      case o => Row(o)
-    }.map { row =>
+    val rows: Seq[Seq[String]] = schema.fieldNames.toSeq +: data.map { row =>
       row.toSeq.map { cell =>
         val str = cell match {
           case null => "null"
@@ -1897,7 +1889,7 @@ class Dataset[T] private[sql](
    *     .transform(...)
    * }}}
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
@@ -1907,7 +1899,7 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1924,7 +1916,7 @@ class Dataset[T] private[sql](
    * (Java-specific)
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1941,7 +1933,7 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1954,7 +1946,7 @@ class Dataset[T] private[sql](
    * (Java-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1968,7 +1960,7 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1984,7 +1976,7 @@ class Dataset[T] private[sql](
    * (Java-specific)
    * Returns a new [[Dataset]] that contains the result of applying `f` to each partition.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1996,8 +1988,6 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[DataFrame]] that contains the result of applying a serialized R function
    * `func` to each partition.
-   *
-   * @group func
    */
   private[sql] def mapPartitionsInR(
       func: Array[Byte],
@@ -2016,7 +2006,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
    * and then flattening the results.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -2029,7 +2019,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
    * and then flattening the results.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -2212,7 +2202,7 @@ class Dataset[T] private[sql](
    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
    * the 100 new partitions will claim 10 of the current partitions.
    *
-   * @group rdd
+   * @group typedrel
    * @since 1.6.0
    */
   def coalesce(numPartitions: Int): Dataset[T] = withTypedPlan {
@@ -2288,7 +2278,7 @@ class Dataset[T] private[sql](
   /**
    * Represents the content of the [[Dataset]] as an [[RDD]] of [[T]].
    *
-   * @group rdd
+   * @group basic
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
@@ -2301,14 +2291,14 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
-   * @group rdd
+   * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
    * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
-   * @group rdd
+   * @group basic
    * @since 1.6.0
    */
   def javaRDD: JavaRDD[T] = toJavaRDD
@@ -2335,8 +2325,14 @@ class Dataset[T] private[sql](
    * @since 2.0.0
    */
   @throws[AnalysisException]
-  def createTempView(viewName: String): Unit = {
-    sparkSession.createTempView(viewName, toDF(), replaceIfExists = false)
+  def createTempView(viewName: String): Unit = withPlan {
+    val tableDesc = CatalogTable(
+      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      tableType = CatalogTableType.VIEW,
+      schema = Seq.empty[CatalogColumn],
+      storage = CatalogStorageFormat.empty)
+    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = false,
+      isTemporary = true)
   }
 
   /**
@@ -2346,15 +2342,21 @@ class Dataset[T] private[sql](
    * @group basic
    * @since 2.0.0
    */
-  def createOrReplaceTempView(viewName: String): Unit = {
-    sparkSession.createTempView(viewName, toDF(), replaceIfExists = true)
+  def createOrReplaceTempView(viewName: String): Unit = withPlan {
+    val tableDesc = CatalogTable(
+      identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
+      tableType = CatalogTableType.VIEW,
+      schema = Seq.empty[CatalogColumn],
+      storage = CatalogStorageFormat.empty)
+    CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = true,
+      isTemporary = true)
   }
 
   /**
    * :: Experimental ::
    * Interface for saving the content of the [[Dataset]] out into external storage or streams.
    *
-   * @group output
+   * @group basic
    * @since 1.6.0
    */
   @Experimental

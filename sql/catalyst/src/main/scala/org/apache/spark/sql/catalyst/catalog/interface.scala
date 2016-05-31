@@ -50,6 +50,11 @@ case class CatalogStorageFormat(
     compressed: Boolean,
     serdeProperties: Map[String, String])
 
+object CatalogStorageFormat {
+  /** Empty storage format for default values and copies. */
+  val empty = CatalogStorageFormat(locationUri = None, inputFormat = None,
+    outputFormat = None, serde = None, compressed = false, serdeProperties = Map.empty)
+}
 
 /**
  * A column in a table.

@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.streaming
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 /**
- * A offset is a monotonically increasing metric used to track progress in the computation of a
+ * An offset is a monotonically increasing metric used to track progress in the computation of a
  * stream. An [[Offset]] must be comparable, and the result of `compareTo` must be consistent
  * with `equals` and `hashcode`.
  */

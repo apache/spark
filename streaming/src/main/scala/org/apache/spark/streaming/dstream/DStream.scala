@@ -52,7 +52,7 @@ import org.apache.spark.util.{CallSite, Utils}
  * `join`. These operations are automatically available on any DStream of pairs
  * (e.g., DStream[(Int, Int)] through implicit conversions.
  *
- * DStreams internally is characterized by a few basic properties:
+ * A DStream internally is characterized by a few basic properties:
  *  - A list of other DStreams that the DStream depends on
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval

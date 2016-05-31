@@ -182,7 +182,7 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override protected def jsonFields: List[JField] = {
     // Turns all kinds of literal values to string in json field, as the type info is hard to
-    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
+    // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)
