@@ -162,8 +162,8 @@ setMethod("pivot",
               if (length(values) == 0) {
                   result <- callJMethod(x@sgd, "pivot", colname)
               } else {
-                  if(length(values) == length(unique(values))) {
-                    stop("Values in list are not unique")   
+                  if (length(values) == length(unique(values))) {
+                    stop("Values in list are not unique")
                   }
                   result <- callJMethod(x@sgd, "pivot", colname, values)
               }
