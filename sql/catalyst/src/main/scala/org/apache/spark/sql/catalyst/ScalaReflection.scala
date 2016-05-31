@@ -568,7 +568,7 @@ object ScalaReflection extends ScalaReflection {
             udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt(),
             Nil,
             dataType = ObjectType(udt.userClass.getAnnotation(classOf[SQLUserDefinedType]).udt()))
-          Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+          Invoke(obj, "serialize", udt, inputObject :: Nil)
 
         case t if UDTRegistration.exists(getClassNameFromType(t)) =>
           val udt = UDTRegistration.getUDTFor(getClassNameFromType(t)).get.newInstance()
@@ -577,7 +577,7 @@ object ScalaReflection extends ScalaReflection {
             udt.getClass,
             Nil,
             dataType = ObjectType(udt.getClass))
-          Invoke(obj, "serialize", udt.sqlType, inputObject :: Nil)
+          Invoke(obj, "serialize", udt, inputObject :: Nil)
 
         case t if definedByConstructorParams(t) =>
           val params = getConstructorParameters(t)
