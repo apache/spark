@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.{DoubleType, StructType}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasInputCol with HasOutputCol with HasSeed {
+  with HasInputCol with HasOutputCol {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -90,9 +90,6 @@ final class QuantileDiscretizer(override val uid: String)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
 
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)
