@@ -38,7 +38,8 @@ class BlockManagerMaster(
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {
-    tell(RemoveExecutor(execId))
+    // Avoid potential deadlocks by using non-blocking call
+    driverEndpoint.ask[Boolean](RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
   }
 
