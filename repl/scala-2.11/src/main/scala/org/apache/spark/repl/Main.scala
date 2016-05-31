@@ -95,19 +95,19 @@ object Main extends Logging {
         // does not have this value set to 'hive' yet. The original default
         // behavior is that when there are hive classes, we use hive catalog.
         sparkSession = builder.enableHiveSupport().getOrCreate()
-        logInfo("Created Spark session with Hive catalog")
+        logInfo("Created Spark session with Hive support")
       } else {
         // Need to change it back to 'in-memory' if no hive classes are found
         // in the case that the property is set to hive in spark-defaults.conf
         builder.config(CATALOG_IMPLEMENTATION.key, "in-memory")
         sparkSession = builder.getOrCreate()
-        logInfo("Created Spark session with in-memory catalog")
+        logInfo("Created Spark session")
       }
     } else {
       // In the case that the property is set but not to 'hive', the internal
       // default is 'in-memory'. So the sparkSession will use in-memory catalog.
       sparkSession = builder.getOrCreate()
-      logInfo("Created Spark session with in-memory catalog")
+      logInfo("Created Spark session")
     }
     sparkContext = sparkSession.sparkContext
     Signaling.cancelOnInterrupt(sparkContext)
