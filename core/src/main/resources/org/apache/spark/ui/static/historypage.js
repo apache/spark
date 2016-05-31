@@ -54,7 +54,8 @@ function makeIdNumeric(id) {
 }
 
 function formatDate(date) {
-  return date.split(".")[0].replace("T", " ");
+  if (date <= 0) return "-";
+  else return date.split(".")[0].replace("T", " ");
 }
 
 function getParameterByName(name, searchString) {

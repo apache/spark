@@ -41,15 +41,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
  *                 at the end of current Spark session. Existing permanent relations with the same
  *                 name are not visible to the current session while the temporary view exists,
  *                 unless they are specified with full qualified table name with database prefix.
- * @param sql the original sql
  */
 case class CreateViewCommand(
     tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean,
     replace: Boolean,
-    isTemporary: Boolean,
-    sql: String)
+    isTemporary: Boolean)
   extends RunnableCommand {
 
   // TODO: Note that this class can NOT canonicalize the view SQL string entirely, which is
@@ -57,8 +55,12 @@ case class CreateViewCommand(
 
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 
-  require(tableDesc.tableType == CatalogTableType.VIEW)
-  require(tableDesc.viewText.isDefined)
+  require(tableDesc.tableType == CatalogTableType.VIEW,
+    "The type of the table to created with CREATE VIEW must be 'CatalogTableType.VIEW'.")
+  if (!isTemporary) {
+    require(tableDesc.viewText.isDefined,
+      "The table to created with CREATE VIEW must have 'viewText'.")
+  }
 
   if (allowExisting && replace) {
     throw new AnalysisException("CREATE VIEW with both IF NOT EXISTS and REPLACE is not allowed.")

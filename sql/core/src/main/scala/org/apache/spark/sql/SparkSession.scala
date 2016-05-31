@@ -583,17 +583,6 @@ class SparkSession private(
     Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
   }
 
-  /**
-   * Creates a temporary view with a DataFrame. The lifetime of this temporary view is tied to
-   * this [[SparkSession]].
-   */
-  private[sql] def createTempView(
-      viewName: String, df: DataFrame, replaceIfExists: Boolean) = {
-    sessionState.catalog.createTempView(
-      sessionState.sqlParser.parseTableIdentifier(viewName).table,
-      df.logicalPlan, replaceIfExists)
-  }
-
   /* ----------------- *
    |  Everything else  |
    * ----------------- */
