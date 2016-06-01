@@ -38,10 +38,11 @@ trait ForeachWriter[T] extends Serializable {
    * skip the further data processing. However, `close` still will be called for cleaning up
    * resources.
    *
+   * @param partitionId the partition id.
    * @param version a unique id for data deduplication.
    * @return a flat that indicates if the data should be processed.
    */
-  def open(version: Long): Boolean
+  def open(partitionId: Long, version: Long): Boolean
 
   /**
    * Called to process the data in the executor side.
@@ -51,9 +52,7 @@ trait ForeachWriter[T] extends Serializable {
   /**
    * Called when stopping to process one partition of new data in the executor side.
    *
-   * @param isFailed Whether any error is thrown during processing data.
-   * @param error The error thrown during processing data. if `isFailed` is `true`. Otherwise, it's
-   *              undefined.
+   * @param errorOrNull the error thrown during processing data or null if nothing is thrown.
    */
-  def close(isFailed: Boolean, error: Throwable): Unit
+  def close(errorOrNull: Throwable): Unit
 }

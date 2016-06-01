@@ -552,9 +552,9 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime(2.seconds))
       .foreach(new ForeachWriter[Int] {
-        override def open(version: Long): Boolean = true
+        override def open(partitionId: Long, version: Long): Boolean = true
         override def process(value: Int): Unit = {}
-        override def close(isFailed: Boolean, error: Throwable): Unit = {}
+        override def close(errorOrNull: Throwable): Unit = {}
       })
 
     cq.awaitTermination(2000L)

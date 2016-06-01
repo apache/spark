@@ -39,21 +39,17 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext {
 
           private val events = mutable.ArrayBuffer[ForeachWriterEvent.Event]()
 
-          override def open(version: Long): Boolean = {
-            events += ForeachWriterEvent.Open(
-              partition = TaskContext.getPartitionId(),
-              version = version)
+          override def open(partitionId: Long, version: Long): Boolean = {
+            events += ForeachWriterEvent.Open(partition = partitionId, version = version)
             true
           }
 
           override def process(value: Int): Unit = {
-            events += ForeachWriterEvent.Process(
-              partition = TaskContext.getPartitionId(),
-              value = value)
+            events += ForeachWriterEvent.Process(value)
           }
 
-          override def close(isFailed: Boolean, error: Throwable): Unit = {
-            events += ForeachWriterEvent.Close(partition = TaskContext.getPartitionId())
+          override def close(errorOrNull: Throwable): Unit = {
+            events += ForeachWriterEvent.Close(error = Option(errorOrNull))
             ForeachWriterEvent.addEvents(events)
           }
         })
@@ -62,15 +58,15 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext {
 
       val expectedEventsForPartition0 = Seq(
         ForeachWriterEvent.Open(partition = 0, version = 0),
-        ForeachWriterEvent.Process(partition = 0, value = 1),
-        ForeachWriterEvent.Process(partition = 0, value = 3),
-        ForeachWriterEvent.Close(partition = 0)
+        ForeachWriterEvent.Process(value = 1),
+        ForeachWriterEvent.Process(value = 3),
+        ForeachWriterEvent.Close(None)
       )
       val expectedEventsForPartition1 = Seq(
         ForeachWriterEvent.Open(partition = 1, version = 0),
-        ForeachWriterEvent.Process(partition = 1, value = 2),
-        ForeachWriterEvent.Process(partition = 1, value = 4),
-        ForeachWriterEvent.Close(partition = 1)
+        ForeachWriterEvent.Process(value = 2),
+        ForeachWriterEvent.Process(value = 4),
+        ForeachWriterEvent.Close(None)
       )
 
       val allEvents = ForeachWriterEvent.allEvents()
@@ -82,6 +78,48 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext {
       query.stop()
     }
   }
+
+  test("foreach error") {
+    ForeachWriterEvent.clear()
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val query = input.toDS().repartition(1).write
+        .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        .foreach(new ForeachWriter[Int] {
+
+          private val events = mutable.ArrayBuffer[ForeachWriterEvent.Event]()
+
+          private var currentPartitionId = -1L
+
+          override def open(partitionId: Long, version: Long): Boolean = {
+            currentPartitionId = partitionId
+            events += ForeachWriterEvent.Open(partition = partitionId, version = version)
+            true
+          }
+
+          override def process(value: Int): Unit = {
+            events += ForeachWriterEvent.Process(value)
+            throw new RuntimeException("error")
+          }
+
+          override def close(errorOrNull: Throwable): Unit = {
+            events += ForeachWriterEvent.Close(error = Option(errorOrNull))
+            ForeachWriterEvent.addEvents(events)
+          }
+        })
+      input.addData(1, 2, 3, 4)
+      query.processAllAvailable()
+
+      val allEvents = ForeachWriterEvent.allEvents()
+      assert(allEvents.size === 1)
+      assert(allEvents(0)(0) === ForeachWriterEvent.Open(partition = 0, version = 0))
+      assert(allEvents(0)(1) ===  ForeachWriterEvent.Process(value = 1))
+      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterEvent.Close]
+      assert(errorEvent.error.get.isInstanceOf[RuntimeException])
+      assert(errorEvent.error.get.getMessage === "error")
+      query.stop()
+    }
+  }
 }
 
 /** A global object to collect events in the executor side */
@@ -89,11 +127,11 @@ object ForeachWriterEvent {
 
   trait Event
 
-  case class Open(partition: Int, version: Long) extends Event
+  case class Open(partition: Long, version: Long) extends Event
 
-  case class Process[T](partition: Int, value: T) extends Event
+  case class Process[T](value: T) extends Event
 
-  case class Close(partition: Int) extends Event
+  case class Close(error: Option[Throwable]) extends Event
 
   private val _allEvents = new ConcurrentLinkedQueue[Seq[Event]]()
 

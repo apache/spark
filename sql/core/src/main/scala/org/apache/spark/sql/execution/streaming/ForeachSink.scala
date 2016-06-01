@@ -17,13 +17,14 @@
 
 package org.apache.spark.sql.execution.streaming
 
+import org.apache.spark.TaskContext
 import org.apache.spark.sql.{DataFrame, Encoder, ForeachWriter}
 
 class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Serializable {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {
     data.as[T].foreachPartition { iter =>
-      if (writer.open(batchId)) {
+      if (writer.open(TaskContext.getPartitionId(), batchId)) {
         var isFailed = false
         try {
           while (iter.hasNext) {
@@ -32,13 +33,13 @@ class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Seria
         } catch {
           case e: Throwable =>
             isFailed = true
-            writer.close(true, e)
+            writer.close(e)
         }
         if (!isFailed) {
-          writer.close(false, null)
+          writer.close(null)
         }
       } else {
-        writer.close(false, null)
+        writer.close(null)
       }
     }
   }
