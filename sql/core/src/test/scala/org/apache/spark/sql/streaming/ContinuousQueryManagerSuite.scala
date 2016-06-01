@@ -28,12 +28,11 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ContinuousQuery, Dataset, OutputMode, StreamTest}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
   import AwaitTerminationTester._
   import testImplicits._

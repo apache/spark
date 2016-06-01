@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingA
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{ContinuousQuery, OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Utils
 
 /**
