@@ -839,7 +839,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create a table, returning either a [[CreateTableCommand]] or a
-   * [[CreateTableAsSelectLogicalPlan]].
+   * [[CreateHiveTableAsSelectLogicalPlan]].
    *
    * This is not used to create datasource tables, which is handled through
    * "CREATE TABLE ... USING ...".
@@ -950,11 +950,12 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
         if (conf.convertCTAS && !hasStorageProperties) {
           val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
-          val options = rowStorage.serdeProperties ++ fileStorage.serdeProperties
+          // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
+          // are empty Maps.
           val optionsWithPath = if (location.isDefined) {
-            options + ("path" -> location.get)
+            Map("path" -> location.get)
           } else {
-            options
+            Map.empty[String, String]
           }
           CreateTableUsingAsSelect(
             tableIdent = tableDesc.identifier,
@@ -967,7 +968,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
             q
           )
         } else {
-          CreateTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
+          CreateHiveTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
         }
       case None => CreateTableCommand(tableDesc, ifNotExists)
     }
