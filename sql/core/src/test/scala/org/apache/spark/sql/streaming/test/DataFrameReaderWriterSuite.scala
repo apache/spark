@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming.test
 
 import java.util.concurrent.TimeUnit
 
@@ -24,6 +24,7 @@ import scala.concurrent.duration._
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
 import org.apache.spark.sql.streaming.{ContinuousQuery, OutputMode, ProcessingTime, StreamTest}
