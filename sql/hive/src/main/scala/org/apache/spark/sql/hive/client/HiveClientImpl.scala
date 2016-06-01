@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.{TableType => HiveTableType}
 import org.apache.hadoop.hive.metastore.api.{Database => HiveDatabase, FieldSchema}
+import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.ql.Driver
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.processors._
@@ -779,18 +780,21 @@ private[hive] class HiveClientImpl(
     hiveTable
   }
 
-  private def toHiveViewTable(view: CatalogTable): HiveTable = {
-    val tbl = toHiveTable(view)
-    tbl.setTableType(HiveTableType.VIRTUAL_VIEW)
-    tbl.setSerializationLib(null)
-    tbl.clearSerDeInfo()
-    tbl
-  }
-
   private def toHivePartition(
       p: CatalogTablePartition,
       ht: HiveTable): HivePartition = {
-    new HivePartition(ht, p.spec.asJava, p.storage.locationUri.map { l => new Path(l) }.orNull)
+    val location = p.storage.locationUri.map { l => new Path(l) }.orNull
+    val tpart = HivePartition.createMetaPartitionObject(ht, p.spec.asJava, location)
+    val storageDesc = new StorageDescriptor
+    val serdeInfo = new SerDeInfo
+    p.storage.locationUri.foreach(storageDesc.setLocation)
+    p.storage.serde.foreach(serdeInfo.setSerializationLib)
+    p.storage.inputFormat.foreach(storageDesc.setInputFormat)
+    p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
+    serdeInfo.setParameters(p.storage.serdeProperties.asJava)
+    storageDesc.setSerdeInfo(serdeInfo)
+    tpart.setSd(storageDesc)
+    new HivePartition(ht, tpart)
   }
 
   private def fromHivePartition(hp: HivePartition): CatalogTablePartition = {
