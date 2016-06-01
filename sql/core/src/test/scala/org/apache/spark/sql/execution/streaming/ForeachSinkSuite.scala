@@ -21,8 +21,8 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable
 
-import org.apache.spark.TaskContext
-import org.apache.spark.sql.{ForeachWriter, StreamTest}
+import org.apache.spark.sql.ForeachWriter
+import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 
 class ForeachSinkSuite extends StreamTest with SharedSQLContext {
