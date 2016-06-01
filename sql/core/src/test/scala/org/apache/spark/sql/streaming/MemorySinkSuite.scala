@@ -27,7 +27,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class MemorySinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class MemorySinkSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
 

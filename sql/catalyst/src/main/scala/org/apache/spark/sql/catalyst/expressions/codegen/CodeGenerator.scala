@@ -24,6 +24,7 @@ import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
 import scala.language.existentials
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -724,15 +725,23 @@ class CodegenContext {
   /**
    * Register a comment and return the corresponding place holder
    */
-  def registerComment(text: String): String = {
-    val name = freshName("c")
-    val comment = if (text.contains("\n") || text.contains("\r")) {
-      text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
+  def registerComment(text: => String): String = {
+    // By default, disable comments in generated code because computing the comments themselves can
+    // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
+    // inputs with wide schemas. For more details on the performance issues that motivated this
+    // flat, see SPARK-15680.
+    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+      val name = freshName("c")
+      val comment = if (text.contains("\n") || text.contains("\r")) {
+        text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
+      } else {
+        s"// $text"
+      }
+      placeHolderToComments += (name -> comment)
+      s"/*$name*/"
     } else {
-      s"// $text"
+      ""
     }
-    placeHolderToComments += (name -> comment)
-    s"/*$name*/"
   }
 }
 
