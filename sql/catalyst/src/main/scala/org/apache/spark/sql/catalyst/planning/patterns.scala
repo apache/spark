@@ -181,6 +181,7 @@ object ExtractFiltersAndInnerJoins extends PredicateHelper {
   }
 }
 
+
 /**
  * A pattern that collects all adjacent unions and returns their children as a Seq.
  */

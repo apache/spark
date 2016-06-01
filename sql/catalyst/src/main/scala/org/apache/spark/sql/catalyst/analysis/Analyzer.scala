@@ -1466,10 +1466,12 @@ class Analyzer(
         val childrenOutput = p.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
           case (exprId, attributes) =>
             // If there are multiple Attributes having the same ExprId, we need to resolve
-            // the conflict of nullable field.
-            val nullable = attributes.map(_.nullable).reduce(_ || _)
+            // the conflict of nullable field. We do not really expect this happen.
+            val nullable = attributes.exists(_.nullable)
             attributes.map(attr => attr.withNullability(nullable))
         }.toSeq
+        // At here, we create an AttributeMap that only compare the exprId for the lookup
+        // operation. So, we can find the corresponding input attribute's nullability.
         val attributeMap = AttributeMap[Attribute](childrenOutput.map(attr => attr -> attr))
         // For an Attribute used by the current LogicalPlan, if it is from its children,
         // we fix the nullable field by using the nullability setting of the corresponding
