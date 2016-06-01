@@ -104,8 +104,7 @@ and the migration guide below will explain all changes between releases.
 
 ## From 1.6 to 2.0
 
-There are no breaking API changes in the `spark.mllib` or `spark.ml` packages, but there are
-deprecations and changes of behavior.
+The deprecations and changes of behavior in the `spark.mllib` or `spark.ml` packages include:
 
 Deprecations:
 
