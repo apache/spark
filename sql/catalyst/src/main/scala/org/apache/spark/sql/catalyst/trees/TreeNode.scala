@@ -430,10 +430,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
     case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
-    case tn: TreeNode[_] => s"${tn.simpleString}" :: Nil
-    case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
+    case tn: TreeNode[_] => tn.simpleString :: Nil
+    case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
+    case iter: Iterable[_] if iter.isEmpty => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
-    case set: Set[_] => set.mkString("{", ",", "}") :: Nil
+    case set: Set[_] => set.mkString("{", ", ", "}") :: Nil
+    case array: Array[_] if array.isEmpty => Nil
+    case array: Array[_] => array.mkString("[", ", ", "]") :: Nil
+    case null => Nil
+    case false => Nil
+    case None => Nil
+    case Some(null) => Nil
+    case Some(str: String) => str :: Nil
     case other => other :: Nil
   }.mkString(", ")
 
