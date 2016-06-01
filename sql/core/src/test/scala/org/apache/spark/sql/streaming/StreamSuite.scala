@@ -235,6 +235,13 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       spark.experimental.extraStrategies = Nil
     }
   }
+
+  test("output mode API in Scala") {
+    val o1 = OutputMode.Append
+    assert(o1 === InternalOutputModes.Append)
+    val o2 = OutputMode.Complete
+    assert(o2 === InternalOutputModes.Complete)
+  }
 }
 
 /**

@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql
 
@@ -93,14 +93,14 @@ private[sql] object Dataset {
  * to some files on storage systems, using the `read` function available on a `SparkSession`.
  * {{{
  *   val people = spark.read.parquet("...").as[Person]  // Scala
- *   Dataset<Person> people = spark.read().parquet("...").as(Encoders.bean(Person.class)  // Java
+ *   Dataset<Person> people = spark.read().parquet("...").as(Encoders.bean(Person.class)); // Java
  * }}}
  *
  * Datasets can also be created through transformations available on existing Datasets. For example,
  * the following creates a new Dataset by applying a filter on the existing one:
  * {{{
  *   val names = people.map(_.name)  // in Scala; names is a Dataset[String]
- *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING))  // in Java 8
+ *   Dataset<String> names = people.map((Person p) -> p.name, Encoders.STRING)); // in Java 8
  * }}}
  *
  * Dataset operations can also be untyped, through various domain-specific-language (DSL)
@@ -110,7 +110,7 @@ private[sql] object Dataset {
  * To select a column from the Dataset, use `apply` method in Scala and `col` in Java.
  * {{{
  *   val ageCol = people("age")  // in Scala
- *   Column ageCol = people.col("age")  // in Java
+ *   Column ageCol = people.col("age"); // in Java
  * }}}
  *
  * Note that the [[Column]] type can also be manipulated through its various functions.
@@ -146,11 +146,8 @@ private[sql] object Dataset {
  *
  * @groupname basic Basic Dataset functions
  * @groupname action Actions
- * @groupname untypedrel Untyped Language Integrated Relational Queries
- * @groupname typedrel Typed Language Integrated Relational Queries
- * @groupname func Functional Transformations
- * @groupname rdd RDD Operations
- * @groupname output Output Operations
+ * @groupname untypedrel Untyped transformations
+ * @groupname typedrel Typed transformations
  *
  * @since 1.6.0
  */
@@ -1706,8 +1703,11 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a new [[Dataset]] with a column dropped.
-   * This is a no-op if schema doesn't contain column name.
+   * Returns a new [[Dataset]] with a column dropped. This is a no-op if schema doesn't contain
+   * column name.
+   *
+   * This method can only be used to drop top level columns. the colName string is treated
+   * literally without further interpretation.
    *
    * @group untypedrel
    * @since 2.0.0
@@ -1720,15 +1720,20 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] with columns dropped.
    * This is a no-op if schema doesn't contain column name(s).
    *
+   * This method can only be used to drop top level columns. the colName string is treated literally
+   * without further interpretation.
+   *
    * @group untypedrel
    * @since 2.0.0
    */
   @scala.annotation.varargs
   def drop(colNames: String*): DataFrame = {
     val resolver = sparkSession.sessionState.analyzer.resolver
-    val remainingCols =
-      schema.filter(f => colNames.forall(n => !resolver(f.name, n))).map(f => Column(f.name))
-    if (remainingCols.size == this.schema.size) {
+    val allColumns = queryExecution.analyzed.output
+    val remainingCols = allColumns.filter { attribute =>
+      colNames.forall(n => !resolver(attribute.name, n))
+    }.map(attribute => Column(attribute))
+    if (remainingCols.size == allColumns.size) {
       toDF()
     } else {
       this.select(remainingCols: _*)
@@ -1892,7 +1897,7 @@ class Dataset[T] private[sql](
    *     .transform(...)
    * }}}
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   def transform[U](t: Dataset[T] => Dataset[U]): Dataset[U] = t(this)
@@ -1902,7 +1907,7 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1919,7 +1924,7 @@ class Dataset[T] private[sql](
    * (Java-specific)
    * Returns a new [[Dataset]] that only contains elements where `func` returns `true`.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1936,7 +1941,7 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1949,7 +1954,7 @@ class Dataset[T] private[sql](
    * (Java-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each element.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1963,7 +1968,7 @@ class Dataset[T] private[sql](
    * (Scala-specific)
    * Returns a new [[Dataset]] that contains the result of applying `func` to each partition.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1979,7 +1984,7 @@ class Dataset[T] private[sql](
    * (Java-specific)
    * Returns a new [[Dataset]] that contains the result of applying `f` to each partition.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -1991,8 +1996,6 @@ class Dataset[T] private[sql](
   /**
    * Returns a new [[DataFrame]] that contains the result of applying a serialized R function
    * `func` to each partition.
-   *
-   * @group func
    */
   private[sql] def mapPartitionsInR(
       func: Array[Byte],
@@ -2011,7 +2014,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
    * and then flattening the results.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -2024,7 +2027,7 @@ class Dataset[T] private[sql](
    * Returns a new [[Dataset]] by first applying a function to all elements of this [[Dataset]],
    * and then flattening the results.
    *
-   * @group func
+   * @group typedrel
    * @since 1.6.0
    */
   @Experimental
@@ -2207,7 +2210,7 @@ class Dataset[T] private[sql](
    * if you go from 1000 partitions to 100 partitions, there will not be a shuffle, instead each of
    * the 100 new partitions will claim 10 of the current partitions.
    *
-   * @group rdd
+   * @group typedrel
    * @since 1.6.0
    */
   def coalesce(numPartitions: Int): Dataset[T] = withTypedPlan {
@@ -2283,7 +2286,7 @@ class Dataset[T] private[sql](
   /**
    * Represents the content of the [[Dataset]] as an [[RDD]] of [[T]].
    *
-   * @group rdd
+   * @group basic
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
@@ -2296,14 +2299,14 @@ class Dataset[T] private[sql](
 
   /**
    * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
-   * @group rdd
+   * @group basic
    * @since 1.6.0
    */
   def toJavaRDD: JavaRDD[T] = rdd.toJavaRDD()
 
   /**
    * Returns the content of the [[Dataset]] as a [[JavaRDD]] of [[Row]]s.
-   * @group rdd
+   * @group basic
    * @since 1.6.0
    */
   def javaRDD: JavaRDD[T] = toJavaRDD
@@ -2335,9 +2338,9 @@ class Dataset[T] private[sql](
       identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       tableType = CatalogTableType.VIEW,
       schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.EmptyStorageFormat)
+      storage = CatalogStorageFormat.empty)
     CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = false,
-      isTemporary = true, sql = "")
+      isTemporary = true)
   }
 
   /**
@@ -2352,16 +2355,16 @@ class Dataset[T] private[sql](
       identifier = sparkSession.sessionState.sqlParser.parseTableIdentifier(viewName),
       tableType = CatalogTableType.VIEW,
       schema = Seq.empty[CatalogColumn],
-      storage = CatalogStorageFormat.EmptyStorageFormat)
+      storage = CatalogStorageFormat.empty)
     CreateViewCommand(tableDesc, logicalPlan, allowExisting = false, replace = true,
-      isTemporary = true, sql = "")
+      isTemporary = true)
   }
 
   /**
    * :: Experimental ::
    * Interface for saving the content of the [[Dataset]] out into external storage or streams.
    *
-   * @group output
+   * @group basic
    * @since 1.6.0
    */
   @Experimental

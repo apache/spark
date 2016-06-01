@@ -35,9 +35,9 @@ class HiveDDLCommandSuite extends PlanTest {
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case CreateTableCommand(desc, allowExisting) => (desc, allowExisting)
-      case CreateHiveTableAsSelectLogicalPlan(desc, _, allowExisting) => (desc, allowExisting)
-      case CreateViewCommand(desc, _, allowExisting, _, _, _) => (desc, allowExisting)
+      case c: CreateTableCommand => (c.table, c.ifNotExists)
+      case c: CreateHiveTableAsSelectLogicalPlan => (c.tableDesc, c.allowExisting)
+      case c: CreateViewCommand => (c.tableDesc, c.allowExisting)
     }.head
   }
 

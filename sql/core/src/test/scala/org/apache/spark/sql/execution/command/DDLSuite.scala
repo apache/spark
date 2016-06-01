@@ -1179,11 +1179,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
       var message = intercept[AnalysisException] {
         sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
       }.getMessage
-      assert(message.contains("Please enable Hive support when inserting the regular tables"))
+      assert(message.contains("Hive support is required to insert into the following tables"))
       message = intercept[AnalysisException] {
         sql(s"SELECT * FROM $tabName")
       }.getMessage
-      assert(message.contains("Please enable Hive support when selecting the regular tables"))
+      assert(message.contains("Hive support is required to select over the following tables"))
     }
   }
 
@@ -1205,11 +1205,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
         var message = intercept[AnalysisException] {
           sql(s"INSERT OVERWRITE TABLE $tabName SELECT 1, 'a'")
         }.getMessage
-        assert(message.contains("Please enable Hive support when inserting the regular tables"))
+        assert(message.contains("Hive support is required to insert into the following tables"))
         message = intercept[AnalysisException] {
           sql(s"SELECT * FROM $tabName")
         }.getMessage
-        assert(message.contains("Please enable Hive support when selecting the regular tables"))
+        assert(message.contains("Hive support is required to select over the following tables"))
       }
     }
   }
