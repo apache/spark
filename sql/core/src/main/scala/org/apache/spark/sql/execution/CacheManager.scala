@@ -19,13 +19,10 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-import org.apache.hadoop.fs.{FileSystem, Path}
-
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -157,27 +154,6 @@ private[sql] class CacheManager extends Logging {
     cachedData.foreach {
       case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
         data.cachedRepresentation.recache()
-      case _ =>
-    }
-  }
-
-  /**
-   * Invalidates the cache of any data that contains `qualifiedPath` in one or more
-   * `HadoopFsRelation` node(s) as part of its logical plan.
-   */
-  private[sql] def invalidateCachedPath(fs: FileSystem, qualifiedPath: Path): Unit = writeLock {
-    cachedData.foreach {
-      case data if data.plan.find {
-        case lr: LogicalRelation => lr.relation match {
-          case hr: HadoopFsRelation =>
-            hr.location.paths
-              .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-              .contains(qualifiedPath)
-        }
-      }.isDefined =>
-        val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
-        data.cachedRepresentation.uncache(blocking = false)
-        cachedData.remove(dataIndex)
       case _ =>
     }
   }
