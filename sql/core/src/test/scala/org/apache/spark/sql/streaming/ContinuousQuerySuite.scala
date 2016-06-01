@@ -18,11 +18,10 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, MemoryStream, StreamExecution}
-import org.apache.spark.sql.test.SharedSQLContext
 
-class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
+
+class ContinuousQuerySuite extends StreamTest {
 
   import AwaitTerminationTester._
   import testImplicits._
