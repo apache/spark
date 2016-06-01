@@ -424,7 +424,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
-  private lazy val allChildren: Set[TreeNode[_]] = containsChild ++ innerChildren.toSet[TreeNode[_]]
+  private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
@@ -470,9 +470,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
-   * All the nodes that are private children of current node.
-   *
-   * For example, sub-queries are stored in innerChildren.
+   * All the nodes that should be shown as a inner nested tree of this node.
+   * For example, this can be used to show sub-queries.
    */
   protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
