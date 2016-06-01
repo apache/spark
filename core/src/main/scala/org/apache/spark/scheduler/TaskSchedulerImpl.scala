@@ -239,6 +239,7 @@ private[spark] class TaskSchedulerImpl(
     manager.parent.removeSchedulable(manager)
     logInfo("Removed TaskSet %s, whose tasks have all completed, from pool %s"
       .format(manager.taskSet.id, manager.parent.name))
+    // TODO update blacklistTracker to discard taskSet info
   }
 
   private def resourceOfferSingleTaskSet(
@@ -248,7 +249,7 @@ private[spark] class TaskSchedulerImpl(
       availableCpus: Array[Int],
       tasks: Seq[ArrayBuffer[TaskDescription]]) : Boolean = {
     var launchedTask = false
-    // TODO unit test, and also add executor-stage filtering as well
+    // TODO add executor-stage filtering as well
     // This is an optimization -- the taskSet might contain a very long list of pending tasks.
     // Rather than wasting time checking the offer against each task, and then realizing the
     // executor is blacklisted, just filter out the bad executor immediately.
@@ -256,8 +257,10 @@ private[spark] class TaskSchedulerImpl(
       .getOrElse(Set())
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
+      val execBlacklisted = taskSet.blacklistTracker.map{
+        _.isExecutorBlacklisted(taskSet.stageId, execId)}.getOrElse(true)
       val host = shuffledOffers(i).host
-      if (!nodeBlacklist(host) && availableCpus(i) >= CPUS_PER_TASK) {
+      if (!nodeBlacklist(host) && !execBlacklisted && availableCpus(i) >= CPUS_PER_TASK) {
         try {
           for (task <- taskSet.resourceOffer(execId, host, maxLocality)) {
             tasks(i) += task
