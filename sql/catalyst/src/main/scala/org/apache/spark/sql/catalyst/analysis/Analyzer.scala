@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
-import org.apache.spark.sql.catalyst.planning.IntegerIndex
+import org.apache.spark.sql.catalyst.planning.{ExtractJoinOutputAttributes, IntegerIndex}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, _}
 import org.apache.spark.sql.catalyst.rules._
@@ -109,6 +109,8 @@ class Analyzer(
       TimeWindowing ::
       TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
+    Batch("Solve", Once,
+      SolveIllegalReferences),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
     Batch("UDF", Once,
@@ -1448,6 +1450,32 @@ class Analyzer(
   }
 
   /**
+   * Corrects attribute references in an expression tree of some operators (e.g., filters and
+   * projects) if these operators have a join as a child and the references point to columns on the
+   * input relation of the join. This is because some joins change the nullability of input columns
+   * and this could cause illegal optimization (e.g., NULL propagation) and wrong answers.
+   * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
+   */
+  object SolveIllegalReferences extends Rule[LogicalPlan] {
+
+    private def replaceReferences(e: Expression, attrMap: AttributeMap[Attribute]) = e.transform {
+      case a: AttributeReference => attrMap.get(a).getOrElse(a)
+    }
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+      case q: LogicalPlan =>
+        q.transform {
+          case f @ Filter(filterCondition, ExtractJoinOutputAttributes(join, joinOutputMap)) =>
+            f.copy(condition = replaceReferences(filterCondition, joinOutputMap))
+          case p @ Project(projectList, ExtractJoinOutputAttributes(join, joinOutputMap)) =>
+            p.copy(projectList = projectList.map { e =>
+              replaceReferences(e, joinOutputMap).asInstanceOf[NamedExpression]
+            })
+        }
+    }
+  }
+
+  /**
    * Extracts [[WindowExpression]]s from the projectList of a [[Project]] operator and
    * aggregateExpressions of an [[Aggregate]] operator and creates individual [[Window]]
    * operators for every distinct [[WindowSpecDefinition]].
@@ -2129,4 +2157,3 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
-
