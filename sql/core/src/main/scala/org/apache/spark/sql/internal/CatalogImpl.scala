@@ -125,6 +125,7 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
       val metadata = sessionCatalog.lookupFunctionInfo(funcIdent)
       new Function(
         name = funcIdent.identifier,
+        database = funcIdent.database.orNull,
         description = null, // for now, this is always undefined
         className = metadata.getClassName,
         isTemporary = funcIdent.database.isEmpty)
