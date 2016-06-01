@@ -616,7 +616,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
     def save(model: PrefixSpanModel[_], path: String): Unit = {
       val sc = model.freqSequences.sparkContext
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
@@ -640,7 +640,7 @@ object PrefixSpanModel extends Loader[PrefixSpanModel[_]] {
 
     def load(sc: SparkContext, path: String): PrefixSpanModel[_] = {
       implicit val formats = DefaultFormats
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)

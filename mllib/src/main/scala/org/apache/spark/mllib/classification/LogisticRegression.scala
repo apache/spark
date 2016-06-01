@@ -437,7 +437,7 @@ class LogisticRegressionWithLBFGS
         lr.setMaxIter(optimizer.getNumIterations())
         lr.setTol(optimizer.getConvergenceTol())
         // Convert our input into a DataFrame
-        val spark = SparkSession.builder().config(input.context.getConf).getOrCreate()
+        val spark = SparkSession.builder().sparkContext(input.context).getOrCreate()
         val df = spark.createDataFrame(input.map(_.asML))
         // Determine if we should cache the DF
         val handlePersistence = input.getStorageLevel == StorageLevel.NONE
