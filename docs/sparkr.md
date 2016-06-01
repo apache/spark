@@ -304,9 +304,9 @@ This summary is same as the result of summary() function in R.
 
 Model persistence is supported for all Machine Learning algorithms for all families.
 
-The examples below show the use of building Gaussian GLM, NaiveBayes, kMeans and AFTSurvivalReg using SparkR
+The examples below show the use of building Gaussian GLM, NaiveBayes, kMeans and AFTSurvivalReg models using SparkR
 
-{% include_example r/ml.r %}
+{% include_example r/ml.R %}
 
 # R Function Name Conflicts
 
