@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming
 
 import java.lang.Thread.UncaughtExceptionHandler
 
@@ -33,10 +33,12 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
 /**
@@ -63,7 +65,7 @@ import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
  * avoid hanging forever in the case of failures. However, individual suites can change this
  * by overriding `streamingTimeout`.
  */
-trait StreamTest extends QueryTest with Timeouts {
+trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
@@ -523,7 +525,7 @@ trait StreamTest extends QueryTest with Timeouts {
     case class ExpectException[E <: Exception]()(implicit val t: ClassTag[E])
       extends ExpectedBehavior
 
-    private val DEFAULT_TEST_TIMEOUT = 1 second
+    private val DEFAULT_TEST_TIMEOUT = 1.second
 
     def test(
         expectedBehavior: ExpectedBehavior,

@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.ManualClock
 
-class StreamSuite extends StreamTest with SharedSQLContext {
+class StreamSuite extends StreamTest {
 
   import testImplicits._
 
