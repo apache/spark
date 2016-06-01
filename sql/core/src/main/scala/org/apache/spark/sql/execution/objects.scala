@@ -357,6 +357,7 @@ case class FlatMapGroupsInRExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
+    val groupNames = groupingAttributes.map(_.name).toArray
     val isDeserializedRData =
       if (outputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
     val serializerForR = if (!isDeserializedRData) {
@@ -370,8 +371,6 @@ case class FlatMapGroupsInRExec(
       val getKey = ObjectOperator.deserializeRowToObject(keyDeserializer, groupingAttributes)
       val getValue = ObjectOperator.deserializeRowToObject(valueDeserializer, dataAttributes)
       val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
-      val groupNames = groupingAttributes.map(_.name).toArray
-
       val runner = new RRunner[Array[Byte]](
         func, SerializationFormats.ROW, serializerForR, packageNames, broadcastVars,
         isDataFrame = true, colNames = inputSchema.fieldNames, key = groupNames)
