@@ -32,7 +32,7 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
-import org.apache.spark.TaskContext
+import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
@@ -127,45 +127,71 @@ case class ScriptTransformation(
         }
         val mutableRow = new SpecificMutableRow(output.map(_.dataType))
 
-        override def hasNext: Boolean = {
-          if (outputSerde == null) {
-            if (curLine == null) {
-              curLine = reader.readLine()
-              if (curLine == null) {
-                if (writerThread.exception.isDefined) {
-                  throw writerThread.exception.get
-                }
-                false
-              } else {
-                true
-              }
-            } else {
-              true
-            }
-          } else if (scriptOutputWritable == null) {
-            scriptOutputWritable = reusedWritableObject
+        private def checkFailureAndPropagate(cause: Throwable = null): Unit = {
+          if (writerThread.exception.isDefined) {
+            throw writerThread.exception.get
+          }
 
-            if (scriptOutputReader != null) {
-              if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
-                writerThread.exception.foreach(throw _)
-                false
-              } else {
-                true
+          // Checks if the proc is still alive (incase the command ran was bad)
+          // The ideal way to do this is to use Java 8's Process#isAlive()
+          // but it cannot be used because Spark still supports Java 7.
+          // Following is a workaround used to check if a process is alive in Java 7
+          // TODO: Once builds are switched to Java 8, this can be changed
+          try {
+            val exitCode = proc.exitValue()
+            if (exitCode != 0) {
+              logError(stderrBuffer.toString) // log the stderr circular buffer
+              throw new SparkException(s"Subprocess exited with status $exitCode. " +
+                s"Error: ${stderrBuffer.toString}", cause)
+            }
+          } catch {
+            case _: IllegalThreadStateException =>
+            // This means that the process is still alive. Move ahead
+          }
+        }
+
+        override def hasNext: Boolean = {
+          try {
+            if (outputSerde == null) {
+              if (curLine == null) {
+                curLine = reader.readLine()
+                if (curLine == null) {
+                  checkFailureAndPropagate()
+                  return false
+                }
               }
-            } else {
-              try {
-                scriptOutputWritable.readFields(scriptOutputStream)
-                true
-              } catch {
-                case _: EOFException =>
-                  if (writerThread.exception.isDefined) {
-                    throw writerThread.exception.get
-                  }
-                  false
+            } else if (scriptOutputWritable == null) {
+              scriptOutputWritable = reusedWritableObject
+
+              if (scriptOutputReader != null) {
+                if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
+                  checkFailureAndPropagate()
+                  return false
+                }
+              } else {
+                try {
+                  scriptOutputWritable.readFields(scriptOutputStream)
+                } catch {
+                  case _: EOFException =>
+                    // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
+                    // Ideally the proc should *not* be alive at this point but
+                    // there can be a lag between EOF being written out and the process
+                    // being terminated. So explicitly waiting for the process to be done.
+                    proc.waitFor()
+                    checkFailureAndPropagate()
+                    return false
+                }
               }
             }
-          } else {
+
             true
+          } catch {
+            case NonFatal(e) =>
+              // If this exception is due to abrupt / unclean termination of `proc`,
+              // then detect it and propagate a better exception message for end users
+              checkFailureAndPropagate(e)
+
+              throw e
           }
         }
 
@@ -284,7 +310,6 @@ private class ScriptTransformationWriterThread(
           }
         }
       }
-      outputStream.close()
       threwException = false
     } catch {
       case NonFatal(e) =>
@@ -295,6 +320,7 @@ private class ScriptTransformationWriterThread(
         throw e
     } finally {
       try {
+        outputStream.close()
         if (proc.waitFor() != 0) {
           logError(stderrBuffer.toString) // log the stderr circular buffer
         }

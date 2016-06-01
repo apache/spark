@@ -28,7 +28,7 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
+import org.apache.spark.sql.{ContinuousQuery, Dataset, OutputMode, StreamTest}
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
@@ -232,20 +232,20 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
-        datasets.map { ds =>
+        datasets.zipWithIndex.map { case (ds, i) =>
           @volatile var query: StreamExecution = null
           try {
             val df = ds.toDF
             val metadataRoot =
-              Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-            query = spark
-              .streams
-              .startQuery(
-                StreamExecution.nextName,
-                metadataRoot,
-                df,
-                new MemorySink(df.schema))
-              .asInstanceOf[StreamExecution]
+              Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
+            query =
+              df.write
+                .format("memory")
+                .queryName(s"query$i")
+                .option("checkpointLocation", metadataRoot)
+                .outputMode("append")
+                .startStream()
+                .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
               if (query != null) query.stop()

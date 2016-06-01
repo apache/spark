@@ -224,6 +224,18 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
+   * Creates a new [[Dataset]] of type T containing zero elements.
+   *
+   * @return 2.0.0
+   */
+  @Experimental
+  def emptyDataset[T: Encoder]: Dataset[T] = {
+    val encoder = implicitly[Encoder[T]]
+    new Dataset(self, LocalRelation(encoder.schema.toAttributes), encoder)
+  }
+
+  /**
+   * :: Experimental ::
    * Creates a [[DataFrame]] from an RDD of Product (e.g. case classes, tuples).
    *
    * @group dataframes
@@ -376,6 +388,40 @@ class SparkSession private(
     Dataset.ofRows(self, LogicalRelation(baseRelation))
   }
 
+  /* ------------------------------- *
+   |  Methods for creating DataSets  |
+   * ------------------------------- */
+
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Example ==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
+   *   val ds = spark.createDataset(data)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
@@ -384,6 +430,17 @@ class SparkSession private(
     Dataset[T](self, plan)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     val enc = encoderFor[T]
     val attributes = enc.schema.toAttributes
@@ -392,6 +449,24 @@ class SparkSession private(
     Dataset[T](self, plan)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a [[java.util.List]] of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Java Example ==
+   *
+   * {{{
+   *     List<String> data = Arrays.asList("hello", "world");
+   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     createDataset(data.asScala)
   }
@@ -508,17 +583,6 @@ class SparkSession private(
     Dataset.ofRows(self, sessionState.catalog.lookupRelation(tableIdent))
   }
 
-  /**
-   * Creates a temporary view with a DataFrame. The lifetime of this temporary view is tied to
-   * this [[SparkSession]].
-   */
-  private[sql] def createTempView(
-      viewName: String, df: DataFrame, replaceIfExists: Boolean) = {
-    sessionState.catalog.createTempView(
-      sessionState.sqlParser.parseTableIdentifier(viewName).table,
-      df.logicalPlan, replaceIfExists)
-  }
-
   /* ----------------- *
    |  Everything else  |
    * ----------------- */
@@ -630,7 +694,7 @@ object SparkSession {
 
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
-    private[sql] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+    private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
       userSuppliedContext = Option(sparkContext)
       this
     }

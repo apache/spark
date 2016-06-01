@@ -46,6 +46,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       1, 1, 1)
   }
 
+  test("emptyDataset") {
+    val ds = spark.emptyDataset[Int]
+    assert(ds.count() == 0L)
+    assert(ds.collect() sameElements Array.empty[Int])
+  }
+
   test("range") {
     assert(spark.range(10).map(_ + 1).reduce(_ + _) == 55)
     assert(spark.range(10).map{ case i: java.lang.Long => i + 1 }.reduce(_ + _) == 55)
@@ -700,7 +706,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val dataset = Seq(1, 2, 3).toDS()
     dataset.createOrReplaceTempView("tempView")
 
-    // Overrrides the existing temporary view with same name
+    // Overrides the existing temporary view with same name
     // No exception should be thrown here.
     dataset.createOrReplaceTempView("tempView")
 
@@ -762,6 +768,20 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
         |""".stripMargin
 
     checkShowString(ds, expected)
+  }
+
+  test(
+    "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
+  ) {
+    val ds = Seq(1 -> "foo", 2 -> "bar").toDF("b", "a").as[ClassData]
+
+    assertResult(Seq(ClassData("foo", 1), ClassData("bar", 2))) {
+      ds.collect().toSeq
+    }
+
+    assertResult(Seq(ClassData("bar", 2))) {
+      ds.filter(_.b > 1).collect().toSeq
+    }
   }
 }
 

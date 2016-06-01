@@ -137,7 +137,8 @@ trait StreamSinkProvider {
   def createSink(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      partitionColumns: Seq[String]): Sink
+      partitionColumns: Seq[String],
+      outputMode: OutputMode): Sink
 }
 
 /**
