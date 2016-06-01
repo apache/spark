@@ -22,6 +22,7 @@ import java.sql.Timestamp
 
 import org.apache.spark.AccumulatorSuite
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
+import org.apache.spark.sql.catalyst.catalog.{CatalogTestUtils, ExternalCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions.SortOrder
 import org.apache.spark.sql.catalyst.plans.logical.Aggregate
 import org.apache.spark.sql.catalyst.util.StringUtils
@@ -57,16 +58,28 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("show functions") {
+    val utils = new CatalogTestUtils {
+      override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
+      override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
+      override def newEmptyCatalog(): ExternalCatalog = spark.sharedState.externalCatalog
+    }
+
+    def createFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.sessionState.catalog
+          .createFunction(utils.newFunc(name, Some("default")), ignoreIfExists = true)
+      }
+    }
+
     def getFunctions(pattern: String): Seq[Row] = {
-      StringUtils.filterPattern(spark.sessionState.functionRegistry.listFunction(), pattern)
-        .map(Row(_))
+      spark.sessionState.catalog.listFunctions("default", pattern).map(Row(_))
     }
+
+    createFunction(Seq("logi", "logii", "logiii", "ilog"))
+
+    println(s"getFunctions: ${sql("SHOW functions").collect().toSeq}") // scalastyle:off
+    println(s"getFunctions: ${getFunctions("*")}") // scalastyle:off
     checkAnswer(sql("SHOW functions"), getFunctions("*"))
-    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
-      // For the pattern part, only '*' and '|' are allowed as wildcards.
-      // For '*', we need to replace it to '.*'.
-      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
-    }
   }
 
   test("describe functions") {
