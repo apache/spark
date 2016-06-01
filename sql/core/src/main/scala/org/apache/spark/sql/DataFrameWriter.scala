@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, Project}
 import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingAsSelect, DataSource, HadoopFsRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
-import org.apache.spark.sql.execution.streaming.{ForeachSink, MemoryPlan, MemorySink, StreamExecution}
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.util.Utils
 
@@ -79,7 +79,47 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       case "ignore" => SaveMode.Ignore
       case "error" | "default" => SaveMode.ErrorIfExists
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
-        "Accepted modes are 'overwrite', 'append', 'ignore', 'error'.")
+        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error'.")
+    }
+    this
+  }
+
+  /**
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
+   *                            written to the sink
+   *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
+   *                              to the sink every time these is some updates
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: OutputMode): DataFrameWriter = {
+    assertStreaming("outputMode() can only be called on continuous queries")
+    this.outputMode = outputMode
+    this
+  }
+
+  /**
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
+   *                 the sink
+   *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
+   *                 every time these is some updates
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: String): DataFrameWriter = {
+    assertStreaming("outputMode() can only be called on continuous queries")
+    this.outputMode = outputMode.toLowerCase match {
+      case "append" =>
+        OutputMode.Append
+      case "complete" =>
+        OutputMode.Complete
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
+          "Accepted output modes are 'append' and 'complete'")
     }
     this
   }
@@ -298,18 +338,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
       val queryName =
         extraOptions.getOrElse(
           "queryName", throw new AnalysisException("queryName must be specified for memory sink"))
-      val checkpointLocation = extraOptions.get("checkpointLocation").map { userSpecified =>
-        new Path(userSpecified).toUri.toString
-      }.orElse {
-        val checkpointConfig: Option[String] =
-          df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION)
-
-        checkpointConfig.map { location =>
-          new Path(location, queryName).toUri.toString
-        }
-      }.getOrElse {
-        Utils.createTempDir(namePrefix = "memory.stream").getCanonicalPath
-      }
+      val checkpointLocation = getCheckpointLocation(queryName, required = false)
 
       // If offsets have already been created, we trying to resume a query.
       val checkpointPath = new Path(checkpointLocation, "offsets")
@@ -321,7 +350,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         checkpointPath.toUri.toString
       }
 
-      val sink = new MemorySink(df.schema)
+      val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       resultDf.createOrReplaceTempView(queryName)
       val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
@@ -329,6 +358,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         checkpointLocation,
         df,
         sink,
+        outputMode,
         trigger)
       continuousQuery
     } else {
@@ -338,23 +368,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           className = source,
           options = extraOptions.toMap,
           partitionColumns = normalizedParCols.getOrElse(Nil))
-
       val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
-      val checkpointLocation = extraOptions.get("checkpointLocation")
-        .orElse {
-          df.sparkSession.sessionState.conf.checkpointLocation.map { l =>
-            new Path(l, queryName).toUri.toString
-          }
-        }.getOrElse {
-          throw new AnalysisException("checkpointLocation must be specified either " +
-            "through option() or SQLConf")
-        }
-
       df.sparkSession.sessionState.continuousQueryManager.startQuery(
         queryName,
-        checkpointLocation,
+        getCheckpointLocation(queryName, required = true),
         df,
-        dataSource.createSink(),
+        dataSource.createSink(outputMode),
+        outputMode,
         trigger)
     }
   }
@@ -373,22 +393,36 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertStreaming("startStream() can only be called on continuous queries")
 
     val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
-    val checkpointLocation = extraOptions.get("checkpointLocation")
-      .orElse {
-        df.sparkSession.sessionState.conf.checkpointLocation.map { l =>
-          new Path(l, queryName).toUri.toString
-        }
-      }.getOrElse {
-        throw new AnalysisException("checkpointLocation must be specified either " +
-          "through option() or SQLConf")
-    }
-
+    val sink = new ForeachSink[T](ds.sparkSession.sparkContext.clean(writer))(ds.unresolvedTEncoder)
     df.sparkSession.sessionState.continuousQueryManager.startQuery(
       queryName,
-      checkpointLocation,
+      getCheckpointLocation(queryName, required = false),
       df,
-      new ForeachSink[T](ds.sparkSession.sparkContext.clean(writer))(ds.unresolvedTEncoder),
+      sink,
+      outputMode,
       trigger)
+  }
+
+  /**
+   * Returns the checkpointLocation for a query. If `required` is `ture` but the checkpoint
+   * location is not set, [[AnalysisException]] will be thrown. If `required` is `false`, a temp
+   * folder will be created if the checkpoint location is not set.
+   */
+  private def getCheckpointLocation(queryName: String, required: Boolean): String = {
+    extraOptions.get("checkpointLocation").map { userSpecified =>
+      new Path(userSpecified).toUri.toString
+    }.orElse {
+      df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION).map { location =>
+        new Path(location, queryName).toUri.toString
+      }
+    }.getOrElse {
+      if (required) {
+        throw new AnalysisException("checkpointLocation must be specified either " +
+          "through option() or SQLConf")
+      } else {
+        Utils.createTempDir(namePrefix = "memory.stream").getCanonicalPath
+      }
+    }
   }
 
   /**
@@ -563,7 +597,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Saves the content of the [[DataFrame]] to a external database table via JDBC. In the case the
+   * Saves the content of the [[DataFrame]] to an external database table via JDBC. In the case the
    * table already exists in the external database, behavior of this function depends on the
    * save mode, specified by the `mode` function (default to throwing an exception).
    *
@@ -673,7 +707,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * This will overwrite `orc.compress`. </li>
    *
    * @since 1.5.0
-   * @note Currently, this method can only be used together with `HiveContext`.
+   * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
     assertNotStreaming("orc() can only be called on non-continuous queries")
@@ -741,6 +775,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var outputMode: OutputMode = OutputMode.Append
 
   private var trigger: Trigger = ProcessingTime(0L)
 

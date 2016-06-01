@@ -130,6 +130,7 @@ trait CodegenSupport extends SparkPlan {
         }
         val evaluateInputs = evaluateVariables(outputVars)
         // generate the code to create a UnsafeRow
+        ctx.INPUT_ROW = row
         ctx.currentVars = outputVars
         val ev = GenerateUnsafeProjection.createCode(ctx, colExprs, false)
         val code = s"""
@@ -445,7 +446,7 @@ case class CollapseCodegenStages(conf: SQLConf) extends Rule[SparkPlan] {
   }
 
   /**
-   * Inserts a InputAdapter on top of those that do not support codegen.
+   * Inserts an InputAdapter on top of those that do not support codegen.
    */
   private def insertInputAdapter(plan: SparkPlan): SparkPlan = plan match {
     case j @ SortMergeJoinExec(_, _, _, _, left, right) if j.supportCodegen =>

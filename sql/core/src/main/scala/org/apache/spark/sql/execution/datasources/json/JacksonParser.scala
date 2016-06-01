@@ -129,15 +129,13 @@ object JacksonParser extends Logging {
       case (VALUE_STRING, FloatType) =>
         // Special case handling for NaN and Infinity.
         val value = parser.getText
-        if (value.equals("NaN") ||
-          value.equals("Infinity") ||
-          value.equals("+Infinity") ||
-          value.equals("-Infinity")) {
+        val lowerCaseValue = value.toLowerCase()
+        if (lowerCaseValue.equals("nan") ||
+          lowerCaseValue.equals("infinity") ||
+          lowerCaseValue.equals("-infinity") ||
+          lowerCaseValue.equals("inf") ||
+          lowerCaseValue.equals("-inf")) {
           value.toFloat
-        } else if (value.equals("+INF") || value.equals("INF")) {
-          Float.PositiveInfinity
-        } else if (value.equals("-INF")) {
-          Float.NegativeInfinity
         } else {
           throw new SparkSQLJsonProcessingException(s"Cannot parse $value as FloatType.")
         }
@@ -148,15 +146,13 @@ object JacksonParser extends Logging {
       case (VALUE_STRING, DoubleType) =>
         // Special case handling for NaN and Infinity.
         val value = parser.getText
-        if (value.equals("NaN") ||
-          value.equals("Infinity") ||
-          value.equals("+Infinity") ||
-          value.equals("-Infinity")) {
+        val lowerCaseValue = value.toLowerCase()
+        if (lowerCaseValue.equals("nan") ||
+          lowerCaseValue.equals("infinity") ||
+          lowerCaseValue.equals("-infinity") ||
+          lowerCaseValue.equals("inf") ||
+          lowerCaseValue.equals("-inf")) {
           value.toDouble
-        } else if (value.equals("+INF") || value.equals("INF")) {
-          Double.PositiveInfinity
-        } else if (value.equals("-INF")) {
-          Double.NegativeInfinity
         } else {
           throw new SparkSQLJsonProcessingException(s"Cannot parse $value as DoubleType.")
         }

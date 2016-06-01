@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.hadoop.hive.serde.serdeConstants
-
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogTable, CatalogTableType}
@@ -37,9 +35,9 @@ class HiveDDLCommandSuite extends PlanTest {
 
   private def extractTableDesc(sql: String): (CatalogTable, Boolean) = {
     parser.parsePlan(sql).collect {
-      case CreateTableCommand(desc, allowExisting) => (desc, allowExisting)
-      case CreateTableAsSelectLogicalPlan(desc, _, allowExisting) => (desc, allowExisting)
-      case CreateViewCommand(desc, _, allowExisting, _, _, _) => (desc, allowExisting)
+      case c: CreateTableCommand => (c.table, c.ifNotExists)
+      case c: CreateTableAsSelectLogicalPlan => (c.tableDesc, c.allowExisting)
+      case c: CreateViewCommand => (c.tableDesc, c.allowExisting)
     }.head
   }
 

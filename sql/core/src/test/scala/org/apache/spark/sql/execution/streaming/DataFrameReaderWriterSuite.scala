@@ -90,10 +90,11 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   override def createSink(
       spark: SQLContext,
       parameters: Map[String, String],
-      partitionColumns: Seq[String]): Sink = {
+      partitionColumns: Seq[String],
+      outputMode: OutputMode): Sink = {
     LastOptions.parameters = parameters
     LastOptions.partitionColumns = partitionColumns
-    LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns)
+    LastOptions.mockStreamSinkProvider.createSink(spark, parameters, partitionColumns, outputMode)
     new Sink {
       override def addBatch(batchId: Long, data: DataFrame): Unit = {}
     }
@@ -414,6 +415,39 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
     val w = df.write
     val e = intercept[AnalysisException](w.mode("append"))
     assert(e.getMessage == "mode() can only be called on non-continuous queries;")
+  }
+
+  test("check outputMode(OutputMode) can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.outputMode(OutputMode.Append))
+    Seq("outputmode", "continuous queries").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
+  test("check outputMode(string) can only be called on continuous queries") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val e = intercept[AnalysisException](w.outputMode("append"))
+    Seq("outputmode", "continuous queries").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
+  test("check outputMode(string) throws exception on unsupported modes") {
+    def testError(outputMode: String): Unit = {
+      val df = spark.read
+        .format("org.apache.spark.sql.streaming.test")
+        .stream()
+      val w = df.write
+      val e = intercept[IllegalArgumentException](w.outputMode(outputMode))
+      Seq("output mode", "unknown", outputMode).foreach { s =>
+        assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+      }
+    }
+    testError("Update")
+    testError("Xyz")
   }
 
   test("check bucketBy() can only be called on non-continuous queries") {

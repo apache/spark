@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.{DataFrame, OutputMode, SQLContext}
 import org.apache.spark.sql.sources.{DataSourceRegister, StreamSinkProvider}
 
 class ConsoleSink(options: Map[String, String]) extends Sink with Logging {
@@ -52,7 +52,8 @@ class ConsoleSinkProvider extends StreamSinkProvider with DataSourceRegister {
   def createSink(
       sqlContext: SQLContext,
       parameters: Map[String, String],
-      partitionColumns: Seq[String]): Sink = {
+      partitionColumns: Seq[String],
+      outputMode: OutputMode): Sink = {
     new ConsoleSink(parameters)
   }
 

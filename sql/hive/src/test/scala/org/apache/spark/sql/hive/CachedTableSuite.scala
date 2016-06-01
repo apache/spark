@@ -97,18 +97,18 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
 
   test("correct error on uncache of non-cached table") {
     intercept[IllegalArgumentException] {
-      hiveContext.uncacheTable("src")
+      spark.catalog.uncacheTable("src")
     }
   }
 
   test("'CACHE TABLE' and 'UNCACHE TABLE' HiveQL statement") {
     sql("CACHE TABLE src")
     assertCached(table("src"))
-    assert(hiveContext.isCached("src"), "Table 'src' should be cached")
+    assert(spark.catalog.isCached("src"), "Table 'src' should be cached")
 
     sql("UNCACHE TABLE src")
     assertCached(table("src"), 0)
-    assert(!hiveContext.isCached("src"), "Table 'src' should not be cached")
+    assert(!spark.catalog.isCached("src"), "Table 'src' should not be cached")
   }
 
   test("CACHE TABLE tableName AS SELECT * FROM anotherTable") {

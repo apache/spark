@@ -28,7 +28,7 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.linalg.VectorImplicits._
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -183,11 +183,9 @@ class Word2VecModel private[ml] (
    * and the vector the DenseVector that it is mapped to.
    */
   @transient lazy val getVectors: DataFrame = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession.builder().getOrCreate()
     val wordVec = wordVectors.getVectors.mapValues(vec => Vectors.dense(vec.map(_.toDouble)))
-    sc.parallelize(wordVec.toSeq).toDF("word", "vector")
+    spark.createDataFrame(wordVec.toSeq).toDF("word", "vector")
   }
 
   /**
@@ -205,10 +203,8 @@ class Word2VecModel private[ml] (
    * synonyms and the given word vector.
    */
   def findSynonyms(word: Vector, num: Int): DataFrame = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
-    sc.parallelize(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
+    val spark = SparkSession.builder().getOrCreate()
+    spark.createDataFrame(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
   }
 
   /** @group setParam */
@@ -230,7 +226,7 @@ class Word2VecModel private[ml] (
     val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
     val d = $(vectorSize)
     val word2Vec = udf { sentence: Seq[String] =>
-      if (sentence.size == 0) {
+      if (sentence.isEmpty) {
         Vectors.sparse(d, Array.empty[Int], Array.empty[Double])
       } else {
         val sum = Vectors.zeros(d)

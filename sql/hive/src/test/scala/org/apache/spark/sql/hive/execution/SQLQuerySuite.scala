@@ -58,7 +58,7 @@ case class Order(
  */
 class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
-  import hiveContext.implicits._
+  import spark.implicits._
 
   test("UDTF") {
     withUserDefinedFunction("udtf_count2" -> true) {
@@ -690,7 +690,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("SPARK-4699 HiveContext should be case insensitive by default") {
+  test("SPARK-4699 SparkSession with Hive Support should be case insensitive by default") {
     checkAnswer(
       sql("SELECT KEY FROM Src ORDER BY value"),
       sql("SELECT key FROM src ORDER BY value").collect().toSeq)
@@ -707,7 +707,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
     val rowRdd = sparkContext.parallelize(row :: Nil)
 
-    hiveContext.createDataFrame(rowRdd, schema).createOrReplaceTempView("testTable")
+    spark.createDataFrame(rowRdd, schema).createOrReplaceTempView("testTable")
 
     sql(
       """CREATE TABLE nullValuesInInnerComplexTypes
@@ -1417,7 +1417,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
            """.stripMargin)
 
         checkAnswer(
-          spark.sqlContext.tables().select('isTemporary).filter('tableName === "t2"),
+          spark.sql("SHOW TABLES").select('isTemporary).filter('tableName === "t2"),
           Row(true)
         )
 
@@ -1558,6 +1558,25 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("CREATE TABLE tbl(i INT, j STRING) USING parquet")
       Seq(1 -> "a").toDF("i", "j").write.mode("overwrite").insertInto("tbl")
       checkAnswer(sql("SELECT * FROM tbl"), Row(1, "a"))
+    }
+  }
+
+  test("spark-15557 promote string test") {
+    withTable("tbl") {
+      sql("CREATE TABLE tbl(c1 string, c2 string)")
+      sql("insert into tbl values ('3', '2.3')")
+      checkAnswer(
+        sql("select (cast (99 as decimal(19,6)) + cast('3' as decimal)) * cast('2.3' as decimal)"),
+        Row(204.0)
+      )
+      checkAnswer(
+        sql("select (cast(99 as decimal(19,6)) + '3') *'2.3' from tbl"),
+        Row(234.6)
+      )
+      checkAnswer(
+        sql("select (cast(99 as decimal(19,6)) + c1) * c2 from tbl"),
+        Row(234.6)
+      )
     }
   }
 }

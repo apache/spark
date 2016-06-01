@@ -155,8 +155,8 @@ public final class Platform {
   @SuppressWarnings("unchecked")
   public static ByteBuffer allocateDirectBuffer(int size) {
     try {
-      Class cls = Class.forName("java.nio.DirectByteBuffer");
-      Constructor constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
+      Class<?> cls = Class.forName("java.nio.DirectByteBuffer");
+      Constructor<?> constructor = cls.getDeclaredConstructor(Long.TYPE, Integer.TYPE);
       constructor.setAccessible(true);
       Field cleanerField = cls.getDeclaredField("cleaner");
       cleanerField.setAccessible(true);
