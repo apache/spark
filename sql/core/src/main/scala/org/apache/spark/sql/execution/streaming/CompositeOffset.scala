@@ -22,7 +22,7 @@ package org.apache.spark.sql.execution.streaming
  * [[Source]]s that are present in a streaming query. This is similar to simplified, single-instance
  * vector clock that must progress linearly forward.
  */
-case class CompositeOffset(offsets: Array[Option[Offset]]) extends Offset {
+case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
   /**
    * Returns a negative integer, zero, or a positive integer as this object is less than, equal to,
    * or greater than the specified object.
@@ -68,14 +68,6 @@ case class CompositeOffset(offsets: Array[Option[Offset]]) extends Offset {
   override def toString: String =
     offsets.map(_.map(_.toString).getOrElse("-")).mkString("[", ", ", "]")
 
-  override def equals(other: Any): Boolean = other match {
-    case that: CompositeOffset => offsets != null && offsets.sameElements(that.offsets)
-    case _ => false
-  }
-
-  override def hashCode(): Int = {
-    offsets.toSeq.hashCode()
-  }
 }
 
 object CompositeOffset {
@@ -84,10 +76,6 @@ object CompositeOffset {
    * `nulls` in the sequence are converted to `None`s.
    */
   def fill(offsets: Offset*): CompositeOffset = {
-    new CompositeOffset(offsets.map(Option(_)).toArray)
-  }
-
-  def apply(offsets: Seq[Option[Offset]]): CompositeOffset = {
-    new CompositeOffset(offsets.toArray)
+    CompositeOffset(offsets.map(Option(_)))
   }
 }

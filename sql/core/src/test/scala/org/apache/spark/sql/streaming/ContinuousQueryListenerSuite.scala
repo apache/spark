@@ -59,7 +59,7 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
           // The source and sink offsets must be None as this must be called before the
           // batches have started
           assert(status.sourceStatuses(0).offset === None)
-          assert(status.sinkStatus.offset === CompositeOffset(None :: Nil))
+          assert(status.sinkStatus.offset === CompositeOffset(None :: Nil).toString)
 
           // No progress events or termination events
           assert(listener.progressStatuses.isEmpty)
@@ -74,8 +74,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
             assert(listener.progressStatuses.size === 1)
             val status = listener.progressStatuses.peek()
             assert(status != null)
-            assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
+            assert(status.sourceStatuses(0).offset === Some(LongOffset(0).toString))
+            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)).toString)
 
             // No termination events
             assert(listener.terminationStatus === null)
@@ -86,8 +86,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
           eventually(Timeout(streamingTimeout)) {
             val status = listener.terminationStatus
             assert(status != null)
-            assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
+            assert(status.sourceStatuses(0).offset === Some(LongOffset(0).toString))
+            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)).toString)
           }
           listener.checkAsyncErrors()
         }
@@ -162,7 +162,7 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val queryStartedInfo = new ContinuousQueryInfo(
       "name",
       Seq(new SourceStatus("source1", None), new SourceStatus("source2", None)),
-      new SinkStatus("sink", CompositeOffset(None :: None :: Nil)))
+      new SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString))
     val queryStarted = new ContinuousQueryListener.QueryStarted(queryStartedInfo)
     val json = JsonProtocol.sparkEventToJson(WrappedContinuousQueryListenerEvent(queryStarted))
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
@@ -175,9 +175,9 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val queryProcessInfo = new ContinuousQueryInfo(
       "name",
       Seq(
-        new SourceStatus("source1", Some(LongOffset(0))),
-        new SourceStatus("source2", Some(LongOffset(1)))),
-      new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1))))))
+        new SourceStatus("source1", Some(LongOffset(0).toString)),
+        new SourceStatus("source2", Some(LongOffset(1).toString))),
+      new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1)))).toString))
     val queryProcess = new ContinuousQueryListener.QueryProgress(queryProcessInfo)
     val json = JsonProtocol.sparkEventToJson(WrappedContinuousQueryListenerEvent(queryProcess))
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
@@ -190,9 +190,9 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     val queryTerminatedInfo = new ContinuousQueryInfo(
       "name",
       Seq(
-        new SourceStatus("source1", Some(LongOffset(0))),
-        new SourceStatus("source2", Some(LongOffset(1)))),
-      new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1))))))
+        new SourceStatus("source1", Some(LongOffset(0).toString)),
+        new SourceStatus("source2", Some(LongOffset(1).toString))),
+      new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1)))).toString))
     val exception = new RuntimeException("exception")
     val queryQueryTerminated = new ContinuousQueryListener.QueryTerminated(
       queryTerminatedInfo,
@@ -221,16 +221,12 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   private def assertSourceStatus(expected: SourceStatus, actual: SourceStatus): Unit = {
     assert(expected.description === actual.description)
-    assert {
-      expected.offset.isEmpty && actual.offset.isEmpty ||
-        (expected.offset.isDefined && actual.offset.isDefined &&
-          expected.offset.get.compareTo(actual.offset.get) === 0)
-    }
+    assert(expected.offset === actual.offset)
   }
 
   private def assertSinkStatus(expected: SinkStatus, actual: SinkStatus): Unit = {
     assert(expected.description === actual.description)
-    assert(expected.offset.compareTo(actual.offset) === 0)
+    assert(expected.offset === actual.offset)
   }
 
   private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {

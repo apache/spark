@@ -131,12 +131,13 @@ class StreamExecution(
   /** Returns current status of all the sources. */
   override def sourceStatuses: Array[SourceStatus] = {
     val localAvailableOffsets = availableOffsets
-    sources.map(s => new SourceStatus(s.toString, localAvailableOffsets.get(s))).toArray
+    sources.map(s =>
+      new SourceStatus(s.toString, localAvailableOffsets.get(s).map(_.toString))).toArray
   }
 
   /** Returns current status of the sink. */
   override def sinkStatus: SinkStatus =
-    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources))
+    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources).toString)
 
   /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
   override def exception: Option[ContinuousQueryException] = Option(streamDeathCause)

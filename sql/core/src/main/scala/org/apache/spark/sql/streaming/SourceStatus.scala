@@ -31,4 +31,4 @@ import org.apache.spark.sql.execution.streaming.{Offset, Source}
 @Experimental
 class SourceStatus private[sql] (
     val description: String,
-    val offset: Option[Offset])
+    val offset: Option[String])
