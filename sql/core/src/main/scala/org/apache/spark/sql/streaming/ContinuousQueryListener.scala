@@ -17,10 +17,8 @@
 
 package org.apache.spark.sql.streaming
 
-import com.fasterxml.jackson.annotation.JsonTypeInfo
-
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql._
+import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
  * :: Experimental ::
@@ -73,11 +71,7 @@ abstract class ContinuousQueryListener {
 object ContinuousQueryListener {
 
   /** Base type of [[ContinuousQueryListener]] events */
-  @JsonTypeInfo(
-    use = JsonTypeInfo.Id.CLASS,
-    include = JsonTypeInfo.As.PROPERTY,
-    property = "@class")
-  trait Event
+  trait Event extends SparkListenerEvent
 
   /** Event representing the start of a query */
   class QueryStarted private[sql](val queryInfo: ContinuousQueryInfo) extends Event

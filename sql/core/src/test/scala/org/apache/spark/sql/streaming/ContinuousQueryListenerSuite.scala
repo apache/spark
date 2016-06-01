@@ -164,10 +164,9 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
       Seq(new SourceStatus("source1", None), new SourceStatus("source2", None)),
       new SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString))
     val queryStarted = new ContinuousQueryListener.QueryStarted(queryStartedInfo)
-    val json = JsonProtocol.sparkEventToJson(WrappedContinuousQueryListenerEvent(queryStarted))
+    val json = JsonProtocol.sparkEventToJson(queryStarted)
     val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[WrappedContinuousQueryListenerEvent]
-      .streamingListenerEvent.asInstanceOf[ContinuousQueryListener.QueryStarted]
+      .asInstanceOf[ContinuousQueryListener.QueryStarted]
     assertContinuousQueryInfoEquals(queryStarted.queryInfo, newQueryStarted.queryInfo)
   }
 
@@ -179,10 +178,9 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
         new SourceStatus("source2", Some(LongOffset(1).toString))),
       new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1)))).toString))
     val queryProcess = new ContinuousQueryListener.QueryProgress(queryProcessInfo)
-    val json = JsonProtocol.sparkEventToJson(WrappedContinuousQueryListenerEvent(queryProcess))
+    val json = JsonProtocol.sparkEventToJson(queryProcess)
     val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[WrappedContinuousQueryListenerEvent]
-      .streamingListenerEvent.asInstanceOf[ContinuousQueryListener.QueryProgress]
+      .asInstanceOf[ContinuousQueryListener.QueryProgress]
     assertContinuousQueryInfoEquals(queryProcess.queryInfo, newQueryProcess.queryInfo)
   }
 
@@ -199,10 +197,9 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
       Some(exception.getMessage),
       exception.getStackTrace)
     val json =
-      JsonProtocol.sparkEventToJson(WrappedContinuousQueryListenerEvent(queryQueryTerminated))
+      JsonProtocol.sparkEventToJson(queryQueryTerminated)
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
-      .asInstanceOf[WrappedContinuousQueryListenerEvent]
-      .streamingListenerEvent.asInstanceOf[ContinuousQueryListener.QueryTerminated]
+      .asInstanceOf[ContinuousQueryListener.QueryTerminated]
     assertContinuousQueryInfoEquals(queryQueryTerminated.queryInfo, newQueryTerminated.queryInfo)
     assert(queryQueryTerminated.exception === newQueryTerminated.exception)
   }
