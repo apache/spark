@@ -20,7 +20,7 @@ package org.apache.spark.ml.feature
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset, Row}
+import org.apache.spark.sql.{Dataset, Row}
 
 object StopWordsRemoverSuite extends SparkFunSuite {
   def testStopWordsRemover(t: StopWordsRemover, dataset: Dataset[_]): Unit = {
@@ -42,7 +42,7 @@ class StopWordsRemoverSuite
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol("filtered")
-    val dataSet = sqlContext.createDataFrame(Seq(
+    val dataSet = spark.createDataFrame(Seq(
       (Seq("test", "test"), Seq("test", "test")),
       (Seq("a", "b", "c", "d"), Seq("b", "c")),
       (Seq("a", "the", "an"), Seq()),
@@ -60,7 +60,7 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
-    val dataSet = sqlContext.createDataFrame(Seq(
+    val dataSet = spark.createDataFrame(Seq(
       (Seq("test", "test"), Seq()),
       (Seq("a", "b", "c", "d"), Seq("b", "c", "d")),
       (Seq("a", "the", "an"), Seq()),
@@ -77,7 +77,7 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setCaseSensitive(true)
-    val dataSet = sqlContext.createDataFrame(Seq(
+    val dataSet = spark.createDataFrame(Seq(
       (Seq("A"), Seq("A")),
       (Seq("The", "the"), Seq("The"))
     )).toDF("raw", "expected")
@@ -98,7 +98,7 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords)
-    val dataSet = sqlContext.createDataFrame(Seq(
+    val dataSet = spark.createDataFrame(Seq(
       (Seq("acaba", "ama", "biri"), Seq()),
       (Seq("hep", "her", "scala"), Seq("scala"))
     )).toDF("raw", "expected")
@@ -112,7 +112,7 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords.toArray)
-    val dataSet = sqlContext.createDataFrame(Seq(
+    val dataSet = spark.createDataFrame(Seq(
       (Seq("python", "scala", "a"), Seq("python", "scala", "a")),
       (Seq("Python", "Scala", "swift"), Seq("Python", "Scala", "swift"))
     )).toDF("raw", "expected")
@@ -126,7 +126,7 @@ class StopWordsRemoverSuite
       .setInputCol("raw")
       .setOutputCol("filtered")
       .setStopWords(stopWords.toArray)
-    val dataSet = sqlContext.createDataFrame(Seq(
+    val dataSet = spark.createDataFrame(Seq(
       (Seq("python", "scala", "a"), Seq()),
       (Seq("Python", "Scala", "swift"), Seq("swift"))
     )).toDF("raw", "expected")
@@ -148,7 +148,7 @@ class StopWordsRemoverSuite
     val remover = new StopWordsRemover()
       .setInputCol("raw")
       .setOutputCol(outputCol)
-    val dataSet = sqlContext.createDataFrame(Seq(
+    val dataSet = spark.createDataFrame(Seq(
       (Seq("The", "the", "swift"), Seq("swift"))
     )).toDF("raw", outputCol)
 

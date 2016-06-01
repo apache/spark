@@ -47,7 +47,7 @@ mostly inspired by the [scikit-learn](http://scikit-learn.org/) project.
   E.g., a `DataFrame` could have different columns storing text, feature vectors, true labels, and predictions.
 
 * **[`Transformer`](ml-guide.html#transformers)**: A `Transformer` is an algorithm which can transform one `DataFrame` into another `DataFrame`.
-E.g., an ML model is a `Transformer` which transforms `DataFrame` with features into a `DataFrame` with predictions.
+E.g., an ML model is a `Transformer` which transforms a `DataFrame` with features into a `DataFrame` with predictions.
 
 * **[`Estimator`](ml-guide.html#estimators)**: An `Estimator` is an algorithm which can be fit on a `DataFrame` to produce a `Transformer`.
 E.g., a learning algorithm is an `Estimator` which trains on a `DataFrame` and produces a model.
@@ -257,7 +257,7 @@ Currently, `spark.ml` supports model selection using the [`CrossValidator`](api/
 
 The `Evaluator` can be a [`RegressionEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.RegressionEvaluator)
 for regression problems, a [`BinaryClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.BinaryClassificationEvaluator)
-for binary data, or a [`MultiClassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator)
+for binary data, or a [`MulticlassClassificationEvaluator`](api/scala/index.html#org.apache.spark.ml.evaluation.MulticlassClassificationEvaluator)
 for multiclass problems. The default metric used to choose the best `ParamMap` can be overridden by the `setMetricName`
 method in each of these evaluators.
 
@@ -292,13 +292,13 @@ However, it is also a well-established method for choosing parameters which is m
 
 ## Example: model selection via train validation split
 In addition to  `CrossValidator` Spark also offers `TrainValidationSplit` for hyper-parameter tuning.
-`TrainValidationSplit` only evaluates each combination of parameters once as opposed to k times in
- case of `CrossValidator`. It is therefore less expensive,
+`TrainValidationSplit` only evaluates each combination of parameters once, as opposed to k times in
+ the case of `CrossValidator`. It is therefore less expensive,
  but will not produce as reliable results when the training dataset is not sufficiently large.
 
 `TrainValidationSplit` takes an `Estimator`, a set of `ParamMap`s provided in the `estimatorParamMaps` parameter,
 and an `Evaluator`.
-It begins by splitting the dataset into two parts using `trainRatio` parameter
+It begins by splitting the dataset into two parts using the `trainRatio` parameter
 which are used as separate training and test datasets. For example with `$trainRatio=0.75$` (default),
 `TrainValidationSplit` will generate a training and test dataset pair where 75% of the data is used for training and 25% for validation.
 Similar to `CrossValidator`, `TrainValidationSplit` also iterates through the set of `ParamMap`s.

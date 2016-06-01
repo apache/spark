@@ -25,10 +25,10 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model, Pipeline, PipelineModel, PipelineStage, Transformer}
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.VectorUDT
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.param.shared.{HasFeaturesCol, HasLabelCol}
 import org.apache.spark.ml.util._
-import org.apache.spark.mllib.linalg.VectorUDT
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.types._
 
@@ -194,7 +194,9 @@ object RFormula extends DefaultParamsReadable[RFormula] {
 
 /**
  * :: Experimental ::
- * A fitted RFormula. Fitting is required to determine the factor levels of formula terms.
+ * Model fitted by [[RFormula]]. Fitting is required to determine the factor levels of
+ * formula terms.
+ *
  * @param resolvedFormula the fitted R formula.
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
@@ -256,8 +258,8 @@ class RFormulaModel private[feature](
     val columnNames = schema.map(_.name)
     require(!columnNames.contains($(featuresCol)), "Features column already exists.")
     require(
-      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType == DoubleType,
-      "Label column already exists and is not of type DoubleType.")
+      !columnNames.contains($(labelCol)) || schema($(labelCol)).dataType.isInstanceOf[NumericType],
+      "Label column already exists and is not of type NumericType.")
   }
 
   @Since("2.0.0")

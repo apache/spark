@@ -28,26 +28,26 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndAfter {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
   private var originalDefaultSource: String = null
   private var path: File = null
   private var df: DataFrame = null
 
   override def beforeAll(): Unit = {
     super.beforeAll()
-    originalDefaultSource = caseInsensitiveContext.conf.defaultDataSourceName
+    originalDefaultSource = spark.sessionState.conf.defaultDataSourceName
 
     path = Utils.createTempDir()
     path.delete()
 
     val rdd = sparkContext.parallelize((1 to 10).map(i => s"""{"a":$i, "b":"str${i}"}"""))
-    df = caseInsensitiveContext.read.json(rdd)
-    df.registerTempTable("jsonTable")
+    df = spark.read.json(rdd)
+    df.createOrReplaceTempView("jsonTable")
   }
 
   override def afterAll(): Unit = {
     try {
-      caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, originalDefaultSource)
+      spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, originalDefaultSource)
     } finally {
       super.afterAll()
     }
@@ -58,45 +58,42 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
   }
 
   def checkLoad(expectedDF: DataFrame = df, tbl: String = "jsonTable"): Unit = {
-    caseInsensitiveContext.conf.setConf(
-      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
-    checkAnswer(caseInsensitiveContext.read.load(path.toString), expectedDF.collect())
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
+    checkAnswer(spark.read.load(path.toString), expectedDF.collect())
 
     // Test if we can pick up the data source name passed in load.
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
-    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString),
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
+    checkAnswer(spark.read.format("json").load(path.toString),
       expectedDF.collect())
-    checkAnswer(caseInsensitiveContext.read.format("json").load(path.toString),
+    checkAnswer(spark.read.format("json").load(path.toString),
       expectedDF.collect())
     val schema = StructType(StructField("b", StringType, true) :: Nil)
     checkAnswer(
-      caseInsensitiveContext.read.format("json").schema(schema).load(path.toString),
+      spark.read.format("json").schema(schema).load(path.toString),
       sql(s"SELECT b FROM $tbl").collect())
   }
 
   test("save with path and load") {
-    caseInsensitiveContext.conf.setConf(
-      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
     df.write.save(path.toString)
     checkLoad()
   }
 
   test("save with string mode and path, and load") {
-    caseInsensitiveContext.conf.setConf(
-      SQLConf.DEFAULT_DATA_SOURCE_NAME, "org.apache.spark.sql.json")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "org.apache.spark.sql.json")
     path.createNewFile()
     df.write.mode("overwrite").save(path.toString)
     checkLoad()
   }
 
   test("save with path and datasource, and load") {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
     df.write.json(path.toString)
     checkLoad()
   }
 
   test("save with data source and options, and load") {
-    caseInsensitiveContext.conf.setConf(SQLConf.DEFAULT_DATA_SOURCE_NAME, "not a source name")
+    spark.conf.set(SQLConf.DEFAULT_DATA_SOURCE_NAME.key, "not a source name")
     df.write.mode(SaveMode.ErrorIfExists).json(path.toString)
     checkLoad()
   }
@@ -123,7 +120,7 @@ class SaveLoadSuite extends DataSourceTest with SharedSQLContext with BeforeAndA
     // verify the append mode
     df.write.mode(SaveMode.Append).json(path.toString)
     val df2 = df.union(df)
-    df2.registerTempTable("jsonTable2")
+    df2.createOrReplaceTempView("jsonTable2")
 
     checkLoad(df2, "jsonTable2")
   }

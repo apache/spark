@@ -44,3 +44,11 @@ class NoSuchFunctionException(db: String, func: String)
   extends AnalysisException(
     s"Undefined function: '$func'. This function is neither a registered temporary function nor " +
     s"a permanent function registered in the database '$db'.")
+
+class NoSuchPartitionsException(db: String, table: String, specs: Seq[TablePartitionSpec])
+  extends AnalysisException(
+    s"The following partitions not found in table '$table' database '$db':\n"
+      + specs.mkString("\n===\n"))
+
+class NoSuchTempFunctionException(func: String)
+  extends AnalysisException(s"Temporary function '$func' not found")

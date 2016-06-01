@@ -31,7 +31,7 @@ import org.apache.spark.sql.execution.ui.SparkPlanGraph
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.util.{JsonProtocol, Utils}
+import org.apache.spark.util.{AccumulatorContext, JsonProtocol, Utils}
 
 
 class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
@@ -71,21 +71,22 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       df: DataFrame,
       expectedNumOfJobs: Int,
       expectedMetrics: Map[Long, (String, Map[String, Any])]): Unit = {
-    val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
+    val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
     withSQLConf("spark.sql.codegen.wholeStage" -> "false") {
       df.collect()
     }
     sparkContext.listenerBus.waitUntilEmpty(10000)
-    val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+    val executionIds =
+      spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
     assert(executionIds.size === 1)
     val executionId = executionIds.head
-    val jobs = sqlContext.listener.getExecution(executionId).get.jobs
+    val jobs = spark.sharedState.listener.getExecution(executionId).get.jobs
     // Use "<=" because there is a race condition that we may miss some jobs
     // TODO Change it to "=" once we fix the race condition that missing the JobStarted event.
     assert(jobs.size <= expectedNumOfJobs)
     if (jobs.size == expectedNumOfJobs) {
       // If we can track all jobs, check the metric values
-      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
+      val metricValues = spark.sharedState.listener.getExecutionMetrics(executionId)
       val actualMetrics = SparkPlanGraph(SparkPlanInfo.fromSparkPlan(
         df.queryExecution.executedPlan)).allNodes.filter { node =>
         expectedMetrics.contains(node.id)
@@ -128,7 +129,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Filter(nodeId = 1))
     // TODO: update metrics in generated operators
-    val ds = sqlContext.range(10).filter('id < 5)
+    val ds = spark.range(10).filter('id < 5)
     testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
@@ -157,7 +158,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   test("Sort metrics") {
     // Assume the execution plan is
     // WholeStageCodegen(nodeId = 0, Range(nodeId = 2) -> Sort(nodeId = 1))
-    val ds = sqlContext.range(10).sort('id)
+    val ds = spark.range(10).sort('id)
     testSparkPlanMetrics(ds.toDF(), 2, Map.empty)
   }
 
@@ -165,11 +166,11 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different, this
     // test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
+      val df = spark.sql(
         "SELECT * FROM testData2 JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> ("SortMergeJoin", Map(
@@ -183,11 +184,11 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     // Because SortMergeJoin may skip different rows if the number of partitions is different,
     // this test should use the deterministic number of partitions.
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
     withTempTable("testDataForJoin") {
       // Assume the execution plan is
       // ... -> SortMergeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
+      val df = spark.sql(
         "SELECT * FROM testData2 left JOIN testDataForJoin ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df, 1, Map(
         0L -> ("SortMergeJoin", Map(
@@ -195,7 +196,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
           "number of output rows" -> 8L)))
       )
 
-      val df2 = sqlContext.sql(
+      val df2 = spark.sql(
         "SELECT * FROM testDataForJoin right JOIN testData2 ON testData2.a = testDataForJoin.a")
       testSparkPlanMetrics(df2, 1, Map(
         0L -> ("SortMergeJoin", Map(
@@ -237,17 +238,19 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("BroadcastNestedLoopJoin metrics") {
     val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
-    withTempTable("testDataForJoin") {
-      // Assume the execution plan is
-      // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
-        "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
-          "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
-      testSparkPlanMetrics(df, 3, Map(
-        1L -> ("BroadcastNestedLoopJoin", Map(
-          "number of output rows" -> 12L)))
-      )
+    testDataForJoin.createOrReplaceTempView("testDataForJoin")
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      withTempTable("testDataForJoin") {
+        // Assume the execution plan is
+        // ... -> BroadcastNestedLoopJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val df = spark.sql(
+          "SELECT * FROM testData2 left JOIN testDataForJoin ON " +
+            "testData2.a * testDataForJoin.a != testData2.a + testDataForJoin.a")
+        testSparkPlanMetrics(df, 3, Map(
+          1L -> ("BroadcastNestedLoopJoin", Map(
+            "number of output rows" -> 12L)))
+        )
+      }
     }
   }
 
@@ -264,35 +267,37 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
   }
 
   test("CartesianProduct metrics") {
-    val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
-    testDataForJoin.registerTempTable("testDataForJoin")
-    withTempTable("testDataForJoin") {
-      // Assume the execution plan is
-      // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
-      val df = sqlContext.sql(
-        "SELECT * FROM testData2 JOIN testDataForJoin")
-      testSparkPlanMetrics(df, 1, Map(
-        0L -> ("CartesianProduct", Map(
-          "number of output rows" -> 12L)))
-      )
+    withSQLConf(SQLConf.CROSS_JOINS_ENABLED.key -> "true") {
+      val testDataForJoin = testData2.filter('a < 2) // TestData2(1, 1) :: TestData2(1, 2)
+      testDataForJoin.createOrReplaceTempView("testDataForJoin")
+      withTempTable("testDataForJoin") {
+        // Assume the execution plan is
+        // ... -> CartesianProduct(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val df = spark.sql(
+          "SELECT * FROM testData2 JOIN testDataForJoin")
+        testSparkPlanMetrics(df, 1, Map(
+          0L -> ("CartesianProduct", Map("number of output rows" -> 12L)))
+        )
+      }
     }
   }
 
   test("save metrics") {
     withTempPath { file =>
-      val previousExecutionIds = sqlContext.listener.executionIdToData.keySet
+      val previousExecutionIds = spark.sharedState.listener.executionIdToData.keySet
       // Assume the execution plan is
       // PhysicalRDD(nodeId = 0)
       person.select('name).write.format("json").save(file.getAbsolutePath)
       sparkContext.listenerBus.waitUntilEmpty(10000)
-      val executionIds = sqlContext.listener.executionIdToData.keySet.diff(previousExecutionIds)
+      val executionIds =
+        spark.sharedState.listener.executionIdToData.keySet.diff(previousExecutionIds)
       assert(executionIds.size === 1)
       val executionId = executionIds.head
-      val jobs = sqlContext.listener.getExecution(executionId).get.jobs
+      val jobs = spark.sharedState.listener.getExecution(executionId).get.jobs
       // Use "<=" because there is a race condition that we may miss some jobs
       // TODO Change "<=" to "=" once we fix the race condition that missing the JobStarted event.
       assert(jobs.size <= 1)
-      val metricValues = sqlContext.listener.getExecutionMetrics(executionId)
+      val metricValues = spark.sharedState.listener.getExecutionMetrics(executionId)
       // Because "save" will create a new DataFrame internally, we cannot get the real metric id.
       // However, we still can check the value.
       assert(metricValues.values.toSeq.exists(_ === "2"))
@@ -308,7 +313,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       case Some(v) => fail(s"metric value was not a Long: ${v.getClass.getName}")
       case _ => fail("metric update is missing")
     }
-    assert(metricInfo.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    assert(metricInfo.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
     // After serializing to JSON, the original value type is lost, but we can still
     // identify that it's a SQL metric from the metadata
     val metricInfoJson = JsonProtocol.accumulableInfoToJson(metricInfo)
@@ -318,7 +323,7 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
       case Some(v) => fail(s"deserialized metric value was not a string: ${v.getClass.getName}")
       case _ => fail("deserialized metric update is missing")
     }
-    assert(metricInfoDeser.metadata === Some(SQLMetrics.ACCUM_IDENTIFIER))
+    assert(metricInfoDeser.metadata === Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
 
 }

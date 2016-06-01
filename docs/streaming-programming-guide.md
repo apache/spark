@@ -145,8 +145,8 @@ import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second
-SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
-JavaStreamingContext jssc = new JavaStreamingContext(conf, Durations.seconds(1))
+SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount");
+JavaStreamingContext jssc = new JavaStreamingContext(conf, Durations.seconds(1));
 {% endhighlight %}
 
 Using this context, we can create a DStream that represents streaming data from a TCP
@@ -416,7 +416,7 @@ some of the common ones are as follows.
 
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
-<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Kafka </td><td> spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> Kinesis<br/></td><td>spark-streaming-kinesis-asl_{{site.SCALA_BINARY_VERSION}} [Amazon Software License] </td></tr>
 <tr><td></td><td></td></tr>
@@ -612,7 +612,7 @@ as well as to run the receiver(s).
 
 - When running a Spark Streaming program locally, do not use "local" or "local[1]" as the master URL.
   Either of these means that only one thread will be used for running tasks locally. If you are using
-  a input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
+  an input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
   be used to run the receiver, leaving no thread for processing the received data. Hence, when
   running locally, always use "local[*n*]" as the master URL, where *n* > number of receivers to run
   (see [Spark Properties](configuration.html#spark-properties) for information on how to set
@@ -1553,8 +1553,8 @@ words.foreachRDD { rdd =>
   // Convert RDD[String] to DataFrame
   val wordsDataFrame = rdd.toDF("word")
 
-  // Register as table
-  wordsDataFrame.registerTempTable("words")
+  // Create a temporary view
+  wordsDataFrame.createOrReplaceTempView("words")
 
   // Do word count on DataFrame using SQL and print it
   val wordCountsDataFrame = 
@@ -1606,8 +1606,8 @@ words.foreachRDD(
       });
       DataFrame wordsDataFrame = sqlContext.createDataFrame(rowRDD, JavaRow.class);
 
-      // Register as table
-      wordsDataFrame.registerTempTable("words");
+      // Creates a temporary view using the DataFrame
+      wordsDataFrame.createOrReplaceTempView("words");
 
       // Do word count on table using SQL and print it
       DataFrame wordCountsDataFrame =
@@ -1646,8 +1646,8 @@ def process(time, rdd):
         rowRdd = rdd.map(lambda w: Row(word=w))
         wordsDataFrame = sqlContext.createDataFrame(rowRdd)
 
-        # Register as table
-        wordsDataFrame.registerTempTable("words")
+        # Creates a temporary view using the DataFrame
+        wordsDataFrame.createOrReplaceTempView("words")
 
         # Do word count on table using SQL and print it
         wordCountsDataFrame = sqlContext.sql("select word, count(*) as total from words group by word")
@@ -1788,7 +1788,7 @@ This example appends the word counts of network data into a file.
 This behavior is made simple by using `JavaStreamingContext.getOrCreate`. This is used as follows.
 
 {% highlight java %}
-// Create a factory object that can create a and setup a new JavaStreamingContext
+// Create a factory object that can create and setup a new JavaStreamingContext
 JavaStreamingContextFactory contextFactory = new JavaStreamingContextFactory() {
   @Override public JavaStreamingContext create() {
     JavaStreamingContext jssc = new JavaStreamingContext(...);  // new context
@@ -1892,7 +1892,7 @@ To run a Spark Streaming applications, you need to have the following.
   if your application uses [advanced sources](#advanced-sources) (e.g. Kafka, Flume),
   then you will have to package the extra artifact they link to, along with their dependencies,
   in the JAR that is used to deploy the application. For example, an application using `KafkaUtils`
-  will have to include `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` and all its
+  will have to include `spark-streaming-kafka-0-8_{{site.SCALA_BINARY_VERSION}}` and all its
   transitive dependencies in the application JAR.
 
 - *Configuring sufficient memory for the executors* - Since the received data must be stored in

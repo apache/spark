@@ -22,10 +22,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystConf, ScalaReflection, SimpleCatalystConf}
-import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
+import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogRelation, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.encoders.OuterScopes
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.expressions.objects.NewInstance
 import org.apache.spark.sql.catalyst.optimizer.BooleanSimplification
 import org.apache.spark.sql.catalyst.planning.IntegerIndex
 import org.apache.spark.sql.catalyst.plans._
@@ -44,7 +45,9 @@ object SimpleAnalyzer extends Analyzer(
     new SessionCatalog(
       new InMemoryCatalog,
       EmptyFunctionRegistry,
-      new SimpleCatalystConf(caseSensitiveAnalysis = true)),
+      new SimpleCatalystConf(caseSensitiveAnalysis = true)) {
+      override def createDatabase(dbDefinition: CatalogDatabase, ignoreIfExists: Boolean) {}
+    },
     new SimpleCatalystConf(caseSensitiveAnalysis = true))
 
 /**
@@ -104,7 +107,7 @@ class Analyzer(
       GlobalAggregates ::
       ResolveAggregateFunctions ::
       TimeWindowing ::
-      HiveTypeCoercion.typeCoercionRules ++
+      TypeCoercion.typeCoercionRules ++
       extendedResolutionRules : _*),
     Batch("Nondeterministic", Once,
       PullOutNondeterministic),
@@ -174,14 +177,16 @@ class Analyzer(
     private def assignAliases(exprs: Seq[NamedExpression]) = {
       exprs.zipWithIndex.map {
         case (expr, i) =>
-          expr.transformUp { case u @ UnresolvedAlias(child, optionalAliasName) =>
+          expr.transformUp { case u @ UnresolvedAlias(child, optGenAliasFunc) =>
             child match {
               case ne: NamedExpression => ne
               case e if !e.resolved => u
               case g: Generator => MultiAlias(g, Nil)
               case c @ Cast(ne: NamedExpression, _) => Alias(c, ne.name)()
               case e: ExtractValue => Alias(e, toPrettySQL(e))()
-              case e => Alias(e, optionalAliasName.getOrElse(toPrettySQL(e)))()
+              case e if optGenAliasFunc.isDefined =>
+                Alias(child, optGenAliasFunc.get.apply(e))()
+              case e => Alias(e, toPrettySQL(e))()
             }
           }
       }.asInstanceOf[Seq[NamedExpression]]
@@ -444,8 +449,43 @@ class Analyzer(
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case i @ InsertIntoTable(u: UnresolvedRelation, _, _, _, _) =>
-        i.copy(table = EliminateSubqueryAliases(lookupTableFromCatalog(u)))
+      case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
+        val table = lookupTableFromCatalog(u)
+        // adding the table's partitions or validate the query's partition info
+        table match {
+          case relation: CatalogRelation if relation.catalogTable.partitionColumns.nonEmpty =>
+            val tablePartitionNames = relation.catalogTable.partitionColumns.map(_.name)
+            if (parts.keys.nonEmpty) {
+              // the query's partitioning must match the table's partitioning
+              // this is set for queries like: insert into ... partition (one = "a", two = <expr>)
+              // TODO: add better checking to pre-inserts to avoid needing this here
+              if (tablePartitionNames.size != parts.keySet.size) {
+                throw new AnalysisException(
+                  s"""Requested partitioning does not match the ${u.tableIdentifier} table:
+                     |Requested partitions: ${parts.keys.mkString(",")}
+                     |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
+              }
+              // Assume partition columns are correctly placed at the end of the child's output
+              i.copy(table = EliminateSubqueryAliases(table))
+            } else {
+              // Set up the table's partition scheme with all dynamic partitions by moving partition
+              // columns to the end of the column list, in partition order.
+              val (inputPartCols, columns) = child.output.partition { attr =>
+                tablePartitionNames.contains(attr.name)
+              }
+              // All partition columns are dynamic because this InsertIntoTable had no partitioning
+              val partColumns = tablePartitionNames.map { name =>
+                inputPartCols.find(_.name == name).getOrElse(
+                  throw new AnalysisException(s"Cannot find partition column $name"))
+              }
+              i.copy(
+                table = EliminateSubqueryAliases(table),
+                partition = tablePartitionNames.map(_ -> None).toMap,
+                child = Project(columns ++ partColumns, child))
+            }
+          case _ =>
+            i.copy(table = EliminateSubqueryAliases(table))
+        }
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
         if (table.database.isDefined && conf.runSQLonFile &&
@@ -1755,7 +1795,9 @@ class Analyzer(
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case logical: LogicalPlan => logical transformExpressions {
         case WindowExpression(wf: WindowFunction, spec) if spec.orderSpec.isEmpty =>
-          failAnalysis(s"WindowFunction $wf requires window to be ordered")
+          failAnalysis(s"Window function $wf requires window to be ordered, please add ORDER BY " +
+            s"clause. For example SELECT $wf(value_expr) OVER (PARTITION BY window_partition " +
+            s"ORDER BY window_ordering) from table")
         case WindowExpression(rank: RankLike, spec) if spec.resolved =>
           val order = spec.orderSpec.map(_.child)
           WindowExpression(rank.withOrder(order), spec)
@@ -1886,8 +1928,8 @@ class Analyzer(
     }
 
     private def illegalNumericPrecedence(from: DataType, to: DataType): Boolean = {
-      val fromPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(from)
-      val toPrecedence = HiveTypeCoercion.numericPrecedence.indexOf(to)
+      val fromPrecedence = TypeCoercion.numericPrecedence.indexOf(from)
+      val toPrecedence = TypeCoercion.numericPrecedence.indexOf(to)
       toPrecedence > 0 && fromPrecedence > toPrecedence
     }
 

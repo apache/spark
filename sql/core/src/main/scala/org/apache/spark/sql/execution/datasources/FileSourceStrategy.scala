@@ -27,7 +27,9 @@ import org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.DataSourceScanExec.{INPUT_PATHS, PUSHED_FILTERS}
+import org.apache.spark.sql.execution.SparkPlan
 
 /**
  * A strategy for planning scans over collections of files that might be partitioned or bucketed
@@ -54,7 +56,8 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, SparkPlan}
  */
 private[sql] object FileSourceStrategy extends Strategy with Logging {
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-    case PhysicalOperation(projects, filters, l @ LogicalRelation(files: HadoopFsRelation, _, _)) =>
+    case PhysicalOperation(projects, filters,
+      l @ LogicalRelation(files: HadoopFsRelation, _, table)) =>
       // Filters on this relation fall into four categories based on where we can use them to avoid
       // reading unneeded data:
       //  - partition keys only - used to prune directories to read
@@ -192,6 +195,12 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           partitions
       }
 
+      val meta = Map(
+        "Format" -> files.fileFormat.toString,
+        "ReadSchema" -> prunedDataSchema.simpleString,
+        PUSHED_FILTERS -> pushedDownFilters.mkString("[", ", ", "]"),
+        INPUT_PATHS -> files.location.paths.mkString(", "))
+
       val scan =
         DataSourceScanExec.create(
           readDataColumns ++ partitionColumns,
@@ -200,10 +209,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
             readFile,
             plannedPartitions),
           files,
-          Map(
-            "Format" -> files.fileFormat.toString,
-            "PushedFilters" -> pushedDownFilters.mkString("[", ", ", "]"),
-            "ReadSchema" -> prunedDataSchema.simpleString))
+          meta,
+          table)
 
       val afterScanFilter = afterScanFilters.toSeq.reduceOption(expressions.And)
       val withFilter = afterScanFilter.map(execution.FilterExec(_, scan)).getOrElse(scan)
