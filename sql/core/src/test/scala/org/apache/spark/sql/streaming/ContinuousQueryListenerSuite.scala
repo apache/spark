@@ -27,9 +27,7 @@ import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.streaming.ContinuousQueryListener.{QueryProgress, QueryStarted, QueryTerminated}
 import org.apache.spark.util.JsonProtocol
 
 
@@ -153,7 +151,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
           spark.sparkContext.listenerBus.waitUntilEmpty(10000)
           assert(listener.terminationStatus !== null)
           assert(listener.terminationException.isDefined &&
-            listener.terminationException.get.contains("java.lang.ArithmeticException"))
+            listener.terminationException.get.contains("java.lang.ArithmeticException") &&
+            listener.terminationStackTrace.nonEmpty)
         }
       )
     }
@@ -194,8 +193,11 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
         new SourceStatus("source1", Some(LongOffset(0))),
         new SourceStatus("source2", Some(LongOffset(1)))),
       new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1))))))
-    val queryQueryTerminated =
-      new ContinuousQueryListener.QueryTerminated(queryTerminatedInfo, Some("exception"))
+    val exception = new RuntimeException("exception")
+    val queryQueryTerminated = new ContinuousQueryListener.QueryTerminated(
+      queryTerminatedInfo,
+      Some(exception.getMessage),
+      exception.getStackTrace)
     val json =
       JsonProtocol.sparkEventToJson(WrappedContinuousQueryListenerEvent(queryQueryTerminated))
     val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
@@ -256,6 +258,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     @volatile var startStatus: ContinuousQueryInfo = null
     @volatile var terminationStatus: ContinuousQueryInfo = null
     @volatile var terminationException: Option[String] = null
+    @volatile var terminationStackTrace: Seq[StackTraceElement] = null
+
     val progressStatuses = new ConcurrentLinkedQueue[ContinuousQueryInfo]
 
     def reset(): Unit = {
@@ -288,6 +292,7 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
         assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
         terminationStatus = queryTerminated.queryInfo
         terminationException = queryTerminated.exception
+        terminationStackTrace = queryTerminated.stackTrace
       }
       asyncTestWaiter.dismiss()
     }

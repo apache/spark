@@ -88,11 +88,13 @@ object ContinuousQueryListener {
   /**
    * Event representing that termination of a query
    *
-   * @param queryInfo
-   * @param exception The exception information of the [[ContinuousQuery]] if any. Otherwise, it
+   * @param queryInfo The query info.
+   * @param exception The exception message of the [[ContinuousQuery]] if any. Otherwise, it
    *                  will be `None`.
+   * @param stackTrace The stack trace of the exception if any.
    */
   class QueryTerminated private[sql](
       val queryInfo: ContinuousQueryInfo,
-      val exception: Option[String]) extends Event
+      val exception: Option[String],
+      val stackTrace: Seq[StackTraceElement]) extends Event
 }

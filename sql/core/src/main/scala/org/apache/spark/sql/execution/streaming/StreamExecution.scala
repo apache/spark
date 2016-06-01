@@ -206,7 +206,10 @@ class StreamExecution(
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(new QueryTerminated(this.toInfo, this.exception.map(Utils.exceptionString)))
+      postEvent(new QueryTerminated(
+        this.toInfo,
+        exception.map(_.getMessage),
+        exception.map(_.getStackTrace.toSeq).getOrElse(Nil)))
       terminationLatch.countDown()
     }
   }
