@@ -29,7 +29,7 @@ case class CacheTableCommand(
   extends RunnableCommand {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = {
-    plan.map(Seq(_)).getOrElse(Seq.empty)
+    plan.toSeq
   }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
