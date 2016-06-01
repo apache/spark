@@ -19,9 +19,8 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.catalyst.trees.TreeNode
-
 
 case class CacheTableCommand(
   tableName: String,
@@ -29,7 +28,7 @@ case class CacheTableCommand(
   isLazy: Boolean)
   extends RunnableCommand {
 
-  override protected def innerChildren: Seq[TreeNode[_]] = {
+  override protected def innerChildren: Seq[QueryPlan[_]] = {
     plan.map(Seq(_)).getOrElse(Seq.empty)
   }
 

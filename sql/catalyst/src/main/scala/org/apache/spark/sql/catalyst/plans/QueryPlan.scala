@@ -264,7 +264,7 @@ abstract class QueryPlan[PlanType <: QueryPlan[PlanType]] extends TreeNode[PlanT
     expressions.flatMap(_.collect {case e: SubqueryExpression => e.plan.asInstanceOf[PlanType]})
   }
 
-  override protected def innerChildren: Seq[TreeNode[_]] = subqueries
+  override protected def innerChildren: Seq[QueryPlan[_]] = subqueries
 
   /**
    * Canonicalized copy of this query plan.
