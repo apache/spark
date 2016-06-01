@@ -375,6 +375,7 @@ class SparkContextSuite extends SparkFunSuite with LocalSparkContext {
     } finally {
       sc.setLogLevel(originalLevel.toString)
       assert(org.apache.log4j.Logger.getRootLogger().getLevel === originalLevel)
+      sc.stop()
     }
   }
 }

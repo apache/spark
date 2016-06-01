@@ -358,8 +358,9 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def setLogLevel(logLevel: String) {
     // let's allow lowcase or mixed case too
     val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
-    require(SparkContext.validLevels.contains(upperCased),
-      s"Supplied level $logLevel did not match one of: ${SparkContext.validLevels.mkString(",")}")
+    require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
+      s"Supplied level $logLevel did not match one of:" +
+        s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
     Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
@@ -2178,7 +2179,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
  * various Spark features.
  */
 object SparkContext extends Logging {
-  private val validLevels = Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
+  private val VALID_LOG_LEVELS =
+    Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**
    * Lock that guards access to global variables that track SparkContext construction.
