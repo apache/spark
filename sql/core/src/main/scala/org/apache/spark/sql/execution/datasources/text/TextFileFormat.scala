@@ -92,6 +92,10 @@ class TextFileFormat extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    assert(
+      requiredSchema.length <= 1,
+      "Text data source only produces a single data column named \"value\".")
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
