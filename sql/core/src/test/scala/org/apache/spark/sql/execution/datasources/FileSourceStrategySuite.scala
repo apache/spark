@@ -340,6 +340,38 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("SPARK-15654 filter out non-splittable files") {
+    // Check if a non-splittable file is not assigned into partitions
+    Seq("gz", "snappy", "lz4").map { suffix =>
+       val table = createTable(
+        files = Seq(s"file.${suffix}" -> 3)
+      )
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 1)
+          assert(partitions(0).files.size == 1)
+        }
+      }
+    }
+
+    // Check if a compressed file isnot assigned into multiple partitions
+    Seq("bz2").map { suffix =>
+       val table = createTable(
+        files = Seq(s"file.${suffix}" -> 3)
+      )
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 3)
+          assert(partitions(0).files.size == 1)
+          assert(partitions(1).files.size == 1)
+          assert(partitions(2).files.size == 1)
+        }
+      }
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
