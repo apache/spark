@@ -171,6 +171,17 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
     val tableIdent = visitTableIdentifier(ctx.tableIdentifier)
     val partitionKeys = Option(ctx.partitionSpec).map(visitPartitionSpec).getOrElse(Map.empty)
 
+    if (ctx.EXISTS != null && ctx.partitionSpec == null) {
+      throw new ParseException(
+        s"IF NOT EXISTS is not expected when Partition Spec is not specified.", ctx)
+    }
+
+    val dynamicPartitionKeys = partitionKeys.filter { case (k, v) => v.isEmpty }
+    if (ctx.EXISTS != null && dynamicPartitionKeys.nonEmpty) {
+      throw new ParseException(s"Dynamic partitions do not support IF NOT EXISTS. Specified " +
+        "partitions with value: " + dynamicPartitionKeys.keys.mkString("[", ",", "]"), ctx)
+    }
+
     InsertIntoTable(
       UnresolvedRelation(tableIdent, None),
       partitionKeys,

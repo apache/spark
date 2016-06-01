@@ -166,6 +166,62 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     sql("DROP TABLE tmp_table")
   }
 
+  test("INSERT OVERWRITE - partition IF NOT EXISTS") {
+    val tmpDir = Utils.createTempDir()
+    val selQuery = "select c1, p1, p2 from table_with_partition"
+    sql(
+      s"""
+         |CREATE TABLE table_with_partition(c1 string)
+         |PARTITIONED by (p1 string,p2 string)
+         |location '${tmpDir.toURI.toString}'
+        """.stripMargin)
+    sql(
+      """
+        |INSERT OVERWRITE TABLE table_with_partition
+        |partition (p1='a',p2='b')
+        |SELECT 'blarr'
+      """.stripMargin)
+
+    checkAnswer(
+      sql(selQuery),
+      Row("blarr", "a", "b"))
+
+    sql(
+      """
+        |INSERT OVERWRITE TABLE table_with_partition
+        |partition (p1='a',p2='b')
+        |SELECT 'blarr2'
+      """.stripMargin)
+
+    checkAnswer(
+      sql(selQuery),
+      Row("blarr2", "a", "b"))
+
+    val e = intercept[AnalysisException] {
+      sql(
+        """
+        |INSERT OVERWRITE TABLE table_with_partition
+        |partition (p1='a',p2) IF NOT EXISTS
+        |SELECT 'blarr3'
+      """.stripMargin)
+    }
+    assert(e.getMessage.contains(
+      "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
+
+    // If the partition already exists, the insert will overwrite the data
+    // unless users specify IF NOT EXISTS
+    sql(
+      """
+        |INSERT OVERWRITE TABLE table_with_partition
+        |partition (p1='a',p2='b') IF NOT EXISTS
+        |SELECT 'blarr3'
+      """.stripMargin)
+
+    checkAnswer(
+      sql(selQuery),
+      Row("blarr2", "a", "b"))
+  }
+
   test("Insert ArrayType.containsNull == false") {
     val schema = StructType(Seq(
       StructField("a", ArrayType(StringType, containsNull = false))))
