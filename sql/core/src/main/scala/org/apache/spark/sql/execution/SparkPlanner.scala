@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.SparkContext
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, FileSourceStrategy}
 import org.apache.spark.sql.internal.SQLConf
 
@@ -41,6 +42,16 @@ class SparkPlanner(
       JoinSelection ::
       InMemoryScans ::
       BasicOperators :: Nil)
+
+  override def plan(plan: LogicalPlan): Iterator[SparkPlan] = {
+    super.plan(plan).map {
+      _.transformUp {
+        case PlanLater(p) =>
+          // TODO: use the first plan for now, but we will implement plan space exploaration later.
+          this.plan(p).next()
+      }
+    }
+  }
 
   /**
    * Used to build table scan operators where complex projection and filtering are done using

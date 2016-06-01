@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -34,6 +36,27 @@ import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.streaming.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.ContinuousQuery
+
+/**
+ * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
+ * with the query planner and is not designed to be stable across spark releases.  Developers
+ * writing libraries should instead consider using the stable APIs provided in
+ * [[org.apache.spark.sql.sources]]
+ */
+@DeveloperApi
+abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
+
+  override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
+}
+
+private[sql] case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
+
+  override def output: Seq[Attribute] = plan.output
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException()
+  }
+}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
