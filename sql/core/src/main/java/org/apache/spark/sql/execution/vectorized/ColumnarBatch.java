@@ -68,15 +68,32 @@ public final class ColumnarBatch {
   final Row row;
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode) {
-    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode);
+    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode, schema.fields().length, null);
   }
 
-  public static ColumnarBatch allocate(StructType type) {
-    return new ColumnarBatch(type, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE);
+  public static ColumnarBatch allocate(StructType schema) {
+    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, DEFAULT_MEMORY_MODE,
+      schema.fields().length, null);
   }
 
   public static ColumnarBatch allocate(StructType schema, MemoryMode memMode, int maxRows) {
-    return new ColumnarBatch(schema, maxRows, memMode);
+    return new ColumnarBatch(schema, maxRows, memMode, schema.fields().length, null);
+  }
+
+  public static ColumnarBatch allocate(
+      StructType schema,
+      MemoryMode memMode,
+      boolean[] missingColumns) {
+    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode,
+      schema.fields().length, missingColumns);
+  }
+
+  public static ColumnarBatch allocate(
+      StructType schema,
+      MemoryMode memMode,
+      int partitionIdx,
+      boolean[] missingColumns) {
+    return new ColumnarBatch(schema, DEFAULT_BATCH_SIZE, memMode, partitionIdx, missingColumns);
   }
 
   /**
@@ -463,7 +480,12 @@ public final class ColumnarBatch {
     nullFilteredColumns.add(ordinal);
   }
 
-  private ColumnarBatch(StructType schema, int maxRows, MemoryMode memMode) {
+  private ColumnarBatch(
+      StructType schema,
+      int maxRows,
+      MemoryMode memMode,
+      int partitionIdx,
+      boolean[] missingColumns) {
     this.schema = schema;
     this.capacity = maxRows;
     this.columns = new ColumnVector[schema.size()];
@@ -471,8 +493,14 @@ public final class ColumnarBatch {
     this.filteredRows = new boolean[maxRows];
 
     for (int i = 0; i < schema.fields().length; ++i) {
+      boolean isConstant = false;
+      if (i >= partitionIdx) {
+        isConstant = true;
+      } else if (missingColumns != null && missingColumns[i]) {
+        isConstant = true;
+      }
       StructField field = schema.fields()[i];
-      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode);
+      columns[i] = ColumnVector.allocate(maxRows, field.dataType(), memMode, isConstant);
     }
 
     this.row = new Row(this);

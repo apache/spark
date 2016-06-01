@@ -23,13 +23,13 @@ import java.util.Arrays;
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
-
+ 
 /**
- * A column backed by an in memory JVM array.
+ * A constant column backed by an in memory JVM array.
  */
-public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
-  public OnHeapColumnVector(int capacity, DataType type) {
-    super(capacity, capacity, type, false);
+public final class OnHeapConstantColumnVector extends OnHeapColumnVectorBase {
+  public OnHeapConstantColumnVector(int capacity, DataType type) {
+    super(1, capacity, type, true);
   }
 
   //
@@ -38,21 +38,19 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putNotNull(int rowId) {
-    nulls[rowId] = (byte)0;
+    nulls[0] = (byte)0;
   }
 
   @Override
   public void putNull(int rowId) {
-    nulls[rowId] = (byte)1;
+    nulls[0] = (byte)1;
     ++numNulls;
     anyNullsSet = true;
   }
 
   @Override
   public void putNulls(int rowId, int count) {
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)1;
-    }
+    nulls[0] = (byte)1;
     anyNullsSet = true;
     numNulls += count;
   }
@@ -60,14 +58,12 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!anyNullsSet) return;
-    for (int i = 0; i < count; ++i) {
-      nulls[rowId + i] = (byte)0;
-    }
+    nulls[0] = (byte)0;
   }
 
   @Override
   public boolean isNullAt(int rowId) {
-    return nulls[rowId] == 1;
+    return nulls[0] == 1;
   }
 
   //
@@ -76,20 +72,18 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putBoolean(int rowId, boolean value) {
-    byteData[rowId] = (byte)((value) ? 1 : 0);
+    byteData[0] = (byte)((value) ? 1 : 0);
   }
 
   @Override
   public void putBooleans(int rowId, int count, boolean value) {
     byte v = (byte)((value) ? 1 : 0);
-    for (int i = 0; i < count; ++i) {
-      byteData[i + rowId] = v;
-    }
+    byteData[0] = v;
   }
 
   @Override
   public boolean getBoolean(int rowId) {
-    return byteData[rowId] == 1;
+    return byteData[0] == 1;
   }
 
   //
@@ -100,27 +94,25 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putByte(int rowId, byte value) {
-    byteData[rowId] = value;
+    byteData[0] = value;
   }
 
   @Override
   public void putBytes(int rowId, int count, byte value) {
-    for (int i = 0; i < count; ++i) {
-      byteData[i + rowId] = value;
-    }
+    byteData[0] = value;
   }
 
   @Override
   public void putBytes(int rowId, int count, byte[] src, int srcIndex) {
-    System.arraycopy(src, srcIndex, byteData, rowId, count);
+    System.arraycopy(src, srcIndex, byteData, 0, 1);
   }
 
   @Override
   public byte getByte(int rowId) {
     if (dictionary == null) {
-      return byteData[rowId];
+      return byteData[0];
     } else {
-      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (byte) dictionary.decodeToInt(dictionaryIds.getInt(0));
     }
   }
 
@@ -130,27 +122,25 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putShort(int rowId, short value) {
-    shortData[rowId] = value;
+    shortData[0] = value;
   }
 
   @Override
   public void putShorts(int rowId, int count, short value) {
-    for (int i = 0; i < count; ++i) {
-      shortData[i + rowId] = value;
-    }
+    shortData[0] = value;
   }
 
   @Override
   public void putShorts(int rowId, int count, short[] src, int srcIndex) {
-    System.arraycopy(src, srcIndex, shortData, rowId, count);
+    System.arraycopy(src, srcIndex, shortData, 0, 1);
   }
 
   @Override
   public short getShort(int rowId) {
     if (dictionary == null) {
-      return shortData[rowId];
+      return shortData[0];
     } else {
-      return (short) dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return (short) dictionary.decodeToInt(dictionaryIds.getInt(0));
     }
   }
 
@@ -161,38 +151,34 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putInt(int rowId, int value) {
-    intData[rowId] = value;
+    intData[0] = value;
   }
 
   @Override
   public void putInts(int rowId, int count, int value) {
-    for (int i = 0; i < count; ++i) {
-      intData[i + rowId] = value;
-    }
+    intData[0] = value;
   }
 
   @Override
   public void putInts(int rowId, int count, int[] src, int srcIndex) {
-    System.arraycopy(src, srcIndex, intData, rowId, count);
+    System.arraycopy(src, srcIndex, intData, 0, 1);
   }
 
   @Override
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-    for (int i = 0; i < count; ++i, srcOffset += 4) {
-      intData[i + rowId] = Platform.getInt(src, srcOffset);
-      if (bigEndianPlatform) {
-        intData[i + rowId] = java.lang.Integer.reverseBytes(intData[i + rowId]);
-      }
+    intData[0] = Platform.getInt(src, srcOffset);
+    if (bigEndianPlatform) {
+      intData[0] = java.lang.Integer.reverseBytes(intData[0]);
     }
   }
 
   @Override
   public int getInt(int rowId) {
     if (dictionary == null) {
-      return intData[rowId];
+      return intData[0];
     } else {
-      return dictionary.decodeToInt(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToInt(dictionaryIds.getInt(0));
     }
   }
 
@@ -202,38 +188,34 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putLong(int rowId, long value) {
-    longData[rowId] = value;
+    longData[0] = value;
   }
 
   @Override
   public void putLongs(int rowId, int count, long value) {
-    for (int i = 0; i < count; ++i) {
-      longData[i + rowId] = value;
-    }
+    longData[0] = value;
   }
 
   @Override
   public void putLongs(int rowId, int count, long[] src, int srcIndex) {
-    System.arraycopy(src, srcIndex, longData, rowId, count);
+    System.arraycopy(src, srcIndex, longData, 0, 1);
   }
 
   @Override
   public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
     int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
-    for (int i = 0; i < count; ++i, srcOffset += 8) {
-      longData[i + rowId] = Platform.getLong(src, srcOffset);
-      if (bigEndianPlatform) {
-        longData[i + rowId] = java.lang.Long.reverseBytes(longData[i + rowId]);
-      }
+    longData[0] = Platform.getLong(src, srcOffset);
+    if (bigEndianPlatform) {
+      longData[0] = java.lang.Long.reverseBytes(longData[0]);
     }
   }
 
   @Override
   public long getLong(int rowId) {
     if (dictionary == null) {
-      return longData[rowId];
+      return longData[0];
     } else {
-      return dictionary.decodeToLong(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToLong(dictionaryIds.getInt(0));
     }
   }
 
@@ -243,38 +225,36 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putFloat(int rowId, float value) {
-    floatData[rowId] = value;
+    floatData[0] = value;
   }
 
   @Override
   public void putFloats(int rowId, int count, float value) {
-    Arrays.fill(floatData, rowId, rowId + count, value);
+    Arrays.fill(floatData, 0, 1, value);
   }
 
   @Override
   public void putFloats(int rowId, int count, float[] src, int srcIndex) {
-    System.arraycopy(src, srcIndex, floatData, rowId, count);
+    System.arraycopy(src, srcIndex, floatData, 0, 1);
   }
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, floatData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 4, count * 4);
+          Platform.DOUBLE_ARRAY_OFFSET, 4);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
-      for (int i = 0; i < count; ++i) {
-        floatData[i + rowId] = bb.getFloat(srcIndex + (4 * i));
-      }
+      floatData[0] = bb.getFloat(srcIndex);
     }
   }
 
   @Override
   public float getFloat(int rowId) {
     if (dictionary == null) {
-      return floatData[rowId];
+      return floatData[0];
     } else {
-      return dictionary.decodeToFloat(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToFloat(dictionaryIds.getInt(0));
     }
   }
 
@@ -284,38 +264,36 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public void putDouble(int rowId, double value) {
-    doubleData[rowId] = value;
+    doubleData[0] = value;
   }
 
   @Override
   public void putDoubles(int rowId, int count, double value) {
-    Arrays.fill(doubleData, rowId, rowId + count, value);
+    Arrays.fill(doubleData, 0, 1, value);
   }
 
   @Override
   public void putDoubles(int rowId, int count, double[] src, int srcIndex) {
-    System.arraycopy(src, srcIndex, doubleData, rowId, count);
+    System.arraycopy(src, srcIndex, doubleData, 0, 1);
   }
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
     if (!bigEndianPlatform) {
       Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex, doubleData,
-          Platform.DOUBLE_ARRAY_OFFSET + rowId * 8, count * 8);
+          Platform.DOUBLE_ARRAY_OFFSET, 8);
     } else {
       ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
-      for (int i = 0; i < count; ++i) {
-        doubleData[i + rowId] = bb.getDouble(srcIndex + (8 * i));
-      }
+      doubleData[0] = bb.getDouble(srcIndex);
     }
   }
 
   @Override
   public double getDouble(int rowId) {
     if (dictionary == null) {
-      return doubleData[rowId];
+      return doubleData[0];
     } else {
-      return dictionary.decodeToDouble(dictionaryIds.getInt(rowId));
+      return dictionary.decodeToDouble(dictionaryIds.getInt(0));
     }
   }
 
@@ -325,17 +303,17 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
 
   @Override
   public int getArrayLength(int rowId) {
-    return arrayLengths[rowId];
+    return arrayLengths[0];
   }
   @Override
   public int getArrayOffset(int rowId) {
-    return arrayOffsets[rowId];
+    return arrayOffsets[0];
   }
 
   @Override
   public void putArray(int rowId, int offset, int length) {
-    arrayOffsets[rowId] = offset;
-    arrayLengths[rowId] = length;
+    arrayOffsets[0] = offset;
+    arrayLengths[0] = length;
   }
 
   @Override
@@ -351,13 +329,14 @@ public final class OnHeapColumnVector extends OnHeapColumnVectorBase {
   @Override
   public int putByteArray(int rowId, byte[] value, int offset, int length) {
     int result = arrayData().appendBytes(length, value, offset);
-    arrayOffsets[rowId] = result;
-    arrayLengths[rowId] = length;
+    arrayOffsets[0] = result;
+    arrayLengths[0] = length;
     return result;
   }
 
   @Override
   public void reserve(int requiredCapacity) {
-    if (requiredCapacity > capacity) reserveInternal(requiredCapacity * 2);
+    // no-op
   }
 }
+ 
