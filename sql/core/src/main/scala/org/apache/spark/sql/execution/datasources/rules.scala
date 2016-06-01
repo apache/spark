@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import scala.util.control.NonFatal
+
 import org.apache.spark.sql.{AnalysisException, SaveMode, SparkSession}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
@@ -38,7 +40,13 @@ private[sql] class ResolveDataSource(sparkSession: SparkSession) extends Rule[Lo
           sparkSession,
           paths = u.tableIdentifier.table :: Nil,
           className = u.tableIdentifier.database.get)
-        if (dataSource.isFileFormat() == Option(false)) {
+
+        val notSupportDirectQuery = try {
+          !classOf[FileFormat].isAssignableFrom(dataSource.providingClass)
+        } catch {
+          case NonFatal(e) => false
+        }
+        if (notSupportDirectQuery) {
           throw new AnalysisException("Unsupported data source type for direct query on files: " +
             s"${u.tableIdentifier.database.get}")
         }
