@@ -188,6 +188,10 @@ class UserDefinedTypeSuite extends QueryTest with SharedSQLContext with ParquetT
 
     val toCatalystConverter = CatalystTypeConverters.createToCatalystConverter(udt)
     assert(toCatalystConverter(null) === null)
+  }
 
+  test("SPARK-15658: Analysis exception if Dataset.map returns UDT object") {
+    // call `collect` to make sure this query can pass analysis.
+    pointsRDD.as[MyLabeledPoint].map(_.copy(label = 2.0)).collect()
   }
 }

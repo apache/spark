@@ -609,6 +609,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     assert(df("id") == person("id"))
   }
 
+  test("drop top level columns that contains dot") {
+    val df1 = Seq((1, 2)).toDF("a.b", "a.c")
+    checkAnswer(df1.drop("a.b"), Row(2))
+
+    // Creates data set: {"a.b": 1, "a": {"b": 3}}
+    val df2 = Seq((1)).toDF("a.b").withColumn("a", struct(lit(3) as "b"))
+    // Not like select(), drop() parses the column name "a.b" literally without interpreting "."
+    checkAnswer(df2.drop("a.b").select("a.b"), Row(3))
+
+    // "`" is treated as a normal char here with no interpreting, "`a`b" is a valid column name.
+    assert(df2.drop("`a.b`").columns.size == 2)
+  }
+
+  test("drop(name: String) search and drop all top level columns that matchs the name") {
+    val df1 = Seq((1, 2)).toDF("a", "b")
+    val df2 = Seq((3, 4)).toDF("a", "b")
+    checkAnswer(df1.join(df2), Row(1, 2, 3, 4))
+    // Finds and drops all columns that match the name (case insensitive).
+    checkAnswer(df1.join(df2).drop("A"), Row(2, 4))
+  }
+
   test("withColumnRenamed") {
     val df = testData.toDF().withColumn("newCol", col("key") + 1)
       .withColumnRenamed("value", "valueRenamed")

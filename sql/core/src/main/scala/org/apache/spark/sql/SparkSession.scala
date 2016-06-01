@@ -694,7 +694,7 @@ object SparkSession {
 
     private[this] var userSuppliedContext: Option[SparkContext] = None
 
-    private[sql] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
+    private[spark] def sparkContext(sparkContext: SparkContext): Builder = synchronized {
       userSuppliedContext = Option(sparkContext)
       this
     }

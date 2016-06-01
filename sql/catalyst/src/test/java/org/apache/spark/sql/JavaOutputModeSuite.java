@@ -15,9 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql;
 
-sealed trait OutputMode
+import org.junit.Test;
 
-case object Append extends OutputMode
-case object Update extends OutputMode
+public class JavaOutputModeSuite {
+
+  @Test
+  public void testOutputModes() {
+    OutputMode o1 = OutputMode.Append();
+    assert(o1.toString().toLowerCase().contains("append"));
+    OutputMode o2 = OutputMode.Complete();
+    assert (o2.toString().toLowerCase().contains("complete"));
+  }
+}
