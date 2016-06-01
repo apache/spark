@@ -58,8 +58,6 @@ import org.apache.parquet.hadoop.metadata.BlockMetaData;
 import org.apache.parquet.hadoop.metadata.ParquetMetadata;
 import org.apache.parquet.hadoop.util.ConfigurationUtil;
 import org.apache.parquet.schema.MessageType;
-import org.apache.parquet.schema.PrimitiveType;
-import org.apache.parquet.schema.Type;
 import org.apache.parquet.schema.Types;
 import org.apache.spark.sql.types.StructType;
 
@@ -188,19 +186,15 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (columns == null) {
       this.requestedSchema = fileSchema;
     } else {
-      if (columns.size() > 0) {
-        Types.MessageTypeBuilder builder = Types.buildMessage();
-        for (String s: columns) {
-          if (!fileSchema.containsField(s)) {
-            throw new IOException("Can only project existing columns. Unknown field: " + s +
-                    " File schema:\n" + fileSchema);
-          }
-          builder.addFields(fileSchema.getType(s));
+      Types.MessageTypeBuilder builder = Types.buildMessage();
+      for (String s: columns) {
+        if (!fileSchema.containsField(s)) {
+          throw new IOException("Can only project existing columns. Unknown field: " + s +
+            " File schema:\n" + fileSchema);
         }
-        this.requestedSchema = builder.named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
-      } else {
-        this.requestedSchema = CatalystSchemaConverter.EMPTY_MESSAGE();
+        builder.addFields(fileSchema.getType(s));
       }
+      this.requestedSchema = builder.named("spark_schema");
     }
     this.sparkSchema = new CatalystSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());
