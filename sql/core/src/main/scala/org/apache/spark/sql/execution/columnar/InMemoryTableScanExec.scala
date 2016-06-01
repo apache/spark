@@ -71,7 +71,7 @@ private[sql] case class InMemoryRelation(
     private[sql] var _batchStats: ListAccumulator[InternalRow] = null)
   extends logical.LeafNode with MultiInstanceRelation {
 
-  override protected def innerChildren: Seq[TreeNode[_]] = Seq(child) ++ super.innerChildren
+  override protected def innerChildren: Seq[TreeNode[_]] = Seq(child)
 
   override def producedAttributes: AttributeSet = outputSet
 

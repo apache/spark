@@ -71,10 +71,7 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
   protected override def doExecute(): RDD[InternalRow] = {
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
-
-  override def argString: String = ""
 }
-
 
 /**
  * An explain command for users to see how a command will be executed.

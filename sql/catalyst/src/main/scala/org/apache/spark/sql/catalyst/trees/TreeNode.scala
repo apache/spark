@@ -424,7 +424,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
-  private def allChildren: Set[TreeNode[_]] = containsChild ++ innerChildren.toSet[TreeNode[_]]
+  private lazy val allChildren: Set[TreeNode[_]] = containsChild ++ innerChildren.toSet[TreeNode[_]]
 
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
