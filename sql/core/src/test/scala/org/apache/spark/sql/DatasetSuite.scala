@@ -771,12 +771,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("transformed dataset correctly solve the attributes") {
     val dataset = Seq(1, 2, 3).toDS()
-    val ds1 = dataset.map(_ + 1).as("d1")
-    val ds2 = dataset.map(_ + 2).as("d2")
+    val ds1 = dataset.map(_ + 1)
 
-    checkDataset(ds1.joinWith(ds2, $"d1.value" === $"d2.value"), (3, 3), (4, 4))
-    checkDataset(ds1.intersect(ds2), 3, 4)
-    checkDataset(ds1.except(ds2), 2)
+    checkDataset(ds1.as("d1").joinWith(ds1.as("d2"), $"d1.value" === $"d2.value"),
+      (2, 2), (3, 3), (4, 4))
+    checkDataset(ds1.as("d1").intersect(ds1.as("d2")), 2, 3, 4)
+    checkDataset(ds1.as("d1").except(ds1.as("d2")))
   }
 
   test("SPARK-15441: Dataset outer join") {
