@@ -50,7 +50,11 @@ trait ForeachWriter[T] extends Serializable {
   def process(value: T): Unit
 
   /**
-   * Called when stopping to process one partition of new data in the executor side.
+   * Called when stopping to process one partition of new data in the executor side. This is
+   * guaranteed to be called when a `Throwable` is thrown during processing data. However,
+   * `close` won't be called in the following cases:
+   *  - JVM crashes without throwing a `Throwable`
+   *  - `open` throws a `Throwable`.
    *
    * @param errorOrNull the error thrown during processing data or null if nothing is thrown.
    */

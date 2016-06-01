@@ -405,7 +405,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Returns the checkpointLocation for a query. If `required` is `ture` but the checkpoint
+   * Returns the checkpointLocation for a query. If `required` is `true` but the checkpoint
    * location is not set, [[AnalysisException]] will be thrown. If `required` is `false`, a temp
    * folder will be created if the checkpoint location is not set.
    */
