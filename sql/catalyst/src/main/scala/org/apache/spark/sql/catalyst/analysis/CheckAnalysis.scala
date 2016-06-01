@@ -310,15 +310,13 @@ trait CheckAnalysis extends PredicateHelper {
             failAnalysis(
               s"""
                  |Hive support is required to select over the following tables:
-                 |${s.catalogTable.identifier}
-               """.stripMargin)
+                 | ${s.catalogTable.identifier}""".stripMargin)
 
           case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
             failAnalysis(
               s"""
                  |Hive support is required to insert into the following tables:
-                 |${s.catalogTable.identifier}
-               """.stripMargin)
+                 | ${s.catalogTable.identifier}""".stripMargin)
 
           case o if !o.resolved =>
             failAnalysis(
