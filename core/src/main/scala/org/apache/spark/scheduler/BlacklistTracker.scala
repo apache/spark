@@ -41,11 +41,11 @@ private[spark] class BlacklistTracker(
     scheduler: TaskSchedulerImpl,
     clock: Clock = new SystemClock()) extends BlacklistCache with Logging {
 
-  // maintain a ExecutorId --> FailureStatus HashMap
   private val executorIdToFailureStatus: mutable.HashMap[String, FailureStatus] = mutable.HashMap()
-  // Apply Strategy pattern here to change different blacklist detection logic
   private val strategy = BlacklistStrategy(sparkConf)
 
+  private val decay = 0.5
+  private val oneMinusDecay = 1 - decay
 
   // A daemon thread to expire blacklist executor periodically
   private val expireBlacklistTimer = ThreadUtils.newDaemonSingleThreadScheduledExecutor(
@@ -83,6 +83,15 @@ private[spark] class BlacklistTracker(
     if (updated) {
       invalidateCache()
     }
+  }
+
+  def taskSetCompleted(stageId: Int): Unit = {
+    // TODO
+  }
+
+  def isExecutorBlacklisted(stageId: Int, executorId: String): Boolean = {
+    // TODO
+    false
   }
 
   // The actual implementation is delegated to strategy
@@ -123,6 +132,8 @@ private[spark] class BlacklistTracker(
 
   // The actual implementation is delegated to strategy
   def nodeBlacklistForStage(stageId: Int): Set[String] = synchronized {
+    // TODO semantics -- how is this synced w/ nodeBlacklist()?
+
     // TODO here and elsewhere -- we invalidate the cache way too often.  In general, we should
     // be able to do an in-place update of the caches.  (a) this is slow and (b) it makes
     // it really hard to track when the blacklist actually changes (would be *really* nice to
@@ -141,9 +152,12 @@ private[spark] class BlacklistTracker(
       info: TaskInfo): Unit = synchronized {
     // when an executor successfully completes any task, we remove it from the blacklist
     // for *all* tasks (?? TODO ??)
+
+    // TODO actually, this seems much too lenient.  If the node is partially bad (eg., one failed
+    // disk out of many), we may get keep getting some failed tasks, and some successful tasks.
+    // In that case we'd rather just leave the executor blacklisted.
     val exec = info.executorId
     val node = scheduler.getHostForExecutor(exec)
-    removeFailedExecutorsForTaskId(exec, stageId, partition)
     // TODO executor level logic as well
     // TODO synchronization?
     if (getNodeBlacklistForStageFromCache(stageId).map(_.contains(node)).getOrElse(false)) {
@@ -156,7 +170,6 @@ private[spark] class BlacklistTracker(
     }
   }
 
-
   def taskFailed(
       stageId: Int,
       partition: Int,
@@ -164,48 +177,24 @@ private[spark] class BlacklistTracker(
     // If the task failed, update latest failure time and failedTaskIds
     val atomTask = StageAndPartition(stageId, partition)
     val executorId = info.executorId
-    executorIdToFailureStatus.get(executorId) match {
-      case Some(failureStatus) =>
-        failureStatus.updatedTime = clock.getTimeMillis()
-        val failedTimes = failureStatus.numFailuresPerTask.getOrElse(atomTask, 0) + 1
-        failureStatus.numFailuresPerTask(atomTask) = failedTimes
-      case None =>
-        val failedTasks = mutable.HashMap(atomTask -> 1)
-        val failureStatus = new FailureStatus(
-          clock.getTimeMillis(), info.host, failedTasks)
-        executorIdToFailureStatus(executorId) = failureStatus
-    }
+    val fs = executorIdToFailureStatus.getOrElseUpdate(executorId, new FailureStatus(info.host))
+    fs.updatedTime = clock.getTimeMillis()
+    val stageFailures =
+      fs.failuresByStageAndPart.getOrElseUpdate(stageId, mutable.HashMap[Int, Int]())
+    stageFailures(partition) = stageFailures.getOrElse(partition, 0) + 1
     reEvaluateNodeBlacklist()
     reEvaluateNodeBlacklistForStageAndUpdateCache(stageId)
     reEvaluateExecutorBlacklistAndUpdateCache(atomTask, clock)
   }
 
+  private def updateFailureScore(executorId: String, host: String, update: Int): Unit = {
+    val fs = executorIdToFailureStatus.getOrElseUpdate(executorId, new FailureStatus(host))
+    fs.failureScore = fs.failureScore * decay + update * oneMinusDecay
+  }
+
   /** remove the executorId from executorIdToFailureStatus */
   def removeFailedExecutors(executorId: String) : Unit = synchronized {
     executorIdToFailureStatus.remove(executorId)
-  }
-
-  /**
-   * Remove the failure record related to given taskId from executorIdToFailureStatus. If the
-   * number of records of given executorId becomes 0, remove the completed executorId.
-   */
-  def removeFailedExecutorsForTaskId(
-      executorId: String,
-      stageId: Int,
-      partition: Int) : Unit = synchronized {
-    val atomTask = StageAndPartition(stageId, partition)
-    executorIdToFailureStatus.get(executorId).map{ fs =>
-      fs.numFailuresPerTask.remove(atomTask).foreach { _ =>
-        // this executor had previously failed for this specific task -- we need to update our
-        // cache so we know its OK now
-        logInfo(s"Executor $executorId is no longer blacklisted for partition $partition in " +
-          s"Stage $stageId")
-        reEvaluateExecutorBlacklistAndUpdateCache(atomTask, clock)
-      }
-      if (fs.numFailuresPerTask.isEmpty) {
-        executorIdToFailureStatus.remove(executorId)
-      }
-    }
   }
 
   /**
@@ -316,23 +305,15 @@ private[scheduler] trait BlacklistCache extends Logging {
 
   protected def getNodeBlacklistForStageFromCache(stageId: Int): Option[Set[String]] =
     blacklistNodeForStageCache.get(stageId)
+
 }
 
-/**
- * A class to record details of failure.
- *
- * @param initialTime the time when failure status be created
- * @param host the node name which running executor on
- * @param numFailuresPerTask all tasks failed on the executor (key is StageAndPartition, value
- *        is the number of failures of this task)
- */
-private[scheduler] final class FailureStatus(
-    initialTime: Long,
-    val host: String,
-    val numFailuresPerTask: mutable.HashMap[StageAndPartition, Int]) {
+private[scheduler] final class FailureStatus(val host: String) {
 
-  var updatedTime = initialTime
-  def totalNumFailures : Int = numFailuresPerTask.values.sum
+  var updatedTime = 0L
+  var failureScore = 0.0
+  val failuresByStageAndPart = mutable.HashMap[Int, mutable.HashMap[Int, Int]]()
+
 }
 
 private[scheduler] case class StageAndPartition(val stageId: Int, val partition: Int)

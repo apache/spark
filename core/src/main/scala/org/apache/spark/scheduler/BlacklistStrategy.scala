@@ -90,8 +90,11 @@ private[scheduler] class SingleTaskStrategy(
       clock: Clock): Set[String] = {
     executorBlacklistCallCount += 1
     executorIdToFailureStatus.filter{
-      case (_, failureStatus) => failureStatus.numFailuresPerTask.keySet.contains(atomTask) &&
-        clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
+      case (_, failureStatus) =>
+        val stageFailures = failureStatus.failuresByStageAndPart.get(atomTask.stageId)
+        val tooManyFailures = stageFailures.flatMap{ _.get(atomTask.partition)}.getOrElse(0) >= 1
+        tooManyFailures &&
+          clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
     }.keys.toSet
   }
 
@@ -114,6 +117,7 @@ private[scheduler] class AdvancedSingleTaskStrategy(
       stageId: Int,
       clock: Clock): Set[String] = {
     nodeBlacklistCallCount += 1
+    // TODO re-analyze performance.  Actually, just reimplement completely.
     // when there is one bad node (or executor), this is really slow.  We pile up a ton of
     // task failures, and we've got to iterate through failure data for each task.  Furthermore,
     // since we don't actively blacklist the bad node / executor, we just keep assigning it more
@@ -121,10 +125,13 @@ private[scheduler] class AdvancedSingleTaskStrategy(
     // to call this again.
     // This can be particularly painful when the failures are fast, since its likely the only
     // executor with free slots is the one which just failed some tasks, which just keep going ...
+
     val nodes = executorIdToFailureStatus.filter{
       case (_, failureStatus) =>
-        failureStatus.numFailuresPerTask.keySet.map(_.stageId).contains(stageId) &&
-        clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
+        // TODO bogus
+        // get all executors with failures for this stage
+        val failed = failureStatus.failuresByStageAndPart.contains(stageId)
+        failed && clock.getTimeMillis() - failureStatus.updatedTime < expireTimeInMilliseconds
     }.values.map(_.host)
     getDuplicateElem(nodes, 1)
   }
