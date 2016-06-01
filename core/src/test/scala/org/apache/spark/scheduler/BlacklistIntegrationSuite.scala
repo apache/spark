@@ -48,7 +48,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       val duration = Duration(1, SECONDS)
       Await.ready(jobFuture, duration)
     }
-    assert(results.isEmpty)
     assertDataStructuresEmpty(noFailure = false)
   }
 
@@ -68,7 +67,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       val duration = Duration(3, SECONDS)
       Await.ready(jobFuture, duration)
     }
-    assert(results.isEmpty)
     assertDataStructuresEmpty(noFailure = false)
   }
 

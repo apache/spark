@@ -133,6 +133,11 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       // when the job succeeds
       assert(taskScheduler.runningTaskSets.isEmpty)
       assert(!backend.hasTasks)
+    } else {
+      // Note that we CANNOT check for empty results on a failure -- the resultHandler will
+      // record results from successful tasks, even if the job fails overall.  We just check
+      // that we got a failure.
+      assert(failure != null)
     }
     assert(scheduler.activeJobs.isEmpty)
   }
@@ -558,7 +563,6 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
       Await.ready(jobFuture, duration)
       failure.getMessage.contains("test task failure")
     }
-    assert(results.isEmpty)
     assertDataStructuresEmpty(noFailure = false)
   }
 }
