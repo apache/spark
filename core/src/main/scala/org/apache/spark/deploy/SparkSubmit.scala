@@ -891,10 +891,12 @@ private[spark] object SparkSubmitUtils {
     val localIvy = new FileSystemResolver
     val localIvyRoot = new File(ivySettings.getDefaultIvyUserDir, "local")
     localIvy.setLocal(true)
-    localIvy.setRepository(new FileRepository(localIvyRoot))
-    val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
-      "[artifact](-[classifier]).[ext]").mkString(File.separator)
+    val ivyPattern = Seq("[organisation]", "[module]", "[revision]", "ivys",
+      "ivy.xml").mkString(File.separator)
     localIvy.addIvyPattern(localIvyRoot.getAbsolutePath + File.separator + ivyPattern)
+    val artifactPattern = Seq("[organisation]", "[module]", "[revision]", "[type]s",
+      "[artifact](-[classifier]).[ext]").mkString(File.separator)
+    localIvy.addArtifactPattern(localIvyRoot.getAbsolutePath + File.separator + artifactPattern)
     localIvy.setName("local-ivy-cache")
     cr.add(localIvy)
 
