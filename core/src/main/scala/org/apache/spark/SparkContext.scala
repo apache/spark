@@ -356,13 +356,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
   def setLogLevel(logLevel: String) {
-    val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
     // let's allow lowcase or mixed case too
-    if (!validLevels.contains(logLevel.toUpperCase(Locale.ENGLISH))) {
-      throw new IllegalArgumentException(
-        s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
-    }
-    Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
+    val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
+    require(SparkContext.validLevels.contains(upperCased),
+      s"Supplied level $logLevel did not match one of: ${SparkContext.validLevels.mkString(",")}")
+    Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
   try {
@@ -2180,6 +2178,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
  * various Spark features.
  */
 object SparkContext extends Logging {
+  private val validLevels = Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**
    * Lock that guards access to global variables that track SparkContext construction.
