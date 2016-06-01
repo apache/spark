@@ -94,7 +94,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   @Experimental
-  def outputMode(outputMode: OutputMode): DataFrameWriter = {
+  def outputMode(outputMode: OutputMode): DataFrameWriter[T] = {
     assertStreaming("outputMode() can only be called on continuous queries")
     this.outputMode = outputMode
     this
@@ -110,7 +110,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   @Experimental
-  def outputMode(outputMode: String): DataFrameWriter = {
+  def outputMode(outputMode: String): DataFrameWriter[T] = {
     assertStreaming("outputMode() can only be called on continuous queries")
     this.outputMode = outputMode.toLowerCase match {
       case "append" =>
