@@ -68,19 +68,19 @@ class ContinuousQuerySuite extends StreamTest {
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.sourceStatuses(0).offset === None),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.sinkStatus.offset === new CompositeOffset(None :: Nil)),
+      AssertOnQuery(_.sinkStatus.offset === new CompositeOffset(None :: Nil).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(0))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(0))),
+      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(0).toString)),
+      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(1))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1))),
+      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(1).toString)),
+      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1)).toString),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(2))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1)))
+      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(2).toString)),
+      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1)).toString)
     )
   }
 
