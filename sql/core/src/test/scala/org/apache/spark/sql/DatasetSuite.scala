@@ -253,21 +253,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (1, 1), (2, 2))
   }
 
-  test("joinWith, expression condition, outer join") {
-    val nullInteger = null.asInstanceOf[Integer]
-    val nullString = null.asInstanceOf[String]
-    val ds1 = Seq(ClassNullableData("a", 1),
-      ClassNullableData("c", 3)).toDS()
-    val ds2 = Seq(("a", new Integer(1)),
-      ("b", new Integer(2))).toDS()
-
-    checkDataset(
-      ds1.joinWith(ds2, $"_1" === $"a", "outer"),
-      (ClassNullableData("a", 1), ("a", new Integer(1))),
-      (ClassNullableData("c", 3), (nullString, nullInteger)),
-      (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
-  }
-
   test("joinWith tuple with primitive, expression") {
     val ds1 = Seq(1, 1, 2).toDS()
     val ds2 = Seq(("a", 1), ("b", 2)).toDS()
@@ -782,6 +767,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assertResult(Seq(ClassData("bar", 2))) {
       ds.filter(_.b > 1).collect().toSeq
     }
+  }
+
+  test("SPARK-15441: Dataset outer join") {
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+    val result = joined.collect().toSet
+    assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
 }
 

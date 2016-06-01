@@ -747,31 +747,62 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
-    val left = this.logicalPlan
-    val right = other.logicalPlan
+    // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
+    // etc.
+    val joined = sparkSession.sessionState.executePlan(
+      Join(
+        this.logicalPlan,
+        other.logicalPlan,
+        JoinType(joinType),
+        Some(condition.expr))).analyzed.asInstanceOf[Join]
 
-    val joined = sparkSession.sessionState.executePlan(Join(left, right, joinType =
-      JoinType(joinType), Some(condition.expr)))
-    val leftOutput = joined.analyzed.output.take(left.output.length)
-    val rightOutput = joined.analyzed.output.takeRight(right.output.length)
-
-    val leftData = this.unresolvedTEncoder match {
-      case e if e.flat => Alias(leftOutput.head, "_1")()
-      case _ => Alias(CreateStruct(leftOutput), "_1")()
+    // For both join side, combine all outputs into a single column and alias it with "_1" or "_2",
+    // to match the schema for the encoder of the join result.
+    // Note that we do this before joining them, to enable the join operator to return null for one
+    // side, in cases like outer-join.
+    val left = {
+      val combined = if (this.unresolvedTEncoder.flat) {
+        assert(joined.left.output.length == 1)
+        Alias(joined.left.output.head, "_1")()
+      } else {
+        Alias(CreateStruct(joined.left.output), "_1")()
+      }
+      Project(combined :: Nil, joined.left)
     }
-    val rightData = other.unresolvedTEncoder match {
-      case e if e.flat => Alias(rightOutput.head, "_2")()
-      case _ => Alias(CreateStruct(rightOutput), "_2")()
+
+    val right = {
+      val combined = if (other.unresolvedTEncoder.flat) {
+        assert(joined.right.output.length == 1)
+        Alias(joined.right.output.head, "_2")()
+      } else {
+        Alias(CreateStruct(joined.right.output), "_2")()
+      }
+      Project(combined :: Nil, joined.right)
+    }
+
+    // Rewrites the join condition to make the attribute point to correct column/field, after we
+    // combine the outputs of each join side.
+    val conditionExpr = joined.condition.get transformUp {
+      case a: Attribute if joined.left.outputSet.contains(a) =>
+        if (this.unresolvedTEncoder.flat) {
+          left.output.head
+        } else {
+          val index = joined.left.output.indexWhere(_.exprId == a.exprId)
+          GetStructField(left.output.head, index)
+        }
+      case a: Attribute if joined.right.outputSet.contains(a) =>
+        if (other.unresolvedTEncoder.flat) {
+          right.output.head
+        } else {
+          val index = joined.right.output.indexWhere(_.exprId == a.exprId)
+          GetStructField(right.output.head, index)
+        }
     }
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
       ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
 
-    withTypedPlan {
-      Project(
-        leftData :: rightData :: Nil,
-        joined.analyzed)
-    }
+    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr)))
   }
 
   /**
