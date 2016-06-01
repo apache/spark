@@ -40,7 +40,8 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         .select(
           (Literal(3) + ((Literal(1) + 'a) + 2)) + 4,
           'b * 1 * 2 * 3 * 4,
-          'a + 1 + 'b + 2 + 'c + 3)
+          'a + 1 + 'b + 2 + 'c + 3,
+          Rand(0) * 1 * 2 * 3 * 4)
 
     val optimized = Optimize.execute(originalQuery.analyze)
 
@@ -49,7 +50,8 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
         .select(
           ('a + 10).as("((3 + ((1 + a) + 2)) + 4)"),
           ('b * 24).as("((((b * 1) * 2) * 3) * 4)"),
-          ('a + 'b + 'c + 6).as("(((((a + 1) + b) + 2) + c) + 3)"))
+          ('a + 'b + 'c + 6).as("(((((a + 1) + b) + 2) + c) + 3)"),
+          Rand(0) * 1 * 2 * 3 * 4)
         .analyze
 
     comparePlans(optimized, correctAnswer)

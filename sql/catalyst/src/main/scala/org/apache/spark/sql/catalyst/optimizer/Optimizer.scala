@@ -743,9 +743,8 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
  */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
   private def isAssociativelyFoldable(e: Expression): Boolean =
-    e.isInstanceOf[BinaryArithmetic] &&
-      e.dataType.isInstanceOf[IntegralType] &&
-        isSingleOperatorExpr(e)
+    e.deterministic && e.isInstanceOf[BinaryArithmetic] && e.dataType.isInstanceOf[IntegralType] &&
+      isSingleOperatorExpr(e)
 
   private def isSingleOperatorExpr(e: Expression): Boolean = e.find {
     case a: Add if a.getClass == e.getClass => false
