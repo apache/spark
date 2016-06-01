@@ -15,22 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming
 
 import scala.collection.mutable
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.{DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.util.ContinuousQueryListener
 import org.apache.spark.util.{Clock, SystemClock}
 
 /**
  * :: Experimental ::
- * A class to manage all the [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active
- * on a [[SparkSession]].
+ * A class to manage all the [[ContinuousQuery]] active on a [[SparkSession]].
  *
  * @since 2.0.0
  */
@@ -147,7 +146,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
 
   /**
    * Register a [[ContinuousQueryListener]] to receive up-calls for life cycle events of
-   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]].
+   * [[ContinuousQuery]].
    *
    * @since 2.0.0
    */
