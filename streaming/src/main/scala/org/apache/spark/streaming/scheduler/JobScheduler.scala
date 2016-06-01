@@ -21,7 +21,6 @@ import java.util.Properties
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 
 import scala.collection.JavaConverters._
-import scala.collection.mutable.HashSet
 import scala.util.Failure
 
 import org.apache.commons.lang.SerializationUtils
@@ -64,8 +63,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private var executorAllocationManager: Option[ExecutorAllocationManager] = None
 
   private var eventLoop: EventLoop[JobSchedulerEvent] = null
-
-  private val inputInfoMissedTimes = HashSet[Time]()
 
   def start(): Unit = synchronized {
     if (eventLoop != null) return // scheduler has already been started
@@ -142,7 +139,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   def submitJobSet(jobSet: JobSet) {
     if (jobSet.jobs.isEmpty) {
       logInfo("No jobs added for time " + jobSet.time)
-      inputInfoMissedTimes.add(jobSet.time)
     } else {
       listenerBus.post(StreamingListenerBatchSubmitted(jobSet.toBatchInfo))
       jobSets.put(jobSet.time, jobSet)
@@ -197,14 +193,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     listenerBus.post(StreamingListenerOutputOperationCompleted(job.toOutputOperationInfo))
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
-      // submit fake BatchCompleted event to show missing inputInfo on Streaming UI
-      inputInfoMissedTimes.foreach (time => {
-        val streamIdToInputInfos = inputInfoTracker.getInfo(time)
-        val fakeJobSet = JobSet(time, Seq(), streamIdToInputInfos)
-        listenerBus.post(StreamingListenerBatchCompleted(fakeJobSet.toBatchInfo))
-      })
-      inputInfoMissedTimes.clear()
-
       jobSets.remove(jobSet.time)
       jobGenerator.onBatchCompletion(jobSet.time)
       logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
