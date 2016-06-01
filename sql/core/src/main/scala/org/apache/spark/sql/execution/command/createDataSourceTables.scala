@@ -22,6 +22,8 @@ import java.util.regex.Pattern
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
@@ -370,7 +372,27 @@ object CreateDataSourceTableUtils extends Logging {
         tableType = tableType,
         schema = Nil,
         storage = CatalogStorageFormat(
-          locationUri = None,
+          // We don't want Hive metastore to implicitly create a table directory,
+          // which may be not the one Data Source table is referring to,
+          // yet which will be left behind when the table is dropped for an external table
+          locationUri = if (new CaseInsensitiveMap(options).get("path").isDefined) {
+            val path = new Path(new CaseInsensitiveMap(options).get("path").get)
+            val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+            if (fs.exists(path)) {
+              // if the provided path exists, Hive metastore only takes directory
+              // as table data location
+              if (fs.getFileStatus(path).isDirectory) {
+                Some(path.toUri.toString)
+              } else {
+                Some(path.getParent.toUri.toString)
+              }
+            } else {
+              // If the path does not exists yet, it is assumed to be directory
+              Some(path.toUri.toString)
+            }
+          } else {
+            None
+          },
           inputFormat = None,
           outputFormat = None,
           serde = None,
