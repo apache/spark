@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.errors.TreeNodeException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.debug._
 import org.apache.spark.sql.types._
@@ -57,6 +58,8 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
     cmd.run(sqlContext.sparkSession).map(converter(_).asInstanceOf[InternalRow])
   }
 
+  override protected def innerChildren: Seq[TreeNode[_]] = cmd :: Nil
+
   override def output: Seq[Attribute] = cmd.output
 
   override def children: Seq[SparkPlan] = Nil
@@ -69,7 +72,7 @@ private[sql] case class ExecutedCommandExec(cmd: RunnableCommand) extends SparkP
     sqlContext.sparkContext.parallelize(sideEffectResult, 1)
   }
 
-  override def argString: String = cmd.toString
+  override def argString: String = ""
 }
 
 

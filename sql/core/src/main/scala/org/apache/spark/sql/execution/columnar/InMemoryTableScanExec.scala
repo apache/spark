@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
+import org.apache.spark.sql.catalyst.trees.TreeNode
 import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
@@ -69,6 +70,8 @@ private[sql] case class InMemoryRelation(
     @transient private[sql] var _statistics: Statistics = null,
     private[sql] var _batchStats: ListAccumulator[InternalRow] = null)
   extends logical.LeafNode with MultiInstanceRelation {
+
+  override protected def innerChildren: Seq[TreeNode[_]] = Seq(child) ++ super.innerChildren
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -221,6 +224,8 @@ private[sql] case class InMemoryTableScanExec(
     predicates: Seq[Expression],
     @transient relation: InMemoryRelation)
   extends LeafExecNode {
+
+  override protected def innerChildren: Seq[TreeNode[_]] = Seq(relation) ++ super.innerChildren
 
   private[sql] override lazy val metrics = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
