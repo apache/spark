@@ -70,13 +70,22 @@ abstract class ContinuousQueryListener {
 @Experimental
 object ContinuousQueryListener {
 
-  /** Base type of [[ContinuousQueryListener]] events */
+  /**
+   * Base type of [[ContinuousQueryListener]] events
+   * @since 2.0.0
+   */
   trait Event extends SparkListenerEvent
 
-  /** Event representing the start of a query */
+  /**
+   * Event representing the start of a query
+   * @since 2.0.0
+   */
   class QueryStarted private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 
-  /** Event representing any progress updates in a query */
+  /**
+   * Event representing any progress updates in a query
+   * @since 2.0.0
+   */
   class QueryProgress private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 
   /**
@@ -86,6 +95,7 @@ object ContinuousQueryListener {
    * @param exception The exception message of the [[ContinuousQuery]] if any. Otherwise, it
    *                  will be `None`.
    * @param stackTrace The stack trace of the exception if any.
+   * @since 2.0.0
    */
   class QueryTerminated private[sql](
       val queryInfo: ContinuousQueryInfo,

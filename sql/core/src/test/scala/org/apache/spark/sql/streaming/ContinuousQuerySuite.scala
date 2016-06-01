@@ -68,7 +68,7 @@ class ContinuousQuerySuite extends StreamTest {
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
       AssertOnQuery(_.sourceStatuses(0).offset === None),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset(None :: Nil)),
+      AssertOnQuery(_.sinkStatus.offset === new CompositeOffset(None :: Nil)),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
       AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(0))),

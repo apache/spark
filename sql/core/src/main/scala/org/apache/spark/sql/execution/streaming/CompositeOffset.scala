@@ -67,7 +67,6 @@ case class CompositeOffset(offsets: Seq[Option[Offset]]) extends Offset {
 
   override def toString: String =
     offsets.map(_.map(_.toString).getOrElse("-")).mkString("[", ", ", "]")
-
 }
 
 object CompositeOffset {
