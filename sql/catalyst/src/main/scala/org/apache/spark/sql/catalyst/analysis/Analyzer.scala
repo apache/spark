@@ -578,9 +578,7 @@ class Analyzer(
           throw new AnalysisException(
             s"""Table column names are a subset of the input data columns:
                |Data columns: ${inputNames.mkString(",")}
-               |Table columns: ${outputNames.mkString(",")}
-               |To write a subset of the columns by name, use df.write.byName.insertInto(...)"""
-                .stripMargin)
+               |Table columns: ${outputNames.mkString(",")}""".stripMargin)
         } else {
           // be conservative and fail if there are too many columns
           throw new AnalysisException(
@@ -594,8 +592,7 @@ class Analyzer(
           logWarning(
             s"""Data column names match the table in a different order:
                |Data columns: ${inputNames.mkString(",")}
-               |Table columns: ${outputNames.mkString(",")}
-               |To map columns by name, use df.write.byName.insertInto(...)""".stripMargin)
+               |Table columns: ${outputNames.mkString(",")}""".stripMargin)
         }
       }
 

@@ -324,12 +324,12 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       intercept[AnalysisException] {
         // also a problem when mapping by name
         spark.table("source").selectExpr("id", "part", "CONCAT('data-', id)")
-            .write.byName.insertInto("partitioned")
+            .write.option("matchByName", true).insertInto("partitioned")
       }
 
       // should be able to insert an expression using AS when mapping columns by name
       spark.table("source").selectExpr("id", "part", "CONCAT('data-', id) as data")
-          .write.byName.insertInto("partitioned")
+          .write.option("matchByName", true).insertInto("partitioned")
       checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)
     }
   }
@@ -345,7 +345,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
 
       intercept[AnalysisException] {
         // also a problem when mapping by name
-        spark.table("source").write.byName.insertInto("partitioned")
+        spark.table("source").write.option("matchByName", true).insertInto("partitioned")
       }
     }
   }
@@ -365,7 +365,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       data.write.insertInto("source")
       checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
 
-      spark.table("source").write.byName.insertInto("partitioned")
+      spark.table("source").write.option("matchByName", true).insertInto("partitioned")
 
       val expected = data.select("id", "data", "part")
       checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)
@@ -381,7 +381,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
           .toDF("id", "data", "part")
 
       // write into the reordered table by name
-      data.write.byName.insertInto("source")
+      data.write.option("matchByName", true).insertInto("source")
       checkAnswer(sql("SELECT id, data, part FROM source"), data.collect().toSeq)
 
       val expected = data.select($"id", $"part" as "data", $"data" as "part")
@@ -402,7 +402,7 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       data.write.insertInto("source")
       checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
 
-      spark.table("source").write.byName.insertInto("partitioned")
+      spark.table("source").write.option("matchByName", true).insertInto("partitioned")
 
       val expected = data.select("id", "data", "part")
       checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)

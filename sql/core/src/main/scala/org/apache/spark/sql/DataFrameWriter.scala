@@ -574,11 +574,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     }
   }
 
-  def byName: DataFrameWriter = {
-    extraOptions.put("matchByName", "true")
-    this
-  }
-
   /**
    * Saves the content of the [[DataFrame]] as the specified table.
    *
