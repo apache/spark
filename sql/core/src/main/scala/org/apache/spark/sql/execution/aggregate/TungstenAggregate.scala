@@ -769,9 +769,9 @@ case class TungstenAggregate(
         val keyString = groupingExpressions.mkString("[", ",", "]")
         val functionString = allAggregateExpressions.mkString("[", ",", "]")
         val outputString = output.mkString("[", ",", "]")
-        s"TungstenAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        s"Aggregate(key=$keyString, functions=$functionString, output=$outputString)"
       case Some(fallbackStartsAt) =>
-        s"TungstenAggregateWithControlledFallback $groupingExpressions " +
+        s"AggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
