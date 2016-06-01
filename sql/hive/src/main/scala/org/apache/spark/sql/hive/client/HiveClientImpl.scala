@@ -43,6 +43,7 @@ import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.execution.QueryExecutionException
+import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.util.{CircularBuffer, Utils}
 
 /**
@@ -323,7 +324,7 @@ private[hive] class HiveClientImpl(
   }
 
   override def listDatabases(pattern: String): Seq[String] = withHiveState {
-    client.getDatabasesByPattern(pattern).asScala.toSeq
+    client.getDatabasesByPattern(pattern).asScala
   }
 
   override def getTableOption(
@@ -351,6 +352,8 @@ private[hive] class HiveClientImpl(
         unsupportedFeatures += "bucketing"
       }
 
+      val properties = h.getParameters.asScala.toMap
+
       CatalogTable(
         identifier = TableIdentifier(h.getTableName, Option(h.getDbName)),
         tableType = h.getTableType match {
@@ -368,14 +371,27 @@ private[hive] class HiveClientImpl(
         createTime = h.getTTable.getCreateTime.toLong * 1000,
         lastAccessTime = h.getLastAccessTime.toLong * 1000,
         storage = CatalogStorageFormat(
-          locationUri = shim.getDataLocation(h),
+          locationUri = shim.getDataLocation(h).filterNot { _ =>
+            // SPARK-15269: Persisted data source tables always store the location URI as a SerDe
+            // property named "path" instead of standard Hive `dataLocation`, because Hive only
+            // allows directory paths as location URIs while Spark SQL data source tables also
+            // allows file paths. So the standard Hive `dataLocation` is meaningless for Spark SQL
+            // data source tables.
+            DDLUtils.isDatasourceTable(properties) &&
+              h.getTableType == HiveTableType.EXTERNAL_TABLE &&
+              // Spark SQL may also save external data source in Hive compatible format when
+              // possible, so that these tables can be directly accessed by Hive. For these tables,
+              // `dataLocation` is still necessary. Here we also check for input format class
+              // because only these Hive compatible tables set this field.
+              h.getInputFormatClass == null
+          },
           inputFormat = Option(h.getInputFormatClass).map(_.getName),
           outputFormat = Option(h.getOutputFormatClass).map(_.getName),
           serde = Option(h.getSerializationLib),
           compressed = h.getTTable.getSd.isCompressed,
           serdeProperties = h.getTTable.getSd.getSerdeInfo.getParameters.asScala.toMap
         ),
-        properties = h.getParameters.asScala.toMap,
+        properties = properties,
         viewOriginalText = Option(h.getViewOriginalText),
         viewText = Option(h.getViewExpandedText),
         unsupportedFeatures = unsupportedFeatures)
