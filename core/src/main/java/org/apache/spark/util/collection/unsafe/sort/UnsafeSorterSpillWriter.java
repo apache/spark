@@ -48,7 +48,7 @@ public final class UnsafeSorterSpillWriter {
   private final File file;
   private final BlockId blockId;
   private final int numRecordsToWrite;
-  private final DiskBlockObjectWriter writer;
+  private DiskBlockObjectWriter writer;
   private int numRecordsSpilled = 0;
 
   public UnsafeSorterSpillWriter(
@@ -138,6 +138,7 @@ public final class UnsafeSorterSpillWriter {
   public void close() throws IOException {
     writer.commit();
     writer.close();
+    writer = null;
     writeBuffer = null;
   }
 

@@ -22,7 +22,6 @@ import java.io.File;
 import java.io.IOException;
 import java.util.LinkedList;
 
-import org.apache.spark.storage.FileSegment;
 import scala.Tuple2;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -38,6 +37,7 @@ import org.apache.spark.serializer.DummySerializerInstance;
 import org.apache.spark.serializer.SerializerInstance;
 import org.apache.spark.storage.BlockManager;
 import org.apache.spark.storage.DiskBlockObjectWriter;
+import org.apache.spark.storage.FileSegment;
 import org.apache.spark.storage.TempShuffleBlockId;
 import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.LongArray;

@@ -125,6 +125,7 @@ private[spark] class DiskBlockObjectWriter(
       }
 
       channel = null
+      mcs = null
       bs = null
       fos = null
       ts = null
