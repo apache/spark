@@ -880,13 +880,26 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     val properties = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
     val selectQuery = Option(ctx.query).map(plan)
 
+    // Ensuring whether no duplicate name is used in table definition
+    val colNames = cols.map(_.name)
+    if (colNames.length != colNames.distinct.length) {
+      val duplicateColumns = colNames.groupBy(identity).collect {
+        case (x, ys) if ys.length > 1 => "\"" + x + "\""
+      }
+      throw new ParseException(s"Duplicate column name key(s) in the table definition: " +
+        duplicateColumns.mkString("[", ",", "]"), ctx)
+    }
+
+    // Ensuring the existing columns are not used as partition columns
+    val partitionColsInTable = partitionCols.map(_.name).toSet.intersect(colNames.toSet)
+    if (partitionColsInTable.nonEmpty) {
+      throw new ParseException(s"Column repeated in partitioning column(s): " +
+        partitionColsInTable.map("\"" + _ + "\"").mkString("[", ",", "]"), ctx)
+    }
+
     // Note: Hive requires partition columns to be distinct from the schema, so we need
     // to include the partition columns here explicitly
     val schema = cols ++ partitionCols
-
-    // Ensuring whether no duplicate name is used in table definition;
-    // Also ensuring the existing columns are not used as partition columns
-    checkDuplicateNames(colNames = schema.map(_.name), ctx)
 
     // Storage format
     val defaultStorage: CatalogStorageFormat = {

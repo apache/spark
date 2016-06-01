@@ -50,17 +50,6 @@ object ParserUtils {
     }
   }
 
-  /** Check if duplicate exist in a set of column names. */
-  def checkDuplicateNames[T](colNames: Seq[String], ctx: ParserRuleContext): Unit = {
-    if (colNames.length != colNames.distinct.length) {
-      val duplicateColumns = colNames.groupBy(identity).collect {
-        case (x, ys) if ys.length > 1 => "\"" + x + "\""
-      }
-      throw new ParseException(s"Column repeated in partitioning column(s) or duplicate column " +
-        s"name key in the table definition: ${duplicateColumns.mkString("[", ",", "]")}", ctx)
-    }
-  }
-
   /** Get the code that creates the given node. */
   def source(ctx: ParserRuleContext): String = {
     val stream = ctx.getStart.getInputStream
