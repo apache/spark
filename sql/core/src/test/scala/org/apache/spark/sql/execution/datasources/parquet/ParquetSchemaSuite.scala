@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.parquet
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
-import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.apache.parquet.schema.MessageTypeParser
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ScalaReflection
@@ -1065,26 +1065,18 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
       parquetSchema: String,
       catalystSchema: StructType,
       expectedSchema: String): Unit = {
-    testSchemaClipping(testName, parquetSchema, catalystSchema,
-      MessageTypeParser.parseMessageType(expectedSchema))
-  }
-
-  private def testSchemaClipping(
-      testName: String,
-      parquetSchema: String,
-      catalystSchema: StructType,
-      expectedSchema: MessageType): Unit = {
     test(s"Clipping - $testName") {
+      val expected = MessageTypeParser.parseMessageType(expectedSchema)
       val actual = CatalystReadSupport.clipParquetSchema(
         MessageTypeParser.parseMessageType(parquetSchema), catalystSchema)
 
       try {
-        expectedSchema.checkContains(actual)
-        actual.checkContains(expectedSchema)
+        expected.checkContains(actual)
+        actual.checkContains(expected)
       } catch { case cause: Throwable =>
         fail(
           s"""Expected clipped schema:
-             |$expectedSchema
+             |$expected
              |Actual clipped schema:
              |$actual
            """.stripMargin,
@@ -1437,7 +1429,7 @@ class ParquetSchemaSuite extends ParquetSchemaTest {
 
     catalystSchema = new StructType(),
 
-    expectedSchema = CatalystSchemaConverter.EMPTY_MESSAGE)
+    expectedSchema = "message root {}")
 
   testSchemaClipping(
     "disjoint field sets",
