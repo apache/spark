@@ -200,10 +200,10 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     val e = intercept[AnalysisException] {
       sql(
         """
-        |INSERT OVERWRITE TABLE table_with_partition
-        |partition (p1='a',p2) IF NOT EXISTS
-        |SELECT 'blarr3'
-      """.stripMargin)
+          |INSERT OVERWRITE TABLE table_with_partition
+          |partition (p1='a',p2) IF NOT EXISTS
+          |SELECT 'blarr3'
+        """.stripMargin)
     }
     assert(e.getMessage.contains(
       "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [p2]"))
