@@ -704,7 +704,7 @@ Essentially isotonic regression is a
 [monotonic function](http://en.wikipedia.org/wiki/Monotonic_function)
 best fitting the original data points.
 
-`spark.ml` supports a
+MLlib supports a
 [pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
@@ -735,30 +735,18 @@ is treated as piecewise linear function. The rules for prediction therefore are:
 
 <div class="codetabs">
 <div data-lang="scala" markdown="1">
-Data are read from a file where each line has a format label,feature
-i.e. 4710.28,500.00. The data are split to training and testing set.
-Model is created using the training set and a mean squared error is calculated from the predicted
-labels and real labels in the test set.
 
 Refer to the [`IsotonicRegression` Scala docs](api/scala/index.html#org.apache.spark.ml.regression.IsotonicRegression) for details on the API.
 
 {% include_example scala/org/apache/spark/examples/ml/IsotonicRegressionExample.scala %}
 </div>
 <div data-lang="java" markdown="1">
-Data are read from a file where each line has a format label,feature
-i.e. 4710.28,500.00. The data are split to training and testing set.
-Model is created using the training set and a mean squared error is calculated from the predicted
-labels and real labels in the test set.
 
 Refer to the [`IsotonicRegression` Java docs](api/java/org/apache/spark/ml/regression/IsotonicRegression.html) for details on the API.
 
 {% include_example java/org/apache/spark/examples/ml/JavaIsotonicRegressionExample.java %}
 </div>
 <div data-lang="python" markdown="1">
-Data are read from a file where each line has a format label,feature
-i.e. 4710.28,500.00. The data are split to training and testing set.
-Model is created using the training set and a mean squared error is calculated from the predicted
-labels and real labels in the test set.
 
 Refer to the [`IsotonicRegression` Python docs](api/python/pyspark.ml.html#pyspark.ml.regression.IsotonicRegression) for more details on the API.
 

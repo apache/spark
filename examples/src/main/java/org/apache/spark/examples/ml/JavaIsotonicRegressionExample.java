@@ -17,61 +17,45 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
-
-import java.util.List;
-
 import org.apache.spark.ml.regression.IsotonicRegression;
 import org.apache.spark.ml.regression.IsotonicRegressionModel;
-import org.apache.spark.sql.DataFrameReader;
 import org.apache.spark.sql.Dataset;
-import org.apache.spark.sql.functions;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SparkSession;
-import org.apache.spark.sql.types.StructType;
-
 // $example off$
+import org.apache.spark.sql.SparkSession;
 
+/**
+ * An example demonstrating IsotonicRegression.
+ * Run with
+ * <pre>
+ * bin/run-example ml.JavaIsotonicRegressionExample
+ * </pre>
+ */
 public class JavaIsotonicRegressionExample {
+
   public static void main(String[] args) {
-      // Create a SparkSession.
-      SparkSession spark = SparkSession
-              .builder()
-              .appName("JavaIsotonicRegression")
-              .getOrCreate();
+    // Create a SparkSession.
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaIsotonicRegression")
+      .getOrCreate();
 
-      IsotonicRegression ir = new IsotonicRegression().setIsotonic(true)
-              .setLabelCol("label")
-              .setFeaturesCol("features")
-              .setWeightCol("weight");
+    // $example on$
+    // Loads data.
+    Dataset<Row> dataset = spark.read().format("libsvm")
+      .load("data/mllib/sample_isotonic_regression_libsvm_data.txt");
 
-      // Loads data.
-      DataFrameReader dataReader = spark.read();
-      dataReader.schema(new StructType()
-              .add("label", "double")
-              .add("features", "double"));
+    // Trains an isotonic regression model.
+    IsotonicRegression ir = new IsotonicRegression();
+    IsotonicRegressionModel model = ir.fit(dataset);
 
-      Dataset<Row> data = dataReader.csv("data/mllib/sample_isotonic_regression_data.txt");
-      data = data.select(
-              functions.col("label"),
-              functions.col("features"),
-              functions.lit(1.0).as("weight")
-      );
+    System.out.println("Boundaries in increasing order: " + model.boundaries());
+    System.out.println("Predictions associated with the boundaries: " + model.predictions());
 
-      // Split data into training (60%) and test (40%) sets.
-      List<Dataset<Row>> splits = data.randomSplitAsList(new double[]{0.6, 0.4}, 11L);
-      Dataset<Row> training = splits.get(0);
-      Dataset<Row> test = splits.get(1);
+    // Makes predictions.
+    model.transform(dataset).show();
+    // $example off$
 
-      // Create isotonic regression model from training data.
-      // Isotonic parameter defaults to true so it is only shown for demonstration
-      IsotonicRegressionModel model = ir.fit(training);
-
-      // Create tuples of predicted and real labels.
-      Dataset<Row> result = model.transform(test);
-
-      result.show();
-      // $example off$
-
-      spark.stop();
+    spark.stop();
   }
 }

@@ -20,13 +20,16 @@ Isotonic Regression Example.
 """
 from __future__ import print_function
 
-from pyspark.sql import SparkSession
-from pyspark.sql.types import StructType, StructField, DoubleType
-
 # $example on$
 from pyspark.ml.regression import IsotonicRegression, IsotonicRegressionModel
 # $example off$
+from pyspark.sql import SparkSession
 
+"""
+An example demonstrating isotonic regression.
+Run with:
+  bin/spark-submit examples/src/main/python/ml/isotonic_regression_example.py
+"""
 if __name__ == "__main__":
 
     spark = SparkSession\
@@ -35,17 +38,17 @@ if __name__ == "__main__":
         .getOrCreate()
 
     # $example on$
-    dataReader = spark.read
-    dataReader.schema(
-        StructType([StructField("label", DoubleType()),
-                    StructField("features", DoubleType())]))
+    # Loads data.
+    dataset = spark.read.format("libsvm")\
+        .load("data/mllib/sample_isotonic_regression_libsvm_data.txt")
 
-    data = dataReader.format("csv").load("data/mllib/sample_isotonic_regression_data.txt")
-    # Split data into training (60%) and test (40%) sets.
-    training, test = data.randomSplit([0.6, 0.4], 11)
-    model = IsotonicRegression().fit(training)
-    result = model.transform(test)
-    result.show
+    # Trains an isotonic regression model.
+    model = IsotonicRegression().fit(dataset)
+    print("Boundaries in increasing order: " + str(model.boundaries))
+    print("Predictions associated with the boundaries: " + str(model.predictions))
+
+    # Makes predictions.
+    model.transform(dataset).show()
     # $example off$
 
-    spark.stop
+    spark.stop()

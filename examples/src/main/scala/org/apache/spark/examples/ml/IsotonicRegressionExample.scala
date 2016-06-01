@@ -16,15 +16,12 @@
  */
 
 // scalastyle:off println
-
 package org.apache.spark.examples.ml
 
 // $example on$
 import org.apache.spark.ml.regression.IsotonicRegression
 // $example off$
-import org.apache.spark.sql.functions._
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.types.{DoubleType, StructType}
 
 /**
  * An example demonstrating Isotonic Regression.
@@ -42,29 +39,21 @@ object IsotonicRegressionExample {
       .builder
       .appName(s"${this.getClass.getSimpleName}")
       .getOrCreate()
+
     // $example on$
-    val ir = new IsotonicRegression().setIsotonic(true)
-      .setLabelCol("label").setFeaturesCol("features").setWeightCol("weight")
+    // Loads data.
+    val dataset = spark.read.format("libsvm")
+      .load("data/mllib/sample_isotonic_regression_libsvm_data.txt")
 
-    val dataReader = spark.read
-    dataReader.schema(new StructType().add("label", DoubleType).add("features", DoubleType))
+    // Trains an isotonic regression model.
+    val ir = new IsotonicRegression()
+    val model = ir.fit(dataset)
 
-    var data = dataReader.csv("data/mllib/sample_isotonic_regression_data.txt")
-    data = data.select(col("label"), col("features"), lit(1.0).as("weight"))
+    println(s"Boundaries in increasing order: ${model.boundaries}")
+    println(s"Predictions associated with the boundaries: ${model.predictions}")
 
-    // Split data into training (60%) and test (40%) sets.
-    val splits = data.randomSplit(Array(0.6, 0.4), seed = 11L)
-    val training = splits(0)
-    val test = splits(1)
-
-    // Create isotonic regression model from training data.
-    // Isotonic parameter defaults to true so it is only shown for demonstration
-    val model = ir.fit(training)
-
-    // Create tuples of predicted and real labels.
-    val result = model.transform(test)
-
-    result.show
+    // Makes predictions.
+    model.transform(dataset).show
     // $example off$
 
     spark.stop()
