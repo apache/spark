@@ -290,11 +290,6 @@ object TypeCoercion {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      case a @ BinaryArithmetic(left @ StringType(), right @ DecimalType.Expression(_, _)) =>
-        a.makeCopy(Array(Cast(left, DecimalType.SYSTEM_DEFAULT), right))
-      case a @ BinaryArithmetic(left @ DecimalType.Expression(_, _), right @ StringType()) =>
-        a.makeCopy(Array(left, Cast(right, DecimalType.SYSTEM_DEFAULT)))
-
       case a @ BinaryArithmetic(left @ StringType(), right) =>
         a.makeCopy(Array(Cast(left, DoubleType), right))
       case a @ BinaryArithmetic(left, right @ StringType()) =>

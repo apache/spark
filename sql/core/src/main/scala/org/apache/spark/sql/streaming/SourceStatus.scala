@@ -15,9 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.streaming
 
-sealed trait OutputMode
+import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
 
-case object Append extends OutputMode
-case object Update extends OutputMode
+/**
+ * :: Experimental ::
+ * Status and metrics of a streaming [[Source]].
+ *
+ * @param description     Description of the source corresponding to this status
+ * @param offset          Current offset of the source, if known
+ * @since 2.0.0
+ */
+@Experimental
+class SourceStatus private[sql] (
+    val description: String,
+    val offset: Option[Offset])

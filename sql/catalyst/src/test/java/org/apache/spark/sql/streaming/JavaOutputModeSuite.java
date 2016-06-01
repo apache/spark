@@ -15,20 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming;
 
-import org.apache.spark.annotation.Experimental
+import org.junit.Test;
 
-/**
- * :: Experimental ::
- * A class used to report information about the progress of a [[ContinuousQuery]].
- *
- * @param name The [[ContinuousQuery]] name
- * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
- * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
- */
-@Experimental
-class ContinuousQueryInfo private[sql](
-  val name: String,
-  val sourceStatuses: Seq[SourceStatus],
-  val sinkStatus: SinkStatus)
+public class JavaOutputModeSuite {
+
+  @Test
+  public void testOutputModes() {
+    OutputMode o1 = OutputMode.Append();
+    assert(o1.toString().toLowerCase().contains("append"));
+    OutputMode o2 = OutputMode.Complete();
+    assert (o2.toString().toLowerCase().contains("complete"));
+  }
+}

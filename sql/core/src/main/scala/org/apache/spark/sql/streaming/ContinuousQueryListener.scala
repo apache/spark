@@ -15,21 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.streaming
 
 import com.fasterxml.jackson.annotation.JsonTypeInfo
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.sql._
-import org.apache.spark.sql.util.ContinuousQueryListener._
 
 /**
  * :: Experimental ::
  * Interface for listening to events related to [[ContinuousQuery ContinuousQueries]].
  * @note The methods are not thread-safe as they may be called from different threads.
+ *
+ * @since 2.0.0
  */
 @Experimental
 abstract class ContinuousQueryListener {
+
+  import ContinuousQueryListener._
 
   /**
    * Called when a query is started.
@@ -38,6 +41,7 @@ abstract class ContinuousQueryListener {
    *       that is, `onQueryStart` will be called on all listeners before
    *       `DataFrameWriter.startStream()` returns the corresponding [[ContinuousQuery]]. Please
    *       don't block this method as it will block your query.
+   * @since 2.0.0
    */
   def onQueryStarted(queryStarted: QueryStarted): Unit
 
@@ -48,10 +52,14 @@ abstract class ContinuousQueryListener {
    *       latest no matter when this method is called. Therefore, the status of [[ContinuousQuery]]
    *       may be changed before/when you process the event. E.g., you may find [[ContinuousQuery]]
    *       is terminated when you are processing [[QueryProgress]].
+   * @since 2.0.0
    */
   def onQueryProgress(queryProgress: QueryProgress): Unit
 
-  /** Called when a query is stopped, with or without error */
+  /**
+   * Called when a query is stopped, with or without error.
+   * @since 2.0.0
+   */
   def onQueryTerminated(queryTerminated: QueryTerminated): Unit
 }
 
@@ -59,6 +67,7 @@ abstract class ContinuousQueryListener {
 /**
  * :: Experimental ::
  * Companion object of [[ContinuousQueryListener]] that defines the listener events.
+ * @since 2.0.0
  */
 @Experimental
 object ContinuousQueryListener {

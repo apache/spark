@@ -201,7 +201,8 @@ class ProcessingTime(Trigger):
         self.interval = interval
 
     def _to_java_trigger(self, sqlContext):
-        return sqlContext._sc._jvm.org.apache.spark.sql.ProcessingTime.create(self.interval)
+        return sqlContext._sc._jvm.org.apache.spark.sql.streaming.ProcessingTime.create(
+            self.interval)
 
 
 def _test():

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.util
+package org.apache.spark.sql.streaming
 
 import java.util.concurrent.ConcurrentLinkedQueue
 
@@ -29,13 +29,14 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.SparkException
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.util.ContinuousQueryListener.{QueryProgress, QueryStarted, QueryTerminated}
+import org.apache.spark.sql.streaming.ContinuousQueryListener.{QueryProgress, QueryStarted, QueryTerminated}
 import org.apache.spark.util.JsonProtocol
 
-class ContinuousQueryListenerSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+
+class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   import testImplicits._
+  import ContinuousQueryListener._
 
   after {
     spark.streams.active.foreach(_.stop())

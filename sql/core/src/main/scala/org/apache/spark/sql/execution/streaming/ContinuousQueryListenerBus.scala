@@ -18,8 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import org.apache.spark.scheduler.{LiveListenerBus, SparkListener, SparkListenerEvent}
-import org.apache.spark.sql.util.ContinuousQueryListener
-import org.apache.spark.sql.util.ContinuousQueryListener._
+import org.apache.spark.sql.streaming.ContinuousQueryListener
 import org.apache.spark.util.ListenerBus
 
 /**
@@ -31,6 +30,8 @@ import org.apache.spark.util.ListenerBus
  */
 class ContinuousQueryListenerBus(sparkListenerBus: LiveListenerBus)
   extends SparkListener with ListenerBus[ContinuousQueryListener, ContinuousQueryListener.Event] {
+
+  import ContinuousQueryListener._
 
   sparkListenerBus.addListener(this)
 

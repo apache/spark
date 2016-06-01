@@ -434,7 +434,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case other => other :: Nil
   }.mkString(", ")
 
-  /** String representation of this node without any children. */
+  /** ONE line description of this node. */
   def simpleString: String = s"$nodeName $argString".trim
 
   override def toString: String = treeString
