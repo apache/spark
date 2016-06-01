@@ -38,9 +38,16 @@ class BlockManagerMaster(
 
   /** Remove a dead executor from the driver endpoint. This is only called on the driver side. */
   def removeExecutor(execId: String) {
-    // Avoid potential deadlocks by using non-blocking call
-    driverEndpoint.ask[Boolean](RemoveExecutor(execId))
+    tell(RemoveExecutor(execId))
     logInfo("Removed " + execId + " successfully in removeExecutor")
+  }
+
+  /** Request removal of a dead executor from the driver endpoint. 
+   *  This is only called on the driver side. Non-blocking  
+   */
+  def removeExecutorAsync(execId: String) {
+    driverEndpoint.ask[Boolean](RemoveExecutor(execId))
+    logInfo("Removal of executor " + execId + " requested")
   }
 
   /** Register the BlockManager's id with the driver. */

@@ -22,7 +22,7 @@ class DistributedSuiteMinThreads extends DistributedSuite {
 
   // This suite runs DistributeSuite with the number of dispatcher
   // threads set to the minimum of 2 to help identify deadlocks
-  
+
   val numThreads = System.getProperty("spark.rpc.netty.dispatcher.numThreads")
 
   override def beforeAll() {
