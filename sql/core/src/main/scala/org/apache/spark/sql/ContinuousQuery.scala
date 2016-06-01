@@ -61,6 +61,9 @@ trait ContinuousQuery {
   /** Returns current status of the sink. */
   def sinkStatus: SinkStatus
 
+  /** Return the current plan tree of ContinuousQuery */
+  def explain(extended: Boolean = false, codegen: Boolean = false): String
+
   /**
    * Waits for the termination of `this` query, either by `query.stop()` or by an exception.
    * If the query has terminated with an exception, then the exception will be thrown.

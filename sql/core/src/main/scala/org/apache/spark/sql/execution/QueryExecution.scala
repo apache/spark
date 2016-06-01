@@ -201,7 +201,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   def simpleString: String = {
     s"""== Physical Plan ==
-       |${stringOrError(executedPlan)}
+       |${ if (logical.isStreaming) "N/A" else stringOrError(executedPlan) }
       """.stripMargin.trim
   }
 
@@ -216,9 +216,9 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlan)}
+       |${ if (logical.isStreaming) "N/A" else stringOrError(optimizedPlan) }
        |== Physical Plan ==
-       |${stringOrError(executedPlan)}
+       |${ if (logical.isStreaming) "N/A" else stringOrError(executedPlan) }
     """.stripMargin.trim
   }
 

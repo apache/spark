@@ -85,6 +85,18 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
     )
   }
 
+  testQuietly("explain continuous query") {
+    val inputData = MemoryStream[Int]
+    val mapped = inputData.toDS().map(6 / _)
+
+    testStream(mapped)(
+      AssertOnQuery(_.explain() === "N/A"),
+      AddData(inputData, 1, 2),
+      CheckAnswer(6, 3),
+      AssertOnQuery(_.explain() !== "N/A")
+    )
+  }
+
   /**
    * A [[StreamAction]] to test the behavior of `ContinuousQuery.awaitTermination()`.
    *
