@@ -1163,7 +1163,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     assert(store.getStatus("blockId").isEmpty)
   }
 
-  test("remove cached block if a read fails due to missing on-disk files") {
+  test("remove block if a read fails due to missing DiskStore files (SPARK-15736)") {
     val storageLevels = Seq(
       StorageLevel(useDisk = true, useMemory = false, deserialized = false),
       StorageLevel(useDisk = true, useMemory = false, deserialized = true))

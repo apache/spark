@@ -242,7 +242,7 @@ class FailureSuite extends SparkFunSuite with LocalSparkContext {
     FailureSuiteState.clear()
   }
 
-  test("failure because cached RDD files are missing") {
+  test("failure because cached RDD partitions are missing from DiskStore (SPARK-15736)") {
     sc = new SparkContext("local[1,2]", "test")
     val rdd = sc.parallelize(1 to 2, 2).persist(StorageLevel.DISK_ONLY)
     rdd.count()
