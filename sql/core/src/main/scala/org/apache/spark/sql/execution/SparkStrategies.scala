@@ -210,7 +210,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        aggregate.Utils.planStreamingAggregation(
+        aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions,
           rewrittenResultExpressions,
@@ -243,20 +243,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               sys.error("Distinct columns cannot exist in Aggregate operator containing " +
                 "aggregate functions which don't support partial aggregation.")
             } else {
-              aggregate.Utils.planAggregateWithoutPartial(
+              aggregate.AggUtils.planAggregateWithoutPartial(
                 groupingExpressions,
                 aggregateExpressions,
                 resultExpressions,
                 planLater(child))
             }
           } else if (functionsWithDistinct.isEmpty) {
-            aggregate.Utils.planAggregateWithoutDistinct(
+            aggregate.AggUtils.planAggregateWithoutDistinct(
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
-            aggregate.Utils.planAggregateWithOneDistinct(
+            aggregate.AggUtils.planAggregateWithOneDistinct(
               groupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
