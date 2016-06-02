@@ -116,14 +116,13 @@ private[spark] class DiskBlockObjectWriter(
     this
   }
 
-  override def close() {
+  /**
+   * Close and cleanup all resources.
+   * Should call after committing or reverting partial writes.
+   */
+  private def closeResources(): Unit = {
     if (initialized) {
-      Utils.tryWithSafeFinally {
-        commit()
-      } {
-        mcs.manualClose()
-      }
-
+      mcs.manualClose()
       channel = null
       mcs = null
       bs = null
@@ -133,6 +132,19 @@ private[spark] class DiskBlockObjectWriter(
       initialized = false
       streamOpen = false
       hasBeenClosed = true
+    }
+  }
+
+  /**
+   * Commits any remaining partial writes and closes resources.
+   */
+  override def close() {
+    if (initialized) {
+      Utils.tryWithSafeFinally {
+        commit()
+      } {
+        closeResources()
+      }
     }
   }
 
@@ -186,7 +198,7 @@ private[spark] class DiskBlockObjectWriter(
         writeMetrics.decBytesWritten(reportedPosition - committedPosition)
         writeMetrics.decRecordsWritten(numRecordsWritten)
         streamOpen = false
-        close()
+        closeResources()
       }
 
       val truncateStream = new FileOutputStream(file, true)
