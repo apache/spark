@@ -224,6 +224,21 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkAnswer(df.groupBy($"j").agg(RowAgg.toColumn), Row("a", 1) :: Row("b", 5) :: Nil)
   }
 
+  test("SPARK-15688: Remove redundant expressions from aggregate") {
+    val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("col1", "col2")
+    val df1 = df.groupBy("col1").agg($"col1", count("*"))
+    assert(df1.schema.map(_.name) === Seq("col1", "count(1)"))
+    val df2 = df.groupBy("col1", "col2").agg($"col1", count("*"))
+    assert(df2.schema.map(_.name) === Seq("col2", "col1", "count(1)"))
+    val df3 = df.groupBy(expr("col1 + 2")).agg(expr("col1 + 2"), count("*"))
+    assert(df3.schema.map(_.name) === Seq("(col1 + 2)", "count(1)"))
+    val df4 = df.groupBy("col1").agg(min("col1"), max("col1"))
+    assert(df4.schema.map(_.name) === Seq("col1", "min(col1)", "max(col1)"))
+    val df5 = df.groupBy("col1", "col2").agg($"col1", $"col2")
+      .groupBy("col1").agg($"col1", count("*"))
+    assert(df5.schema.map(_.name) === Seq("col1", "count(1)"))
+  }
+
   test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {
     val ds = Seq(AggData(1, "a"), AggData(2, "a")).toDS()
 
