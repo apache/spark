@@ -39,11 +39,11 @@ class WideSchemaBenchmark extends SparkFunSuite {
 
   import sparkSession.implicits._
 
-  ignore("many column query parse") {
-    val benchmark = new Benchmark("many column parse", 1)
+  ignore("parsing large select expressions") {
+    val benchmark = new Benchmark("parsing large select", 1)
     for (width <- widthsToTest) {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
-      benchmark.addTimerCase(s"$width column parse") { timer =>
+      benchmark.addTimerCase(s"$width select expressions") { timer =>
         timer.startTiming()
         sparkSession.range(1).toDF.selectExpr(selectExpr: _*)
         timer.stopTiming()
@@ -54,13 +54,13 @@ class WideSchemaBenchmark extends SparkFunSuite {
     /*
     OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
     Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
-    many column parse:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    parsing large select                   Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ----------------------------------------------------------------------------------------------
-    1 column parse                                15 /   19          0.0    15464923.0       1.0X
-    10 column parse                               26 /   30          0.0    26131438.0       0.6X
-    100 column parse                              46 /   58          0.0    45719540.0       0.3X
-    1000 column parse                            285 /  328          0.0   285407972.0       0.1X
-    5000 column parse                           1482 / 1645          0.0  1482298845.0       0.0X
+    1 select expressions                          15 /   19          0.0    15464923.0       1.0X
+    10 select expressions                         26 /   30          0.0    26131438.0       0.6X
+    100 select expressions                        46 /   58          0.0    45719540.0       0.3X
+    1000 select expressions                      285 /  328          0.0   285407972.0       0.1X
+    5000 select expressions                     1482 / 1645          0.0  1482298845.0       0.0X
     */
   }
 
