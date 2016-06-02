@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql
 
+<<<<<<< Updated upstream
+=======
+import java.io.File
+
+>>>>>>> Stashed changes
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.functions._
 import org.apache.spark.util.Benchmark
@@ -70,11 +75,18 @@ class WideSchemaBenchmark extends SparkFunSuite {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       val df = sparkSession.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
       df.count()  // force caching
-      benchmark.addCase(s"$width cols x $numRows rows (read)") { iter =>
+      benchmark.addCase(s"$width cols x $numRows rows (read in-mem)") { iter =>
         df.selectExpr("sum(a_1)").collect()
       }
-      benchmark.addCase(s"$width cols x $numRows rows (write)") { iter =>
+      benchmark.addCase(s"$width cols x $numRows rows (write in-mem)") { iter =>
         df.selectExpr("*", "hash(a_1) as f").selectExpr("sum(a_1)", "sum(f)").collect()
+      }
+      val parquet = saveAsParquet(df)
+      benchmark.addCase(s"$width cols x $numRows rows (read parquet)") { iter =>
+        parquet.selectExpr("sum(a_1)").collect()
+      }
+      benchmark.addCase(s"$width cols x $numRows rows (write parquet)") { iter =>
+        saveAsParquet(df.selectExpr("sum(a_1)"))
       }
     }
     benchmark.run()
