@@ -520,7 +520,7 @@ class Analyzer(
   object ResolveOutputColumns extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
       case ins @ InsertIntoTable(relation: LogicalPlan, partition, _, _, _, _)
-          if ins.childrenResolved && !ins.resolved =>
+          if relation.resolved && !ins.resolved =>
         resolveOutputColumns(ins, expectedColumns(relation, partition), relation.toString)
     }
 
