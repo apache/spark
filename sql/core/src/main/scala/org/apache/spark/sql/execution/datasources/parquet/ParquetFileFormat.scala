@@ -791,7 +791,7 @@ private[sql] object ParquetFileFormat extends Logging {
     //
     // Parquet requires `FileStatus`es to read footers.  Here we try to send cached `FileStatus`es
     // to executor side to avoid fetching them again.  However, `FileStatus` is not `Serializable`
-    // but only `Writable`.  What makes it worth, for some reason, `FileStatus` doesn't play well
+    // but only `Writable`.  What makes it worse, for some reason, `FileStatus` doesn't play well
     // with `SerializableWritable[T]` and always causes a weird `IllegalStateException`.  These
     // facts virtually prevents us to serialize `FileStatus`es.
     //
