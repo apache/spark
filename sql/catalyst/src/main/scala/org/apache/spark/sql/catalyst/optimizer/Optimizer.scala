@@ -752,25 +752,27 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
     case other => other :: Nil
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressionsDown {
-    case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-      val (foldables, others) = flattenAdd(a).partition(_.foldable)
-      if (foldables.size > 1) {
-        val foldableExpr = foldables.reduce((x, y) => Add(x, y))
-        val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
-        if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
-      } else {
-        a
-      }
-    case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-      val (foldables, others) = flattenMultiply(m).partition(_.foldable)
-      if (foldables.size > 1) {
-        val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
-        val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
-        if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
-      } else {
-        m
-      }
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenAdd(a).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
+          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+        } else {
+          a
+        }
+      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenMultiply(m).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
+          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+        } else {
+          m
+        }
+    }
   }
 }
 
