@@ -190,6 +190,11 @@ class HiveDDLCommandSuite extends PlanTest {
       " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
   }
 
+  test("CTAS statement with schema is not allowed") {
+    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) " +
+      "AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
+  }
+
   test("unsupported operations") {
     intercept[ParseException] {
       parser.parsePlan(
