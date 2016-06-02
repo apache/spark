@@ -1482,16 +1482,6 @@ class SQLTests(ReusedPySparkTestCase):
         functions = dict((f.name, f) for f in spark.catalog.listFunctions())
         functionsDefault = dict((f.name, f) for f in spark.catalog.listFunctions("default"))
         self.assertTrue(len(functions) > 200)
-        self.assertTrue("+" in functions)
-        self.assertTrue("like" in functions)
-        self.assertTrue("month" in functions)
-        self.assertTrue("to_unix_timestamp" in functions)
-        self.assertTrue("current_database" in functions)
-        self.assertEquals(functions["+"], Function(
-            name="+",
-            description=None,
-            className="org.apache.spark.sql.catalyst.expressions.Add",
-            isTemporary=True))
         self.assertEquals(functions, functionsDefault)
         spark.catalog.registerFunction("temp_func", lambda x: str(x))
         spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
