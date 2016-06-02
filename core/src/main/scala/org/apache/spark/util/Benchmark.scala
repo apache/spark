@@ -17,11 +17,14 @@
 
 package org.apache.spark.util
 
+import java.io.{OutputStream, PrintStream}
+
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 import scala.util.Try
 
+import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.SystemUtils
 
 /**
@@ -36,19 +39,28 @@ import org.apache.commons.lang3.SystemUtils
  *
  * @param name name of this benchmark.
  * @param valuesPerIteration number of values used in the test case, used to compute rows/s.
- * @param minNumIters the min number of iterations that will be run per case. Note that this
- *                    should be at least 2 since the first iteration is ignored.
+ * @param minNumIters the min number of iterations that will be run per case, not counting warm-up.
+ * @param warmupTime amount of time to spend running dummy case iterations for JIT warm-up.
  * @param minTime further iterations will be run for each case until this time is used up.
  * @param outputPerIteration if true, the timing for each run will be printed to stdout.
+ * @param output optional output stream to write benchmark results to
  */
 private[spark] class Benchmark(
     name: String,
     valuesPerIteration: Long,
-    minNumIters: Int = 3,
+    minNumIters: Int = 2,
+    warmupTime: FiniteDuration = 2.seconds,
     minTime: FiniteDuration = 2.seconds,
-    outputPerIteration: Boolean = false) {
+    outputPerIteration: Boolean = false,
+    output: Option[OutputStream] = None) {
   import Benchmark._
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
+
+  val out = if (output.isDefined) {
+    new PrintStream(new TeeOutputStream(System.out, output.get))
+  } else {
+    System.out
+  }
 
   /**
    * Adds a case to run when run() is called. The given function will be run for several
@@ -95,20 +107,20 @@ private[spark] class Benchmark(
 
     val firstBest = results.head.bestMs
     // The results are going to be processor specific so it is useful to include that.
-    println(Benchmark.getJVMOSInfo())
-    println(Benchmark.getProcessorName())
-    printf("%-40s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
+    out.println(Benchmark.getJVMOSInfo())
+    out.println(Benchmark.getProcessorName())
+    out.printf("%-40s %16s %12s %13s %10s\n", name + ":", "Best/Avg Time(ms)", "Rate(M/s)",
       "Per Row(ns)", "Relative")
-    println("-" * 96)
+    out.println("-" * 96)
     results.zip(benchmarks).foreach { case (result, benchmark) =>
-      printf("%-40s %16s %12s %13s %10s\n",
+      out.printf("%-40s %16s %12s %13s %10s\n",
         benchmark.name,
         "%5.0f / %4.0f" format (result.bestMs, result.avgMs),
         "%10.1f" format result.bestRate,
         "%6.1f" format (1000 / result.bestRate),
         "%3.1fX" format (firstBest / result.bestMs))
     }
-    println
+    out.println
     // scalastyle:on
   }
 
@@ -118,17 +130,19 @@ private[spark] class Benchmark(
    */
   def measure(num: Long, overrideNumIters: Int)(f: Timer => Unit): Result = {
     System.gc()  // ensures garbage from previous cases don't impact this one
+    val warmupDeadline = warmupTime.fromNow
+    while (!warmupDeadline.isOverdue) {
+      f(new Benchmark.Timer(-1))
+    }
     val minIters = if (overrideNumIters != 0) overrideNumIters else minNumIters
-    val minDuration = if (overrideNumIters != 0) 0.seconds.fromNow else minTime.fromNow
+    val minDuration = if (overrideNumIters != 0) 0 else minTime.toNanos
     val runTimes = ArrayBuffer[Long]()
     var i = 0
-    while (i < minIters || !minDuration.isOverdue) {
+    while (i < minIters || runTimes.sum < minDuration) {
       val timer = new Benchmark.Timer(i)
       f(timer)
       val runTime = timer.totalTime()
-      if (i > 0) {
-        runTimes += runTime
-      }
+      runTimes += runTime
 
       if (outputPerIteration) {
         // scalastyle:off
