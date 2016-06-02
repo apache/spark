@@ -336,7 +336,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * input once to determine the input schema.
    *
    * @param jsonRDD input RDD with one JSON object per record
-   * @since 1.4.0*
+   * @since 1.4.0
    */
   @deprecated("Use json(dataset) instead.", "2.0.0")
   def json(jsonRDD: RDD[String]): DataFrame = {
