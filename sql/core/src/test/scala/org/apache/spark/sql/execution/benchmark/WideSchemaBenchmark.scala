@@ -28,7 +28,7 @@ import org.apache.spark.util.Benchmark
  */
 class WideSchemaBenchmark extends SparkFunSuite {
   private val scaleFactor = 100000
-  private val widthsToTest = Seq(1, 10, 100, 1000, 5000)  // crashes on higher values
+  private val widthsToTest = Seq(1, 10, 100, 1000, 2500)
   private val depthsToTest = Seq(1, 10, 100, 250)
   assert(scaleFactor > widthsToTest.max)
 
@@ -64,17 +64,22 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
-  ignore("many column field read") {
-    val benchmark = new Benchmark("many column field read", scaleFactor)
+  test("many column field read and write") {
+    val benchmark = new Benchmark("many column field r/w", scaleFactor)
     for (width <- widthsToTest) {
       // normalize by width to keep constant data size
       val numRows = scaleFactor / width
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       val df = sparkSession.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$width cols x $numRows rows") { timer =>
+      benchmark.addTimerCase(s"$width cols x $numRows rows (read)") { timer =>
         timer.startTiming()
         df.selectExpr("sum(a_1)").collect()
+        timer.stopTiming()
+      }
+      benchmark.addTimerCase(s"$width cols x $numRows rows (write)") { timer =>
+        timer.startTiming()
+        df.selectExpr("*", "hash(a_1) as f").selectExpr("sum(a_1)", "sum(f)").collect()
         timer.stopTiming()
       }
     }
@@ -83,18 +88,23 @@ class WideSchemaBenchmark extends SparkFunSuite {
     /*
     OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
     Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
-    many column field read:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    many column field r/w:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ----------------------------------------------------------------------------------------------
-    1 cols x 100000 rows                          57 /   67          1.7         572.9       1.0X
-    10 cols x 10000 rows                          35 /   43          2.8         354.1       1.6X
-    100 cols x 1000 rows                          49 /   67          2.0         492.4       1.2X
-    1000 cols x 100 rows                         428 /  459          0.2        4281.8       0.1X
-    5000 cols x 20 rows                         2170 / 2253          0.0       21695.6       0.0X
+    1 cols x 100000 rows (read)                   41 /   51          2.4         414.5       1.0X
+    1 cols x 100000 rows (write)                  52 /   68          1.9         520.1       0.8X
+    10 cols x 10000 rows (read)                   43 /   49          2.3         426.7       1.0X
+    10 cols x 10000 rows (write)                  48 /   65          2.1         478.3       0.9X
+    100 cols x 1000 rows (read)                   84 /   91          1.2         840.4       0.5X
+    100 cols x 1000 rows (write)                 103 /  122          1.0        1032.1       0.4X
+    1000 cols x 100 rows (read)                  458 /  468          0.2        4575.5       0.1X
+    1000 cols x 100 rows (write)                 849 /  875          0.1        8494.0       0.0X
+    2500 cols x 40 rows (read)                  1077 / 1135          0.1       10770.3       0.0X
+    2500 cols x 40 rows (write)                 2251 / 2351          0.0       22510.8       0.0X
     */
   }
 
-  ignore("wide struct field read") {
-    val benchmark = new Benchmark("wide struct field read", scaleFactor)
+  test("wide struct field read and write") {
+    val benchmark = new Benchmark("wide struct field r/w", scaleFactor)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
       var datum: String = "{"
@@ -108,9 +118,14 @@ class WideSchemaBenchmark extends SparkFunSuite {
       datum += "}"
       val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$width wide x $numRows rows") { timer =>
+      benchmark.addTimerCase(s"$width wide x $numRows rows (read)") { timer =>
         timer.startTiming()
         df.selectExpr("sum(value_1)").collect()
+        timer.stopTiming()
+      }
+      benchmark.addTimerCase(s"$width wide x $numRows rows (write)") { timer =>
+        timer.startTiming()
+        df.selectExpr("*", "hash(value_1) as f").selectExpr(s"sum(value_1)", "sum(f)").collect()
         timer.stopTiming()
       }
     }
@@ -119,18 +134,23 @@ class WideSchemaBenchmark extends SparkFunSuite {
     /*
     OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
     Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
-    wide struct field read:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    wide struct field r/w:                 Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ----------------------------------------------------------------------------------------------
-    1 wide x 100000 rows                          33 /   41          3.0         333.9       1.0X
-    10 wide x 10000 rows                          45 /   52          2.2         445.1       0.8X
-    100 wide x 1000 rows                          86 /   95          1.2         856.1       0.4X
-    1000 wide x 100 rows                         265 /  322          0.4        2646.4       0.1X
-    5000 wide x 20 rows                         1882 / 2043          0.1       18817.4       0.0X
+    1 wide x 100000 rows (read)                   31 /   38          3.2         309.3       1.0X
+    1 wide x 100000 rows (write)                  55 /   61          1.8         551.6       0.6X
+    10 wide x 10000 rows (read)                   51 /   53          2.0         506.6       0.6X
+    10 wide x 10000 rows (write)                  60 /   71          1.7         596.5       0.5X
+    100 wide x 1000 rows (read)                   74 /   86          1.4         737.4       0.4X
+    100 wide x 1000 rows (write)                 133 /  154          0.8        1332.1       0.2X
+    1000 wide x 100 rows (read)                  377 /  441          0.3        3767.3       0.1X
+    1000 wide x 100 rows (write)                 688 /  828          0.1        6880.8       0.0X
+    2500 wide x 40 rows (read)                   974 / 1044          0.1        9738.1       0.0X
+    2500 wide x 40 rows (write)                 2081 / 2256          0.0       20805.8       0.0X
     */
   }
 
-  ignore("deeply nested struct field read") {
-    val benchmark = new Benchmark("deeply nested struct field read", scaleFactor)
+  test("deeply nested struct field read and write") {
+    val benchmark = new Benchmark("deeply nested struct field r/w", scaleFactor)
     for (depth <- depthsToTest) {
       val numRows = scaleFactor / depth
       var datum: String = "{\"value\": 1}"
@@ -141,9 +161,14 @@ class WideSchemaBenchmark extends SparkFunSuite {
       }
       val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$depth deep x $numRows rows") { timer =>
+      benchmark.addTimerCase(s"$depth deep x $numRows rows (read)") { timer =>
         timer.startTiming()
         df.selectExpr(s"sum($selector)").collect()
+        timer.stopTiming()
+      }
+      benchmark.addTimerCase(s"$depth deep x $numRows rows (write)") { timer =>
+        timer.startTiming()
+        df.selectExpr("*", s"$selector as f").selectExpr(s"sum($selector)", "sum(f)").collect()
         timer.stopTiming()
       }
     }
@@ -152,12 +177,16 @@ class WideSchemaBenchmark extends SparkFunSuite {
     /*
     OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
     Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
-    deeply nested struct field read:       Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    deeply nested struct field r/w:        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ----------------------------------------------------------------------------------------------
-    1 deep x 100000 rows                          45 /   55          2.2         450.4       1.0X
-    10 deep x 10000 rows                          52 /   63          1.9         515.1       0.9X
-    100 deep x 1000 rows                         100 /  119          1.0        1004.0       0.4X
-    250 deep x 400 rows                          534 /  623          0.2        5342.4       0.1X
+    1 deep x 100000 rows (read)                   38 /   49          2.6         382.2       1.0X
+    1 deep x 100000 rows (write)                  38 /   45          2.6         382.1       1.0X
+    10 deep x 10000 rows (read)                   48 /   61          2.1         483.8       0.8X
+    10 deep x 10000 rows (write)                  93 /  104          1.1         931.2       0.4X
+    100 deep x 1000 rows (read)                  151 /  162          0.7        1513.2       0.3X
+    100 deep x 1000 rows (write)                 903 / 1004          0.1        9030.5       0.0X
+    250 deep x 400 rows (read)                   653 /  735          0.2        6526.8       0.1X
+    250 deep x 400 rows (write)                 8749 / 9217          0.0       87490.4       0.0X
     */
   }
 
