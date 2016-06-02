@@ -424,9 +424,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   protected def stringArgs: Iterator[Any] = productIterator
 
+  private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
+
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
-    case tn: TreeNode[_] if containsChild(tn) => Nil
+    case tn: TreeNode[_] if allChildren.contains(tn) => Nil
+    case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
     case tn: TreeNode[_] => s"${tn.simpleString}" :: Nil
     case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
     case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
@@ -467,9 +470,10 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
-   * All the nodes that are parts of this node, this is used by subquries.
+   * All the nodes that should be shown as a inner nested tree of this node.
+   * For example, this can be used to show sub-queries.
    */
-  protected def innerChildren: Seq[BaseType] = Nil
+  protected def innerChildren: Seq[TreeNode[_]] = Seq.empty
 
   /**
    * Appends the string represent of this node and its children to the given StringBuilder.
