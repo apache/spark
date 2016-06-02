@@ -2557,6 +2557,9 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     def _create_model(self, java_model):
         return RFormulaModel(java_model)
 
+    def __str__(self):
+        return "RFormula(%s) (uid=%s)" % (self.getFormula(), self.uid)
+
 
 class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
@@ -2567,6 +2570,10 @@ class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 1.5.0
     """
+
+    def __str__(self):
+        resolvedFormula = self._call_java("resolvedFormula")
+        return "RFormulaModel(%s) (uid=%s)" % (resolvedFormula, self.uid)
 
 
 @inherit_doc
