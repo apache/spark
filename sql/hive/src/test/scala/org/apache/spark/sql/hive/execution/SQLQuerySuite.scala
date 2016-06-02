@@ -1506,52 +1506,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test(
-    "SPARK-14488 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
-    "shouldn't create persisted table"
-  ) {
-    withTempPath { dir =>
-      withTempTable("t1", "t2") {
-        val path = dir.getCanonicalPath
-        val ds = spark.range(10)
-        ds.createOrReplaceTempView("t1")
-
-        sql(
-          s"""CREATE TEMPORARY TABLE t2
-             |USING PARQUET
-             |OPTIONS (PATH '$path')
-             |AS SELECT * FROM t1
-           """.stripMargin)
-
-        checkAnswer(
-          spark.sql("SHOW TABLES").select('isTemporary).filter('tableName === "t2"),
-          Row(true)
-        )
-
-        checkAnswer(table("t2"), table("t1"))
-      }
-    }
-  }
-
-  test(
-    "SPARK-14493 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
-    "shouldn always be used together with PATH data source option"
-  ) {
-    withTempTable("t") {
-      spark.range(10).createOrReplaceTempView("t")
-
-      val message = intercept[IllegalArgumentException] {
-        sql(
-          s"""CREATE TEMPORARY TABLE t1
-             |USING PARQUET
-             |AS SELECT * FROM t
-           """.stripMargin)
-      }.getMessage
-
-      assert(message == "'path' is not specified")
-    }
-  }
-
   test("derived from Hive query file: drop_database_removes_partition_dirs.q") {
     // This test verifies that if a partition exists outside a table's current location when the
     // database is dropped the partition's location is dropped as well.

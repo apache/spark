@@ -561,7 +561,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           CreateTableUsingAsSelect(
             tableIdent,
             source,
-            temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
             getBucketSpec,
             mode,
