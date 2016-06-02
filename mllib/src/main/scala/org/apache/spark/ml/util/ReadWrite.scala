@@ -33,7 +33,7 @@ import org.apache.spark.ml.classification.{OneVsRest, OneVsRestModel}
 import org.apache.spark.ml.feature.RFormulaModel
 import org.apache.spark.ml.param.{ParamPair, Params}
 import org.apache.spark.ml.tuning.ValidatorParams
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.util.Utils
 
 /**
@@ -43,9 +43,18 @@ private[util] sealed trait BaseReadWrite {
   private var optionSparkSession: Option[SparkSession] = None
 
   /**
-   * Sets the Spark Session to use for saving/loading.
+   * Sets the Spark SQLContext to use for saving/loading.
    */
   @Since("1.6.0")
+  def context(sqlContext: SQLContext): this.type = {
+    optionSparkSession = Option(sqlContext.sparkSession)
+    this
+  }
+
+  /**
+   * Sets the Spark Session to use for saving/loading.
+   */
+  @Since("2.0.0")
   def context(sparkSession: SparkSession): this.type = {
     optionSparkSession = Option(sparkSession)
     this
@@ -60,6 +69,11 @@ private[util] sealed trait BaseReadWrite {
     }
     optionSparkSession.get
   }
+
+  /**
+   * Returns the user-specified SQL context or the default.
+   */
+  protected final def sqlContext: SQLContext = sparkSession.sqlContext
 
   /** Returns the underlying [[SparkContext]]. */
   protected final def sc: SparkContext = sparkSession.sparkContext
@@ -115,6 +129,9 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 
   // override for Java compatibility
   override def context(sparkSession: SparkSession): this.type = super.context(sparkSession)
+
+  // override for Java compatibility
+  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
 }
 
 /**
@@ -159,6 +176,9 @@ abstract class MLReader[T] extends BaseReadWrite {
 
   // override for Java compatibility
   override def context(sparkSession: SparkSession): this.type = super.context(sparkSession)
+
+  // override for Java compatibility
+  override def context(sqlContext: SQLContext): this.type = super.context(sqlContext)
 }
 
 /**

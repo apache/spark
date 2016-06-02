@@ -778,12 +778,6 @@ object MimaExcludes {
       ) ++ Seq(
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.asBreeze"),
         ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.asBreeze")
-      ) ++ Seq(
-        // [SPARK-15644] Replace SQLContext by SparkSession in MLLIB
-        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.util.MLWriter.sqlContext"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.util.MLWriter.context"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.ml.util.MLReader.sqlContext"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("org.apache.spark.ml.util.MLReader.context")
       )
     case v if v.startsWith("1.6") =>
       Seq(
