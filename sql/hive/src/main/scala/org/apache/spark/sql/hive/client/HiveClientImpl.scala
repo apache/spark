@@ -783,16 +783,24 @@ private[hive] class HiveClientImpl(
   private def toHivePartition(
       p: CatalogTablePartition,
       ht: HiveTable): HivePartition = {
-    val location = p.storage.locationUri.map { l => new Path(l) }.orNull
-    val tpart = HivePartition.createMetaPartitionObject(ht, p.spec.asJava, location)
+    val tpart = new org.apache.hadoop.hive.metastore.api.Partition
+    val partValues = ht.getPartCols.asScala.map { hc =>
+      p.spec.get(hc.getName).getOrElse {
+        throw new IllegalArgumentException(
+          s"Partition spec is missing a value for column '${hc.getName}': ${p.spec}")
+      }
+    }
     val storageDesc = new StorageDescriptor
     val serdeInfo = new SerDeInfo
     p.storage.locationUri.foreach(storageDesc.setLocation)
-    p.storage.serde.foreach(serdeInfo.setSerializationLib)
     p.storage.inputFormat.foreach(storageDesc.setInputFormat)
     p.storage.outputFormat.foreach(storageDesc.setOutputFormat)
+    p.storage.serde.foreach(serdeInfo.setSerializationLib)
     serdeInfo.setParameters(p.storage.serdeProperties.asJava)
     storageDesc.setSerdeInfo(serdeInfo)
+    tpart.setDbName(ht.getDbName)
+    tpart.setTableName(ht.getTableName)
+    tpart.setValues(partValues.asJava)
     tpart.setSd(storageDesc)
     new HivePartition(ht, tpart)
   }
