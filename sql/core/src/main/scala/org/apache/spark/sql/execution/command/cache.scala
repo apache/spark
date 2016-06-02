@@ -19,14 +19,18 @@ package org.apache.spark.sql.execution.command
 
 import org.apache.spark.sql.{Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.Attribute
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-
 
 case class CacheTableCommand(
   tableName: String,
   plan: Option[LogicalPlan],
   isLazy: Boolean)
   extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = {
+    plan.toSeq
+  }
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>

@@ -24,11 +24,14 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, FunctionRegistry}
+import org.apache.spark.sql.catalyst.catalog.CatalogTableType
 import org.apache.spark.sql.catalyst.parser.ParseException
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.{HiveUtils, MetastoreRelation}
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
@@ -376,75 +379,135 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     )
   }
 
-  test("CTAS without serde") {
-    def checkRelation(tableName: String, isDataSourceParquet: Boolean): Unit = {
-      val relation = EliminateSubqueryAliases(
-        sessionState.catalog.lookupRelation(TableIdentifier(tableName)))
-      relation match {
-        case LogicalRelation(r: HadoopFsRelation, _, _) =>
-          if (!isDataSourceParquet) {
-            fail(
-              s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
+  def checkRelation(
+      tableName: String,
+      isDataSourceParquet: Boolean,
+      format: String,
+      userSpecifiedLocation: Option[String] = None): Unit = {
+    val relation = EliminateSubqueryAliases(
+      sessionState.catalog.lookupRelation(TableIdentifier(tableName)))
+    val catalogTable =
+      sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+    relation match {
+      case LogicalRelation(r: HadoopFsRelation, _, _) =>
+        if (!isDataSourceParquet) {
+          fail(
+            s"${classOf[MetastoreRelation].getCanonicalName} is expected, but found " +
               s"${HadoopFsRelation.getClass.getCanonicalName}.")
-          }
+        }
+        userSpecifiedLocation match {
+          case Some(location) =>
+            assert(r.options("path") === location)
+          case None => // OK.
+        }
+        assert(
+          catalogTable.properties(CreateDataSourceTableUtils.DATASOURCE_PROVIDER) === format)
 
-        case r: MetastoreRelation =>
-          if (isDataSourceParquet) {
-            fail(
-              s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
+      case r: MetastoreRelation =>
+        if (isDataSourceParquet) {
+          fail(
+            s"${HadoopFsRelation.getClass.getCanonicalName} is expected, but found " +
               s"${classOf[MetastoreRelation].getCanonicalName}.")
-          }
-      }
+        }
+        userSpecifiedLocation match {
+          case Some(location) =>
+            assert(r.catalogTable.storage.locationUri.get === location)
+          case None => // OK.
+        }
+        // Also make sure that the format is the desired format.
+        assert(catalogTable.storage.inputFormat.get.toLowerCase.contains(format))
     }
 
-    val originalConf = sessionState.convertCTAS
+    // When a user-specified location is defined, the table type needs to be EXTERNAL.
+    val actualTableType = catalogTable.tableType
+    userSpecifiedLocation match {
+      case Some(location) =>
+        assert(actualTableType === CatalogTableType.EXTERNAL)
+      case None =>
+        assert(actualTableType === CatalogTableType.MANAGED)
+    }
+  }
 
-    setConf(HiveUtils.CONVERT_CTAS, true)
+  test("CTAS without serde without location") {
+    val originalConf = sessionState.conf.convertCTAS
 
+    setConf(SQLConf.CONVERT_CTAS, true)
+
+    val defaultDataSource = sessionState.conf.defaultDataSourceName
     try {
       sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       sql("CREATE TABLE IF NOT EXISTS ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      var message = intercept[AnalysisException] {
+      val message = intercept[AnalysisException] {
         sql("CREATE TABLE ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
       }.getMessage
       assert(message.contains("already exists"))
-      checkRelation("ctas1", true)
+      checkRelation("ctas1", true, defaultDataSource)
       sql("DROP TABLE ctas1")
 
       // Specifying database name for query can be converted to data source write path
       // is not allowed right now.
-      message = intercept[AnalysisException] {
-        sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
-      }.getMessage
-      assert(
-        message.contains("Cannot specify database name in a CTAS statement"),
-        "When spark.sql.hive.convertCTAS is true, we should not allow " +
-            "database name specified.")
+      sql("CREATE TABLE default.ctas1 AS SELECT key k, value FROM src ORDER BY k, value")
+      checkRelation("ctas1", true, defaultDataSource)
+      sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as textfile" +
           " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", true)
+      checkRelation("ctas1", false, "text")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as sequencefile" +
             " AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", true)
+      checkRelation("ctas1", false, "sequence")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as rcfile AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "rcfile")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as orc AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "orc")
       sql("DROP TABLE ctas1")
 
       sql("CREATE TABLE ctas1 stored as parquet AS SELECT key k, value FROM src ORDER BY k, value")
-      checkRelation("ctas1", false)
+      checkRelation("ctas1", false, "parquet")
       sql("DROP TABLE ctas1")
     } finally {
-      setConf(HiveUtils.CONVERT_CTAS, originalConf)
+      setConf(SQLConf.CONVERT_CTAS, originalConf)
       sql("DROP TABLE IF EXISTS ctas1")
+    }
+  }
+
+  test("CTAS without serde with location") {
+    withSQLConf(SQLConf.CONVERT_CTAS.key -> "true") {
+      withTempDir { dir =>
+        val defaultDataSource = sessionState.conf.defaultDataSourceName
+
+        val tempLocation = dir.getCanonicalPath
+        sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c1'" +
+          " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c1"))
+        sql("DROP TABLE ctas1")
+
+        sql(s"CREATE TABLE ctas1 LOCATION 'file:$tempLocation/c2'" +
+          " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", true, defaultDataSource, Some(s"file:$tempLocation/c2"))
+        sql("DROP TABLE ctas1")
+
+        sql(s"CREATE TABLE ctas1 stored as textfile LOCATION 'file:$tempLocation/c3'" +
+          " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", false, "text", Some(s"file:$tempLocation/c3"))
+        sql("DROP TABLE ctas1")
+
+        sql(s"CREATE TABLE ctas1 stored as sequenceFile LOCATION 'file:$tempLocation/c4'" +
+          " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", false, "sequence", Some(s"file:$tempLocation/c4"))
+        sql("DROP TABLE ctas1")
+
+        sql(s"CREATE TABLE ctas1 stored as rcfile LOCATION 'file:$tempLocation/c5'" +
+          " AS SELECT key k, value FROM src ORDER BY k, value")
+        checkRelation("ctas1", false, "rcfile", Some(s"file:$tempLocation/c5"))
+        sql("DROP TABLE ctas1")
+      }
     }
   }
 
@@ -785,8 +848,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     // generates an invalid query plan.
     val rdd = sparkContext.makeRDD((1 to 5).map(i => s"""{"a":[$i, ${i + 1}]}"""))
     read.json(rdd).createOrReplaceTempView("data")
-    val originalConf = sessionState.convertCTAS
-    setConf(HiveUtils.CONVERT_CTAS, false)
+    val originalConf = sessionState.conf.convertCTAS
+    setConf(SQLConf.CONVERT_CTAS, false)
 
     try {
       sql("CREATE TABLE explodeTest (key bigInt)")
@@ -805,7 +868,7 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       sql("DROP TABLE explodeTest")
       dropTempTable("data")
     } finally {
-      setConf(HiveUtils.CONVERT_CTAS, originalConf)
+      setConf(SQLConf.CONVERT_CTAS, originalConf)
     }
   }
 

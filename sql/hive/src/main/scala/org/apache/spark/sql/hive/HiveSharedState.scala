@@ -51,6 +51,6 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
   /**
    * A catalog that interacts with the Hive metastore.
    */
-  override lazy val externalCatalog = new HiveExternalCatalog(metadataHive)
-
+  override lazy val externalCatalog =
+    new HiveExternalCatalog(metadataHive, sparkContext.hadoopConfiguration)
 }
