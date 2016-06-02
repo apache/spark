@@ -551,7 +551,6 @@ case class EncodeUsingSerializer(child: Expression, kryo: Boolean)
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
     val serializerInit = s"""
-      $serializer = null;
       if ($env == null) {
         $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
        } else {
@@ -598,7 +597,6 @@ case class DecodeUsingSerializer[T](child: Expression, tag: ClassTag[T], kryo: B
     val env = s"${classOf[SparkEnv].getName}.get()"
     val sparkConf = s"new ${classOf[SparkConf].getName}()"
     val serializerInit = s"""
-      $serializer = null;
       if ($env == null) {
         $serializer = ($serializerInstanceClass) new $serializerClass($sparkConf).newInstance();
        } else {
