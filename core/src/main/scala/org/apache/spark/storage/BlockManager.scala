@@ -442,6 +442,8 @@ private[spark] class BlockManager(
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
           releaseLock(blockId)
+          // Remove the missing block so that its unavailability is reported to the driver
+          removeBlock(blockId)
           throw new SparkException(s"Block $blockId was not found even though it's read-locked")
         }
     }
@@ -490,6 +492,8 @@ private[spark] class BlockManager(
         serializerManager.dataSerialize(blockId, memoryStore.getValues(blockId).get)
       } else {
         releaseLock(blockId)
+        // Remove the missing block so that its unavailability is reported to the driver
+        removeBlock(blockId)
         throw new SparkException(s"Block $blockId was not found even though it's read-locked")
       }
     } else {  // storage level is serialized
@@ -500,6 +504,8 @@ private[spark] class BlockManager(
         maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes).getOrElse(diskBytes)
       } else {
         releaseLock(blockId)
+        // Remove the missing block so that its unavailability is reported to the driver
+        removeBlock(blockId)
         throw new SparkException(s"Block $blockId was not found even though it's read-locked")
       }
     }
