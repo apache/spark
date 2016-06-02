@@ -27,23 +27,24 @@ import org.apache.spark.util.ResetSystemProperties
 class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
   with ResetSystemProperties {
   import testImplicits._
+  sparkConf.set("spark.sql.codegen.comments", "true")
 
   test("filter String") {
     val df = sparkContext.parallelize(1 to 1, 1).map(i => (i, -i)).toDF("k", "v")
       .filter("k > 0")
-    validate(df, Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:33"))
+    validate(df, Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:34"))
   }
 
   test("select Column") {
     val df = sparkContext.parallelize(1 to 1, 1).toDF
       .select($"value" + 1)
-    validate(df, Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:39"))
+    validate(df, Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:40"))
   }
 
   test("selectExpr String") {
     val df = sparkContext.parallelize(1 to 1, 1).toDF
       .selectExpr("value + 2")
-    validate(df, Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:45"))
+    validate(df, Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:46"))
   }
 
   test("filter Strings (two filters are combined into one plan") {
@@ -51,18 +52,18 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
       .filter("k > 0")
       .filter("v > 1")
     validate(df,
-      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:51",
-            " > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:52"),
-      Array(" > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:51",
-            " > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:52"))
+      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:52",
+            " > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:53"),
+      Array(" > 1\\) @ filter at CodegenEmbedFileLineSuite.scala:52",
+            " > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:53"))
   }
 
   test("selectExpr Strings") {
     val df = sparkContext.parallelize(1 to 1, 1).map(i => (i, -i)).toDF("k", "v")
       .selectExpr("k + 2", "v - 2")
     validate(df,
-      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:62",
-            " - 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:62"))
+      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:63",
+            " - 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:63"))
   }
 
   test("select and selectExpr") {
@@ -70,11 +71,11 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
     val df1 = df.select($"value" + 1)
     val df2 = df.selectExpr("value + 2")
     validate(df1,
-      Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:70"),
-      Array(" \\+ 2\\) @ select at CodegenEmbedFileLineSuite.scala:71"))
+      Array(" \\+ 1\\) @ select at CodegenEmbedFileLineSuite.scala:71"),
+      Array(" \\+ 2\\) @ select at CodegenEmbedFileLineSuite.scala:72"))
     validate(df2,
-      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:71"),
-      Array(" \\+ 1\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:70"))
+      Array(" \\+ 2\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:72"),
+      Array(" \\+ 1\\) @ selectExpr at CodegenEmbedFileLineSuite.scala:71"))
   }
 
   test("filter and select") {
@@ -82,8 +83,8 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
     val df1 = df.filter("value > 0")
     val df2 = df1.select($"value" * 2)
     validate(df2,
-      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:82",
-            " \\* 2\\) @ select at CodegenEmbedFileLineSuite.scala:83"))
+      Array(" > 0\\) @ filter at CodegenEmbedFileLineSuite.scala:83",
+            " \\* 2\\) @ select at CodegenEmbedFileLineSuite.scala:84"))
   }
 
   test("no transformation") {
@@ -100,7 +101,7 @@ class CodegenEmbedFileLineSuite extends PlanTest with SharedSQLContext
     // As LogicalPlan.resolveOperators does,
     // this routine also updates CurrentOrigin by logicalPlan.origin
     val cg = CurrentOrigin.withOrigin(logicalPlan.origin) {
-      val queryExecution = sqlContext.executePlan(logicalPlan)
+      val queryExecution = sqlContext.sessionState.executePlan(logicalPlan)
       codegenString(queryExecution.executedPlan)
     }
 
