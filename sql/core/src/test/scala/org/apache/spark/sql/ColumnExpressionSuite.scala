@@ -120,15 +120,6 @@ class ColumnExpressionSuite extends QueryTest with SharedSQLContext {
     assert(newCol.expr.asInstanceOf[NamedExpression].metadata.getString("key") === "value")
   }
 
-  test("extracting from struct preserves metadata") {
-    val metadata = new MetadataBuilder().putString("key", "value").build()
-
-    val df = spark.createDataFrame(sparkContext.parallelize(Seq(Row(Row("foo")))),
-      StructType(Seq(StructField("struct", StructType(
-        Seq(StructField("str", StringType, false, metadata)))))))
-    assert(df.select(df("struct")("str")).schema.fields(0).metadata === metadata)
-  }
-
   test("single explode") {
     val df = Seq((1, Seq(1, 2, 3))).toDF("a", "intList")
     checkAnswer(
