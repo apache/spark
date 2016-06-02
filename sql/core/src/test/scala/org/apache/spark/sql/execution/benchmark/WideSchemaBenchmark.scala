@@ -176,7 +176,7 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
-  ignore("bushy struct field read and write") {
+  test("bushy struct field read and write") {
     val benchmark = new Benchmark("bushy struct field r/w", scaleFactor)
     for (width <- Seq(1, 10, 100, 500)) {
       val numRows = scaleFactor / width
@@ -218,10 +218,6 @@ class WideSchemaBenchmark extends SparkFunSuite {
     512 nodes x 10 deep x 200 rows (write)      6698 / 7124          0.0       66977.0       0.0X
     */
   }
-
-  //
-  // The following benchmarks are for reference: the schema is not actually wide for them.
-  //
 
   ignore("wide array field read") {
     val benchmark = new Benchmark("wide array field read", scaleFactor)
