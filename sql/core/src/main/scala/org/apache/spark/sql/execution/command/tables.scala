@@ -39,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-case class CreateTableAsSelectLogicalPlan(
+case class CreateHiveTableAsSelectLogicalPlan(
     tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {

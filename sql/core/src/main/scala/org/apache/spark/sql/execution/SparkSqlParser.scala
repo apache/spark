@@ -839,7 +839,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create a table, returning either a [[CreateTableCommand]] or a
-   * [[CreateTableAsSelectLogicalPlan]].
+   * [[CreateHiveTableAsSelectLogicalPlan]].
    *
    * This is not used to create datasource tables, which is handled through
    * "CREATE TABLE ... USING ...".
@@ -936,7 +936,40 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       comment = comment)
 
     selectQuery match {
-      case Some(q) => CreateTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
+      case Some(q) =>
+        // Hive does not allow to use a CTAS statement to create a partitioned table.
+        if (tableDesc.partitionColumnNames.nonEmpty) {
+          val errorMessage = "A Create Table As Select (CTAS) statement is not allowed to " +
+            "create a partitioned table using Hive's file formats. " +
+            "Please use the syntax of \"CREATE TABLE tableName USING dataSource " +
+            "OPTIONS (...) PARTITIONED BY ...\" to create a partitioned table through a " +
+            "CTAS statement."
+          throw operationNotAllowed(errorMessage, ctx)
+        }
+
+        val hasStorageProperties = (ctx.createFileFormat != null) || (ctx.rowFormat != null)
+        if (conf.convertCTAS && !hasStorageProperties) {
+          val mode = if (ifNotExists) SaveMode.Ignore else SaveMode.ErrorIfExists
+          // At here, both rowStorage.serdeProperties and fileStorage.serdeProperties
+          // are empty Maps.
+          val optionsWithPath = if (location.isDefined) {
+            Map("path" -> location.get)
+          } else {
+            Map.empty[String, String]
+          }
+          CreateTableUsingAsSelect(
+            tableIdent = tableDesc.identifier,
+            provider = conf.defaultDataSourceName,
+            temporary = false,
+            partitionColumns = tableDesc.partitionColumnNames.toArray,
+            bucketSpec = None,
+            mode = mode,
+            options = optionsWithPath,
+            q
+          )
+        } else {
+          CreateHiveTableAsSelectLogicalPlan(tableDesc, q, ifNotExists)
+        }
       case None => CreateTableCommand(tableDesc, ifNotExists)
     }
   }
