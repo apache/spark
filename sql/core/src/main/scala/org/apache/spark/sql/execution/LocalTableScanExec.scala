@@ -48,6 +48,14 @@ private[sql] case class LocalTableScanExec(
     }
   }
 
+  override protected def stringArgs: Iterator[Any] = {
+    if (rows.isEmpty) {
+      Iterator("<empty>", output)
+    } else {
+      Iterator(output)
+    }
+  }
+
   override def executeCollect(): Array[InternalRow] = {
     unsafeRows
   }
