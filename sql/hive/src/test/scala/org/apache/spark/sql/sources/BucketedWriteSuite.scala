@@ -59,18 +59,22 @@ class BucketedWriteSuite extends QueryTest with SQLTestUtils with TestHiveSingle
     intercept[SparkException](df.write.bucketBy(3, "i").format("text").saveAsTable("tt"))
   }
 
-  test("write bucketed data using save() or insertInto()") {
+  test("write bucketed data using save()") {
     val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
 
-    val e1 = intercept[IllegalArgumentException] {
+    val e = intercept[IllegalArgumentException] {
       df.write.bucketBy(2, "i").parquet("/tmp/path")
     }
-    assert(e1.getMessage == "'save' does not support bucketing right now.")
+    assert(e.getMessage == "'save' does not support bucketing right now.")
+  }
 
-    val e2 = intercept[IllegalArgumentException] {
+  test("write bucketed data using insertInto()") {
+    val df = Seq(1 -> "a", 2 -> "b").toDF("i", "j")
+
+    val e = intercept[IllegalArgumentException] {
       df.write.bucketBy(2, "i").insertInto("tt")
     }
-    assert(e2.getMessage == "'insertInto' does not support bucketing right now.")
+    assert(e.getMessage == "'insertInto' does not support bucketing right now.")
   }
 
   private val df = (0 until 50).map(i => (i % 5, i % 13, i.toString)).toDF("i", "j", "k")
