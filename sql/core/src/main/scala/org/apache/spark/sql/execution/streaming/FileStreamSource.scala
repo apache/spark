@@ -17,20 +17,36 @@
 
 package org.apache.spark.sql.execution.streaming
 
+<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
 import scala.collection.JavaConverters._
+=======
+import java.util.UUID
 
-import org.apache.hadoop.fs.Path
+import scala.collection.mutable.ArrayBuffer
+import scala.util.control.NonFatal
+>>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
+
+import org.apache.hadoop.fs.{Path, PathFilter}
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
 import org.apache.spark.sql.execution.datasources.{DataSource, ListingFileCatalog, LogicalRelation}
+=======
+import org.apache.spark.sql.execution.datasources.{CaseInsensitiveMap, DataSource, ListingFileCatalog, LogicalRelation}
+import org.apache.spark.sql.internal.SQLConf
+>>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
 import org.apache.spark.sql.types.StructType
 
 /**
+<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
  * A very simple source that reads files from the given directory as they appear.
  *
  * TODO: Clean up the metadata log files periodically.
+=======
+ * A very simple source that reads text files from the given directory as they appear.
+>>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
  */
 class FileStreamSource(
     sparkSession: SparkSession,
@@ -40,6 +56,7 @@ class FileStreamSource(
     metadataPath: String,
     options: Map[String, String]) extends Source with Logging {
 
+<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
   import FileStreamSource._
 
   private val sourceOptions = new FileStreamOptions(options)
@@ -51,6 +68,11 @@ class FileStreamSource(
 
   private val metadataLog = new HDFSMetadataLog[Array[FileEntry]](sparkSession, metadataPath)
 
+=======
+  private val fs = new Path(path).getFileSystem(sparkSession.sessionState.newHadoopConf())
+  private val qualifiedBasePath = fs.makeQualified(new Path(path)) // can contains glob patterns
+  private val metadataLog = new FileStreamSourceLog(sparkSession, metadataPath)
+>>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
   private var maxBatchId = metadataLog.getLatest().map(_._1).getOrElse(-1L)
 
   /** Maximum number of new files to be considered in each batch */
@@ -231,6 +253,89 @@ object FileStreamSource {
 
     def allEntries: Seq[FileEntry] = {
       map.entrySet().asScala.map(entry => FileEntry(entry.getKey, entry.getValue)).toSeq
+    }
+  }
+}
+
+class FileStreamSourceLog(sparkSession: SparkSession, path: String)
+  extends HDFSMetadataLog[Seq[String]](sparkSession, path) {
+
+  // Configurations about metadata compaction
+  private val compactInterval = sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL)
+  require(compactInterval > 0,
+    s"Please set ${SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key} (was $compactInterval) to a " +
+      s"positive value.")
+
+  private val fileCleanupDelayMs = sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY)
+
+  private val isDeletingExpiredLog = sparkSession.conf.get(SQLConf.FILE_SOURCE_LOG_DELETION)
+
+  private var compactBatchId: Long = -1L
+
+  private def isCompactionBatch(batchId: Long, compactInterval: Long): Boolean = {
+    batchId % compactInterval == 0
+  }
+
+  override def add(batchId: Long, metadata: Seq[String]): Boolean = {
+    if (isCompactionBatch(batchId, compactInterval)) {
+      compactMetadataLog(batchId - 1)
+    }
+
+    super.add(batchId, metadata)
+  }
+
+  private def compactMetadataLog(batchId: Long): Unit = {
+    // read out compact metadata and merge with new metadata.
+    val batches = super.get(Some(compactBatchId), Some(batchId))
+    val totalMetadata = batches.flatMap(_._2)
+    if (totalMetadata.isEmpty) {
+      return
+    }
+
+    // Remove old compact metadata file and rewrite.
+    val renamedPath = new Path(path, s".${batchId.toString}-${UUID.randomUUID.toString}.tmp")
+    fileManager.rename(batchIdToPath(batchId), renamedPath)
+
+    var isSuccess = false
+    try {
+      isSuccess = super.add(batchId, totalMetadata)
+    } catch {
+      case NonFatal(e) => isSuccess = false
+    } finally {
+      if (!isSuccess) {
+        // Rollback to the previous status if compaction is failed.
+        fileManager.delete(batchIdToPath(batchId))
+        fileManager.rename(renamedPath, batchIdToPath(batchId))
+        return
+      } else {
+        fileManager.delete(renamedPath)
+      }
+    }
+
+    compactBatchId = batchId
+
+    // Remove expired metadata log
+    if (isDeletingExpiredLog) {
+      removeOlderThan(compactBatchId)
+    }
+  }
+
+  private def removeOlderThan(batchId: Long): Unit = {
+    val expiredTime = System.currentTimeMillis() - fileCleanupDelayMs
+    fileManager.list(metadataPath, new PathFilter {
+      override def accept(path: Path): Boolean = {
+        try {
+          val id = pathToBatchId(path)
+          id < batchId
+        } catch {
+          case _: NumberFormatException =>
+            false
+        }
+      }
+    }).foreach { f =>
+      if (f.getModificationTime <= expiredTime) {
+        fileManager.delete(f.getPath)
+      }
     }
   }
 }

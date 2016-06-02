@@ -17,10 +17,16 @@
 
 package org.apache.spark.sql.streaming
 
+<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
 import java.io.File
 
 import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
+=======
+import java.io.{File, FilenameFilter}
+
+import org.scalatest.PrivateMethodTester
+>>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.util._
@@ -30,7 +36,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-class FileStreamSourceTest extends StreamTest with SharedSQLContext {
+class FileStreamSourceTest extends StreamTest with SharedSQLContext with PrivateMethodTester {
 
   import testImplicits._
 
@@ -623,6 +629,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
     }
   }
 
+<<<<<<< 92ce8d4849a0341c4636e70821b7be57ad3055b1
   test("max files per trigger") {
     withTempDir { case src =>
       var lastFileModTime: Option[Long] = None
@@ -801,6 +808,63 @@ class FileStreamSourceSuite extends FileStreamSourceTest {
       )
     }
   }
+=======
+  test("clean obsolete metadata log") {
+    val _sources = PrivateMethod[Seq[Source]]('sources)
+    val _metadataLog = PrivateMethod[FileStreamSourceLog]('metadataLog)
+
+    def verify(execution: StreamExecution)
+      (batchId: Long, expectedBatches: Int, expectedFileNames: Array[String]): Boolean = {
+      val fileSource = (execution invokePrivate _sources()).head.asInstanceOf[FileStreamSource]
+      val metadataLog = fileSource invokePrivate _metadataLog()
+      val files = new File(metadataLog.metadataPath.toUri.toString).listFiles(
+        new FilenameFilter {
+          override def accept(dir: File, name: String): Boolean = {
+            try {
+              name.toLong
+              true
+            } catch {
+              case _: NumberFormatException => false
+            }
+          }
+      }).map(_.getName)
+
+      metadataLog.get(None, Some(batchId)).flatMap(_._2).size === expectedBatches &&
+        files === expectedFileNames
+    }
+
+    withTempDirs { case (src, tmp) =>
+      withSQLConf(
+        SQLConf.FILE_SOURCE_LOG_COMPACT_INTERVAL.key -> "2",
+        SQLConf.FILE_SOURCE_LOG_CLEANUP_DELAY.key -> "0ms"
+      ) {
+        val fileStream = createFileStream("text", src.getCanonicalPath)
+        val filtered = fileStream.filter($"value" contains "keep")
+
+        testStream(filtered)(
+          AddTextFileData("drop1\nkeep2\nkeep3", src, tmp),
+          CheckAnswer("keep2", "keep3"),
+          AssertOnQuery(verify(_)(0L, 1, Array("0"))),
+          AddTextFileData("drop4\nkeep5\nkeep6", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6"),
+          AssertOnQuery(verify(_)(1L, 2, Array("0", "1"))),
+          AddTextFileData("drop7\nkeep8\nkeep9", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9"),
+          AssertOnQuery(verify(_)(2L, 3, Array("1", "2"))),
+          StopStream,
+          StartStream(),
+          AssertOnQuery(verify(_)(2L, 3, Array("1", "2"))),
+          AddTextFileData("drop10\nkeep11", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11"),
+          AssertOnQuery(verify(_)(3L, 4, Array("1", "2", "3"))),
+          AddTextFileData("drop12\nkeep13", src, tmp),
+          CheckAnswer("keep2", "keep3", "keep5", "keep6", "keep8", "keep9", "keep11", "keep13"),
+          AssertOnQuery(verify(_)(4L, 5, Array("3", "4")))
+        )
+      }
+    }
+  }
+>>>>>>> Add the ability to remove the old MetadataLog in FileStreamSource
 }
 
 class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
