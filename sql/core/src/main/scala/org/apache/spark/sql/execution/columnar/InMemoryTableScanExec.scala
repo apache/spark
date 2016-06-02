@@ -288,8 +288,8 @@ private[sql] case class InMemoryTableScanExec(
     sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
 
   // Accumulators used for testing purposes
-  lazy val readPartitions: LongAccumulator = sparkContext.longAccumulator
-  lazy val readBatches: LongAccumulator = sparkContext.longAccumulator
+  lazy val readPartitions = sparkContext.longAccumulator
+  lazy val readBatches = sparkContext.longAccumulator
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
