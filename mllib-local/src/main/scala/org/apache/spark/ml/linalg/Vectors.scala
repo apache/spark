@@ -537,6 +537,22 @@ class DenseVector @Since("2.0.0") ( @Since("2.0.0") val values: Array[Double]) e
       maxIdx
     }
   }
+  
+  /**
+ * Function that returns the result of multiply this DenseVector by another DenseVector.
+ *
+ * @param other The second DenseVector
+ * @return The resulting Double value
+ */
+  def dot(other: DenseVector): Double = {
+    require(this.size == other.size, "DenseVectors dimmensions must be the same." +
+    s" You provided ${this.size} items and " +
+    s" ${other.size} items.")
+
+    return BLAS.dot(this,other)  
+    
+  }
+  
 }
 
 @Since("2.0.0")

@@ -712,6 +712,23 @@ class DenseVector @Since("1.0.0") (
   override def asML: newlinalg.DenseVector = {
     new newlinalg.DenseVector(values)
   }
+  
+  /**
+ * Function that returns the result of multiply this DenseVector by another DenseVector.
+ *
+ * @param other The second DenseVector
+ * @return The resulting Double value
+ */
+  @Since("2.0.0")
+  def dot(other: DenseVector): Double = {
+    require(this.size == other.size, "DenseVectors dimmensions must be the same." +
+    s" You provided ${this.size} items and " +
+    s" ${other.size} items.")
+
+    return BLAS.dot(this,other)  
+    
+  }
+  
 }
 
 @Since("1.3.0")
