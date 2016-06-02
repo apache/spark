@@ -39,16 +39,16 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
   def this() = this(Identifiable.randomUID("mcEval"))
 
   /**
-   * param for metric name in evaluation (supports `"f1"` (default), `"precision"`, `"recall"`,
-   * `"weightedPrecision"`, `"weightedRecall"`, `"accuracy"`)
+   * param for metric name in evaluation (supports `"f1"` (default), `"weightedPrecision"`,
+   * `"weightedRecall"`, `"accuracy"`)
    * @group param
    */
   @Since("1.5.0")
   val metricName: Param[String] = {
-    val allowedParams = ParamValidators.inArray(Array("f1", "precision",
-      "recall", "weightedPrecision", "weightedRecall", "accuracy"))
+    val allowedParams = ParamValidators.inArray(Array("f1", "weightedPrecision",
+      "weightedRecall", "accuracy"))
     new Param(this, "metricName", "metric name in evaluation " +
-      "(f1|precision|recall|weightedPrecision|weightedRecall|accuracy)", allowedParams)
+      "(f1|weightedPrecision|weightedRecall|accuracy)", allowedParams)
   }
 
   /** @group getParam */
