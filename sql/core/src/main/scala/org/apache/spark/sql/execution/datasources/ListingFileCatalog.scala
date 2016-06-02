@@ -83,7 +83,7 @@ class ListingFileCatalog(
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
         logInfo(s"Listing $path on driver")
-        
+
         Try(HadoopFsRelation.listLeafFiles(fs, fs.getFileStatus(path), pathFilter)).
           getOrElse(Array.empty)
       }
