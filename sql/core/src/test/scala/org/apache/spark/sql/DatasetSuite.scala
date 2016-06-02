@@ -786,6 +786,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val result = joined.collect().toSet
     assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
   }
+
+  test("Dataset should support flat input object to be null") {
+    checkDataset(Seq("a", null).toDS(), "a", null)
+  }
+
+  test("Dataset should throw RuntimeException if non-flat input object is null") {
+    val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level non-flat input object"))
+  }
 }
 
 case class Generic[T](id: T, value: Double)
