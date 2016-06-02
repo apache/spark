@@ -30,7 +30,10 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
-case class TungstenAggregate(
+/**
+ * Hash-based aggregate operator that can also fallback to sorting when data exceeds memory size.
+ */
+case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
@@ -44,7 +47,7 @@ case class TungstenAggregate(
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
   }
 
-  require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
+  require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
   override lazy val allAttributes: Seq[Attribute] =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -769,15 +772,15 @@ case class TungstenAggregate(
         val keyString = groupingExpressions.mkString("[", ",", "]")
         val functionString = allAggregateExpressions.mkString("[", ",", "]")
         val outputString = output.mkString("[", ",", "]")
-        s"Aggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
       case Some(fallbackStartsAt) =>
-        s"AggregateWithControlledFallback $groupingExpressions " +
+        s"HashAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
 }
 
-object TungstenAggregate {
+object HashAggregateExec {
   def supportsAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
     val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
     UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema)

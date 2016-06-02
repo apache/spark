@@ -246,7 +246,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.sparkPlan
-      .collect { case _: aggregate.TungstenAggregate => true }
+      .collect { case _: aggregate.HashAggregateExec => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(

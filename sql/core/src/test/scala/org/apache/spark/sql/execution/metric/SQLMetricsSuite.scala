@@ -133,25 +133,21 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     testSparkPlanMetrics(ds.toDF(), 1, Map.empty)
   }
 
-  test("TungstenAggregate metrics") {
+  test("Aggregate metrics") {
     // Assume the execution plan is
     // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
     // -> TungstenAggregate(nodeId = 0)
     val df = testData2.groupBy().count() // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
-      2L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 2L)),
-      0L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 1L)))
+      2L -> ("HashAggregate", Map("number of output rows" -> 2L)),
+      0L -> ("HashAggregate", Map("number of output rows" -> 1L)))
     )
 
     // 2 partitions and each partition contains 2 keys
     val df2 = testData2.groupBy('a).count()
     testSparkPlanMetrics(df2, 1, Map(
-      2L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 4L)),
-      0L -> ("TungstenAggregate", Map(
-        "number of output rows" -> 3L)))
+      2L -> ("HashAggregate", Map("number of output rows" -> 4L)),
+      0L -> ("HashAggregate", Map("number of output rows" -> 3L)))
     )
   }
 
