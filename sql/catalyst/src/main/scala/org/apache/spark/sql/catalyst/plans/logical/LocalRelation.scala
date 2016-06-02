@@ -57,7 +57,13 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
     LocalRelation(output.map(_.newInstance()), data).asInstanceOf[this.type]
   }
 
-  override protected def stringArgs = Iterator(output)
+  override protected def stringArgs: Iterator[Any] = {
+    if (data.isEmpty) {
+      Iterator("Empty", output)
+    } else {
+      Iterator(output)
+    }
+  }
 
   override def sameResult(plan: LogicalPlan): Boolean = plan match {
     case LocalRelation(otherOutput, otherData) =>
