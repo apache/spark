@@ -742,42 +742,35 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
  * Reorder associative integral-type operators and fold all constants into one.
  */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
-  private def isAssociativelyFoldable(e: Expression): Boolean =
-    e.deterministic && e.isInstanceOf[BinaryArithmetic] && e.dataType.isInstanceOf[IntegralType] &&
-      isSingleOperatorExpr(e)
-
-  private def isSingleOperatorExpr(e: Expression): Boolean = e.find {
-    case a: Add if a.getClass == e.getClass => false
-    case m: Multiply if m.getClass == e.getClass => false
-    case _: BinaryArithmetic => true
-    case _ => false
-  }.isEmpty
-
-  private def getOperandList(e: Expression): Seq[Expression] = e match {
-    case BinaryArithmetic(a, b) => getOperandList(a) ++ getOperandList(b)
+  private def flattenAdd(e: Expression): Seq[Expression] = e match {
+    case Add(l, r) => flattenAdd(l) ++ flattenAdd(r)
     case other => other :: Nil
   }
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsDown {
-      case e if isAssociativelyFoldable(e) =>
-        val (foldables, others) = getOperandList(e).partition(_.foldable)
-        if (foldables.size > 1) {
-          e match {
-            case a: Add =>
-              val foldableExpr = foldables.reduce((x, y) => Add(x, y))
-              val c = Literal.create(foldableExpr.eval(EmptyRow), e.dataType)
-              if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
-            case m: Multiply =>
-              val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
-              val c = Literal.create(foldableExpr.eval(EmptyRow), e.dataType)
-              if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
-            case _ => e
-          }
-        } else {
-          e
-        }
-    }
+  private def flattenMultiply(e: Expression): Seq[Expression] = e match {
+    case Multiply(l, r) => flattenMultiply(l) ++ flattenMultiply(r)
+    case other => other :: Nil
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformExpressionsDown {
+    case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+      val (foldables, others) = flattenAdd(a).partition(_.foldable)
+      if (foldables.size > 1) {
+        val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+        val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
+        if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+      } else {
+        a
+      }
+    case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+      val (foldables, others) = flattenMultiply(m).partition(_.foldable)
+      if (foldables.size > 1) {
+        val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+        val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
+        if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+      } else {
+        m
+      }
   }
 }
 
