@@ -21,7 +21,6 @@ import scala.collection.JavaConverters._
 
 import org.apache.commons.lang.StringUtils
 
-import org.apache.spark.Accumulator
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -36,7 +35,7 @@ import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{AccumulatorContext, ListAccumulator}
+import org.apache.spark.util.{AccumulatorContext, ListAccumulator, LongAccumulator}
 
 
 private[sql] object InMemoryRelation {
@@ -294,8 +293,8 @@ private[sql] case class InMemoryTableScanExec(
     sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
 
   // Accumulators used for testing purposes
-  lazy val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
-  lazy val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
+  lazy val readPartitions = sparkContext.longAccumulator
+  lazy val readBatches = sparkContext.longAccumulator
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
@@ -339,7 +338,7 @@ private[sql] case class InMemoryTableScanExec(
               false
             } else {
               if (enableAccumulators) {
-                readBatches += 1
+                readBatches.add(1)
               }
               true
             }
@@ -361,7 +360,7 @@ private[sql] case class InMemoryTableScanExec(
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
       columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
-        readPartitions += 1
+        readPartitions.add(1)
       }
       columnarIterator
     }

@@ -2067,9 +2067,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
 
       // Identity udf that tracks the number of times it is called.
-      val countAcc = sparkContext.accumulator(0, "CallCount")
+      val countAcc = sparkContext.longAccumulator("CallCount")
       spark.udf.register("testUdf", (x: Int) => {
-        countAcc.++=(1)
+        countAcc.add(1)
         x
       })
 
@@ -2092,7 +2092,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
 
       val testUdf = functions.udf((x: Int) => {
-        countAcc.++=(1)
+        countAcc.add(1)
         x
       })
       verifyCallCount(
