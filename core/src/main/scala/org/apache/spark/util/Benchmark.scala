@@ -38,7 +38,7 @@ import org.apache.commons.lang3.SystemUtils
  * @param valuesPerIteration number of values used in the test case, used to compute rows/s.
  * @param minNumIters the min number of iterations that will be run per case. Note that this
  *                    should be at least 2 since the first iteration is ignored.
- * @param minTime iterations will be run for a case until this time is used up.
+ * @param minTime further iterations will be run for each case until this time is used up.
  * @param outputPerIteration if true, the timing for each run will be printed to stdout.
  */
 private[spark] class Benchmark(
