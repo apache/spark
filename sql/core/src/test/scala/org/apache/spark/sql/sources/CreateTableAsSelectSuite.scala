@@ -21,6 +21,7 @@ import java.io.File
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -80,7 +81,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
     path.mkdir()
     path.setWritable(false)
 
-    val e = intercept[Exception] {
+    val e = intercept[SparkException] {
       sql(
         s"""
            |CREATE TABLE jsonTable
