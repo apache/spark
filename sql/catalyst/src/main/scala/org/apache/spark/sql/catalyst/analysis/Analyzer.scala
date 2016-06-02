@@ -113,6 +113,8 @@ class Analyzer(
       PullOutNondeterministic),
     Batch("UDF", Once,
       HandleNullInputsForUDF),
+    Batch("FixNullability", Once,
+      FixNullability),
     Batch("Cleanup", fixedPoint,
       CleanupAliases)
   )
@@ -1452,6 +1454,40 @@ class Analyzer(
   }
 
   /**
+   * Fixes nullability of Attributes in a resolved LogicalPlan by using the nullability of
+   * corresponding Attributes of its children output Attributes. This step is needed because
+   * users can use a resolved AttributeReference in the Dataset API and outer joins
+   * can change the nullability of an AttribtueReference. Without the fix, a nullable column's
+   * nullable field can be actually set as non-nullable, which cause illegal optimization
+   * (e.g., NULL propagation) and wrong answers.
+   * See SPARK-13484 and SPARK-13801 for the concrete queries of this case.
+   */
+  object FixNullability extends Rule[LogicalPlan] {
+
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
+      case p if !p.resolved => p // Skip unresolved nodes.
+      case p: LogicalPlan if p.resolved =>
+        val childrenOutput = p.children.flatMap(c => c.output).groupBy(_.exprId).flatMap {
+          case (exprId, attributes) =>
+            // If there are multiple Attributes having the same ExprId, we need to resolve
+            // the conflict of nullable field. We do not really expect this happen.
+            val nullable = attributes.exists(_.nullable)
+            attributes.map(attr => attr.withNullability(nullable))
+        }.toSeq
+        // At here, we create an AttributeMap that only compare the exprId for the lookup
+        // operation. So, we can find the corresponding input attribute's nullability.
+        val attributeMap = AttributeMap[Attribute](childrenOutput.map(attr => attr -> attr))
+        // For an Attribute used by the current LogicalPlan, if it is from its children,
+        // we fix the nullable field by using the nullability setting of the corresponding
+        // output Attribute from the children.
+        p.transformExpressions {
+          case attr: Attribute if attributeMap.contains(attr) =>
+            attr.withNullability(attributeMap(attr).nullable)
+        }
+    }
+  }
+
+  /**
    * Extracts [[WindowExpression]]s from the projectList of a [[Project]] operator and
    * aggregateExpressions of an [[Aggregate]] operator and creates individual [[Window]]
    * operators for every distinct [[WindowSpecDefinition]].
@@ -2133,4 +2169,3 @@ object TimeWindowing extends Rule[LogicalPlan] {
       }
   }
 }
-
