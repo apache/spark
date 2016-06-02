@@ -43,10 +43,8 @@ class WideSchemaBenchmark extends SparkFunSuite {
     val benchmark = new Benchmark("parsing large select", 1)
     for (width <- widthsToTest) {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
-      benchmark.addTimerCase(s"$width select expressions") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$width select expressions") { iter =>
         sparkSession.range(1).toDF.selectExpr(selectExpr: _*)
-        timer.stopTiming()
       }
     }
     benchmark.run()
@@ -72,15 +70,11 @@ class WideSchemaBenchmark extends SparkFunSuite {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
       val df = sparkSession.range(numRows).toDF.selectExpr(selectExpr: _*).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$width cols x $numRows rows (read)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$width cols x $numRows rows (read)") { iter =>
         df.selectExpr("sum(a_1)").collect()
-        timer.stopTiming()
       }
-      benchmark.addTimerCase(s"$width cols x $numRows rows (write)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$width cols x $numRows rows (write)") { iter =>
         df.selectExpr("*", "hash(a_1) as f").selectExpr("sum(a_1)", "sum(f)").collect()
-        timer.stopTiming()
       }
     }
     benchmark.run()
@@ -118,15 +112,11 @@ class WideSchemaBenchmark extends SparkFunSuite {
       datum += "}"
       val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$width wide x $numRows rows (read)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$width wide x $numRows rows (read)") { iter =>
         df.selectExpr("sum(value_1)").collect()
-        timer.stopTiming()
       }
-      benchmark.addTimerCase(s"$width wide x $numRows rows (write)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$width wide x $numRows rows (write)") { iter =>
         df.selectExpr("*", "hash(value_1) as f").selectExpr(s"sum(value_1)", "sum(f)").collect()
-        timer.stopTiming()
       }
     }
     benchmark.run()
@@ -161,15 +151,11 @@ class WideSchemaBenchmark extends SparkFunSuite {
       }
       val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$depth deep x $numRows rows (read)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$depth deep x $numRows rows (read)") { iter =>
         df.selectExpr(s"sum($selector)").collect()
-        timer.stopTiming()
       }
-      benchmark.addTimerCase(s"$depth deep x $numRows rows (write)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$depth deep x $numRows rows (write)") { iter =>
         df.selectExpr("*", s"$selector as f").selectExpr(s"sum($selector)", "sum(f)").collect()
-        timer.stopTiming()
       }
     }
     benchmark.run()
@@ -208,15 +194,11 @@ class WideSchemaBenchmark extends SparkFunSuite {
       // we should benchmark that too separately.
       val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$numNodes nodes x $depth deep x $numRows rows (read)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$numNodes nodes x $depth deep x $numRows rows (read)") { iter =>
         df.selectExpr(s"sum($selector)").collect()
-        timer.stopTiming()
       }
-      benchmark.addTimerCase(s"$numNodes nodes x $depth deep x $numRows rows (write)") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$numNodes nodes x $depth deep x $numRows rows (write)") { iter =>
         df.selectExpr("*", s"$selector as f").selectExpr(s"sum($selector)", "sum(f)").collect()
-        timer.stopTiming()
       }
     }
     benchmark.run()
@@ -256,10 +238,8 @@ class WideSchemaBenchmark extends SparkFunSuite {
       datum += "]}"
       val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$width wide x $numRows rows") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$width wide x $numRows rows") { iter =>
         df.selectExpr("sum(value[0])").collect()
-        timer.stopTiming()
       }
     }
     benchmark.run()
@@ -284,10 +264,8 @@ class WideSchemaBenchmark extends SparkFunSuite {
       val datum = Tuple1((1 to width).map(i => ("value_" + i -> 1)).toMap)
       val df = sparkSession.range(numRows).map(_ => datum).cache()
       df.count()  // force caching
-      benchmark.addTimerCase(s"$width wide x $numRows rows") { timer =>
-        timer.startTiming()
+      benchmark.addCase(s"$width wide x $numRows rows") { iter =>
         df.selectExpr("sum(_1[\"value_1\"])").collect()
-        timer.stopTiming()
       }
     }
     benchmark.run()
