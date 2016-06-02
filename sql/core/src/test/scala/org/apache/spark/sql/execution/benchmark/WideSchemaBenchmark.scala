@@ -22,13 +22,13 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.util.Benchmark
 
 /**
- * Benchmark for performance over wide and nested DataFrames.
+ * Benchmark for performance with very wide and nested DataFrames.
  * To run this:
  *  build/sbt "sql/test-only *WideSchemaBenchmark"
  */
 class WideSchemaBenchmark extends SparkFunSuite {
   private val scaleFactor = 100000
-  private val widthsToTest = Seq(1, 10, 100, 1000, 5000)
+  private val widthsToTest = Seq(1, 10, 100, 1000, 5000)  // crashes on higher values
   private val depthsToTest = Seq(1, 10, 100, 250)
   assert(scaleFactor > widthsToTest.max)
 
