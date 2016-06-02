@@ -92,7 +92,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     }
   }
 
-  test("parsing large select expressions") {
+  ignore("parsing large select expressions") {
     val benchmark = new Benchmark("parsing large select", 1)
     for (width <- widthsToTest) {
       val selectExpr = (1 to width).map(i => s"id as a_$i")
@@ -115,7 +115,7 @@ parsing large select:                    Best/Avg Time(ms)    Rate(M/s)   Per Ro
 */
   }
 
-  test("many column field read and write") {
+  ignore("many column field read and write") {
     val benchmark = new Benchmark("many column field r/w", scaleFactor)
     for (width <- widthsToTest) {
       // normalize by width to keep constant data size
@@ -155,7 +155,7 @@ many column field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Ro
 */
   }
 
-  test("wide struct field read and write") {
+  ignore("wide struct field read and write") {
     val benchmark = new Benchmark("wide struct field r/w", scaleFactor)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
@@ -202,7 +202,7 @@ wide struct field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Ro
 */
   }
 
-  test("deeply nested struct field read and write") {
+  ignore("deeply nested struct field read and write") {
     val benchmark = new Benchmark("deeply nested struct field r/w", scaleFactor)
     for (depth <- depthsToTest) {
       val numRows = scaleFactor / depth
@@ -242,7 +242,7 @@ deeply nested struct field r/w:          Best/Avg Time(ms)    Rate(M/s)   Per Ro
 */
   }
 
-  test("bushy struct field read and write") {
+  ignore("bushy struct field read and write") {
     val benchmark = new Benchmark("bushy struct field r/w", scaleFactor)
     for (width <- Seq(1, 10, 100, 500)) {
       val numRows = scaleFactor / width
@@ -288,7 +288,7 @@ bushy struct field r/w:                  Best/Avg Time(ms)    Rate(M/s)   Per Ro
 */
   }
 
-  test("wide array field read and write") {
+  ignore("wide array field read and write") {
     val benchmark = new Benchmark("wide array field r/w", scaleFactor)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
@@ -335,7 +335,7 @@ wide array field r/w:                    Best/Avg Time(ms)    Rate(M/s)   Per Ro
 */
   }
 
-  test("wide map field read and write") {
+  ignore("wide map field read and write") {
     val benchmark = new Benchmark("wide map field r/w", scaleFactor)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
