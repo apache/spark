@@ -77,7 +77,7 @@ object DatasetBenchmark {
 
     val df = spark.range(1, numRows).select($"id".as("l"))
     val benchmark = new Benchmark("back-to-back map for primitive", numRows)
-    val func = (d: Long) => d+1
+    val func = (d: Long) => d + 1
 
     val rdd = spark.sparkContext.range(1, numRows).map(l => l.toLong)
     benchmark.addCase("RDD") { iter =>
@@ -234,25 +234,26 @@ object DatasetBenchmark {
     benchmark2.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    back-to-back filter:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    RDD                                      1974 / 2036         50.6          19.7       1.0X
-    DataFrame                                 103 /  127        967.4           1.0      19.1X
-    Dataset                                  4343 / 4477         23.0          43.4       0.5X
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+
+    back-to-back filter:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD                                           3854 / 3976         25.9          38.5       1.0X
+    DataFrame                                      249 /  301        401.2           2.5      15.5X
+    Dataset                                       8119 / 8425         12.3          81.2       0.5X
     */
     benchmark3.run()
 
     /*
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_60-b27 on Mac OS X 10.11.4
-    Intel(R) Core(TM) i7-4960HQ CPU @ 2.60GHz
-    aggregate:                          Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
-    -------------------------------------------------------------------------------------------
-    RDD sum                                  2130 / 2166         46.9          21.3       1.0X
-    DataFrame sum                              92 /  128       1085.3           0.9      23.1X
-    Dataset sum using Aggregator             4111 / 4282         24.3          41.1       0.5X
-    Dataset complex Aggregator               8782 / 9036         11.4          87.8       0.2X
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_91-b14 on Mac OS X 10.11.5
+    Intel(R) Core(TM) i5-5257U CPU @ 2.70GHz
+    aggregate:                               Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    RDD sum                                       4660 / 5167         21.5          46.6       1.0X
+    DataFrame sum                                  140 /  168        712.1           1.4      33.2X
+    Dataset sum using Aggregator                  7549 / 8149         13.2          75.5       0.6X
+    Dataset complex Aggregator                  20530 / 20770          4.9         205.3       0.2X
     */
     benchmark4.run()
   }
