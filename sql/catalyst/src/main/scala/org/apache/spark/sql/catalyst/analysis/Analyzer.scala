@@ -1948,13 +1948,12 @@ class Analyzer(
      * exception if they do not match.
      */
     private def validateTupleColumns(deserializer: Expression, inputs: Seq[Attribute]): Unit = {
-      var maxOrdinal = -1
-      deserializer.foreach {
-        case GetColumnByOrdinal(ordinal, _) => if (ordinal > maxOrdinal) maxOrdinal = ordinal
-        case _ =>
-      }
-      if (maxOrdinal >= 0 && maxOrdinal != inputs.length - 1) {
-        fail(inputs.toStructType, maxOrdinal)
+      val ordinals = deserializer.collect {
+        case GetColumnByOrdinal(ordinal, _) => ordinal
+      }.distinct.sorted
+
+      if (ordinals.nonEmpty && ordinals != inputs.indices) {
+        fail(inputs.toStructType, ordinals.last)
       }
     }
 
@@ -1965,20 +1964,22 @@ class Analyzer(
      * Tuple fields, and throw an exception if they do not match.
      */
     private def validateInnerTupleFields(deserializer: Expression): Unit = {
-      val exprToMaxOrdinal = scala.collection.mutable.HashMap.empty[Expression, Int]
+      val exprToOrdinals = scala.collection.mutable.HashMap.empty[Expression, ArrayBuffer[Int]]
       deserializer foreach {
         case g: GetStructField =>
-          val maxOrdinal = exprToMaxOrdinal.getOrElse(g.child, -1)
-          if (maxOrdinal < g.ordinal) {
-            exprToMaxOrdinal.update(g.child, g.ordinal)
+          if (exprToOrdinals.contains(g.child)) {
+            exprToOrdinals(g.child) += g.ordinal
+          } else {
+            exprToOrdinals += g.child -> ArrayBuffer(g.ordinal)
           }
         case _ =>
       }
-      exprToMaxOrdinal.foreach {
-        case (expr, maxOrdinal) =>
+      exprToOrdinals.foreach {
+        case (expr, ordinals) =>
           val schema = expr.dataType.asInstanceOf[StructType]
-          if (maxOrdinal != schema.length - 1) {
-            fail(schema, maxOrdinal)
+          val sortedOrdinals: Seq[Int] = ordinals.distinct.sorted
+          if (sortedOrdinals.nonEmpty && sortedOrdinals != schema.indices) {
+            fail(schema, sortedOrdinals.last)
           }
       }
     }
