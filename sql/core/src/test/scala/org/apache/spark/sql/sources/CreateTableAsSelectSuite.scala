@@ -72,7 +72,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
 
       checkAnswer(
         sql("SELECT a, b FROM jsonTable"),
-        sql("SELECT a, b FROM jt").collect())
+        sql("SELECT a, b FROM jt"))
     }
   }
 
@@ -112,7 +112,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
 
       checkAnswer(
         sql("SELECT a, b FROM jsonTable"),
-        sql("SELECT a, b FROM jt").collect())
+        sql("SELECT a, b FROM jt"))
 
       // Creates a table of the same name with flag "if not exists", nothing happens
       sql(
@@ -126,7 +126,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
          """.stripMargin)
       checkAnswer(
         sql("SELECT * FROM jsonTable"),
-        sql("SELECT a, b FROM jt").collect())
+        sql("SELECT a, b FROM jt"))
 
       // Explicitly drops the table and deletes the underlying data.
       sql("DROP TABLE jsonTable")
@@ -145,7 +145,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
 
       checkAnswer(
         sql("SELECT * FROM jsonTable"),
-        sql("SELECT b FROM jt").collect())
+        sql("SELECT b FROM jt"))
     }
   }
 
@@ -192,7 +192,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
            |OPTIONS (PATH '${path.toString}')
            |PARTITIONED BY (a)
            |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
+         """.stripMargin
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.getPartitionColumnsFromTableProperties(table) == Seq("a"))
@@ -208,7 +208,7 @@ class CreateTableAsSelectSuite extends DataSourceTest with SharedSQLContext with
            |OPTIONS (PATH '${path.toString}')
            |CLUSTERED BY (a) SORTED BY (b) INTO 5 BUCKETS
            |AS SELECT 1 AS a, 2 AS b
-           """.stripMargin
+         """.stripMargin
       )
       val table = catalog.getTableMetadata(TableIdentifier("t"))
       assert(DDLUtils.getBucketSpecFromTableProperties(table) ==
