@@ -161,6 +161,53 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
+  test("bushy struct field read and write") {
+    val benchmark = new Benchmark("bushy struct field r/w", scaleFactor)
+    for (width <- Seq(1, 10, 100, 500)) {
+      val numRows = scaleFactor / width
+      var numNodes = 1
+      var datum: String = "{\"value\": 1}"
+      var selector: String = "value"
+      var depth = 1
+      while (numNodes < width) {
+        numNodes *= 2
+        datum = s"""{"left_$depth": $datum, "right_$depth": $datum}"""
+        selector = s"left_$depth." + selector
+        depth += 1
+      }
+      // TODO(ekl) seems like the json parsing is actually the majority of the time, perhaps
+      // we should benchmark that too separately.
+      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
+      df.count()  // force caching
+      benchmark.addTimerCase(s"$numNodes nodes x $depth deep x $numRows rows (read)") { timer =>
+        timer.startTiming()
+        df.selectExpr(s"sum($selector)").collect()
+        timer.stopTiming()
+      }
+      benchmark.addTimerCase(s"$numNodes nodes x $depth deep x $numRows rows (write)") { timer =>
+        timer.startTiming()
+        df.selectExpr("*", s"$selector as f").selectExpr(s"sum($selector)", "sum(f)").collect()
+        timer.stopTiming()
+      }
+    }
+    benchmark.run()
+
+    /*
+    OpenJDK 64-Bit Server VM 1.8.0_66-internal-b17 on Linux 4.2.0-36-generic
+    Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+    bushy struct field r/w:                Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ----------------------------------------------------------------------------------------------
+    1 nodes x 1 deep x 100000 rows (read)         57 /   69          1.7         571.7       1.0X
+    1 nodes x 1 deep x 100000 rows (write)        61 /   75          1.6         614.4       0.9X
+    16 nodes x 5 deep x 10000 rows (read)         44 /   55          2.3         439.0       1.3X
+    16 nodes x 5 deep x 10000 rows (write)       100 /  126          1.0         999.5       0.6X
+    128 nodes x 8 deep x 1000 rows (read)         53 /   61          1.9         532.9       1.1X
+    128 nodes x 8 deep x 1000 rows (write)       530 /  656          0.2        5295.6       0.1X
+    512 nodes x 10 deep x 200 rows (read)         98 /  134          1.0         979.2       0.6X
+    512 nodes x 10 deep x 200 rows (write)      6698 / 7124          0.0       66977.0       0.0X
+    */
+  }
+
   //
   // The following benchmarks are for reference: the schema is not actually wide for them.
   //
