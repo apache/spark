@@ -21,8 +21,7 @@ import org.apache.spark.sql.{Dataset, SparkSession, SQLContext}
 import org.apache.spark.sql.test.SharedSQLContext
 
 private[json] trait TestJsonData extends SharedSQLContext {
-  val importContext = sqlContext
-  import importContext.implicits._
+  import testImplicits._
 
   def primitiveFieldAndType: Dataset[String] =
     sqlContext.createDataset(
