@@ -58,28 +58,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("show functions") {
-    val utils = new CatalogTestUtils {
-      override val tableInputFormat: String = "com.fruit.eyephone.CameraInputFormat"
-      override val tableOutputFormat: String = "com.fruit.eyephone.CameraOutputFormat"
-      override def newEmptyCatalog(): ExternalCatalog = spark.sharedState.externalCatalog
-    }
-
-    def createFunction(names: Seq[String]): Unit = {
-      names.foreach { name =>
-        spark.sessionState.catalog
-          .createFunction(utils.newFunc(name, Some("default")), ignoreIfExists = true)
-      }
-    }
-
     def getFunctions(pattern: String): Seq[Row] = {
-      spark.sessionState.catalog.listFunctions("default", pattern).map(Row(_))
+      spark.sessionState.catalog.listFunctions("default").map(Row(_))
     }
 
-    createFunction(Seq("logi", "logii", "logiii", "ilog"))
-
-    println(s"getFunctions: ${sql("SHOW functions").collect().toSeq}") // scalastyle:off
-    println(s"getFunctions: ${getFunctions("*")}") // scalastyle:off
     checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    assert(sql("SHOW functions").collect().isEmpty)
   }
 
   test("describe functions") {
