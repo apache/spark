@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -35,7 +36,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     // Set a conf first.
     spark.conf.set(testKey, testVal)
     // Clear the conf.
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     // After clear, only overrideConfs used by unit test should be in the SQLConf.
     assert(spark.conf.getAll === TestSQLContext.overrideConfs)
 
@@ -50,11 +51,11 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
     assert(spark.conf.getAll.contains(testKey))
 
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
   }
 
   test("parse SQL set commands") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     sql(s"set $testKey=$testVal")
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
     assert(spark.conf.get(testKey, testVal + "_") === testVal)
@@ -72,7 +73,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     sql(s"set $key=")
     assert(spark.conf.get(key, "0") === "")
 
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
   }
 
   test("set command for display") {
@@ -97,7 +98,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("deprecated property") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.SHUFFLE_PARTITIONS)
     try {
       sql(s"set ${SQLConf.Deprecated.MAPRED_REDUCE_TASKS}=10")
@@ -108,7 +109,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reset - public conf") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.GROUP_BY_ORDINAL)
     try {
       assert(spark.conf.get(SQLConf.GROUP_BY_ORDINAL) === true)
@@ -124,7 +125,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reset - internal conf") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     val original = spark.conf.get(SQLConf.NATIVE_VIEW)
     try {
       assert(spark.conf.get(SQLConf.NATIVE_VIEW) === true)
@@ -140,7 +141,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("reset - user-defined conf") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     val userDefinedConf = "x.y.z.reset"
     try {
       assert(spark.conf.getOption(userDefinedConf).isEmpty)
@@ -155,7 +156,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("invalid conf value") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     val e = intercept[IllegalArgumentException] {
       sql(s"set ${SQLConf.CASE_SENSITIVE.key}=10")
     }
@@ -163,7 +164,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
   }
 
   test("Test SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE's method") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
 
     spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "100")
     assert(spark.conf.get(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE) === 100)
@@ -191,7 +192,7 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
       spark.conf.set(SQLConf.SHUFFLE_TARGET_POSTSHUFFLE_INPUT_SIZE.key, "-90000000000g")
     }
 
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
   }
 
   test("SparkSession can access configs set in SparkConf") {
@@ -207,4 +208,44 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("default value of WAREHOUSE_PATH") {
+    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
+    try {
+      // to get the default value, always unset it
+      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
+      assert(spark.sessionState.conf.warehousePath
+        === s"file:${System.getProperty("user.dir")}/spark-warehouse")
+    } finally {
+      sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
+    }
+  }
+
+  test("MAX_CASES_BRANCHES") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      val sql_one_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 END FROM tab1"
+      val sql_two_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 ELSE 0 END FROM tab1"
+
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "0") {
+        assert(!sql(sql_one_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+        assert(!sql(sql_two_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
+
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "1") {
+        assert(sql(sql_one_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+        assert(!sql(sql_two_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
+
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "2") {
+        assert(sql(sql_one_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+        assert(sql(sql_two_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
+    }
+  }
 }

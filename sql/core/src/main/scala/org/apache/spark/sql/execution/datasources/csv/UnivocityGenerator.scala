@@ -75,6 +75,7 @@ private[csv] object UnivocityGenerator extends Logging {
     writerSettings.setEmptyValue(options.nullValue)
     writerSettings.setSkipEmptyLines(true)
     writerSettings.setQuoteAllFields(false)
+    writerSettings.setQuoteEscapingEnabled(options.escapeQuotes)
     writerSettings
   }
 }

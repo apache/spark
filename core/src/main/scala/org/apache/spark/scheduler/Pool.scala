@@ -88,10 +88,10 @@ private[spark] class Pool(
     schedulableQueue.asScala.foreach(_.executorLost(executorId, host, reason))
   }
 
-  override def checkSpeculatableTasks(): Boolean = {
+  override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     var shouldRevive = false
     for (schedulable <- schedulableQueue.asScala) {
-      shouldRevive |= schedulable.checkSpeculatableTasks()
+      shouldRevive |= schedulable.checkSpeculatableTasks(minTimeToSpeculation)
     }
     shouldRevive
   }

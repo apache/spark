@@ -67,7 +67,7 @@ private[streaming] class InputInfoTracker(ssc: StreamingContext) extends Logging
 
     if (inputInfos.contains(inputInfo.inputStreamId)) {
       throw new IllegalStateException(s"Input stream ${inputInfo.inputStreamId} for batch" +
-        s"$batchTime is already added into InputInfoTracker, this is a illegal state")
+        s"$batchTime is already added into InputInfoTracker, this is an illegal state")
     }
     inputInfos += ((inputInfo.inputStreamId, inputInfo))
   }

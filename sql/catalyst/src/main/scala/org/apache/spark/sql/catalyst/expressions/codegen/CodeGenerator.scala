@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
+import scala.language.existentials
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -560,6 +561,10 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
+    if (row == null) {
+      // Cannot split these expressions because they are not created from a row object.
+      return expressions.mkString("\n")
+    }
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -718,26 +723,24 @@ class CodegenContext {
   def getPlaceHolderToComments(): collection.Map[String, String] = placeHolderToComments
 
   /**
-   * Register a multi-line comment and return the corresponding place holder
-   */
-  private def registerMultilineComment(text: String): String = {
-    val placeHolder = s"/*${freshName("c")}*/"
-    val comment = text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
-    placeHolderToComments += (placeHolder -> comment)
-    placeHolder
-  }
-
-  /**
    * Register a comment and return the corresponding place holder
    */
-  def registerComment(text: String): String = {
-    if (text.contains("\n") || text.contains("\r")) {
-      registerMultilineComment(text)
+  def registerComment(text: => String): String = {
+    // By default, disable comments in generated code because computing the comments themselves can
+    // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
+    // inputs with wide schemas. For more details on the performance issues that motivated this
+    // flat, see SPARK-15680.
+    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+      val name = freshName("c")
+      val comment = if (text.contains("\n") || text.contains("\r")) {
+        text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
+      } else {
+        s"// $text"
+      }
+      placeHolderToComments += (name -> comment)
+      s"/*$name*/"
     } else {
-      val placeHolder = s"/*${freshName("c")}*/"
-      val safeComment = s"// $text"
-      placeHolderToComments += (placeHolder -> safeComment)
-      placeHolder
+      ""
     }
   }
 }
@@ -816,7 +819,17 @@ object CodeGenerator extends Logging {
    */
   private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
+
+    // A special classloader used to wrap the actual parent classloader of
+    // [[org.codehaus.janino.ClassBodyEvaluator]] (see CodeGenerator.doCompile). This classloader
+    // does not throw a ClassNotFoundException with a cause set (i.e. exception.getCause returns
+    // a null). This classloader is needed because janino will throw the exception directly if
+    // the parent classloader throws a ClassNotFoundException with cause set instead of trying to
+    // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
+    // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
+    // https://issues.apache.org/jira/browse/SPARK-11636.
+    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
+    evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(

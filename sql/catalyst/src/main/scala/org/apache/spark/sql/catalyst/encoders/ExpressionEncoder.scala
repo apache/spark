@@ -125,12 +125,13 @@ object ExpressionEncoder {
         }
       } else {
         val input = BoundReference(index, enc.schema, nullable = true)
-        enc.deserializer.transformUp {
+        val deserialized = enc.deserializer.transformUp {
           case UnresolvedAttribute(nameParts) =>
             assert(nameParts.length == 1)
             UnresolvedExtractValue(input, Literal(nameParts.head))
           case BoundReference(ordinal, dt, _) => GetStructField(input, ordinal)
         }
+        If(IsNull(input), Literal.create(null, deserialized.dataType), deserialized)
       }
     }
 

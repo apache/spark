@@ -1177,7 +1177,7 @@ def sha2(col, numBits):
 
 @since(2.0)
 def hash(*cols):
-    """Calculates the hash code of given columns, and returns the result as a int column.
+    """Calculates the hash code of given columns, and returns the result as an int column.
 
     >>> spark.createDataFrame([('ABC',)], ['a']).select(hash('a').alias('hash')).collect()
     [Row(hash=-757602832)]
@@ -1359,7 +1359,7 @@ def levenshtein(left, right):
 
 
 @since(1.5)
-def locate(substr, str, pos=0):
+def locate(substr, str, pos=1):
     """
     Locate the position of the first occurrence of substr in a string column, after position pos.
 

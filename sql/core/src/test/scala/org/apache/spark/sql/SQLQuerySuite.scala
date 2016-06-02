@@ -1048,7 +1048,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   }
 
   test("SET commands semantics using sql()") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     val testKey = "test.key.0"
     val testVal = "test.val.0"
     val nonexistentKey = "nonexistent"
@@ -1089,17 +1089,17 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SET $nonexistentKey"),
       Row(nonexistentKey, "<undefined>")
     )
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
   }
 
   test("SET commands with illegal or inappropriate argument") {
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
     // Set negative mapred.reduce.tasks for automatically determining
     // the number of reducers is not supported
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-1"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-01"))
     intercept[IllegalArgumentException](sql(s"SET mapred.reduce.tasks=-2"))
-    spark.sqlContext.conf.clear()
+    spark.sessionState.conf.clear()
   }
 
   test("apply schema") {
@@ -2480,6 +2480,30 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         Row("r1c1", "r1c2", "t1r1c3", "r1c2", "t1r1c3") ::
           Row("r2c1", "r2c2", "t1r2c3", "r2c2", "t1r2c3") ::
           Row("r3c1x", "r3c2", "t1r3c3", "r3c2", "t1r3c3") :: Nil)
+    }
+  }
+
+  test("SPARK-15327: fail to compile generated code with complex data structure") {
+    withTempDir{ dir =>
+      val json =
+        """
+          |{"h": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "d": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"c": {"b": {"c": [{"e": "adfgd"}], "a": [{"count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "a": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"e": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "g": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"e": "testing", "count": 3}], "b": [{"e": "test", "count": 1}]}},
+          |"f": {"b": {"c": [{"e": "adfgd"}], "a": [{"e": "testing", "count": 3}],
+          |"b": [{"e": "test", "count": 1}]}}, "b": {"b": {"c": [{"e": "adfgd"}],
+          |"a": [{"count": 3}], "b": [{"e": "test", "count": 1}]}}}'
+          |
+        """.stripMargin
+      val rdd = sparkContext.parallelize(Array(json))
+      spark.read.json(rdd).write.mode("overwrite").parquet(dir.toString)
+      spark.read.parquet(dir.toString).collect()
     }
   }
 

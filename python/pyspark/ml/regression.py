@@ -48,11 +48,15 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     The learning objective is to minimize the squared error, with regularization.
     The specific squared error loss function used is: L = 1/2n ||A coefficients - y||^2^
 
-    This support multiple types of regularization:
-     - none (a.k.a. ordinary least squares)
-     - L2 (ridge regression)
-     - L1 (Lasso)
-     - L2 + L1 (elastic net)
+    This supports multiple types of regularization:
+
+     * none (a.k.a. ordinary least squares)
+
+     * L2 (ridge regression)
+
+     * L1 (Lasso)
+
+     * L2 + L1 (elastic net)
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
@@ -128,7 +132,7 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by LinearRegression.
+    Model fitted by :class:`LinearRegression`.
 
     .. versionadded:: 1.4.0
     """
@@ -503,13 +507,13 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by IsotonicRegression.
+    Model fitted by :class:`IsotonicRegression`.
     """
 
     @property
     def boundaries(self):
         """
-        Model boundaries.
+        Boundaries in increasing order for which predictions are known.
         """
         return self._call_java("boundaries")
 
@@ -769,7 +773,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
     """
     .. note:: Experimental
 
-    Model fitted by DecisionTreeRegressor.
+    Model fitted by :class:`DecisionTreeRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -887,7 +891,7 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLRead
     """
     .. note:: Experimental
 
-    Model fitted by RandomForestRegressor.
+    Model fitted by :class:`RandomForestRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -1021,7 +1025,7 @@ class GBTRegressionModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by GBTRegressor.
+    Model fitted by :class:`GBTRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -1190,7 +1194,7 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by AFTSurvivalRegression.
+    Model fitted by :class:`AFTSurvivalRegression`.
 
     .. versionadded:: 1.6.0
     """
@@ -1380,7 +1384,7 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable
     """
     .. note:: Experimental
 
-    Model fitted by GeneralizedLinearRegression.
+    Model fitted by :class:`GeneralizedLinearRegression`.
 
     .. versionadded:: 2.0.0
     """

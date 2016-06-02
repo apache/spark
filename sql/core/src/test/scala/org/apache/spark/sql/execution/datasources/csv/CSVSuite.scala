@@ -137,7 +137,7 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   }
 
   test("test inferring decimals") {
-    val result = sqlContext.read
+    val result = spark.read
       .format("csv")
       .option("comment", "~")
       .option("header", "true")
@@ -363,6 +363,57 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(csvDir)
 
       verifyCars(carsCopy, withHeader = true)
+    }
+  }
+
+  test("save csv with quote escaping enabled") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val data = Seq(("test \"quote\"", 123, "it \"works\"!", "\"very\" well"))
+      val df = spark.createDataFrame(data)
+
+      // escapeQuotes should be true by default
+      df.coalesce(1).write
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\"")
+        .save(csvDir)
+
+      val results = spark.read
+        .format("text")
+        .load(csvDir)
+        .collect()
+
+      val expected = "\"test \"\"quote\"\"\",123,\"it \"\"works\"\"!\",\"\"\"very\"\" well\""
+
+      assert(results.toSeq.map(_.toSeq) === Seq(Seq(expected)))
+    }
+  }
+
+  test("save csv with quote escaping disabled") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val data = Seq(("test \"quote\"", 123, "it \"works\"!", "\"very\" well"))
+      val df = spark.createDataFrame(data)
+
+      // escapeQuotes should be true by default
+      df.coalesce(1).write
+        .format("csv")
+        .option("quote", "\"")
+        .option("escapeQuotes", "false")
+        .option("escape", "\"")
+        .save(csvDir)
+
+      val results = spark.read
+        .format("text")
+        .load(csvDir)
+        .collect()
+
+      val expected = "test \"quote\",123,it \"works\"!,\"\"\"very\"\" well\""
+
+      assert(results.toSeq.map(_.toSeq) === Seq(Seq(expected)))
     }
   }
 
