@@ -2558,7 +2558,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         return RFormulaModel(java_model)
 
     def __str__(self):
-        return "RFormula(%s) (uid=%s)" % (self.getFormula(), self.uid)
+        formulaStr = self.getFormula() if self.isDefined(self.formula) else ""
+        return "RFormula(%s) (uid=%s)" % (formulaStr, self.uid)
 
 
 class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
