@@ -695,10 +695,6 @@ setGeneric("desc", function(x) { standardGeneric("desc") })
 
 #' @rdname column
 #' @export
-setGeneric("endsWith", function(x, ...) { standardGeneric("endsWith") })
-
-#' @rdname column
-#' @export
 setGeneric("getField", function(x, ...) { standardGeneric("getField") })
 
 #' @rdname column
@@ -724,10 +720,6 @@ setGeneric("like", function(x, ...) { standardGeneric("like") })
 #' @rdname column
 #' @export
 setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
-
-#' @rdname column
-#' @export
-setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
 
 #' @rdname column
 #' @export
