@@ -769,6 +769,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("mapped dataset should resolve duplicated attributes for self join") {
+    val ds = Seq(1, 2, 3).toDS().map(_ + 1)
+    val ds1 = ds.as("d1")
+    val ds2 = ds.as("d2")
+
+    checkDataset(ds1.joinWith(ds2, $"d1.value" === $"d2.value"), (2, 2), (3, 3), (4, 4))
+    checkDataset(ds1.intersect(ds2), 2, 3, 4)
+    checkDataset(ds1.except(ds1))
+  }
+
   test("SPARK-15441: Dataset outer join") {
     val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
     val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
