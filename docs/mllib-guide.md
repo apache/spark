@@ -147,8 +147,6 @@ Changes of behavior:
 * [SPARK-13600](https://issues.apache.org/jira/browse/SPARK-13600):
  `QuantileDiscretizer` now uses `spark.sql.DataFrameStatFunctions.approxQuantile` to find splits (previously used custom sampling logic).
  The output buckets will differ for same input data and params.
-* [SPARK-14814](https://issues.apache.org/jira/browse/SPARK-14814):
- Fix the java compatibility issue for the output of `spark.mllib.tree.model.DecisionTreeModel.predict` method.
 
 ## Previous Spark versions
 
