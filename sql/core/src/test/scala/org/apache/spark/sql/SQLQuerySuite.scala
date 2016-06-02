@@ -59,11 +59,32 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
 
   test("show functions") {
     def getFunctions(pattern: String): Seq[Row] = {
-      spark.sessionState.catalog.listFunctions("default").map(Row(_))
+      StringUtils.filterPattern(
+        spark.sessionState.catalog.listFunctions("default").map(_.funcName), pattern)
+        .map(Row(_))
     }
 
-    checkAnswer(sql("SHOW functions"), getFunctions("*"))
+    def createFunction(names: Seq[String]): Unit = {
+      names.foreach { name =>
+        spark.udf.register(name, (arg1: Int, arg2: String) => arg2 + arg1)
+      }
+    }
+
     assert(sql("SHOW functions").collect().isEmpty)
+
+    createFunction(Seq("ilog", "logi", "logii", "logiii"))
+    createFunction(Seq("crc32i", "cubei", "cume_disti"))
+    createFunction(Seq("isize", "ispace"))
+    createFunction(Seq("to_datei", "date_addi", "current_datei"))
+
+    checkAnswer(sql("SHOW functions"), getFunctions("*"))
+
+    Seq("^c*", "*e$", "log*", "*date*").foreach { pattern =>
+      // For the pattern part, only '*' and '|' are allowed as wildcards.
+      // For '*', we need to replace it to '.*'.
+      checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
+    }
+
   }
 
   test("describe functions") {
