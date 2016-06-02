@@ -438,7 +438,6 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case array: Array[_] if array.isEmpty => Nil
     case array: Array[_] => array.mkString("[", ", ", "]") :: Nil
     case null => Nil
-    case false => Nil
     case None => Nil
     case Some(null) => Nil
     case Some(str: String) => str :: Nil
