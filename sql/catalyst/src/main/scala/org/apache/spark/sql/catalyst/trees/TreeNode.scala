@@ -169,6 +169,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
+  /**
+   * Efficient alternative to `productIterator.map(f).toArray`.
+   */
   protected def mapProductIterator[B: ClassTag](f: Any => B): Array[B] = {
     val arr = Array.ofDim[B](productArity)
     val iter = productIterator
