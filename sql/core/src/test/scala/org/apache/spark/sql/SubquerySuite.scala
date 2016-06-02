@@ -100,8 +100,6 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
   test("uncorrelated scalar subquery on a DataFrame generated query") {
     val df = Seq((1, "one"), (2, "two"), (3, "three")).toDF("key", "value")
     df.createOrReplaceTempView("subqueryData")
-    val t1 = Seq((1, 1), (2, 2)).toDF("c1", "c2")
-    t1.createOrReplaceTempView("t1")
 
     checkAnswer(
       sql("select (select key from subqueryData where key > 2 order by key limit 1) + 1"),
@@ -123,16 +121,31 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         " where key = (select max(key) from subqueryData) - 1)"),
       Array(Row("two"))
     )
+  }
+
+  test("SPARK-15677: Scalar sub-query in Select list against a DataFrame generated query") {
+    Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+    Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
 
     checkAnswer(
-      sql("select (select 1 as col) from t1"),
-      Array(Row(1), Row(1))
-    )
+      sql("SELECT (select 1 as col) from t1"),
+      Row(1) :: Row(1) :: Nil)
 
     checkAnswer(
-      sql("select c1 + (select min(key) from subqueryData) from t1"),
-      Array(Row(2), Row(3))
-    )
+      sql("SELECT (select max(c1) from t2) from t1"),
+      Row(2) :: Row(2) :: Nil)
+
+    checkAnswer(
+      sql("SELECT 1 + (select 1 as col) from t1"),
+      Row(2) :: Row(2) :: Nil)
+
+    checkAnswer(
+      sql("SELECT c1, (select max(c1) from t2) + c2 from t1"),
+      Row(1, 3) :: Row(2, 4) :: Nil)
+
+    checkAnswer(
+      sql("SELECT c1, (select max(c1) from t2 where t1.c2 = t2.c2) from t1"),
+      Row(1, 1) :: Row(2, 2) :: Nil)
   }
 
   test("SPARK-14791: scalar subquery inside broadcast join") {
