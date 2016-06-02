@@ -202,8 +202,7 @@ class PlanParserSuite extends PlanTest {
     val sql = "select * from t"
     intercept(s"insert overwrite table s partition (e = 1, x) if not exists $sql",
       "Dynamic partitions do not support IF NOT EXISTS. Specified partitions with value: [x]")
-    intercept(s"insert overwrite table s if not exists $sql",
-      "IF NOT EXISTS is not expected when Partition Spec is not specified")
+    intercept[ParseException](parsePlan(s"insert overwrite table s if not exists $sql"))
   }
 
   test("aggregation") {
