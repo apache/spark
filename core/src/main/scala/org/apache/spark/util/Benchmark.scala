@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration._
 import scala.util.Try
 
 import org.apache.commons.lang3.SystemUtils
@@ -33,18 +34,28 @@ import org.apache.commons.lang3.SystemUtils
  *
  * The benchmark function takes one argument that is the iteration that's being run.
  *
- * If outputPerIteration is true, the timing for each run will be printed to stdout.
+ * @param name name of this benchmark.
+ * @param valuesPerIteration number of values used in the test case, used to compute rows/s.
+ * @param minNumIters the min number of iterations that will be run per case. Note that this
+ *                    should be at least 2 since the first iteration is ignored.
+ * @param minTime iterations will be run for a case until this time is used up.
+ * @param outputPerIteration if true, the timing for each run will be printed to stdout.
  */
 private[spark] class Benchmark(
     name: String,
     valuesPerIteration: Long,
-    defaultNumIters: Int = 5,
+    minNumIters: Int = 3,
+    minTime: FiniteDuration = 2.seconds,
     outputPerIteration: Boolean = false) {
+  import Benchmark._
   val benchmarks = mutable.ArrayBuffer.empty[Benchmark.Case]
 
   /**
    * Adds a case to run when run() is called. The given function will be run for several
    * iterations to collect timing statistics.
+   *
+   * @param name of the benchmark case
+   * @param numIters if non-zero, forces exactly this many iterations to be run
    */
   def addCase(name: String, numIters: Int = 0)(f: Int => Unit): Unit = {
     addTimerCase(name, numIters) { timer =>
@@ -58,9 +69,12 @@ private[spark] class Benchmark(
    * Adds a case with manual timing control. When the function is run, timing does not start
    * until timer.startTiming() is called within the given function. The corresponding
    * timer.stopTiming() method must be called before the function returns.
+   *
+   * @param name of the benchmark case
+   * @param numIters if non-zero, forces exactly this many iterations to be run
    */
   def addTimerCase(name: String, numIters: Int = 0)(f: Benchmark.Timer => Unit): Unit = {
-    benchmarks += Benchmark.Case(name, f, if (numIters == 0) defaultNumIters else numIters)
+    benchmarks += Benchmark.Case(name, f, numIters)
   }
 
   /**
@@ -75,7 +89,7 @@ private[spark] class Benchmark(
 
     val results = benchmarks.map { c =>
       println("  Running case: " + c.name)
-      Benchmark.measure(valuesPerIteration, c.numIters, outputPerIteration)(c.fn)
+      measure(valuesPerIteration, c.numIters)(c.fn)
     }
     println
 
@@ -96,6 +110,39 @@ private[spark] class Benchmark(
     }
     println
     // scalastyle:on
+  }
+
+  /**
+   * Runs a single function `f` for iters, returning the average time the function took and
+   * the rate of the function.
+   */
+  def measure(num: Long, overrideNumIters: Int)(f: Timer => Unit): Result = {
+    System.gc()  // ensures garbage from previous cases don't impact this one
+    val minIters = if (overrideNumIters != 0) overrideNumIters else minNumIters
+    val minDuration = if (overrideNumIters != 0) 0.seconds.fromNow else minTime.fromNow
+    val runTimes = ArrayBuffer[Long]()
+    var i = 0
+    while (i < minIters || !minDuration.isOverdue) {
+      val timer = new Benchmark.Timer(i)
+      f(timer)
+      val runTime = timer.totalTime()
+      if (i > 0) {
+        runTimes += runTime
+      }
+
+      if (outputPerIteration) {
+        // scalastyle:off
+        println(s"Iteration $i took ${runTime / 1000} microseconds")
+        // scalastyle:on
+      }
+      i += 1
+    }
+    // scalastyle:off
+    println(s"  Stopped after $i iterations, ${runTimes.sum / 1000000} ms")
+    // scalastyle:on
+    val best = runTimes.min
+    val avg = runTimes.sum / runTimes.size
+    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0)
   }
 }
 
@@ -161,30 +208,4 @@ private[spark] object Benchmark {
     val osVersion = System.getProperty("os.version")
     s"${vmName} ${runtimeVersion} on ${osName} ${osVersion}"
   }
-
-  /**
-   * Runs a single function `f` for iters, returning the average time the function took and
-   * the rate of the function.
-   */
-  def measure(num: Long, iters: Int, outputPerIteration: Boolean)(f: Timer => Unit): Result = {
-    val runTimes = ArrayBuffer[Long]()
-    for (i <- 0 until iters + 1) {
-      val timer = new Benchmark.Timer(i)
-      f(timer)
-      val runTime = timer.totalTime()
-      if (i > 0) {
-        runTimes += runTime
-      }
-
-      if (outputPerIteration) {
-        // scalastyle:off
-        println(s"Iteration $i took ${runTime / 1000} microseconds")
-        // scalastyle:on
-      }
-    }
-    val best = runTimes.min
-    val avg = runTimes.sum / iters
-    Result(avg / 1000000.0, num / (best / 1000.0), best / 1000000.0)
-  }
 }
-
