@@ -1481,7 +1481,7 @@ class SQLTests(ReusedPySparkTestCase):
         spark.sql("CREATE DATABASE some_db")
         functions = dict((f.name, f) for f in spark.catalog.listFunctions())
         functionsDefault = dict((f.name, f) for f in spark.catalog.listFunctions("default"))
-        self.assertTrue(len(functions) > 200)
+        self.assertEquals(len(functions), 0)
         self.assertEquals(functions, functionsDefault)
         spark.catalog.registerFunction("temp_func", lambda x: str(x))
         spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
