@@ -1104,4 +1104,17 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }
     }
   }
+
+  test("SPARK-15269 external data source table creation") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(1).write.json(path)
+
+      withTable("t") {
+        sql(s"CREATE TABLE t USING json OPTIONS (PATH '$path')")
+        sql("DROP TABLE t")
+        sql(s"CREATE TABLE t USING json AS SELECT 1 AS c")
+      }
+    }
+  }
 }
