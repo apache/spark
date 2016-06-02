@@ -62,7 +62,7 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
-  test("many column field read and write") {
+  ignore("many column field read and write") {
     val benchmark = new Benchmark("many column field r/w", scaleFactor)
     for (width <- widthsToTest) {
       // normalize by width to keep constant data size
@@ -97,7 +97,7 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
-  test("wide struct field read and write") {
+  ignore("wide struct field read and write") {
     val benchmark = new Benchmark("wide struct field r/w", scaleFactor)
     for (width <- widthsToTest) {
       val numRows = scaleFactor / width
@@ -139,7 +139,7 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
-  test("deeply nested struct field read and write") {
+  ignore("deeply nested struct field read and write") {
     val benchmark = new Benchmark("deeply nested struct field r/w", scaleFactor)
     for (depth <- depthsToTest) {
       val numRows = scaleFactor / depth
@@ -176,7 +176,7 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
-  test("bushy struct field read and write") {
+  ignore("bushy struct field read and write") {
     val benchmark = new Benchmark("bushy struct field r/w", scaleFactor)
     for (width <- Seq(1, 10, 100, 500)) {
       val numRows = scaleFactor / width
