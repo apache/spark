@@ -391,9 +391,47 @@ object ColumnarBatchBenchmark {
     benchmark.run
   }
 
+  def constantColumn(iters: Long): Unit = {
+    val count = 2 * 1000
+
+    def column(memoryMode: MemoryMode, isConstant: Boolean) = { i: Int =>
+      val column = ColumnVector.allocate(count, IntegerType, memoryMode, isConstant)
+      var sum = 0L
+      for (n <- 0L until iters) {
+        var i = 0
+        while (i < count) {
+          column.putInt(i, 1000)
+          i += 1
+        }
+        i = 0
+        while (i < count) {
+          sum += column.getInt(i)
+          i += 1
+        }
+        column.reset()
+      }
+    }
+
+    /*
+    ColumnVector R/W:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    On Heap, Not Constant                           58 /   59          0.7        1405.7       1.0X
+    On Heap, Constant                               44 /   44          0.9        1076.3       1.3X
+    Off Heap, Not Constant                        1134 / 1205          0.0       27684.1       0.1X
+    Off Heap, Constant                             914 /  939          0.0       22308.6       0.1X
+    */
+    val benchmark = new Benchmark("ColumnVector R/W", iters)
+    benchmark.addCase("On Heap, Not Constant")(column(MemoryMode.ON_HEAP, false))
+    benchmark.addCase("On Heap, Constant")(column(MemoryMode.ON_HEAP, true))
+    benchmark.addCase("Off Heap, Not Constant")(column(MemoryMode.OFF_HEAP, false))
+    benchmark.addCase("Off Heap, Constant")(column(MemoryMode.OFF_HEAP, true))
+    benchmark.run
+  }
+
   def main(args: Array[String]): Unit = {
     intAccess(1024 * 40)
     booleanAccess(1024 * 40)
     stringAccess(1024 * 4)
+    constantColumn(1024 * 40)
   }
 }
