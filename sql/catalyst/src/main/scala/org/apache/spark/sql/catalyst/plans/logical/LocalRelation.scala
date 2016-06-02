@@ -59,7 +59,7 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
 
   override protected def stringArgs: Iterator[Any] = {
     if (data.isEmpty) {
-      Iterator("Empty", output)
+      Iterator("<empty>", output)
     } else {
       Iterator(output)
     }

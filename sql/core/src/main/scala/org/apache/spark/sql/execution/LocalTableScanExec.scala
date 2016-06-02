@@ -50,7 +50,7 @@ private[sql] case class LocalTableScanExec(
 
   override protected def stringArgs: Iterator[Any] = {
     if (rows.isEmpty) {
-      Iterator("Empty", output)
+      Iterator("<empty>", output)
     } else {
       Iterator(output)
     }
