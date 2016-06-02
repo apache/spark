@@ -64,7 +64,7 @@ class WideSchemaBenchmark extends SparkFunSuite {
     */
   }
 
-  ignore("many column field read") {
+  ignore("wide row field read") {
     val benchmark = new Benchmark("many column field read", scaleFactor)
     for (width <- widthsToTest) {
       // normalize by width to keep constant data size
