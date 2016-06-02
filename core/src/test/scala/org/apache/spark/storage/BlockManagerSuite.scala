@@ -1375,7 +1375,7 @@ class BlockManagerSuite extends SparkFunSuite with Matchers with BeforeAndAfterE
     // Because the BlockManager's metadata claims that the block exists (i.e. that it's present
     // in at least one store), the read attempts to read it and fails when the on-disk file is
     // missing.
-    intercept[SparkException] {
+    intercept[BlockException] {
       readMethod(store)
     }
     // Subsequent read attempts will succeed; the block isn't present but we return an expected
