@@ -21,6 +21,7 @@ import java.util.UUID
 
 import scala.collection.Map
 import scala.collection.mutable.Stack
+import scala.reflect.ClassTag
 
 import org.apache.commons.lang.ClassUtils
 import org.json4s.JsonAST._
@@ -168,12 +169,23 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
   }
 
+  protected def mapProductIterator[B: ClassTag](f: Any => B): Array[B] = {
+    val arr = Array.ofDim[B](productArity)
+    val iter = productIterator
+    var i = 0
+    while (i < arr.length) {
+      arr(i) = f(iter.next())
+      i += 1
+    }
+    arr
+  }
+
   /**
    * Returns a copy of this node where `f` has been applied to all the nodes children.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
     var changed = false
-    val newArgs = productIterator.map {
+    val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = f(arg.asInstanceOf[BaseType])
         if (newChild fastEquals arg) {
@@ -184,7 +196,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         }
       case nonChild: AnyRef => nonChild
       case null => null
-    }.toArray
+    }
     if (changed) makeCopy(newArgs) else this
   }
 
@@ -197,7 +209,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
-    val newArgs = productIterator.map {
+    val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
       case s: Seq[_] => s.map {
@@ -237,7 +249,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         }
       case nonChild: AnyRef => nonChild
       case null => null
-    }.toArray
+    }
 
     if (changed) makeCopy(newArgs) else this
   }
@@ -302,7 +314,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       rule: PartialFunction[BaseType, BaseType],
       nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
     var changed = false
-    val newArgs = productIterator.map {
+    val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
@@ -353,7 +365,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }
       case nonChild: AnyRef => nonChild
       case null => null
-    }.toArray
+    }
     if (changed) makeCopy(newArgs) else this
   }
 
