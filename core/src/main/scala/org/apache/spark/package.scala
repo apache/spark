@@ -71,6 +71,8 @@ package object spark {
           props.getProperty("date", unknownProp)
         )
       } catch {
+        case npe: NullPointerException =>
+          throw new SparkException("Error while locating file spark-version-info.properties", npe)
         case e: Exception =>
           throw new SparkException("Error loading properties from spark-version-info.properties", e)
       } finally {
