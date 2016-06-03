@@ -23,8 +23,8 @@ import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
-
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
   override def zero: (Long, Long) = (0, 0)
@@ -226,22 +226,24 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   test("SPARK-15688: Remove redundant expressions from aggregate") {
     val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("col1", "col2")
-    // Aggregate expression contains the group by column and should appear once in the output.
-    val df1 = df.groupBy("col1").agg($"col1", count("*"))
-    assert(df1.schema.map(_.name) === Seq("col1", "count(1)"))
-    // Only the column that is missing in aggregate expression should be added to aggregate expr.
-    val df2 = df.groupBy("col1", "col2").agg($"col1", count("*"))
-    assert(df2.schema.map(_.name) === Seq("col2", "col1", "count(1)"))
-    // Complex expression in group by and aggregate clause.
-    val df3 = df.groupBy(expr("col1 + 2")).agg(expr("col1 + 2"), count("*"))
-    assert(df3.schema.map(_.name) === Seq("(col1 + 2)", "count(1)"))
-    // Group by column should be added as its not part of aggregate expression.
-    val df4 = df.groupBy("col1").agg(min("col1"), max("col1"))
-    assert(df4.schema.map(_.name) === Seq("col1", "min(col1)", "max(col1)"))
-    // Multiple aggregates in the plan.
-    val df5 = df.groupBy("col1", "col2").agg($"col1", $"col2")
-      .groupBy("col1").agg($"col1", count("*"))
-    assert(df5.schema.map(_.name) === Seq("col1", "count(1)"))
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "true") {
+      // Aggregate expression contains the group by column and should appear once in the output.
+      val df1 = df.groupBy("col1").agg($"col1", count("*"))
+      assert(df1.schema.map(_.name) === Seq("col1", "count(1)"))
+      // Only the column that is missing in aggregate expression should be added to aggregate expr.
+      val df2 = df.groupBy("col1", "col2").agg($"col1", count("*"))
+      assert(df2.schema.map(_.name) === Seq("col2", "col1", "count(1)"))
+      // Complex expression in group by and aggregate clause.
+      val df3 = df.groupBy(expr("col1 + 2")).agg(expr("col1 + 2"), count("*"))
+      assert(df3.schema.map(_.name) === Seq("(col1 + 2)", "count(1)"))
+      // Group by expressions should be added as they are not part of aggregate expression.
+      val df4 = df.groupBy("col1").agg(min("col1"), max("col1"))
+      assert(df4.schema.map(_.name) === Seq("col1", "min(col1)", "max(col1)"))
+      // Multiple aggregates in the plan.
+      val df5 = df.groupBy("col1", "col2").agg($"col1", $"col2")
+        .groupBy("col1").agg($"col1", count("*"))
+      assert(df5.schema.map(_.name) === Seq("col1", "count(1)"))
+    }
   }
 
   test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {

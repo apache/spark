@@ -207,12 +207,12 @@ class DataFrameAggregateSuite extends QueryTest with SharedSQLContext {
       Seq(Row(1, 3), Row(2, 3), Row(3, 3))
     )
 
-    spark.conf.set(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key, false)
-    checkAnswer(
-      testData2.groupBy("a").agg(sum($"b")),
-      Seq(Row(3), Row(3), Row(3))
-    )
-    spark.conf.set(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key, true)
+    withSQLConf(SQLConf.DATAFRAME_RETAIN_GROUP_COLUMNS.key -> "false") {
+      checkAnswer(
+        testData2.groupBy("a").agg(sum($"b")),
+        Seq(Row(3), Row(3), Row(3))
+      )
+    }
   }
 
   test("agg without groups") {
