@@ -82,7 +82,7 @@ object AggUtils {
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
-    // Check if we can use TungstenAggregate.
+    // Check if we can use HashAggregate.
 
     // 1. Create an Aggregate Operator for partial aggregations.
 

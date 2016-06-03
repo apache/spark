@@ -251,7 +251,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     if (!hasGeneratedAgg) {
       fail(
         s"""
-           |Codegen is enabled, but query $sqlText does not have TungstenAggregate in the plan.
+           |Codegen is enabled, but query $sqlText does not have HashAggregate in the plan.
            |${df.queryExecution.simpleString}
          """.stripMargin)
     }
