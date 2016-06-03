@@ -52,7 +52,7 @@ fi
 
 # Determine the Python executable to use for the executors:
 if [[ -z "$PYSPARK_PYTHON" ]]; then
-  if [[ $PYSPARK_DRIVER_PYTHON == *ipython* && $DEFAULT_PYTHON != "python2.7" ]]; then
+  if [[ $PYSPARK_DRIVER_PYTHON == *ipython* && $DEFAULT_PYTHON < "python2.7" ]]; then
     echo "IPython requires Python 2.7+; please install python2.7 or set PYSPARK_PYTHON" 1>&2
     exit 1
   else
