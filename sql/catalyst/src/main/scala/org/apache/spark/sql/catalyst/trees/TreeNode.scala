@@ -430,6 +430,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   def argString: String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
     case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
+    case Some(tn: TreeNode[_]) => tn.simpleString :: Nil
     case tn: TreeNode[_] => tn.simpleString :: Nil
     case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
     case iter: Iterable[_] if iter.isEmpty => Nil
@@ -440,7 +441,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     case null => Nil
     case None => Nil
     case Some(null) => Nil
-    case Some(str: String) => str :: Nil
+    case Some(any) => any :: Nil
     case other => other :: Nil
   }.mkString(", ")
 
