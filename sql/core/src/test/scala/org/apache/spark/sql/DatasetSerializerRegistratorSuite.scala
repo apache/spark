@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql
 
+import com.esotericsoftware.kryo.{Kryo, Serializer}
 import com.esotericsoftware.kryo.io.{Input, Output}
-import com.esotericsoftware.kryo.{Serializer, Kryo}
+
 import org.apache.spark.serializer.KryoRegistrator
-import org.apache.spark.sql.test.TestSparkSession
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.test.TestSparkSession
 
 /**
  * Test suite to test Kryo custom registrators.
@@ -52,7 +53,7 @@ class TestRegistrator extends KryoRegistrator {
 }
 
 object TestRegistrator {
-  def apply() = new TestRegistrator()
+  def apply(): TestRegistrator = new TestRegistrator()
 }
 
 /** A [[Serializer]] that takes a [[KryoData]] and serializes it as KryoData(0). */
