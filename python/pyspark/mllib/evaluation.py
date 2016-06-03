@@ -181,6 +181,8 @@ class MulticlassMetrics(JavaModelWrapper):
     0.66...
     >>> metrics.recall()
     0.66...
+    >>> metrics.accuracy()
+    0.66...
     >>> metrics.weightedFalsePositiveRate
     0.19...
     >>> metrics.weightedPrecision
@@ -262,6 +264,14 @@ class MulticlassMetrics(JavaModelWrapper):
                 raise Exception("If the beta parameter is specified, label can not be none")
             else:
                 return self.call("fMeasure", label, beta)
+
+    @since('2.0.0')
+    def accuracy(self):
+        """
+        Returns accuracy (equals to the total number of correctly classified instances
+        out of the total number of instances).
+        """
+        return self.call("accuracy")
 
     @property
     @since('1.4.0')
