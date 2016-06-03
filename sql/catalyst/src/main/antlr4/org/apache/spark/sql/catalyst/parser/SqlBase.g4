@@ -116,7 +116,7 @@ statement
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
     | TRUNCATE TABLE tableIdentifier partitionSpec?                    #truncateTable
-    | op=(ADD | LIST) identifier .*?                                   #manageResource
+    | op=(ADD |  DELETE | LIST) identifier .*?                         #manageResource
     | SET ROLE .*?                                                     #failNativeCommand
     | SET .*?                                                          #setConfiguration
     | RESET                                                            #resetConfiguration
