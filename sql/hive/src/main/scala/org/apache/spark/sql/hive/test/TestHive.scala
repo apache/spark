@@ -179,12 +179,7 @@ private[hive] class TestHiveSparkSession(
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  val inRepoTests = if (System.getProperty("user.dir").endsWith("sql" + File.separator + "hive")) {
-    new File("src" + File.separator + "test" + File.separator + "resources" + File.separator)
-  } else {
-    new File("sql" + File.separator + "hive" + File.separator + "src" + File.separator + "test" +
-      File.separator + "resources")
-  }
+  val inRepoTests = new File(Thread.currentThread().getContextClassLoader.getResource(".").getFile)
 
   def getHiveFile(path: String): File = {
     val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
