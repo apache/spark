@@ -132,6 +132,9 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
       assert(relation.statistics.sizeInBytes === size)
     }
 
+    // Dump size of the src table.
+    sql("SELECT COUNT(*) FROM src").show()
+
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
