@@ -338,7 +338,8 @@ private[sql] object DataSourceScanExec {
       rdd: RDD[InternalRow],
       relation: BaseRelation,
       metadata: Map[String, String] = Map.empty,
-      metastoreTableIdentifier: Option[TableIdentifier] = None): DataSourceScanExec = {
+      metastoreTableIdentifier: Option[TableIdentifier] = None,
+      isSupportBatch: Boolean = true): DataSourceScanExec = {
     val outputPartitioning = {
       val bucketSpec = relation match {
         // TODO: this should be closer to bucket planning.
@@ -362,7 +363,8 @@ private[sql] object DataSourceScanExec {
 
     relation match {
       case r: HadoopFsRelation
-        if r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
+        if isSupportBatch &&
+          r.fileFormat.supportBatch(r.sparkSession, StructType.fromAttributes(output)) =>
         BatchedDataSourceScanExec(
           output, rdd, relation, outputPartitioning, metadata, metastoreTableIdentifier)
       case _ =>

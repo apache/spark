@@ -258,6 +258,11 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val OPTIMIZER_METADATA_ONLY = SQLConfigBuilder("spark.sql.optimizer.metadataOnly")
+    .doc("When true, enable the metadata-only query optimization.")
+    .booleanConf
+    .createWithDefault(false)
+
   val NATIVE_VIEW = SQLConfigBuilder("spark.sql.nativeView")
     .internal()
     .doc("When true, CREATE VIEW will be handled by Spark SQL instead of Hive native commands.  " +
@@ -598,6 +603,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def verifyPartitionPath: Boolean = getConf(HIVE_VERIFY_PARTITION_PATH)
 
   def metastorePartitionPruning: Boolean = getConf(HIVE_METASTORE_PARTITION_PRUNING)
+
+  def optimizerMetadataOnly: Boolean = getConf(OPTIMIZER_METADATA_ONLY)
 
   def nativeView: Boolean = getConf(NATIVE_VIEW)
 
