@@ -19,6 +19,7 @@ package org.apache.spark.sql.expressions.javalang;
 
 import org.apache.spark.annotation.Experimental;
 import org.apache.spark.api.java.function.MapFunction;
+import org.apache.spark.sql.Encoder;
 import org.apache.spark.sql.TypedColumn;
 import org.apache.spark.sql.execution.aggregate.TypedAverage;
 import org.apache.spark.sql.execution.aggregate.TypedCount;
@@ -42,8 +43,8 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static <T> TypedColumn<T, Double> avg(MapFunction<T, Double> f) {
-    return new TypedAverage<T>(f).toColumnJava();
+  public static <T> TypedColumn<T, Double> avg(MapFunction<T, Double> f, Encoder<T> encoder) {
+    return new TypedAverage<T>(f, encoder).toColumnJava();
   }
 
   /**
@@ -51,8 +52,8 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static <T> TypedColumn<T, Long> count(MapFunction<T, Object> f) {
-    return new TypedCount<T>(f).toColumnJava();
+  public static <T> TypedColumn<T, Long> count(MapFunction<T, Object> f, Encoder<T> encoder) {
+    return new TypedCount<T>(f, encoder).toColumnJava();
   }
 
   /**
@@ -60,8 +61,8 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static <T> TypedColumn<T, Double> sum(MapFunction<T, Double> f) {
-    return new TypedSumDouble<T>(f).toColumnJava();
+  public static <T> TypedColumn<T, Double> sum(MapFunction<T, Double> f, Encoder<T> encoder) {
+    return new TypedSumDouble<T>(f, encoder).toColumnJava();
   }
 
   /**
@@ -69,7 +70,7 @@ public class typed {
    *
    * @since 2.0.0
    */
-  public static <T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f) {
-    return new TypedSumLong<T>(f).toColumnJava();
+  public static <T> TypedColumn<T, Long> sumLong(MapFunction<T, Long> f, Encoder<T> encoder) {
+    return new TypedSumLong<T>(f, encoder).toColumnJava();
   }
 }

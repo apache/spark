@@ -29,8 +29,10 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.types._
 
 object TypedAggregateExpression {
-  def apply[BUF : Encoder, OUT : Encoder](
-      aggregator: Aggregator[_, BUF, OUT]): TypedAggregateExpression = {
+  def apply[IN: Encoder, BUF : Encoder, OUT : Encoder](
+      aggregator: Aggregator[IN, BUF, OUT]): TypedAggregateExpression = {
+    val inputEncoder = encoderFor[IN]
+    val inputDeserializer = UnresolvedDeserializer(inputEncoder.deserializer)
     val bufferEncoder = encoderFor[BUF]
     val bufferSerializer = bufferEncoder.namedExpressions
     val bufferDeserializer = bufferEncoder.deserializer.transform {
@@ -46,7 +48,7 @@ object TypedAggregateExpression {
 
     new TypedAggregateExpression(
       aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
-      None,
+      Some(inputDeserializer),
       bufferSerializer,
       bufferDeserializer,
       outputEncoder.serializer,

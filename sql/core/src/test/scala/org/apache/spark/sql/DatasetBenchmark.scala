@@ -125,6 +125,8 @@ object DatasetBenchmark {
 
     override def merge(b1: Data, b2: Data): Data = Data(b1.l + b2.l, "")
 
+    override def inputEncoder: Encoder[Data] = Encoders.product[Data]
+
     override def bufferEncoder: Encoder[Data] = Encoders.product[Data]
 
     override def outputEncoder: Encoder[Long] = Encoders.scalaLong

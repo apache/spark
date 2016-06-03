@@ -19,12 +19,12 @@ package org.apache.spark.sql
 
 import scala.language.postfixOps
 
-import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
+import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder }
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
-
+import org.apache.spark.sql.types.StructType
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
   override def zero: (Long, Long) = (0, 0)
@@ -35,6 +35,7 @@ object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, L
     (b1._1 + b2._1, b1._2 + b2._2)
   }
   override def finish(reduction: (Long, Long)): (Long, Long) = reduction
+  override def inputEncoder: Encoder[(String, Int)] = Encoders.product[(String, Int)]
   override def bufferEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
   override def outputEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
 }
@@ -47,6 +48,7 @@ object ClassInputAgg extends Aggregator[AggData, Int, Int] {
   override def reduce(b: Int, a: AggData): Int = b + a.a
   override def finish(reduction: Int): Int = reduction
   override def merge(b1: Int, b2: Int): Int = b1 + b2
+  override def inputEncoder: Encoder[AggData] = Encoders.product[AggData]
   override def bufferEncoder: Encoder[Int] = Encoders.scalaInt
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
@@ -58,6 +60,7 @@ object ComplexBufferAgg extends Aggregator[AggData, (Int, AggData), Int] {
   override def finish(reduction: (Int, AggData)): Int = reduction._1
   override def merge(b1: (Int, AggData), b2: (Int, AggData)): (Int, AggData) =
     (b1._1 + b2._1, b1._2)
+  override def inputEncoder: Encoder[AggData] = Encoders.product[AggData]
   override def bufferEncoder: Encoder[(Int, AggData)] = Encoders.product[(Int, AggData)]
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
@@ -68,6 +71,7 @@ object NameAgg extends Aggregator[AggData, String, String] {
   def reduce(b: String, a: AggData): String = a.b + b
   def merge(b1: String, b2: String): String = b1 + b2
   def finish(r: String): String = r
+  override def inputEncoder: Encoder[AggData] = Encoders.product[AggData]
   override def bufferEncoder: Encoder[String] = Encoders.STRING
   override def outputEncoder: Encoder[String] = Encoders.STRING
 }
@@ -78,12 +82,13 @@ object SeqAgg extends Aggregator[AggData, Seq[Int], Seq[Int]] {
   def reduce(b: Seq[Int], a: AggData): Seq[Int] = a.a +: b
   def merge(b1: Seq[Int], b2: Seq[Int]): Seq[Int] = b1 ++ b2
   def finish(r: Seq[Int]): Seq[Int] = r
+  override def inputEncoder: Encoder[AggData] = Encoders.product[AggData]
   override def bufferEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
   override def outputEncoder: Encoder[Seq[Int]] = ExpressionEncoder()
 }
 
 
-class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
+class ParameterizedTypeSum[IN: Encoder, OUT : Numeric : Encoder](f: IN => OUT)
   extends Aggregator[IN, OUT, OUT] {
 
   private val numeric = implicitly[Numeric[OUT]]
@@ -91,15 +96,17 @@ class ParameterizedTypeSum[IN, OUT : Numeric : Encoder](f: IN => OUT)
   override def reduce(b: OUT, a: IN): OUT = numeric.plus(b, f(a))
   override def merge(b1: OUT, b2: OUT): OUT = numeric.plus(b1, b2)
   override def finish(reduction: OUT): OUT = reduction
+  override def inputEncoder: Encoder[IN] = implicitly[Encoder[IN]]
   override def bufferEncoder: Encoder[OUT] = implicitly[Encoder[OUT]]
   override def outputEncoder: Encoder[OUT] = implicitly[Encoder[OUT]]
 }
 
-object RowAgg extends Aggregator[Row, Int, Int] {
+class RowAgg(schema: StructType) extends Aggregator[Row, Int, Int] {
   def zero: Int = 0
   def reduce(b: Int, a: Row): Int = a.getInt(0) + b
   def merge(b1: Int, b2: Int): Int = b1 + b2
   def finish(r: Int): Int = r
+  override def inputEncoder: Encoder[Row] = RowEncoder(schema)
   override def bufferEncoder: Encoder[Int] = Encoders.scalaInt
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
@@ -130,7 +137,6 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   test("typed aggregation: complex result type") {
     val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
-
     checkDataset(
       ds.groupByKey(_._1).agg(
         expr("avg(_2)").as[Double],
@@ -221,7 +227,8 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   test("aggregator in DataFrame/Dataset[Row]") {
     val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    checkAnswer(df.groupBy($"j").agg(RowAgg.toColumn), Row("a", 1) :: Row("b", 5) :: Nil)
+    checkAnswer(df.groupBy($"j").agg(new RowAgg(df.schema).toColumn),
+      Row("a", 1) :: Row("b", 5) :: Nil)
   }
 
   test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {
@@ -235,10 +242,10 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
 
   test("spark-15051 alias of aggregator in DataFrame/Dataset[Row]") {
     val df1 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    checkAnswer(df1.agg(RowAgg.toColumn as "b"), Row(6) :: Nil)
+    checkAnswer(df1.agg(new RowAgg(df1.schema).toColumn as "b"), Row(6) :: Nil)
 
     val df2 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    checkAnswer(df2.agg(RowAgg.toColumn as "b").select("b"), Row(6) :: Nil)
+    checkAnswer(df2.agg(new RowAgg(df2.schema).toColumn as "b").select("b"), Row(6) :: Nil)
   }
 
   test("spark-15114 shorter system generated alias names") {
@@ -248,8 +255,8 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     assert(ds2.columns.head === "TypedSumDouble(int)")
     assert(ds2.columns.last === "TypedAverage(int)")
     val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last ==
+    assert(df.groupBy($"j").agg(new RowAgg(df.schema).toColumn).columns.last ==
       "RowAgg(org.apache.spark.sql.Row)")
-    assert(df.groupBy($"j").agg(RowAgg.toColumn as "agg1").columns.last == "agg1")
+    assert(df.groupBy($"j").agg(new RowAgg(df.schema).toColumn as "agg1").columns.last == "agg1")
   }
 }

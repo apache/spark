@@ -53,28 +53,29 @@ object typed {
    *
    * @since 2.0.0
    */
-  def avg[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedAverage(f).toColumn
+  def avg[IN: Encoder](f: IN => Double): TypedColumn[IN, Double] = new TypedAverage(f).toColumn
 
   /**
    * Count aggregate function.
    *
    * @since 2.0.0
    */
-  def count[IN](f: IN => Any): TypedColumn[IN, Long] = new TypedCount(f).toColumn
+  def count[IN: Encoder](f: IN => Any): TypedColumn[IN, Long] = new TypedCount(f).toColumn
 
   /**
    * Sum aggregate function for floating point (double) type.
    *
    * @since 2.0.0
    */
-  def sum[IN](f: IN => Double): TypedColumn[IN, Double] = new TypedSumDouble[IN](f).toColumn
+  def sum[IN: Encoder](f: IN => Double): TypedColumn[IN, Double] =
+    new TypedSumDouble[IN](f).toColumn
 
   /**
    * Sum aggregate function for integral (long, i.e. 64 bit integer) type.
    *
    * @since 2.0.0
    */
-  def sumLong[IN](f: IN => Long): TypedColumn[IN, Long] = new TypedSumLong[IN](f).toColumn
+  def sumLong[IN: Encoder](f: IN => Long): TypedColumn[IN, Long] = new TypedSumLong[IN](f).toColumn
 
   // TODO:
   // stddevOf: Double

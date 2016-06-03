@@ -74,6 +74,11 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
     }
 
     @Override
+    public Encoder<Tuple2<String, Integer>> inputEncoder() {
+      return Encoders.tuple(Encoders.STRING(), Encoders.INT());
+    }
+
+      @Override
     public Encoder<Integer> bufferEncoder() {
       return Encoders.INT();
     }
@@ -92,7 +97,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
         public Double call(Tuple2<String, Integer> value) throws Exception {
           return (double)(value._2() * 2);
         }
-      }));
+      }, Encoders.tuple(Encoders.STRING(), Encoders.INT())));
     Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 6.0)), agged.collectAsList());
   }
 
@@ -104,7 +109,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
         public Object call(Tuple2<String, Integer> value) throws Exception {
           return value;
         }
-      }));
+      }, Encoders.tuple(Encoders.STRING(), Encoders.INT())));
     Assert.assertEquals(Arrays.asList(tuple2("a", 2), tuple2("b", 1)), agged.collectAsList());
   }
 
@@ -116,7 +121,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
         public Double call(Tuple2<String, Integer> value) throws Exception {
           return (double)value._2();
         }
-      }));
+      }, Encoders.tuple(Encoders.STRING(), Encoders.INT())));
     Assert.assertEquals(Arrays.asList(tuple2("a", 3.0), tuple2("b", 3.0)), agged.collectAsList());
   }
 
@@ -128,7 +133,7 @@ public class JavaDatasetAggregatorSuite extends JavaDatasetAggregatorSuiteBase {
         public Long call(Tuple2<String, Integer> value) throws Exception {
           return (long)value._2();
         }
-      }));
+      }, Encoders.tuple(Encoders.STRING(), Encoders.INT())));
     Assert.assertEquals(Arrays.asList(tuple2("a", 3), tuple2("b", 3)), agged.collectAsList());
   }
 }

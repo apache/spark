@@ -51,7 +51,7 @@ import org.apache.spark.sql.execution.aggregate.TypedAggregateExpression
  * @since 1.6.0
  */
 @Experimental
-abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
+abstract class Aggregator[IN, BUF, OUT] extends Serializable {
 
   /**
    * A zero value for this aggregation. Should satisfy the property that any b + zero = b.
@@ -79,6 +79,12 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
   def finish(reduction: BUF): OUT
 
   /**
+   * Specifies the [[Encoder]] for the input value type.
+   * @since 2.0.0
+   */
+  def inputEncoder: Encoder[IN]
+
+  /**
    * Specifies the [[Encoder]] for the intermediate value type.
    * @since 2.0.0
    */
@@ -96,6 +102,7 @@ abstract class Aggregator[-IN, BUF, OUT] extends Serializable {
    * @since 1.6.0
    */
   def toColumn: TypedColumn[IN, OUT] = {
+    implicit val aEncoder = inputEncoder
     implicit val bEncoder = bufferEncoder
     implicit val cEncoder = outputEncoder
 
