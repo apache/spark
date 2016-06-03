@@ -137,7 +137,7 @@ class FileStreamSourceTest extends StreamTest with SharedSQLContext {
   val valueSchema = new StructType().add("value", StringType)
 }
 
-class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
+class FileStreamSourceSuite extends FileStreamSourceTest {
 
   import testImplicits._
 
@@ -594,7 +594,7 @@ class FileStreamSourceSuite extends FileStreamSourceTest with SharedSQLContext {
   }
 }
 
-class FileStreamSourceStressTestSuite extends FileStreamSourceTest with SharedSQLContext {
+class FileStreamSourceStressTestSuite extends FileStreamSourceTest {
 
   import testImplicits._
 

@@ -83,40 +83,10 @@ class ListingFileCatalog(
       val statuses: Seq[FileStatus] = paths.flatMap { path =>
         val fs = path.getFileSystem(hadoopConf)
         logInfo(s"Listing $path on driver")
-
-        val statuses = {
-          val stats = Try(fs.listStatus(path)).getOrElse(Array.empty[FileStatus])
-          if (pathFilter != null) stats.filter(f => pathFilter.accept(f.getPath)) else stats
-        }
-
-        statuses.map {
-          case f: LocatedFileStatus => f
-
-          // NOTE:
-          //
-          // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
-          //   operations, calling `getFileBlockLocations` does no harm here since these file system
-          //   implementations don't actually issue RPC for this method.
-          //
-          // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should a
-          //   a big deal since we always use to `listLeafFilesInParallel` when the number of paths
-          //   exceeds threshold.
-          case f =>
-            HadoopFsRelation.createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
-        }
-      }.filterNot { status =>
-        val name = status.getPath.getName
-        HadoopFsRelation.shouldFilterOut(name)
+        Try(HadoopFsRelation.listLeafFiles(fs, fs.getFileStatus(path), pathFilter)).
+          getOrElse(Array.empty)
       }
-
-      val (dirs, files) = statuses.partition(_.isDirectory)
-
-      // It uses [[LinkedHashSet]] since the order of files can affect the results. (SPARK-11500)
-      if (dirs.isEmpty) {
-        mutable.LinkedHashSet(files: _*)
-      } else {
-        mutable.LinkedHashSet(files: _*) ++ listLeafFiles(dirs.map(_.getPath))
-      }
+      mutable.LinkedHashSet(statuses: _*)
     }
   }
 

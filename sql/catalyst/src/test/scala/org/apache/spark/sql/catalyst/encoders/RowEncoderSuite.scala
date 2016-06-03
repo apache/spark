@@ -136,7 +136,7 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("scala_decimal", DecimalType.SYSTEM_DEFAULT)
       .add("catalyst_decimal", DecimalType.SYSTEM_DEFAULT)
 
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
 
     val javaDecimal = new java.math.BigDecimal("1234.5678")
     val scalaDecimal = BigDecimal("1234.5678")
@@ -153,7 +153,7 @@ class RowEncoderSuite extends SparkFunSuite {
 
   test("RowEncoder should preserve decimal precision and scale") {
     val schema = new StructType().add("decimal", DecimalType(10, 5), false)
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
     val decimal = Decimal("67123.45")
     val input = Row(decimal)
     val row = encoder.toRow(input)
@@ -163,7 +163,7 @@ class RowEncoderSuite extends SparkFunSuite {
 
   test("RowEncoder should preserve schema nullability") {
     val schema = new StructType().add("int", IntegerType, nullable = false)
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
     assert(encoder.serializer.length == 1)
     assert(encoder.serializer.head.dataType == IntegerType)
     assert(encoder.serializer.head.nullable == false)
@@ -179,7 +179,7 @@ class RowEncoderSuite extends SparkFunSuite {
           new StructType().add("int", IntegerType, nullable = false),
           nullable = false),
       nullable = false)
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
     assert(encoder.serializer.length == 1)
     assert(encoder.serializer.head.dataType ==
       new StructType()
@@ -196,7 +196,7 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("array", ArrayType(IntegerType))
       .add("nestedArray", ArrayType(ArrayType(StringType)))
       .add("deepNestedArray", ArrayType(ArrayType(ArrayType(LongType))))
-    val encoder = RowEncoder(schema)
+    val encoder = RowEncoder(schema).resolveAndBind()
     val input = Row(
       Array(1, 2, null),
       Array(Array("abc", null), null),
@@ -241,7 +241,7 @@ class RowEncoderSuite extends SparkFunSuite {
 
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
-      val encoder = RowEncoder(schema)
+      val encoder = RowEncoder(schema).resolveAndBind()
       val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
 
       var input: Row = null

@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.streaming.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.ContinuousQuery
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -201,7 +202,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   /**
    * Used to plan aggregation queries that are computed incrementally as part of a
-   * [[org.apache.spark.sql.ContinuousQuery]]. Currently this rule is injected into the planner
+   * [[ContinuousQuery]]. Currently this rule is injected into the planner
    * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
@@ -209,7 +210,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        aggregate.Utils.planStreamingAggregation(
+        aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions,
           rewrittenResultExpressions,
@@ -242,20 +243,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               sys.error("Distinct columns cannot exist in Aggregate operator containing " +
                 "aggregate functions which don't support partial aggregation.")
             } else {
-              aggregate.Utils.planAggregateWithoutPartial(
+              aggregate.AggUtils.planAggregateWithoutPartial(
                 groupingExpressions,
                 aggregateExpressions,
                 resultExpressions,
                 planLater(child))
             }
           } else if (functionsWithDistinct.isEmpty) {
-            aggregate.Utils.planAggregateWithoutDistinct(
+            aggregate.AggUtils.planAggregateWithoutDistinct(
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
-            aggregate.Utils.planAggregateWithOneDistinct(
+            aggregate.AggUtils.planAggregateWithOneDistinct(
               groupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
@@ -396,15 +397,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new AnalysisException(
           "allowExisting should be set to false when creating a temporary table.")
 
-      case c: CreateTableUsingAsSelect if c.temporary && c.partitionColumns.nonEmpty =>
-        sys.error("Cannot create temporary partitioned table.")
-
-      case c: CreateTableUsingAsSelect if c.temporary =>
-        val cmd = CreateTempTableUsingAsSelectCommand(
-          c.tableIdent, c.provider, Array.empty[String], c.mode, c.options, c.child)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect if !c.temporary =>
+      case c: CreateTableUsingAsSelect =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
             c.tableIdent,

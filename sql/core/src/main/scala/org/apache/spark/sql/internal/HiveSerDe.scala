@@ -77,4 +77,3 @@ object HiveSerDe {
     serdeMap.get(key)
   }
 }
-

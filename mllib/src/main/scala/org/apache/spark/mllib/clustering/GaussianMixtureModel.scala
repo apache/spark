@@ -96,7 +96,7 @@ class GaussianMixtureModel @Since("1.3.0") (
     val bcDists = sc.broadcast(gaussians)
     val bcWeights = sc.broadcast(weights)
     points.map { x =>
-      computeSoftAssignments(x.toBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
+      computeSoftAssignments(x.asBreeze.toDenseVector, bcDists.value, bcWeights.value, k)
     }
   }
 
@@ -105,7 +105,7 @@ class GaussianMixtureModel @Since("1.3.0") (
    */
   @Since("1.4.0")
   def predictSoft(point: Vector): Array[Double] = {
-    computeSoftAssignments(point.toBreeze.toDenseVector, gaussians, weights, k)
+    computeSoftAssignments(point.asBreeze.toDenseVector, gaussians, weights, k)
   }
 
   /**
@@ -143,7 +143,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
         path: String,
         weights: Array[Double],
         gaussians: Array[MultivariateGaussian]): Unit = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render
@@ -159,7 +159,7 @@ object GaussianMixtureModel extends Loader[GaussianMixtureModel] {
 
     def load(sc: SparkContext, path: String): GaussianMixtureModel = {
       val dataPath = Loader.dataPath(path)
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val dataFrame = spark.read.parquet(dataPath)
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       Loader.checkSchema[Data](dataFrame.schema)

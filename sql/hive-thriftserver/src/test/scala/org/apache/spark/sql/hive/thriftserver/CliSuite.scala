@@ -62,13 +62,13 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   /**
    * Run a CLI operation and expect all the queries and expected answers to be returned.
+   *
    * @param timeout maximum time for the commands to complete
    * @param extraArgs any extra arguments
    * @param errorResponses a sequence of strings whose presence in the stdout of the forked process
    *                       is taken as an immediate error condition. That is: if a line containing
    *                       with one of these strings is found, fail the test immediately.
    *                       The default value is `Seq("Error:")`
-   *
    * @param queriesAndExpectedAnswers one or more tuples of query + answer
    */
   def runCliWithin(
@@ -239,22 +239,37 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
       "" -> "This is a test for Spark-11624")
   }
 
-  ignore("list jars") {
+  test("list jars") {
     val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
-      s"ADD JAR $jarFile" -> "",
-      s"LIST JARS" -> "TestUDTF.jar",
-      s"List JAR $jarFile" -> "TestUDTF.jar"
+      s"ADD JAR $jarFile;" -> "",
+      s"LIST JARS;" -> "TestUDTF.jar"
     )
   }
 
-  ignore("list files") {
-    val dataFilePath = Thread.currentThread().getContextClassLoader
-      .getResource("data/files/small_kv.txt")
+  test("list jar <jarfile>") {
+    val jarFile = Thread.currentThread().getContextClassLoader.getResource("TestUDTF.jar")
     runCliWithin(2.minute)(
-      s"ADD FILE $dataFilePath" -> "",
-      s"LIST FILES" -> "small_kv.txt",
-      s"LIST FILE $dataFilePath" -> "small_kv.txt"
+      s"ADD JAR $jarFile;" -> "",
+      s"List JAR $jarFile;" -> "TestUDTF.jar"
+    )
+  }
+
+  test("list files") {
+    val dataFilePath = Thread.currentThread().
+      getContextClassLoader.getResource("data/files/small_kv.txt")
+    runCliWithin(2.minute)(
+      s"ADD FILE $dataFilePath;" -> "",
+      s"LIST FILES;" -> "small_kv.txt"
+    )
+  }
+
+  test("list file <filepath>") {
+    val dataFilePath = Thread.currentThread().
+      getContextClassLoader.getResource("data/files/small_kv.txt")
+    runCliWithin(2.minute)(
+      s"ADD FILE $dataFilePath;" -> "",
+      s"LIST FILE $dataFilePath;" -> "small_kv.txt"
     )
   }
 }
