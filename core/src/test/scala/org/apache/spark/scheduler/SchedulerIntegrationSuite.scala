@@ -89,7 +89,26 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     }
   }
 
+  /**
+   * A map from partition -> results for all tasks of a job when you call this test framework's
+   * [[submit]] method.  Two important considerations:
+   *
+   * 1. If there is a job failure, results may or may not be empty.  If any tasks succeed before
+   * the job has failed, they will get included in `results`.  Instead, check for job failure by
+   * checking [[failure]].  (Also see [[assertDataStructuresEmpty()]])
+   *
+   * 2. The only gets cleared between tests.  So it won't make much sense if you submit more
+   * than one job inside one test (or at least, you need to be sure to do your own handling for it)
+   */
   val results = new HashMap[Int, Any]()
+
+  /**
+   * If a call to [[submit]] results in a job failure, this will hold the exception, else it will
+   * be null.
+   *
+   * As with [[results]], this only gets cleared between tests, so care must be taken if you are
+   * submitting more than one job in one test.
+   */
   var failure: Throwable = _
 
   /**
@@ -113,6 +132,11 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
     }
   }
 
+  /**
+   * Helper to run a few common asserts after a job has completed, in particular some internal
+   * datastructures for bookkeeping.  This only does a very minimal check for whether the job
+   * failed or succeeded -- often you will want extra asserts on [[results]] or [[failure]].
+   */
   protected def assertDataStructuresEmpty(noFailure: Boolean = true): Unit = {
     if (noFailure) {
       if (failure != null) {
@@ -134,9 +158,6 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
       assert(taskScheduler.runningTaskSets.isEmpty)
       assert(!backend.hasTasks)
     } else {
-      // Note that we CANNOT check for empty results on a failure -- the resultHandler will
-      // record results from successful tasks, even if the job fails overall.  We just check
-      // that we got a failure.
       assert(failure != null)
     }
     assert(scheduler.activeJobs.isEmpty)
@@ -314,7 +335,7 @@ private[spark] abstract class MockBackend(
     val offers: Seq[WorkerOffer] = generateOffers()
     val newTaskDescriptions = taskScheduler.resourceOffers(offers).flatten
     // get the task now, since that requires a lock on TaskSchedulerImpl, to prevent individual
-    // tests for introducing a race if they need it
+    // tests from introducing a race if they need it
     val newTasks = taskScheduler.synchronized {
       newTaskDescriptions.map { taskDescription =>
         val taskSet = taskScheduler.taskIdToTaskSetManager(taskDescription.taskId).taskSet
@@ -323,7 +344,7 @@ private[spark] abstract class MockBackend(
       }
     }
     synchronized {
-      newTasks.foreach { case (taskDescription, task) =>
+      newTasks.foreach { case (taskDescription, _) =>
         executorIdToExecutor(taskDescription.executorId).freeCores -= taskScheduler.CPUS_PER_TASK
       }
       freeCores -= newTasks.size * taskScheduler.CPUS_PER_TASK
@@ -451,7 +472,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
    */
   testScheduler("super simple job") {
     def runBackend(): Unit = {
-      val (taskDescripition, task) = backend.beginTask()
+      val (taskDescripition, _) = backend.beginTask()
       backend.taskSuccess(taskDescripition, 42)
     }
     withBackend(runBackend _) {
@@ -559,7 +580,7 @@ class BasicSchedulerIntegrationSuite extends SchedulerIntegrationSuite[SingleCor
 
   testScheduler("job failure after 4 attempts") {
     def runBackend(): Unit = {
-      val (taskDescription, task) = backend.beginTask()
+      val (taskDescription, _) = backend.beginTask()
       backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
     }
     withBackend(runBackend _) {
