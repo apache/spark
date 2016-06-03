@@ -1697,6 +1697,11 @@ private[spark] object SerDe extends Serializable {
     rdd.map(x => Array(x._1, x._2))
   }
 
+  /* convert RDD[Tuple3[,,]] to RDD[Array[Any]] */
+  def fromTuple3RDD(rdd: RDD[(Any, Any, Any)]): RDD[Array[Any]] = {
+    rdd.map(x => Array(x._1, x._2, x._3))
+  }
+
   /**
    * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
    * PySpark.
