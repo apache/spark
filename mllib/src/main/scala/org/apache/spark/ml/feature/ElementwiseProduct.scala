@@ -33,9 +33,11 @@ import org.apache.spark.sql.types.DataType
  * multiplier.
  */
 @Experimental
-class ElementwiseProduct(override val uid: String)
+@Since("1.4.0")
+class ElementwiseProduct @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, ElementwiseProduct] with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("elemProd"))
 
   /**
@@ -45,9 +47,11 @@ class ElementwiseProduct(override val uid: String)
   val scalingVec: Param[Vector] = new Param(this, "scalingVec", "vector for hadamard product")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setScalingVec(value: Vector): this.type = set(scalingVec, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getScalingVec: Vector = getOrDefault(scalingVec)
 
   override protected def createTransformFunc: Vector => Vector = {

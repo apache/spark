@@ -33,15 +33,19 @@ import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
  * @see [[http://en.wikipedia.org/wiki/Stop_words]]
  */
 @Experimental
-class StopWordsRemover(override val uid: String)
+@Since("1.5.0")
+class StopWordsRemover @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("stopWords"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**
@@ -54,9 +58,11 @@ class StopWordsRemover(override val uid: String)
     new StringArrayParam(this, "stopWords", "the words to be filtered out")
 
   /** @group setParam */
+  @Since("1.5.0")
   def setStopWords(value: Array[String]): this.type = set(stopWords, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getStopWords: Array[String] = $(stopWords)
 
   /**
@@ -68,9 +74,11 @@ class StopWordsRemover(override val uid: String)
     "whether to do a case-sensitive comparison over the stop words")
 
   /** @group setParam */
+  @Since("1.5.0")
   def setCaseSensitive(value: Boolean): this.type = set(caseSensitive, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getCaseSensitive: Boolean = $(caseSensitive)
 
   setDefault(stopWords -> StopWordsRemover.loadDefaultStopWords("english"), caseSensitive -> false)

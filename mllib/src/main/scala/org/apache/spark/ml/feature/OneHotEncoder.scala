@@ -43,9 +43,11 @@ import org.apache.spark.sql.types.{DoubleType, NumericType, StructType}
  * @see [[StringIndexer]] for converting categorical values into category indices
  */
 @Experimental
-class OneHotEncoder(override val uid: String) extends Transformer
+@Since("1.4.0")
+class OneHotEncoder @Since("1.4.0") (@Since("1.4.0") override val uid: String) extends Transformer
   with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("oneHot"))
 
   /**
@@ -57,12 +59,15 @@ class OneHotEncoder(override val uid: String) extends Transformer
   setDefault(dropLast -> true)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setDropLast(value: Boolean): this.type = set(dropLast, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   override def transformSchema(schema: StructType): StructType = {

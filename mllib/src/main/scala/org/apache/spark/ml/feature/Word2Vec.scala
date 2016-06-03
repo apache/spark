@@ -120,39 +120,52 @@ private[feature] trait Word2VecBase extends Params
  * natural language processing or machine learning process.
  */
 @Experimental
-final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] with Word2VecBase
-  with DefaultParamsWritable {
+@Since("1.4.0")
+final class Word2Vec @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
+  extends Estimator[Word2VecModel] with Word2VecBase with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("w2v"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setVectorSize(value: Int): this.type = set(vectorSize, value)
 
   /** @group expertSetParam */
+  @Since("1.6.0")
   def setWindowSize(value: Int): this.type = set(windowSize, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setStepSize(value: Double): this.type = set(stepSize, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setNumPartitions(value: Int): this.type = set(numPartitions, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinCount(value: Int): this.type = set(minCount, value)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setMaxSentenceLength(value: Int): this.type = set(maxSentenceLength, value)
 
   @Since("2.0.0")
@@ -191,8 +204,9 @@ object Word2Vec extends DefaultParamsReadable[Word2Vec] {
  * Model fitted by [[Word2Vec]].
  */
 @Experimental
+@Since("1.4.0")
 class Word2VecModel private[ml] (
-    override val uid: String,
+    @Since("1.4.0") override val uid: String,
     @transient private val wordVectors: feature.Word2VecModel)
   extends Model[Word2VecModel] with Word2VecBase with MLWritable {
 
@@ -202,6 +216,7 @@ class Word2VecModel private[ml] (
    * Returns a dataframe with two fields, "word" and "vector", with "word" being a String and
    * and the vector the DenseVector that it is mapped to.
    */
+  @Since("1.5.0")
   @transient lazy val getVectors: DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
     val wordVec = wordVectors.getVectors.mapValues(vec => Vectors.dense(vec.map(_.toDouble)))
@@ -213,6 +228,7 @@ class Word2VecModel private[ml] (
    * Returns a dataframe with the words and the cosine similarities between the
    * synonyms and the given word.
    */
+  @Since("1.5.0")
   def findSynonyms(word: String, num: Int): DataFrame = {
     findSynonyms(wordVectors.transform(word), num)
   }
@@ -222,15 +238,18 @@ class Word2VecModel private[ml] (
    * of the word. Returns a dataframe with the words and the cosine similarities between the
    * synonyms and the given word vector.
    */
+  @Since("1.5.0")
   def findSynonyms(word: Vector, num: Int): DataFrame = {
     val spark = SparkSession.builder().getOrCreate()
     spark.createDataFrame(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
   }
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**

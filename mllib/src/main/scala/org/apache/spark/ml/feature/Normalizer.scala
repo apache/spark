@@ -31,9 +31,11 @@ import org.apache.spark.sql.types.DataType
  * Normalize a vector to have unit norm using the given p-norm.
  */
 @Experimental
-class Normalizer(override val uid: String)
+@Since("1.4.0")
+class Normalizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, Normalizer] with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("normalizer"))
 
   /**
@@ -46,9 +48,11 @@ class Normalizer(override val uid: String)
   setDefault(p -> 2.0)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getP: Double = $(p)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setP(value: Double): this.type = set(p, value)
 
   override protected def createTransformFunc: Vector => Vector = {

@@ -70,9 +70,11 @@ private[feature] trait RFormulaBase extends HasFeaturesCol with HasLabelCol {
  * will be created from the specified response variable in the formula.
  */
 @Experimental
-class RFormula(override val uid: String)
+@Since("1.5.0")
+class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends Estimator[RFormulaModel] with RFormulaBase with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("rFormula"))
 
   /**
@@ -86,15 +88,19 @@ class RFormula(override val uid: String)
    * @group setParam
    * @param value an R formula in string form (e.g. "y ~ x + z")
    */
+  @Since("1.5.0")
   def setFormula(value: String): this.type = set(formula, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getFormula: String = $(formula)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /** Whether the formula specifies fitting an intercept. */
@@ -201,8 +207,9 @@ object RFormula extends DefaultParamsReadable[RFormula] {
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
 @Experimental
+@Since("1.5.0")
 class RFormulaModel private[feature](
-    override val uid: String,
+    @Since("1.5.0") override val uid: String,
     private[ml] val resolvedFormula: ResolvedRFormula,
     private[ml] val pipelineModel: PipelineModel)
   extends Model[RFormulaModel] with RFormulaBase with MLWritable {

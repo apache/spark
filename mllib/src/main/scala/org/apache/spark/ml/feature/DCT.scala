@@ -36,9 +36,11 @@ import org.apache.spark.sql.types.DataType
  * More information on [[https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia]].
  */
 @Experimental
-class DCT(override val uid: String)
+@Since("1.5.0")
+class DCT @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   extends UnaryTransformer[Vector, Vector, DCT] with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("dct"))
 
   /**
@@ -50,9 +52,11 @@ class DCT(override val uid: String)
     this, "inverse", "Set transformer to perform inverse DCT")
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInverse(value: Boolean): this.type = set(inverse, value)
 
   /** @group getParam */
+  @Since("1.5.0")
   def getInverse: Boolean = $(inverse)
 
   setDefault(inverse -> false)

@@ -62,21 +62,27 @@ private[feature] trait ChiSqSelectorParams extends Params
  * categorical label.
  */
 @Experimental
-final class ChiSqSelector(override val uid: String)
+@Since("1.6.0")
+final class ChiSqSelector @Since("1.6.0") (@Since("1.6.0") override val uid: String)
   extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams with DefaultParamsWritable {
 
+  @Since("1.6.0")
   def this() = this(Identifiable.randomUID("chiSqSelector"))
 
   /** @group setParam */
+  @Since("1.6.0")
   def setNumTopFeatures(value: Int): this.type = set(numTopFeatures, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   @Since("2.0.0")
@@ -112,23 +118,28 @@ object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
  * Model fitted by [[ChiSqSelector]].
  */
 @Experimental
+@Since("1.6.0")
 final class ChiSqSelectorModel private[ml] (
-    override val uid: String,
+    @Since("1.6.0") override val uid: String,
     private val chiSqSelector: feature.ChiSqSelectorModel)
   extends Model[ChiSqSelectorModel] with ChiSqSelectorParams with MLWritable {
 
   import ChiSqSelectorModel._
 
   /** list of indices to select (filter). Must be ordered asc */
+  @Since("1.6.0")
   val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
 
   /** @group setParam */
+  @Since("1.6.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.6.0")
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   @Since("2.0.0")

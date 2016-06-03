@@ -30,9 +30,11 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  * @see [[RegexTokenizer]]
  */
 @Experimental
-class Tokenizer(override val uid: String)
+@Since("1.2.0")
+class Tokenizer @Since("1.2.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], Tokenizer] with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("tok"))
 
   override protected def createTransformFunc: String => Seq[String] = {
@@ -63,9 +65,11 @@ object Tokenizer extends DefaultParamsReadable[Tokenizer] {
  * It returns an array of strings that can be empty.
  */
 @Experimental
-class RegexTokenizer(override val uid: String)
+@Since("1.4.0")
+class RegexTokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], RegexTokenizer] with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("regexTok"))
 
   /**
@@ -77,9 +81,11 @@ class RegexTokenizer(override val uid: String)
     ParamValidators.gtEq(0))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinTokenLength(value: Int): this.type = set(minTokenLength, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getMinTokenLength: Int = $(minTokenLength)
 
   /**
@@ -90,9 +96,11 @@ class RegexTokenizer(override val uid: String)
   val gaps: BooleanParam = new BooleanParam(this, "gaps", "Set regex to match gaps or tokens")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setGaps(value: Boolean): this.type = set(gaps, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getGaps: Boolean = $(gaps)
 
   /**
@@ -103,9 +111,11 @@ class RegexTokenizer(override val uid: String)
   val pattern: Param[String] = new Param(this, "pattern", "regex pattern used for tokenizing")
 
   /** @group setParam */
+  @Since("1.4.0")
   def setPattern(value: String): this.type = set(pattern, value)
 
   /** @group getParam */
+  @Since("1.4.0")
   def getPattern: String = $(pattern)
 
   /**
@@ -117,9 +127,11 @@ class RegexTokenizer(override val uid: String)
     "whether to convert all characters to lowercase before tokenizing.")
 
   /** @group setParam */
+  @Since("1.6.0")
   def setToLowercase(value: Boolean): this.type = set(toLowercase, value)
 
   /** @group getParam */
+  @Since("1.6.0")
   def getToLowercase: Boolean = $(toLowercase)
 
   setDefault(minTokenLength -> 1, gaps -> true, pattern -> "\\s+", toLowercase -> true)

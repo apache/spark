@@ -65,18 +65,24 @@ private[feature] trait PCAParams extends Params with HasInputCol with HasOutputC
  * principal components.
  */
 @Experimental
-class PCA (override val uid: String) extends Estimator[PCAModel] with PCAParams
-  with DefaultParamsWritable {
+@Since("1.5.0")
+class PCA @Since("1.5.0") (
+    @Since("1.5.0") override val uid: String)
+  extends Estimator[PCAModel] with PCAParams with DefaultParamsWritable {
 
+  @Since("1.5.0")
   def this() = this(Identifiable.randomUID("pca"))
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setK(value: Int): this.type = set(k, value)
 
   /**
@@ -116,18 +122,21 @@ object PCA extends DefaultParamsReadable[PCA] {
  *                          each principal component.
  */
 @Experimental
+@Since("1.5.0")
 class PCAModel private[ml] (
-    override val uid: String,
-    val pc: DenseMatrix,
-    val explainedVariance: DenseVector)
+    @Since("1.5.0") override val uid: String,
+    @Since("1.6.0") val pc: DenseMatrix,
+    @Since("2.0.0") val explainedVariance: DenseVector)
   extends Model[PCAModel] with PCAParams with MLWritable {
 
   import PCAModel._
 
   /** @group setParam */
+  @Since("1.5.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.5.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /**

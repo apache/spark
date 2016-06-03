@@ -54,16 +54,19 @@ private[feature] trait MaxAbsScalerParams extends Params with HasInputCol with H
  * any sparsity.
  */
 @Experimental
-class MaxAbsScaler @Since("2.0.0") (override val uid: String)
+@Since("2.0.0")
+class MaxAbsScaler @Since("2.0.0") (@Since("2.0.0") override val uid: String)
   extends Estimator[MaxAbsScalerModel] with MaxAbsScalerParams with DefaultParamsWritable {
 
   @Since("2.0.0")
   def this() = this(Identifiable.randomUID("maxAbsScal"))
 
   /** @group setParam */
+  @Since("2.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
@@ -88,7 +91,7 @@ class MaxAbsScaler @Since("2.0.0") (override val uid: String)
   override def copy(extra: ParamMap): MaxAbsScaler = defaultCopy(extra)
 }
 
-@Since("1.6.0")
+@Since("2.0.0")
 object MaxAbsScaler extends DefaultParamsReadable[MaxAbsScaler] {
 
   @Since("1.6.0")
@@ -101,17 +104,20 @@ object MaxAbsScaler extends DefaultParamsReadable[MaxAbsScaler] {
  *
  */
 @Experimental
+@Since("2.0.0")
 class MaxAbsScalerModel private[ml] (
-    override val uid: String,
-    val maxAbs: Vector)
+    @Since("2.0.0") override val uid: String,
+    @Since("2.0.0") val maxAbs: Vector)
   extends Model[MaxAbsScalerModel] with MaxAbsScalerParams with MLWritable {
 
   import MaxAbsScalerModel._
 
   /** @group setParam */
+  @Since("2.0.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
@@ -139,7 +145,7 @@ class MaxAbsScalerModel private[ml] (
   override def write: MLWriter = new MaxAbsScalerModelWriter(this)
 }
 
-@Since("1.6.0")
+@Since("2.0.0")
 object MaxAbsScalerModel extends MLReadable[MaxAbsScalerModel] {
 
   private[MaxAbsScalerModel]

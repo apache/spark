@@ -94,18 +94,24 @@ private[ml] trait VectorIndexerParams extends Params with HasInputCol with HasOu
  *  - Add option for allowing unknown categories.
  */
 @Experimental
-class VectorIndexer(override val uid: String) extends Estimator[VectorIndexerModel]
-  with VectorIndexerParams with DefaultParamsWritable {
+@Since("1.4.0")
+class VectorIndexer @Since("1.4.0") (
+    @Since("1.4.0") override val uid: String)
+  extends Estimator[VectorIndexerModel] with VectorIndexerParams with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("vecIdx"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMaxCategories(value: Int): this.type = set(maxCategories, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
@@ -256,15 +262,17 @@ object VectorIndexer extends DefaultParamsReadable[VectorIndexer] {
  *                      If a feature is not in this map, it is treated as continuous.
  */
 @Experimental
+@Since("1.4.0")
 class VectorIndexerModel private[ml] (
-    override val uid: String,
-    val numFeatures: Int,
-    val categoryMaps: Map[Int, Map[Double, Int]])
+    @Since("1.4.0") override val uid: String,
+    @Since("1.4.0") val numFeatures: Int,
+    @Since("1.4.0") val categoryMaps: Map[Int, Map[Double, Int]])
   extends Model[VectorIndexerModel] with VectorIndexerParams with MLWritable {
 
   import VectorIndexerModel._
 
   /** Java-friendly version of [[categoryMaps]] */
+  @Since("1.4.0")
   def javaCategoryMaps: JMap[JInt, JMap[JDouble, JInt]] = {
     categoryMaps.mapValues(_.asJava).asJava.asInstanceOf[JMap[JInt, JMap[JDouble, JInt]]]
   }
@@ -342,9 +350,11 @@ class VectorIndexerModel private[ml] (
   }
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")

@@ -64,18 +64,23 @@ private[feature] trait IDFBase extends Params with HasInputCol with HasOutputCol
  * Compute the Inverse Document Frequency (IDF) given a collection of documents.
  */
 @Experimental
-final class IDF(override val uid: String) extends Estimator[IDFModel] with IDFBase
-  with DefaultParamsWritable {
+@Since("1.4.0")
+final class IDF @Since("1.4.0") (@Since("1.4.0") override val uid: String)
+  extends Estimator[IDFModel] with IDFBase with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("idf"))
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setMinDocFreq(value: Int): this.type = set(minDocFreq, value)
 
   @Since("2.0.0")
@@ -107,17 +112,20 @@ object IDF extends DefaultParamsReadable[IDF] {
  * Model fitted by [[IDF]].
  */
 @Experimental
+@Since("1.4.0")
 class IDFModel private[ml] (
-    override val uid: String,
+    @Since("1.4.0") override val uid: String,
     idfModel: feature.IDFModel)
   extends Model[IDFModel] with IDFBase with MLWritable {
 
   import IDFModel._
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")

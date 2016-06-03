@@ -35,9 +35,11 @@ import org.apache.spark.sql.types._
  * Binarize a column of continuous features given a threshold.
  */
 @Experimental
-final class Binarizer(override val uid: String)
+@Since("1.4.0")
+final class Binarizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends Transformer with HasInputCol with HasOutputCol with DefaultParamsWritable {
 
+  @Since("1.4.0")
   def this() = this(Identifiable.randomUID("binarizer"))
 
   /**
@@ -51,17 +53,21 @@ final class Binarizer(override val uid: String)
     new DoubleParam(this, "threshold", "threshold used to binarize continuous features")
 
   /** @group getParam */
+  @Since("1.4.0")
   def getThreshold: Double = $(threshold)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
 
   setDefault(threshold -> 0.0)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setInputCol(value: String): this.type = set(inputCol, value)
 
   /** @group setParam */
+  @Since("1.4.0")
   def setOutputCol(value: String): this.type = set(outputCol, value)
 
   @Since("2.0.0")
