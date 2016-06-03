@@ -95,6 +95,31 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assertDataStructuresEmpty(noFailure = true)
   }
 
+
+  // No progress if there are fewer executors than maxTaxFailures
+  testScheduler(
+    "Progress with fewer executors than maxTaskFailures",
+    extraConfs = Seq(
+      // just set this to something much longer than the test duration
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
+      "spark.testing.nHosts" -> "2",
+      "spark.testing.nExecutorsPerHost" -> "1",
+      "spark.testing.nCoresPerExecutor" -> "1"
+    )
+  ) {
+    def runBackend(): Unit = {
+      val (taskDescription, _) = backend.beginTask()
+      backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
+    }
+    withBackend(runBackend _) {
+      val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
+      val duration = Duration(1, SECONDS)
+      Await.ready(jobFuture, duration)
+      failure.getMessage.contains("test task failure")
+    }
+    assertDataStructuresEmpty(noFailure = false)
+  }
+
 }
 
 class MultiExecutorMockBackend(
