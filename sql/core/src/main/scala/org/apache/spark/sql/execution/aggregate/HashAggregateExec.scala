@@ -458,7 +458,7 @@ case class HashAggregateExec(
   }
 
   /**
-   * Using the vectorized hash map in TungstenAggregate is currently supported for all primitive
+   * Using the vectorized hash map in HashAggregate is currently supported for all primitive
    * data types during partial aggregation. However, we currently only enable the hash map for a
    * subset of cases that've been verified to show performance improvements on our benchmarks
    * subject to an internal conf that sets an upper limit on the maximum length of the aggregate
