@@ -63,7 +63,9 @@ object RateEstimator {
         val integral = conf.getDouble("spark.streaming.backpressure.pid.integral", 0.2)
         val derived = conf.getDouble("spark.streaming.backpressure.pid.derived", 0.0)
         val minRate = conf.getDouble("spark.streaming.backpressure.pid.minRate", 100)
-        new PIDRateEstimator(batchInterval.milliseconds, proportional, integral, derived, minRate)
+        val concurrentJobs = conf.getInt("spark.streaming.concurrentJobs", 1)
+        new PIDRateEstimator(batchInterval.milliseconds, proportional, integral, derived, minRate,
+          concurrentJobs)
 
       case estimator =>
         throw new IllegalArgumentException(s"Unknown rate estimator: $estimator")

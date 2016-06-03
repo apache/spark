@@ -44,13 +44,15 @@ import org.apache.spark.internal.Logging
  * @param minRate what is the minimum rate that can be estimated.
  *        This must be greater than zero, so that the system always receives some data for rate
  *        estimation to work.
+ * @param concurrentJobs what is the value of `spark.streaming.concurrentJobs`.
  */
 private[streaming] class PIDRateEstimator(
     batchIntervalMillis: Long,
     proportional: Double,
     integral: Double,
     derivative: Double,
-    minRate: Double
+    minRate: Double,
+    concurrentJobs: Int
   ) extends RateEstimator with Logging {
 
   private var firstRun: Boolean = true
@@ -73,6 +75,9 @@ private[streaming] class PIDRateEstimator(
   require(
     minRate > 0,
     s"Minimum rate in PIDRateEstimator should be > 0")
+  require(
+    concurrentJobs > 0,
+    s"concurrentJobs in PIDRateEstimator should be > 0")
 
   logInfo(s"Created PIDRateEstimator with proportional = $proportional, integral = $integral, " +
     s"derivative = $derivative, min rate = $minRate")
@@ -98,7 +103,7 @@ private[streaming] class PIDRateEstimator(
         // based on the latest batch information. We consider the desired rate to be latest rate,
         // which is what this estimator calculated for the previous batch.
         // in elements/second
-        val error = latestRate - processingRate
+        val error = latestRate - processingRate * concurrentJobs.toDouble
 
         // The error integral, based on schedulingDelay as an indicator for accumulated errors.
         // A scheduling delay s corresponds to s * processingRate overflowing elements. Those
@@ -110,7 +115,7 @@ private[streaming] class PIDRateEstimator(
         // there wouldn't have been any overflowing elements, and the scheduling delay would have
         // been zero.
         // (in elements/second)
-        val historicalError = schedulingDelay.toDouble * processingRate / batchIntervalMillis
+        val historicalError = schedulingDelay.toDouble * processingRate * concurrentJobs.toDouble / batchIntervalMillis
 
         // in elements/(second ^ 2)
         val dError = (error - latestError) / delaySinceUpdate
