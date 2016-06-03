@@ -208,6 +208,14 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(convertedBack.getSeq(2) == Seq(Seq(Seq(0L, null), null), null))
   }
 
+  test("RowEncoder should throw RuntimeException if input row object is null") {
+    val schema = new StructType().add("int", IntegerType)
+    val encoder = RowEncoder(schema)
+    val e = intercept[RuntimeException](encoder.toRow(null))
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level row object"))
+  }
+
   test("RowEncoder should validate external type") {
     val e1 = intercept[RuntimeException] {
       val schema = new StructType().add("a", IntegerType)
