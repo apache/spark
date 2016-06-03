@@ -51,12 +51,6 @@ class HiveDDLCommandSuite extends PlanTest {
   test("Test CTAS #1") {
     val s1 =
       """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
-        |(viewTime INT,
-        |userid BIGINT,
-        |page_url STRING,
-        |referrer_url STRING,
-        |ip STRING COMMENT 'IP Address of the User',
-        |country STRING COMMENT 'country of origination')
         |COMMENT 'This is the staging page view table'
         |STORED AS RCFILE
         |LOCATION '/user/external/page_view'
@@ -91,12 +85,6 @@ class HiveDDLCommandSuite extends PlanTest {
   test("Test CTAS #2") {
     val s2 =
       """CREATE EXTERNAL TABLE IF NOT EXISTS mydb.page_view
-        |(viewTime INT,
-        |userid BIGINT,
-        |page_url STRING,
-        |referrer_url STRING,
-        |ip STRING COMMENT 'IP Address of the User',
-        |country STRING COMMENT 'country of origination')
         |COMMENT 'This is the staging page view table'
         |ROW FORMAT SERDE 'parquet.hive.serde.ParquetHiveSerDe'
         | STORED AS
@@ -188,6 +176,11 @@ class HiveDDLCommandSuite extends PlanTest {
   test("CTAS statement with a PARTITIONED BY clause is not allowed") {
     assertUnsupported(s"CREATE TABLE ctas1 PARTITIONED BY (k int)" +
       " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
+  }
+
+  test("CTAS statement with schema is not allowed") {
+    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) " +
+      "AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
   }
 
   test("unsupported operations") {
