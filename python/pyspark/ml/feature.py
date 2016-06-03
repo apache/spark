@@ -2499,6 +2499,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     True
     >>> loadedRF.getLabelCol() == rf.getLabelCol()
     True
+    >>> str(loadedRF)
+    'RFormula(y ~ x + s) (uid=...)'
     >>> modelPath = temp_path + "/rFormulaModel"
     >>> model.save(modelPath)
     >>> loadedModel = RFormulaModel.load(modelPath)
@@ -2513,6 +2515,8 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     |0.0|0.0|  a|[0.0,1.0]|  0.0|
     +---+---+---+---------+-----+
     ...
+    >>> str(loadedModel)
+    'RFormulaModel(ResolvedRFormula(...)) (uid=...)'
 
     .. versionadded:: 1.5.0
     """
@@ -2558,7 +2562,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         return RFormulaModel(java_model)
 
     def __str__(self):
-        formulaStr = self.getFormula() if self.isDefined(self.formula) else ""
+        formulaStr = self.getFormula() if self.isDefined(self.formula) else None
         return "RFormula(%s) (uid=%s)" % (formulaStr, self.uid)
 
 
