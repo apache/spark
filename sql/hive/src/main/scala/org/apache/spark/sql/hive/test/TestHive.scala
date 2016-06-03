@@ -179,14 +179,8 @@ private[hive] class TestHiveSparkSession(
   hiveFilesTemp.mkdir()
   ShutdownHookManager.registerShutdownDeleteDir(hiveFilesTemp)
 
-  val inRepoTests = new File(Thread.currentThread().getContextClassLoader.getResource(".").getFile)
-
   def getHiveFile(path: String): File = {
-    val stripped = path.replaceAll("""\.\.\/""", "").replace('/', File.separatorChar)
-    hiveDevHome
-      .map(new File(_, stripped))
-      .filter(_.exists)
-      .getOrElse(new File(inRepoTests, stripped))
+    new File(Thread.currentThread().getContextClassLoader.getResource(path).getFile)
   }
 
   val describedTable = "DESCRIBE (\\w+)".r
