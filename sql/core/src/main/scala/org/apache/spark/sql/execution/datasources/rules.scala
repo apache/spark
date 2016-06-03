@@ -78,8 +78,9 @@ private[sql] object PreInsertCastAndRename extends Rule[LogicalPlan] {
         // schema of the relation.
         if (l.output.size != child.output.size) {
           sys.error(
-            s"$l requires that the data to be inserted have " +
-              s"the same number of columns as the target table.")
+            s"$l requires that the data to be inserted have the same number of columns as the " +
+              s"target table: target table has ${l.output.size} column(s) but " +
+              s"the inserted data has ${child.output.size} column(s).")
         }
         castAndRenameChildOutput(i, l.output, child)
   }
