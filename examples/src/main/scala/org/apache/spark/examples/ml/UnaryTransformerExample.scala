@@ -19,8 +19,6 @@
 package org.apache.spark.examples.ml
 
 // $example on$
-import java.io.File
-
 import org.apache.spark.ml.UnaryTransformer
 import org.apache.spark.ml.param.DoubleParam
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, Identifiable}
@@ -47,9 +45,10 @@ object UnaryTransformerExample {
   /**
    * Simple Transformer which adds a constant value to input Doubles.
    *
-   * [[UnaryTransformer]] handles schema validation and other elements required by Pipelines.
-   * It also defines parameters for specifying input and output columns:
+   * [[UnaryTransformer]] can be used to create a stage usable within Pipelines.
+   * It defines parameters for specifying input and output columns:
    * [[UnaryTransformer.inputCol]] and [[UnaryTransformer.outputCol]].
+   * It can optionally handle schema validation.
    *
    * [[DefaultParamsWritable]] provides a default implementation for persisting instances
    * of this Transformer.
@@ -70,6 +69,10 @@ object UnaryTransformerExample {
     }
 
     override protected def outputDataType: DataType = DataTypes.DoubleType
+
+    override protected def validateInputType(inputType: DataType): Unit = {
+      require(inputType == DataTypes.DoubleType, s"Bad input type: $inputType. Requires Double.")
+    }
   }
 
   /**

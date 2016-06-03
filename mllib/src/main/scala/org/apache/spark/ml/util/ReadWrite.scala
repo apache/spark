@@ -151,7 +151,7 @@ trait MLWritable {
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of writing saved instances of the class.
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
- * [[org.apache.spark.sql.Dataset]] or [[org.apache.spark.ml.linalg.Vector]].
+ * [[org.apache.spark.sql.Dataset]].
  *
  * @see  [[DefaultParamsReadable]], the counterpart to this trait
  */
@@ -217,7 +217,7 @@ trait MLReadable[T] {
  * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
  * a default implementation of reading saved instances of the class.
  * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
- * [[org.apache.spark.sql.Dataset]] or [[org.apache.spark.ml.linalg.Vector]].
+ * [[org.apache.spark.sql.Dataset]].
  *
  * @tparam T ML instance type
  *
