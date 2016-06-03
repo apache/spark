@@ -886,15 +886,15 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       val duplicateColumns = colNames.groupBy(identity).collect {
         case (x, ys) if ys.length > 1 => "\"" + x + "\""
       }
-      throw new ParseException(s"Duplicate column name key(s) in the table definition: " +
+      throw operationNotAllowed(s"Duplicated column names found in table definition of $name: " +
         duplicateColumns.mkString("[", ",", "]"), ctx)
     }
 
-    // Ensuring the existing columns are not used as partition columns
-    val partitionColsInTable = partitionCols.map(_.name).toSet.intersect(colNames.toSet)
-    if (partitionColsInTable.nonEmpty) {
-      throw new ParseException(s"Column repeated in partitioning column(s): " +
-        partitionColsInTable.map("\"" + _ + "\"").mkString("[", ",", "]"), ctx)
+    // For Hive tables, partition columns must not be part of the schema
+    val badPartCols = partitionCols.map(_.name).toSet.intersect(colNames.toSet)
+    if (badPartCols.nonEmpty) {
+      throw operationNotAllowed(s"Partition columns may not be specified in the schema: " +
+        badPartCols.map("\"" + _ + "\"").mkString("[", ",", "]"), ctx)
     }
 
     // Note: Hive requires partition columns to be distinct from the schema, so we need
