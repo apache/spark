@@ -1964,7 +1964,12 @@ class Analyzer(
      */
     private def validateNestedTupleFields(deserializer: Expression): Unit = {
       val structChildToOrdinals = deserializer
-        .collect { case g: GetStructField => g }
+        // There are 2 kinds of `GetStructField`:
+        //   1. resolved from `UnresolvedExtractValue`, and it will have a `name` property.
+        //   2. created when we build deserializer expression for nested tuple, no `name` property.
+        // Here we want to validate the ordinals of nested tuple, so we should only catch
+        // `GetStructField` without the name property.
+        .collect { case g: GetStructField if g.name.isEmpty => g }
         .groupBy(_.child)
         .mapValues(_.map(_.ordinal).distinct.sorted)
 
