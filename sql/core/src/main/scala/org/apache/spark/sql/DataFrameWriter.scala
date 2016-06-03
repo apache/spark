@@ -435,21 +435,11 @@ final class DataFrameWriter private[sql](df: DataFrame) {
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
-    // A partitioned relation's schema can be different from the input logicalPlan, since
-    // partition columns are all moved after data columns. We Project to adjust the ordering.
-    // TODO: this belongs to the analyzer.
-    val input = normalizedParCols.map { parCols =>
-      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
-        parCols.contains(attr.name)
-      }
-      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
-    }.getOrElse(df.logicalPlan)
-
     df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
         UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
-        input,
+        df.logicalPlan,
         overwrite,
         ifNotExists = false)).toRdd
   }
