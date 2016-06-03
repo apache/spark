@@ -246,12 +246,12 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     val df = sql(sqlText)
     // First, check if we have GeneratedAggregate.
     val hasGeneratedAgg = df.queryExecution.sparkPlan
-      .collect { case _: aggregate.TungstenAggregate => true }
+      .collect { case _: aggregate.HashAggregateExec => true }
       .nonEmpty
     if (!hasGeneratedAgg) {
       fail(
         s"""
-           |Codegen is enabled, but query $sqlText does not have TungstenAggregate in the plan.
+           |Codegen is enabled, but query $sqlText does not have HashAggregate in the plan.
            |${df.queryExecution.simpleString}
          """.stripMargin)
     }
@@ -1838,20 +1838,61 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df)
     })
 
-    val e1 = intercept[AnalysisException] {
+    var e = intercept[AnalysisException] {
       sql("select * from in_valid_table")
     }
-    assert(e1.message.contains("Table or view not found"))
+    assert(e.message.contains("Table or view not found"))
 
-    val e2 = intercept[AnalysisException] {
+    e = intercept[AnalysisException] {
       sql("select * from no_db.no_table").show()
     }
-    assert(e2.message.contains("Table or view not found"))
+    assert(e.message.contains("Table or view not found"))
 
-    val e3 = intercept[AnalysisException] {
+    e = intercept[AnalysisException] {
       sql("select * from json.invalid_file")
     }
-    assert(e3.message.contains("Path does not exist"))
+    assert(e.message.contains("Path does not exist"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.hive.orc`.`file_path`")
+    }
+    assert(e.message.contains("The ORC data source must be used with Hive support enabled"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `com.databricks.spark.avro`.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: com.databricks.spark.avro. " +
+      "Please use Spark package http://spark-packages.org/package/databricks/spark-avro"))
+
+    // data source type is case insensitive
+    e = intercept[AnalysisException] {
+      sql(s"select id from Avro.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
+      "http://spark-packages.org/package/databricks/spark-avro"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from avro.`file_path`")
+    }
+    assert(e.message.contains("Failed to find data source: avro. Please use Spark package " +
+      "http://spark-packages.org/package/databricks/spark-avro"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`")
+    }
+    assert(e.message.contains("Table or view not found: " +
+      "`org.apache.spark.sql.sources.HadoopFsRelationProvider`.`file_path`"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `Jdbc`.`file_path`")
+    }
+    assert(e.message.contains("Unsupported data source type for direct query on files: Jdbc"))
+
+    e = intercept[AnalysisException] {
+      sql(s"select id from `org.apache.spark.sql.execution.datasources.jdbc`.`file_path`")
+    }
+    assert(e.message.contains("Unsupported data source type for direct query on files: " +
+      "org.apache.spark.sql.execution.datasources.jdbc"))
   }
 
   test("SortMergeJoin returns wrong results when using UnsafeRows") {
@@ -2067,9 +2108,9 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       checkAnswer(df.selectExpr("a + 1", "a + (a + 1)"), Row(2, 3))
 
       // Identity udf that tracks the number of times it is called.
-      val countAcc = sparkContext.accumulator(0, "CallCount")
+      val countAcc = sparkContext.longAccumulator("CallCount")
       spark.udf.register("testUdf", (x: Int) => {
-        countAcc.++=(1)
+        countAcc.add(1)
         x
       })
 
@@ -2092,7 +2133,7 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
         df.selectExpr("testUdf(a + 1) + testUdf(1 + b)", "testUdf(a + 1)"), Row(4, 2), 2)
 
       val testUdf = functions.udf((x: Int) => {
-        countAcc.++=(1)
+        countAcc.add(1)
         x
       })
       verifyCallCount(
