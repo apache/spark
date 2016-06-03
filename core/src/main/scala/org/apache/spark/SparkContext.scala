@@ -1441,6 +1441,32 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
+   * Delete a file to be downloaded with this Spark job on every node.
+   * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
+   * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
+   * use `SparkFiles.get(fileName)` to find its download location.
+   *
+   */
+  def deleteFile(path: String): Unit = {
+    val uri = new URI(path)
+    val schemeCorrectedPath = uri.getScheme match {
+      case null | "local" => new File(path).getCanonicalFile.toURI.toString
+      case _ => path
+    }
+    val scheme = new URI(schemeCorrectedPath).getScheme
+    val fileName = new File(uri.getPath)
+    val key = if (!isLocal && scheme == "file") {
+      env.rpcEnv.fileServer.deleteFile(fileName.getName())
+    } else {
+      schemeCorrectedPath
+    }
+    addedFiles.remove(key)
+    val timestamp = System.currentTimeMillis
+    logInfo("Deleted file " + path + " at " + key + " with timestamp " + timestamp)
+    postEnvironmentUpdate()
+  }
+
+  /**
    * :: DeveloperApi ::
    * Register a listener to receive up-calls from events that happen during execution.
    */

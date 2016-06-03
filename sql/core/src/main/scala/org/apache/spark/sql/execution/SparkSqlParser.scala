@@ -819,6 +819,11 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           case "jar" => AddJarCommand(mayebePaths)
           case other => throw operationNotAllowed(s"ADD with resource type '$other'", ctx)
         }
+      case SqlBaseParser.DELETE =>
+        ctx.identifier.getText.toLowerCase match {
+          case "file" => DeleteFileCommand(mayebePaths)
+          case other => throw operationNotAllowed (s"DELETE with resource type '$other'", ctx)
+        }
       case SqlBaseParser.LIST =>
         ctx.identifier.getText.toLowerCase match {
           case "files" | "file" =>
