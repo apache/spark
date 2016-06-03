@@ -22,9 +22,11 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.hadoop.fs.{BlockLocation, FileStatus, LocatedFileStatus, Path}
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.expressions
+import org.apache.spark.sql.catalyst.{expressions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.DataSourceScanExec
@@ -111,25 +113,27 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
 
       val optimizerMetadataOnly =
         readDataColumns.isEmpty && files.sparkSession.sessionState.conf.optimizerMetadataOnly
-      val scanRdd = if (optimizerMetadataOnly) {
-          val partitionValues = selectedPartitions.map(_.values)
-          files.sqlContext.sparkContext.parallelize(partitionValues, 1)
-        } else {
-          val readFile = files.fileFormat.buildReaderWithPartitionValues(
-            sparkSession = files.sparkSession,
-            dataSchema = files.dataSchema,
-            partitionSchema = files.partitionSchema,
-            requiredSchema = prunedDataSchema,
-            filters = pushedDownFilters,
-            options = files.options,
-            hadoopConf = files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))
+      val scanRdd: RDD[InternalRow] = if (optimizerMetadataOnly) {
+        val partitionSchema = files.partitionSchema.toAttributes
+        lazy val converter = GenerateUnsafeProjection.generate(partitionSchema, partitionSchema)
+        val partitionValues = selectedPartitions.map(_.values)
+        files.sqlContext.sparkContext.parallelize(partitionValues, 1).map(converter(_))
+      } else {
+        val readFile = files.fileFormat.buildReaderWithPartitionValues(
+          sparkSession = files.sparkSession,
+          dataSchema = files.dataSchema,
+          partitionSchema = files.partitionSchema,
+          requiredSchema = prunedDataSchema,
+          filters = pushedDownFilters,
+          options = files.options,
+          hadoopConf = files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))
 
-          val plannedPartitions = getFilePartitions(files, selectedPartitions)
-          new FileScanRDD(
-            files.sparkSession,
-            readFile,
-            plannedPartitions)
-        }
+        val plannedPartitions = getFilePartitions(files, selectedPartitions)
+        new FileScanRDD(
+          files.sparkSession,
+          readFile,
+          plannedPartitions)
+      }
 
       val meta = Map(
         "Format" -> files.fileFormat.toString,
