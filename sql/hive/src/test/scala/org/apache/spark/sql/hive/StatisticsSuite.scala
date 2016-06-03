@@ -23,6 +23,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.TableIdentifier
+import org.apache.spark.sql.catalyst.catalog.SimpleCatalogRelation
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -119,6 +120,18 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
     def queryTotalSize(tableName: String): BigInt =
       spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName)).statistics.sizeInBytes
 
+    def checkSize(tableName: String, size: BigInt): Unit = {
+      val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
+      // scalastyle:off println
+      println(relation match {
+        case s: SimpleCatalogRelation => s.metadata
+        case m: MetastoreRelation => m.catalogTable
+        case other => other
+      })
+      // scalastyle:on println
+      assert(relation.statistics.sizeInBytes === size)
+    }
+
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
@@ -126,7 +139,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
-    assert(queryTotalSize("analyzeTable") === BigInt(11624))
+    checkSize("analyzeTable", BigInt(11624))
 
     sql("DROP TABLE analyzeTable").collect()
 
@@ -155,7 +168,7 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
 
-    assert(queryTotalSize("analyzeTable_part") === BigInt(17436))
+    checkSize("analyzeTable_part", BigInt(17436))
 
     sql("DROP TABLE analyzeTable_part").collect()
 
