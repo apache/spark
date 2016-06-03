@@ -422,7 +422,7 @@ private[ml] object MetaAlgorithmReadWrite {
       case rformModel: RFormulaModel => Array(rformModel.pipelineModel)
       case _: Params => Array()
     }
-    val subStageMaps = subStages.map(getUidMapImpl).foldLeft(List.empty[(String, Params)])(_ ++ _)
+    val subStageMaps = subStages.flatMap(getUidMapImpl)
     List((instance.uid, instance)) ++ subStageMaps
   }
 }
