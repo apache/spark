@@ -67,7 +67,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     assertSupported()
-    sparkSession.cacheManager.useCachedData(analyzed)
+    sparkSession.sharedState.cacheManager.useCachedData(analyzed)
   }
 
   lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)

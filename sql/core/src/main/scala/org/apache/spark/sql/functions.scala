@@ -924,7 +924,7 @@ object functions {
    * @since 1.5.0
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
-    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.unresolvedTEncoder)
+    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.exprEnc)
   }
 
   /**
@@ -1996,7 +1996,7 @@ object functions {
 
   /**
    * Computes the numeric value of the first character of the string column, and returns the
-   * result as a int column.
+   * result as an int column.
    *
    * @group string_funcs
    * @since 1.5.0

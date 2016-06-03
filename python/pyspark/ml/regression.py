@@ -48,11 +48,15 @@ class LinearRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPrediction
     The learning objective is to minimize the squared error, with regularization.
     The specific squared error loss function used is: L = 1/2n ||A coefficients - y||^2^
 
-    This support multiple types of regularization:
-     - none (a.k.a. ordinary least squares)
-     - L2 (ridge regression)
-     - L1 (Lasso)
-     - L2 + L1 (elastic net)
+    This supports multiple types of regularization:
+
+     * none (a.k.a. ordinary least squares)
+
+     * L2 (ridge regression)
+
+     * L1 (Lasso)
+
+     * L2 + L1 (elastic net)
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([
@@ -128,7 +132,7 @@ class LinearRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by LinearRegression.
+    Model fitted by :class:`LinearRegression`.
 
     .. versionadded:: 1.4.0
     """
@@ -503,13 +507,13 @@ class IsotonicRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by IsotonicRegression.
+    Model fitted by :class:`IsotonicRegression`.
     """
 
     @property
     def boundaries(self):
         """
-        Model boundaries.
+        Boundaries in increasing order for which predictions are known.
         """
         return self._call_java("boundaries")
 
@@ -589,7 +593,7 @@ class RandomForestParams(TreeEnsembleParams):
     featureSubsetStrategy = \
         Param(Params._dummy(), "featureSubsetStrategy",
               "The number of features to consider for splits at each tree node. Supported " +
-              "options: " + ", ".join(supportedFeatureSubsetStrategies),
+              "options: " + ", ".join(supportedFeatureSubsetStrategies) + " (0.0-1.0], [1-n].",
               typeConverter=TypeConverters.toString)
 
     def __init__(self):
@@ -742,6 +746,12 @@ class DecisionTreeModel(JavaModel, JavaPredictionModel):
         """Return depth of the decision tree."""
         return self._call_java("depth")
 
+    @property
+    @since("2.0.0")
+    def toDebugString(self):
+        """Full description of model."""
+        return self._call_java("toDebugString")
+
     def __repr__(self):
         return self._call_java("toString")
 
@@ -757,10 +767,34 @@ class TreeEnsembleModels(JavaModel):
     """
 
     @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeModel(m) for m in list(self._call_java("trees"))]
+
+    @property
+    @since("2.0.0")
+    def getNumTrees(self):
+        """Number of trees in ensemble."""
+        return self._call_java("getNumTrees")
+
+    @property
     @since("1.5.0")
     def treeWeights(self):
         """Return the weights for each tree"""
         return list(self._call_java("javaTreeWeights"))
+
+    @property
+    @since("2.0.0")
+    def totalNumNodes(self):
+        """Total number of nodes, summed over all trees in the ensemble."""
+        return self._call_java("totalNumNodes")
+
+    @property
+    @since("2.0.0")
+    def toDebugString(self):
+        """Full description of model."""
+        return self._call_java("toDebugString")
 
     def __repr__(self):
         return self._call_java("toString")
@@ -771,7 +805,7 @@ class DecisionTreeRegressionModel(DecisionTreeModel, JavaMLWritable, JavaMLReada
     """
     .. note:: Experimental
 
-    Model fitted by DecisionTreeRegressor.
+    Model fitted by :class:`DecisionTreeRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -825,6 +859,10 @@ class RandomForestRegressor(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredi
     0.0
     >>> model.numFeatures
     1
+    >>> model.trees
+    [DecisionTreeRegressionModel (uid=...) of depth..., DecisionTreeRegressionModel...]
+    >>> model.getNumTrees
+    2
     >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     0.5
@@ -892,10 +930,16 @@ class RandomForestRegressionModel(TreeEnsembleModels, JavaPredictionModel, JavaM
     """
     .. note:: Experimental
 
-    Model fitted by RandomForestRegressor.
+    Model fitted by :class:`RandomForestRegressor`.
 
     .. versionadded:: 1.4.0
     """
+
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
     @property
     @since("2.0.0")
@@ -1028,7 +1072,7 @@ class GBTRegressionModel(TreeEnsembleModels, JavaPredictionModel, JavaMLWritable
     """
     .. note:: Experimental
 
-    Model fitted by GBTRegressor.
+    Model fitted by :class:`GBTRegressor`.
 
     .. versionadded:: 1.4.0
     """
@@ -1047,6 +1091,12 @@ class GBTRegressionModel(TreeEnsembleModels, JavaPredictionModel, JavaMLWritable
         .. seealso:: :py:attr:`DecisionTreeRegressionModel.featureImportances`
         """
         return self._call_java("featureImportances")
+
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
 
 
 @inherit_doc
@@ -1197,7 +1247,7 @@ class AFTSurvivalRegressionModel(JavaModel, JavaMLWritable, JavaMLReadable):
     """
     .. note:: Experimental
 
-    Model fitted by AFTSurvivalRegression.
+    Model fitted by :class:`AFTSurvivalRegression`.
 
     .. versionadded:: 1.6.0
     """
@@ -1390,7 +1440,7 @@ class GeneralizedLinearRegressionModel(JavaModel, JavaPredictionModel, JavaMLWri
     """
     .. note:: Experimental
 
-    Model fitted by GeneralizedLinearRegression.
+    Model fitted by :class:`GeneralizedLinearRegression`.
 
     .. versionadded:: 2.0.0
     """

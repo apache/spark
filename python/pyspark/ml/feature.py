@@ -19,8 +19,6 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from py4j.java_collections import JavaArray
-
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml.linalg import _convert_to_vector
@@ -159,9 +157,9 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               "Split points for mapping continuous features into buckets. With n+1 splits, " +
               "there are n buckets. A bucket defined by splits x,y holds values in the " +
               "range [x,y) except the last bucket, which also includes y. The splits " +
-              "should be strictly increasing. Values at -inf, inf must be explicitly " +
-              "provided to cover all Double values; otherwise, values outside the splits " +
-              "specified will be treated as errors.",
+              "should be of length >= 3 and strictly increasing. Values at -inf, inf must be " +
+              "explicitly provided to cover all Double values; otherwise, values outside the " +
+              "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
     @keyword_only
@@ -1171,22 +1169,23 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable,
-                          JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
     `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-    categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
-    into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
-    covering all real values. This attempts to find numBuckets partitions based on a sample of data,
-    but it may find fewer depending on the data sample values.
+    categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
+    The bin ranges are chosen using an approximate algorithm (see the documentation for
+    :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
+    The precision of the approximation can be controlled with the
+    :py:attr:`relativeError` parameter.
+    The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
 
     >>> df = spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", seed=123)
-    >>> qds.getSeed()
-    123
+    ...     inputCol="values", outputCol="buckets", relativeError=0.01)
+    >>> qds.getRelativeError()
+    0.01
     >>> bucketizer = qds.fit(df)
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
@@ -1205,32 +1204,33 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
     .. versionadded:: 2.0.0
     """
 
-    # a placeholder to make it appear in the generated doc
     numBuckets = Param(Params._dummy(), "numBuckets",
                        "Maximum number of buckets (quantiles, or " +
-                       "categories) into which data points are grouped. Must be >= 2. Default 2.",
+                       "categories) into which data points are grouped. Must be >= 2.",
                        typeConverter=TypeConverters.toInt)
 
+    relativeError = Param(Params._dummy(), "relativeError", "The relative target precision for " +
+                          "the approximate quantile algorithm used to generate buckets. " +
+                          "Must be in the range [0, 1].",
+                          typeConverter=TypeConverters.toFloat)
+
     @keyword_only
-    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
                                             self.uid)
-        self.numBuckets = Param(self, "numBuckets",
-                                "Maximum number of buckets (quantiles, or " +
-                                "categories) into which data points are grouped. Must be >= 2.")
-        self._setDefault(numBuckets=2)
+        self._setDefault(numBuckets=2, relativeError=0.001)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
         """
-        setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
         Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
@@ -1249,6 +1249,20 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
         Gets the value of numBuckets or its default value.
         """
         return self.getOrDefault(self.numBuckets)
+
+    @since("2.0.0")
+    def setRelativeError(self, value):
+        """
+        Sets the value of :py:attr:`relativeError`.
+        """
+        return self._set(relativeError=value)
+
+    @since("2.0.0")
+    def getRelativeError(self):
+        """
+        Gets the value of relativeError or its default value.
+        """
+        return self.getOrDefault(self.relativeError)
 
     def _create_model(self, java_model):
         """
@@ -1459,6 +1473,10 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
 
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
+
+    The "unit std" is computed using the `corrected sample standard deviation \
+    <https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation>`_,
+    which is computed as the square root of the unbiased sample variance.
 
     >>> from pyspark.ml.linalg import Vectors
     >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])

@@ -95,7 +95,7 @@ private[sql] class CacheManager extends Logging {
             sparkSession.sessionState.conf.useCompression,
             sparkSession.sessionState.conf.columnBatchSize,
             storageLevel,
-            sparkSession.executePlan(planToCache).executedPlan,
+            sparkSession.sessionState.executePlan(planToCache).executedPlan,
             tableName))
     }
   }

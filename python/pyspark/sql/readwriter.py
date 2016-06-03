@@ -497,6 +497,26 @@ class DataFrameWriter(object):
             self._jwrite = self._jwrite.mode(saveMode)
         return self
 
+    @since(2.0)
+    def outputMode(self, outputMode):
+        """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+
+        Options include:
+
+        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+           the sink
+        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+           every time these is some updates
+
+       .. note:: Experimental.
+
+        >>> writer = sdf.write.outputMode('append')
+        """
+        if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
+            raise ValueError('The output mode must be a non-empty string. Got: %s' % outputMode)
+        self._jwrite = self._jwrite.outputMode(outputMode)
+        return self
+
     @since(1.4)
     def format(self, source):
         """Specifies the underlying output data source.
@@ -766,7 +786,7 @@ class DataFrameWriter(object):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None):
+            header=None, nullValue=None, escapeQuotes=None):
         """Saves the content of the [[DataFrame]] in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -787,6 +807,9 @@ class DataFrameWriter(object):
                       value, ``"``.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
+        :param escapeQuotes: A flag indicating whether values containing quotes should always
+                             be enclosed in quotes. If None is set, it uses the default value
+                             ``true``, escaping all values containing a quote character.
         :param header: writes the names of columns as the first line. If None is set, it uses
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
@@ -807,6 +830,8 @@ class DataFrameWriter(object):
             self.option("header", header)
         if nullValue is not None:
             self.option("nullValue", nullValue)
+        if escapeQuotes is not None:
+            self.option("escapeQuotes", nullValue)
         self._jwrite.csv(path)
 
     @since(1.5)
@@ -839,7 +864,7 @@ class DataFrameWriter(object):
 
     @since(1.4)
     def jdbc(self, url, table, mode=None, properties=None):
-        """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
+        """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
         .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.

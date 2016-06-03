@@ -17,11 +17,11 @@
 
 package org.apache.spark.sql.execution.streaming
 
-import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.analysis.OutputMode
+import org.apache.spark.sql.{InternalOutputModes, SparkSession}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkPlanner, UnaryExecNode}
+import org.apache.spark.sql.streaming.OutputMode
 
 /**
  * A variant of [[QueryExecution]] that allows the execution of the given [[LogicalPlan]]
@@ -36,7 +36,8 @@ class IncrementalExecution private[sql](
   extends QueryExecution(sparkSession, logicalPlan) {
 
   // TODO: make this always part of planning.
-  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy :: Nil
+  val stateStrategy = sparkSession.sessionState.planner.StatefulAggregationStrategy +:
+    sparkSession.sessionState.experimentalMethods.extraStrategies
 
   // Modified planner with stateful operations.
   override def planner: SparkPlanner =
@@ -53,16 +54,19 @@ class IncrementalExecution private[sql](
 
   /** Locates save/restore pairs surrounding aggregation. */
   val state = new Rule[SparkPlan] {
+
     override def apply(plan: SparkPlan): SparkPlan = plan transform {
-      case StateStoreSaveExec(keys, None,
+      case StateStoreSaveExec(keys, None, None,
              UnaryExecNode(agg,
                StateStoreRestoreExec(keys2, None, child))) =>
         val stateId = OperatorStateId(checkpointLocation, operatorId, currentBatchId)
+        val returnAllStates = if (outputMode == InternalOutputModes.Complete) true else false
         operatorId += 1
 
         StateStoreSaveExec(
           keys,
           Some(stateId),
+          Some(returnAllStates),
           agg.withNewChildren(
             StateStoreRestoreExec(
               keys,
