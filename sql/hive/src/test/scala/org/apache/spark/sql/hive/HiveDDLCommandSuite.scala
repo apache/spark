@@ -63,13 +63,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
-    assert(desc.schema ==
-      CatalogColumn("viewtime", "int") ::
-      CatalogColumn("userid", "bigint") ::
-      CatalogColumn("page_url", "string") ::
-      CatalogColumn("referrer_url", "string") ::
-      CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
+    assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     assert(desc.comment == Some("This is the staging page view table"))
     // TODO will be SQLText
     assert(desc.viewText.isEmpty)
@@ -100,13 +94,7 @@ class HiveDDLCommandSuite extends PlanTest {
     assert(desc.identifier.table == "page_view")
     assert(desc.tableType == CatalogTableType.EXTERNAL)
     assert(desc.storage.locationUri == Some("/user/external/page_view"))
-    assert(desc.schema ==
-      CatalogColumn("viewtime", "int") ::
-      CatalogColumn("userid", "bigint") ::
-      CatalogColumn("page_url", "string") ::
-      CatalogColumn("referrer_url", "string") ::
-      CatalogColumn("ip", "string", comment = Some("IP Address of the User")) ::
-      CatalogColumn("country", "string", comment = Some("country of origination")) :: Nil)
+    assert(desc.schema.isEmpty) // will be populated later when the table is actually created
     // TODO will be SQLText
     assert(desc.comment == Some("This is the staging page view table"))
     assert(desc.viewText.isEmpty)
@@ -178,9 +166,16 @@ class HiveDDLCommandSuite extends PlanTest {
       " AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
   }
 
-  test("CTAS statement with schema is not allowed") {
-    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) " +
-      "AS SELECT key, value FROM (SELECT 1 as key, 2 as value) tmp")
+  test("CTAS statement with schema") {
+    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
+    parser.parsePlan(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'") match {
+      case cmd: CreateHiveTableAsSelectLogicalPlan =>
+        assert(cmd.tableDesc.schema.toSet ==
+          Set(CatalogColumn("age", "int"), CatalogColumn("name", "string")))
+      case other =>
+        fail(s"Expected ${CreateHiveTableAsSelectLogicalPlan.getClass.getSimpleName}, " +
+          s"but parsed ${other.getClass.getSimpleName}")
+    }
   }
 
   test("unsupported operations") {

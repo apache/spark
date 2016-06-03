@@ -25,6 +25,7 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -939,8 +940,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     selectQuery match {
       case Some(q) =>
-        // Just use whatever is projected in the select statement as our schema
-        if (schema.nonEmpty) {
+        // If there exists an unresolved relation in the children, then it means we're
+        // selecting from a table. In that case we shouldn't provide our own schema.
+        if (q.children.exists(_.isInstanceOf[UnresolvedRelation]) && schema.nonEmpty) {
           throw operationNotAllowed(
             "Schema may not be specified in a Create Table As Select (CTAS) statement",
             ctx)
