@@ -71,6 +71,9 @@ object HiveSerDe {
     val key = source.toLowerCase match {
       case s if s.startsWith("org.apache.spark.sql.parquet") => "parquet"
       case s if s.startsWith("org.apache.spark.sql.orc") => "orc"
+      case s if s.equals("orcfile") => "orc"
+      case s if s.equals("parquetfile") => "parquet"
+      case s if s.equals("avrofile") => "avro"
       case s => s
     }
 
