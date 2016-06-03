@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.streaming.{ContinuousQuery, OutputMode, ProcessingTime, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -101,7 +101,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 }
 
-class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -456,7 +456,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
     val w = df.write
     val e = intercept[IllegalArgumentException](w.bucketBy(1, "text").startStream())
-    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+    assert(e.getMessage == "'startStream' does not support bucketing right now.")
   }
 
   test("check sortBy() can only be called on non-continuous queries;") {
@@ -465,7 +465,7 @@ class DataFrameReaderWriterSuite extends StreamTest with SharedSQLContext with B
       .stream()
     val w = df.write
     val e = intercept[IllegalArgumentException](w.sortBy("text").startStream())
-    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+    assert(e.getMessage == "'startStream' does not support bucketing right now.")
   }
 
   test("check save(path) can only be called on non-continuous queries") {

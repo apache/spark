@@ -91,6 +91,8 @@ private[sql] case class LogicalRDD(
     case _ => false
   }
 
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
+
   override def producedAttributes: AttributeSet = outputSet
 
   @transient override lazy val statistics: Statistics = Statistics(

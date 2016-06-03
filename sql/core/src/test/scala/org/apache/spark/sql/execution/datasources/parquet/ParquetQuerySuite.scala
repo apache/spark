@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -148,13 +149,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
+      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+    ) {
       testSchemaMerging(2)
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
+    ) {
       testSchemaMerging(3)
     }
   }
@@ -601,6 +607,21 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
           df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
           "Should return batch")
         checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
+  }
+
+  test("SPARK-15719: disable writing summary files by default") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(3).write.parquet(path)
+
+      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val files = fs.listFiles(new Path(path), true)
+
+      while (files.hasNext) {
+        val file = files.next
+        assert(!file.getPath.getName.contains("_metadata"))
       }
     }
   }

@@ -33,8 +33,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.util.ContinuousQueryListener
-import org.apache.spark.sql.util.ContinuousQueryListener._
+import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /**
@@ -53,6 +52,8 @@ class StreamExecution(
     private[sql] val triggerClock: Clock,
     val outputMode: OutputMode)
   extends ContinuousQuery with Logging {
+
+  import org.apache.spark.sql.streaming.ContinuousQueryListener._
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
