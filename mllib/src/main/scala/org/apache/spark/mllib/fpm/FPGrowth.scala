@@ -162,7 +162,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
  *
  */
 @Since("1.3.0")
-class FPGrowth private (
+class FPGrowth private[spark] (
     private var minSupport: Double,
     private var numPartitions: Int) extends Logging with Serializable {
 
