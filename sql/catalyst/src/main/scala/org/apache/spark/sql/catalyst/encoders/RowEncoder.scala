@@ -57,8 +57,8 @@ import org.apache.spark.unsafe.types.UTF8String
 object RowEncoder {
   def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = false)
-    val serializer = serializerFor(inputObject, schema)
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
+    val serializer = serializerFor(AssertNotNull(inputObject, Seq("top level row object")), schema)
     val deserializer = deserializerFor(schema)
     new ExpressionEncoder[Row](
       schema,
@@ -153,8 +153,7 @@ object RowEncoder {
         val fieldValue = serializerFor(
           GetExternalRowField(
             inputObject, index, field.name, externalDataTypeForInput(field.dataType)),
-          field.dataType
-        )
+          field.dataType)
         val convertedField = if (field.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),

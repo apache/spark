@@ -519,7 +519,7 @@ case class CreateExternalRow(children: Seq[Expression], schema: StructType)
     val code = s"""
       $values = new Object[${children.size}];
       $childrenCode
-      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, this.$schemaField);
+      final ${classOf[Row].getName} ${ev.value} = new $rowClass($values, $schemaField);
       """
     ev.copy(code = code, isNull = "false")
   }
@@ -675,7 +675,7 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
       ${childGen.code}
 
       if (${childGen.isNull}) {
-        throw new RuntimeException(this.$errMsgField);
+        throw new RuntimeException($errMsgField);
       }
      """
     ev.copy(code = code, isNull = "false", value = childGen.value)
