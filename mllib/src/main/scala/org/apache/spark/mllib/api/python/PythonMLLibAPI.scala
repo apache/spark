@@ -1177,7 +1177,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     // We use DataFrames for serialization of IndexedRows to Python,
     // so return a DataFrame.
     val sc = indexedRowMatrix.rows.sparkContext
-    val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     spark.createDataFrame(indexedRowMatrix.rows)
   }
 
@@ -1188,7 +1188,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     // We use DataFrames for serialization of MatrixEntry entries to
     // Python, so return a DataFrame.
     val sc = coordinateMatrix.entries.sparkContext
-    val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     spark.createDataFrame(coordinateMatrix.entries)
   }
 
@@ -1199,7 +1199,7 @@ private[python] class PythonMLLibAPI extends Serializable {
     // We use DataFrames for serialization of sub-matrix blocks to
     // Python, so return a DataFrame.
     val sc = blockMatrix.blocks.sparkContext
-    val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+    val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
     spark.createDataFrame(blockMatrix.blocks)
   }
 }

@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.datasources.{BucketSpec, CreateTableUsingA
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcUtils
 import org.apache.spark.sql.execution.streaming.{MemoryPlan, MemorySink, StreamExecution}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.{ContinuousQuery, OutputMode, ProcessingTime, Trigger}
 import org.apache.spark.util.Utils
 
 /**
@@ -77,7 +78,47 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       case "ignore" => SaveMode.Ignore
       case "error" | "default" => SaveMode.ErrorIfExists
       case _ => throw new IllegalArgumentException(s"Unknown save mode: $saveMode. " +
-        "Accepted modes are 'overwrite', 'append', 'ignore', 'error'.")
+        "Accepted save modes are 'overwrite', 'append', 'ignore', 'error'.")
+    }
+    this
+  }
+
+  /**
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
+   *                            written to the sink
+   *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
+   *                              to the sink every time these is some updates
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: OutputMode): DataFrameWriter = {
+    assertStreaming("outputMode() can only be called on continuous queries")
+    this.outputMode = outputMode
+    this
+  }
+
+  /**
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
+   *                 the sink
+   *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
+   *                 every time these is some updates
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def outputMode(outputMode: String): DataFrameWriter = {
+    assertStreaming("outputMode() can only be called on continuous queries")
+    this.outputMode = outputMode.toLowerCase match {
+      case "append" =>
+        OutputMode.Append
+      case "complete" =>
+        OutputMode.Complete
+      case _ =>
+        throw new IllegalArgumentException(s"Unknown output mode $outputMode. " +
+          "Accepted output modes are 'append' and 'complete'")
     }
     this
   }
@@ -240,7 +281,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    * @since 1.4.0
    */
   def save(): Unit = {
-    assertNotBucketed()
+    assertNotBucketed("save")
     assertNotStreaming("save() can only be called on non-continuous queries")
     val dataSource = DataSource(
       df.sparkSession,
@@ -289,7 +330,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    */
   @Experimental
   def startStream(): ContinuousQuery = {
-    assertNotBucketed()
+    assertNotBucketed("startStream")
     assertStreaming("startStream() can only be called on continuous queries")
 
     if (source == "memory") {
@@ -319,7 +360,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointPath.toUri.toString
       }
 
-      val sink = new MemorySink(df.schema)
+      val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       resultDf.createOrReplaceTempView(queryName)
       val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
@@ -327,6 +368,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         checkpointLocation,
         df,
         sink,
+        outputMode,
         trigger)
       continuousQuery
     } else {
@@ -352,7 +394,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         queryName,
         checkpointLocation,
         df,
-        dataSource.createSink(),
+        dataSource.createSink(outputMode),
+        outputMode,
         trigger)
     }
   }
@@ -387,7 +430,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    assertNotBucketed()
+    assertNotBucketed("insertInto")
     assertNotStreaming("insertInto() can only be called on non-continuous queries")
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
@@ -457,10 +500,10 @@ final class DataFrameWriter private[sql](df: DataFrame) {
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
 
-  private def assertNotBucketed(): Unit = {
+  private def assertNotBucketed(operation: String): Unit = {
     if (numBuckets.isDefined || sortColumnNames.isDefined) {
       throw new IllegalArgumentException(
-        "Currently we don't support writing bucketed data to this data source.")
+        s"'$operation' does not support bucketing right now.")
     }
   }
 
@@ -518,7 +561,6 @@ final class DataFrameWriter private[sql](df: DataFrame) {
           CreateTableUsingAsSelect(
             tableIdent,
             source,
-            temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
             getBucketSpec,
             mode,
@@ -707,6 +749,8 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private var source: String = df.sparkSession.sessionState.conf.defaultDataSourceName
 
   private var mode: SaveMode = SaveMode.ErrorIfExists
+
+  private var outputMode: OutputMode = OutputMode.Append
 
   private var trigger: Trigger = ProcessingTime(0L)
 

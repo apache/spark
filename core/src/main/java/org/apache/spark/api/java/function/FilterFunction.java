@@ -22,7 +22,7 @@ import java.io.Serializable;
 /**
  * Base interface for a function used in Dataset's filter function.
  *
- * If the function returns true, the element is discarded in the returned Dataset.
+ * If the function returns true, the element is included in the returned Dataset.
  */
 public interface FilterFunction<T> extends Serializable {
   boolean call(T value) throws Exception;

@@ -403,6 +403,17 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Cleanup code run in response to a failed local read.
+   * Must be called while holding a read lock on the block.
+   */
+  private def handleLocalReadFailure(blockId: BlockId): Nothing = {
+    releaseLock(blockId)
+    // Remove the missing block so that its unavailability is reported to the driver
+    removeBlock(blockId)
+    throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+  }
+
+  /**
    * Get block from local block manager as an iterator of Java objects.
    */
   def getLocalValues(blockId: BlockId): Option[BlockResult] = {
@@ -441,8 +452,7 @@ private[spark] class BlockManager(
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, releaseLock(blockId))
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
-          releaseLock(blockId)
-          throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+          handleLocalReadFailure(blockId)
         }
     }
   }
@@ -489,8 +499,7 @@ private[spark] class BlockManager(
         // The block was not found on disk, so serialize an in-memory copy:
         serializerManager.dataSerialize(blockId, memoryStore.getValues(blockId).get)
       } else {
-        releaseLock(blockId)
-        throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+        handleLocalReadFailure(blockId)
       }
     } else {  // storage level is serialized
       if (level.useMemory && memoryStore.contains(blockId)) {
@@ -499,8 +508,7 @@ private[spark] class BlockManager(
         val diskBytes = diskStore.getBytes(blockId)
         maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes).getOrElse(diskBytes)
       } else {
-        releaseLock(blockId)
-        throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+        handleLocalReadFailure(blockId)
       }
     }
   }

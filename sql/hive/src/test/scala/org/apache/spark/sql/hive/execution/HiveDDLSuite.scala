@@ -345,6 +345,28 @@ class HiveDDLSuite
     }
   }
 
+  test("alter table partition - storage information") {
+    sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT)")
+    sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
+    val catalog = spark.sessionState.catalog
+    val expectedSerde = "com.sparkbricks.serde.ColumnarSerDe"
+    val expectedSerdeProps = Map("compress" -> "true")
+    val expectedSerdePropsString =
+      expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
+    val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
+    assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
+    assume(oldPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) !=
+      expectedSerdeProps, "bad test: serde properties were already set")
+    sql(s"""ALTER TABLE boxes PARTITION (width=4)
+      |    SET SERDE '$expectedSerde'
+      |    WITH SERDEPROPERTIES ($expectedSerdePropsString)
+      |""".stripMargin)
+    val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
+    assert(newPart.storage.serde == Some(expectedSerde))
+    assume(newPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) ==
+      expectedSerdeProps)
+  }
+
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
