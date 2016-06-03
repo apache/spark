@@ -583,8 +583,8 @@ object ScalaReflection extends ScalaReflection {
           val params = getConstructorParameters(t)
           val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
             if (javaKeywords.contains(fieldName)) {
-              throw new UnsupportedOperationException(s"`$fieldName` is a java reserved keyword " +
-                "and can not be used as field name\n" + walkedTypePath.mkString("\n"))
+              throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
+                "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
             }
 
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))

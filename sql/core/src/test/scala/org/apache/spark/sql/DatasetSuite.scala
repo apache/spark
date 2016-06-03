@@ -792,7 +792,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       Seq(InvalidInJava(1)).toDS()
     }
     assert(e.getMessage.contains(
-      "`abstract` is a java reserved keyword and can not be used as field name"))
+      "`abstract` is a reserved keyword and cannot be used as field name"))
   }
 }
 
