@@ -507,11 +507,14 @@ private[spark] class BlockManager(
         // Look for block on disk, potentially storing it back in memory if required
         if (level.useDisk) {
           logDebug(s"Getting block $blockId from disk")
-          val bytes: ByteBuffer = diskStore.getBytes(blockId) match {
-            case Some(b) => b
-            case None =>
-              throw new BlockException(
-                blockId, s"Block $blockId not found on disk, though it should be")
+          val bytes: ByteBuffer = if (diskStore.contains(blockId)) {
+            // DiskStore.getBytes() always returns Some, so this .get() is guaranteed to be safe
+            diskStore.getBytes(blockId).get
+          } else {
+            // Remove the missing block so that its unavailability is reported to the driver
+            removeBlock(blockId)
+            throw new BlockException(
+              blockId, s"Block $blockId not found on disk, though it should be")
           }
           assert(0 == bytes.position())
 
