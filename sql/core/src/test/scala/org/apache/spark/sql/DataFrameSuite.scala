@@ -28,7 +28,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -1227,7 +1227,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyNonExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
-      case agg: TungstenAggregate =>
+      case agg: HashAggregateExec =>
         atFirstAgg = !atFirstAgg
       case _ =>
         if (atFirstAgg) {
@@ -1242,7 +1242,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
-      case agg: TungstenAggregate =>
+      case agg: HashAggregateExec =>
         if (atFirstAgg) {
           fail("Should not have back to back Aggregates")
         }

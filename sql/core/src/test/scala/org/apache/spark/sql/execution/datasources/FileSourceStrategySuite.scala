@@ -490,6 +490,7 @@ class LocalityTestFileSystem extends RawLocalFileSystem {
 
   override def getFileBlockLocations(
       file: FileStatus, start: Long, len: Long): Array[BlockLocation] = {
+    require(!file.isDirectory, "The file path can not be a directory.")
     val count = invocations.getAndAdd(1)
     Array(new BlockLocation(Array(s"host$count:50010"), Array(s"host$count"), 0, len))
   }

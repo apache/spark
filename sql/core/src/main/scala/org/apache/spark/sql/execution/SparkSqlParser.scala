@@ -317,17 +317,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
       // Get the backing query.
       val query = plan(ctx.query)
 
+      if (temp) {
+        throw operationNotAllowed("CREATE TEMPORARY TABLE ... USING ... AS query", ctx)
+      }
+
       // Determine the storage mode.
       val mode = if (ifNotExists) {
         SaveMode.Ignore
-      } else if (temp) {
-        SaveMode.Overwrite
       } else {
         SaveMode.ErrorIfExists
       }
 
       CreateTableUsingAsSelect(
-        table, provider, temp, partitionColumnNames, bucketSpec, mode, options, query)
+        table, provider, partitionColumnNames, bucketSpec, mode, options, query)
     } else {
       val struct = Option(ctx.colTypeList()).map(createStructType)
       CreateTableUsing(
@@ -960,7 +962,6 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
           CreateTableUsingAsSelect(
             tableIdent = tableDesc.identifier,
             provider = conf.defaultDataSourceName,
-            temporary = false,
             partitionColumns = tableDesc.partitionColumnNames.toArray,
             bucketSpec = None,
             mode = mode,

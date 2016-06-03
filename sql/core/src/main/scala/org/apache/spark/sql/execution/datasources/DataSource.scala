@@ -132,28 +132,20 @@ case class DataSource(
               // Found the data source using fully qualified path
               dataSource
             case Failure(error) =>
-              if (error.isInstanceOf[ClassNotFoundException]) {
-                val className = error.getMessage
-                if (spark2RemovedClasses.contains(className)) {
-                  throw new ClassNotFoundException(s"$className is removed in Spark 2.0. " +
-                    "Please check if your library is compatible with Spark 2.0")
-                }
-              }
-              if (provider.startsWith("org.apache.spark.sql.hive.orc")) {
-                throw new ClassNotFoundException(
-                  "The ORC data source must be used with Hive support enabled.", error)
+              if (provider.toLowerCase == "orc" ||
+                  provider.startsWith("org.apache.spark.sql.hive.orc")) {
+                throw new AnalysisException(
+                  "The ORC data source must be used with Hive support enabled")
+              } else if (provider.toLowerCase == "avro" ||
+                  provider == "com.databricks.spark.avro") {
+                throw new AnalysisException(
+                  s"Failed to find data source: ${provider.toLowerCase}. Please use Spark " +
+                    "package http://spark-packages.org/package/databricks/spark-avro")
               } else {
-                if (provider == "avro" || provider == "com.databricks.spark.avro") {
-                  throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please use Spark package " +
-                      "http://spark-packages.org/package/databricks/spark-avro",
-                    error)
-                } else {
-                  throw new ClassNotFoundException(
-                    s"Failed to find data source: $provider. Please find packages at " +
-                      "http://spark-packages.org",
-                    error)
-                }
+                throw new ClassNotFoundException(
+                  s"Failed to find data source: $provider. Please find packages at " +
+                    "http://spark-packages.org",
+                  error)
               }
           }
         } catch {
