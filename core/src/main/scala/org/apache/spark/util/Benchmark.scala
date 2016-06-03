@@ -26,6 +26,7 @@ import scala.util.Try
 
 import org.apache.commons.io.output.TeeOutputStream
 import org.apache.commons.lang3.SystemUtils
+import org.apache.log4j.{Level, Logger}
 
 /**
  * Utility class to benchmark components. An example of how to use this is:
@@ -95,6 +96,17 @@ private[spark] class Benchmark(
    * provide some baseline.
    */
   def run(): Unit = {
+    val logger = Logger.getRootLogger()
+    val original = logger.getLevel()
+    try {
+      logger.setLevel(Level.toLevel("INFO"))  // avoid DEBUG overheads
+      run0()
+    } finally {
+      logger.setLevel(original)
+    }
+  }
+
+  private def run0(): Unit = {
     require(benchmarks.nonEmpty)
     // scalastyle:off
     println("Running benchmark: " + name)
