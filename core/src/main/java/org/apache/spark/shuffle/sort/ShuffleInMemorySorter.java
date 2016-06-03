@@ -44,6 +44,9 @@ final class ShuffleInMemorySorter {
    * An array of record pointers and partition ids that have been encoded by
    * {@link PackedRecordPointer}. The sort operates on this array instead of directly manipulating
    * records.
+   *
+   * Only part of the array will be used to store the pointers, the rest part is preserved as
+   * temporary buffer for sorting.
    */
   private LongArray array;
 
@@ -71,10 +74,10 @@ final class ShuffleInMemorySorter {
     this.initialSize = initialSize;
     this.useRadixSort = useRadixSort;
     this.array = consumer.allocateArray(initialSize);
-    this.usableCapacity = calcCapacity();
+    this.usableCapacity = getUsableCapacity();
   }
 
-  private int calcCapacity() {
+  private int getUsableCapacity() {
     // Radix sort requires same amount of used memory as buffer, Tim sort requires
     // half of the used memory as buffer.
     return (int) (array.size() / (useRadixSort ? 2 : 1.5));
@@ -95,7 +98,7 @@ final class ShuffleInMemorySorter {
     if (consumer != null) {
       consumer.freeArray(array);
       array = consumer.allocateArray(initialSize);
-      usableCapacity = calcCapacity();
+      usableCapacity = getUsableCapacity();
     }
     pos = 0;
   }
@@ -111,7 +114,7 @@ final class ShuffleInMemorySorter {
     );
     consumer.freeArray(array);
     array = newArray;
-    usableCapacity = calcCapacity();
+    usableCapacity = getUsableCapacity();
   }
 
   public boolean hasSpaceForAnotherRecord() {

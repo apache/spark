@@ -81,6 +81,9 @@ public final class UnsafeInMemorySorter {
   /**
    * Within this buffer, position {@code 2 * i} holds a pointer pointer to the record at
    * index {@code i}, while position {@code 2 * i + 1} in the array holds an 8-byte key prefix.
+   *
+   * Only part of the array will be used to store the pointers, the rest part is preserved as
+   * temporary buffer for sorting.
    */
   private LongArray array;
 
@@ -131,10 +134,10 @@ public final class UnsafeInMemorySorter {
       this.radixSortSupport = null;
     }
     this.array = array;
-    this.usableCapacity = calcCapacity();
+    this.usableCapacity = getUsableCapacity();
   }
 
-  private int calcCapacity() {
+  private int getUsableCapacity() {
     // Radix sort requires same amount of used memory as buffer, Tim sort requires
     // half of the used memory as buffer.
     return (int) (array.size() / (radixSortSupport != null ? 2 : 1.5));
@@ -154,7 +157,7 @@ public final class UnsafeInMemorySorter {
     if (consumer != null) {
       consumer.freeArray(array);
       array = consumer.allocateArray(initialSize);
-      usableCapacity = calcCapacity();
+      usableCapacity = getUsableCapacity();
     }
     pos = 0;
   }
@@ -193,7 +196,7 @@ public final class UnsafeInMemorySorter {
       pos * 8L);
     consumer.freeArray(array);
     array = newArray;
-    usableCapacity = calcCapacity();
+    usableCapacity = getUsableCapacity();
   }
 
   /**
