@@ -456,7 +456,7 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .stream()
     val w = df.write
     val e = intercept[IllegalArgumentException](w.bucketBy(1, "text").startStream())
-    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+    assert(e.getMessage == "'startStream' does not support bucketing right now.")
   }
 
   test("check sortBy() can only be called on non-continuous queries;") {
@@ -465,7 +465,7 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .stream()
     val w = df.write
     val e = intercept[IllegalArgumentException](w.sortBy("text").startStream())
-    assert(e.getMessage == "Currently we don't support writing bucketed data to this data source.")
+    assert(e.getMessage == "'startStream' does not support bucketing right now.")
   }
 
   test("check save(path) can only be called on non-continuous queries") {
