@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
-import org.apache.spark.sql.types.{ArrayType, DataType, MapType}
+import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 
 /**
  * For lazy computing, be sure the generator.terminate() called in the very last
@@ -41,6 +41,7 @@ private[execution] sealed case class LazyIterator(func: () => TraversableOnce[In
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
  * programming with one important additional feature, which allows the input rows to be joined with
  * their output.
+ *
  * @param generator the generator expression
  * @param join  when true, each output row is implicitly joined with the input tuple that produced
  *              it.
@@ -113,11 +114,12 @@ case class GenerateExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     boundGenerator match {
-      case e: Explode => codegenExplode(e.child, ctx, input, row)
+      case e: Explode => codegen(e.child, ctx, input, row)
+      case e => codegen(e, ctx, input, row)
     }
   }
 
-  private def codegenExplode(
+  private def codegen(
       e: Expression,
       ctx: CodegenContext,
       input: Seq[ExprCode],
@@ -134,16 +136,17 @@ case class GenerateExec(
     val numElements = ctx.freshName("numElements")
 
     // Generate accessor for MapData/Array element(s).
-    def accessor(field: String, name: String, dt: DataType, nullable: Boolean): ExprCode = {
-      val source = data.value + field
+    val outerCheck = optionalCode(outer, s"$numElements == 0")
+    def accessor(source: String, name: String, dt: DataType, nullable: Boolean): ExprCode = {
       val value = ctx.freshName(name)
       val javaType = ctx.javaType(dt)
       val getter = ctx.getValue(source, dt, index)
-      if (outer || nullable) {
+      val checks = outerCheck ++ optionalCode(nullable, s"$source.isNullAt($index)")
+      if (checks.nonEmpty) {
         val isNull = ctx.freshName("isNull")
         val code =
           s"""
-             |boolean $isNull = $numElements == 0 || $source.isNullAt($index);
+             |boolean $isNull = ${checks.mkString(" || ")};
              |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
            """.stripMargin
         ExprCode(code, isNull, value)
@@ -151,17 +154,36 @@ case class GenerateExec(
         ExprCode(s"$javaType $value = $getter;", "false", value)
       }
     }
-    val values = e.dataType match {
+
+    val (initArrayData, initValues, values) = e.dataType match {
+        /*
+      case ArrayType(st: StructType, nullable) if output.size > 1 =>
+        val rowCode = accessor("", "col", st, nullable)
+        st.fields.map { f =>
+
+        }
+        ("", rowCode.code, Seq.empty[ExprCode])
+*/
       case ArrayType(dataType, nullable) =>
-        // Add unwrapping here for tuples.
-        Seq(accessor("", "col", dataType, nullable))
+        ("", "", Seq(accessor(data.value, "col", dataType, nullable)))
+
       case MapType(keyType, valueType, valueContainsNull) =>
-        Seq(accessor(".keyArray()", "key", keyType, nullable = false),
-          accessor(".valueArray()", "value", valueType, valueContainsNull))
+        // Materialize the key and the value array before we enter the loop.
+        val keyArray = ctx.freshName("keyArray")
+        val valueArray = ctx.freshName("valueArray")
+        val initArrayData =
+          s"""
+             |ArrayData $keyArray = ${data.isNull} ? null : ${data.value}.keyArray();
+             |ArrayData $valueArray = ${data.isNull} ? null : ${data.value}.valueArray();
+           """.stripMargin
+        val values = Seq(
+          accessor(keyArray, "key", keyType, nullable = false),
+          accessor(valueArray, "value", valueType, valueContainsNull))
+        (initArrayData, "", values)
     }
 
     // Determine result vars.
-    val output = if (join) {
+    val outputValues = if (join) {
       input ++ values
     } else {
       values
@@ -173,11 +195,18 @@ case class GenerateExec(
     val init = if (outer) s"$numElements == 0 ? -1 : 0" else "0"
     s"""
        |${data.code}
+       |$initArrayData
        |int $numElements = ${data.isNull} ? 0 : ${data.value}.numElements();
        |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
-       |  ${consume(ctx, output)}
+       |  $initValues
+       |  ${consume(ctx, outputValues)}
        |}
      """.stripMargin
+  }
+
+  private def optionalCode(condition: Boolean, code: => String): Seq[String] = {
+    if (condition) Seq(code)
+    else Seq.empty
   }
 }
