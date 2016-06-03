@@ -26,16 +26,16 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.StructType
 
-object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
+object ComplexResultAgg extends Aggregator[(String, Long), (Long, Long), (Long, Long)] {
   override def zero: (Long, Long) = (0, 0)
-  override def reduce(countAndSum: (Long, Long), input: (String, Int)): (Long, Long) = {
+  override def reduce(countAndSum: (Long, Long), input: (String, Long)): (Long, Long) = {
     (countAndSum._1 + 1, countAndSum._2 + input._2)
   }
   override def merge(b1: (Long, Long), b2: (Long, Long)): (Long, Long) = {
     (b1._1 + b2._1, b1._2 + b2._2)
   }
   override def finish(reduction: (Long, Long)): (Long, Long) = reduction
-  override def inputEncoder: Encoder[(String, Int)] = Encoders.product[(String, Int)]
+  override def inputEncoder: Encoder[(String, Long)] = Encoders.product[(String, Long)]
   override def bufferEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
   override def outputEncoder: Encoder[(Long, Long)] = Encoders.product[(Long, Long)]
 }
@@ -136,7 +136,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   }
 
   test("typed aggregation: complex result type") {
-    val ds = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDS()
+    val ds = Seq("a" -> 1L, "a" -> 3L, "b" -> 3L).toDS()
     checkDataset(
       ds.groupByKey(_._1).agg(
         expr("avg(_2)").as[Double],
@@ -226,9 +226,13 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
   }
 
   test("aggregator in DataFrame/Dataset[Row]") {
-    val df = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
-    checkAnswer(df.groupBy($"j").agg(new RowAgg(df.schema).toColumn),
+    val df1 = Seq(1 -> "a", 2 -> "b", 3 -> "b").toDF("i", "j")
+    checkAnswer(df1.groupBy($"j").agg(new RowAgg(df1.schema).toColumn),
       Row("a", 1) :: Row("b", 5) :: Nil)
+
+    val df2 = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDF("i", "j")
+    checkAnswer(df2.groupBy("i").agg(ComplexResultAgg.toColumn),
+      Row("a", Row(2, 4)) :: Row("b", Row(1, 3)) :: Nil)
   }
 
   test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {
