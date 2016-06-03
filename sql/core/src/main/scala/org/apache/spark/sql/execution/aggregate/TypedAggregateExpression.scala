@@ -48,7 +48,7 @@ object TypedAggregateExpression {
 
     new TypedAggregateExpression(
       aggregator.asInstanceOf[Aggregator[Any, Any, Any]],
-      Some(inputDeserializer),
+      inputDeserializer,
       bufferSerializer,
       bufferDeserializer,
       outputEncoder.serializer,
@@ -62,7 +62,7 @@ object TypedAggregateExpression {
  */
 case class TypedAggregateExpression(
     aggregator: Aggregator[Any, Any, Any],
-    inputDeserializer: Option[Expression],
+    inputDeserializer: Expression,
     bufferSerializer: Seq[NamedExpression],
     bufferDeserializer: Expression,
     outputSerializer: Seq[Expression],
@@ -73,11 +73,11 @@ case class TypedAggregateExpression(
 
   override def deterministic: Boolean = true
 
-  override def children: Seq[Expression] = inputDeserializer.toSeq :+ bufferDeserializer
+  override def children: Seq[Expression] = inputDeserializer :: bufferDeserializer :: Nil
 
-  override lazy val resolved: Boolean = inputDeserializer.isDefined && childrenResolved
+  override lazy val resolved: Boolean = childrenResolved
 
-  override def references: AttributeSet = AttributeSet(inputDeserializer.toSeq)
+  override def references: AttributeSet = AttributeSet(Seq(inputDeserializer))
 
   override def inputTypes: Seq[AbstractDataType] = Nil
 
@@ -99,7 +99,7 @@ case class TypedAggregateExpression(
       aggregatorLiteral,
       "reduce",
       bufferExternalType,
-      bufferDeserializer :: inputDeserializer.get :: Nil)
+      bufferDeserializer :: inputDeserializer :: Nil)
 
     bufferSerializer.map(ReferenceToExpressions(_, reduced :: Nil))
   }
@@ -140,9 +140,8 @@ case class TypedAggregateExpression(
 
   override def toString: String = {
     val input = inputDeserializer match {
-      case Some(UnresolvedDeserializer(deserializer, _)) => deserializer.dataType.simpleString
-      case Some(deserializer) => deserializer.dataType.simpleString
-      case _ => "unknown"
+      case UnresolvedDeserializer(deserializer, _) => deserializer.dataType.simpleString
+      case deserializer => deserializer.dataType.simpleString
     }
 
     s"$nodeName($input)"

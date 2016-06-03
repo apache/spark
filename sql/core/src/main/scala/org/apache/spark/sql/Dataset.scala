@@ -991,9 +991,7 @@ class Dataset[T] private[sql](
     new Dataset[U1](
       sparkSession,
       Project(
-        c1.withInputType(
-          unresolvedTEncoder.deserializer,
-          logicalPlan.output).named :: Nil,
+        c1.named :: Nil,
         logicalPlan),
       implicitly[Encoder[U1]])
   }
@@ -1006,7 +1004,7 @@ class Dataset[T] private[sql](
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
+      columns.map(_.named)
     val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(sparkSession, execution, ExpressionEncoder.tuple(encoders))
   }

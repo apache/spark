@@ -64,21 +64,6 @@ class TypedColumn[-T, U](
   extends Column(expr) {
 
   /**
-   * Inserts the specific input type and schema into any expressions that are expected to operate
-   * on a decoded object.
-   */
-  private[sql] def withInputType(
-      inputDeserializer: Expression,
-      inputAttributes: Seq[Attribute]): TypedColumn[T, U] = {
-    val unresolvedDeserializer = UnresolvedDeserializer(inputDeserializer, inputAttributes)
-    val newExpr = expr transform {
-      case ta: TypedAggregateExpression if ta.inputDeserializer.isEmpty =>
-        ta.copy(inputDeserializer = Some(unresolvedDeserializer))
-    }
-    new TypedColumn[T, U](newExpr, encoder)
-  }
-
-  /**
    * Gives the TypedColumn a name (alias).
    * If the current TypedColumn has metadata associated with it, this metadata will be propagated
    * to the new column.
