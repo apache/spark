@@ -174,10 +174,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
    */
   protected def mapProductIterator[B: ClassTag](f: Any => B): Array[B] = {
     val arr = Array.ofDim[B](productArity)
-    val iter = productIterator
     var i = 0
     while (i < arr.length) {
-      arr(i) = f(iter.next())
+      arr(i) = f(productElement(i))
       i += 1
     }
     arr
