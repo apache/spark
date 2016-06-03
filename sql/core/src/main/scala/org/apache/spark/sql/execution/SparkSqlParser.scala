@@ -940,9 +940,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
     selectQuery match {
       case Some(q) =>
-        // If there exists an unresolved relation in the children, then it means we're
-        // selecting from a table. In that case we shouldn't provide our own schema.
-        if (q.children.exists(_.isInstanceOf[UnresolvedRelation]) && schema.nonEmpty) {
+        // Just use whatever is projected in the select statement as our schema
+        if (schema.nonEmpty) {
           throw operationNotAllowed(
             "Schema may not be specified in a Create Table As Select (CTAS) statement",
             ctx)

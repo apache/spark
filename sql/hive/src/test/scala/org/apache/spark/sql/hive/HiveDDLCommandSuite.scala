@@ -168,14 +168,7 @@ class HiveDDLCommandSuite extends PlanTest {
 
   test("CTAS statement with schema") {
     assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT * FROM src")
-    parser.parsePlan(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'") match {
-      case cmd: CreateHiveTableAsSelectLogicalPlan =>
-        assert(cmd.tableDesc.schema.toSet ==
-          Set(CatalogColumn("age", "int"), CatalogColumn("name", "string")))
-      case other =>
-        fail(s"Expected ${CreateHiveTableAsSelectLogicalPlan.getClass.getSimpleName}, " +
-          s"but parsed ${other.getClass.getSimpleName}")
-    }
+    assertUnsupported(s"CREATE TABLE ctas1 (age INT, name STRING) AS SELECT 1, 'hello'")
   }
 
   test("unsupported operations") {
