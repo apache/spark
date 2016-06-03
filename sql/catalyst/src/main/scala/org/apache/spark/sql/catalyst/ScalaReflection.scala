@@ -582,6 +582,11 @@ object ScalaReflection extends ScalaReflection {
         case t if definedByConstructorParams(t) =>
           val params = getConstructorParameters(t)
           val nonNullOutput = CreateNamedStruct(params.flatMap { case (fieldName, fieldType) =>
+            if (javaKeywords.contains(fieldName)) {
+              throw new UnsupportedOperationException(s"`$fieldName` is a reserved keyword and " +
+                "cannot be used as field name\n" + walkedTypePath.mkString("\n"))
+            }
+
             val fieldValue = Invoke(inputObject, fieldName, dataTypeFor(fieldType))
             val clsName = getClassNameFromType(fieldType)
             val newPath = s"""- field (class: "$clsName", name: "$fieldName")""" +: walkedTypePath
@@ -720,6 +725,12 @@ object ScalaReflection extends ScalaReflection {
     tpe <:< localTypeOf[Product] || tpe <:< localTypeOf[DefinedByConstructorParams]
   }
 
+  private val javaKeywords = Set("abstract", "assert", "boolean", "break", "byte", "case", "catch",
+    "char", "class", "const", "continue", "default", "do", "double", "else", "extends", "false",
+    "final", "finally", "float", "for", "goto", "if", "implements", "import", "instanceof", "int",
+    "interface", "long", "native", "new", "null", "package", "private", "protected", "public",
+    "return", "short", "static", "strictfp", "super", "switch", "synchronized", "this", "throw",
+    "throws", "transient", "true", "try", "void", "volatile", "while")
 }
 
 /**
