@@ -160,8 +160,8 @@ setMethod("substr", signature(x = "Column"),
 #' @name startsWith
 #' @family colum_func
 #'
-#' @param vector of character string whose “starts” are considered
-#' @param character vector (often of length one)
+#' @param x vector of character string whose “starts” are considered
+#' @param prefix character vector (often of length one)
 setMethod("startsWith", signature(x = "Column"),
           function(x, prefix) {
             jc <- callJMethod(x@jc, "startsWith", as.vector(prefix))
@@ -177,8 +177,8 @@ setMethod("startsWith", signature(x = "Column"),
 #' @name endsWith
 #' @family colum_func
 #'
-#' @param vector of character string whose “ends” are considered
-#' @param character vector (often of length one)
+#' @param x vector of character string whose “ends” are considered
+#' @param suffix character vector (often of length one)
 setMethod("endsWith", signature(x = "Column"),
           function(x, suffix) {
             jc <- callJMethod(x@jc, "endsWith", as.vector(suffix))

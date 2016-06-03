@@ -691,6 +691,10 @@ setGeneric("contains", function(x, ...) { standardGeneric("contains") })
 
 #' @rdname column
 #' @export
+setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
+
+#' @rdname column
+#' @export
 setGeneric("desc", function(x) { standardGeneric("desc") })
 
 #' @rdname column
@@ -716,6 +720,10 @@ setGeneric("isNotNull", function(x) { standardGeneric("isNotNull") })
 #' @rdname column
 #' @export
 setGeneric("like", function(x, ...) { standardGeneric("like") })
+
+#' @rdname column
+#' @export
+setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
 #' @rdname column
 #' @export
