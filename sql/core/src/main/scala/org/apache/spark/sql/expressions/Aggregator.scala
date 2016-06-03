@@ -114,4 +114,18 @@ abstract class Aggregator[IN, BUF, OUT] extends Serializable {
 
     new TypedColumn[IN, OUT](expr, encoderFor[OUT])
   }
+
+  def apply(columnNames: String*): TypedColumn[IN, OUT] = {
+    implicit val aEncoder = inputEncoder
+    implicit val bEncoder = bufferEncoder
+    implicit val cEncoder = outputEncoder
+
+    val expr =
+      AggregateExpression(
+        TypedAggregateExpression(this, Some(columnNames)),
+        Complete,
+        isDistinct = false)
+
+    new TypedColumn[IN, OUT](expr, encoderFor[OUT])
+  }
 }

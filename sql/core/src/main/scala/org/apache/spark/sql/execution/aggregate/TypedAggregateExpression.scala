@@ -30,9 +30,15 @@ import org.apache.spark.sql.types._
 
 object TypedAggregateExpression {
   def apply[IN: Encoder, BUF : Encoder, OUT : Encoder](
-      aggregator: Aggregator[IN, BUF, OUT]): TypedAggregateExpression = {
+      aggregator: Aggregator[IN, BUF, OUT],
+      inputColumnNames: Option[Seq[String]] = None): TypedAggregateExpression = {
     val inputEncoder = encoderFor[IN]
-    val inputDeserializer = UnresolvedDeserializer(inputEncoder.deserializer)
+    val inputDeserializer = UnresolvedDeserializer(inputColumnNames.map{ names =>
+      inputEncoder.deserializer.transform {
+        case BoundReference(ord, dataType, nullable) =>
+          UnresolvedAttribute(names(ord))
+      }
+    }.getOrElse(inputEncoder.deserializer))
     val bufferEncoder = encoderFor[BUF]
     val bufferSerializer = bufferEncoder.namedExpressions
     val bufferDeserializer = bufferEncoder.deserializer.transform {

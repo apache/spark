@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import scala.language.postfixOps
 
 import org.apache.spark.sql.catalyst.encoders.{ExpressionEncoder, RowEncoder }
+import org.apache.spark.sql.execution.aggregate.{TypedCount, TypedSumDouble}
 import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
@@ -233,6 +234,15 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     val df2 = Seq("a" -> 1, "a" -> 3, "b" -> 3).toDF("i", "j")
     checkAnswer(df2.groupBy("i").agg(ComplexResultAgg.toColumn),
       Row("a", Row(2, 4)) :: Row("b", Row(1, 3)) :: Nil)
+
+    val df3 = Seq(("a", "x", 1), ("a", "y", 3), ("b", "x", 3)).toDF("i", "j", "k")
+    checkAnswer(df3.groupBy("i").agg(ComplexResultAgg("i", "k")),
+      Row("a", Row(2, 4)) :: Row("b", Row(1, 3)) :: Nil)
+
+    checkAnswer(df3.groupBy("i").agg(
+      new TypedCount[Double](identity).apply("k") as "count",
+      new TypedSumDouble[Double](identity).apply("k") as "sum"
+    ), Row("a", 2, 4.0) :: Row("b", 1, 3.0) :: Nil)
   }
 
   test("SPARK-14675: ClassFormatError when use Seq as Aggregator buffer type") {
