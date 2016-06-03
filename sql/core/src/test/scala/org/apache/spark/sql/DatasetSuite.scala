@@ -790,6 +790,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(e.getMessage.contains(
       "`abstract` is a reserved keyword and cannot be used as field name"))
   }
+
+  test("Dataset should support flat input object to be null") {
+    checkDataset(Seq("a", null).toDS(), "a", null)
+  }
+
+  test("Dataset should throw RuntimeException if non-flat input object is null") {
+    val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level non-flat input object"))
+  }
 }
 
 case class Generic[T](id: T, value: Double)
