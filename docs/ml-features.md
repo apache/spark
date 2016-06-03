@@ -1102,7 +1102,7 @@ for more details on the API.
 categorical features. The number of bins is set by the `numBuckets` parameter.
 The bin ranges are chosen using an approximate algorithm (see the documentation for [approxQuantile](api/scala/index.html#org.apache.spark.sql.DataFrameStatFunctions.scala)
 for a detailed description). The precision of the approximation can be controlled with the
-`relativeError` parameter. When set to zero, exact quantiles are calculated (**Note:** Computing exact quantiles is an expensive operation).
+`relativeError` parameter. When set to zero, exact quantiles are calculated (**Note:** Computing exact quantiles is an expensive operation). The default value of `relativeError` is 0.01.
 The lower and upper bin bounds will be `-Infinity` and `+Infinity` covering all real values.
 
 **Examples**

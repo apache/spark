@@ -58,7 +58,11 @@ public class JavaQuantileDiscretizerExample {
     QuantileDiscretizer discretizer = new QuantileDiscretizer()
       .setInputCol("hour")
       .setOutputCol("result")
-      .setNumBuckets(3);
+      .setNumBuckets(3)
+      .setRelativeError(0);
+      // Note that we compute exact quantiles here by setting `relativeError` to 0 for
+      // illustrative purposes, however in most cases the default parameter value should suffice
+
 
     Dataset<Row> result = discretizer.fit(df).transform(df);
     result.show();
