@@ -34,13 +34,13 @@ object QuantileDiscretizerExample {
     val data = Array((0, 18.0), (1, 19.0), (2, 8.0), (3, 5.0), (4, 2.2))
     val df = spark.createDataFrame(data).toDF("id", "hour")
 
+    // Note that we compute exact quantiles here by setting `relativeError` to 0 for
+    // illustrative purposes, however in most cases the default parameter value should suffice
     val discretizer = new QuantileDiscretizer()
       .setInputCol("hour")
       .setOutputCol("result")
       .setNumBuckets(3)
       .setRelativeError(0)
-      // Note that we compute exact quantiles here by setting `relativeError` to 0 for
-      // illustrative purposes, however in most cases the default parameter value should suffice
 
     val result = discretizer.fit(df).transform(df)
     result.show()
