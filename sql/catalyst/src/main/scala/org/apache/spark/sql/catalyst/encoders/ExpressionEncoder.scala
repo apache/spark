@@ -55,7 +55,7 @@ object ExpressionEncoder {
       inputObject
     } else {
       // For input object of non-flat type, we can't encode it to row if it's null, as Spark SQL
-      // doesn't allow row to be null, only its columns can be null.
+      // doesn't allow top-level row to be null, only its columns can be null.
       AssertNotNull(inputObject, Seq("top level non-flat input object"))
     }
     val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
