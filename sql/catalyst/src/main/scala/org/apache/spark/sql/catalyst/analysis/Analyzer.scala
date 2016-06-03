@@ -458,7 +458,11 @@ class Analyzer(
           val (inputPartCols, inputDataCols) = child.output.partition { attr =>
             parts.contains(attr.name)
           }
-          Project(inputDataCols ++ inputPartCols, child)
+          if (child.output == (inputDataCols ++ inputPartCols)) {
+            child
+          } else {
+            Project(inputDataCols ++ inputPartCols, child)
+          }
         } else {
           child
         }
