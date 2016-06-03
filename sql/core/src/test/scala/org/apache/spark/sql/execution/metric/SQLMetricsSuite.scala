@@ -1,19 +1,19 @@
 /*
-* Licensed to the Apache Software Foundation (ASF) under one or more
-* contributor license agreements.  See the NOTICE file distributed with
-* this work for additional information regarding copyright ownership.
-* The ASF licenses this file to You under the Apache License, Version 2.0
-* (the "License"); you may not use this file except in compliance with
-* the License.  You may obtain a copy of the License at
-*
-*    http://www.apache.org/licenses/LICENSE-2.0
-*
-* Unless required by applicable law or agreed to in writing, software
-* distributed under the License is distributed on an "AS IS" BASIS,
-* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-* See the License for the specific language governing permissions and
-* limitations under the License.
-*/
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
 package org.apache.spark.sql.execution.metric
 
@@ -135,8 +135,8 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
 
   test("Aggregate metrics") {
     // Assume the execution plan is
-    // ... -> TungstenAggregate(nodeId = 2) -> Exchange(nodeId = 1)
-    // -> TungstenAggregate(nodeId = 0)
+    // ... -> HashAggregate(nodeId = 2) -> Exchange(nodeId = 1)
+    // -> HashAggregate(nodeId = 0)
     val df = testData2.groupBy().count() // 2 partitions
     testSparkPlanMetrics(df, 1, Map(
       2L -> ("HashAggregate", Map("number of output rows" -> 2L)),

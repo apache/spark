@@ -722,6 +722,7 @@ class Analyzer(
     // Else, throw exception.
     try {
       expr transformUp {
+        case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
           withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
@@ -1924,10 +1925,54 @@ class Analyzer(
           } else {
             inputAttributes
           }
-          val unbound = deserializer transform {
-            case b: BoundReference => inputs(b.ordinal)
-          }
-          resolveExpression(unbound, LocalRelation(inputs), throws = true)
+
+          validateTopLevelTupleFields(deserializer, inputs)
+          val resolved = resolveExpression(
+            deserializer, LocalRelation(inputs), throws = true)
+          validateNestedTupleFields(resolved)
+          resolved
+      }
+    }
+
+    private def fail(schema: StructType, maxOrdinal: Int): Unit = {
+      throw new AnalysisException(s"Try to map ${schema.simpleString} to Tuple${maxOrdinal + 1}, " +
+        "but failed as the number of fields does not line up.")
+    }
+
+    /**
+     * For each top-level Tuple field, we use [[GetColumnByOrdinal]] to get its corresponding column
+     * by position.  However, the actual number of columns may be different from the number of Tuple
+     * fields.  This method is used to check the number of columns and fields, and throw an
+     * exception if they do not match.
+     */
+    private def validateTopLevelTupleFields(
+        deserializer: Expression, inputs: Seq[Attribute]): Unit = {
+      val ordinals = deserializer.collect {
+        case GetColumnByOrdinal(ordinal, _) => ordinal
+      }.distinct.sorted
+
+      if (ordinals.nonEmpty && ordinals != inputs.indices) {
+        fail(inputs.toStructType, ordinals.last)
+      }
+    }
+
+    /**
+     * For each nested Tuple field, we use [[GetStructField]] to get its corresponding struct field
+     * by position.  However, the actual number of struct fields may be different from the number
+     * of nested Tuple fields.  This method is used to check the number of struct fields and nested
+     * Tuple fields, and throw an exception if they do not match.
+     */
+    private def validateNestedTupleFields(deserializer: Expression): Unit = {
+      val structChildToOrdinals = deserializer
+        .collect { case g: GetStructField => g }
+        .groupBy(_.child)
+        .mapValues(_.map(_.ordinal).distinct.sorted)
+
+      structChildToOrdinals.foreach { case (expr, ordinals) =>
+        val schema = expr.dataType.asInstanceOf[StructType]
+        if (ordinals != schema.indices) {
+          fail(schema, ordinals.last)
+        }
       }
     }
   }
