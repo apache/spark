@@ -30,7 +30,9 @@ if __name__ == "__main__":
     data = [(0, 18.0,), (1, 19.0,), (2, 8.0,), (3, 5.0,), (4, 2.2,)]
     dataFrame = spark.createDataFrame(data, ["id", "hour"])
 
-    discretizer = QuantileDiscretizer(numBuckets=3, inputCol="hour", outputCol="result")
+    discretizer = QuantileDiscretizer(numBuckets=3, inputCol="hour", outputCol="result", relativeError=0)
+    # Note that we compute exact quantiles here by setting `relativeError` to 0 for
+    # illustrative purposes, however in most cases the default parameter value should suffice
 
     result = discretizer.fit(dataFrame).transform(dataFrame)
     result.show()
