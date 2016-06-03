@@ -62,7 +62,7 @@ case class CatalogStorageFormat(
       Seq(locationUri.map("Location:" + _).getOrElse(""),
         inputFormat.map("InputFormat:" + _).getOrElse(""),
         outputFormat.map("OutputFormat:" + _).getOrElse(""),
-        if (compressed) "Compressed:Yes" else "Compressed:No",
+        if (compressed) "Compressed" else "",
         serde.map("Serde:" + _).getOrElse(""),
         serdePropsToString)
     output.filter(_.nonEmpty).mkString("Storage(", ", ", ")")
@@ -91,7 +91,7 @@ case class CatalogColumn(
     val output =
       Seq(s"`$name`",
         dataType,
-        if (nullable) "NULL" else "NOT NULL",
+        if (!nullable) "NOT NULL" else "",
         comment.map("(" + _ + ")").getOrElse(""))
     output.filter(_.nonEmpty).mkString(" ")
   }
@@ -193,7 +193,7 @@ case class CatalogTable(
         if (properties.nonEmpty) s"Properties:$tableProperties" else "",
         s"$storage")
 
-    output.filter(_.nonEmpty).mkString("CatalogTable(", ", ", ")")
+    output.filter(_.nonEmpty).mkString("CatalogTable(\n\t", "\n\t", ")")
   }
 
 }
