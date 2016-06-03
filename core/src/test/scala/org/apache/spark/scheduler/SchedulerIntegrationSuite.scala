@@ -97,8 +97,8 @@ abstract class SchedulerIntegrationSuite[T <: MockBackend: ClassTag] extends Spa
    * the job has failed, they will get included in `results`.  Instead, check for job failure by
    * checking [[failure]].  (Also see [[assertDataStructuresEmpty()]])
    *
-   * 2. The only gets cleared between tests.  So it won't make much sense if you submit more
-   * than one job inside one test (or at least, you need to be sure to do your own handling for it)
+   * 2. This only gets cleared between tests.  So you'll need to do special handling if you submit
+   * more than one job in one test.
    */
   val results = new HashMap[Int, Any]()
 
