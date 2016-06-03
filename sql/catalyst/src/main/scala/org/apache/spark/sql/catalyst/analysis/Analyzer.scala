@@ -1945,7 +1945,8 @@ class Analyzer(
      * fields.  This method is used to check the number of columns and fields, and throw an
      * exception if they do not match.
      */
-    private def validateTopLevelTupleFields(deserializer: Expression, inputs: Seq[Attribute]): Unit = {
+    private def validateTopLevelTupleFields(
+        deserializer: Expression, inputs: Seq[Attribute]): Unit = {
       val ordinals = deserializer.collect {
         case GetColumnByOrdinal(ordinal, _) => ordinal
       }.distinct.sorted
