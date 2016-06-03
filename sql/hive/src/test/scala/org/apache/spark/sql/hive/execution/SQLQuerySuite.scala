@@ -608,17 +608,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("specifying the column list for CTAS") {
     Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
 
-    sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+    sql("create table gen__tmp as select key as a, value as b from mytable1")
     checkAnswer(
       sql("SELECT a, b from gen__tmp"),
       sql("select key, value from mytable1").collect())
     sql("DROP TABLE gen__tmp")
 
-    sql("create table gen__tmp(a double, b double) as select key, value from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select cast(key as double), cast(value as double) from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
+    intercept[AnalysisException] {
+      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+    }
 
     sql("drop table mytable1")
   }
@@ -1225,8 +1223,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
       withTempTable("src") {
-        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF().createOrReplaceTempView("src")
-        sql("CREATE TABLE test10741(c1 STRING, c2 INT) STORED AS PARQUET AS SELECT * FROM src")
+        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF("c1", "c2").createOrReplaceTempView("src")
+        sql("CREATE TABLE test10741 STORED AS PARQUET AS SELECT * FROM src")
       }
 
       checkAnswer(sql(

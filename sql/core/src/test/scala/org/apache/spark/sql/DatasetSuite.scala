@@ -566,18 +566,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }.message
     assert(message ==
       "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.\n" +
-        " - Input schema: struct<a:string,b:int>\n" +
-        " - Target schema: struct<_1:string,_2:int,_3:bigint>")
+        "but failed as the number of fields does not line up.")
 
     val message2 = intercept[AnalysisException] {
       ds.as[Tuple1[String]]
     }.message
     assert(message2 ==
       "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.\n" +
-        " - Input schema: struct<a:string,b:int>\n" +
-        " - Target schema: struct<_1:string>")
+        "but failed as the number of fields does not line up.")
   }
 
   test("SPARK-13440: Resolving option fields") {
@@ -793,6 +789,16 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.getMessage.contains(
       "`abstract` is a reserved keyword and cannot be used as field name"))
+  }
+
+  test("Dataset should support flat input object to be null") {
+    checkDataset(Seq("a", null).toDS(), "a", null)
+  }
+
+  test("Dataset should throw RuntimeException if non-flat input object is null") {
+    val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level non-flat input object"))
   }
 }
 

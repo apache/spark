@@ -110,7 +110,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   object CheckAnswer {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
-      val toExternalRow = RowEncoder(encoder.schema)
+      val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
       CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), false)
     }
 
@@ -124,7 +124,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   object CheckLastBatch {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
-      val toExternalRow = RowEncoder(encoder.schema)
+      val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
       CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), true)
     }
 

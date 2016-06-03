@@ -25,6 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.catalyst.analysis.GetColumnByOrdinal
 import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
@@ -56,8 +57,8 @@ import org.apache.spark.unsafe.types.UTF8String
 object RowEncoder {
   def apply(schema: StructType): ExpressionEncoder[Row] = {
     val cls = classOf[Row]
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = false)
-    val serializer = serializerFor(inputObject, schema)
+    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
+    val serializer = serializerFor(AssertNotNull(inputObject, Seq("top level row object")), schema)
     val deserializer = deserializerFor(schema)
     new ExpressionEncoder[Row](
       schema,
@@ -152,8 +153,7 @@ object RowEncoder {
         val fieldValue = serializerFor(
           GetExternalRowField(
             inputObject, index, field.name, externalDataTypeForInput(field.dataType)),
-          field.dataType
-        )
+          field.dataType)
         val convertedField = if (field.nullable) {
           If(
             Invoke(inputObject, "isNullAt", BooleanType, Literal(index) :: Nil),
@@ -210,12 +210,7 @@ object RowEncoder {
         case p: PythonUserDefinedType => p.sqlType
         case other => other
       }
-      val field = BoundReference(i, dt, f.nullable)
-      If(
-        IsNull(field),
-        Literal.create(null, externalDataTypeFor(dt)),
-        deserializerFor(field)
-      )
+      deserializerFor(GetColumnByOrdinal(i, dt))
     }
     CreateExternalRow(fields, schema)
   }
