@@ -1396,7 +1396,7 @@ class DAGScheduler(
       stage.clearFailures()
     } else {
       stage.latestInfo.stageFailed(errorMessage.get)
-      logInfo("%s (%s) failed in %s s".format(stage, stage.name, serviceTime))
+      logInfo(s"$stage (${stage.name}) failed in $serviceTime s due to ${errorMessage.get}")
     }
 
     outputCommitCoordinator.stageEnd(stage.id)

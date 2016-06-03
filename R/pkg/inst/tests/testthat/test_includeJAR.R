@@ -21,10 +21,9 @@ runScript <- function() {
   sparkTestJarPath <- "R/lib/SparkR/test_support/sparktestjar_2.10-1.0.jar"
   jarPath <- paste("--jars", shQuote(file.path(sparkHome, sparkTestJarPath)))
   scriptPath <- file.path(sparkHome, "R/lib/SparkR/tests/testthat/jarTest.R")
-  submitPath <- file.path(sparkHome, "bin/spark-submit")
-  res <- system2(command = submitPath,
-                 args = c(jarPath, scriptPath),
-                 stdout = TRUE)
+  submitPath <- file.path(sparkHome, paste("bin/", determineSparkSubmitBin(), sep = ""))
+  combinedArgs <- paste(jarPath, scriptPath, sep = " ")
+  res <- launchScript(submitPath, combinedArgs, capture = TRUE)
   tail(res, 2)
 }
 

@@ -596,6 +596,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
    * values to using the `add` method. Only the master can access the accumulator's `value`.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, accumulatorParam: AccumulatorParam[T]): Accumulator[T] =
     sc.accumulator(initialValue)(accumulatorParam)
 
@@ -605,6 +606,7 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * This version supports naming the accumulator for display in Spark's web UI.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulator[T](initialValue: T, name: String, accumulatorParam: AccumulatorParam[T])
       : Accumulator[T] =
     sc.accumulator(initialValue, name)(accumulatorParam)
@@ -613,6 +615,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulable]] shared variable of the given type, to which tasks
    * can "add" values with `add`. Only the master can access the accumuable's `value`.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[T, R](initialValue: T, param: AccumulableParam[T, R]): Accumulable[T, R] =
     sc.accumulable(initialValue)(param)
 
@@ -622,6 +625,7 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * This version supports naming the accumulator for display in Spark's web UI.
    */
+  @deprecated("use AccumulatorV2", "2.0.0")
   def accumulable[T, R](initialValue: T, name: String, param: AccumulableParam[T, R])
       : Accumulable[T, R] =
     sc.accumulable(initialValue, name)(param)

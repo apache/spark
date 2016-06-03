@@ -23,9 +23,7 @@ import java.util.UUID
 import scala.util.Random
 import scala.util.control.NonFatal
 
-import org.apache.spark.sql.{ContinuousQuery, ContinuousQueryException, StreamTest}
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
 /**
@@ -38,7 +36,7 @@ import org.apache.spark.util.Utils
  *
  * At the end, the resulting files are loaded and the answer is checked.
  */
-class FileStressSuite extends StreamTest with SharedSQLContext {
+class FileStressSuite extends StreamTest {
   import testImplicits._
 
   testQuietly("fault tolerance stress test - unpartitioned output") {

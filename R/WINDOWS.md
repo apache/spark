@@ -28,6 +28,6 @@ To run the SparkR unit tests on Windows, the following steps are required —ass
 
     ```
     R -e "install.packages('testthat', repos='http://cran.us.r-project.org')"
-    .\bin\spark-submit2.cmd --conf spark.hadoop.fs.defualt.name="file:///" R\pkg\tests\run-all.R
+    .\bin\spark-submit2.cmd --conf spark.hadoop.fs.default.name="file:///" R\pkg\tests\run-all.R
     ```
 
