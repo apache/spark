@@ -338,20 +338,20 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
         assert(partitions.flatMap(fileScanRDD.preferredLocations).length == 3)
       }
     }
+  }
 
-    test("optimize metadataOnly") {
-      withSQLConf("spark.sql.optimizer.metadataOnly" -> "true") {
-        val table =
-          createTable(
-            files = Seq(
-              "p1=1/file1" -> 10,
-              "p1=2/file2" -> 10))
+  test("optimize metadataOnly") {
+    withSQLConf("spark.sql.optimizer.metadataOnly" -> "true") {
+      val table =
+        createTable(
+          files = Seq(
+            "p1=1/file1" -> 10,
+            "p1=2/file2" -> 10))
 
-        checkDataset(table.select($"p1"), Row(1), Row(2))
-        checkDataset(table.where("p1 = 1").select($"p1"), Row(1))
-        val df = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
-        assert(getPhysicalFilters(df) contains resolve(df, "c1 = 1"))
-      }
+      checkDataset(table.select($"p1"), Row(1), Row(2))
+      checkDataset(table.where("p1 = 1").select($"p1"), Row(1))
+      val df = table.where("p1 = 1 AND (p1 + c1) = 2 AND c1 = 1")
+      assert(getPhysicalFilters(df) contains resolve(df, "c1 = 1"))
     }
   }
 
