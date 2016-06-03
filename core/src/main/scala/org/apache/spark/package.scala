@@ -46,16 +46,18 @@ import java.util.Properties
 package object spark {
 
   private object SparkBuildInfo {
-    val resourceStream = Thread.currentThread().getContextClassLoader.
-      getResourceAsStream("spark-version-info.properties")
 
     val (
-      spark_version: String,
-      spark_branch: String,
-      spark_revision: String,
-      spark_build_user: String,
-      spark_repo_url: String,
-      spark_build_date: String) =
+        spark_version: String,
+        spark_branch: String,
+        spark_revision: String,
+        spark_build_user: String,
+        spark_repo_url: String,
+        spark_build_date: String) = {
+
+      val resourceStream = Thread.currentThread().getContextClassLoader.
+        getResourceAsStream("spark-version-info.properties")
+
       try {
         val unknownProp = "<unknown>"
         val props = new Properties()
@@ -81,6 +83,7 @@ package object spark {
           }
         }
       }
+    }
   }
 
   val SPARK_VERSION = SparkBuildInfo.spark_version
