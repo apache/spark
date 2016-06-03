@@ -32,8 +32,9 @@ class AnalysisException protected[sql] (
     val message: String,
     val line: Option[Int] = None,
     val startPosition: Option[Int] = None,
-    val plan: Option[LogicalPlan] = None)
-  extends Exception with Serializable {
+    val plan: Option[LogicalPlan] = None,
+    val cause: Option[Throwable] = None)
+  extends Exception(message, cause.orNull) with Serializable {
 
   def withPosition(line: Option[Int], startPosition: Option[Int]): AnalysisException = {
     val newException = new AnalysisException(message, line, startPosition)

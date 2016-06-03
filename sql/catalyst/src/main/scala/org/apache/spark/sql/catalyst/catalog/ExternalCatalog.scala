@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.NoSuchDatabaseException
 
 
 /**
@@ -27,14 +27,14 @@ import org.apache.spark.sql.AnalysisException
  * can be accessed in multiple threads. This is an external catalog because it is expected to
  * interact with external systems.
  *
- * Implementations should throw [[AnalysisException]] when table or database don't exist.
+ * Implementations should throw [[NoSuchDatabaseException]] when table or database don't exist.
  */
 abstract class ExternalCatalog {
   import CatalogTypes.TablePartitionSpec
 
   protected def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
-      throw new AnalysisException(s"Database '$db' does not exist")
+      throw new NoSuchDatabaseException(db)
     }
   }
 

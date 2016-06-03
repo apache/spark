@@ -197,6 +197,11 @@ object GradientDescent extends Logging {
         "< 1.0 can be unstable because of the stochasticity in sampling.")
     }
 
+    if (numIterations * miniBatchFraction < 1.0) {
+      logWarning("Not all examples will be used if numIterations * miniBatchFraction < 1.0: " +
+        s"numIterations=$numIterations and miniBatchFraction=$miniBatchFraction")
+    }
+
     val stochasticLossHistory = new ArrayBuffer[Double](numIterations)
     // Record previous weight and current one to calculate solution vector difference
 
@@ -296,8 +301,8 @@ object GradientDescent extends Logging {
       currentWeights: Vector,
       convergenceTol: Double): Boolean = {
     // To compare with convergence tolerance.
-    val previousBDV = previousWeights.toBreeze.toDenseVector
-    val currentBDV = currentWeights.toBreeze.toDenseVector
+    val previousBDV = previousWeights.asBreeze.toDenseVector
+    val currentBDV = currentWeights.asBreeze.toDenseVector
 
     // This represents the difference of updated weights in the iteration.
     val solutionVecDiff: Double = norm(previousBDV - currentBDV)

@@ -24,7 +24,7 @@ import org.apache.spark.util.Utils
 @DeveloperApi
 class RDDInfo(
     val id: Int,
-    val name: String,
+    var name: String,
     val numPartitions: Int,
     var storageLevel: StorageLevel,
     val parentIds: Seq[Int],

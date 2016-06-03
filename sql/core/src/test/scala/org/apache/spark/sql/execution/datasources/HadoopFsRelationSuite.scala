@@ -27,7 +27,7 @@ class HadoopFsRelationSuite extends QueryTest with SharedSQLContext {
   test("sizeInBytes should be the total size of all files") {
     withTempDir{ dir =>
       dir.delete()
-      sqlContext.range(1000).write.parquet(dir.toString)
+      spark.range(1000).write.parquet(dir.toString)
       // ignore hidden files
       val allFiles = dir.listFiles(new FilenameFilter {
         override def accept(dir: File, name: String): Boolean = {
@@ -35,8 +35,19 @@ class HadoopFsRelationSuite extends QueryTest with SharedSQLContext {
         }
       })
       val totalSize = allFiles.map(_.length()).sum
-      val df = sqlContext.read.parquet(dir.toString)
+      val df = spark.read.parquet(dir.toString)
       assert(df.queryExecution.logical.statistics.sizeInBytes === BigInt(totalSize))
     }
+  }
+
+  test("file filtering") {
+    assert(!HadoopFsRelation.shouldFilterOut("abcd"))
+    assert(HadoopFsRelation.shouldFilterOut(".ab"))
+    assert(HadoopFsRelation.shouldFilterOut("_cd"))
+
+    assert(!HadoopFsRelation.shouldFilterOut("_metadata"))
+    assert(!HadoopFsRelation.shouldFilterOut("_common_metadata"))
+    assert(HadoopFsRelation.shouldFilterOut("_ab_metadata"))
+    assert(HadoopFsRelation.shouldFilterOut("_cd_common_metadata"))
   }
 }

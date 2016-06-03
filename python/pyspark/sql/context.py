@@ -34,7 +34,10 @@ __all__ = ["SQLContext", "HiveContext", "UDFRegistration"]
 
 
 class SQLContext(object):
-    """Wrapper around :class:`SparkSession`, the main entry point to Spark SQL functionality.
+    """The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
+
+    As of Spark 2.0, this is replaced by :class:`SparkSession`. However, we are keeping the class
+    here for backward compatibility.
 
     A SQLContext can be used create :class:`DataFrame`, register :class:`DataFrame` as
     tables, execute SQL over tables, cache tables, and read parquet files.
@@ -57,7 +60,7 @@ class SQLContext(object):
         ...     b=True, list=[1, 2, 3], dict={"s": 0}, row=Row(a=1),
         ...     time=datetime(2014, 8, 1, 14, 1, 5))])
         >>> df = allTypes.toDF()
-        >>> df.registerTempTable("allTypes")
+        >>> df.createOrReplaceTempView("allTypes")
         >>> sqlContext.sql('select i+1, d+1, not b, list[1], dict["s"], time, row.a '
         ...            'from allTypes where b and i > 0').collect()
         [Row((i + CAST(1 AS BIGINT))=2, (d + CAST(1 AS DOUBLE))=2.0, (NOT b)=False, list[1]=2, \
@@ -106,7 +109,7 @@ class SQLContext(object):
     def newSession(self):
         """
         Returns a new SQLContext as new session, that has separate SQLConf,
-        registered temporary tables and UDFs, but shared SparkContext and
+        registered temporary views and UDFs, but shared SparkContext and
         table cache.
         """
         return self.__class__(self._sc, self.sparkSession.newSession())
@@ -302,7 +305,7 @@ class SQLContext(object):
 
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         """
-        self.sparkSession.catalog.registerTable(df, tableName)
+        df.createOrReplaceTempView(tableName)
 
     @since(1.6)
     def dropTempTable(self, tableName):
@@ -311,7 +314,7 @@ class SQLContext(object):
         >>> sqlContext.registerDataFrameAsTable(df, "table1")
         >>> sqlContext.dropTempTable("table1")
         """
-        self.sparkSession.catalog.dropTempTable(tableName)
+        self.sparkSession.catalog.dropTempView(tableName)
 
     @since(1.3)
     def createExternalTable(self, tableName, path=None, source=None, schema=None, **options):
@@ -455,7 +458,7 @@ class HiveContext(SQLContext):
 
     def __init__(self, sparkContext, jhiveContext=None):
         if jhiveContext is None:
-            sparkSession = SparkSession.withHiveSupport(sparkContext)
+            sparkSession = SparkSession.builder.enableHiveSupport().getOrCreate()
         else:
             sparkSession = SparkSession(sparkContext, jhiveContext.sparkSession())
         SQLContext.__init__(self, sparkContext, sparkSession, jhiveContext)

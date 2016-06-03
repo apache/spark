@@ -65,7 +65,7 @@ private[spark] class BlockManager(
     memoryManager: MemoryManager,
     mapOutputTracker: MapOutputTracker,
     shuffleManager: ShuffleManager,
-    blockTransferService: BlockTransferService,
+    val blockTransferService: BlockTransferService,
     securityManager: SecurityManager,
     numUsableCores: Int)
   extends BlockDataManager with BlockEvictionHandler with Logging {
@@ -92,9 +92,9 @@ private[spark] class BlockManager(
   private[spark] val diskStore = new DiskStore(conf, diskBlockManager)
   memoryManager.setMemoryStore(memoryStore)
 
-  // Note: depending on the memory manager, `maxStorageMemory` may actually vary over time.
+  // Note: depending on the memory manager, `maxMemory` may actually vary over time.
   // However, since we use this only for reporting and logging, what we actually want here is
-  // the absolute maximum value that `maxStorageMemory` can ever possibly reach. We may need
+  // the absolute maximum value that `maxMemory` can ever possibly reach. We may need
   // to revisit whether reporting this value as the "max" is intuitive to the user.
   private val maxMemory = memoryManager.maxOnHeapStorageMemory
 
@@ -231,7 +231,7 @@ private[spark] class BlockManager(
    */
   def reregister(): Unit = {
     // TODO: We might need to rate limit re-registering.
-    logInfo("BlockManager re-registering with master")
+    logInfo(s"BlockManager $blockManagerId re-registering with master")
     master.registerBlockManager(blockManagerId, maxMemory, slaveEndpoint)
     reportAllBlocks()
   }
@@ -403,6 +403,17 @@ private[spark] class BlockManager(
   }
 
   /**
+   * Cleanup code run in response to a failed local read.
+   * Must be called while holding a read lock on the block.
+   */
+  private def handleLocalReadFailure(blockId: BlockId): Nothing = {
+    releaseLock(blockId)
+    // Remove the missing block so that its unavailability is reported to the driver
+    removeBlock(blockId)
+    throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+  }
+
+  /**
    * Get block from local block manager as an iterator of Java objects.
    */
   def getLocalValues(blockId: BlockId): Option[BlockResult] = {
@@ -441,8 +452,7 @@ private[spark] class BlockManager(
           val ci = CompletionIterator[Any, Iterator[Any]](iterToReturn, releaseLock(blockId))
           Some(new BlockResult(ci, DataReadMethod.Disk, info.size))
         } else {
-          releaseLock(blockId)
-          throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+          handleLocalReadFailure(blockId)
         }
     }
   }
@@ -489,8 +499,7 @@ private[spark] class BlockManager(
         // The block was not found on disk, so serialize an in-memory copy:
         serializerManager.dataSerialize(blockId, memoryStore.getValues(blockId).get)
       } else {
-        releaseLock(blockId)
-        throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+        handleLocalReadFailure(blockId)
       }
     } else {  // storage level is serialized
       if (level.useMemory && memoryStore.contains(blockId)) {
@@ -499,8 +508,7 @@ private[spark] class BlockManager(
         val diskBytes = diskStore.getBytes(blockId)
         maybeCacheDiskBytesInMemory(info, blockId, level, diskBytes).getOrElse(diskBytes)
       } else {
-        releaseLock(blockId)
-        throw new SparkException(s"Block $blockId was not found even though it's read-locked")
+        handleLocalReadFailure(blockId)
       }
     }
   }
