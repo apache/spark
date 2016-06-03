@@ -311,8 +311,10 @@ object Utils {
             aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes),
         child = restored)
     }
-
-    val saved = StateStoreSaveExec(groupingAttributes, None, partialMerged2)
+    // Note: stateId and returnAllStates are filled in later with preparation rules
+    // in IncrementalExecution.
+    val saved = StateStoreSaveExec(
+      groupingAttributes, stateId = None, returnAllStates = None, partialMerged2)
 
     val finalAndCompleteAggregate: SparkPlan = {
       val finalAggregateExpressions = functionsWithoutDistinct.map(_.copy(mode = Final))

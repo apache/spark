@@ -599,6 +599,8 @@ case class TungstenAggregate(
 
     // create grouping key
     ctx.currentVars = input
+    // make sure that the generated code will not be splitted as multiple functions
+    ctx.INPUT_ROW = null
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
     val vectorizedRowKeys = ctx.generateExpressions(
@@ -767,9 +769,9 @@ case class TungstenAggregate(
         val keyString = groupingExpressions.mkString("[", ",", "]")
         val functionString = allAggregateExpressions.mkString("[", ",", "]")
         val outputString = output.mkString("[", ",", "]")
-        s"TungstenAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        s"Aggregate(key=$keyString, functions=$functionString, output=$outputString)"
       case Some(fallbackStartsAt) =>
-        s"TungstenAggregateWithControlledFallback $groupingExpressions " +
+        s"AggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
