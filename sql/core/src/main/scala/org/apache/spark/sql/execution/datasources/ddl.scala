@@ -56,7 +56,6 @@ case class CreateTableUsing(
 case class CreateTableUsingAsSelect(
     tableIdent: TableIdentifier,
     provider: String,
-    temporary: Boolean,
     partitionColumns: Array[String],
     bucketSpec: Option[BucketSpec],
     mode: SaveMode,
@@ -85,37 +84,6 @@ case class CreateTempTableUsing(
     sparkSession.sessionState.catalog.createTempView(
       tableIdent.table,
       Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      overrideIfExists = true)
-
-    Seq.empty[Row]
-  }
-}
-
-case class CreateTempTableUsingAsSelectCommand(
-    tableIdent: TableIdentifier,
-    provider: String,
-    partitionColumns: Array[String],
-    mode: SaveMode,
-    options: Map[String, String],
-    query: LogicalPlan) extends RunnableCommand {
-
-  if (tableIdent.database.isDefined) {
-    throw new AnalysisException(
-      s"Temporary table '$tableIdent' should not have specified a database")
-  }
-
-  override def run(sparkSession: SparkSession): Seq[Row] = {
-    val df = Dataset.ofRows(sparkSession, query)
-    val dataSource = DataSource(
-      sparkSession,
-      className = provider,
-      partitionColumns = partitionColumns,
-      bucketSpec = None,
-      options = options)
-    val result = dataSource.write(mode, df)
-    sparkSession.sessionState.catalog.createTempView(
-      tableIdent.table,
-      Dataset.ofRows(sparkSession, LogicalRelation(result)).logicalPlan,
       overrideIfExists = true)
 
     Seq.empty[Row]

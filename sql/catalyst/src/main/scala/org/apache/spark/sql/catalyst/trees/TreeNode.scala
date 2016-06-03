@@ -427,13 +427,21 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   private lazy val allChildren: Set[TreeNode[_]] = (children ++ innerChildren).toSet[TreeNode[_]]
 
   /** Returns a string representing the arguments to this node, minus any children */
-  def argString: String = productIterator.flatMap {
+  def argString: String = stringArgs.flatMap {
     case tn: TreeNode[_] if allChildren.contains(tn) => Nil
     case Some(tn: TreeNode[_]) if allChildren.contains(tn) => Nil
-    case tn: TreeNode[_] => s"${tn.simpleString}" :: Nil
-    case seq: Seq[BaseType] if seq.toSet.subsetOf(children.toSet) => Nil
-    case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
-    case set: Set[_] => set.mkString("{", ",", "}") :: Nil
+    case Some(tn: TreeNode[_]) => tn.simpleString :: Nil
+    case tn: TreeNode[_] => tn.simpleString :: Nil
+    case seq: Seq[Any] if seq.toSet.subsetOf(allChildren.asInstanceOf[Set[Any]]) => Nil
+    case iter: Iterable[_] if iter.isEmpty => Nil
+    case seq: Seq[_] => seq.mkString("[", ", ", "]") :: Nil
+    case set: Set[_] => set.mkString("{", ", ", "}") :: Nil
+    case array: Array[_] if array.isEmpty => Nil
+    case array: Array[_] => array.mkString("[", ", ", "]") :: Nil
+    case null => Nil
+    case None => Nil
+    case Some(null) => Nil
+    case Some(any) => any :: Nil
     case other => other :: Nil
   }.mkString(", ")
 
