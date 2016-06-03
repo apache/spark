@@ -114,14 +114,16 @@ case class GenerateExec(
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
     boundGenerator match {
-      case e: Explode => codegen(e.child, ctx, input, row)
-      case e => codegen(e, ctx, input, row)
+      case e: Explode => codeGen(ctx, e.child, expand = false, input, row)
+      case g => codeGen(ctx, g, expand = true, input, row)
     }
   }
 
-  private def codegen(
-      e: Expression,
+  /** Generate code for Generate. */
+  private def codeGen(
       ctx: CodegenContext,
+      e: Expression,
+      expand: Boolean,
       input: Seq[ExprCode],
       row: ExprCode): String = {
     ctx.currentVars = input
@@ -135,37 +137,19 @@ case class GenerateExec(
     val index = ctx.freshName("index")
     val numElements = ctx.freshName("numElements")
 
-    // Generate accessor for MapData/Array element(s).
-    val outerCheck = optionalCode(outer, s"$numElements == 0")
-    def accessor(source: String, name: String, dt: DataType, nullable: Boolean): ExprCode = {
-      val value = ctx.freshName(name)
-      val javaType = ctx.javaType(dt)
-      val getter = ctx.getValue(source, dt, index)
-      val checks = outerCheck ++ optionalCode(nullable, s"$source.isNullAt($index)")
-      if (checks.nonEmpty) {
-        val isNull = ctx.freshName("isNull")
-        val code =
-          s"""
-             |boolean $isNull = ${checks.mkString(" || ")};
-             |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
-           """.stripMargin
-        ExprCode(code, isNull, value)
-      } else {
-        ExprCode(s"$javaType $value = $getter;", "false", value)
-      }
-    }
-
+    // Add a check if the generate outer flag is true.
+    val checks = optionalCode(outer, data.isNull)
     val (initArrayData, initValues, values) = e.dataType match {
-        /*
-      case ArrayType(st: StructType, nullable) if output.size > 1 =>
-        val rowCode = accessor("", "col", st, nullable)
-        st.fields.map { f =>
-
+      case ArrayType(st: StructType, nullable) if expand =>
+        val rowCode = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
+        val extendedChecks = checks ++ optionalCode(nullable, rowCode.isNull)
+        val values = st.fields.toSeq.zipWithIndex.map { case (f, i) =>
+          codeGenAccessor(ctx, rowCode.value, f.name, s"$i", f.dataType, f.nullable, extendedChecks)
         }
-        ("", rowCode.code, Seq.empty[ExprCode])
-*/
+        ("", rowCode.code, values)
+
       case ArrayType(dataType, nullable) =>
-        ("", "", Seq(accessor(data.value, "col", dataType, nullable)))
+        ("", "", Seq(codeGenAccessor(ctx, data.value, "col", index, dataType, nullable, checks)))
 
       case MapType(keyType, valueType, valueContainsNull) =>
         // Materialize the key and the value array before we enter the loop.
@@ -177,8 +161,8 @@ case class GenerateExec(
              |ArrayData $valueArray = ${data.isNull} ? null : ${data.value}.valueArray();
            """.stripMargin
         val values = Seq(
-          accessor(keyArray, "key", keyType, nullable = false),
-          accessor(valueArray, "value", valueType, valueContainsNull))
+          codeGenAccessor(ctx, keyArray, "key", index, keyType, nullable = false, checks),
+          codeGenAccessor(ctx, valueArray, "value", index, valueType, valueContainsNull, checks))
         (initArrayData, "", values)
     }
 
@@ -203,6 +187,34 @@ case class GenerateExec(
        |  ${consume(ctx, outputValues)}
        |}
      """.stripMargin
+  }
+
+  /**
+   * Generate for accessor code for ArrayData and InternalRows.
+   */
+  private def codeGenAccessor(
+      ctx: CodegenContext,
+      source: String,
+      name: String,
+      index: String,
+      dt: DataType,
+      nullable: Boolean,
+      initialChecks: Seq[String]): ExprCode = {
+    val value = ctx.freshName(name)
+    val javaType = ctx.javaType(dt)
+    val getter = ctx.getValue(source, dt, index)
+    val checks = initialChecks ++ optionalCode(nullable, s"$source.isNullAt($index)")
+    if (checks.nonEmpty) {
+      val isNull = ctx.freshName("isNull")
+      val code =
+        s"""
+           |boolean $isNull = ${checks.mkString(" || ")};
+           |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
+           """.stripMargin
+      ExprCode(code, isNull, value)
+    } else {
+      ExprCode(s"$javaType $value = $getter;", "false", value)
+    }
   }
 
   private def optionalCode(condition: Boolean, code: => String): Seq[String] = {

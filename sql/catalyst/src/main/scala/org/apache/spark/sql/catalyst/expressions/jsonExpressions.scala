@@ -366,10 +366,6 @@ case class JsonTuple(children: Seq[Expression]) extends Generator {
     }
   }
 
-  override def dataType: DataType = StructType(fieldExpressions.zipWithIndex.map {
-    case (_, idx) => StructField(s"c$idx", StringType, nullable = true)
-  })
-
   override def eval(input: InternalRow): Seq[InternalRow] = {
     val json = jsonExpr.eval(input).asInstanceOf[UTF8String]
     if (json == null) {
