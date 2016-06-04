@@ -631,7 +631,8 @@ object Word2VecModel extends Loader[Word2VecModel] {
 
       // We want to partition the model in partitions smaller than
       // spark.kryoserializer.buffer.max
-      val bufferSize = Utils.byteStringAsBytes(spark.conf.get("spark.kryoserializer.buffer.max", "64m"))
+      val bufferSize = Utils.byteStringAsBytes(
+        spark.conf.get("spark.kryoserializer.buffer.max", "64m"))
       // We calculate the approximate size of the model
       // We only calculate the array size, considering an
       // average string size of 15 bytes, the formula is:
