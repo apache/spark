@@ -422,9 +422,9 @@ class RelationalGroupedDataset protected[sql](
           packageNames,
           broadcastVarObj,
           realOutputSchema,
-          df.unresolvedTEncoder.deserializer,
-          groupingDataFrame.unresolvedTEncoder.deserializer,
-          df.resolvedTEncoder,
+          df.exprEnc.deserializer,
+          groupingDataFrame.exprEnc.deserializer,
+          df.exprEnc,
           groupingAttributes,
           df.logicalPlan.output,
           df.logicalPlan))

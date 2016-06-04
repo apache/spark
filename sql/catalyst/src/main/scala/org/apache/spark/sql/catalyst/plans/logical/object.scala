@@ -268,7 +268,7 @@ object FlatMapGroupsInR {
        dataAttributes,
        CatalystSerde.generateObjAttr(RowEncoder(schema)),
        child)
-     CatalystSerde.serialize(mapped, RowEncoder(schema))
+     CatalystSerde.serialize(mapped)(RowEncoder(schema))
   }
 }
 
