@@ -258,9 +258,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     >>> evaluator = MulticlassClassificationEvaluator(predictionCol="prediction")
     >>> evaluator.evaluate(dataset)
     0.66...
-    >>> evaluator.evaluate(dataset, {evaluator.metricName: "precision"})
-    0.66...
-    >>> evaluator.evaluate(dataset, {evaluator.metricName: "recall"})
+    >>> evaluator.evaluate(dataset, {evaluator.metricName: "accuracy"})
     0.66...
 
     .. versionadded:: 1.5.0
