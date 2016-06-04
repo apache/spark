@@ -94,10 +94,13 @@ package object expressions  {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
     }
 
-    private lazy val inputArr = attrs.toArray
+    // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
+    // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
+    // to an array.
+    private lazy val attrsArray = attrs.toArray
 
     private lazy val exprIdToOrdinal = {
-      val arr = inputArr
+      val arr = attrsArray
       val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
       var index = 0
       while (index < arr.length) {
@@ -110,8 +113,14 @@ package object expressions  {
       map
     }
 
-    def apply(ordinal: Int): Attribute = inputArr(ordinal)
+    /**
+     * Returns the attribute at the given index.
+     */
+    def apply(ordinal: Int): Attribute = attrsArray(ordinal)
 
+    /**
+     * Returns the index of first attribute with a matching expression id, or -1 if no match exists.
+     */
     def getOrdinalWithExprId(exprId: ExprId): Int = {
       Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
     }
