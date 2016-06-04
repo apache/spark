@@ -43,7 +43,8 @@ exportMethods("glm",
               "spark.isoreg",
               "spark.gaussianMixture",
               "spark.als",
-              "spark.kstest")
+              "spark.kstest",
+              "spark.decisionTree")
 
 # Job group lifecycle management methods
 export("setJobGroup",
