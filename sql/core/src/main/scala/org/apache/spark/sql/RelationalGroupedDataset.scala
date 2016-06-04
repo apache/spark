@@ -39,6 +39,8 @@ import org.apache.spark.sql.types.StructType
  * The main method is the agg function, which has multiple variants. This class also contains
  * convenience some first order statistics such as mean, sum for convenience.
  *
+ * This class was named `GroupedData` in Spark 1.x.
+ *
  * @since 2.0.0
  */
 class RelationalGroupedDataset protected[sql](
@@ -78,7 +80,7 @@ class RelationalGroupedDataset protected[sql](
   private[this] def alias(expr: Expression): NamedExpression = expr match {
     case u: UnresolvedAttribute => UnresolvedAlias(u)
     case expr: NamedExpression => expr
-    case a: AggregateExpression if (a.aggregateFunction.isInstanceOf[TypedAggregateExpression]) =>
+    case a: AggregateExpression if a.aggregateFunction.isInstanceOf[TypedAggregateExpression] =>
       UnresolvedAlias(a, Some(Column.generateAlias))
     case expr: Expression => Alias(expr, usePrettyExpression(expr).sql)()
   }
@@ -217,7 +219,7 @@ class RelationalGroupedDataset protected[sql](
   def agg(expr: Column, exprs: Column*): DataFrame = {
     toDF((expr +: exprs).map {
       case typed: TypedColumn[_, _] =>
-        typed.withInputType(df.unresolvedTEncoder.deserializer, df.logicalPlan.output).expr
+        typed.withInputType(df.exprEnc.deserializer, df.logicalPlan.output).expr
       case c => c.expr
     })
   }

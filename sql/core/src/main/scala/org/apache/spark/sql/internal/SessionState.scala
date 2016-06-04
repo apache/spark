@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.AnalyzeTableCommand
 import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreInsertCastAndRename, ResolveDataSource}
+import org.apache.spark.sql.streaming.{ContinuousQuery, ContinuousQueryManager}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -142,7 +143,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
-   * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
+   * Interface to start and stop [[ContinuousQuery]]s.
    */
   lazy val continuousQueryManager: ContinuousQueryManager = {
     new ContinuousQueryManager(sparkSession)

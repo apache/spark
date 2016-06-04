@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
+class FileStreamSinkSuite extends StreamTest {
   import testImplicits._
 
 

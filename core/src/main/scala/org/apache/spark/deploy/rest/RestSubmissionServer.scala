@@ -89,6 +89,7 @@ private[spark] abstract class RestSubmissionServer(
     server.addConnector(connector)
 
     val mainHandler = new ServletContextHandler
+    mainHandler.setServer(server)
     mainHandler.setContextPath("/")
     contextToServlet.foreach { case (prefix, servlet) =>
       mainHandler.addServlet(new ServletHolder(servlet), prefix)
