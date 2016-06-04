@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst
 
+import com.google.common.collect.Maps
+
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.types.{StructField, StructType}
 
@@ -94,12 +96,14 @@ package object expressions  {
 
     private lazy val inputArr = attrs.toArray
 
-    private lazy val inputToOrdinal = {
-      val map = new java.util.HashMap[ExprId, Int](inputArr.length * 2)
+    private lazy val exprIdToOrdinal = {
+      val arr = inputArr
+      val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
       var index = 0
-      attrs.foreach { attr =>
-        if (!map.containsKey(attr.exprId)) {
-          map.put(attr.exprId, index)
+      while (index < arr.length) {
+        val exprId = arr(index).exprId
+        if (!map.containsKey(exprId)) {
+          map.put(exprId, index)
         }
         index += 1
       }
@@ -109,7 +113,7 @@ package object expressions  {
     def apply(ordinal: Int): Attribute = inputArr(ordinal)
 
     def getOrdinalWithExprId(exprId: ExprId): Int = {
-      Option(inputToOrdinal.get(exprId)).getOrElse(-1)
+      Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
     }
   }
 
