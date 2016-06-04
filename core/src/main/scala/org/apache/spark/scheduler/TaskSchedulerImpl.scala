@@ -359,13 +359,13 @@ private[spark] class TaskSchedulerImpl(
               // executor is finished and return task success state to driver. However, this kinds
               // of task should be ignored, because the task on this executor is already re-queued
               // by driver. For more details, can check in SPARK-14485.
-              if (executorId.ne(null) && !executorIdToTaskCount.contains(executorId)) {
-                taskSet.removeRunningTask(tid)
-                logWarning(
-                  ("Ignoring update with state %s for TID %s because its executor has already removed " +
-                    "by driver, and the task of this executor has re-queued").format(state, tid))
+              taskSet.removeRunningTask(tid)
+              if (executorId != null && !executorIdToTaskCount.contains(executorId)) {
+                logInfo(
+                  ("Ignoring update with state %s for TID %s because its executor has already " +
+                    "removed by driver, and the task of this executor has re-queued")
+                    .format(state, tid))
               } else {
-                taskSet.removeRunningTask(tid)
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
               }
             } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
