@@ -89,7 +89,9 @@ object BindReferences extends Logging {
       val map = new java.util.HashMap[ExprId, Int](inputArr.length * 2)
       var index = 0
       input.foreach { attr =>
-        map.putIfAbsent(attr.exprId, index)
+        if (!map.containsKey(attr.exprId)) {
+          map.put(attr.exprId, index)
+        }
         index += 1
       }
       map
