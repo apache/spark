@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -466,7 +467,7 @@ object LastArguments {
 }
 
 /** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
-class TestFileFormat extends FileFormat {
+class TestFileFormat extends TextFileFormat {
 
   override def toString: String = "TestFileFormat"
 

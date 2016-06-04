@@ -146,8 +146,8 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val maxSplitBytes = {
             // Since `LineRecordReader` in hadoop cannot split files compressed by some codecs
             // (e.g., gzip), check if all the input files are splittable here.
-            if (HadoopFsRelation.canSplitFiles(
-                selectedPartitions.flatMap(_.files),
+            if (files.fileFormat.canSplitFiles(
+                selectedPartitions.flatMap(_.files).map(_.getPath),
                 files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))) {
               Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
             } else {

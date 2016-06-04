@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution.datasources.text
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
+import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
 import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
@@ -82,6 +83,21 @@ class TextFileFormat extends FileFormat with DataSourceRegister {
         new TextOutputWriter(path, dataSchema, context)
       }
     }
+  }
+
+  override def canSplitFiles(files: Seq[Path], conf: Configuration): Boolean = try {
+    val inputFormat = new TextInputFormat()
+    inputFormat.configure(new JobConf(conf))
+    val clazz = inputFormat.getClass()
+    val isSplitable = clazz.getDeclaredMethod("isSplitable", classOf[FileSystem], classOf[Path])
+    isSplitable.setAccessible(true)
+    files.forall { path =>
+      // Set `null` in the first argument because `TextInputFormat#isSplitable` do not use this
+      val d = isSplitable.invoke(inputFormat, null, path).asInstanceOf[Boolean]
+      d
+    }
+  } catch {
+    case _: Throwable => false
   }
 
   override def buildReader(

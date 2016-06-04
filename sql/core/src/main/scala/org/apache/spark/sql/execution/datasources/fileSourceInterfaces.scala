@@ -216,6 +216,13 @@ trait FileFormat {
   }
 
   /**
+   * Return true iff input formats can be split into multiple input splits.
+   */
+  def canSplitFiles(files: Seq[Path], conf: Configuration): Boolean = {
+    true
+  }
+
+  /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
    * @param dataSchema The global data schema. It can be either specified by the user, or
@@ -336,7 +343,7 @@ trait FileCatalog {
 
 
 /**
- * Helper methods for gathering metadata in hadoop-related files.
+ * Helper methods for gathering metadata from HDFS.
  */
 private[sql] object HadoopFsRelation extends Logging {
 
@@ -461,13 +468,5 @@ private[sql] object HadoopFsRelation extends Logging {
         blockLocations)
     }
     mutable.LinkedHashSet(hadoopFakeStatuses: _*)
-  }
-
-  // Return true iff all the input files can be split by `LineRecordReader`
-  def canSplitFiles(files: Seq[FileStatus], conf: Configuration): Boolean = {
-    files.forall { file =>
-      val codec = (new CompressionCodecFactory(conf)).getCodec(file.getPath)
-      codec == null || codec.isInstanceOf[SplittableCompressionCodec]
-    }
   }
 }
