@@ -91,6 +91,8 @@ private[sql] case class LogicalRDD(
     case _ => false
   }
 
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
+
   override def producedAttributes: AttributeSet = outputSet
 
   @transient override lazy val statistics: Statistics = Statistics(
@@ -347,15 +349,14 @@ private[sql] object DataSourceScanExec {
         case _ => None
       }
 
-      def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
-        throw new AnalysisException(s"bucket column $colName not found in existing columns " +
-          s"(${output.map(_.name).mkString(", ")})")
-      }
-
       bucketSpec.map { spec =>
         val numBuckets = spec.numBuckets
-        val bucketColumns = spec.bucketColumnNames.map(toAttribute)
-        HashPartitioning(bucketColumns, numBuckets)
+        val bucketColumns = spec.bucketColumnNames.flatMap { n => output.find(_.name == n) }
+        if (bucketColumns.size == spec.bucketColumnNames.size) {
+          HashPartitioning(bucketColumns, numBuckets)
+        } else {
+          UnknownPartitioning(0)
+        }
       }.getOrElse {
         UnknownPartitioning(0)
       }

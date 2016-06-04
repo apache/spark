@@ -99,7 +99,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
     def save(model: FPGrowthModel[_], path: String): Unit = {
       val sc = model.freqItemsets.sparkContext
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render(
         ("class" -> thisClassName) ~ ("version" -> thisFormatVersion)))
@@ -123,7 +123,7 @@ object FPGrowthModel extends Loader[FPGrowthModel[_]] {
 
     def load(sc: SparkContext, path: String): FPGrowthModel[_] = {
       implicit val formats = DefaultFormats
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val (className, formatVersion, metadata) = Loader.loadMetadata(sc, path)
       assert(className == thisClassName)

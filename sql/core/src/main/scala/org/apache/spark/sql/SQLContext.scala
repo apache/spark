@@ -30,18 +30,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.streaming.ContinuousQueryManager
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
- * The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
+ * The entry point for working with structured data (rows and columns) in Spark 1.x.
  *
  * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class
  * here for backward compatibility.
@@ -171,13 +169,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
-   * :: Experimental ::
    * Returns a [[DataFrame]] with no rows or columns.
    *
    * @group basic
    * @since 1.3.0
    */
-  @Experimental
   def emptyDataFrame: DataFrame = sparkSession.emptyDataFrame
 
   /**
@@ -437,7 +433,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
@@ -447,31 +442,26 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group genericdata
    * @since 1.4.0
    */
-  @Experimental
   def read: DataFrameReader = sparkSession.read
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
     sparkSession.catalog.createExternalTable(tableName, path)
   }
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path based on a data source
    * and returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       path: String,
@@ -480,14 +470,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -496,7 +484,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates an external table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
@@ -504,7 +491,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -513,14 +499,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * Create an external table from the given path based on a data source, a schema and
    * a set of options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -530,7 +514,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Create an external table from the given path based on a data source, a schema and
    * a set of options. Then, returns the corresponding DataFrame.
@@ -538,7 +521,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -661,7 +643,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this` context.
+   * [[org.apache.spark.sql.streaming.ContinuousQuery ContinuousQueries]] active on `this` context.
    *
    * @since 2.0.0
    */

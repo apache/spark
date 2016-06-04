@@ -253,21 +253,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       (1, 1), (2, 2))
   }
 
-  test("joinWith, expression condition, outer join") {
-    val nullInteger = null.asInstanceOf[Integer]
-    val nullString = null.asInstanceOf[String]
-    val ds1 = Seq(ClassNullableData("a", 1),
-      ClassNullableData("c", 3)).toDS()
-    val ds2 = Seq(("a", new Integer(1)),
-      ("b", new Integer(2))).toDS()
-
-    checkDataset(
-      ds1.joinWith(ds2, $"_1" === $"a", "outer"),
-      (ClassNullableData("a", 1), ("a", new Integer(1))),
-      (ClassNullableData("c", 3), (nullString, nullInteger)),
-      (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
-  }
-
   test("joinWith tuple with primitive, expression") {
     val ds1 = Seq(1, 1, 2).toDS()
     val ds2 = Seq(("a", 1), ("b", 2)).toDS()
@@ -706,7 +691,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val dataset = Seq(1, 2, 3).toDS()
     dataset.createOrReplaceTempView("tempView")
 
-    // Overrrides the existing temporary view with same name
+    // Overrides the existing temporary view with same name
     // No exception should be thrown here.
     dataset.createOrReplaceTempView("tempView")
 
@@ -769,6 +754,46 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
     checkShowString(ds, expected)
   }
+
+  test(
+    "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
+  ) {
+    val ds = Seq(1 -> "foo", 2 -> "bar").toDF("b", "a").as[ClassData]
+
+    assertResult(Seq(ClassData("foo", 1), ClassData("bar", 2))) {
+      ds.collect().toSeq
+    }
+
+    assertResult(Seq(ClassData("bar", 2))) {
+      ds.filter(_.b > 1).collect().toSeq
+    }
+  }
+
+  test("mapped dataset should resolve duplicated attributes for self join") {
+    val ds = Seq(1, 2, 3).toDS().map(_ + 1)
+    val ds1 = ds.as("d1")
+    val ds2 = ds.as("d2")
+
+    checkDataset(ds1.joinWith(ds2, $"d1.value" === $"d2.value"), (2, 2), (3, 3), (4, 4))
+    checkDataset(ds1.intersect(ds2), 2, 3, 4)
+    checkDataset(ds1.except(ds1))
+  }
+
+  test("SPARK-15441: Dataset outer join") {
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+    val result = joined.collect().toSet
+    assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
+  }
+
+  test("better error message when use java reserved keyword as field name") {
+    val e = intercept[UnsupportedOperationException] {
+      Seq(InvalidInJava(1)).toDS()
+    }
+    assert(e.getMessage.contains(
+      "`abstract` is a reserved keyword and cannot be used as field name"))
+  }
 }
 
 case class Generic[T](id: T, value: Double)
@@ -791,6 +816,8 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
+
+case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

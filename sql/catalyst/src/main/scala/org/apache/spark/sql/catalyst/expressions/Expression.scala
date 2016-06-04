@@ -185,7 +185,7 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyName: String = nodeName.toLowerCase
 
-  private def flatArguments = productIterator.flatMap {
+  protected def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }

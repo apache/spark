@@ -30,7 +30,10 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
 
-case class TungstenAggregate(
+/**
+ * Hash-based aggregate operator that can also fallback to sorting when data exceeds memory size.
+ */
+case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
@@ -44,7 +47,7 @@ case class TungstenAggregate(
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
   }
 
-  require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
+  require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
   override lazy val allAttributes: Seq[Attribute] =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
@@ -599,6 +602,8 @@ case class TungstenAggregate(
 
     // create grouping key
     ctx.currentVars = input
+    // make sure that the generated code will not be splitted as multiple functions
+    ctx.INPUT_ROW = null
     val unsafeRowKeyCode = GenerateUnsafeProjection.createCode(
       ctx, groupingExpressions.map(e => BindReferences.bindReference[Expression](e, child.output)))
     val vectorizedRowKeys = ctx.generateExpressions(
@@ -767,15 +772,15 @@ case class TungstenAggregate(
         val keyString = groupingExpressions.mkString("[", ",", "]")
         val functionString = allAggregateExpressions.mkString("[", ",", "]")
         val outputString = output.mkString("[", ",", "]")
-        s"TungstenAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
       case Some(fallbackStartsAt) =>
-        s"TungstenAggregateWithControlledFallback $groupingExpressions " +
+        s"HashAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
 }
 
-object TungstenAggregate {
+object HashAggregateExec {
   def supportsAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
     val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
     UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema)
