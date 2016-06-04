@@ -108,7 +108,7 @@ package object expressions  {
 
     def apply(ordinal: Int): Attribute = inputArr(ordinal)
 
-    def getOrdinal(exprId: ExprId): Int = {
+    def getOrdinalWithExprId(exprId: ExprId): Int = {
       Option(inputToOrdinal.get(exprId)).getOrElse(-1)
     }
   }

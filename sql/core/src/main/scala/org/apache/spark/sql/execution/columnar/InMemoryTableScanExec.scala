@@ -321,7 +321,7 @@ private[sql] case class InMemoryTableScanExec(
       // Find the ordinals and data types of the requested columns.
       val (requestedColumnIndices, requestedColumnDataTypes) =
         attributes.map { a =>
-          relOutput.getOrdinal(a.exprId) -> a.dataType
+          relOutput.getOrdinalWithExprId(a.exprId) -> a.dataType
         }.unzip
 
       // Do partition batch pruning if enabled
