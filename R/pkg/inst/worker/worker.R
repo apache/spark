@@ -27,8 +27,8 @@ elapsedSecs <- function() {
   proc.time()[3]
 }
 
-computeHelper <- function(mode, partition, serializer, deserializer, key,
-                           colNames, computeFunc, outputCon, inputData) {
+compute <- function(mode, partition, serializer, deserializer, key,
+             colNames, computeFunc, outputCon, inputData) {
   if (mode > 0) {
     if (deserializer == "row") {
       # Transform the list of rows into a data.frame
@@ -61,12 +61,10 @@ computeHelper <- function(mode, partition, serializer, deserializer, key,
   } else {
     output <- computeFunc(partition, inputData)
   }
+  return (output)
+}
 
-  # Computation time
-  # TODO calling elapsedSecs() function directly, makes the test cases and stylecheck
-  # to fail
-  computeElap <- proc.time()[3]
-
+outputResult <- function(serializer, output, outputCon) {
   if (serializer == "byte") {
     SparkR:::writeRawSerialize(outputCon, output)
   } else if (serializer == "row") {
@@ -75,8 +73,6 @@ computeHelper <- function(mode, partition, serializer, deserializer, key,
     # write lines one-by-one with flag
     lapply(output, function(line) SparkR:::writeString(outputCon, line))
   }
-
-  return (computeElap)
 }
 
 # Constants
@@ -141,9 +137,6 @@ mode <- SparkR:::readInt(inputCon)
 
 if (mode > 0) {
   colNames <- SparkR:::readObject(inputCon)
-  if (mode == 2) {
-    key <- SparkR:::readObject(inputCon)
-  }
 }
 
 isEmpty <- SparkR:::readInt(inputCon)
@@ -156,33 +149,45 @@ if (isEmpty != 0) {
     } else if (deserializer == "string") {
       data <- as.list(readLines(inputCon))
     } else if (deserializer == "row" && mode == 2) {
-      data <- SparkR:::readMultipleObjectsWithKeys(inputCon)
+      dataWithKeys <- SparkR:::readMultipleObjectsWithKeys(inputCon)
+      keys <- dataWithKeys$keys
+      data <- dataWithKeys$data
     } else if (deserializer == "row"){
       data <- SparkR:::readMultipleObjects(inputCon)
     }
-
-    # Timing reading input data for execution
+    computeInputElapsDiff <- 0
+    outputComputeElapsDiff <- 0
     inputElap <- elapsedSecs()
     if (mode > 0) {
       if (mode == 1) {
-        computeElap <- computeHelper(mode, partition, serializer, deserializer, key,
-                         colNames, computeFunc, outputCon, data)
-      } else {
+        # Timing reading input data for execution
+        output <- compute(mode, partition, serializer, deserializer, NULL,
+                    colNames, computeFunc, outputCon, data)
+       } else {
         # gapply mode
         for (i in 1:length(data)) {
-          # TODO compute the diff between outputElap and computeElap
-          # Currently, only `computeElap` for the last iteration will be used.
-          computeElap <- computeHelper(mode, partition, serializer, deserializer, key,
-                           colNames, computeFunc, outputCon, data[[i]])
+          # Timing reading input data for execution
+          inputElap <- elapsedSecs()
+          output <- compute(mode, partition, serializer, deserializer, keys[[i]],
+                      colNames, computeFunc, outputCon, data[[i]])
+          computeElap <- elapsedSecs()
+          outputResult(serializer, output, outputCon)
+          computeInputElapsDiff <-  computeInputElapsDiff + (computeElap - inputElap)
+          outputComputeElapsDiff <- outputComputeElapsDiff + (elapsedSecs() - computeElap)
         }
       }
     } else {
-      computeElap <- computeHelper(mode, partition, serializer, deserializer, key,
-                       colNames, computeFunc, outputCon, data)
+      # Timing reading input data for execution
+      output <- compute(mode, partition, serializer, deserializer, NULL,
+                  colNames, computeFunc, outputCon, data)
     }
-
-    # Timing output
-    outputElap <- elapsedSecs()
+    if (mode != 2) {
+      # Not a gapply mode
+      computeElap <- elapsedSecs()
+      outputResult(serializer, output, outputCon)
+      computeInputElapsDiff <- computeElap - inputElap
+      outputComputeElapsDiff <- elapsedSecs() - computeElap
+    }
   } else {
     if (deserializer == "byte") {
       # Now read as many characters as described in funcLen
@@ -224,11 +229,15 @@ if (isEmpty != 0) {
     }
     # Timing output
     outputElap <- elapsedSecs()
+    computeInputElapsDiff <- computeElap - inputElap
+    outputComputeElapsDiff <- outputElap - computeElap
   }
 } else {
   inputElap <- broadcastElap
   computeElap <- broadcastElap
   outputElap <- broadcastElap
+  computeInputElapsDiff <- computeElap - inputElap
+  outputComputeElapsDiff <- outputElap - computeElap
 }
 
 # Report timing
@@ -237,8 +246,8 @@ SparkR:::writeDouble(outputCon, bootTime)
 SparkR:::writeDouble(outputCon, initElap - bootElap)        # init
 SparkR:::writeDouble(outputCon, broadcastElap - initElap)   # broadcast
 SparkR:::writeDouble(outputCon, inputElap - broadcastElap)  # input
-SparkR:::writeDouble(outputCon, computeElap - inputElap)    # compute
-SparkR:::writeDouble(outputCon, outputElap - computeElap)   # output
+SparkR:::writeDouble(outputCon, computeInputElapsDiff)    # compute
+SparkR:::writeDouble(outputCon, outputComputeElapsDiff)   # output
 
 # End of output
 SparkR:::writeInt(outputCon, specialLengths$END_OF_STERAM)

@@ -25,7 +25,7 @@ import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{BinaryType, StructField, StructType}
 
 /**
- * A function wrapper that applies the given R function to each partition of each group.
+ * A function wrapper that applies the given R function to each partition.
  */
 private[sql] case class MapGroupsRWrapper(
     func: Array[Byte],
@@ -87,7 +87,7 @@ object PartitionsRHelper {
 
     val runner = new RRunner[Array[Byte]](
       func, deserializer, serializer, packageNames, broadcastVars,
-      isDataFrame = true, colNames = colNames)
+      isDataFrame = true, colNames = colNames, mode = 1)
     // Partition index is ignored. Dataset has no support for mapPartitionsWithIndex.
     val outputIter = runner.compute(newIter, -1)
 

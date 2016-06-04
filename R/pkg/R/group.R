@@ -172,7 +172,7 @@ createMethods()
 #'   df,
 #'   list("a", "c"),
 #'   function(key, x) {
-#'     y <- data.frame(x[, unlist(key)][1, ], mean(x$b), stringsAsFactors = FALSE)
+#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 #'   },
 #' schema)
 #' collect(df1)

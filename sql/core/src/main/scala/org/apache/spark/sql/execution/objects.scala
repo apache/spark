@@ -357,10 +357,9 @@ case class FlatMapGroupsInRExec(
     Seq(groupingAttributes.map(SortOrder(_, Ascending)))
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val groupNames = groupingAttributes.map(_.name).toArray
-    val isDeserializedRData =
+    val isSerializedRData =
       if (outputSchema == SERIALIZED_R_DATA_SCHEMA) true else false
-    val serializerForR = if (!isDeserializedRData) {
+    val serializerForR = if (!isSerializedRData) {
       SerializationFormats.ROW
     } else {
       SerializationFormats.BYTE
@@ -373,9 +372,8 @@ case class FlatMapGroupsInRExec(
       val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
       val runner = new RRunner[Array[Byte]](
         func, SerializationFormats.ROW, serializerForR, packageNames, broadcastVars,
-        isDataFrame = true, colNames = inputSchema.fieldNames, key = groupNames)
+        isDataFrame = true, colNames = inputSchema.fieldNames, mode = 2)
 
-      val hasGroups = grouped.hasNext
       val groupedRBytes = grouped.flatMap { case (key, rowIter) =>
         val deserializedIter = rowIter.map(getValue)
         val newIter =
@@ -384,17 +382,13 @@ case class FlatMapGroupsInRExec(
         Iterator((newKey, newIter))
       }
 
-      if (hasGroups) {
-        val outputIter = runner.compute(groupedRBytes, -1)
-        if (!isDeserializedRData) {
-          val result = outputIter.map { bytes => bytesToRow(bytes, outputSchema) }
-          result.map(outputObject)
-        } else {
-          val result = outputIter.map { bytes => Row.fromSeq(Seq(bytes)) }
-          result.map(outputObject)
-        }
+      val outputIter = runner.compute(groupedRBytes, -1)
+      if (!isSerializedRData) {
+        val result = outputIter.map { bytes => bytesToRow(bytes, outputSchema) }
+        result.map(outputObject)
       } else {
-        Iterator.empty
+        val result = outputIter.map { bytes => Row.fromSeq(Seq(bytes)) }
+        result.map(outputObject)
       }
     }
   }

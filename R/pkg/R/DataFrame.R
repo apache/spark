@@ -1269,7 +1269,7 @@ setMethod("dapplyCollect",
 #' gapply
 #'
 #' Group the SparkDataFrame using the specified columns and apply the R function to each
-#' group. The group is defined by input grouping columns.
+#' group.
 #'
 #' @param x A SparkDataFrame
 #' @param cols Grouping columns
@@ -1299,7 +1299,7 @@ setMethod("dapplyCollect",
 #'   df,
 #'   list("a", "c"),
 #'   function(key, x) {
-#'     y <- data.frame(x[, unlist(key)][1, ], mean(x$b), stringsAsFactors = FALSE)
+#'     y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
 #'   },
 #' schema)
 #' collect(df1)

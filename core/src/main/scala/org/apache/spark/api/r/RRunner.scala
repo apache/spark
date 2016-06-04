@@ -41,7 +41,7 @@ private[spark] class RRunner[U](
     numPartitions: Int = -1,
     isDataFrame: Boolean = false,
     colNames: Array[String] = null,
-    key: Array[String] = null)
+    mode: Int = 0)
   extends Logging {
   private var bootTime: Double = _
   private var dataStream: DataInputStream = _
@@ -149,23 +149,10 @@ private[spark] class RRunner[U](
           }
 
           dataOut.writeInt(numPartitions)
-
-          val mode = if (isDataFrame && key != null) {
-            2 // gapply
-          } else if (isDataFrame) {
-            1 // dapply
-          } else {
-            0 // RDD
-          }
           dataOut.writeInt(mode)
 
           if (isDataFrame) {
             SerDe.writeObject(dataOut, colNames)
-          }
-
-          // Write key - the grouping columns for gapply mode
-          if (mode == 2) {
-            SerDe.writeObject(dataOut, key)
           }
 
           if (!iter.hasNext) {
@@ -198,7 +185,8 @@ private[spark] class RRunner[U](
                   writeElem(innerElem)
                 }
                 // Writes key which can be used as a boundary in group-aggregate
-                SerDe.writeObject(dataOut, key.asInstanceOf[Array[Byte]])
+                dataOut.writeByte('r')
+                writeElem(key)
               case (key, value) =>
                 writeElem(key)
                 writeElem(value)
