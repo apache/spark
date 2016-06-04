@@ -127,6 +127,8 @@ if (numBroadcastVars > 0) {
 
 # Timing broadcast
 broadcastElap <- elapsedSecs()
+# Initial input timing
+inputElap <- broadcastElap
 
 # If -1: read as normal RDD; if >= 0, treat as pairwise RDD and treat the int
 # as number of partitions to create.
@@ -140,6 +142,8 @@ if (mode > 0) {
 }
 
 isEmpty <- SparkR:::readInt(inputCon)
+computeInputElapsDiff <- 0
+outputComputeElapsDiff <- 0
 
 if (isEmpty != 0) {
   if (numPartitions == -1) {
@@ -155,8 +159,7 @@ if (isEmpty != 0) {
     } else if (deserializer == "row"){
       data <- SparkR:::readMultipleObjects(inputCon)
     }
-    computeInputElapsDiff <- 0
-    outputComputeElapsDiff <- 0
+
     inputElap <- elapsedSecs()
     if (mode > 0) {
       if (mode == 1) {
@@ -232,12 +235,6 @@ if (isEmpty != 0) {
     computeInputElapsDiff <- computeElap - inputElap
     outputComputeElapsDiff <- outputElap - computeElap
   }
-} else {
-  inputElap <- broadcastElap
-  computeElap <- broadcastElap
-  outputElap <- broadcastElap
-  computeInputElapsDiff <- computeElap - inputElap
-  outputComputeElapsDiff <- outputElap - computeElap
 }
 
 # Report timing

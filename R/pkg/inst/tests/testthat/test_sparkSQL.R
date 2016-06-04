@@ -2180,7 +2180,7 @@ test_that("gapply() on a DataFrame", {
 
   df <- suppressWarnings(createDataFrame (sqlContext, iris))
   schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
-  # Groups by `Sepal_Length` and computes the average for Sepal_Width
+  # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
   df1 <- gapply(
     cols = list("Sepal_Length"),
     df,
