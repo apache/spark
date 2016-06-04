@@ -435,10 +435,7 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton with SQLTestUtils {
     }
 
     // Non-External parquet pointing to /tmp/...
-
-    sql("CREATE TABLE parquet_tmp(c1 int, c2 int) " +
-      " STORED AS parquet " +
-      " AS SELECT 1, 2")
+    sql("CREATE TABLE parquet_tmp STORED AS parquet AS SELECT 1, 2")
 
     val answer4 =
       sql("SELECT input_file_name() as file FROM parquet_tmp").head().getString(0)

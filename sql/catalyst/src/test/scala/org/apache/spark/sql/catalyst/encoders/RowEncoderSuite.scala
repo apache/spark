@@ -224,6 +224,14 @@ class RowEncoderSuite extends SparkFunSuite {
     assert(convertedBack.getSeq(2) == Seq(Seq(Seq(0L, null), null), null))
   }
 
+  test("RowEncoder should throw RuntimeException if input row object is null") {
+    val schema = new StructType().add("int", IntegerType)
+    val encoder = RowEncoder(schema)
+    val e = intercept[RuntimeException](encoder.toRow(null))
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level row object"))
+  }
+
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
       val encoder = RowEncoder(schema).resolveAndBind()
