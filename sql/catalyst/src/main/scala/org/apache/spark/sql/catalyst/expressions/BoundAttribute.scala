@@ -98,7 +98,7 @@ object BindReferences extends Logging {
     }
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        val ordinal = inputToOrdinal.getOrDefault(a.exprId, -1)
+        val ordinal = Option(inputToOrdinal.get(a.exprId)).getOrElse(-1)
         if (ordinal == -1) {
           if (allowFailures) {
             a
