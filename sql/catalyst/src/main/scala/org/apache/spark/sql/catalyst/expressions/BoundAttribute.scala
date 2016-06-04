@@ -82,31 +82,19 @@ object BindReferences extends Logging {
 
   def bindReference[A <: Expression](
       expression: A,
-      input: Seq[Attribute],
+      input: AttributeSeq,
       allowFailures: Boolean = false): A = {
-    val inputArr = input.toArray
-    val inputToOrdinal = {
-      val map = new java.util.HashMap[ExprId, Int](inputArr.length * 2)
-      var index = 0
-      input.foreach { attr =>
-        if (!map.containsKey(attr.exprId)) {
-          map.put(attr.exprId, index)
-        }
-        index += 1
-      }
-      map
-    }
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        val ordinal = Option(inputToOrdinal.get(a.exprId)).getOrElse(-1)
+        val ordinal = input.getOrdinal(a.exprId)
         if (ordinal == -1) {
           if (allowFailures) {
             a
           } else {
-            sys.error(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+            sys.error(s"Couldn't find $a in ${input.attrs.mkString("[", ",", "]")}")
           }
         } else {
-          BoundReference(ordinal, a.dataType, inputArr(ordinal).nullable)
+          BoundReference(ordinal, a.dataType, input(ordinal).nullable)
         }
       }
     }.asInstanceOf[A] // Kind of a hack, but safe.  TODO: Tighten return type when possible.

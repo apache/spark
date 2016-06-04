@@ -86,10 +86,30 @@ package object expressions  {
   /**
    * Helper functions for working with `Seq[Attribute]`.
    */
-  implicit class AttributeSeq(attrs: Seq[Attribute]) {
+  implicit class AttributeSeq(val attrs: Seq[Attribute]) {
     /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
     def toStructType: StructType = {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
+    }
+
+    private lazy val inputArr = attrs.toArray
+
+    private lazy val inputToOrdinal = {
+      val map = new java.util.HashMap[ExprId, Int](inputArr.length * 2)
+      var index = 0
+      attrs.foreach { attr =>
+        if (!map.containsKey(attr.exprId)) {
+          map.put(attr.exprId, index)
+        }
+        index += 1
+      }
+      map
+    }
+
+    def apply(ordinal: Int): Attribute = inputArr(ordinal)
+
+    def getOrdinal(exprId: ExprId): Int = {
+      Option(inputToOrdinal.get(exprId)).getOrElse(-1)
     }
   }
 
