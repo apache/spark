@@ -181,8 +181,8 @@ class DataFrameReader(object):
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
         :param samplingRatio: sets the ratio for sampling and reading the input data to infer
-                              the schema. The value should be numeric and greater than 0. it
-                              uses the default value ``1.0``.
+                              the schema. The value should be numeric and greater than 0. If None
+                              is set, it uses the default value ``1.0``.
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
