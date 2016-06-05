@@ -265,7 +265,7 @@ class MulticlassClassificationEvaluator(JavaEvaluator, HasLabelCol, HasPredictio
     """
     metricName = Param(Params._dummy(), "metricName",
                        "metric name in evaluation "
-                       "(f1|precision|recall|weightedPrecision|weightedRecall|accuracy)",
+                       "(f1|weightedPrecision|weightedRecall|accuracy)",
                        typeConverter=TypeConverters.toString)
 
     @keyword_only
