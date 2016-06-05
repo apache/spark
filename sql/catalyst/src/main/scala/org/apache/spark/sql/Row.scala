@@ -304,15 +304,7 @@ trait Row extends Serializable {
    *
    * @throws ClassCastException when data type does not match.
    */
-  def getStruct(i: Int): Row = {
-    // Product and Row both are recognized as StructType in a Row
-    val t = get(i)
-    if (t.isInstanceOf[Product]) {
-      Row.fromTuple(t.asInstanceOf[Product])
-    } else {
-      t.asInstanceOf[Row]
-    }
-  }
+  def getStruct(i: Int): Row = getAs[Row](i)
 
   /**
    * Returns the value at position i.
