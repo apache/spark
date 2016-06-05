@@ -175,8 +175,9 @@ if (isEmpty != 0) {
                       colNames, computeFunc, outputCon, data[[i]])
           computeElap <- elapsedSecs()
           outputResult(serializer, output, outputCon)
+          outputElap <- elapsedSecs()
           computeInputElapsDiff <-  computeInputElapsDiff + (computeElap - inputElap)
-          outputComputeElapsDiff <- outputComputeElapsDiff + (elapsedSecs() - computeElap)
+          outputComputeElapsDiff <- outputComputeElapsDiff + (outputElap - computeElap)
         }
       }
     } else {
@@ -188,8 +189,9 @@ if (isEmpty != 0) {
       # Not a gapply mode
       computeElap <- elapsedSecs()
       outputResult(serializer, output, outputCon)
+      outputElap <- elapsedSecs()
       computeInputElapsDiff <- computeElap - inputElap
-      outputComputeElapsDiff <- elapsedSecs() - computeElap
+      outputComputeElapsDiff <- outputElap - computeElap
     }
   } else {
     if (deserializer == "byte") {
