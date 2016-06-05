@@ -25,7 +25,6 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -298,15 +297,13 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
 
   /**
    * Create a [[CreateTableUsing]] or a [[CreateTableUsingAsSelect]] logical plan.
-   *
-   * TODO add bucketing and partitioning.
    */
   override def visitCreateTableUsing(ctx: CreateTableUsingContext): LogicalPlan = withOrigin(ctx) {
     val (table, temp, ifNotExists, external) = visitCreateTableHeader(ctx.createTableHeader)
     if (external) {
       throw operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
+    val options = Option(ctx.optionParameterList).map(visitOptionParameters).getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
     val partitionColumnNames =
       Option(ctx.partitionColumnNames)
@@ -432,6 +429,33 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     } else {
       key.getText
     }
+  }
+
+  /**
+   * Parse a key-value map from a [[OptionParameterListContext]], assuming all values are specified.
+   */
+  private def visitOptionParameters(ctx: OptionParameterListContext): Map[String, String] = {
+    val properties = ctx.optionParameter.asScala.map { property =>
+      val key = visitTablePropertyKey(property.key)
+      val value = if (property.value.STRING != null) {
+        string(property.value.STRING)
+      } else if (property.value.booleanValue != null) {
+        property.value.getText.toLowerCase
+      } else {
+        property.value.getText
+      }
+      key -> value
+    }
+
+    // Check for duplicate property names.
+    checkDuplicateKeys(properties, ctx)
+    val props = properties.toMap
+    val badKeys = props.filter { case (_, v) => v == null }.keys
+    if (badKeys.nonEmpty) {
+      throw operationNotAllowed(
+        s"Values should not be specified for key(s): ${badKeys.mkString("[", ",", "]")}", ctx)
+    }
+    props
   }
 
   /**

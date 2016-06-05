@@ -1117,4 +1117,26 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       }
     }
   }
+
+  test("SPARK-14839: Support for other types as option in OPTIONS clause") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      withTable("t") {
+        sql(
+          s"""CREATE TABLE t USING json
+             |OPTIONS (
+             |  path '$path', optionA 1, optionB 0.1, optionC TRUE
+             |)
+             |AS SELECT 1 AS c
+           """.stripMargin
+        )
+        val catalogTable = sharedState.externalCatalog.getTable("default", "t")
+        val serdeProperties = catalogTable.storage.serdeProperties
+        assert(serdeProperties("optionA").toInt == 1)
+        assert(serdeProperties("optionB").toDouble == 0.1)
+        assert(serdeProperties("optionC").toBoolean == true)
+      }
+    }
+  }
 }
