@@ -37,14 +37,27 @@ import org.apache.spark.util.SerializableConfiguration
 object FileStreamSink {
   // The name of the subdirectory that is used to store metadata about which files are valid.
   val metadataDir = "_spark_metadata"
+
+  // List FileStatus using fs.globStatus(), then transform this FileStatus into SinkFileStatus
+  private[sql] def getSinkFileStatusUsingGlob(
+      paths: Seq[Path], hadoopConf: Configuration): Seq[SinkFileStatus] = {
+    val fs = paths.head.getFileSystem(hadoopConf)
+    paths.map(path => {
+      // We're using '${uuid}*' to match paths like "${uuid}.txt.gz" or "${uuid}.gz.parquet"
+      val pattern = new Path(fs.makeQualified(path).toUri.toString + "*")
+      val fileStatuses = fs.globStatus(pattern)
+      assert(fileStatuses.length == 1, s"Unexpected number of paths matching ${pattern}")
+      SinkFileStatus(fileStatuses.head)
+    })
+  }
 }
 
 /**
- * A sink that writes out results to parquet files.  Each batch is written out to a unique
- * directory. After all of the files in a batch have been successfully written, the list of
- * file paths is appended to the log atomically. In the case of partial failures, some duplicate
- * data may be present in the target directory, but only one copy of each file will be present
- * in the log.
+ * A sink that writes out results to files on a HDFS-compatible file system. Each batch is written
+ * out to a unique directory. After all of the files in a batch have been successfully written, the
+ * list of file paths is appended to the log atomically. In the case of partial failures, some
+ * duplicate data may be present in the target directory, but only one copy of each file will be
+ * present in the log.
  */
 class FileStreamSink(
     sparkSession: SparkSession,
@@ -172,7 +185,7 @@ class FileStreamSinkWriter(
       }
       writer.close()
       writer = null
-      SinkFileStatus(fs.getFileStatus(path))
+      FileStreamSink.getSinkFileStatusUsingGlob(Seq(path), serializableConf.value).head
     } catch {
       case cause: Throwable =>
         logError("Aborting task.", cause)
@@ -247,8 +260,7 @@ class FileStreamSinkWriter(
         currentWriter = null
       }
       if (paths.nonEmpty) {
-        val fs = paths.head.getFileSystem(serializableConf.value)
-        paths.map(p => SinkFileStatus(fs.getFileStatus(p)))
+        FileStreamSink.getSinkFileStatusUsingGlob(paths, serializableConf.value)
       } else Seq.empty
     } catch {
       case cause: Throwable =>

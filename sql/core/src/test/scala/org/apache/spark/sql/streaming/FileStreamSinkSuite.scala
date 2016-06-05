@@ -18,45 +18,96 @@
 package org.apache.spark.sql.streaming
 
 import java.io.File
+import java.util.UUID
 
 import org.apache.commons.io.FileUtils
 import org.apache.commons.io.filefilter.{DirectoryFileFilter, RegexFileFilter}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.execution.DataSourceScanExec
 import org.apache.spark.sql.execution.datasources._
-import org.apache.spark.sql.execution.streaming.{FileStreamSinkWriter, MemoryStream, MetadataLogFileCatalog}
+import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
+import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
+import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.functions._
-import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.sources.DataSourceRegister
+import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
 class FileStreamSinkSuite extends StreamTest {
   import testImplicits._
 
+  val COMPRESSION_CODECS = Seq("none", "gzip")
 
-  test("FileStreamSinkWriter - unpartitioned data") {
+  test("FileStreamSinkWriter - csv - unpartitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testUnpartitionedData(new CSVFileFormat, codec) }
+  }
+
+  test("FileStreamSinkWriter - json - unpartitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testUnpartitionedData(new JsonFileFormat, codec) }
+  }
+
+  test("FileStreamSinkWriter - parquet - unpartitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testUnpartitionedData(new ParquetFileFormat, codec) }
+  }
+
+  test("FileStreamSinkWriter - text - unpartitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testUnpartitionedData(new TextFileFormat, codec) }
+  }
+
+  private def testUnpartitionedData(
+      fileFormat: FileFormat with DataSourceRegister,
+      codec: String) {
     val path = Utils.createTempDir()
     path.delete()
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fileFormat = new parquet.ParquetFileFormat()
+
+    val testingText = fileFormat.isInstanceOf[TextFileFormat]
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = spark
-        .range(start, end, 1, numPartitions)
-        .select($"id", lit(100).as("data"))
+
+      // The `text` format accepts only one unpartitioned column, and requires the contents be
+      // strings; so we occasionally treat `text` format differently from the other formats.
+      val df = if (testingText) {
+          // For `text` format, we'll have only one unpartitioned column
+          spark
+            .range(start, end, 1, numPartitions)
+            .map(_.toString).toDF("id")
+        }
+        else {
+          // For the other formats, we'll have two unpartitioned columns
+          spark
+            .range(start, end, 1, numPartitions)
+            .map(_.toString).toDF("id")
+            .select($"id", lit("foo").as("value"))
+        }
+
       val writer = new FileStreamSinkWriter(
-        df, fileFormat, path.toString, partitionColumnNames = Nil, hadoopConf, Map.empty)
-      writer.write().map(_.path.stripPrefix("file://"))
+        df,
+        fileFormat,
+        path.toString,
+        partitionColumnNames = Nil,
+        hadoopConf,
+        Map("compression" -> codec))
+      // `path` would be like "file:///some/path/..." if run on Hadoop 2.2.0
+      // `path` would be like "file:/some/path/..."   if run on Hadoop 2.3.0 and onwards
+      // so path.stripPrefix("file://").stripPrefix("file:") would give us "/some/path/..."
+      writer.write().map(_.path.stripPrefix("file://").stripPrefix("file:"))
     }
 
     // Write and check whether new files are written correctly
     val files1 = writeRange(0, 10, 2)
     assert(files1.size === 2, s"unexpected number of files: $files1")
     checkFilesExist(path, files1, "file not written")
-    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 10).map(Row(_, 100)))
+    checkAnswer(
+        spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath),
+        (0 until 10).map(_.toString).map { if (testingText) Row(_) else Row(_, "foo")} )
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(10, 20, 3)
@@ -64,27 +115,64 @@ class FileStreamSinkSuite extends StreamTest {
     assert(files2.intersect(files1).isEmpty, "old files returned")
     checkFilesExist(path, files2, s"New file not written")
     checkFilesExist(path, files1, s"Old file not found")
-    checkAnswer(spark.read.load(path.getCanonicalPath), (0 until 20).map(Row(_, 100)))
+    checkAnswer(
+        spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath),
+        (0 until 20).map(_.toString).map { if (testingText) Row(_) else Row(_, "foo")} )
   }
 
-  test("FileStreamSinkWriter - partitioned data") {
+  test("FileStreamSinkWriter - csv - partitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testPartitionedData(new csv.CSVFileFormat(), codec) }
+  }
+
+  test("FileStreamSinkWriter - json - partitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testPartitionedData(new JsonFileFormat, codec) }
+  }
+
+  test("FileStreamSinkWriter - parquet - partitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testPartitionedData(new ParquetFileFormat, codec) }
+  }
+
+  test("FileStreamSinkWriter - text - partitioned data - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec => testPartitionedData(new TextFileFormat, codec) }
+  }
+
+  private def testPartitionedData(
+      fileFormat: FileFormat with DataSourceRegister,
+      codec: String) {
     implicit val e = ExpressionEncoder[java.lang.Long]
     val path = Utils.createTempDir()
     path.delete()
 
     val hadoopConf = spark.sparkContext.hadoopConfiguration
-    val fileFormat = new parquet.ParquetFileFormat()
+
+    val testingText = fileFormat.isInstanceOf[TextFileFormat]
 
     def writeRange(start: Int, end: Int, numPartitions: Int): Seq[String] = {
-      val df = spark
-        .range(start, end, 1, numPartitions)
-        .flatMap(x => Iterator(x, x, x)).toDF("id")
-        .select($"id", lit(100).as("data1"), lit(1000).as("data2"))
-
+      val df = if (testingText) {
+          // For `text` format, we'll have only one unpartitioned column
+          spark
+            .range(start, end, 1, numPartitions)
+            .flatMap(x => Iterator(x, x, x)).toDF("id")
+            .select($"id", lit("foo").as("value"))
+        } else {
+          // For the other formats, we'll have two unpartitioned columns
+          spark
+            .range(start, end, 1, numPartitions)
+            .flatMap(x => Iterator(x, x, x)).toDF("id")
+            .select($"id", lit("foo").as("value1"), lit("bar").as("value2"))
+        }
       require(df.rdd.partitions.size === numPartitions)
       val writer = new FileStreamSinkWriter(
-        df, fileFormat, path.toString, partitionColumnNames = Seq("id"), hadoopConf, Map.empty)
-      writer.write().map(_.path.stripPrefix("file://"))
+        df,
+        fileFormat,
+        path.toString,
+        partitionColumnNames = Seq("id"),
+        hadoopConf,
+        Map("compression" -> codec))
+      // `path` would be like "file:///some/path/..." if run on Hadoop 2.2.0
+      // `path` would be like "file:/some/path/..."   if run on Hadoop 2.3.0 and onwards
+      // so path.stripPrefix("file://").stripPrefix("file:") would give us "/some/path/..."
+      writer.write().map(_.path.stripPrefix("file://").stripPrefix("file:"))
     }
 
     def checkOneFileWrittenPerKey(keys: Seq[Int], filesWritten: Seq[String]): Unit = {
@@ -102,8 +190,12 @@ class FileStreamSinkSuite extends StreamTest {
     checkFilesExist(path, files1, "file not written")
     checkOneFileWrittenPerKey(0 until 10, files1)
 
-    val answer1 = (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(spark.read.load(path.getCanonicalPath), answer1)
+    val answer1 = if (testingText) {
+        (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row("foo", _))
+      } else {
+        (0 until 10).flatMap(x => Iterator(x, x, x)).map(Row("foo", "bar", _))
+      }
+    checkAnswer(spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath), answer1)
 
     // Append and check whether new files are written correctly and old files still exist
     val files2 = writeRange(0, 20, 3)
@@ -113,12 +205,47 @@ class FileStreamSinkSuite extends StreamTest {
     checkFilesExist(path, files1, s"Old file not found")
     checkOneFileWrittenPerKey(0 until 20, files2)
 
-    val answer2 = (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row(100, 1000, _))
-    checkAnswer(spark.read.load(path.getCanonicalPath), answer1 ++ answer2)
+    val answer2 = if (testingText) {
+        (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row("foo", _))
+      }
+      else {
+        (0 until 20).flatMap(x => Iterator(x, x, x)).map(Row("foo", "bar", _))
+      }
+
+    checkAnswer(
+        spark.read.format(fileFormat.shortName()).load(path.getCanonicalPath),
+        answer1 ++ answer2)
   }
 
-  test("FileStreamSink - unpartitioned writing and batch reading") {
-    val inputData = MemoryStream[Int]
+  test("csv - unpartitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec =>
+      testUnpartitionedWritingAndBatchReading(new CSVFileFormat, codec)
+    }
+  }
+
+  test("json - unpartitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec =>
+      testUnpartitionedWritingAndBatchReading(new JsonFileFormat, codec)
+    }
+  }
+
+  test("parquet - unpartitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec =>
+      testUnpartitionedWritingAndBatchReading(new ParquetFileFormat, codec)
+    }
+  }
+
+  test("text - unpartitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec =>
+      testUnpartitionedWritingAndBatchReading(new TextFileFormat, codec)
+    }
+  }
+
+  private def testUnpartitionedWritingAndBatchReading(
+      fileFormat: FileFormat with DataSourceRegister,
+      codec: String) {
+
+    val inputData = MemoryStream[String]
     val df = inputData.toDF()
 
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
@@ -129,18 +256,19 @@ class FileStreamSinkSuite extends StreamTest {
     try {
       query =
         df.write
-          .format("parquet")
+          .format(fileFormat.shortName())
           .option("checkpointLocation", checkpointDir)
+          .option("compression", codec)
           .startStream(outputDir)
 
-      inputData.addData(1, 2, 3)
+      inputData.addData("1", "2", "3")
 
       failAfter(streamingTimeout) {
         query.processAllAvailable()
       }
 
-      val outputDf = spark.read.parquet(outputDir).as[Int]
-      checkDataset(outputDf, 1, 2, 3)
+      val outputDf = spark.read.format(fileFormat.shortName()).load(outputDir).as[String]
+      checkDataset(outputDf, "1", "2", "3")
 
     } finally {
       if (query != null) {
@@ -149,7 +277,34 @@ class FileStreamSinkSuite extends StreamTest {
     }
   }
 
-  test("FileStreamSink - partitioned writing and batch reading") {
+  test("FileStreamSink - csv - partitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec =>
+      testPartitionedWritingAndBatchReading(new CSVFileFormat, codec)
+    }
+  }
+
+  test("FileStreamSink - json - partitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach { codec =>
+      testPartitionedWritingAndBatchReading(new JsonFileFormat, codec)
+    }
+  }
+
+  test("FileStreamSink - parquet - partitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach {
+      codec => testPartitionedWritingAndBatchReading(new ParquetFileFormat, codec)
+    }
+  }
+
+  test("FileStreamSink - text - partitioned writing and batch reading - codecs: none/gzip") {
+    COMPRESSION_CODECS.foreach {
+      codec => testPartitionedWritingAndBatchReading(new TextFileFormat, codec)
+    }
+  }
+
+  private def testPartitionedWritingAndBatchReading(
+      fileFormat: FileFormat with DataSourceRegister,
+      codec: String) {
+
     val inputData = MemoryStream[Int]
     val ds = inputData.toDS()
 
@@ -160,12 +315,13 @@ class FileStreamSinkSuite extends StreamTest {
 
     try {
       query =
-        ds.map(i => (i, i * 1000))
+        ds.map(i => (i, (i * 1000).toString))
           .toDF("id", "value")
           .write
-          .format("parquet")
+          .format(fileFormat.shortName())
           .partitionBy("id")
           .option("checkpointLocation", checkpointDir)
+          .option("header", "true") // this is only for `cvs` to save column names into files
           .startStream(outputDir)
 
       inputData.addData(1, 2, 3)
@@ -173,9 +329,16 @@ class FileStreamSinkSuite extends StreamTest {
         query.processAllAvailable()
       }
 
-      val outputDf = spark.read.parquet(outputDir)
+      val outputDf =
+        sqlContext
+          .read
+          .format(fileFormat.shortName())
+          .option("compression", codec)
+          .option("header", "true") // this is only for `cvs` to load column names back from files
+          .load(outputDir)
+
       val expectedSchema = new StructType()
-        .add(StructField("value", IntegerType))
+        .add(StructField("value", StringType))
         .add(StructField("id", IntegerType))
       assert(outputDf.schema === expectedSchema)
 
@@ -192,8 +355,8 @@ class FileStreamSinkSuite extends StreamTest {
 
       // Verify the data is correctly read
       checkDataset(
-        outputDf.as[(Int, Int)],
-        (1000, 1), (2000, 2), (3000, 3))
+        outputDf.as[(String, Int)],
+        ("1000", 1), ("2000", 2), ("3000", 3))
 
       /** Check some condition on the partitions of the FileScanRDD generated by a DF */
       def checkFileScanPartitions(df: DataFrame)(func: Seq[FilePartition] => Unit): Unit = {
@@ -261,11 +424,14 @@ class FileStreamSinkSuite extends StreamTest {
     }
 
     testFormat(None) // should not throw error as default format parquet when not specified
+    testFormat(Some("csv"))
+    testFormat(Some("json"))
     testFormat(Some("parquet"))
+    testFormat(Some("text"))
     val e = intercept[UnsupportedOperationException] {
-      testFormat(Some("text"))
+      testFormat(Some("jdbc"))
     }
-    Seq("text", "not support", "stream").foreach { s =>
+    Seq("jdbc", "not support", "stream").foreach { s =>
       assert(e.getMessage.contains(s))
     }
   }
@@ -273,15 +439,46 @@ class FileStreamSinkSuite extends StreamTest {
   private def checkFilesExist(dir: File, expectedFiles: Seq[String], msg: String): Unit = {
     import scala.collection.JavaConverters._
     val files =
-      FileUtils.listFiles(dir, new RegexFileFilter("[^.]+"), DirectoryFileFilter.DIRECTORY)
+      // To filter out files like '.some_file.txt.gz.crc', but to keep 'some_file.txt.gz'
+      FileUtils.listFiles(dir, new RegexFileFilter("[^.].*"), DirectoryFileFilter.DIRECTORY)
         .asScala
         .map(_.getCanonicalPath)
-        .toSet
 
     expectedFiles.foreach { f =>
-      assert(files.contains(f),
+      // we examine the prefix, but not the extension
+      assert(files.map(_.startsWith(f)).reduce(_ || _),
         s"\n$msg\nexpected file:\n\t$f\nfound files:\n${files.mkString("\n\t")}")
     }
   }
 
+  test("getSinkFileStatusUsingGlob()") {
+    val dir = Utils.createTempDir(namePrefix = "streaming").getCanonicalPath
+
+    val uuid = UUID.randomUUID().toString
+    val file = new File(dir, uuid + ".txt.gz")
+    file.createNewFile()
+
+    val fileSinkFileStatus =
+      FileStreamSink.getSinkFileStatusUsingGlob(Seq(new Path(dir, uuid)), new Configuration)
+    assert(fileSinkFileStatus != null)
+    assert(fileSinkFileStatus.length == 1)
+    assert(
+      // `path` would be like "file:///some/path/..." if run on Hadoop 2.2.0
+      // `path` would be like "file:/some/path/..."   if run on Hadoop 2.3.0 and onwards
+      // so path.stripPrefix("file://").stripPrefix("file:") would give us "/some/path/..."
+      fileSinkFileStatus.head.path.stripPrefix("file://").stripPrefix("file:")
+        == file.getCanonicalPath)
+    assert(fileSinkFileStatus.head.isDir == false)
+    assert(fileSinkFileStatus.head.action == "add")
+
+    val file2 = new File(dir, uuid + ".unknown")
+    file2.createNewFile()
+
+    // We would expect only one file being matched, so it should fail if more than one file match
+    val e = intercept[AssertionError](
+      FileStreamSink.getSinkFileStatusUsingGlob(Seq(new Path(dir, uuid)), new Configuration))
+    Seq("unexpected number", "matching").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
 }

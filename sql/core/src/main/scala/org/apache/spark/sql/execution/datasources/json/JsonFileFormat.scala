@@ -24,16 +24,18 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{LongWritable, NullWritable, Text}
 import org.apache.hadoop.mapred.{JobConf, TextInputFormat}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
@@ -41,6 +43,8 @@ import org.apache.spark.util.SerializableConfiguration
 class JsonFileFormat extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "json"
+
+  override def toString: String = "JSON"
 
   override def inferSchema(
       sparkSession: SparkSession,
@@ -74,10 +78,7 @@ class JsonFileFormat extends FileFormat with DataSourceRegister {
       options: Map[String, String],
       dataSchema: StructType): OutputWriterFactory = {
     val conf = job.getConfiguration
-    val parsedOptions: JSONOptions = new JSONOptions(options)
-    parsedOptions.compressionCodec.foreach { codec =>
-      CompressionCodecs.setCodecConfiguration(conf, codec)
-    }
+    JsonFileFormat.prepareConfForWriting(conf, options)
 
     new OutputWriterFactory {
       override def newInstance(
@@ -85,9 +86,35 @@ class JsonFileFormat extends FileFormat with DataSourceRegister {
           bucketId: Option[Int],
           dataSchema: StructType,
           context: TaskAttemptContext): OutputWriter = {
-        new JsonOutputWriter(path, bucketId, dataSchema, context)
+        // Returns a 'batch' JsonOutputWriter
+        new JsonOutputWriterBase(dataSchema, context) {
+          private[json] override val recordWriter: RecordWriter[NullWritable, Text] = {
+            new TextOutputFormat[NullWritable, Text]() {
+              override def getDefaultWorkFile(
+                  context: TaskAttemptContext, extension: String): Path = {
+                val conf = context.getConfiguration
+                val uniqueWriteJobId = conf.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
+                val taskAttemptId = context.getTaskAttemptID
+                val split = taskAttemptId.getTaskID.getId
+                val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
+                new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString.json$extension")
+              }
+            }.getRecordWriter(context)
+          }
+        }
       }
     }
+  }
+
+  override def buildWriter(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      options: Map[String, String]): OutputWriterFactory = {
+    new StreamingJsonOutputWriterFactory(
+      sqlContext.conf,
+      dataSchema,
+      sqlContext.sparkContext.hadoopConfiguration,
+      options)
   }
 
   override def buildReader(
@@ -146,16 +173,53 @@ class JsonFileFormat extends FileFormat with DataSourceRegister {
     }
   }
 
-  override def toString: String = "JSON"
-
   override def hashCode(): Int = getClass.hashCode()
 
   override def equals(other: Any): Boolean = other.isInstanceOf[JsonFileFormat]
 }
 
-private[json] class JsonOutputWriter(
-    path: String,
-    bucketId: Option[Int],
+/**
+ * A factory for generating [[OutputWriter]]s for writing json files. This is implemented different
+ * from the 'batch' JsonOutputWriter as this does not use any [[OutputCommitter]]. It simply
+ * writes the data to the path used to generate the output writer. Callers of this factory
+ * has to ensure which files are to be considered as committed.
+ */
+private[json] class StreamingJsonOutputWriterFactory(
+    sqlConf: SQLConf,
+    dataSchema: StructType,
+    hadoopConf: Configuration,
+    options: Map[String, String]) extends StreamingOutputWriterFactory {
+
+  private val serializableConf = {
+    val conf = Job.getInstance(hadoopConf).getConfiguration
+    JsonFileFormat.prepareConfForWriting(conf, options)
+    new SerializableConfiguration(conf)
+  }
+
+  /**
+   * Returns a [[OutputWriter]] that writes data to the give path without using an
+   * [[OutputCommitter]].
+   */
+  override private[sql] def newWriter(path: String): OutputWriter = {
+    val hadoopTaskAttempId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
+    val hadoopAttemptContext =
+      new TaskAttemptContextImpl(serializableConf.value, hadoopTaskAttempId)
+    // Returns a 'streaming' JsonOutputWriter
+    new JsonOutputWriterBase(dataSchema, hadoopAttemptContext) {
+      override private[json] val recordWriter: RecordWriter[NullWritable, Text] =
+        createNoCommitterTextRecordWriter(
+          path,
+          hadoopAttemptContext,
+          (c: TaskAttemptContext, ext: String) => { new Path(s"$path.json$ext") })
+    }
+  }
+}
+
+/**
+ * Base JsonOutputWriter class for 'batch' JsonOutputWriter and 'streaming' JsonOutputWriter. The
+ * writing logic to a single file resides in this base class.
+ */
+private[json] abstract class JsonOutputWriterBase(
     dataSchema: StructType,
     context: TaskAttemptContext)
   extends OutputWriter with Logging {
@@ -165,18 +229,8 @@ private[json] class JsonOutputWriter(
   private[this] val gen = new JsonFactory().createGenerator(writer).setRootValueSeparator(null)
   private[this] val result = new Text()
 
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId$bucketString.json$extension")
-      }
-    }.getRecordWriter(context)
-  }
+  // different subclass may provide different record writers
+  private[json] val recordWriter: RecordWriter[NullWritable, Text]
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
@@ -193,5 +247,21 @@ private[json] class JsonOutputWriter(
   override def close(): Unit = {
     gen.close()
     recordWriter.close(context)
+  }
+}
+
+private[json] object JsonFileFormat {
+  /**
+   * Setup writing configurations into the given [[Configuration]].
+   * Both continuous-queries writing process and non-continuous-queries writing process will
+   * call this function.
+   */
+  private[json] def prepareConfForWriting(
+      conf: Configuration,
+      options: Map[String, String]): Unit = {
+    val parsedOptions: JSONOptions = new JSONOptions(options)
+    parsedOptions.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
   }
 }

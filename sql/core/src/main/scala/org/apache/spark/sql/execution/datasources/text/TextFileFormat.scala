@@ -20,15 +20,17 @@ package org.apache.spark.sql.execution.datasources.text
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.{Job, RecordWriter, TaskAttemptContext}
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
-import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
+import org.apache.spark.sql.{AnalysisException, Row, SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
@@ -39,6 +41,8 @@ import org.apache.spark.util.SerializableConfiguration
 class TextFileFormat extends FileFormat with DataSourceRegister {
 
   override def shortName(): String = "text"
+
+  override def toString: String = "Text"
 
   private def verifySchema(schema: StructType): Unit = {
     if (schema.size != 1) {
@@ -65,23 +69,8 @@ class TextFileFormat extends FileFormat with DataSourceRegister {
     verifySchema(dataSchema)
 
     val conf = job.getConfiguration
-    val compressionCodec = options.get("compression").map(CompressionCodecs.getCodecClassName)
-    compressionCodec.foreach { codec =>
-      CompressionCodecs.setCodecConfiguration(conf, codec)
-    }
-
-    new OutputWriterFactory {
-      override def newInstance(
-          path: String,
-          bucketId: Option[Int],
-          dataSchema: StructType,
-          context: TaskAttemptContext): OutputWriter = {
-        if (bucketId.isDefined) {
-          throw new AnalysisException("Text doesn't support bucketing")
-        }
-        new TextOutputWriter(path, dataSchema, context)
-      }
-    }
+    TextFileFormat.prepareConfForWriting(conf, options)
+    new BatchOutputWriterFactory
   }
 
   override def buildReader(
@@ -120,24 +109,31 @@ class TextFileFormat extends FileFormat with DataSourceRegister {
       }
     }
   }
+
+  override def buildWriter(
+      sqlContext: SQLContext,
+      dataSchema: StructType,
+      options: Map[String, String]): OutputWriterFactory = {
+    verifySchema(dataSchema)
+    new StreamingTextOutputWriterFactory(
+      sqlContext.conf,
+      dataSchema,
+      sqlContext.sparkContext.hadoopConfiguration,
+      options)
+  }
 }
 
-class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemptContext)
+/**
+ * Base TextOutputWriter class for 'batch' TextOutputWriter and 'streaming' TextOutputWriter. The
+ * writing logic to a single file resides in this base class.
+ */
+private[text] abstract class TextOutputWriterBase(context: TaskAttemptContext)
   extends OutputWriter {
 
   private[this] val buffer = new Text()
 
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.txt$extension")
-      }
-    }.getRecordWriter(context)
-  }
+  // different subclass may provide different record writers
+  private[text] val recordWriter: RecordWriter[NullWritable, Text]
 
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
@@ -149,5 +145,86 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
 
   override def close(): Unit = {
     recordWriter.close(context)
+  }
+}
+
+private[text] class BatchOutputWriterFactory extends OutputWriterFactory {
+  override def newInstance(
+      path: String,
+      bucketId: Option[Int],
+      dataSchema: StructType,
+      context: TaskAttemptContext): OutputWriter = {
+    if (bucketId.isDefined) {
+      throw new AnalysisException("Text doesn't support bucketing")
+    }
+    // Returns a 'batch' TextOutputWriter
+    new TextOutputWriterBase(context) {
+      override private[text] val recordWriter: RecordWriter[NullWritable, Text] = {
+        new TextOutputFormat[NullWritable, Text]() {
+          override def getDefaultWorkFile(
+              context: TaskAttemptContext, extension: String): Path = {
+            val configuration = context.getConfiguration
+            val uniqueWriteJobId =
+              configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
+            val taskAttemptId = context.getTaskAttemptID
+            val split = taskAttemptId.getTaskID.getId
+            new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.txt$extension")
+          }
+        }.getRecordWriter(context)
+      }
+    }
+  }
+}
+
+/**
+ * A factory for generating [[OutputWriter]]s for writing text files. This is implemented different
+ * from the 'batch' TextOutputWriter as this does not use any [[OutputCommitter]]. It simply
+ * writes the data to the path used to generate the output writer. Callers of this factory
+ * has to ensure which files are to be considered as committed.
+ */
+private[text] class StreamingTextOutputWriterFactory(
+    sqlConf: SQLConf,
+    dataSchema: StructType,
+    hadoopConf: Configuration,
+    options: Map[String, String]) extends StreamingOutputWriterFactory {
+
+  private val serializableConf = {
+    val conf = Job.getInstance(hadoopConf).getConfiguration
+    TextFileFormat.prepareConfForWriting(conf, options)
+    new SerializableConfiguration(conf)
+  }
+
+  /**
+   * Returns a [[OutputWriter]] that writes data to the give path without using an
+   * [[OutputCommitter]].
+   */
+  override private[sql] def newWriter(path: String): OutputWriter = {
+    val hadoopTaskAttempId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
+    val hadoopAttemptContext =
+      new TaskAttemptContextImpl(serializableConf.value, hadoopTaskAttempId)
+    // Returns a 'streaming' TextOutputWriter
+    new TextOutputWriterBase(hadoopAttemptContext) {
+      override private[text] val recordWriter: RecordWriter[NullWritable, Text] =
+        createNoCommitterTextRecordWriter(
+          path,
+          hadoopAttemptContext,
+          (c: TaskAttemptContext, ext: String) => { new Path(s"$path.txt$ext") })
+    }
+  }
+}
+
+private[text] object TextFileFormat {
+  /**
+   * Setup writing configurations into the given [[Configuration]].
+   * Both continuous-queries writing process and non-continuous-queries writing process will
+   * call this function.
+   */
+  private[text] def prepareConfForWriting(
+      conf: Configuration,
+      options: Map[String, String]): Unit = {
+    val compressionCodec = options.get("compression").map(CompressionCodecs.getCodecClassName)
+    compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
   }
 }

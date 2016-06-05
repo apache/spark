@@ -26,7 +26,7 @@ import org.apache.hadoop.mapred.TextInputFormat
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
@@ -86,12 +86,20 @@ class CSVFileFormat extends FileFormat with DataSourceRegister {
       dataSchema: StructType): OutputWriterFactory = {
     verifySchema(dataSchema)
     val conf = job.getConfiguration
-    val csvOptions = new CSVOptions(options)
-    csvOptions.compressionCodec.foreach { codec =>
-      CompressionCodecs.setCodecConfiguration(conf, codec)
-    }
+    val csvOptions = CSVRelation.prepareConfForWriting(conf, options)
+    new BatchCSVOutputWriterFactory(csvOptions)
+  }
 
-    new CSVOutputWriterFactory(csvOptions)
+  override def buildWriter(
+    sqlContext: SQLContext,
+    dataSchema: StructType,
+    options: Map[String, String]): OutputWriterFactory = {
+    verifySchema(dataSchema)
+    new StreamingCSVOutputWriterFactory(
+      sqlContext.conf,
+      dataSchema,
+      sqlContext.sparkContext.hadoopConfiguration,
+      options)
   }
 
   override def buildReader(
