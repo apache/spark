@@ -437,6 +437,8 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * to strings.
    */
   private def visitOptionParameters(ctx: OptionParameterListContext): Map[String, String] = {
+    // TODO: Currently it does not treat null. Hive does not allow null for metadata and
+    // throws an exception.
     val properties = ctx.optionParameter.asScala.map { property =>
       val key = visitTablePropertyKey(property.key)
       val value = if (property.value.STRING != null) {
