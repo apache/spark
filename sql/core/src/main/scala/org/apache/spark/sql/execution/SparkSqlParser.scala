@@ -432,7 +432,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   }
 
   /**
-   * Parse a key-value map from a [[OptionParameterListContext]], assuming all values are specified.
+   * Parse a key-value map from a [[OptionParameterListContext]], assuming all values are
+   * specified. This allows string, boolean, decimal and integer literals which are converted
+   * to strings.
    */
   private def visitOptionParameters(ctx: OptionParameterListContext): Map[String, String] = {
     val properties = ctx.optionParameter.asScala.map { property =>
