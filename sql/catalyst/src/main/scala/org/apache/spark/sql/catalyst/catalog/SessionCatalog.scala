@@ -784,7 +784,7 @@ class SessionCatalog(
   }
 
   /**
-   * Return a [[Expression]] that represents the specified function, assuming it exists.
+   * Return an [[Expression]] that represents the specified function, assuming it exists.
    *
    * For a temporary function or a permanent function that has been loaded,
    * this method will simply lookup the function through the
