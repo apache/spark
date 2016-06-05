@@ -86,7 +86,7 @@ object BindReferences extends Logging {
       allowFailures: Boolean = false): A = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        val ordinal = input.getOrdinalWithExprId(a.exprId)
+        val ordinal = input.indexOf(a.exprId)
         if (ordinal == -1) {
           if (allowFailures) {
             a

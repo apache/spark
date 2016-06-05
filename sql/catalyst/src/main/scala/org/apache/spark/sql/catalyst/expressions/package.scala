@@ -102,13 +102,12 @@ package object expressions  {
     private lazy val exprIdToOrdinal = {
       val arr = attrsArray
       val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
-      var index = 0
-      while (index < arr.length) {
-        val exprId = arr(index).exprId
-        if (!map.containsKey(exprId)) {
-          map.put(exprId, index)
-        }
-        index += 1
+      // Iterate over the array in reverse order so that the final map value is the first attribute
+      // with a given expression id.
+      var index = arr.length - 1
+      while (index >= 0) {
+        map.put(arr(index).exprId, index)
+        index -= 1
       }
       map
     }
@@ -121,7 +120,7 @@ package object expressions  {
     /**
      * Returns the index of first attribute with a matching expression id, or -1 if no match exists.
      */
-    def getOrdinalWithExprId(exprId: ExprId): Int = {
+    def indexOf(exprId: ExprId): Int = {
       Option(exprIdToOrdinal.get(exprId)).getOrElse(-1)
     }
   }
