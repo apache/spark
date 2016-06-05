@@ -28,7 +28,7 @@ import org.apache.spark.util.{AccumulatorContext, AccumulatorMetadata, LegacyAcc
 
 
 /**
- * A data type that can be accumulated, i.e. has an commutative and associative "add" operation,
+ * A data type that can be accumulated, i.e. has a commutative and associative "add" operation,
  * but where the result type, `R`, may be different from the element type being added, `T`.
  *
  * You must define how to add data, and how to merge two of these together.  For some data types,

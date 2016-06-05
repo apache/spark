@@ -366,7 +366,7 @@ object SparkSubmit {
       }
     }
 
-    // In YARN mode for an R app, add the SparkR package archive and the R package
+    // In YARN mode for a R app, add the SparkR package archive and the R package
     // archive containing all of the built R libraries to archives so that they can
     // be distributed with the job
     if (args.isR && clusterManager == YARN) {
