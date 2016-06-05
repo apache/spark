@@ -303,7 +303,9 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (external) {
       throw operationNotAllowed("CREATE EXTERNAL TABLE ... USING", ctx)
     }
-    val options = Option(ctx.optionParameterList).map(visitOptionParameters).getOrElse(Map.empty)
+    val options = Option(ctx.optionParameterList)
+      .map(visitOptionParameterList)
+      .getOrElse(Map.empty)
     val provider = ctx.tableProvider.qualifiedName.getText
     val partitionColumnNames =
       Option(ctx.partitionColumnNames)
@@ -436,7 +438,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    * specified. This allows string, boolean, decimal and integer literals which are converted
    * to strings.
    */
-  private def visitOptionParameters(ctx: OptionParameterListContext): Map[String, String] = {
+  override def visitOptionParameterList(ctx: OptionParameterListContext): Map[String, String] = {
     // TODO: Currently it does not treat null. Hive does not allow null for metadata and
     // throws an exception.
     val properties = ctx.optionParameter.asScala.map { property =>
