@@ -25,6 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.util.BoundedPriorityQueue
 
 /**
+ * :: DeveloperApi ::
  * Machine learning specific Pair RDD functions.
  */
 @DeveloperApi
@@ -50,6 +51,9 @@ class MLPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)]) extends Se
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object MLPairRDDFunctions {
   /** Implicit conversion from a pair RDD to MLPairRDDFunctions. */

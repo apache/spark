@@ -675,6 +675,8 @@ class DistributedLDAModel private[ml] (
   private var _checkpointFiles: Array[String] = oldDistributedModel.checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * If using checkpointing and [[LDA.keepLastCheckpoint]] is set to true, then there may be
    * saved checkpoint files.  This method is provided so that users can manage those files.
    *
@@ -689,6 +691,8 @@ class DistributedLDAModel private[ml] (
   def getCheckpointFiles: Array[String] = _checkpointFiles
 
   /**
+   * :: DeveloperApi ::
+   *
    * Remove any remaining checkpoint files from training.
    *
    * @see [[getCheckpointFiles]]
