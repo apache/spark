@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 
 // TODO: merge this with DDLSuite (SPARK-14441)
 class DDLCommandSuite extends PlanTest {
-  private val parser = new SparkSqlParser(new SQLConf)
+  private lazy val parser = new SparkSqlParser(new SQLConf)
 
   private def assertUnsupported(sql: String, containsThesePhrases: Seq[String] = Seq()): Unit = {
     val e = intercept[ParseException] {
@@ -235,6 +235,21 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed2, expected2)
     comparePlans(parsed3, expected3)
     comparePlans(parsed4, expected4)
+  }
+
+  test("create table - table file format") {
+    val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
+      "sequencefile", "rcfile", "textfile")
+
+    allSources.foreach { s =>
+      val query = s"CREATE TABLE my_tab STORED AS $s"
+      val ct = parseAs[CreateTableCommand](query)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+      assert(hiveSerde.isDefined)
+      assert(ct.table.storage.serde == hiveSerde.get.serde)
+      assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
+      assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+    }
   }
 
   test("create table - row format and table file format") {

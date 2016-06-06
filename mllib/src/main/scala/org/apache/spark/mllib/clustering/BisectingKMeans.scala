@@ -31,6 +31,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
+ * :: Experimental ::
+ *
  * A bisecting k-means algorithm based on the paper "A comparison of document clustering techniques"
  * by Steinbach, Karypis, and Kumar, with modification to fit Spark.
  * The algorithm starts from a single cluster that contains all points.
@@ -396,6 +398,8 @@ private object BisectingKMeans extends Serializable {
 }
 
 /**
+ * :: Experimental ::
+ *
  * Represents a node in a clustering tree.
  *
  * @param index node index, negative for internal nodes and non-negative for leaf nodes

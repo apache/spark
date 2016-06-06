@@ -354,7 +354,10 @@ class VersionsSuite extends SparkFunSuite with Logging {
     test(s"$version: alterPartitions") {
       val spec = Map("key1" -> "1", "key2" -> "2")
       val newLocation = Utils.createTempDir().getPath()
-      val storage = storageFormat.copy(locationUri = Some(newLocation))
+      val storage = storageFormat.copy(
+        locationUri = Some(newLocation),
+        // needed for 0.12 alter partitions
+        serde = Some("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"))
       val partition = CatalogTablePartition(spec, storage)
       client.alterPartitions("default", "src_part", Seq(partition))
       assert(client.getPartition("default", "src_part", spec)
@@ -440,6 +443,7 @@ class VersionsSuite extends SparkFunSuite with Logging {
         assert(client.getFunctionOption("default", "func2").isEmpty)
       } else {
         assert(client.getFunctionOption("default", "func2").isDefined)
+        assert(client.getFunctionOption("default", "the_func_not_exists").isEmpty)
       }
     }
 

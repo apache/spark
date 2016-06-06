@@ -29,7 +29,7 @@ import org.apache.spark.sql.test.{ExamplePointUDT, SQLTestUtils}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 
 class HiveMetastoreCatalogSuite extends TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   test("struct field should accept underscore in sub-column name") {
     val hiveTypeStr = "struct<a: int, b_1: string, c: string>"
@@ -45,7 +45,7 @@ class HiveMetastoreCatalogSuite extends TestHiveSingleton {
   }
 
   test("duplicated metastore relations") {
-    val df = hiveContext.sql("SELECT * FROM src")
+    val df = spark.sql("SELECT * FROM src")
     logInfo(df.queryExecution.toString)
     df.as('a).join(df.as('b), $"a.key" === $"b.key")
   }

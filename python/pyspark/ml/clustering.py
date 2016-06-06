@@ -64,6 +64,21 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. note:: Experimental
 
     GaussianMixture clustering.
+    This class performs expectation maximization for multivariate Gaussian
+    Mixture Models (GMMs).  A GMM represents a composite distribution of
+    independent Gaussian distributions with associated "mixing" weights
+    specifying each's contribution to the composite.
+
+    Given a set of sample points, this class will maximize the log-likelihood
+    for a mixture of k Gaussians, iterating until the log-likelihood changes by
+    less than convergenceTol, or until it has reached the max number of iterations.
+    While this process is generally guaranteed to converge, it is not guaranteed
+    to find a global optimum.
+
+    Note: For high-dimensional data (with many features), this algorithm may perform poorly.
+          This is due to high-dimensional data (a) making it difficult to cluster at all
+          (based on statistical/theoretical arguments) and (b) numerical issues with
+          Gaussian distributions.
 
     >>> from pyspark.ml.linalg import Vectors
 
@@ -73,7 +88,7 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     ...         (Vectors.dense([0.75, 0.935]),),
     ...         (Vectors.dense([-0.83, -0.68]),),
     ...         (Vectors.dense([-0.91, -0.76]),)]
-    >>> df = sqlContext.createDataFrame(data, ["features"])
+    >>> df = spark.createDataFrame(data, ["features"])
     >>> gm = GaussianMixture(k=3, tol=0.0001,
     ...                      maxIter=10, seed=10)
     >>> model = gm.fit(df)
@@ -118,8 +133,8 @@ class GaussianMixture(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create",
-              typeConverter=TypeConverters.toInt)
+    k = Param(Params._dummy(), "k", "Number of independent Gaussians in the mixture model. " +
+              "Must be > 1.", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -197,7 +212,7 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
-    >>> df = sqlContext.createDataFrame(data, ["features"])
+    >>> df = spark.createDataFrame(data, ["features"])
     >>> kmeans = KMeans(k=2, seed=1)
     >>> model = kmeans.fit(df)
     >>> centers = model.clusterCenters()
@@ -227,15 +242,15 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     .. versionadded:: 1.5.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create",
+    k = Param(Params._dummy(), "k", "The number of clusters to create. Must be > 1.",
               typeConverter=TypeConverters.toInt)
     initMode = Param(Params._dummy(), "initMode",
-                     "the initialization algorithm. This can be either \"random\" to " +
+                     "The initialization algorithm. This can be either \"random\" to " +
                      "choose random points as initial cluster centers, or \"k-means||\" " +
                      "to use a parallel variant of k-means++",
                      typeConverter=TypeConverters.toString)
-    initSteps = Param(Params._dummy(), "initSteps", "steps for k-means initialization mode",
-                      typeConverter=TypeConverters.toInt)
+    initSteps = Param(Params._dummy(), "initSteps", "The number of steps for k-means|| " +
+                      "initialization mode. Must be > 0.", typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, featuresCol="features", predictionCol="prediction", k=2,
@@ -350,7 +365,7 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.dense([0.0, 0.0]),), (Vectors.dense([1.0, 1.0]),),
     ...         (Vectors.dense([9.0, 8.0]),), (Vectors.dense([8.0, 9.0]),)]
-    >>> df = sqlContext.createDataFrame(data, ["features"])
+    >>> df = spark.createDataFrame(data, ["features"])
     >>> bkm = BisectingKMeans(k=2, minDivisibleClusterSize=1.0)
     >>> model = bkm.fit(df)
     >>> centers = model.clusterCenters()
@@ -380,11 +395,11 @@ class BisectingKMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIte
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of clusters to create",
+    k = Param(Params._dummy(), "k", "The desired number of leaf clusters. Must be > 1.",
               typeConverter=TypeConverters.toInt)
     minDivisibleClusterSize = Param(Params._dummy(), "minDivisibleClusterSize",
-                                    "the minimum number of points (if >= 1.0) " +
-                                    "or the minimum proportion",
+                                    "The minimum number of points (if >= 1.0) or the minimum " +
+                                    "proportion of points (if < 1.0) of a divisible cluster.",
                                     typeConverter=TypeConverters.toFloat)
 
     @keyword_only
@@ -627,7 +642,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
 
     >>> from pyspark.ml.linalg import Vectors, SparseVector
     >>> from pyspark.ml.clustering import LDA
-    >>> df = sqlContext.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
+    >>> df = spark.createDataFrame([[1, Vectors.dense([0.0, 1.0])],
     ...      [2, SparseVector(2, {0: 1.0})],], ["id", "features"])
     >>> lda = LDA(k=2, seed=1, optimizer="em")
     >>> model = lda.fit(df)
@@ -661,7 +676,7 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
     .. versionadded:: 2.0.0
     """
 
-    k = Param(Params._dummy(), "k", "number of topics (clusters) to infer",
+    k = Param(Params._dummy(), "k", "The number of topics (clusters) to infer. Must be > 1.",
               typeConverter=TypeConverters.toInt)
     optimizer = Param(Params._dummy(), "optimizer",
                       "Optimizer or inference algorithm used to estimate the LDA model.  "
@@ -933,21 +948,23 @@ class LDA(JavaEstimator, HasFeaturesCol, HasMaxIter, HasSeed, HasCheckpointInter
 if __name__ == "__main__":
     import doctest
     import pyspark.ml.clustering
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = pyspark.ml.clustering.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.clustering tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.clustering tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     import tempfile
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        sc.stop()
+        spark.stop()
     finally:
         from shutil import rmtree
         try:
