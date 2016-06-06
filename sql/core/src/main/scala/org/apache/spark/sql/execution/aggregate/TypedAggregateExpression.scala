@@ -38,10 +38,11 @@ object TypedAggregateExpression {
       bufferSerializer.map(_.toAttribute))
 
     val outputEncoder = encoderFor[OUT]
-    val outputType = if (outputEncoder.flat) {
-      outputEncoder.schema.head.dataType
+    val (outputType, outputNullable) = if (outputEncoder.flat) {
+      val sf = outputEncoder.schema.head
+      (sf.dataType, sf.nullable)
     } else {
-      outputEncoder.schema
+      (outputEncoder.schema, true)
     }
 
     new TypedAggregateExpression(
@@ -51,7 +52,8 @@ object TypedAggregateExpression {
       bufferDeserializer,
       outputEncoder.serializer,
       outputEncoder.deserializer.dataType,
-      outputType)
+      outputType,
+      outputNullable)
   }
 }
 
@@ -65,9 +67,8 @@ case class TypedAggregateExpression(
     bufferDeserializer: Expression,
     outputSerializer: Seq[Expression],
     outputExternalType: DataType,
-    dataType: DataType) extends DeclarativeAggregate with NonSQLExpression {
-
-  override def nullable: Boolean = true
+    dataType: DataType,
+    nullable: Boolean) extends DeclarativeAggregate with NonSQLExpression {
 
   override def deterministic: Boolean = true
 
