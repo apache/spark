@@ -262,9 +262,9 @@ private[sql] class ParquetFileFormat
   }
 
   override def isSplitable(
-    sparkSession: SparkSession,
-    options: Map[String, String],
-    path: Path): Boolean = {
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
     true
   }
 
