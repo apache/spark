@@ -60,20 +60,14 @@ private[hive] trait HiveStrategies {
    */
   object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
-        // Filter out all predicates that only deal with partition keys, these are given to the
-        // hive table scan operator to be used for partition pruning.
-        val partitionKeyIds = AttributeSet(relation.partitionKeys)
-        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
-          !predicate.references.isEmpty &&
-          predicate.references.subsetOf(partitionKeyIds)
+      case relation: MetastoreRelation =>
+        val requiredAttributes = if (relation.requiredAttributes.isEmpty) {
+          relation.output
+        } else {
+          relation.requiredAttributes
         }
-
-        pruneFilterProject(
-          projectList,
-          otherPredicates,
-          identity[Seq[Expression]],
-          HiveTableScanExec(_, relation, pruningPredicates)(sparkSession)) :: Nil
+        HiveTableScanExec(requiredAttributes, relation, relation.partitionPruningPred)(
+          sparkSession) :: Nil
       case _ =>
         Nil
     }

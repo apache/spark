@@ -44,7 +44,8 @@ private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
     alias: Option[String],
-    var partitionPruningPred: Seq[Expression] = Seq.empty[Expression])
+    var partitionPruningPred: Seq[Expression] = Seq.empty[Expression],
+    var requiredAttributes: Seq[Attribute] = Seq.empty[Attribute])
     (val catalogTable: CatalogTable,
      @transient private val client: HiveClient,
      @transient private val sparkSession: SparkSession)
@@ -57,7 +58,9 @@ private[hive] case class MetastoreRelation(
         alias == relation.alias &&
         output == relation.output &&
         partitionPruningPred.size == relation.partitionPruningPred.size &&
-        (partitionPruningPred, relation.partitionPruningPred).zipped.forall(_ semanticEquals _)
+        (partitionPruningPred, relation.partitionPruningPred).zipped.forall(_ semanticEquals _) &&
+        requiredAttributes.size == relation.requiredAttributes.size &&
+        (requiredAttributes, relation.requiredAttributes).zipped.forall(_ semanticEquals _)
     case _ => false
   }
 
@@ -136,7 +139,8 @@ private[hive] case class MetastoreRelation(
         } else if (sparkSession.sessionState.conf.fallBackToHdfsForStatsEnabled) {
           try {
             val hadoopConf = sparkSession.sessionState.newHadoopConf()
-            if (partitionPruningPred.isEmpty) {
+            if (partitionPruningPred.isEmpty ||
+              !sparkSession.sessionState.conf.hivePartitionPrunerForStats) {
               val fs: FileSystem = hiveQlTable.getPath.getFileSystem(hadoopConf)
               fs.getContentSummary(hiveQlTable.getPath).getLength
             } else {
@@ -229,7 +233,9 @@ private[hive] case class MetastoreRelation(
       case mr: MetastoreRelation =>
         mr.databaseName == databaseName && mr.tableName == tableName &&
           partitionPruningPred.size == mr.partitionPruningPred.size &&
-          (partitionPruningPred, mr.partitionPruningPred).zipped.forall(_ semanticEquals _)
+          (partitionPruningPred, mr.partitionPruningPred).zipped.forall(_ semanticEquals _) &&
+          requiredAttributes.size == relation.requiredAttributes.size &&
+          (requiredAttributes, relation.requiredAttributes).zipped.forall(_ semanticEquals _)
       case _ => false
     }
   }
@@ -285,7 +291,7 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias, partitionPruningPred)(
+    MetastoreRelation(databaseName, tableName, alias, partitionPruningPred, requiredAttributes)(
       catalogTable, client, sparkSession)
   }
 }

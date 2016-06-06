@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.hive
 
-import org.apache.spark.sql.{ExperimentalMethods, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.{AttributeSet, PredicateHelper}
+import org.apache.spark.sql.{catalyst, ExperimentalMethods, SparkSession}
+import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
@@ -32,27 +32,48 @@ class HiveOptimizer (
   extends Optimizer(catalog, conf) {
 
   override def batches: Seq[Batch] = super.batches :+
-    Batch("Partition Pruner", Once, PartitionPruner(conf)) :+
-      Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+    Batch("Push filter into relation", Once, PushFilterIntoRelation(conf)) :+
+      Batch("Push Project into relation", Once, PushProjectIntoRelation(conf)) :+
+        Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 }
 
-case class PartitionPruner(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
+case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
 
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (!conf.hivePartitionPrunerForStats) {
-      return plan
-    }
     plan.transform {
       case filter@Filter(condition, relation: MetastoreRelation)
         if relation.partitionKeys.nonEmpty && condition.deterministic =>
         val partitionKeyIds = AttributeSet(relation.partitionKeys)
         val predicates = splitConjunctivePredicates(condition)
-        val pruningPredicates = predicates.filter { predicate =>
+        val (pruningPredicates, otherPredicates) = predicates.partition { predicate =>
           !predicate.references.isEmpty &&
             predicate.references.subsetOf(partitionKeyIds)
         }
-        relation.partitionPruningPred = pruningPredicates
-        filter.withNewChildren(relation :: Nil)
+        val filterCondition: Option[Expression] =
+          otherPredicates.reduceLeftOption(catalyst.expressions.And)
+        if (pruningPredicates.nonEmpty) {
+          relation.partitionPruningPred = pruningPredicates
+        }
+
+        filterCondition.map(Filter(_, relation)).getOrElse(relation)
+    }
+  }
+}
+
+case class PushProjectIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] {
+
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transform {
+      case p @Project(projectList, relation: MetastoreRelation) =>
+        val projectSet = AttributeSet(projectList.flatMap(_.references))
+        relation.requiredAttributes = projectSet.toSeq
+        relation
+
+      case p @Project(projectList, filter@Filter(condition, relation: MetastoreRelation)) =>
+        val projectSet = AttributeSet(projectList.flatMap(_.references))
+        val filterSet = AttributeSet(condition.flatMap(_.references))
+        relation.requiredAttributes = (projectSet ++ filterSet).toSeq
+        filter
     }
   }
 }
