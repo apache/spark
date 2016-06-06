@@ -44,7 +44,8 @@ public class JavaIsotonicRegressionExample {
     JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(
       new Function<LabeledPoint, Tuple3<Double, Double, Double>>() {
         public Tuple3<Double, Double, Double> call(LabeledPoint point) {
-          return new Tuple3<>(new Double(point.label()), new Double(point.features().apply(0)), 1.0);
+          return new Tuple3<>(new Double(point.label()),
+                  new Double(point.features().apply(0)), 1.0);
         }
       }
     );
@@ -57,7 +58,8 @@ public class JavaIsotonicRegressionExample {
 
     // Create isotonic regression model from training data.
     // Isotonic parameter defaults to true so it is only shown for demonstration
-    final IsotonicRegressionModel model = new IsotonicRegression().setIsotonic(true).run(training);
+    final IsotonicRegressionModel model =
+            new IsotonicRegression().setIsotonic(true).run(training);
 
     // Create tuples of predicted and real labels.
     JavaPairRDD<Double, Double> predictionAndLabel = test.mapToPair(
