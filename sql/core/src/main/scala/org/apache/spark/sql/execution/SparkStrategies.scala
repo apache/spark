@@ -376,8 +376,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case c: CreateTableUsing if c.temporary && !c.allowExisting =>
         logWarning(
-          s"CREATE TEMPORARY TABLE tableName USING... is deprecated, please use CREATE " +
-            s"TEMPORARY VIEW viewName USING... instead")
+          s"CREATE TEMPORARY TABLE ${c.tableIdent.identifier} USING... is deprecated, " +
+            s"please use CREATE TEMPORARY VIEW viewName USING... instead")
         ExecutedCommandExec(
           CreateTempViewUsing(
             c.tableIdent, c.userSpecifiedSchema, replace = true, c.provider, c.options)) :: Nil

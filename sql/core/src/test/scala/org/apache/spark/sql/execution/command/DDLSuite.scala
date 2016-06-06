@@ -115,10 +115,6 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     if (!path.endsWith(File.separator)) path + File.separator else path
   }
 
-  private def testFile(fileName: String): String = {
-    Thread.currentThread().getContextClassLoader.getResource(fileName).toString
-  }
-
   test("the qualified path of a database is stored in the catalog") {
     val catalog = spark.sessionState.catalog
 
@@ -427,7 +423,7 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("create temporary view using") {
-    val csvFile = testFile("cars.csv")
+    val csvFile = Thread.currentThread().getContextClassLoader.getResource("cars.csv").toString()
     withView("testview") {
       sql(s"CREATE OR REPLACE TEMPORARY VIEW testview (c1: String, c2: String)  USING " +
         "org.apache.spark.sql.execution.datasources.csv.CSVFileFormat  " +

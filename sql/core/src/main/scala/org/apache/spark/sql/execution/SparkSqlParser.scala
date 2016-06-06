@@ -346,14 +346,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
   /**
    * Creates a [[CreateTempViewUsing]] logical plan.
    */
-  override def visitCreateTempViewUsing(ctx: CreateTempViewUsingContext)
-    : LogicalPlan = withOrigin(ctx) {
-    val options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty)
-    val provider = ctx.tableProvider.qualifiedName.getText
-    val table = visitTableIdentifier(ctx.tableIdentifier())
-    val struct = Option(ctx.colTypeList()).map(createStructType)
-    val replace = ctx.REPLACE != null
-    CreateTempViewUsing(table, struct, replace, provider, options)
+  override def visitCreateTempViewUsing(
+      ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+    CreateTempViewUsing(
+      tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
+      userSpecifiedSchema = Option(ctx.colTypeList()).map(createStructType),
+      replace = ctx.REPLACE != null,
+      provider = ctx.tableProvider.qualifiedName.getText,
+      options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
