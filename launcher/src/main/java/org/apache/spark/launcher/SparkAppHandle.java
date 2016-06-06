@@ -43,12 +43,12 @@ public interface SparkAppHandle {
     RUNNING(false),
     /** The application finished with a successful status. */
     FINISHED(true),
-    /** The Spark Submit JVM got killed with a unknown status. */
-    FINISHED_UNKNOWN(true),
     /** The application finished with a failed status. */
     FAILED(true),
     /** The application was killed. */
-    KILLED(true);
+    KILLED(true),
+    /** The Spark Submit JVM got killed with a unknown status. */
+    LOST(true);
 
     private final boolean isFinal;
 

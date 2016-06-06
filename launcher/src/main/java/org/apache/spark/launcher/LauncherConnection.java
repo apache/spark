@@ -25,7 +25,7 @@ import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import org.apache.spark.launcher.SparkAppHandle.State;
+
 import static org.apache.spark.launcher.LauncherProtocol.*;
 
 /**
@@ -61,14 +61,15 @@ abstract class LauncherConnection implements Closeable, Runnable {
     } catch (EOFException eof) {
       // Remote side has closed the connection, just cleanup.
       try {
-        close(eof);
+        close();
       } catch (Exception unused) {
         // no-op.
       }
     } catch (Exception e) {
       if (!closed) {
+        LOG.log(Level.WARNING, "Error in inbound message handling.", e);
         try {
-          close(e);
+          close();
         } catch (Exception unused) {
           // no-op.
         }
@@ -104,19 +105,6 @@ abstract class LauncherConnection implements Closeable, Runnable {
         }
       }
     }
-  }
-
-  private void close(Exception exp) throws IOException {
-	if (!closed) {
-	  synchronized (this) {
-	    if (!closed) {
-	      handle(new SetState(State.FINISHED_UNKNOWN));
-	      LOG.log(Level.WARNING, "The communication to launch server got disconnected.", exp);
-	      closed = true;
-	      socket.close();
-	    }
-	  }
-	}
   }
 
 }

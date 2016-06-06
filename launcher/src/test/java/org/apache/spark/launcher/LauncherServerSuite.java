@@ -17,41 +17,23 @@
 
 package org.apache.spark.launcher;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
-import java.io.EOFException;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.ObjectOutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.spark.launcher.LauncherProtocol.Hello;
-import org.apache.spark.launcher.LauncherProtocol.Message;
-import org.apache.spark.launcher.LauncherProtocol.SetAppId;
-import org.apache.spark.launcher.LauncherProtocol.SetState;
-import org.apache.spark.launcher.LauncherProtocol.Stop;
-import org.apache.spark.launcher.SparkAppHandle.State;
 import org.junit.Test;
-import org.mockito.Mockito;
+import static org.junit.Assert.*;
 
-import com.google.common.collect.Lists;
+import static org.apache.spark.launcher.LauncherProtocol.*;
 
 
 public class LauncherServerSuite extends BaseSuite {
@@ -177,99 +159,66 @@ public class LauncherServerSuite extends BaseSuite {
 
   @Test
   public void testSparkSubmitVmShutsDown() throws Exception {
-	LauncherServer launchServer = (LauncherServer)Mockito.mock(LauncherServer.class);
-	Socket socket = (Socket)Mockito.mock(Socket.class);
-	Mockito.when(socket.getOutputStream()).thenReturn(new ByteArrayOutputStream());
-	Mockito.when(socket.getInputStream()).thenReturn(getMessageInputStream(new LauncherProtocol.Message[] {
-	  new LauncherProtocol.Hello("someSecret", "someVersion"),
-	  new LauncherProtocol.SetState(SparkAppHandle.State.SUBMITTED), new LauncherProtocol.SetState(
-	    SparkAppHandle.State.RUNNING) })).thenThrow(new Throwable[] {
-	      new EOFException("Probably Remote JVM Shutdown") });
-
-	ChildProcAppHandle appHandle = new ChildProcAppHandle("someSecret", launchServer);
-	final BlockingQueue stateQueue = new ArrayBlockingQueue(10);
-	List<State> expectedStateList = Lists.newArrayList(State.CONNECTED,State.SUBMITTED,State.RUNNING, State.FINISHED_UNKNOWN);
-	final List<State> realStateList = Lists.newArrayList();
-	appHandle.addListener(new SparkAppHandle.Listener() {
-	  public void stateChanged(SparkAppHandle handle) {
-	    stateQueue.offer(handle.getState());
-	  }
-
-	  public void infoChanged(SparkAppHandle handle) {
-	  }
-	});
-	DummyLauncherConnection launcherConnection = new DummyLauncherConnection(
-	  socket, appHandle);
-	final AtomicBoolean jobFinished = new AtomicBoolean(false);
-	Thread clientPollerThread = new Thread() {
-	  public void run() {
-	    while (!jobFinished.get()) {
-	      SparkAppHandle.State state = SparkAppHandle.State.UNKNOWN;
-	      try {
-	        state = (SparkAppHandle.State)stateQueue.take();
-	      } catch (InterruptedException e) {
-	        Thread.currentThread().interrupt();
-	        throw new RuntimeException(e);
-	      }
-
-	      switch (state) {
-	        case CONNECTED:
-	          realStateList.add(state);
-	          break;
-	        case FAILED:
-              realStateList.add(state);
-	          jobFinished.set(true);
-	          break;
-	        case FINISHED:
-	          jobFinished.set(true);
-	          realStateList.add(state);
-	          break;
-	        case KILLED:
-	          jobFinished.set(true);
-	          realStateList.add(state);
-	          break;
-	        case RUNNING:
-	          realStateList.add(state);
-	          break;
-	        case SUBMITTED:
-	          realStateList.add(state);
-	          break;
-	        case UNKNOWN:
-	          realStateList.add(state);
-	          break;
-	        case FINISHED_UNKNOWN:
-	          jobFinished.set(true);
-	          realStateList.add(state);
-	          break;
-	        default:
-	          throw new RuntimeException("some exception");
-	      }
-	    }
-	  }
-	};
-	clientPollerThread.start();
-	Thread launcherThread = new Thread(launcherConnection);
-	launcherThread.start();
-	launcherThread.join();
-
-	clientPollerThread.join(10000L);
-	assertEquals(expectedStateList, realStateList);
-	assertTrue(jobFinished.get());
+    ChildProcAppHandle handle = LauncherServer.newAppHandle();
+    TestClient client = null;
+    final List<SparkAppHandle.State> expectedStateList = Arrays.asList(SparkAppHandle.State.CONNECTED, SparkAppHandle.State.LOST);
+    final List<SparkAppHandle.State> realStateList = new ArrayList<SparkAppHandle.State>(2);
+    final AtomicBoolean jobFinished = new AtomicBoolean(false);
+    final BlockingQueue<SparkAppHandle.State> stateQueue = new LinkedBlockingQueue<SparkAppHandle.State>(10);
+    final Semaphore semaphore = new Semaphore(0);
+    try {
+      Socket s = new Socket(InetAddress.getLoopbackAddress(),
+        LauncherServer.getServerInstance().getPort());
+      handle.addListener(new SparkAppHandle.Listener() {
+        public void stateChanged(SparkAppHandle handle) {
+          stateQueue.offer(handle.getState());
+          semaphore.release();
+        }
+        public void infoChanged(SparkAppHandle handle) {
+          semaphore.release();
+        }
+      });
+      client = new TestClient(s);
+      client.send(new Hello(handle.getSecret(), "1.4.0"));
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      // Make sure the server matched the client to the handle.
+      assertNotNull(handle.getConnection());
+      Thread sparkLauncherClient = new Thread() {
+        public void run() {
+          while (!jobFinished.get()) {
+            SparkAppHandle.State state = SparkAppHandle.State.UNKNOWN;
+            try {
+              state = (SparkAppHandle.State)stateQueue.take();
+            } catch (InterruptedException e) {
+              Thread.currentThread().interrupt();
+              throw new RuntimeException(e);
+            }
+            switch (state) {
+              case CONNECTED:
+                realStateList.add(state);
+                break;
+              case LOST:
+                jobFinished.set(true);
+                realStateList.add(state);
+                break;
+              default:
+                throw new RuntimeException(String.format("Unexpected state. The should have been one of the %s.", expectedStateList));
+            }
+          }
+        }
+      };
+      sparkLauncherClient.start();
+      close(client);
+      sparkLauncherClient.join(10000L);
+      assertEquals(expectedStateList, realStateList);
+      assertTrue(jobFinished.get());
+    } finally {
+      kill(handle);
+      close(client);
+      client.clientThread.join();
+    }
   }
-
-  private static InputStream getMessageInputStream(Message ... messages) {
-	ByteArrayOutputStream out = new ByteArrayOutputStream();
-	try {
-	  ObjectOutputStream os = new ObjectOutputStream(out);
-	  for (Message message : messages) {
-		os.writeObject(message);
-	  }
-	} catch (IOException e) {
-	  throw new RuntimeException(e);
-	}
-	return new ByteArrayInputStream(out.toByteArray());
-  }
-
+  
 
   private void kill(SparkAppHandle handle) {
     if (handle != null) {
@@ -306,43 +255,6 @@ public class LauncherServerSuite extends BaseSuite {
       inbound.offer(msg);
     }
 
-  }
-
-  public class DummyLauncherConnection extends LauncherConnection {
- 	private ChildProcAppHandle _appAppHandle;
- 	DummyLauncherConnection(Socket socket, ChildProcAppHandle appHandle)
- 		throws IOException {
- 		super(socket);
- 		_appAppHandle = appHandle;
- 	}
-
- 	@Override
- 	protected void handle(Message msg) throws IOException {
- 	  try {
- 		if (msg instanceof Hello) {
- 		  if (_appAppHandle != null) {
- 		    _appAppHandle.setState(SparkAppHandle.State.CONNECTED);
- 			_appAppHandle.setConnection(this);
- 		  } else {
- 			throw new IllegalArgumentException("Received Hello for unknown client.");
- 		  }
- 		} else {
- 		  if (_appAppHandle == null) {
- 			throw new IllegalArgumentException("Expected hello, got: " + msg != null ? msg.getClass().getName() : null);
- 	      }
- 		  if (msg instanceof SetAppId) {
- 		    SetAppId set = (SetAppId) msg;
- 		    _appAppHandle.setAppId(set.appId);
- 		  } else if (msg instanceof SetState) {
- 		    _appAppHandle.setState(((SetState) msg).state);
- 		  } else {
- 			throw new IllegalArgumentException("Invalid message: " + msg != null ? msg.getClass().getName() : null);
- 		  }
- 	    }
- 	  } catch (Exception e) {
- 	  close();
- 	  }
-    }
   }
 
 }
