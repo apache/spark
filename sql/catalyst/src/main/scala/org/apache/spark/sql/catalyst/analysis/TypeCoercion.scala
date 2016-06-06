@@ -52,10 +52,10 @@ object TypeCoercion {
       DecimalPrecision ::
       BooleanEquality ::
       StringToIntegralCasts ::
+      Division ::
       FunctionArgumentConversion ::
       CaseWhenCoercion ::
       IfCoercion ::
-      Division ::
       PropagateTypes ::
       ImplicitTypeCasts ::
       DateTimeOperations ::
