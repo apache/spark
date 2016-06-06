@@ -310,7 +310,7 @@ private[sql] case class InMemoryTableScanExec(
     // within the map Partitions closure.
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
-    val relOutput = relation.output
+    val relOutput: AttributeSeq = relation.output
     val buffers = relation.cachedColumnBuffers
 
     buffers.mapPartitionsInternal { cachedBatchIterator =>
@@ -321,7 +321,7 @@ private[sql] case class InMemoryTableScanExec(
       // Find the ordinals and data types of the requested columns.
       val (requestedColumnIndices, requestedColumnDataTypes) =
         attributes.map { a =>
-          relOutput.indexWhere(_.exprId == a.exprId) -> a.dataType
+          relOutput.indexOf(a.exprId) -> a.dataType
         }.unzip
 
       // Do partition batch pruning if enabled
