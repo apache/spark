@@ -159,10 +159,10 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         """
         Get threshold for binary classification.
 
-        If :py:attr:`thresholds is set with length 2 (i.e., binary classification),
+        If :py:attr:`thresholds` is set with length 2 (i.e., binary classification),
         this returns the equivalent threshold:
         :math:`\\frac{1}{1 + \\frac{thresholds(0)}{thresholds(1)}}`.
-        Otherwise, returns :py:attr:`threshold` if set or its default value.
+        Otherwise, returns :py:attr:`threshold` if set or its default value if unset.
         """
         self._checkThresholdConsistency()
         if self.isSet(self.thresholds):
