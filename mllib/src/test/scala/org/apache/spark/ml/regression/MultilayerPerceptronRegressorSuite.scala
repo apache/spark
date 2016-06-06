@@ -18,33 +18,43 @@
 package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.classification.LogisticRegressionSuite._
 import org.apache.spark.ml.feature.LabeledPoint
-import org.apache.spark.ml.linalg.{Vector, Vectors}
-import org.apache.spark.ml.regression.MultilayerPerceptronRegressor
+import org.apache.spark.ml.linalg.{Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.ml.util.TestingUtils._
-import org.apache.spark.mllib.classification.LogisticRegressionWithLBFGS
-import org.apache.spark.mllib.evaluation.MulticlassMetrics
-import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{Dataset, Row}
 
 class MultilayerPerceptronRegressorSuite
-  extends SparkFunSuite with MLlibTestSparkContext {
+  extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   test("MLPRegressor behaves reasonably on toy data") {
-
     val df = spark.createDataFrame(Seq(
-      LabeledPoint(10, Vectors.dense(1, 2, 3, 4)),
-      LabeledPoint(-5, Vectors.dense(6, 3, 2, 1)),
-      LabeledPoint(11, Vectors.dense(2, 2, 3, 4)),
-      LabeledPoint(-6, Vectors.dense(6, 4, 2, 1)),
-      LabeledPoint(9, Vectors.dense(1, 2, 6, 4)),
-      LabeledPoint(-4, Vectors.dense(6, 3, 2, 2))
+      LabeledPoint(30, Vectors.dense(1, 2, 3, 4)),
+      LabeledPoint(-15, Vectors.dense(6, 3, 2, 1)),
+      LabeledPoint(33, Vectors.dense(2, 2, 3, 4)),
+      LabeledPoint(-18, Vectors.dense(6, 4, 2, 1)),
+      LabeledPoint(27, Vectors.dense(1, 2, 6, 4)),
+      LabeledPoint(-12, Vectors.dense(6, 3, 2, 2))
     ))
     val mlpr = new MultilayerPerceptronRegressor().setLayers(Array[Int](4, 10, 10, 1))
+    val model = mlpr.fit(df)
+    val results = model.transform(df)
+    val predictions = results.select("prediction").rdd.map(_.getDouble(0))
+    assert(predictions.max() > 2)
+    assert(predictions.min() < -1)
+  }
+
+  test("MLPRegressor works with gradient descent") {
+    val df = spark.createDataFrame(Seq(
+      LabeledPoint(30, Vectors.dense(1, 2, 3, 4)),
+      LabeledPoint(-15, Vectors.dense(6, 3, 2, 1)),
+      LabeledPoint(33, Vectors.dense(2, 2, 3, 4)),
+      LabeledPoint(-18, Vectors.dense(6, 4, 2, 1)),
+      LabeledPoint(27, Vectors.dense(1, 2, 6, 4)),
+      LabeledPoint(-12, Vectors.dense(6, 3, 2, 2))
+    ))
+    val layers = Array[Int](4, 5, 8, 1)
+    val mlpr = new MultilayerPerceptronRegressor().setLayers(layers).setSolver("gd")
     val model = mlpr.fit(df)
     val results = model.transform(df)
     val predictions = results.select("prediction").rdd.map(_.getDouble(0))
@@ -71,12 +81,12 @@ class MultilayerPerceptronRegressorSuite
 
   test("Test setWeights by training restart") {
     val dataFrame = spark.createDataFrame(Seq(
-      LabeledPoint(10, Vectors.dense(1, 2, 3, 4)),
-      LabeledPoint(-5, Vectors.dense(6, 3, 2, 1)),
-      LabeledPoint(11, Vectors.dense(2, 2, 3, 4)),
-      LabeledPoint(-6, Vectors.dense(6, 4, 2, 1)),
-      LabeledPoint(9, Vectors.dense(1, 2, 6, 4)),
-      LabeledPoint(-4, Vectors.dense(6, 3, 2, 2))
+      LabeledPoint(30, Vectors.dense(1, 2, 3, 4)),
+      LabeledPoint(-15, Vectors.dense(6, 3, 2, 1)),
+      LabeledPoint(33, Vectors.dense(2, 2, 3, 4)),
+      LabeledPoint(-18, Vectors.dense(6, 4, 2, 1)),
+      LabeledPoint(27, Vectors.dense(1, 2, 6, 4)),
+      LabeledPoint(-12, Vectors.dense(6, 3, 2, 2))
     ))
     val layers = Array[Int](2, 5, 2)
     val trainer = new MultilayerPerceptronRegressor()
@@ -92,6 +102,35 @@ class MultilayerPerceptronRegressorSuite
     val weights2 = trainer.fit(dataFrame).weights
     assert(weights1 ~== weights2 absTol 10e-5,
       "Training should produce the same weights given equal initial weights and number of steps")
+  }
+
+  test("read/write: MultilayerPerceptronRegressor") {
+    val mlp = new MultilayerPerceptronRegressor()
+      .setLayers(Array(2, 3, 2))
+      .setMaxIter(5)
+      .setBlockSize(2)
+      .setSeed(42)
+      .setTol(0.1)
+      .setFeaturesCol("myFeatures")
+      .setLabelCol("myLabel")
+      .setPredictionCol("myPrediction")
+    testDefaultReadWrite(mlp, testParams = true)
+  }
+
+  test("read/write: MultilayerPerceptronRegressorModel") {
+    val df = spark.createDataFrame(Seq(
+      LabeledPoint(10, Vectors.dense(1, 2, 3, 4)),
+      LabeledPoint(-5, Vectors.dense(6, 3, 2, 1)),
+      LabeledPoint(11, Vectors.dense(2, 2, 3, 4)),
+      LabeledPoint(-6, Vectors.dense(6, 4, 2, 1)),
+      LabeledPoint(9, Vectors.dense(1, 2, 6, 4)),
+      LabeledPoint(-4, Vectors.dense(6, 3, 2, 2))
+    ))
+    val mlp = new MultilayerPerceptronRegressor().setLayers(Array(4, 3, 1)).setMaxIter(5)
+    val mlpModel = mlp.fit(df)
+    val newMlpModel = testDefaultReadWrite(mlpModel, testParams = true)
+    assert(newMlpModel.layers === mlpModel.layers)
+    assert(newMlpModel.weights === mlpModel.weights)
   }
 
   /* Test for numeric types after rewriting max/min for Dataframe method to handle Long/BigInt */
