@@ -303,10 +303,11 @@ class DataFrameReader(object):
         return self._df(self._jreader.text(self._spark._sc._jvm.PythonUtils.toSeq(path)))
 
     @since(2.0)
-    def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
-            comment=None, header=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            nullValue=None, nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
-            maxColumns=None, maxCharsPerColumn=None, mode=None):
+    def csv(self, path, schema=None, sep=u',', encoding=u'UTF-8', quote=u'\"', escape=u'\\',
+            comment=None, header='false', ignoreLeadingWhiteSpace='false',
+            ignoreTrailingWhiteSpace='false', nullValue='', nanValue='NaN', positiveInf='Inf',
+            negativeInf='Inf', dateFormat=None, maxColumns='20480', maxCharsPerColumn='1000000',
+            mode='PERMISSIVE'):
         """Loads a CSV file and returns the result as a [[DataFrame]].
 
         This function goes through the input once to determine the input schema. To avoid going
@@ -315,44 +316,41 @@ class DataFrameReader(object):
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
         :param sep: sets the single character as a separator for each field and value.
-                    If None is set, it uses the default value, ``,``.
-        :param encoding: decodes the CSV files by the given encoding type. If None is set,
-                         it uses the default value, ``UTF-8``.
+                    The default value is ``,``.
+        :param encoding: decodes the CSV files by the given encoding type.
+                    The default value is ``UTF-8``.
         :param quote: sets the single character used for escaping quoted values where the
-                      separator can be part of the value. If None is set, it uses the default
-                      value, ``"``.
+                      separator can be part of the value. The default value is ``"``.
         :param escape: sets the single character used for escaping quotes inside an already
-                       quoted value. If None is set, it uses the default value, ``\``.
+                       quoted value. The default value is ``\``.
         :param comment: sets the single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
-        :param header: uses the first line as names of columns. If None is set, it uses the
-                       default value, ``false``.
+        :param header: uses the first line as names of columns. The default value is ``false``.
         :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
-                                        being read should be skipped. If None is set, it uses
-                                        the default value, ``false``.
+                                        being read should be skipped. The default value is
+                                        ``false``.
         :param ignoreTrailingWhiteSpace: defines whether or not trailing whitespaces from values
-                                         being read should be skipped. If None is set, it uses
-                                         the default value, ``false``.
-        :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string.
-        :param nanValue: sets the string representation of a non-number value. If None is set, it
-                         uses the default value, ``NaN``.
-        :param positiveInf: sets the string representation of a positive infinity value. If None
-                            is set, it uses the default value, ``Inf``.
-        :param negativeInf: sets the string representation of a negative infinity value. If None
-                            is set, it uses the default value, ``Inf``.
+                                         being read should be skipped. The default value is
+                                         ``false``.
+        :param nullValue: sets the string representation of a null value. The default value is a
+                          empty string.
+        :param nanValue: sets the string representation of a non-number value. The default value is
+                         ``NaN``.
+        :param positiveInf: sets the string representation of a positive infinity value. The default
+                            value is ``Inf``.
+        :param negativeInf: sets the string representation of a negative infinity value. The default
+                            value is ``Inf``.
         :param dateFormat: sets the string that indicates a date format. Custom date formats
                            follow the formats at ``java.text.SimpleDateFormat``. This
                            applies to both date type and timestamp type. By default, it is None
                            which means trying to parse times and date by
                            ``java.sql.Timestamp.valueOf()`` and ``java.sql.Date.valueOf()``.
-        :param maxColumns: defines a hard limit of how many columns a record can have. If None is
-                           set, it uses the default value, ``20480``.
+        :param maxColumns: defines a hard limit of how many columns a record can have. The default
+                           value is ``20480``.
         :param maxCharsPerColumn: defines the maximum number of characters allowed for any given
-                                  value being read. If None is set, it uses the default value,
-                                  ``1000000``.
-        :param mode: allows a mode for dealing with corrupt records during parsing. If None is
-                     set, it uses the default value, ``PERMISSIVE``.
+                                  value being read. The default value is ``1000000``.
+        :param mode: allows a mode for dealing with corrupt records during parsing. The default
+                     value is ``PERMISSIVE``.
 
                 * ``PERMISSIVE`` : sets other fields to ``null`` when it meets a corrupted record.
                     When a schema is set by user, it sets ``null`` for extra fields.
@@ -785,8 +783,8 @@ class DataFrameWriter(object):
         self._jwrite.text(path)
 
     @since(2.0)
-    def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None, escapeQuotes=None):
+    def csv(self, path, mode='error', compression=None, sep=',', quote=u'\"', escape='\\',
+            header='false', nullValue='', escapeQuotes='true'):
         """Saves the content of the [[DataFrame]] in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -800,20 +798,19 @@ class DataFrameWriter(object):
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, bzip2, gzip, lz4,
                             snappy and deflate).
-        :param sep: sets the single character as a separator for each field and value. If None is
-                    set, it uses the default value, ``,``.
+        :param sep: sets the single character as a separator for each field and value. The default
+                    value is ``,``.
         :param quote: sets the single character used for escaping quoted values where the
-                      separator can be part of the value. If None is set, it uses the default
-                      value, ``"``.
+                      separator can be part of the value. The default value is ``"``.
         :param escape: sets the single character used for escaping quotes inside an already
-                       quoted value. If None is set, it uses the default value, ``\``
+                       quoted value. The default value is ``\``
         :param escapeQuotes: A flag indicating whether values containing quotes should always
                              be enclosed in quotes. If None is set, it uses the default value
                              ``true``, escaping all values containing a quote character.
-        :param header: writes the names of columns as the first line. If None is set, it uses
-                       the default value, ``false``.
-        :param nullValue: sets the string representation of a null value. If None is set, it uses
-                          the default value, empty string.
+        :param header: writes the names of columns as the first line. The default value is
+                       ``false``.
+        :param nullValue: sets the string representation of a null value. The default value is a
+                          empty string.
 
         >>> df.write.csv(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -831,7 +828,7 @@ class DataFrameWriter(object):
         if nullValue is not None:
             self.option("nullValue", nullValue)
         if escapeQuotes is not None:
-            self.option("escapeQuotes", nullValue)
+            self.option("escapeQuotes", escapeQuotes)
         self._jwrite.csv(path)
 
     @since(1.5)
