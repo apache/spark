@@ -27,6 +27,8 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.mllib.regression.IsotonicRegression;
 import org.apache.spark.mllib.regression.IsotonicRegressionModel;
+import org.apache.spark.mllib.regression.LabeledPoint;
+import org.apache.spark.mllib.util.MLUtils;
 // $example off$
 import org.apache.spark.SparkConf;
 
@@ -35,14 +37,14 @@ public class JavaIsotonicRegressionExample {
     SparkConf sparkConf = new SparkConf().setAppName("JavaIsotonicRegressionExample");
     JavaSparkContext jsc = new JavaSparkContext(sparkConf);
     // $example on$
-    JavaRDD<String> data = jsc.textFile("data/mllib/sample_isotonic_regression_data.txt");
+    JavaRDD<LabeledPoint> data = MLUtils.loadLibSVMFile(
+            jsc.sc(), "data/mllib/sample_isotonic_regression_libsvm_data.txt").toJavaRDD();
 
     // Create label, feature, weight tuples from input data with weight set to default value 1.0.
     JavaRDD<Tuple3<Double, Double, Double>> parsedData = data.map(
-      new Function<String, Tuple3<Double, Double, Double>>() {
-        public Tuple3<Double, Double, Double> call(String line) {
-          String[] parts = line.split(",");
-          return new Tuple3<>(new Double(parts[0]), new Double(parts[1]), 1.0);
+      new Function<LabeledPoint, Tuple3<Double, Double, Double>>() {
+        public Tuple3<Double, Double, Double> call(LabeledPoint point) {
+          return new Tuple3<>(new Double(point.label()), new Double(point.features().apply(0)), 1.0);
         }
       }
     );

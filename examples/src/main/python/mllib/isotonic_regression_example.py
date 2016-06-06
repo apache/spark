@@ -23,7 +23,7 @@ from __future__ import print_function
 from pyspark import SparkContext
 # $example on$
 import math
-from pyspark.mllib.regression import IsotonicRegression, IsotonicRegressionModel
+from pyspark.mllib.regression import LabeledPoint, IsotonicRegression, IsotonicRegressionModel
 # $example off$
 
 if __name__ == "__main__":
@@ -31,10 +31,14 @@ if __name__ == "__main__":
     sc = SparkContext(appName="PythonIsotonicRegressionExample")
 
     # $example on$
-    data = sc.textFile("data/mllib/sample_isotonic_regression_data.txt")
+    # Load and parse the data
+    def parsePoint(line):
+        values = [float(x) for x in line.replace(',', ' ').replace(':', ' ').split(' ')]
+        return (values[0], values[2], 1.0)
+    data = sc.textFile("data/mllib/sample_isotonic_regression_libsvm_data.txt")
 
     # Create label, feature, weight tuples from input data with weight set to default value 1.0.
-    parsedData = data.map(lambda line: tuple([float(x) for x in line.split(',')]) + (1.0,))
+    parsedData = data.map(parsePoint)
 
     # Split data into training (60%) and test (40%) sets.
     training, test = parsedData.randomSplit([0.6, 0.4], 11)
