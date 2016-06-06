@@ -15,6 +15,8 @@
 # limitations under the License.
 #
 
+import warnings
+
 from pyspark import since
 from pyspark.mllib.common import JavaModelWrapper, callMLlibFunc
 from pyspark.sql import SQLContext
@@ -181,6 +183,8 @@ class MulticlassMetrics(JavaModelWrapper):
     0.66...
     >>> metrics.recall()
     0.66...
+    >>> metrics.accuracy()
+    0.66...
     >>> metrics.weightedFalsePositiveRate
     0.19...
     >>> metrics.weightedPrecision
@@ -233,6 +237,8 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns precision or precision for a given label (category) if specified.
         """
         if label is None:
+            # note:: Deprecated in 2.0.0. Use accuracy.
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
             return self.call("precision")
         else:
             return self.call("precision", float(label))
@@ -243,6 +249,8 @@ class MulticlassMetrics(JavaModelWrapper):
         Returns recall or recall for a given label (category) if specified.
         """
         if label is None:
+            # note:: Deprecated in 2.0.0. Use accuracy.
+            warnings.warn("Deprecated in 2.0.0. Use accuracy.")
             return self.call("recall")
         else:
             return self.call("recall", float(label))
@@ -254,6 +262,8 @@ class MulticlassMetrics(JavaModelWrapper):
         """
         if beta is None:
             if label is None:
+                # note:: Deprecated in 2.0.0. Use accuracy.
+                warnings.warn("Deprecated in 2.0.0. Use accuracy.")
                 return self.call("fMeasure")
             else:
                 return self.call("fMeasure", label)
@@ -262,6 +272,14 @@ class MulticlassMetrics(JavaModelWrapper):
                 raise Exception("If the beta parameter is specified, label can not be none")
             else:
                 return self.call("fMeasure", label, beta)
+
+    @since('2.0.0')
+    def accuracy(self):
+        """
+        Returns accuracy (equals to the total number of correctly classified instances
+        out of the total number of instances).
+        """
+        return self.call("accuracy")
 
     @property
     @since('1.4.0')

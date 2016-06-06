@@ -93,7 +93,7 @@ trait ContinuousQuery {
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**
-   * Blocks until all available data in the source has been processed an committed to the sink.
+   * Blocks until all available data in the source has been processed and committed to the sink.
    * This method is intended for testing. Note that in the case of continually arriving data, this
    * method may block forever. Additionally, this method is only guaranteed to block until data that
    * has been synchronously appended data to a [[org.apache.spark.sql.execution.streaming.Source]]

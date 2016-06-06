@@ -1040,7 +1040,7 @@ class RDD(object):
         If the elements in RDD do not vary (max == min) always returns
         a single bucket.
 
-        It will return an tuple of buckets and histogram.
+        It will return a tuple of buckets and histogram.
 
         >>> rdd = sc.parallelize(range(51))
         >>> rdd.histogram(2)
@@ -2211,7 +2211,7 @@ class RDD(object):
         return values.collect()
 
     def _to_java_object_rdd(self):
-        """ Return an JavaRDD of Object by unpickling
+        """ Return a JavaRDD of Object by unpickling
 
         It will convert each Python object into Java object by Pyrolite, whenever the
         RDD is serialized in batch or not.

@@ -26,6 +26,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.serializer._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.util.GenericArrayData
@@ -692,22 +693,17 @@ case class AssertNotNull(child: Expression, walkedTypePath: Seq[String])
 case class GetExternalRowField(
     child: Expression,
     index: Int,
-    fieldName: String,
-    dataType: DataType) extends UnaryExpression with NonSQLExpression {
+    fieldName: String) extends UnaryExpression with NonSQLExpression {
 
   override def nullable: Boolean = false
+
+  override def dataType: DataType = ObjectType(classOf[Object])
 
   override def eval(input: InternalRow): Any =
     throw new UnsupportedOperationException("Only code-generated evaluation is supported")
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val row = child.genCode(ctx)
-
-    val getField = dataType match {
-      case ObjectType(x) if x == classOf[Row] => s"""${row.value}.getStruct($index)"""
-      case _ => s"""(${ctx.boxedType(dataType)}) ${row.value}.get($index)"""
-    }
-
     val code = s"""
       ${row.code}
 
@@ -720,8 +716,55 @@ case class GetExternalRowField(
           "cannot be null.");
       }
 
-      final ${ctx.javaType(dataType)} ${ev.value} = $getField;
+      final Object ${ev.value} = ${row.value}.get($index);
      """
     ev.copy(code = code, isNull = "false")
+  }
+}
+
+/**
+ * Validates the actual data type of input expression at runtime.  If it doesn't match the
+ * expectation, throw an exception.
+ */
+case class ValidateExternalType(child: Expression, expected: DataType)
+  extends UnaryExpression with NonSQLExpression with ExpectsInputTypes {
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(ObjectType(classOf[Object]))
+
+  override def nullable: Boolean = child.nullable
+
+  override def dataType: DataType = RowEncoder.externalDataTypeForInput(expected)
+
+  override def eval(input: InternalRow): Any =
+    throw new UnsupportedOperationException("Only code-generated evaluation is supported")
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val input = child.genCode(ctx)
+    val obj = input.value
+
+    val typeCheck = expected match {
+      case _: DecimalType =>
+        Seq(classOf[java.math.BigDecimal], classOf[scala.math.BigDecimal], classOf[Decimal])
+          .map(cls => s"$obj instanceof ${cls.getName}").mkString(" || ")
+      case _: ArrayType =>
+        s"$obj instanceof ${classOf[Seq[_]].getName} || $obj.getClass().isArray()"
+      case _ =>
+        s"$obj instanceof ${ctx.boxedType(dataType)}"
+    }
+
+    val code = s"""
+      ${input.code}
+      ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
+      if (!${input.isNull}) {
+        if ($typeCheck) {
+          ${ev.value} = (${ctx.boxedType(dataType)}) $obj;
+        } else {
+          throw new RuntimeException($obj.getClass().getName() + " is not a valid " +
+            "external type for schema of ${expected.simpleString}");
+        }
+      }
+
+    """
+    ev.copy(code = code, isNull = input.isNull)
   }
 }
