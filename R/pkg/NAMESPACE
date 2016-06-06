@@ -186,7 +186,7 @@ exportMethods("%in%",
               "isNotNull",
               "isNull",
               "is.nan",
-              "isnan"
+              "isnan",
               "kurtosis",
               "lag",
               "last",
