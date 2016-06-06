@@ -284,8 +284,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * schema in advance, use the version that specifies the schema to avoid the extra scan.
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
-   * <li>`samplingRatio` (default `1.0`): sets the ratio for sampling and reading the input data
-   * to infer the schema. The value should be numeric and greater than 0.</li>
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
    * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
    * type. If the values do not fit in decimal, then it infers them as doubles.</li>

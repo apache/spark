@@ -166,10 +166,10 @@ class DataFrameReader(object):
             return self._df(self._jreader.stream())
 
     @since(1.4)
-    def json(self, path, schema=None, samplingRatio=None, primitivesAsString=None,
-             prefersDecimal=None, allowComments=None, allowUnquotedFieldNames=None,
-             allowSingleQuotes=None, allowNumericLeadingZero=None,
-             allowBackslashEscapingAnyCharacter=None, mode=None, columnNameOfCorruptRecord=None):
+    def json(self, path, schema=None, primitivesAsString=None, prefersDecimal=None,
+             allowComments=None, allowUnquotedFieldNames=None, allowSingleQuotes=None,
+             allowNumericLeadingZero=None, allowBackslashEscapingAnyCharacter=None,
+             mode=None, columnNameOfCorruptRecord=None):
         """
         Loads a JSON file (one object per line) or an RDD of Strings storing JSON objects
         (one object per record) and returns the result as a :class`DataFrame`.
@@ -180,9 +180,6 @@ class DataFrameReader(object):
         :param path: string represents path to the JSON dataset,
                      or RDD of Strings storing JSON objects.
         :param schema: an optional :class:`StructType` for the input schema.
-        :param samplingRatio: sets the ratio for sampling and reading the input data to infer
-                              the schema. The value should be numeric and greater than 0. If None
-                              is set, it uses the default value ``1.0``.
         :param primitivesAsString: infers all primitive values as a string type. If None is set,
                                    it uses the default value, ``false``.
         :param prefersDecimal: infers all floating-point values as a decimal type. If the values
@@ -225,8 +222,6 @@ class DataFrameReader(object):
         """
         if schema is not None:
             self.schema(schema)
-        if samplingRatio is not None:
-            self.option("samplingRatio", samplingRatio)
         if primitivesAsString is not None:
             self.option("primitivesAsString", primitivesAsString)
         if prefersDecimal is not None:
