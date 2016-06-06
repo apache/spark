@@ -38,11 +38,10 @@ object TypedAggregateExpression {
       bufferSerializer.map(_.toAttribute))
 
     val outputEncoder = encoderFor[OUT]
-    val (outputType, outputNullable) = if (outputEncoder.flat) {
-      val sf = outputEncoder.schema.head
-      (sf.dataType, sf.nullable)
+    val outputType = if (outputEncoder.flat) {
+      outputEncoder.schema.head.dataType
     } else {
-      (outputEncoder.schema, true)
+      outputEncoder.schema
     }
 
     new TypedAggregateExpression(
@@ -53,7 +52,7 @@ object TypedAggregateExpression {
       outputEncoder.serializer,
       outputEncoder.deserializer.dataType,
       outputType,
-      outputNullable)
+      !outputEncoder.flat || outputEncoder.schema.head.nullable)
   }
 }
 
