@@ -97,9 +97,9 @@ package object expressions  {
     // It's possible that `attrs` is a linked list, which can lead to bad O(n^2) loops when
     // accessing attributes by their ordinals. To avoid this performance penalty, convert the input
     // to an array.
-    private lazy val attrsArray = attrs.toArray
+    @transient private lazy val attrsArray = attrs.toArray
 
-    private lazy val exprIdToOrdinal = {
+    @transient private lazy val exprIdToOrdinal = {
       val arr = attrsArray
       val map = Maps.newHashMapWithExpectedSize[ExprId, Int](arr.length)
       // Iterate over the array in reverse order so that the final map value is the first attribute
