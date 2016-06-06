@@ -36,7 +36,7 @@ Any exception in the receiving threads should be caught and handled properly to 
 failures of the receiver. `restart(<exception>)` will restart the receiver by
 asynchronously calling `onStop()` and then calling `onStart()` after a delay.
 `stop(<exception>)` will call `onStop()` and terminate the receiver. Also, `reportError(<error>)`
-reports a error message to the driver (visible in the logs and UI) without stopping / restarting
+reports an error message to the driver (visible in the logs and UI) without stopping / restarting
 the receiver.
 
 The following is a custom receiver that receives a stream of text over a socket. It treats

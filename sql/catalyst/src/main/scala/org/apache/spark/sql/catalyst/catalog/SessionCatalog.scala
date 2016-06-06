@@ -22,7 +22,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -111,13 +111,13 @@ class SessionCatalog(
     fs.makeQualified(hadoopPath)
   }
 
-  protected[this] def requireDbExists(db: String): Unit = {
+  private def requireDbExists(db: String): Unit = {
     if (!databaseExists(db)) {
       throw new NoSuchDatabaseException(db)
     }
   }
 
-  protected[this] def requireTableExists(name: TableIdentifier): Unit = {
+  private def requireTableExists(name: TableIdentifier): Unit = {
     if (!tableExists(name)) {
       val db = name.database.getOrElse(currentDb)
       throw new NoSuchTableException(db = db, table = name.table)

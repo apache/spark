@@ -152,8 +152,10 @@ case class HiveTableScanExec(
       }
     }
     val numOutputRows = longMetric("numOutputRows")
+    // Avoid to serialize MetastoreRelation because schema is lazy. (see SPARK-15649)
+    val outputSchema = schema
     rdd.mapPartitionsInternal { iter =>
-      val proj = UnsafeProjection.create(schema)
+      val proj = UnsafeProjection.create(outputSchema)
       iter.map { r =>
         numOutputRows += 1
         proj(r)

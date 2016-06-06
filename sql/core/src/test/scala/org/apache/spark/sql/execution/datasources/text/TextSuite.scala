@@ -19,9 +19,6 @@ package org.apache.spark.sql.execution.datasources.text
 
 import java.io.File
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
@@ -31,6 +28,7 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
 class TextSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("reading text file") {
     verifyFrame(spark.read.format("text").load(testFile))
@@ -123,6 +121,19 @@ class TextSuite extends QueryTest with SharedSQLContext {
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
       verifyFrame(spark.read.options(extraOptions).text(tempDirPath).toDF())
+    }
+  }
+
+  test("SPARK-14343: select partitioning column") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val ds1 = spark.range(1).selectExpr("CONCAT('val_', id)")
+      ds1.write.text(s"$path/part=a")
+      ds1.write.text(s"$path/part=b")
+
+      checkDataset(
+        spark.read.format("text").load(path).select($"part"),
+        Row("a"), Row("b"))
     }
   }
 

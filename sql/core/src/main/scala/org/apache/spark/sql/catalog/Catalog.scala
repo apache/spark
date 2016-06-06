@@ -24,6 +24,8 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Catalog interface for Spark. To access this, use `SparkSession.catalog`.
+ *
+ * @since 2.0.0
  */
 abstract class Catalog {
 
@@ -210,5 +212,18 @@ abstract class Catalog {
    * @since 2.0.0
    */
   def clearCache(): Unit
+
+  /**
+   * Invalidate and refresh all the cached the metadata of the given table. For performance reasons,
+   * Spark SQL or the external data source library it uses might cache certain metadata about a
+   * table, such as the location of blocks. When those change outside of Spark SQL, users should
+   * call this function to invalidate the cache.
+   *
+   * If this table is cached as an InMemoryRelation, drop the original cached version and make the
+   * new version cached lazily.
+   *
+   * @since 2.0.0
+   */
+  def refreshTable(tableName: String): Unit
 
 }

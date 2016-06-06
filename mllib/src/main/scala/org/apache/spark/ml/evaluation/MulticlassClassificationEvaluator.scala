@@ -28,7 +28,7 @@ import org.apache.spark.sql.types.DoubleType
 
 /**
  * :: Experimental ::
- * Evaluator for multiclass classification, which expects two input columns: score and label.
+ * Evaluator for multiclass classification, which expects two input columns: prediction and label.
  */
 @Since("1.5.0")
 @Experimental
@@ -82,8 +82,8 @@ class MulticlassClassificationEvaluator @Since("1.5.0") (@Since("1.5.0") overrid
     val metrics = new MulticlassMetrics(predictionAndLabels)
     val metric = $(metricName) match {
       case "f1" => metrics.weightedFMeasure
-      case "precision" => metrics.precision
-      case "recall" => metrics.recall
+      case "precision" => metrics.accuracy
+      case "recall" => metrics.accuracy
       case "weightedPrecision" => metrics.weightedPrecision
       case "weightedRecall" => metrics.weightedRecall
       case "accuracy" => metrics.accuracy

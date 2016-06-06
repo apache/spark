@@ -30,12 +30,12 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
    * all tasks.
    */
   def badHostBackend(): Unit = {
-    val task = backend.beginTask()
-    val host = backend.executorIdToExecutor(task.executorId).host
+    val (taskDescription, _) = backend.beginTask()
+    val host = backend.executorIdToExecutor(taskDescription.executorId).host
     if (host == badHost) {
-      backend.taskFailed(task, new RuntimeException("I'm a bad host!"))
+      backend.taskFailed(taskDescription, new RuntimeException("I'm a bad host!"))
     } else {
-      backend.taskSuccess(task, 42)
+      backend.taskSuccess(taskDescription, 42)
     }
   }
 
@@ -48,7 +48,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       val duration = Duration(1, SECONDS)
       Await.ready(jobFuture, duration)
     }
-    assert(results.isEmpty)
     assertDataStructuresEmpty(noFailure = false)
   }
 
@@ -68,7 +67,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
       val duration = Duration(3, SECONDS)
       Await.ready(jobFuture, duration)
     }
-    assert(results.isEmpty)
     assertDataStructuresEmpty(noFailure = false)
   }
 
@@ -94,7 +92,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assert(results === (0 until 10).map { _ -> 42 }.toMap)
     assertDataStructuresEmpty(noFailure = true)
   }
-
 
   // No progress if there are fewer executors than maxTaxFailures
   testScheduler(

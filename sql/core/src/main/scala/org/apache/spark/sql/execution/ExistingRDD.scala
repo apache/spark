@@ -27,9 +27,8 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, Partitioning, UnknownPartitioning}
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.execution.datasources.HadoopFsRelation
-import org.apache.spark.sql.execution.datasources.parquet.{DefaultSource => ParquetSource}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat => ParquetSource}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
@@ -91,6 +90,8 @@ private[sql] case class LogicalRDD(
     case LogicalRDD(_, otherRDD) => rdd.id == otherRDD.id
     case _ => false
   }
+
+  override protected def stringArgs: Iterator[Any] = Iterator(output)
 
   override def producedAttributes: AttributeSet = outputSet
 
@@ -157,7 +158,8 @@ private[sql] case class RowDataSourceScanExec(
 
   val outputUnsafeRows = relation match {
     case r: HadoopFsRelation if r.fileFormat.isInstanceOf[ParquetSource] =>
-      !SQLContext.getActive().get.conf.getConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
+      !SparkSession.getActiveSession.get.sessionState.conf.getConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED)
     case _: HadoopFsRelation => true
     case _ => false
   }
@@ -252,7 +254,7 @@ private[sql] case class BatchedDataSourceScanExec(
     val isNullVar = if (nullable) { ctx.freshName("isNull") } else { "false" }
     val valueVar = ctx.freshName("value")
     val str = s"columnVector[$columnVar, $ordinal, ${dataType.simpleString}]"
-    val code = s"/* ${toCommentSafeString(str)} */\n" + (if (nullable) {
+    val code = s"${ctx.registerComment(str)}\n" + (if (nullable) {
       s"""
         boolean ${isNullVar} = ${columnVar}.isNullAt($ordinal);
         $javaType ${valueVar} = ${isNullVar} ? ${ctx.defaultValue(dataType)} : ($value);
@@ -347,15 +349,14 @@ private[sql] object DataSourceScanExec {
         case _ => None
       }
 
-      def toAttribute(colName: String): Attribute = output.find(_.name == colName).getOrElse {
-        throw new AnalysisException(s"bucket column $colName not found in existing columns " +
-          s"(${output.map(_.name).mkString(", ")})")
-      }
-
       bucketSpec.map { spec =>
         val numBuckets = spec.numBuckets
-        val bucketColumns = spec.bucketColumnNames.map(toAttribute)
-        HashPartitioning(bucketColumns, numBuckets)
+        val bucketColumns = spec.bucketColumnNames.flatMap { n => output.find(_.name == n) }
+        if (bucketColumns.size == spec.bucketColumnNames.size) {
+          HashPartitioning(bucketColumns, numBuckets)
+        } else {
+          UnknownPartitioning(0)
+        }
       }.getOrElse {
         UnknownPartitioning(0)
       }

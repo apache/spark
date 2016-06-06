@@ -17,7 +17,7 @@
 
 package org.apache.spark.ml.clustering
 
-import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 import org.apache.spark.internal.Logging
@@ -50,8 +50,8 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    * @group param
    */
   @Since("1.6.0")
-  final val k = new IntParam(this, "k", "number of topics (clusters) to infer",
-    ParamValidators.gt(1))
+  final val k = new IntParam(this, "k", "The number of topics (clusters) to infer. " +
+    "Must be > 1.", ParamValidators.gt(1))
 
   /** @group getParam */
   @Since("1.6.0")
@@ -165,7 +165,7 @@ private[clustering] trait LDAParams extends Params with HasFeaturesCol with HasM
    */
   @Since("1.6.0")
   final val optimizer = new Param[String](this, "optimizer", "Optimizer or inference" +
-    " algorithm used to estimate the LDA model.  Supported: " + supportedOptimizers.mkString(", "),
+    " algorithm used to estimate the LDA model. Supported: " + supportedOptimizers.mkString(", "),
     (o: String) => ParamValidators.inArray(supportedOptimizers).apply(o.toLowerCase))
 
   /** @group getParam */
@@ -696,8 +696,8 @@ class DistributedLDAModel private[ml] (
   @DeveloperApi
   @Since("2.0.0")
   def deleteCheckpointFiles(): Unit = {
-    val fs = FileSystem.get(sparkSession.sparkContext.hadoopConfiguration)
-    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, fs))
+    val hadoopConf = sparkSession.sparkContext.hadoopConfiguration
+    _checkpointFiles.foreach(PeriodicCheckpointer.removeCheckpointFile(_, hadoopConf))
     _checkpointFiles = Array.empty[String]
   }
 

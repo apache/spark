@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.SQLBuilder
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util._
-import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExplainCommand, SetCommand, ShowColumnsCommand}
+import org.apache.spark.sql.execution.command._
 import org.apache.spark.sql.hive.{InsertIntoHiveTable => LogicalInsertIntoHiveTable}
 import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
 
@@ -414,8 +414,8 @@ abstract class HiveComparisonTest
 
             // We will ignore the ExplainCommand, ShowFunctions, DescribeFunction
             if ((!hiveQuery.logical.isInstanceOf[ExplainCommand]) &&
-                (!hiveQuery.logical.isInstanceOf[ShowFunctions]) &&
-                (!hiveQuery.logical.isInstanceOf[DescribeFunction]) &&
+                (!hiveQuery.logical.isInstanceOf[ShowFunctionsCommand]) &&
+                (!hiveQuery.logical.isInstanceOf[DescribeFunctionCommand]) &&
                 preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${preparedHive.size} row(s) ==" +: preparedHive

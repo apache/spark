@@ -180,7 +180,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @group expertParam
    */
   val intermediateStorageLevel = new Param[String](this, "intermediateStorageLevel",
-    "StorageLevel for intermediate datasets. Cannot be 'NONE'. Default: 'MEMORY_AND_DISK'.",
+    "StorageLevel for intermediate datasets. Cannot be 'NONE'.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess && s != "NONE")
 
   /** @group expertGetParam */
@@ -194,7 +194,7 @@ private[recommendation] trait ALSParams extends ALSModelParams with HasMaxIter w
    * @group expertParam
    */
   val finalStorageLevel = new Param[String](this, "finalStorageLevel",
-    "StorageLevel for ALS model factors. Default: 'MEMORY_AND_DISK'.",
+    "StorageLevel for ALS model factors.",
     (s: String) => Try(StorageLevel.fromString(s)).isSuccess)
 
   /** @group expertGetParam */
@@ -430,15 +430,11 @@ class ALS(@Since("1.4.0") override val uid: String) extends Estimator[ALSModel] 
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setIntermediateStorageLevel(value: String): this.type = {
-    set(intermediateStorageLevel, value)
-  }
+  def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   /** @group expertSetParam */
   @Since("2.0.0")
-  def setFinalStorageLevel(value: String): this.type = {
-    set(finalStorageLevel, value)
-  }
+  def setFinalStorageLevel(value: String): this.type = set(finalStorageLevel, value)
 
   /**
    * Sets both numUserBlocks and numItemBlocks to the specific value.
