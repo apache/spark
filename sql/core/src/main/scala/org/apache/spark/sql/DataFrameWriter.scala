@@ -391,7 +391,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   @Experimental
   def foreach(writer: ForeachWriter[T]): ContinuousQuery = {
     assertNotBucketed()
-    assertStreaming("startStream() can only be called on continuous queries")
+    assertStreaming(
+      "foreach() on streaming Datasets and DataFrames can only be called on continuous queries")
 
     val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
     val sink = new ForeachSink[T](ds.sparkSession.sparkContext.clean(writer))(ds.unresolvedTEncoder)

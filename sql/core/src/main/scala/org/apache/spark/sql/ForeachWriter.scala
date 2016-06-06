@@ -18,6 +18,7 @@
 package org.apache.spark.sql
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.sql.streaming.ContinuousQuery
 
 /**
  * :: Experimental ::
@@ -27,7 +28,7 @@ import org.apache.spark.annotation.Experimental
  * @since 2.0.0
  */
 @Experimental
-trait ForeachWriter[T] extends Serializable {
+abstract class ForeachWriter[T] extends Serializable {
 
   /**
    * Called when starting to process one partition of new data in the executor side. `version` is
