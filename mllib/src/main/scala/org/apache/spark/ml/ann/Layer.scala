@@ -856,7 +856,6 @@ private[ml] class FeedForwardTrainer(
       (v._1, OldVectors.fromML(v._2))
     }, w)
 //    val newWeights = optimizer.optimize(dataStacker.stack(data), w)
-    println("Weights Computed")
     topology.model(newWeights)
   }
 
