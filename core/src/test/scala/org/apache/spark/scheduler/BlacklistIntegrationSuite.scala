@@ -55,7 +55,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // of executors on the bad node, then locality preferences will lead to us cycling through
   // the executors on the bad node, and still failing the job
   testScheduler(
-    "With blacklist on, job will still fail if there are too many bad executors on bad host",
+    "With blacklist on, job will still fail if there are too many bad execs on bad host",
     extraConfs = Seq(
       // just set this to something much longer than the test duration
       ("spark.scheduler.executorTaskBlacklistTime", "10000000")
@@ -71,8 +71,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   // Here we run with the blacklist on, and maxTaskFailures high enough that we'll eventually
   // schedule on a good node and succeed the job
-  testScheduler(
-    "Bad node with multiple executors, job will still succeed with the right confs",
+  testScheduler("Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
       // just set this to something much longer than the test duration
       ("spark.scheduler.executorTaskBlacklistTime", "10000000"),
