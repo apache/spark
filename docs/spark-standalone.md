@@ -134,15 +134,6 @@ You can optionally configure the cluster further by setting environment variable
     <td>Port for the worker web UI (default: 8081).</td>
   </tr>
   <tr>
-    <td><code>SPARK_WORKER_INSTANCES</code></td>
-    <td>
-      Number of worker instances to run on each machine (default: 1). You can make this more than 1 if
-      you have have very large machines and would like multiple Spark worker processes. If you do set
-      this, make sure to also set <code>SPARK_WORKER_CORES</code> explicitly to limit the cores per worker,
-      or else each worker will try to use all the cores.
-    </td>
-  </tr>
-  <tr>
     <td><code>SPARK_WORKER_DIR</code></td>
     <td>Directory to run applications in, which will include both logs and scratch space (default: SPARK_HOME/work).</td>
   </tr>
