@@ -145,8 +145,8 @@ import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second
-SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
-JavaStreamingContext jssc = new JavaStreamingContext(conf, Durations.seconds(1))
+SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount");
+JavaStreamingContext jssc = new JavaStreamingContext(conf, Durations.seconds(1));
 {% endhighlight %}
 
 Using this context, we can create a DStream that represents streaming data from a TCP
@@ -612,7 +612,7 @@ as well as to run the receiver(s).
 
 - When running a Spark Streaming program locally, do not use "local" or "local[1]" as the master URL.
   Either of these means that only one thread will be used for running tasks locally. If you are using
-  a input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
+  an input DStream based on a receiver (e.g. sockets, Kafka, Flume, etc.), then the single thread will
   be used to run the receiver, leaving no thread for processing the received data. Hence, when
   running locally, always use "local[*n*]" as the master URL, where *n* > number of receivers to run
   (see [Spark Properties](configuration.html#spark-properties) for information on how to set
@@ -1395,13 +1395,13 @@ object WordBlacklist {
 
 object DroppedWordsCounter {
 
-  @volatile private var instance: Accumulator[Long] = null
+  @volatile private var instance: LongAccumulator = null
 
-  def getInstance(sc: SparkContext): Accumulator[Long] = {
+  def getInstance(sc: SparkContext): LongAccumulator = {
     if (instance == null) {
       synchronized {
         if (instance == null) {
-          instance = sc.accumulator(0L, "WordsInBlacklistCounter")
+          instance = sc.longAccumulator("WordsInBlacklistCounter")
         }
       }
     }
@@ -1409,7 +1409,7 @@ object DroppedWordsCounter {
   }
 }
 
-wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
+wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
   // Get or register the blacklist Broadcast
   val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
   // Get or register the droppedWordsCounter Accumulator
@@ -1417,12 +1417,12 @@ wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
   // Use blacklist to drop words and use droppedWordsCounter to count them
   val counts = rdd.filter { case (word, count) =>
     if (blacklist.value.contains(word)) {
-      droppedWordsCounter += count
+      droppedWordsCounter.add(count)
       false
     } else {
       true
     }
-  }.collect()
+  }.collect().mkString("[", ", ", "]")
   val output = "Counts at time " + time + " " + counts
 })
 
@@ -1788,7 +1788,7 @@ This example appends the word counts of network data into a file.
 This behavior is made simple by using `JavaStreamingContext.getOrCreate`. This is used as follows.
 
 {% highlight java %}
-// Create a factory object that can create a and setup a new JavaStreamingContext
+// Create a factory object that can create and setup a new JavaStreamingContext
 JavaStreamingContextFactory contextFactory = new JavaStreamingContextFactory() {
   @Override public JavaStreamingContext create() {
     JavaStreamingContext jssc = new JavaStreamingContext(...);  // new context

@@ -351,7 +351,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     def roc(self):
         """
         Returns the receiver operating characteristic (ROC) curve,
-        which is an Dataframe having two fields (FPR, TPR) with
+        which is a Dataframe having two fields (FPR, TPR) with
         (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
 
         .. seealso:: `Wikipedia reference \
@@ -380,7 +380,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     @since("2.0.0")
     def pr(self):
         """
-        Returns the precision-recall curve, which is an Dataframe
+        Returns the precision-recall curve, which is a Dataframe
         containing two fields recall, precision with (0.0, 1.0) prepended
         to it.
 
@@ -498,7 +498,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
 
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
-    >>> df = sqlContext.createDataFrame([
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
@@ -512,7 +512,9 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     1
     >>> model.featureImportances
     SparseVector(1, {0: 1.0})
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> print(model.toDebugString)
+    DecisionTreeClassificationModel (uid=...) of depth 1 with 3 nodes...
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -520,7 +522,7 @@ class DecisionTreeClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     DenseVector([1.0, 0.0])
     >>> result.rawPrediction
     DenseVector([1.0, 0.0])
-    >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
 
@@ -627,7 +629,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
-    >>> df = sqlContext.createDataFrame([
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
@@ -639,7 +641,7 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 1.0, 1.0])
     True
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> result = model.transform(test0).head()
     >>> result.prediction
     0.0
@@ -647,9 +649,11 @@ class RandomForestClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPred
     0
     >>> numpy.argmax(result.rawPrediction)
     0
-    >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> model.trees
+    [DecisionTreeClassificationModel (uid=...) of depth..., DecisionTreeClassificationModel...]
     >>> rfc_path = temp_path + "/rfc"
     >>> rf.save(rfc_path)
     >>> rf2 = RandomForestClassifier.load(rfc_path)
@@ -730,6 +734,12 @@ class RandomForestClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaML
         """
         return self._call_java("featureImportances")
 
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeClassificationModel(m) for m in list(self._call_java("trees"))]
+
 
 @inherit_doc
 class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasMaxIter,
@@ -754,7 +764,7 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     >>> from numpy import allclose
     >>> from pyspark.ml.linalg import Vectors
     >>> from pyspark.ml.feature import StringIndexer
-    >>> df = sqlContext.createDataFrame([
+    >>> df = spark.createDataFrame([
     ...     (1.0, Vectors.dense(1.0)),
     ...     (0.0, Vectors.sparse(1, [], []))], ["label", "features"])
     >>> stringIndexer = StringIndexer(inputCol="label", outputCol="indexed")
@@ -766,12 +776,16 @@ class GBTClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol
     SparseVector(1, {0: 1.0})
     >>> allclose(model.treeWeights, [1.0, 0.1, 0.1, 0.1, 0.1])
     True
-    >>> test0 = sqlContext.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
+    >>> test0 = spark.createDataFrame([(Vectors.dense(-1.0),)], ["features"])
     >>> model.transform(test0).head().prediction
     0.0
-    >>> test1 = sqlContext.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
+    >>> test1 = spark.createDataFrame([(Vectors.sparse(1, [0], [1.0]),)], ["features"])
     >>> model.transform(test1).head().prediction
     1.0
+    >>> model.totalNumNodes
+    15
+    >>> print(model.toDebugString)
+    GBTClassificationModel (uid=...)...with 5 trees...
     >>> gbtc_path = temp_path + "gbtc"
     >>> gbt.save(gbtc_path)
     >>> gbt2 = GBTClassifier.load(gbtc_path)
@@ -869,6 +883,12 @@ class GBTClassificationModel(TreeEnsembleModels, JavaMLWritable, JavaMLReadable)
         """
         return self._call_java("featureImportances")
 
+    @property
+    @since("2.0.0")
+    def trees(self):
+        """Trees in this ensemble. Warning: These have null parent Estimators."""
+        return [DecisionTreeRegressionModel(m) for m in list(self._call_java("trees"))]
+
 
 @inherit_doc
 class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, HasProbabilityCol,
@@ -885,7 +905,7 @@ class NaiveBayes(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol, H
 
     >>> from pyspark.sql import Row
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> df = spark.createDataFrame([
     ...     Row(label=0.0, features=Vectors.dense([0.0, 0.0])),
     ...     Row(label=0.0, features=Vectors.dense([0.0, 1.0])),
     ...     Row(label=1.0, features=Vectors.dense([1.0, 0.0]))])
@@ -1021,7 +1041,8 @@ class NaiveBayesModel(JavaModel, JavaMLWritable, JavaMLReadable):
 
 @inherit_doc
 class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredictionCol,
-                                     HasMaxIter, HasTol, HasSeed, JavaMLWritable, JavaMLReadable):
+                                     HasMaxIter, HasTol, HasSeed, HasStepSize, JavaMLWritable,
+                                     JavaMLReadable):
     """
     Classifier trainer based on the Multilayer Perceptron.
     Each layer has sigmoid activation function, output layer has softmax.
@@ -1029,18 +1050,18 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     Number of outputs has to be equal to the total number of labels.
 
     >>> from pyspark.ml.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> df = spark.createDataFrame([
     ...     (0.0, Vectors.dense([0.0, 0.0])),
     ...     (1.0, Vectors.dense([0.0, 1.0])),
     ...     (1.0, Vectors.dense([1.0, 0.0])),
     ...     (0.0, Vectors.dense([1.0, 1.0]))], ["label", "features"])
-    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 5, 2], blockSize=1, seed=123)
+    >>> mlp = MultilayerPerceptronClassifier(maxIter=100, layers=[2, 2, 2], blockSize=1, seed=123)
     >>> model = mlp.fit(df)
     >>> model.layers
-    [2, 5, 2]
+    [2, 2, 2]
     >>> model.weights.size
-    27
-    >>> testDF = sqlContext.createDataFrame([
+    12
+    >>> testDF = spark.createDataFrame([
     ...     (Vectors.dense([1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 0.0]),)], ["features"])
     >>> model.transform(testDF).show()
@@ -1063,6 +1084,12 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
     True
     >>> model.weights == model2.weights
     True
+    >>> mlp2 = mlp2.setInitialWeights(list(range(0, 12)))
+    >>> model3 = mlp2.fit(df)
+    >>> model3.weights != model2.weights
+    True
+    >>> model3.layers == model.layers
+    True
 
     .. versionadded:: 1.6.0
     """
@@ -1076,28 +1103,36 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
                       "remaining data in a partition then it is adjusted to the size of this " +
                       "data. Recommended size is between 10 and 1000, default is 128.",
                       typeConverter=TypeConverters.toInt)
+    solver = Param(Params._dummy(), "solver", "The solver algorithm for optimization. Supported " +
+                   "options: l-bfgs, gd.", typeConverter=TypeConverters.toString)
+    initialWeights = Param(Params._dummy(), "initialWeights", "The initial weights of the model.",
+                           typeConverter=TypeConverters.toVector)
 
     @keyword_only
     def __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03,
+                 solver="l-bfgs", initialWeights=None):
         """
         __init__(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
+                 maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03, \
+                 solver="l-bfgs", initialWeights=None)
         """
         super(MultilayerPerceptronClassifier, self).__init__()
         self._java_obj = self._new_java_obj(
             "org.apache.spark.ml.classification.MultilayerPerceptronClassifier", self.uid)
-        self._setDefault(maxIter=100, tol=1E-4, blockSize=128)
+        self._setDefault(maxIter=100, tol=1E-4, blockSize=128, stepSize=0.03, solver="l-bfgs")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.6.0")
     def setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction",
-                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128):
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03,
+                  solver="l-bfgs", initialWeights=None):
         """
         setParams(self, featuresCol="features", labelCol="label", predictionCol="prediction", \
-                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128)
+                  maxIter=100, tol=1e-4, seed=None, layers=None, blockSize=128, stepSize=0.03, \
+                  solver="l-bfgs", initialWeights=None)
         Sets params for MultilayerPerceptronClassifier.
         """
         kwargs = self.setParams._input_kwargs
@@ -1133,6 +1168,48 @@ class MultilayerPerceptronClassifier(JavaEstimator, HasFeaturesCol, HasLabelCol,
         Gets the value of blockSize or its default value.
         """
         return self.getOrDefault(self.blockSize)
+
+    @since("2.0.0")
+    def setStepSize(self, value):
+        """
+        Sets the value of :py:attr:`stepSize`.
+        """
+        return self._set(stepSize=value)
+
+    @since("2.0.0")
+    def getStepSize(self):
+        """
+        Gets the value of stepSize or its default value.
+        """
+        return self.getOrDefault(self.stepSize)
+
+    @since("2.0.0")
+    def setSolver(self, value):
+        """
+        Sets the value of :py:attr:`solver`.
+        """
+        return self._set(solver=value)
+
+    @since("2.0.0")
+    def getSolver(self):
+        """
+        Gets the value of solver or its default value.
+        """
+        return self.getOrDefault(self.solver)
+
+    @since("2.0.0")
+    def setInitialWeights(self, value):
+        """
+        Sets the value of :py:attr:`initialWeights`.
+        """
+        return self._set(initialWeights=value)
+
+    @since("2.0.0")
+    def getInitialWeights(self):
+        """
+        Gets the value of initialWeights or its default value.
+        """
+        return self.getOrDefault(self.initialWeights)
 
 
 class MultilayerPerceptronClassificationModel(JavaModel, JavaMLWritable, JavaMLReadable):
@@ -1467,21 +1544,23 @@ class OneVsRestModel(Model, OneVsRestParams, MLReadable, MLWritable):
 if __name__ == "__main__":
     import doctest
     import pyspark.ml.classification
-    from pyspark.context import SparkContext
-    from pyspark.sql import SQLContext
+    from pyspark.sql import SparkSession
     globs = pyspark.ml.classification.__dict__.copy()
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.classification tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.classification tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     import tempfile
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        sc.stop()
+        spark.stop()
     finally:
         from shutil import rmtree
         try:

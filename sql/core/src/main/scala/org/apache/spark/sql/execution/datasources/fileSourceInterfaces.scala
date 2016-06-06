@@ -142,7 +142,7 @@ case class HadoopFsRelation(
     fileFormat: FileFormat,
     options: Map[String, String]) extends BaseRelation with FileRelation {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   val schema: StructType = {
     val dataSchemaColumnNames = dataSchema.map(_.name.toLowerCase).toSet
@@ -341,11 +341,11 @@ private[sql] object HadoopFsRelation extends Logging {
 
   /** Checks if we should filter out this path name. */
   def shouldFilterOut(pathName: String): Boolean = {
-    // TODO: We should try to filter out all files/dirs starting with "." or "_".
-    // The only reason that we are not doing it now is that Parquet needs to find those
-    // metadata files from leaf files returned by this methods. We should refactor
-    // this logic to not mix metadata files with data files.
-    pathName == "_SUCCESS" || pathName == "_temporary" || pathName.startsWith(".")
+    // We filter everything that starts with _ and ., except _common_metadata and _metadata
+    // because Parquet needs to find those metadata files from leaf files returned by this method.
+    // We should refactor this logic to not mix metadata files with data files.
+    (pathName.startsWith("_") || pathName.startsWith(".")) &&
+      !pathName.startsWith("_common_metadata") && !pathName.startsWith("_metadata")
   }
 
   /**
@@ -381,6 +381,16 @@ private[sql] object HadoopFsRelation extends Logging {
       }
       statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
         case f: LocatedFileStatus => f
+
+        // NOTE:
+        //
+        // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
+        //   operations, calling `getFileBlockLocations` does no harm here since these file system
+        //   implementations don't actually issue RPC for this method.
+        //
+        // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
+        //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+        //   paths exceeds threshold.
         case f => createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
       }
     }

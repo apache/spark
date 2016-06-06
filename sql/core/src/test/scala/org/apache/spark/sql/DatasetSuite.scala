@@ -22,9 +22,8 @@ import java.sql.{Date, Timestamp}
 
 import scala.language.postfixOps
 
-import org.scalatest.words.MatcherWords.be
-
 import org.apache.spark.sql.catalyst.encoders.{OuterScopes, RowEncoder}
+import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.execution.streaming.MemoryStream
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
@@ -45,6 +44,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.mapPartitions(_ => Iterator(1)),
       1, 1, 1)
+  }
+
+  test("emptyDataset") {
+    val ds = spark.emptyDataset[Int]
+    assert(ds.count() == 0L)
+    assert(ds.collect() sameElements Array.empty[Int])
   }
 
   test("range") {
@@ -80,6 +85,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("coalesce, repartition") {
     val data = (1 to 100).map(i => ClassData(i.toString, i))
     val ds = data.toDS()
+
+    intercept[IllegalArgumentException] {
+      ds.coalesce(0)
+    }
+
+    intercept[IllegalArgumentException] {
+      ds.repartition(0)
+    }
 
     assert(ds.repartition(10).rdd.partitions.length == 10)
     checkDataset(
@@ -205,6 +218,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       ("b", 2))
   }
 
+  test("filter and then select") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.filter(_._1 == "b").select(expr("_1").as[String]),
+      "b")
+  }
+
   test("foreach") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.longAccumulator
@@ -231,21 +251,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds1.joinWith(ds2, $"a.value" === $"b.value", "inner"),
       (1, 1), (2, 2))
-  }
-
-  test("joinWith, expression condition, outer join") {
-    val nullInteger = null.asInstanceOf[Integer]
-    val nullString = null.asInstanceOf[String]
-    val ds1 = Seq(ClassNullableData("a", 1),
-      ClassNullableData("c", 3)).toDS()
-    val ds2 = Seq(("a", new Integer(1)),
-      ("b", new Integer(2))).toDS()
-
-    checkDataset(
-      ds1.joinWith(ds2, $"_1" === $"a", "outer"),
-      (ClassNullableData("a", 1), ("a", new Integer(1))),
-      (ClassNullableData("c", 3), (nullString, nullInteger)),
-      (ClassNullableData(nullString, nullInteger), ("b", new Integer(2))))
   }
 
   test("joinWith tuple with primitive, expression") {
@@ -421,20 +426,6 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     assert(ds.toString == "[_1: int, _2: int]")
   }
 
-  test("showString: Kryo encoder") {
-    implicit val kryoEncoder = Encoders.kryo[KryoData]
-    val ds = Seq(KryoData(1), KryoData(2)).toDS()
-
-    val expectedAnswer = """+-----------+
-                           ||      value|
-                           |+-----------+
-                           ||KryoData(1)|
-                           ||KryoData(2)|
-                           |+-----------+
-                           |""".stripMargin
-    assert(ds.showString(10) === expectedAnswer)
-  }
-
   test("Kryo encoder") {
     implicit val kryoEncoder = Encoders.kryo[KryoData]
     val ds = Seq(KryoData(1), KryoData(2)).toDS()
@@ -575,18 +566,14 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }.message
     assert(message ==
       "Try to map struct<a:string,b:int> to Tuple3, " +
-        "but failed as the number of fields does not line up.\n" +
-        " - Input schema: struct<a:string,b:int>\n" +
-        " - Target schema: struct<_1:string,_2:int,_3:bigint>")
+        "but failed as the number of fields does not line up.")
 
     val message2 = intercept[AnalysisException] {
       ds.as[Tuple1[String]]
     }.message
     assert(message2 ==
       "Try to map struct<a:string,b:int> to Tuple1, " +
-        "but failed as the number of fields does not line up.\n" +
-        " - Input schema: struct<a:string,b:int>\n" +
-        " - Target schema: struct<_1:string>")
+        "but failed as the number of fields does not line up.")
   }
 
   test("SPARK-13440: Resolving option fields") {
@@ -662,7 +649,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   }
 
   test("dataset.rdd with generic case class") {
-    val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS
+    val ds = Seq(Generic(1, 1.0), Generic(2, 2.0)).toDS()
     val ds2 = ds.map(g => Generic(g.id, g.value))
     assert(ds.rdd.map(r => r.id).count === 2)
     assert(ds2.rdd.map(r => r.id).count === 2)
@@ -673,7 +660,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("runtime null check for RowEncoder") {
     val schema = new StructType().add("i", IntegerType, nullable = false)
-    val df = sqlContext.range(10).map(l => {
+    val df = spark.range(10).map(l => {
       if (l % 5 == 0) {
         Row(null)
       } else {
@@ -689,9 +676,9 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
 
   test("row nullability mismatch") {
     val schema = new StructType().add("a", StringType, true).add("b", StringType, false)
-    val rdd = sqlContext.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
+    val rdd = spark.sparkContext.parallelize(Row(null, "123") :: Row("234", null) :: Nil)
     val message = intercept[Exception] {
-      sqlContext.createDataFrame(rdd, schema).collect()
+      spark.createDataFrame(rdd, schema).collect()
     }.getMessage
     assert(message.contains("The 1th field 'b' of input row cannot be null"))
   }
@@ -700,7 +687,7 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     val dataset = Seq(1, 2, 3).toDS()
     dataset.createOrReplaceTempView("tempView")
 
-    // Overrrides the existing temporary view with same name
+    // Overrides the existing temporary view with same name
     // No exception should be thrown here.
     dataset.createOrReplaceTempView("tempView")
 
@@ -715,6 +702,103 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
   test("SPARK-15381: physical object operator should define `reference` correctly") {
     val df = Seq(1 -> 2).toDF("a", "b")
     checkAnswer(df.map(row => row)(RowEncoder(df.schema)).select("b", "a"), Row(2, 1))
+  }
+
+  private def checkShowString[T](ds: Dataset[T], expected: String): Unit = {
+    val numRows = expected.split("\n").length - 4
+    val actual = ds.showString(numRows, truncate = true)
+
+    if (expected != actual) {
+      fail(
+        "Dataset.showString() gives wrong result:\n\n" + sideBySide(
+          "== Expected ==\n" + expected,
+          "== Actual ==\n" + actual
+        ).mkString("\n")
+      )
+    }
+  }
+
+  test("SPARK-15550 Dataset.show() should show contents of the underlying logical plan") {
+    val df = Seq((1, "foo", "extra"), (2, "bar", "extra")).toDF("b", "a", "c")
+    val ds = df.as[ClassData]
+    val expected =
+      """+---+---+-----+
+        ||  b|  a|    c|
+        |+---+---+-----+
+        ||  1|foo|extra|
+        ||  2|bar|extra|
+        |+---+---+-----+
+        |""".stripMargin
+
+    checkShowString(ds, expected)
+  }
+
+  test("SPARK-15550 Dataset.show() should show inner nested products as rows") {
+    val ds = Seq(
+      NestedStruct(ClassData("foo", 1)),
+      NestedStruct(ClassData("bar", 2))
+    ).toDS()
+
+    val expected =
+      """+-------+
+        ||      f|
+        |+-------+
+        ||[foo,1]|
+        ||[bar,2]|
+        |+-------+
+        |""".stripMargin
+
+    checkShowString(ds, expected)
+  }
+
+  test(
+    "SPARK-15112: EmbedDeserializerInFilter should not optimize plan fragment that changes schema"
+  ) {
+    val ds = Seq(1 -> "foo", 2 -> "bar").toDF("b", "a").as[ClassData]
+
+    assertResult(Seq(ClassData("foo", 1), ClassData("bar", 2))) {
+      ds.collect().toSeq
+    }
+
+    assertResult(Seq(ClassData("bar", 2))) {
+      ds.filter(_.b > 1).collect().toSeq
+    }
+  }
+
+  test("mapped dataset should resolve duplicated attributes for self join") {
+    val ds = Seq(1, 2, 3).toDS().map(_ + 1)
+    val ds1 = ds.as("d1")
+    val ds2 = ds.as("d2")
+
+    checkDataset(ds1.joinWith(ds2, $"d1.value" === $"d2.value"), (2, 2), (3, 3), (4, 4))
+    checkDataset(ds1.intersect(ds2), 2, 3, 4)
+    checkDataset(ds1.except(ds1))
+  }
+
+  test("SPARK-15441: Dataset outer join") {
+    val left = Seq(ClassData("a", 1), ClassData("b", 2)).toDS().as("left")
+    val right = Seq(ClassData("x", 2), ClassData("y", 3)).toDS().as("right")
+    val joined = left.joinWith(right, $"left.b" === $"right.b", "left")
+    val result = joined.collect().toSet
+    assert(result == Set(ClassData("a", 1) -> null, ClassData("b", 2) -> ClassData("x", 2)))
+  }
+
+  test("better error message when use java reserved keyword as field name") {
+    val e = intercept[UnsupportedOperationException] {
+      Seq(InvalidInJava(1)).toDS()
+    }
+    assert(e.getMessage.contains(
+      "`abstract` is a reserved keyword and cannot be used as field name"))
+  }
+
+  test("Dataset should support flat input object to be null") {
+    checkDataset(Seq("a", null).toDS(), "a", null)
+  }
+
+  test("Dataset should throw RuntimeException if non-flat input object is null") {
+    val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level non-flat input object"))
   }
 }
 
@@ -738,6 +822,8 @@ case class ClassNullableData(a: String, b: Integer)
 
 case class NestedStruct(f: ClassData)
 case class DeepNestedStruct(f: NestedStruct)
+
+case class InvalidInJava(`abstract`: Int)
 
 /**
  * A class used to test serialization using encoders. This class throws exceptions when using

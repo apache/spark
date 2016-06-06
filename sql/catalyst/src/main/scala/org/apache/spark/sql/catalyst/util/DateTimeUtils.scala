@@ -58,6 +58,7 @@ object DateTimeUtils {
   final val YearZero = -17999
   final val toYearZero = to2001 + 7304850
   final val TimeZoneGMT = TimeZone.getTimeZone("GMT")
+  final val MonthOf31Days = Set(1, 3, 5, 7, 8, 10, 12)
 
   @transient lazy val defaultTimeZone = TimeZone.getDefault
 
@@ -333,8 +334,7 @@ object DateTimeUtils {
       digitsMilli += 1
     }
 
-    if (!justTime && (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 ||
-        segments(1) > 12 || segments(2) < 1 || segments(2) > 31)) {
+    if (!justTime && isInvalidDate(segments(0), segments(1), segments(2))) {
       return None
     }
 
@@ -414,15 +414,34 @@ object DateTimeUtils {
       return None
     }
     segments(i) = currentSegmentValue
-    if (segments(0) < 0 || segments(0) > 9999 || segments(1) < 1 || segments(1) > 12 ||
-        segments(2) < 1 || segments(2) > 31) {
+    if (isInvalidDate(segments(0), segments(1), segments(2))) {
       return None
     }
+
     val c = threadLocalGmtCalendar.get()
     c.clear()
     c.set(segments(0), segments(1) - 1, segments(2), 0, 0, 0)
     c.set(Calendar.MILLISECOND, 0)
     Some((c.getTimeInMillis / MILLIS_PER_DAY).toInt)
+  }
+
+  /**
+   * Return true if the date is invalid.
+   */
+  private def isInvalidDate(year: Int, month: Int, day: Int): Boolean = {
+    if (year < 0 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
+      return true
+    }
+    if (month == 2) {
+      if (isLeapYear(year) && day > 29) {
+        return true
+      } else if (!isLeapYear(year) && day > 28) {
+        return true
+      }
+    } else if (!MonthOf31Days.contains(month) && day > 30) {
+      return true
+    }
+    false
   }
 
   /**

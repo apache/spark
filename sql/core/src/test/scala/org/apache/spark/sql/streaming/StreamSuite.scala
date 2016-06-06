@@ -24,7 +24,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.ManualClock
 
-class StreamSuite extends StreamTest with SharedSQLContext {
+class StreamSuite extends StreamTest {
 
   import testImplicits._
 
@@ -219,6 +219,28 @@ class StreamSuite extends StreamTest with SharedSQLContext {
       CheckIncrementalExecutionCurrentBatchId(2),
       CheckOffsetLogLatestBatchId(2),
       CheckSinkLatestBatchId(2))
+  }
+
+  test("insert an extraStrategy") {
+    try {
+      spark.experimental.extraStrategies = TestStrategy :: Nil
+
+      val inputData = MemoryStream[(String, Int)]
+      val df = inputData.toDS().map(_._1).toDF("a")
+
+      testStream(df)(
+        AddData(inputData, ("so slow", 1)),
+        CheckAnswer("so fast"))
+    } finally {
+      spark.experimental.extraStrategies = Nil
+    }
+  }
+
+  test("output mode API in Scala") {
+    val o1 = OutputMode.Append
+    assert(o1 === InternalOutputModes.Append)
+    val o2 = OutputMode.Complete
+    assert(o2 === InternalOutputModes.Complete)
   }
 }
 

@@ -616,8 +616,8 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
       data.map { v =>
         (0.0,
           Vectors.fromBreeze(BDV.vertcat(
-            v._1.toBreeze.toDenseVector,
-            v._2.toBreeze.toDenseVector))
+            v._1.asBreeze.toDenseVector,
+            v._2.asBreeze.toDenseVector))
           ) }
     } else {
       data.mapPartitions { it =>
@@ -665,8 +665,8 @@ private[ann] class ANNUpdater extends Updater {
     iter: Int,
     regParam: Double): (OldVector, Double) = {
     val thisIterStepSize = stepSize
-    val brzWeights: BV[Double] = weightsOld.toBreeze.toDenseVector
-    Baxpy(-thisIterStepSize, gradient.toBreeze, brzWeights)
+    val brzWeights: BV[Double] = weightsOld.asBreeze.toDenseVector
+    Baxpy(-thisIterStepSize, gradient.asBreeze, brzWeights)
     (OldVectors.fromBreeze(brzWeights), 0)
   }
 }

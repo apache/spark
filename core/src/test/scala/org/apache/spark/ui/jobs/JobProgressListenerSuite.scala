@@ -243,7 +243,6 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       new FetchFailed(null, 0, 0, 0, "ignored"),
       ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
-      TaskKilled,
       ExecutorLostFailure("0", true, Some("Induced failure")),
       UnknownReason)
     var failCount = 0
@@ -254,6 +253,11 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       assert(listener.stageIdToData((task.stageId, 0)).numCompleteTasks === 0)
       assert(listener.stageIdToData((task.stageId, 0)).numFailedTasks === failCount)
     }
+
+    // Make sure killed tasks are accounted for correctly.
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 0, taskType, TaskKilled, taskInfo, metrics))
+    assert(listener.stageIdToData((task.stageId, 0)).numKilledTasks === 1)
 
     // Make sure we count success as success.
     listener.onTaskEnd(
@@ -364,20 +368,20 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
   test("drop internal and sql accumulators") {
     val taskInfo = new TaskInfo(0, 0, 0, 0, "", "", TaskLocality.ANY, false)
     val internalAccum =
-      AccumulableInfo(id = 1, name = Some("internal"), None, None, internal = true, false)
+      AccumulableInfo(id = 1, name = Some("internal"), None, None, true, false, None)
     val sqlAccum = AccumulableInfo(
       id = 2,
       name = Some("sql"),
-      None,
-      None,
+      update = None,
+      value = None,
       internal = false,
       countFailedValues = false,
       metadata = Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
     val userAccum = AccumulableInfo(
       id = 3,
       name = Some("user"),
-      None,
-      None,
+      update = None,
+      value = None,
       internal = false,
       countFailedValues = false,
       metadata = None)
