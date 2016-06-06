@@ -23,7 +23,7 @@ import org.apache.spark.annotation.Experimental
  * :: Experimental ::
  * A class used to report information about the progress of a [[ContinuousQuery]].
  *
- * @param name The [[ContinuousQuery]] name
+ * @param name The [[ContinuousQuery]] name.
  * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
  * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
  */
