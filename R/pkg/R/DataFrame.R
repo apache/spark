@@ -2707,7 +2707,7 @@ setMethod("histogram",
               # use method describe() to compute statistics in one single pass. The new
               # column must have a name that doesn't exist in the dataset.
               # To do so, we generate a random column name with more characters than the
-              # longest colname in the dataset, but no more than 100 (think of a UUID).
+              # longest colname in the dataset, but no more than 100 (think of an UUID).
               # This column name will never be visible to the user, so the name is irrelevant.
               # Limiting the colname length to 100 makes debugging easier and it does
               # introduce a negligible probability of collision: assuming the user has 1 million

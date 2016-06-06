@@ -599,7 +599,7 @@ setMethod("mapPartitionsWithIndex",
 #' The same as `filter()' in Spark.
 #'
 #' @param x The RDD to be filtered.
-#' @param f A unary predicate function.
+#' @param f An unary predicate function.
 #' @examples
 # nolint start
 #'\dontrun{

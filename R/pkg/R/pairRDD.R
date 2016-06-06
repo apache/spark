@@ -409,7 +409,7 @@ setMethod("reduceByKeyLocally",
 #' might group an RDD of type (Int, Int) into an RDD of type (Int, Seq[Int]).
 #' Users provide three functions:
 #' \itemize{
-#'   \item createCombiner, which turns a V into a C (e.g., creates a one-element list)
+#'   \item createCombiner, which turns a V into a C (e.g., creates an one-element list)
 #'   \item mergeValue, to merge a V into a C (e.g., adds it to the end of a list) -
 #'   \item mergeCombiners, to combine two C's into a single one (e.g., concatentates
 #'    two lists).
@@ -473,7 +473,7 @@ setMethod("combineByKey",
 #' Aggregate the values of each key in an RDD, using given combine functions
 #' and a neutral "zero value". This function can return a different result type,
 #' U, than the type of the values in this RDD, V. Thus, we need one operation
-#' for merging a V into a U and one operation for merging two U's, The former
+#' for merging a V into an U and one operation for merging two U's, The former
 #' operation is used for merging values within a partition, and the latter is
 #' used for merging values between partitions. To avoid memory allocation, both
 #' of these functions are allowed to modify and return their first argument
