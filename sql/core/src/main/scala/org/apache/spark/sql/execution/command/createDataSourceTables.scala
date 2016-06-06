@@ -27,6 +27,7 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
@@ -118,8 +119,8 @@ case class CreateDataSourceTableCommand(
 /**
  * A command used to create a data source table using the result of a query.
  *
- * Note: This is different from [[CreateTableAsSelect]]. Please check the syntax for difference.
- * This is not intended for temporary tables.
+ * Note: This is different from [[CreateTableAsSelectLogicalPlan]]. Please check the syntax for
+ * difference. This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -137,6 +138,8 @@ case class CreateDataSourceTableAsSelectCommand(
     options: Map[String, String],
     query: LogicalPlan)
   extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports

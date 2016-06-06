@@ -56,7 +56,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * If this is an integer >= 1, this specifies the number of documents the term must appear in;
    * if this is a double in [0,1), then this specifies the fraction of documents.
    *
-   * Default: 1
+   * Default: 1.0
    * @group param
    */
   val minDF: DoubleParam = new DoubleParam(this, "minDF", "Specifies the minimum number of" +
@@ -86,7 +86,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
    * Note that the parameter is only used in transform of [[CountVectorizerModel]] and does not
    * affect fitting.
    *
-   * Default: 1
+   * Default: 1.0
    * @group param
    */
   val minTF: DoubleParam = new DoubleParam(this, "minTF", "Filter to ignore rare words in" +
@@ -95,8 +95,6 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
     " appear in the document); if this is a double in [0,1), then this specifies a fraction (out" +
     " of the document's token count). Note that the parameter is only used in transform of" +
     " CountVectorizerModel and does not affect fitting.", ParamValidators.gtEq(0.0))
-
-  setDefault(minTF -> 1)
 
   /** @group getParam */
   def getMinTF: Double = $(minTF)
@@ -114,7 +112,7 @@ private[feature] trait CountVectorizerParams extends Params with HasInputCol wit
   /** @group getParam */
   def getBinary: Boolean = $(binary)
 
-  setDefault(binary -> false)
+  setDefault(vocabSize -> (1 << 18), minDF -> 1.0, minTF -> 1.0, binary -> false)
 }
 
 /**
@@ -144,8 +142,6 @@ class CountVectorizer(override val uid: String)
 
   /** @group setParam */
   def setBinary(value: Boolean): this.type = set(binary, value)
-
-  setDefault(vocabSize -> (1 << 18), minDF -> 1)
 
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): CountVectorizerModel = {

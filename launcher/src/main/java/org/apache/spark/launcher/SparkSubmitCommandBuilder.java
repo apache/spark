@@ -89,7 +89,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
   }
 
   final List<String> sparkArgs;
-  private final boolean printInfo;
+  private final boolean isAppResourceReq;
   private final boolean isExample;
 
   /**
@@ -101,7 +101,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   SparkSubmitCommandBuilder() {
     this.sparkArgs = new ArrayList<>();
-    this.printInfo = false;
+    this.isAppResourceReq = true;
     this.isExample = false;
   }
 
@@ -133,19 +133,19 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       this.isExample = isExample;
       OptionParser parser = new OptionParser();
       parser.parse(submitArgs);
-      this.printInfo = parser.infoRequested;
+      this.isAppResourceReq = parser.isAppResourceReq;
     }  else {
       this.isExample = isExample;
-      this.printInfo = true;
+      this.isAppResourceReq = false;
     }
   }
 
   @Override
   public List<String> buildCommand(Map<String, String> env)
       throws IOException, IllegalArgumentException {
-    if (PYSPARK_SHELL.equals(appResource) && !printInfo) {
+    if (PYSPARK_SHELL.equals(appResource) && isAppResourceReq) {
       return buildPySparkShellCommand(env);
-    } else if (SPARKR_SHELL.equals(appResource) && !printInfo) {
+    } else if (SPARKR_SHELL.equals(appResource) && isAppResourceReq) {
       return buildSparkRCommand(env);
     } else {
       return buildSparkSubmitCommand(env);
@@ -156,7 +156,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
     List<String> args = new ArrayList<>();
     SparkSubmitOptionParser parser = new SparkSubmitOptionParser();
 
-    if (!allowsMixedArguments && !printInfo) {
+    if (!allowsMixedArguments && isAppResourceReq) {
       checkArgument(appResource != null, "Missing application resource.");
     }
 
@@ -208,7 +208,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
       args.add(join(",", pyFiles));
     }
 
-    if (!printInfo) {
+    if (isAppResourceReq) {
       checkArgument(!isExample || mainClass != null, "Missing example class name.");
     }
     if (mainClass != null) {
@@ -388,7 +388,7 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
 
   private class OptionParser extends SparkSubmitOptionParser {
 
-    boolean infoRequested = false;
+    boolean isAppResourceReq = true;
 
     @Override
     protected boolean handle(String opt, String value) {
@@ -420,11 +420,15 @@ class SparkSubmitCommandBuilder extends AbstractCommandBuilder {
           allowsMixedArguments = true;
           appResource = specialClasses.get(value);
         }
+      } else if (opt.equals(KILL_SUBMISSION) || opt.equals(STATUS)) {
+        isAppResourceReq = false;
+        sparkArgs.add(opt);
+        sparkArgs.add(value);
       } else if (opt.equals(HELP) || opt.equals(USAGE_ERROR)) {
-        infoRequested = true;
+        isAppResourceReq = false;
         sparkArgs.add(opt);
       } else if (opt.equals(VERSION)) {
-        infoRequested = true;
+        isAppResourceReq = false;
         sparkArgs.add(opt);
       } else {
         sparkArgs.add(opt);

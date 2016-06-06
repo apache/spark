@@ -308,10 +308,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-14933 - create view from hive parquet tabale") {
     withTable("t_part") {
       withView("v_part") {
-        spark.sql(
-          """create table t_part (c1 int, c2 int)
-            |stored as parquet as select 1 as a, 2 as b
-          """.stripMargin)
+        spark.sql("create table t_part stored as parquet as select 1 as a, 2 as b")
         spark.sql("create view v_part as select * from t_part")
         checkAnswer(
           sql("select * from t_part"),
@@ -323,10 +320,7 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-14933 - create view from hive orc tabale") {
     withTable("t_orc") {
       withView("v_orc") {
-        spark.sql(
-          """create table t_orc (c1 int, c2 int)
-            |stored as orc as select 1 as a, 2 as b
-          """.stripMargin)
+        spark.sql("create table t_orc stored as orc as select 1 as a, 2 as b")
         spark.sql("create view v_orc as select * from t_orc")
         checkAnswer(
           sql("select * from t_orc"),

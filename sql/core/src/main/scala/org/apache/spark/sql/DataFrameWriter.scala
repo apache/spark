@@ -283,7 +283,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def save(): Unit = {
-    assertNotBucketed()
+    assertNotBucketed("save")
     assertNotStreaming("save() can only be called on non-continuous queries")
     val dataSource = DataSource(
       df.sparkSession,
@@ -332,7 +332,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Experimental
   def startStream(): ContinuousQuery = {
-    assertNotBucketed()
+    assertNotBucketed("startStream")
     assertStreaming("startStream() can only be called on continuous queries")
 
     if (source == "memory") {
@@ -457,7 +457,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
-    assertNotBucketed()
+    assertNotBucketed("insertInto")
     assertNotStreaming("insertInto() can only be called on non-continuous queries")
     val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
@@ -527,10 +527,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         s"existing columns (${validColumnNames.mkString(", ")})"))
   }
 
-  private def assertNotBucketed(): Unit = {
+  private def assertNotBucketed(operation: String): Unit = {
     if (numBuckets.isDefined || sortColumnNames.isDefined) {
       throw new IllegalArgumentException(
-        "Currently we don't support writing bucketed data to this data source.")
+        s"'$operation' does not support bucketing right now.")
     }
   }
 
@@ -588,7 +588,6 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           CreateTableUsingAsSelect(
             tableIdent,
             source,
-            temporary = false,
             partitioningColumns.map(_.toArray).getOrElse(Array.empty[String]),
             getBucketSpec,
             mode,
