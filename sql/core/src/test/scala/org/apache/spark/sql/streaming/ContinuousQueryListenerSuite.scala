@@ -58,8 +58,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
           // The source and sink offsets must be None as this must be called before the
           // batches have started
-          assert(status.sourceStatuses(0).offset === None)
-          assert(status.sinkStatus.offset === CompositeOffset(None :: Nil).toString)
+          assert(status.sourceStatuses(0).offsetDesc === None)
+          assert(status.sinkStatus.offsetDesc === CompositeOffset(None :: Nil).toString)
 
           // No progress events or termination events
           assert(listener.progressStatuses.isEmpty)
@@ -74,8 +74,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
             assert(listener.progressStatuses.size === 1)
             val status = listener.progressStatuses.peek()
             assert(status != null)
-            assert(status.sourceStatuses(0).offset === Some(LongOffset(0).toString))
-            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)).toString)
+            assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
+            assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
 
             // No termination events
             assert(listener.terminationStatus === null)
@@ -86,8 +86,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
           eventually(Timeout(streamingTimeout)) {
             val status = listener.terminationStatus
             assert(status != null)
-            assert(status.sourceStatuses(0).offset === Some(LongOffset(0).toString))
-            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)).toString)
+            assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
+            assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
           }
           listener.checkAsyncErrors()
         }
@@ -150,9 +150,9 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
         Assert {
           spark.sparkContext.listenerBus.waitUntilEmpty(10000)
           assert(listener.terminationStatus !== null)
-          assert(listener.terminationException.isDefined &&
-            listener.terminationException.get.contains("java.lang.ArithmeticException") &&
-            listener.terminationStackTrace.nonEmpty)
+          assert(listener.terminationException.isDefined)
+          assert(listener.terminationException.get.contains("java.lang.ArithmeticException"))
+          assert(listener.terminationStackTrace.nonEmpty)
         }
       )
     }
@@ -218,12 +218,12 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
   private def assertSourceStatus(expected: SourceStatus, actual: SourceStatus): Unit = {
     assert(expected.description === actual.description)
-    assert(expected.offset === actual.offset)
+    assert(expected.offsetDesc === actual.offsetDesc)
   }
 
   private def assertSinkStatus(expected: SinkStatus, actual: SinkStatus): Unit = {
     assert(expected.description === actual.description)
-    assert(expected.offset === actual.offset)
+    assert(expected.offsetDesc === actual.offsetDesc)
   }
 
   private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
