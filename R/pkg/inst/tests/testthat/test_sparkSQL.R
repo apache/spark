@@ -2172,10 +2172,14 @@ test_that("gapply() on a DataFrame", {
       y <- (data.frame(key, mean(x$b), stringsAsFactors = FALSE))
     },
     schema)
-  actual <- collect(arrange(df3, "a", decreasing = FALSE))
+  actual <- collect(df3)
+  actual <-  actual[order(actual$a), ]
+  rownames(actual) <- NULL
   expected <- collect(select(df, "a", "b", "c"))
   expected <- data.frame(aggregate(expected$b, by = list(expected$a, expected$c), FUN = mean))
   colnames(expected) <- c("a", "c", "avg")
+  expected <-  expected[order(expected$a), ]
+  rownames(expected) <- NULL
   expect_identical(actual, expected)
 
   df <- suppressWarnings(createDataFrame (sqlContext, iris))
@@ -2188,11 +2192,14 @@ test_that("gapply() on a DataFrame", {
       data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)
     },
     schema)
-  actual <- collect(arrange(df1, "Sepal_Length"))
+  actual <- collect(df1)
+  actual <- actual[order(actual$Sepal_Length), ]
+  rownames(actual) <- NULL
   agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Sepal.Length), FUN = mean),
                     stringsAsFactors = FALSE)
   colnames(agg_local_df) <- c("Sepal_Length", "Avg")
   expected <-  agg_local_df[order(agg_local_df$Sepal_Length), ]
+  rownames(expected) <- NULL
   expect_identical(actual, expected)
 })
 
