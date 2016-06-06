@@ -21,10 +21,6 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
@@ -34,7 +30,6 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 import static org.apache.spark.launcher.LauncherProtocol.*;
-
 
 public class LauncherServerSuite extends BaseSuite {
 
@@ -161,17 +156,12 @@ public class LauncherServerSuite extends BaseSuite {
   public void testSparkSubmitVmShutsDown() throws Exception {
     ChildProcAppHandle handle = LauncherServer.newAppHandle();
     TestClient client = null;
-    final List<SparkAppHandle.State> expectedStateList = Arrays.asList(SparkAppHandle.State.CONNECTED, SparkAppHandle.State.LOST);
-    final List<SparkAppHandle.State> realStateList = new ArrayList<SparkAppHandle.State>(2);
-    final AtomicBoolean jobFinished = new AtomicBoolean(false);
-    final BlockingQueue<SparkAppHandle.State> stateQueue = new LinkedBlockingQueue<SparkAppHandle.State>(10);
     final Semaphore semaphore = new Semaphore(0);
     try {
       Socket s = new Socket(InetAddress.getLoopbackAddress(),
         LauncherServer.getServerInstance().getPort());
       handle.addListener(new SparkAppHandle.Listener() {
         public void stateChanged(SparkAppHandle handle) {
-          stateQueue.offer(handle.getState());
           semaphore.release();
         }
         public void infoChanged(SparkAppHandle handle) {
@@ -183,42 +173,15 @@ public class LauncherServerSuite extends BaseSuite {
       assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
       // Make sure the server matched the client to the handle.
       assertNotNull(handle.getConnection());
-      Thread sparkLauncherClient = new Thread() {
-        public void run() {
-          while (!jobFinished.get()) {
-            SparkAppHandle.State state = SparkAppHandle.State.UNKNOWN;
-            try {
-              state = (SparkAppHandle.State)stateQueue.take();
-            } catch (InterruptedException e) {
-              Thread.currentThread().interrupt();
-              throw new RuntimeException(e);
-            }
-            switch (state) {
-              case CONNECTED:
-                realStateList.add(state);
-                break;
-              case LOST:
-                jobFinished.set(true);
-                realStateList.add(state);
-                break;
-              default:
-                throw new RuntimeException(String.format("Unexpected state. The should have been one of the %s.", expectedStateList));
-            }
-          }
-        }
-      };
-      sparkLauncherClient.start();
       close(client);
-      sparkLauncherClient.join(10000L);
-      assertEquals(expectedStateList, realStateList);
-      assertTrue(jobFinished.get());
+      assertTrue(semaphore.tryAcquire(30, TimeUnit.SECONDS));
+      assertEquals(SparkAppHandle.State.LOST, handle.getState());
     } finally {
       kill(handle);
       close(client);
       client.clientThread.join();
     }
   }
-  
 
   private void kill(SparkAppHandle handle) {
     if (handle != null) {
