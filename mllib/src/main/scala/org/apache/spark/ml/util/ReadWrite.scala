@@ -68,6 +68,8 @@ private[util] sealed trait BaseReadWrite {
 }
 
 /**
+ * :: Experimental ::
+ *
  * Abstract class for utility classes that can save ML instances.
  */
 @Experimental
@@ -120,8 +122,11 @@ abstract class MLWriter extends BaseReadWrite with Logging {
 }
 
 /**
+ * :: Experimental ::
+ *
  * Trait for classes that provide [[MLWriter]].
  */
+@Experimental
 @Since("1.6.0")
 trait MLWritable {
 
@@ -139,12 +144,27 @@ trait MLWritable {
   def save(path: String): Unit = write.save(path)
 }
 
-private[ml] trait DefaultParamsWritable extends MLWritable { self: Params =>
+/**
+ * :: Experimental ::
+ *
+ * Helper trait for making simple [[Params]] types writable.  If a [[Params]] class stores
+ * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
+ * a default implementation of writing saved instances of the class.
+ * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
+ * [[org.apache.spark.sql.Dataset]].
+ *
+ * @see  [[DefaultParamsReadable]], the counterpart to this trait
+ */
+@Experimental
+@Since("2.0.0")
+trait DefaultParamsWritable extends MLWritable { self: Params =>
 
   override def write: MLWriter = new DefaultParamsWriter(this)
 }
 
 /**
+ * :: Experimental ::
+ *
  * Abstract class for utility classes that can load ML instances.
  *
  * @tparam T ML instance type
@@ -164,6 +184,8 @@ abstract class MLReader[T] extends BaseReadWrite {
 }
 
 /**
+ * :: Experimental ::
+ *
  * Trait for objects that provide [[MLReader]].
  *
  * @tparam T ML instance type
@@ -187,9 +209,25 @@ trait MLReadable[T] {
   def load(path: String): T = read.load(path)
 }
 
-private[ml] trait DefaultParamsReadable[T] extends MLReadable[T] {
 
-  override def read: MLReader[T] = new DefaultParamsReader
+/**
+ * :: Experimental ::
+ *
+ * Helper trait for making simple [[Params]] types readable.  If a [[Params]] class stores
+ * all data as [[org.apache.spark.ml.param.Param]] values, then extending this trait will provide
+ * a default implementation of reading saved instances of the class.
+ * This only handles simple [[org.apache.spark.ml.param.Param]] types; e.g., it will not handle
+ * [[org.apache.spark.sql.Dataset]].
+ *
+ * @tparam T ML instance type
+ *
+ * @see  [[DefaultParamsWritable]], the counterpart to this trait
+ */
+@Experimental
+@Since("2.0.0")
+trait DefaultParamsReadable[T] extends MLReadable[T] {
+
+  override def read: MLReader[T] = new DefaultParamsReader[T]
 }
 
 /**
