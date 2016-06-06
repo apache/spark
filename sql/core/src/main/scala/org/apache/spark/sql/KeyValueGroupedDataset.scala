@@ -70,7 +70,7 @@ class KeyValueGroupedDataset[K, V] private[sql](
    *
    * {{{
    *   // Create values grouped by key from a Dataset[(K, V)]
-   *   ds.groupBy(_._1).mapValues(_._2)
+   *   ds.groupByKey(_._1).mapValues(_._2) // Scala
    * }}}
    * @since 2.0.0
    */
@@ -92,8 +92,10 @@ class KeyValueGroupedDataset[K, V] private[sql](
    * data. The grouping key is unchanged by this.
    *
    * {{{
-   *   // Create values grouped by key from a Dataset[(K, V)]
-   *   ds.groupBy(_._1).mapValues(_._2)
+   *   // Create Integer values grouped by String key from a Dataset<Tuple2<String, Integer>>
+   *   Dataset<Tuple2<String, Integer>> ds = ...;
+   *   KeyValueGroupedDataset<String, Integer> grouped =
+   *     ds.groupByKey(t -> t._1, Encoders.STRING()).mapValues(t -> t._2, Encoders.INT());
    * }}}
    * @since 2.0.0
    */
