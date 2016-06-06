@@ -391,7 +391,7 @@ test_that("read/write json files", {
   expect_is(df, "SparkDataFrame")
   expect_equal(count(df), 3)
 
-  # Test read.df with a user defined schema
+  # Test read.df with an user defined schema
   schema <- structType(structField("name", type = "string"),
                        structField("age", type = "double"))
 

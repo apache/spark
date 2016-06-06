@@ -483,7 +483,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 
 # Utility function to get user defined function (UDF) dependencies (closure).
 # More specifically, this function captures the values of free variables defined
-# outside a UDF, and stores them in the function's environment.
+# outside an UDF, and stores them in the function's environment.
 # param
 #   func A function whose closure needs to be captured.
 #   checkedFunc An environment of function objects examined during cleanClosure. It can be

@@ -35,7 +35,7 @@ setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 #' @export
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
-#' @title S4 class that represents a AFTSurvivalRegressionModel
+#' @title S4 class that represents an AFTSurvivalRegressionModel
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
 #' @export
 setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))

@@ -85,7 +85,7 @@ test_that("cleanClosure on R functions", {
   g <- function(x) { x + y }
   f <- function(x) {
     defUse <- base::as.integer(x) + 1  # Test for access operators `::`.
-    lapply(x, g) + 1  # Test for capturing function call "g"'s closure as a argument of lapply.
+    lapply(x, g) + 1  # Test for capturing function call "g"'s closure as an argument of lapply.
     l$field[1, 1] <- 3  # Test for access operators `$`.
     res <- defUse + l$field[1, ]  # Test for def-use chain of "defUse", and "" symbol.
     f(res)  # Test for recursive calls.

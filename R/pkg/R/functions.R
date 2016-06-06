@@ -93,7 +93,7 @@ setMethod("approxCountDistinct",
 #' ascii
 #'
 #' Computes the numeric value of the first character of the string column, and returns the
-#' result as a int column.
+#' result as an int column.
 #'
 #' @rdname ascii
 #' @name ascii
@@ -400,7 +400,7 @@ setMethod("crc32",
 
 #' hash
 #'
-#' Calculates the hash code of given columns, and returns the result as a int column.
+#' Calculates the hash code of given columns, and returns the result as an int column.
 #'
 #' @rdname hash
 #' @name hash
