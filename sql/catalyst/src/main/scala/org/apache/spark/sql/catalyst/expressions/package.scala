@@ -88,7 +88,7 @@ package object expressions  {
   /**
    * Helper functions for working with `Seq[Attribute]`.
    */
-  implicit class AttributeSeq(val attrs: Seq[Attribute]) {
+  implicit class AttributeSeq(val attrs: Seq[Attribute]) extends Serializable {
     /** Creates a StructType with a schema matching this `Seq[Attribute]`. */
     def toStructType: StructType = {
       StructType(attrs.map(a => StructField(a.name, a.dataType, a.nullable)))
