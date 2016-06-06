@@ -30,8 +30,7 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
     val paramValue = parameters.get(paramName)
     paramValue match {
       case None => default
-      case Some(null) => default
-      case Some(value) if value.length == 0 => '\u0000'
+      case Some(value) if value == null || value.length == 0 => '\u0000'
       case Some(value) if value.length == 1 => value.charAt(0)
       case _ => throw new RuntimeException(s"$paramName cannot be more than one character")
     }
@@ -52,12 +51,12 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
   }
 
   private def getBool(paramName: String, default: Boolean = false): Boolean = {
-    val param = parameters.getOrElse(paramName, default.toString)
-    if (param == null) {
+    val paramValue = parameters.getOrElse(paramName, default.toString)
+    if (paramValue == null) {
       default
-    } else if (param.toLowerCase == "true") {
+    } else if (paramValue.toLowerCase == "true") {
       true
-    } else if (param.toLowerCase == "false") {
+    } else if (paramValue.toLowerCase == "false") {
       false
     } else {
       throw new Exception(s"$paramName flag can be true or false")
