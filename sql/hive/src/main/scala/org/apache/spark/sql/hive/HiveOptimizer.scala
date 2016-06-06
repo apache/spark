@@ -67,13 +67,22 @@ case class PushProjectIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] {
       case p @Project(projectList, relation: MetastoreRelation) =>
         val projectSet = AttributeSet(projectList.flatMap(_.references))
         relation.requiredAttributes = projectSet.toSeq
-        relation
+        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet) {
+          relation
+        } else {
+          Project(projectList, relation)
+        }
 
       case p @Project(projectList, filter@Filter(condition, relation: MetastoreRelation)) =>
         val projectSet = AttributeSet(projectList.flatMap(_.references))
         val filterSet = AttributeSet(condition.flatMap(_.references))
         relation.requiredAttributes = (projectSet ++ filterSet).toSeq
-        filter
+        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
+          filterSet.subsetOf(projectSet)) {
+          filter
+        } else {
+          Project(projectList, filter)
+        }
     }
   }
 }
