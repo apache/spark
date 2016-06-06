@@ -25,9 +25,9 @@ library(SparkR)
 sc <- sparkR.init(appName="SparkR-ML-example")
 sqlContext <- sparkRSQL.init(sc)
 
-
-############################ spark.glm and glm ##############################################
 # $example on$
+############################ spark.glm and glm ##############################################
+
 irisDF <- suppressWarnings(createDataFrame(sqlContext, iris))
 # Fit a generalized linear model of family "gaussian" with spark.glm
 gaussianDF <- irisDF

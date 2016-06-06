@@ -287,24 +287,24 @@ head(teenagers)
 
 SparkR supports the following Machine Learning algorithms.
 
-* Generalized Linear Regression Model [spark.glm()](api/R/glm.html)
-* Naive Bayes [spark.naiveBayes()](api/R/naiveBayes.html)
-* KMeans [spark.kmeans()](api/R/kmeans.html)
-* AFT Survival Regression [spark.survreg()](api/R/survreg.html)
+* Generalized Linear Regression Model [spark.glm()](api/R/spark.glm.html)
+* Naive Bayes [spark.naiveBayes()](api/R/spark.naiveBayes.html)
+* KMeans [spark.kmeans()](api/R/spark.kmeans.html)
+* AFT Survival Regression [spark.survreg()](api/R/spark.survreg.html)
 
-Generalized Linear Regression can be used to train a model from a specified family. Currently the Gaussian, Binomial, Poisson and Gamma families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
+[Generalized Linear Regression](api/R/spark.glm.html) can be used to train a model from a specified family. Currently the Gaussian, Binomial, Poisson and Gamma families are supported. We support a subset of the available R formula operators for model fitting, including '~', '.', ':', '+', and '-'.
 
 The [summary()](api/R/summary.html) function gives the summary of a model produced by different algorithms listed above.
-This summary is same as the result of summary() function in R.
+It produces the similar result compared with R summary function.
 
 ## Model persistence
 
-* write.ml allows users to save a fitted model in a given input path
-* read.ml allows users to read/load the model which was saved using write.ml in a given path
+* [write.ml](api/R/write.ml.html) allows users to save a fitted model in a given input path
+* [read.ml](api/R/read.ml.html) allows users to read/load the model which was saved using write.ml in a given path
 
 Model persistence is supported for all Machine Learning algorithms for all families.
 
-The examples below show the use of building Gaussian GLM, NaiveBayes, kMeans and AFTSurvivalReg models using SparkR
+The examples below show the use of building glm with Gaussian family,glm with Binomial family, survreg, naiveBayes, kmeans models using SparkR
 
 {% include_example r/ml.R %}
 
