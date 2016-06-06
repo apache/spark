@@ -73,6 +73,12 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
   }
 
   @Test
+  public void testCliKillAndStatus() throws Exception {
+    testCLIOpts(parser.STATUS);
+    testCLIOpts(parser.KILL_SUBMISSION);
+  }
+
+  @Test
   public void testCliParser() throws Exception {
     List<String> sparkSubmitArgs = Arrays.asList(
       parser.MASTER,
@@ -324,6 +330,14 @@ public class SparkSubmitCommandBuilderSuite extends BaseSuite {
 
   private List<String> buildCommand(List<String> args, Map<String, String> env) throws Exception {
     return newCommandBuilder(args).buildCommand(env);
+  }
+
+  private void testCLIOpts(String opt) throws Exception {
+    List<String> helpArgs = Arrays.asList(opt, "driver-20160531171222-0000");
+    Map<String, String> env = new HashMap<>();
+    List<String> cmd = buildCommand(helpArgs, env);
+    assertTrue(opt + " should be contained in the final cmd.",
+      cmd.contains(opt));
   }
 
 }

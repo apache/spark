@@ -53,7 +53,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateTableAsSelect",
+      "CreateHiveTableAsSelect",
       "InsertIntoHiveTable",
       "Limit",
       "src")
@@ -71,7 +71,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       "== Analyzed Logical Plan ==",
       "== Optimized Logical Plan ==",
       "== Physical Plan ==",
-      "CreateTableAsSelect",
+      "CreateHiveTableAsSelect",
       "InsertIntoHiveTable",
       "Limit",
       "src")
@@ -92,7 +92,7 @@ class HiveExplainSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val shouldContain =
         "== Parsed Logical Plan ==" :: "== Analyzed Logical Plan ==" :: "Subquery" ::
         "== Optimized Logical Plan ==" :: "== Physical Plan ==" ::
-        "CreateTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
+        "CreateHiveTableAsSelect" :: "InsertIntoHiveTable" :: "jt" :: Nil
       for (key <- shouldContain) {
         assert(outputs.contains(key), s"$key doesn't exist in result")
       }

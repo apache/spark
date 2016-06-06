@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkConf, SparkContext, SparkException}
+import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.annotation.{DeveloperApi, Experimental}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
@@ -40,8 +40,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Range}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.ui.SQLListener
-import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState, SQLConf}
+import org.apache.spark.sql.internal.{CatalogImpl, SessionState, SharedState}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.streaming._
 import org.apache.spark.sql.types.{DataType, LongType, StructType}
 import org.apache.spark.sql.util.ExecutionListenerManager
 import org.apache.spark.util.Utils
@@ -182,7 +183,7 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this`.
+   * [[ContinuousQuery ContinuousQueries]] active on `this`.
    *
    * @group basic
    * @since 2.0.0
@@ -304,7 +305,7 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[JavaRDD]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -318,7 +319,7 @@ class SparkSession private(
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[java.util.List]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -364,7 +365,7 @@ class SparkSession private(
   }
 
   /**
-   * Applies a schema to an List of Java Beans.
+   * Applies a schema to a List of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
@@ -474,7 +475,7 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from 0 to `end` (exclusive) with step value 1.
+   * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    * @group dataset
@@ -485,7 +486,7 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with step value 1.
+   * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    * @group dataset
@@ -498,7 +499,7 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value.
+   * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
    * @group dataset
@@ -511,7 +512,7 @@ class SparkSession private(
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value, with partition number
+   * in a range from `start` to `end` (exclusive) with a step value, with partition number
    * specified.
    *
    * @since 2.0.0
@@ -556,9 +557,9 @@ class SparkSession private(
   }
 
 
-  /* ------------------------ *
-   |  Catalog-related methods |
-   * ----------------- ------ */
+  /* ------------------------- *
+   |  Catalog-related methods  |
+   * ------------------------- */
 
   /**
    * Interface through which the user may create, drop, alter or query underlying

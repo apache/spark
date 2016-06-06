@@ -924,7 +924,7 @@ object functions {
    * @since 1.5.0
    */
   def broadcast[T](df: Dataset[T]): Dataset[T] = {
-    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.unresolvedTEncoder)
+    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.exprEnc)
   }
 
   /**

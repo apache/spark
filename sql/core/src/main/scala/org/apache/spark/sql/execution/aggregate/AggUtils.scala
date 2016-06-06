@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateSto
 /**
  * Utility functions used by the query planner to convert our plan to new aggregation code path.
  */
-object Utils {
+object AggUtils {
 
   def planAggregateWithoutPartial(
       groupingExpressions: Seq[NamedExpression],
@@ -35,7 +35,7 @@ object Utils {
 
     val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
     val completeAggregateAttributes = completeAggregateExpressions.map(_.resultAttribute)
-    SortBasedAggregateExec(
+    SortAggregateExec(
       requiredChildDistributionExpressions = Some(groupingExpressions),
       groupingExpressions = groupingExpressions,
       aggregateExpressions = completeAggregateExpressions,
@@ -54,10 +54,10 @@ object Utils {
       initialInputBufferOffset: Int = 0,
       resultExpressions: Seq[NamedExpression] = Nil,
       child: SparkPlan): SparkPlan = {
-    val usesTungstenAggregate = TungstenAggregate.supportsAggregate(
+    val useHash = HashAggregateExec.supportsAggregate(
       aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes))
-    if (usesTungstenAggregate) {
-      TungstenAggregate(
+    if (useHash) {
+      HashAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
@@ -66,7 +66,7 @@ object Utils {
         resultExpressions = resultExpressions,
         child = child)
     } else {
-      SortBasedAggregateExec(
+      SortAggregateExec(
         requiredChildDistributionExpressions = requiredChildDistributionExpressions,
         groupingExpressions = groupingExpressions,
         aggregateExpressions = aggregateExpressions,
@@ -82,7 +82,7 @@ object Utils {
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
       child: SparkPlan): Seq[SparkPlan] = {
-    // Check if we can use TungstenAggregate.
+    // Check if we can use HashAggregate.
 
     // 1. Create an Aggregate Operator for partial aggregations.
 

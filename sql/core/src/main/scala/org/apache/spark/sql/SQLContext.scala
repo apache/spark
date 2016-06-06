@@ -30,13 +30,11 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.streaming.ContinuousQueryManager
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -372,7 +370,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[JavaRDD]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -386,7 +384,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[java.util.List]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -423,7 +421,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Applies a schema to an List of Java Beans.
+   * Applies a schema to a List of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
@@ -554,7 +552,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from 0 to `end` (exclusive) with step value 1.
+   * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    * @group dataset
@@ -565,7 +563,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with step value 1.
+   * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    * @group dataset
@@ -576,7 +574,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value.
+   * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
    * @group dataset
@@ -589,7 +587,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value, with partition number
+   * in a range from `start` to `end` (exclusive) with a step value, with partition number
    * specified.
    *
    * @since 2.0.0
@@ -645,7 +643,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this` context.
+   * [[org.apache.spark.sql.streaming.ContinuousQuery ContinuousQueries]] active on `this` context.
    *
    * @since 2.0.0
    */
