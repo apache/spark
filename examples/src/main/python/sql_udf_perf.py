@@ -44,6 +44,17 @@ def dataframe_scala_udf_word_count(df):
 
 
 def benchmark(textInputPath, repeat, number):
+    """
+    Benchmark wordcount on a provided text input path with a given number
+    of repeats each executed number times.
+
+    :param textInputPath: The input path to perform wordcount on.
+    :param repeat: Number of times to repeat the test
+    :param number: Number of iterations to perform the wordcount per test
+    """
+    def benchmark_func(func):
+        return timeit.repeat(func, repeat=repeat, number=number)
+
     print("Benchmarking wordcount:")
     tokenize = lambda x: x.split(" ")
     returnUDFType = ArrayType(StringType())
@@ -59,11 +70,17 @@ def benchmark(textInputPath, repeat, number):
     df.cache()
     df.count()
     print("DataFrame Python UDF:")
-    print(timeit.repeat(lambda: dataframe_udf_word_count(tokenizeUDF, df), repeat=repeat, number=number))
+    python_udf_test_lambda = lambda: dataframe_udf_word_count(tokenizeUDF, df)
+    python_udf_times = timeit.repeat(python_udf_test_lambda, repeat=repeat, number=number)
+    print(python_udf_times)
     print("DataFrame Jython UDF:")
-    print(timeit.repeat(lambda: dataframe_udf_word_count(tokenizeJythonUDF, df), repeat=repeat, number=number))
+    jython_udf_test_lambda = lambda: dataframe_udf_word_count(tokenizeJythonUDF, df)
+    jython_udf_times = timeit.repeat(jython_udf_test_lambda, repeat=repeat, number=number)
+    print(jython_udf_times)
     print("DataFrame Scala UDF:")
-    print(timeit.repeat(lambda: dataframe_scala_udf_word_count(df), repeat=repeat, number=number))
+    scala_udf_test_lambda = lambda: dataframe_scala_udf_word_count(df)
+    scala_udf_times = timeit.repeat(scala_udf_test_lambda, repeat=repeat, number=number)
+    print(scala_udf_times)
 
 
 if __name__ == "__main__":
