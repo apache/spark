@@ -261,7 +261,8 @@ setCheckpointDir <- function(sc, dirName) {
 #' @export
 #' @examples
 #'\dontrun{
-#' doubled <- spark.lapply(1:10, function(x){2 * x})
+#' sc <- sparkR.init()
+#' doubled <- spark.lapply(sc, 1:10, function(x){2 * x})
 #'}
 spark.lapply <- function(sc, list, func) {
   rdd <- parallelize(sc, list, length(list))

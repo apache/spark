@@ -238,9 +238,9 @@ setMethod("ceil",
             column(jc)
           })
 
-#' Though scala functions has "col" function, we don't expose it in SparkR
-#' because we don't want to conflict with the "col" function in the R base
-#' package and we also have "column" function exported which is an alias of "col".
+#' @rdname col
+#' @name column
+#' @export
 col <- function(x) {
   column(callJStatic("org.apache.spark.sql.functions", "col", x))
 }
@@ -248,6 +248,10 @@ col <- function(x) {
 #' column
 #'
 #' Returns a Column based on the given column name.
+#'
+#' Though scala functions has "col" function, we don't expose it in SparkR
+#' because we don't want to conflict with the "col" function in the R base
+#' package and we also have "column" function exported which is an alias of "col".
 #'
 #' @rdname col
 #' @name column

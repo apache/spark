@@ -629,8 +629,6 @@ setMethod("repartition",
 #'
 #' @param x A SparkDataFrame
 #' @return A StringRRDD of JSON objects
-#' @family SparkDataFrame functions
-#' @rdname tojson
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -648,7 +646,7 @@ setMethod("toJSON",
             RDD(jrdd, serializedMode = "string")
           })
 
-#' write.json
+#' Save the contents of DataFrame as a JSON file
 #'
 #' Save the contents of a SparkDataFrame as a JSON file (one object per line). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
@@ -675,7 +673,7 @@ setMethod("write.json",
             invisible(callJMethod(write, "json", path))
           })
 
-#' write.parquet
+#' Save the contents of DataFrame as a Parquet file, preserving the schema.
 #'
 #' Save the contents of a SparkDataFrame as a Parquet file, preserving the schema. Files written out
 #' with this method can be read back in as a SparkDataFrame using read.parquet().
@@ -713,7 +711,7 @@ setMethod("saveAsParquetFile",
             write.parquet(x, path)
           })
 
-#' write.text
+#' Save the content of DataFrame in a text file at the specified path.
 #'
 #' Saves the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
@@ -1080,8 +1078,6 @@ setMethod("first",
 #'
 #' @param x A SparkDataFrame
 #'
-#' @family SparkDataFrame functions
-#' @rdname tordd
 #' @noRd
 #' @examples
 #'\dontrun{
@@ -2187,7 +2183,7 @@ setMethod("except",
             dataFrame(excepted)
           })
 
-#' write.df
+#' Save the contents of DataFrame to a data source.
 #'
 #' Save the contents of the SparkDataFrame to a data source. The data source is specified by the
 #' `source` and a set of options (...). If `source` is not specified, the default data source
@@ -2524,13 +2520,14 @@ setMethod("attach",
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
 
+#' Evaluate an expression in an environment constructed from DataFrame
+#'
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
 #' with() allows access to columns of a SparkDataFrame by simply referring to
 #' their name. It appends every column of a SparkDataFrame into a new
 #' environment. Then, the given expression is evaluated in this new
 #' environment.
 #'
-#' @title with
 #' @rdname with
 #' @family SparkDataFrame functions
 #' @title Evaluate a R expression in an environment constructed from a SparkDataFrame
@@ -2784,7 +2781,7 @@ setMethod("histogram",
             return(histStats)
           })
 
-#' write.jdbc
+#' Save the content of DataFrame to an external database table via JDBC.
 #'
 #' Saves the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
 #' database connection properties can be set (...)

@@ -110,9 +110,11 @@ isRDD <- function(name, env) {
 #' @return the hash code as an integer
 #' @export
 #' @examples
+#'\dontrun{
 #' hashCode(1L) # 1
 #' hashCode(1.0) # 1072693248
 #' hashCode("1") # 49
+#'}
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])
