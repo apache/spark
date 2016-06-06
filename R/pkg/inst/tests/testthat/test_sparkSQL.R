@@ -1136,11 +1136,11 @@ test_that("string operators", {
   df <- read.json(jsonPath)
   expect_equal(count(where(df, like(df$name, "A%"))), 1)
   expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
+  expect_true(first(select(df, startsWith(df$name, "M")))[[1]])
+  expect_false(first(select(df, startsWith(df$name, "m")))[[1]])
+  expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
   if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
-    expect_true(first(select(df, startsWith(df$name, "M")))[[1]])
-    expect_false(first(select(df, startsWith(df$name, "m")))[[1]])
-    expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
     expect_true(startsWith("Hello World", "Hello"))
     expect_false(endsWith("Hello World", "a"))
   }
