@@ -2164,12 +2164,12 @@ test_that("gapply() on a DataFrame", {
   # Computes the arithmetic mean of the second column by grouping
   # on the first and third columns. Output the groupping value and the average.
   schema <-  structType(structField("a", "integer"), structField("c", "string"),
-    structField("avg", "double"))
+               structField("avg", "double"))
   df3 <- gapply(
     df,
     list("a", "c"),
     function(key, x) {
-      y <- (data.frame(key, mean(x$b), stringsAsFactors = FALSE))
+      y <- data.frame(key, mean(x$b), stringsAsFactors = FALSE)
     },
     schema)
   actual <- collect(df3)
@@ -2182,17 +2182,17 @@ test_that("gapply() on a DataFrame", {
   rownames(expected) <- NULL
   expect_identical(actual, expected)
 
-  df <- suppressWarnings(createDataFrame (sqlContext, iris))
+  irisDF <- suppressWarnings(createDataFrame (iris))
   schema <-  structType(structField("Sepal_Length", "double"), structField("Avg", "double"))
   # Groups by `Sepal_Length` and computes the average for `Sepal_Width`
-  df1 <- gapply(
+  df4 <- gapply(
     cols = list("Sepal_Length"),
-    df,
+    irisDF,
     function(key, x) {
-      data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)
+      y <- data.frame(key, mean(x$Sepal_Width), stringsAsFactors = FALSE)
     },
     schema)
-  actual <- collect(df1)
+  actual <- collect(df4)
   actual <- actual[order(actual$Sepal_Length), ]
   rownames(actual) <- NULL
   agg_local_df <- data.frame(aggregate(iris$Sepal.Width, by = list(iris$Sepal.Length), FUN = mean),
