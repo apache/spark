@@ -23,8 +23,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 /**
- * ::DeveloperApi::
-
+ * :: DeveloperApi ::
  * A function description type which can be recognized by FunctionRegistry, and will be used to
  * show the usage of the function in human language.
  *

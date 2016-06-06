@@ -126,6 +126,9 @@ class DecisionTreeClassifier @Since("1.4.0") (
   override def copy(extra: ParamMap): DecisionTreeClassifier = defaultCopy(extra)
 }
 
+/**
+ * :: Experimental ::
+ */
 @Since("1.4.0")
 @Experimental
 object DecisionTreeClassifier extends DefaultParamsReadable[DecisionTreeClassifier] {

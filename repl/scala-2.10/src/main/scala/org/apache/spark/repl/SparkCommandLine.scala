@@ -22,6 +22,7 @@ import scala.Predef._
 import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
  * Command class enabling Spark-specific command line options (provided by
  * <i>org.apache.spark.repl.SparkRunnerSettings</i>).
  *

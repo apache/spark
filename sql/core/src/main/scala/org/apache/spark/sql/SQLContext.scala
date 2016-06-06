@@ -91,6 +91,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   def newSession(): SQLContext = sparkSession.newSession().sqlContext
 
   /**
+   * :: Experimental ::
    * An interface to register custom [[org.apache.spark.sql.util.QueryExecutionListener]]s
    * that listen for execution metrics.
    */

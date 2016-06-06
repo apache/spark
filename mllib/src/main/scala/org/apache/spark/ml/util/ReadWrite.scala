@@ -68,6 +68,7 @@ private[util] sealed trait BaseReadWrite {
 }
 
 /**
+ * :: Experimental ::
  * Abstract class for utility classes that can save ML instances.
  */
 @Experimental
@@ -145,6 +146,7 @@ private[ml] trait DefaultParamsWritable extends MLWritable { self: Params =>
 }
 
 /**
+ * :: Experimental ::
  * Abstract class for utility classes that can load ML instances.
  *
  * @tparam T ML instance type
@@ -164,6 +166,7 @@ abstract class MLReader[T] extends BaseReadWrite {
 }
 
 /**
+ * :: Experimental ::
  * Trait for objects that provide [[MLReader]].
  *
  * @tparam T ML instance type

@@ -124,6 +124,9 @@ class DecisionTreeRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   override def copy(extra: ParamMap): DecisionTreeRegressor = defaultCopy(extra)
 }
 
+/**
+ * :: Experimental ::
+ */
 @Since("1.4.0")
 @Experimental
 object DecisionTreeRegressor extends DefaultParamsReadable[DecisionTreeRegressor] {

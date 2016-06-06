@@ -23,7 +23,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.serializer.Serializer
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  *
  * Implementation of this class can be plugged in as recovery mode alternative for Spark's
  * Standalone mode.

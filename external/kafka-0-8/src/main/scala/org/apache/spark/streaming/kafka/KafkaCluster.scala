@@ -363,6 +363,9 @@ class KafkaCluster(val kafkaParams: Map[String, String]) extends Serializable {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object KafkaCluster {
   type Err = ArrayBuffer[Throwable]

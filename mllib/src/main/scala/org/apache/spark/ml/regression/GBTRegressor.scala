@@ -134,6 +134,9 @@ class GBTRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   override def copy(extra: ParamMap): GBTRegressor = defaultCopy(extra)
 }
 
+/**
+ * :: Experimental ::
+ */
 @Since("1.4.0")
 @Experimental
 object GBTRegressor extends DefaultParamsReadable[GBTRegressor] {

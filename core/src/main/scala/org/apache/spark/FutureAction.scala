@@ -107,6 +107,7 @@ trait FutureAction[T] extends Future[T] {
 
 
 /**
+ * :: DeveloperApi ::
  * A [[FutureAction]] holding the result of an action that triggers a single job. Examples include
  * count, collect, reduce.
  */
@@ -149,6 +150,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
 
 
 /**
+ * :: DeveloperApi ::
  * Handle via which a "run" function passed to a [[ComplexFutureAction]]
  * can submit jobs for execution.
  */
@@ -169,6 +171,7 @@ trait JobSubmitter {
 
 
 /**
+ * :: DeveloperApi ::
  * A [[FutureAction]] for actions that could trigger multiple Spark jobs. Examples include take,
  * takeSample. Cancellation works by setting the cancelled flag to true and cancelling any pending
  * jobs.

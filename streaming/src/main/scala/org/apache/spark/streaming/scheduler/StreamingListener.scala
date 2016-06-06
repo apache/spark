@@ -29,31 +29,55 @@ import org.apache.spark.util.Distribution
 @DeveloperApi
 sealed trait StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerBatchSubmitted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerOutputOperationStarted(outputOperationInfo: OutputOperationInfo)
   extends StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerOutputOperationCompleted(outputOperationInfo: OutputOperationInfo)
   extends StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerReceiverStarted(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerReceiverError(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamingListenerReceiverStopped(receiverInfo: ReceiverInfo)
   extends StreamingListenerEvent

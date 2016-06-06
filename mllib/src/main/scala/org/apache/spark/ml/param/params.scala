@@ -951,6 +951,9 @@ final class ParamMap private[ml] (private val map: mutable.Map[Param[Any], Any])
   def size: Int = map.size
 }
 
+/**
+ * :: Experimental ::
+ */
 @Since("1.2.0")
 @Experimental
 object ParamMap {

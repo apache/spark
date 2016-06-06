@@ -37,6 +37,7 @@ import org.apache.spark.sql.execution.QueryExecution
 trait QueryExecutionListener {
 
   /**
+   * :: DeveloperApi ::
    * A callback function that will be called when a query executed successfully.
    * Note that this can be invoked by multiple different threads.
    *
@@ -49,6 +50,7 @@ trait QueryExecutionListener {
   def onSuccess(funcName: String, qe: QueryExecution, durationNs: Long): Unit
 
   /**
+   * :: DeveloperApi ::
    * A callback function that will be called when a query execution failed.
    * Note that this can be invoked by multiple different threads.
    *
@@ -71,6 +73,7 @@ trait QueryExecutionListener {
 class ExecutionListenerManager private[sql] () extends Logging {
 
   /**
+   * :: DeveloperApi ::
    * Registers the specified [[QueryExecutionListener]].
    */
   @DeveloperApi
@@ -79,6 +82,7 @@ class ExecutionListenerManager private[sql] () extends Logging {
   }
 
   /**
+   * :: DeveloperApi ::
    * Unregisters the specified [[QueryExecutionListener]].
    */
   @DeveloperApi
@@ -87,6 +91,7 @@ class ExecutionListenerManager private[sql] () extends Logging {
   }
 
   /**
+   * :: DeveloperApi ::
    * Removes all the registered [[QueryExecutionListener]].
    */
   @DeveloperApi

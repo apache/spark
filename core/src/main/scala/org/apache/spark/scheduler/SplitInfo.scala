@@ -21,8 +21,11 @@ import collection.mutable.ArrayBuffer
 
 import org.apache.spark.annotation.DeveloperApi
 
-// information about a specific split instance : handles both split instances.
-// So that we do not need to worry about the differences.
+/**
+ * :: DeveloperApi ::
+ * information about a specific split instance : handles both split instances.
+ * So that we do not need to worry about the differences.
+ */
 @DeveloperApi
 class SplitInfo(
     val inputFormatClazz: Class[_],

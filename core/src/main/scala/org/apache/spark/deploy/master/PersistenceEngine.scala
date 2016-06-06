@@ -23,6 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rpc.RpcEnv
 
 /**
+ * :: DeveloperApi ::
  * Allows Master to persist any state that is necessary in order to recover from a failure.
  * The following semantics are required:
  *   - addApplication and addWorker are called before completing registration of a new app/worker.

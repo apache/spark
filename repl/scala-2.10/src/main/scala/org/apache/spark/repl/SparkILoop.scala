@@ -46,7 +46,9 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
-/** The Scala interactive shell.  It provides a read-eval-print loop
+/**
+ * :: DeveloperApi ::
+ *  The Scala interactive shell.  It provides a read-eval-print loop
  *  around the Interpreter class.
  *  After instantiation, clients should call the main() method.
  *
@@ -126,7 +128,10 @@ class SparkILoop(
     }
   }
 
-  // NOTE: Must be public for visibility
+  /**
+   * :: DeveloperApi ::
+   *  NOTE: Must be public for visibility
+   */
   @DeveloperApi
   var sparkContext: SparkContext = _
 
@@ -312,6 +317,7 @@ class SparkILoop(
   private var currentPrompt = Properties.shellPromptString
 
   /**
+   * :: DeveloperApi ::
    * Sets the prompt string used by the REPL.
    *
    * @param prompt The new prompt string
@@ -320,6 +326,7 @@ class SparkILoop(
   def setPrompt(prompt: String) = currentPrompt = prompt
 
   /**
+   * :: DeveloperApi ::
    * Represents the current prompt string used by the REPL.
    *
    * @return The current prompt string
@@ -603,6 +610,7 @@ class SparkILoop(
   // }
 
   /**
+   * :: DeveloperApi ::
    * Provides a list of available commands.
    *
    * @return The list of commands
@@ -1001,7 +1009,10 @@ class SparkILoop(
     true
   }
 
-  // NOTE: Must be public for visibility
+  /**
+   * :: DeveloperApi ::
+   * NOTE: Must be public for visibility
+   */
   @DeveloperApi
   def createSparkSession(): SparkSession = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")

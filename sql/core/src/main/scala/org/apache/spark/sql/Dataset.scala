@@ -453,6 +453,7 @@ class Dataset[T] private[sql](
   def isLocal: Boolean = logicalPlan.isInstanceOf[LocalRelation]
 
   /**
+   * :: Experimental ::
    * Returns true if this [[Dataset]] contains one or more sources that continuously
    * return data as it arrives. A [[Dataset]] that reads data from a streaming source
    * must be executed as a [[ContinuousQuery]] using the `startStream()` method in

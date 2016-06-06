@@ -123,6 +123,9 @@ class RandomForestClassifier @Since("1.4.0") (
   override def copy(extra: ParamMap): RandomForestClassifier = defaultCopy(extra)
 }
 
+/**
+ * :: Experimental ::
+ */
 @Since("1.4.0")
 @Experimental
 object RandomForestClassifier extends DefaultParamsReadable[RandomForestClassifier] {

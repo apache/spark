@@ -23,7 +23,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.Partition
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * A PartitionCoalescer defines how to coalesce the partitions of a given RDD.
  */
 @DeveloperApi
@@ -41,7 +41,7 @@ trait PartitionCoalescer {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * A group of [[Partition]]s
  * @param prefLoc preferred location for the partition group
  */

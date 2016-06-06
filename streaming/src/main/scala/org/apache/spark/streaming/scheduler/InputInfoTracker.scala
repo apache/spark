@@ -41,6 +41,9 @@ case class StreamInputInfo(
     metadata.get(StreamInputInfo.METADATA_KEY_DESCRIPTION).map(_.toString)
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object StreamInputInfo {
 

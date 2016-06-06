@@ -27,7 +27,7 @@ import org.apache.spark.sql.streaming.OutputMode
 import org.apache.spark.sql.types.StructType
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * Data sources should implement this trait so that they can register an alias to their data source.
  * This allows users to give the data source alias as the format type over the fully qualified
  * class name.
@@ -53,7 +53,7 @@ trait DataSourceRegister {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * Implemented by objects that produce relations for a specific kind of data source.  When
  * Spark SQL is given a DDL operation with a USING clause specified (to specify the implemented
  * RelationProvider), this interface is used to pass in the parameters specified by a user.
@@ -78,7 +78,7 @@ trait RelationProvider {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * Implemented by objects that produce relations for a specific kind of data source
  * with a given schema.  When Spark SQL is given a DDL operation with a USING clause specified (
  * to specify the implemented SchemaRelationProvider) and a user defined schema, this interface
@@ -143,6 +143,7 @@ trait StreamSinkProvider {
 }
 
 /**
+ * :: DeveloperApi ::
  * @since 1.3.0
  */
 @DeveloperApi
@@ -169,7 +170,7 @@ trait CreatableRelationProvider {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * Represents a collection of tuples with a known schema. Classes that extend BaseRelation must
  * be able to produce the schema of their data in the form of a [[StructType]]. Concrete
  * implementation should inherit from one of the descendant `Scan` classes, which define various
@@ -227,7 +228,7 @@ abstract class BaseRelation {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * A BaseRelation that can produce all of its tuples as an RDD of Row objects.
  *
  * @since 1.3.0
@@ -238,7 +239,7 @@ trait TableScan {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * A BaseRelation that can eliminate unneeded columns before producing an RDD
  * containing all of its tuples as Row objects.
  *
@@ -250,7 +251,7 @@ trait PrunedScan {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * A BaseRelation that can eliminate unneeded columns and filter using selected
  * predicates before producing an RDD containing all matching tuples as Row objects.
  *
@@ -269,7 +270,7 @@ trait PrunedFilteredScan {
 }
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * A BaseRelation that can be used to insert data into it through the insert method.
  * If overwrite in insert method is true, the old data in the relation should be overwritten with
  * the new data. If overwrite in insert method is false, the new data should be appended.
@@ -292,7 +293,7 @@ trait InsertableRelation {
 }
 
 /**
- * ::Experimental::
+ * :: Experimental ::
  * An interface for experimenting with a more direct connection to the query planner.  Compared to
  * [[PrunedFilteredScan]], this operator receives the raw expressions from the
  * [[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan]].  Unlike the other APIs this

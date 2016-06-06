@@ -168,11 +168,14 @@ abstract class TaskContext extends Serializable {
    */
   def getLocalProperty(key: String): String
 
+  /**
+   * :: DeveloperApi ::
+   */
   @DeveloperApi
   def taskMetrics(): TaskMetrics
 
   /**
-   * ::DeveloperApi::
+   * :: DeveloperApi ::
    * Returns all metrics sources with the given name which are associated with the instance
    * which runs the task. For more information see [[org.apache.spark.metrics.MetricsSystem!]].
    */

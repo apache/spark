@@ -526,8 +526,6 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * :: DeveloperApi ::
-   *
    * Return the current state of the context. The context can be in three possible states -
    * <ul>
    *   <li>

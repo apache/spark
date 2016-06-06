@@ -24,6 +24,7 @@ import org.apache.spark.sql.functions
 import org.apache.spark.sql.types.DataType
 
 /**
+ * :: Experimental ::
  * A user-defined function. To create one, use the `udf` functions in [[functions]].
  * Note that the user-defined functions must be deterministic. Due to optimization,
  * duplicate invocations may be eliminated or the function may even be invoked more times than

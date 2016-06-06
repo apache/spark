@@ -26,6 +26,9 @@ import org.apache.spark.annotation.DeveloperApi
 @DeveloperApi
 sealed trait JobResult
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case object JobSucceeded extends JobResult
 

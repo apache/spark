@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
 /**
- * ::Experimental::
+ * :: Experimental ::
  * A factory that produces [[OutputWriter]]s.  A new [[OutputWriterFactory]] is created on driver
  * side for each write job issued when writing to a [[HadoopFsRelation]], and then gets serialized
  * to executor side to create actual [[OutputWriter]]s on the fly.
@@ -82,7 +82,7 @@ abstract class OutputWriterFactory extends Serializable {
 }
 
 /**
- * ::Experimental::
+ * :: Experimental ::
  * [[OutputWriter]] is used together with [[HadoopFsRelation]] for persisting rows to the
  * underlying file system.  Subclasses of [[OutputWriter]] must provide a zero-argument constructor.
  * An [[OutputWriter]] instance is created and initialized when a new output file is opened on

@@ -48,38 +48,59 @@ sealed abstract class BlockId {
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   override def name: String = "rdd_" + rddId + "_" + splitIndex
 }
 
-// Format of the shuffle block ids (including data and index) should be kept in sync with
-// org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
+/**
+ * :: DeveloperApi ::
+ * Format of the shuffle block ids (including data and index) should be kept in sync with
+ * org.apache.spark.network.shuffle.ExternalShuffleBlockResolver#getBlockData().
+ */
 @DeveloperApi
 case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class ShuffleDataBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".data"
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class ShuffleIndexBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   override def name: String = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId + ".index"
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class BroadcastBlockId(broadcastId: Long, field: String = "") extends BlockId {
   override def name: String = "broadcast_" + broadcastId + (if (field == "") "" else "_" + field)
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class TaskResultBlockId(taskId: Long) extends BlockId {
   override def name: String = "taskresult_" + taskId
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   override def name: String = "input-" + streamId + "-" + uniqueId
@@ -100,6 +121,9 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
   override def name: String = "test_" + id
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
