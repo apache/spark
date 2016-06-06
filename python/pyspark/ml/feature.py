@@ -2516,7 +2516,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     +---+---+---+---------+-----+
     ...
     >>> str(loadedModel)
-    'RFormulaModel(ResolvedRFormula(...)) (uid=...)'
+    'RFormulaModel(ResolvedRFormula(label=y, terms=[x,s], hasIntercept=true)) (uid=...)'
 
     .. versionadded:: 1.5.0
     """
@@ -2562,7 +2562,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
         return RFormulaModel(java_model)
 
     def __str__(self):
-        formulaStr = self.getFormula() if self.isDefined(self.formula) else None
+        formulaStr = self.getFormula() if self.isDefined(self.formula) else ""
         return "RFormula(%s) (uid=%s)" % (formulaStr, self.uid)
 
 
