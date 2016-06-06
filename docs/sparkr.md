@@ -262,6 +262,67 @@ head(df)
 {% endhighlight %}
 </div>
 
+### Applying User-defined Function
+
+#### dapply
+Apply a function to each partition of `SparkDataFrame`. The function to be applied to each partition of the `SparkDataFrame` and should have only one parameter, to which a `data.frame` corresponds to each partition will be passed. The output of function should be a `data.frame`.
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Convert waiting time from hours to seconds.
+# Note that we can apply UDF to DataFrame.
+
+df1 <- dapply(df, function(x) {x}, schema(df))
+head(collect(df1), 3)
+##  eruptions waiting waiting_secs
+##1     3.600      79         4740
+##2     1.800      54         3240
+##3     3.333      74         4440
+
+{% endhighlight %}
+</div>
+
+#### dapplyCollect
+Like `dapply`, apply a function to each partition of `SparkDataFrame` and collect the result back.
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Convert waiting time from hours to seconds.
+# Note that we can apply UDF to DataFrame.
+ldf <- dapplyCollect(
+         df,
+         function(x) {
+           x <- cbind(x, "waiting_secs"=x$waiting * 60)
+         })
+head(df, 3)
+##  eruptions waiting waiting_secs
+##1     3.600      79         4740
+##2     1.800      54         3240
+##3     3.333      74         4440
+
+{% endhighlight %}
+</div>
+
+#### lapply
+Similar to `lapply` in native R, `spark.lapply` runs a function over a list of elements and distributes the computations with Spark.
+Applies a function in a manner that is similar to `doParallel` or `lapply` to elements of a list.
+<div data-lang="r"  markdown="1">
+{% highlight r %}
+
+# Perform distributed training of multiple models with spark.lapply
+families <- c("gaussian", "poisson")
+train <- function(family) {
+  model <- glm(Sepal.Length ~ Sepal.Width + Species, iris, family = family)
+  summary(model)
+}
+model.summaries <- spark.lapply(sc, families, train)
+
+# Print the summary of each model
+print(model.summaries)
+
+{% endhighlight %}
+</div>
+
 ## Running SQL Queries from SparkR
 A SparkR DataFrame can also be registered as a temporary table in Spark SQL and registering a DataFrame as a table allows you to run SQL queries over its data.
 The `sql` function enables applications to run SQL queries programmatically and returns the result as a `DataFrame`.
