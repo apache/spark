@@ -21,10 +21,11 @@ import java.math.BigDecimal
 import java.sql.{Connection, Date, Timestamp}
 import java.util.Properties
 
+import org.scalatest.Ignore
+
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.types.{BooleanType, ByteType, ShortType, StructType}
 import org.apache.spark.tags.DockerTest
-import org.scalatest.Ignore
 
 
 @DockerTest
@@ -49,10 +50,12 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     conn.prepareStatement("INSERT INTO tbl VALUES (17,'dave')").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE numbers ( small SMALLINT, med INTEGER, big BIGINT, "
-      + "deci DECIMAL(31,20), flt FLOAT, dbl DOUBLE, real REAL, decflt DECFLOAT)").executeUpdate()
+      + "deci DECIMAL(31,20), flt FLOAT, dbl DOUBLE, real REAL, "
+      + "decflt DECFLOAT, decflt16 DECFLOAT(16), decflt34 DECFLOAT(34))").executeUpdate()
     conn.prepareStatement("INSERT INTO numbers VALUES (17, 77777, 922337203685477580, "
       + "123456745.56789012345000000000, 42.75, 5.4E-70, "
-      + "3.4028234663852886e+38, 4.2999)").executeUpdate()
+      + "3.4028234663852886e+38, 4.2999, DECFLOAT('9.999999999999999E19', 16), "
+      + "DECFLOAT('1234567891234567.123456789123456789', 34))").executeUpdate()
 
     conn.prepareStatement("CREATE TABLE dates (d DATE, t TIME, ts TIMESTAMP )").executeUpdate()
     conn.prepareStatement("INSERT INTO dates VALUES ('1991-11-09', '13:31:24', "
@@ -80,7 +83,7 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     val rows = df.collect()
     assert(rows.length == 1)
     val types = rows(0).toSeq.map(x => x.getClass.toString)
-    assert(types.length == 8)
+    assert(types.length == 10)
     assert(types(0).equals("class java.lang.Integer"))
     assert(types(1).equals("class java.lang.Integer"))
     assert(types(2).equals("class java.lang.Long"))
@@ -89,7 +92,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(types(5).equals("class java.lang.Double"))
     assert(types(6).equals("class java.lang.Float"))
     assert(types(7).equals("class java.math.BigDecimal"))
-
+    assert(types(8).equals("class java.math.BigDecimal"))
+    assert(types(9).equals("class java.math.BigDecimal"))
     assert(rows(0).getInt(0) == 17)
     assert(rows(0).getInt(1) == 77777)
     assert(rows(0).getLong(2) == 922337203685477580L)
@@ -99,6 +103,8 @@ class DB2IntegrationSuite extends DockerJDBCIntegrationSuite {
     assert(rows(0).getDouble(5) == 5.4E-70)
     assert(rows(0).getFloat(6) == 3.4028234663852886e+38)
     assert(rows(0).getDecimal(7) == new BigDecimal("4.299900000000000000"))
+    assert(rows(0).getDecimal(8) == new BigDecimal("99999999999999990000.000000000000000000"))
+    assert(rows(0).getDecimal(9) == new BigDecimal("1234567891234567.123456789123456789"))
   }
 
   test("Date types") {
