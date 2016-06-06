@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.ui
 
+import java.text.NumberFormat
+
 import scala.collection.mutable
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
@@ -40,6 +42,10 @@ case class SparkListenerSQLExecutionStart(
 
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
+  extends SparkListenerEvent
+
+@DeveloperApi
+case class SparkListenerDriverAccumUpdates(executionId: Long, accumUpdates: Seq[(Long, Long)])
   extends SparkListenerEvent
 
 private[sql] class SQLHistoryListenerFactory extends SparkHistoryListenerFactory {
@@ -225,7 +231,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
       val sqlPlanMetrics = physicalPlanGraph.allNodes.flatMap { node =>
         node.metrics.map(metric => metric.accumulatorId -> metric)
       }
-      val executionUIData = new SQLExecutionUIData(
+      val executionUIData = SQLExecutionUIData(
         executionId,
         description,
         details,
@@ -248,6 +254,13 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
           // There are some running jobs, onExecutionEnd happens before some "onJobEnd"s.
           // Then we don't if the execution is successful, so let the last onJobEnd updates the
           // execution lists.
+        }
+      }
+    }
+    case SparkListenerDriverAccumUpdates(executionId, accumUpdates) => synchronized {
+      _executionIdToData.get(executionId).foreach { executionUIData =>
+        for ((accId, accValue) <- accumUpdates) {
+          executionUIData.driverAccumUpdates(accId) = accValue
         }
       }
     }
@@ -296,8 +309,11 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
             (accumulatorUpdate._1, accumulatorUpdate._2)
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
+
+        val formatter = NumberFormat.getInstance()
+        val driverUpdates = executionUIData.driverAccumUpdates.mapValues(formatter.format)
         mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
-          executionUIData.accumulatorMetrics(accumulatorId).metricType)
+          executionUIData.accumulatorMetrics(accumulatorId).metricType) ++ driverUpdates
       case None =>
         // This execution has been dropped
         Map.empty
@@ -361,17 +377,22 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
 /**
  * Represent all necessary data for an execution that will be used in Web UI.
  */
-private[ui] class SQLExecutionUIData(
-    val executionId: Long,
-    val description: String,
-    val details: String,
-    val physicalPlanDescription: String,
-    val physicalPlanGraph: SparkPlanGraph,
-    val accumulatorMetrics: Map[Long, SQLPlanMetric],
-    val submissionTime: Long,
-    var completionTime: Option[Long] = None,
-    val jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty,
-    val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()) {
+private[ui] case class SQLExecutionUIData(
+    executionId: Long,
+    description: String,
+    details: String,
+    physicalPlanDescription: String,
+    physicalPlanGraph: SparkPlanGraph,
+    accumulatorMetrics: Map[Long, SQLPlanMetric],
+    submissionTime: Long) {
+
+  var completionTime: Option[Long] = None
+
+  val jobs: mutable.HashMap[Long, JobExecutionStatus] = mutable.HashMap.empty
+
+  val stages: mutable.ArrayBuffer[Int] = mutable.ArrayBuffer()
+
+  val driverAccumUpdates: mutable.HashMap[Long, Long] = mutable.HashMap.empty
 
   /**
    * Return whether there are running jobs in this execution.

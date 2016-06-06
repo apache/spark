@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.plans.physical.{BroadcastMode, BroadcastPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{SparkPlan, SQLExecution}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.sql.execution.ui.SparkListenerDriverAccumUpdates
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -92,6 +93,10 @@ case class BroadcastExchangeExec(
 
         val broadcasted = sparkContext.broadcast(relation)
         longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
+
+        sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
+          executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
+
         broadcasted
       }
     }(BroadcastExchangeExec.executionContext)
