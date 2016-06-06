@@ -58,7 +58,7 @@ class MutableUnsafeRow(val writer: UnsafeRowWriter) extends GenericMutableRow(nu
 }
 
 /**
- * Generates bytecode for an [[ColumnarIterator]] for columnar cache.
+ * Generates bytecode for a [[ColumnarIterator]] for columnar cache.
  */
 object GenerateColumnAccessor extends CodeGenerator[Seq[DataType], ColumnarIterator] with Logging {
 

@@ -26,7 +26,10 @@ import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistrib
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
-case class SortBasedAggregateExec(
+/**
+ * Sort-based aggregate operator.
+ */
+case class SortAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
@@ -106,6 +109,6 @@ case class SortBasedAggregateExec(
     val keyString = groupingExpressions.mkString("[", ",", "]")
     val functionString = allAggregateExpressions.mkString("[", ",", "]")
     val outputString = output.mkString("[", ",", "]")
-    s"SortBasedAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+    s"SortAggregate(key=$keyString, functions=$functionString, output=$outputString)"
   }
 }

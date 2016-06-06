@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.sql.AnalysisException
 
-/** An trait that represents the type of a resourced needed by a function. */
+/** A trait that represents the type of a resourced needed by a function. */
 abstract class FunctionResourceType(val resourceType: String)
 
 object JarResource extends FunctionResourceType("jar")

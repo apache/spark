@@ -293,8 +293,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
-   * <li>`allowNonNumericNumbers` (default `true`): allows using non-numeric numbers such as "NaN",
-   * "Infinity", "-Infinity", "INF", "-INF", which are convertd to floating point numbers.</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
@@ -316,7 +314,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
-   * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
+   * Loads a `JavaRDD[String]` storing JSON objects (one object per record) and
    * returns the result as a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the

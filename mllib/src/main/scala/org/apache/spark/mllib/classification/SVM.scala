@@ -44,7 +44,7 @@ class SVMModel @Since("1.1.0") (
 
   /**
    * Sets the threshold that separates positive predictions from negative predictions. An example
-   * with prediction score greater than or equal to this threshold is identified as an positive,
+   * with prediction score greater than or equal to this threshold is identified as a positive,
    * and negative otherwise. The default value is 0.0.
    */
   @Since("1.0.0")

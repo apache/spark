@@ -1050,7 +1050,7 @@ def _need_converter(dataType):
 
 
 def _create_converter(dataType):
-    """Create an converter to drop the names of fields in obj """
+    """Create a converter to drop the names of fields in obj """
     if not _need_converter(dataType):
         return lambda x: x
 

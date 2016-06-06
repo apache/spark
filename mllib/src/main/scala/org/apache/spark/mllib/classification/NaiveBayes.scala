@@ -193,7 +193,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         modelType: String)
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -207,7 +207,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 
     @Since("1.3.0")
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       // Load Parquet data.
       val dataRDD = spark.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
@@ -238,7 +238,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         theta: Array[Array[Double]])
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -251,7 +251,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
     }
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       // Load Parquet data.
       val dataRDD = spark.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.

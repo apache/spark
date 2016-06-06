@@ -15,20 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.{Offset, Sink}
+import org.apache.spark.sql.execution.streaming.{Offset, Source}
 
 /**
  * :: Experimental ::
- * Status and metrics of a streaming [[Sink]].
+ * Status and metrics of a streaming [[Source]].
  *
- * @param description Description of the source corresponding to this status
- * @param offset      Current offset up to which data has been written by the sink
+ * @param description     Description of the source corresponding to this status
+ * @param offset          Current offset of the source, if known
  * @since 2.0.0
  */
 @Experimental
-class SinkStatus private[sql](
+class SourceStatus private[sql] (
     val description: String,
-    val offset: Offset)
+    val offset: Option[Offset])
