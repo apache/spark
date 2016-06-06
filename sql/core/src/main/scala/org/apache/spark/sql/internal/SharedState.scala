@@ -52,7 +52,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) {
     org.apache.spark.util.Utils.getContextOrSparkClassLoader)
 
   /**
-   * Create a SQLListener then add it into SparkContext, and create an SQLTab if there is SparkUI.
+   * Create a SQLListener then add it into SparkContext, and create a SQLTab if there is SparkUI.
    */
   private def createListenerAndUI(sc: SparkContext): SQLListener = {
     if (SparkSession.sqlListener.get() == null) {

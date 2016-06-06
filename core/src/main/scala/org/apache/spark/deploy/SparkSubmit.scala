@@ -408,12 +408,12 @@ object SparkSubmit {
       printErrorAndExit("SparkR is not supported for Mesos cluster.")
     }
 
-    // If we're running a R app, set the main class to our specific R runner
+    // If we're running an R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
         args.mainClass = "org.apache.spark.api.r.RBackend"
       } else {
-        // If a R file is provided, add it to the child arguments and list of files to deploy.
+        // If an R file is provided, add it to the child arguments and list of files to deploy.
         // Usage: RRunner <main R file> [app arguments]
         args.mainClass = "org.apache.spark.deploy.RRunner"
         args.childArgs = ArrayBuffer(args.primaryResource) ++ args.childArgs
@@ -422,7 +422,7 @@ object SparkSubmit {
     }
 
     if (isYarnCluster && args.isR) {
-      // In yarn-cluster mode for a R app, add primary resource to files
+      // In yarn-cluster mode for an R app, add primary resource to files
       // that can be distributed with the job
       args.files = mergeFileLists(args.files, args.primaryResource)
     }

@@ -300,7 +300,7 @@ trait Row extends Serializable {
     getMap[K, V](i).asJava
 
   /**
-   * Returns the value at position i of struct type as an [[Row]] object.
+   * Returns the value at position i of struct type as a [[Row]] object.
    *
    * @throws ClassCastException when data type does not match.
    */
