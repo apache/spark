@@ -191,7 +191,7 @@ class LogisticRegression(JavaEstimator, HasFeaturesCol, HasLabelCol, HasPredicti
         If :py:attr:`thresholds` is set, return its value.
         Otherwise, if :py:attr:`threshold` is set, return the equivalent thresholds for binary
         classification: (1-threshold, threshold).
-        If neither are set, return the default value.
+        If neither are set, throw an error.
         """
         self._checkThresholdConsistency()
         if not self.isSet(self.thresholds) and self.isSet(self.threshold):
