@@ -20,6 +20,7 @@ package org.apache.spark.shuffle
 import org.apache.spark.annotation.DeveloperApi
 
 /**
+ * :: DeveloperApi ::
  * An opaque handle to a shuffle, used by a ShuffleManager to pass information about it to tasks.
  *
  * @param shuffleId ID of the shuffle

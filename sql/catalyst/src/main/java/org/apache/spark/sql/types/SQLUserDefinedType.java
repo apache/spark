@@ -22,7 +22,7 @@ import java.lang.annotation.*;
 import org.apache.spark.annotation.DeveloperApi;
 
 /**
- * ::DeveloperApi::
+ * :: DeveloperApi ::
  * A user-defined type which can be automatically recognized by a SQLContext and registered.
  * WARNING: UDTs are currently only supported from Scala.
  */

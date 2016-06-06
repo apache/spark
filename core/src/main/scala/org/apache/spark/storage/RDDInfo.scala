@@ -21,6 +21,9 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.rdd.{RDD, RDDOperationScope}
 import org.apache.spark.util.Utils
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 class RDDInfo(
     val id: Int,

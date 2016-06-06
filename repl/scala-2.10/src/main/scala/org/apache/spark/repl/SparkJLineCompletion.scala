@@ -19,6 +19,7 @@ import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
 
 /**
+ * :: DeveloperApi ::
  * Represents an auto-completion tool for the supplied interpreter that
  * utilizes supplied queries for valid completions based on the current
  * contents of the internal buffer.
@@ -39,12 +40,14 @@ class SparkJLineCompletion(val intp: SparkIMain) extends Completion with Complet
   import intp.{ debugging }
 
   /**
+   * :: DeveloperApi ::
    * Represents the level of verbosity. Increments with consecutive tabs.
    */
   @DeveloperApi
   var verbosity: Int = 0
 
   /**
+   * :: DeveloperApi ::
    * Resets the level of verbosity to zero.
    */
   @DeveloperApi
@@ -310,6 +313,7 @@ class SparkJLineCompletion(val intp: SparkIMain) extends Completion with Complet
     topLevelFor(Parsed.dotted(buf + ".", buf.length + 1))
 
   /**
+   * :: DeveloperApi ::
    * Constructs a new ScalaCompleter for auto completion.
    *
    * @return The new JLineTabCompletion instance

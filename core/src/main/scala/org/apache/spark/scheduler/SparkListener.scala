@@ -31,6 +31,9 @@ import org.apache.spark.scheduler.cluster.ExecutorInfo
 import org.apache.spark.storage.{BlockManagerId, BlockUpdatedInfo}
 import org.apache.spark.ui.SparkUI
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY, property = "Event")
 trait SparkListenerEvent {
@@ -38,20 +41,35 @@ trait SparkListenerEvent {
   protected[spark] def logEvent: Boolean = true
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerTaskStart(stageId: Int, stageAttemptId: Int, taskInfo: TaskInfo)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerTaskEnd(
     stageId: Int,
@@ -63,6 +81,9 @@ case class SparkListenerTaskEnd(
     @Nullable taskMetrics: TaskMetrics)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerJobStart(
     jobId: Int,
@@ -75,6 +96,9 @@ case class SparkListenerJobStart(
   val stageIds: Seq[Int] = stageInfos.map(_.stageId)
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerJobEnd(
     jobId: Int,
@@ -82,33 +106,55 @@ case class SparkListenerJobEnd(
     jobResult: JobResult)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerBlockManagerAdded(time: Long, blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerBlockManagerRemoved(time: Long, blockManagerId: BlockManagerId)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerExecutorAdded(time: Long, executorId: String, executorInfo: ExecutorInfo)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerExecutorRemoved(time: Long, executorId: String, reason: String)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerBlockUpdated(blockUpdatedInfo: BlockUpdatedInfo) extends SparkListenerEvent
 
 /**
+ * :: DeveloperApi ::
  * Periodic updates from executors.
  * @param execId executor id
  * @param accumUpdates sequence of (taskId, stageId, stageAttemptId, accumUpdates)
@@ -119,6 +165,9 @@ case class SparkListenerExecutorMetricsUpdate(
     accumUpdates: Seq[(Long, Int, Int, Seq[AccumulableInfo])])
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerApplicationStart(
     appName: String,
@@ -128,6 +177,9 @@ case class SparkListenerApplicationStart(
     appAttemptId: Option[String],
     driverLogs: Option[Map[String, String]] = None) extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerApplicationEnd(time: Long) extends SparkListenerEvent
 

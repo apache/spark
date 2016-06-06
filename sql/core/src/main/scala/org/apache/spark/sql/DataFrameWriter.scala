@@ -84,6 +84,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * :: Experimental ::
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
    *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
    *                            written to the sink
@@ -100,6 +101,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   }
 
   /**
+   * :: Experimental ::
    * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
    *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
    *                 the sink

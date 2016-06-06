@@ -234,7 +234,10 @@ class NewHadoopRDD[K, V](
     new InterruptibleIterator(context, iter)
   }
 
-  /** Maps over a partition, providing the InputSplit that was used as the base of the partition. */
+  /**
+   * :: DeveloperApi ::
+   * Maps over a partition, providing the InputSplit that was used as the base of the partition.
+   */
   @DeveloperApi
   def mapPartitionsWithInputSplit[U: ClassTag](
       f: (InputSplit, Iterator[(K, V)]) => Iterator[U],

@@ -2567,6 +2567,7 @@ object functions {
   }
 
   /**
+   * :: Experimental ::
    * Bucketize rows into one or more time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
@@ -2621,6 +2622,7 @@ object functions {
 
 
   /**
+   * :: Experimental ::
    * Bucketize rows into one or more time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in
@@ -2663,6 +2665,7 @@ object functions {
   }
 
   /**
+   * :: Experimental ::
    * Generates tumbling time windows given a timestamp specifying column. Window
    * starts are inclusive but the window ends are exclusive, e.g. 12:05 will be in the window
    * [12:05,12:10) but not in [12:00,12:05). Windows can support microsecond precision. Windows in

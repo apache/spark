@@ -68,7 +68,9 @@ class PartitionPruningRDD[T: ClassTag](
     dependencies.head.asInstanceOf[PruneDependency[T]].partitions
 }
 
-
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object PartitionPruningRDD {
 

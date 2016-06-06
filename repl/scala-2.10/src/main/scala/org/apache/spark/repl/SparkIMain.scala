@@ -54,7 +54,9 @@ import org.apache.spark.annotation.DeveloperApi
 //   def show() = pp(this, 0)
 // }
 
-  /** An interpreter for Scala code.
+  /**
+   * :: DeveloperApi ::
+   *  An interpreter for Scala code.
    *
    *  The main public entry points are compile(), interpret(), and bind().
    *  The compile() method loads a complete Scala file.  The interpret() method
@@ -106,6 +108,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /**
+     * :: DeveloperApi ::
      * Returns the path to the output directory containing all generated
      * class files that will be served by the REPL class server.
      */
@@ -178,6 +181,7 @@ import org.apache.spark.annotation.DeveloperApi
     private[repl] lazy val reporter: ConsoleReporter = new SparkIMain.ReplReporter(this)
 
     /**
+     * :: DeveloperApi ::
      * Determines if errors were reported (typically during compilation).
      *
      * @note This is not for runtime errors
@@ -218,6 +222,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /**
+     * :: DeveloperApi ::
      * Initializes the underlying compiler/interpreter in a blocking fashion.
      *
      * @note Must be executed before using SparkIMain!
@@ -234,6 +239,7 @@ import org.apache.spark.annotation.DeveloperApi
     /** the public, go through the future compiler */
 
     /**
+     * :: DeveloperApi ::
      * The underlying compiler used to generate ASTs and execute code.
      */
     @DeveloperApi
@@ -292,6 +298,7 @@ import org.apache.spark.annotation.DeveloperApi
     import memberHandlers._
 
     /**
+     * :: DeveloperApi ::
      * Suppresses overwriting print results during the operation.
      *
      * @param body The block to execute
@@ -308,6 +315,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /**
+     * :: DeveloperApi ::
      * Completely masks all output during the operation (minus JVM standard
      * out and error).
      *
@@ -346,6 +354,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /**
+     * :: DeveloperApi ::
      * Contains the code (in string form) representing a wrapper around all
      * code executed by this instance.
      *
@@ -355,6 +364,7 @@ import org.apache.spark.annotation.DeveloperApi
     def executionWrapper = _executionWrapper
 
     /**
+     * :: DeveloperApi ::
      * Sets the code to use as a wrapper around all code executed by this
      * instance.
      *
@@ -364,6 +374,7 @@ import org.apache.spark.annotation.DeveloperApi
     def setExecutionWrapper(code: String) = _executionWrapper = code
 
     /**
+     * :: DeveloperApi ::
      * Clears the code used as a wrapper around all code executed by
      * this instance.
      */
@@ -374,6 +385,7 @@ import org.apache.spark.annotation.DeveloperApi
     private lazy val isettings = new SparkISettings(this)
 
     /**
+     * :: DeveloperApi ::
      * Instantiates a new compiler used by SparkIMain. Overridable to provide
      * own instance of a compiler.
      *
@@ -392,6 +404,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /**
+     * :: DeveloperApi ::
      * Adds any specified jars to the compile and runtime classpaths.
      *
      * @note Currently only supports jars, not directories
@@ -444,6 +457,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /**
+     * :: DeveloperApi ::
      * Represents the parent classloader used by this instance. Can be
      * overridden to provide alternative classloader.
      *
@@ -511,6 +525,7 @@ import org.apache.spark.annotation.DeveloperApi
     private[repl] def setContextClassLoader() = classLoader.setAsContext()
 
     /**
+     * :: DeveloperApi ::
      * Returns the real name of a class based on its repl-defined name.
      *
      * ==Example==
@@ -536,6 +551,7 @@ import org.apache.spark.annotation.DeveloperApi
     private[repl] def optFlatName(id: String) = requestForIdent(id) map (_ fullFlatName id)
 
     /**
+     * :: DeveloperApi ::
      * Retrieves all simple names contained in the current instance.
      *
      * @return A list of sorted names
@@ -548,6 +564,7 @@ import org.apache.spark.annotation.DeveloperApi
     private[repl] def pathToTerm(id: String): String = pathToName(newTermName(id))
 
     /**
+     * :: DeveloperApi ::
      * Retrieves the full code path to access the specified simple name
      * content.
      *
@@ -647,6 +664,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
     /**
+     * :: DeveloperApi ::
      * Compiles specified source files.
      *
      * @param sources The sequence of source files to compile
@@ -658,6 +676,7 @@ import org.apache.spark.annotation.DeveloperApi
       compileSourcesKeepingRun(sources: _*)._1
 
     /**
+     * :: DeveloperApi ::
      * Compiles a string of code.
      *
      * @param code The string of code to compile
@@ -786,6 +805,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Interpret one line of input. All feedback, including parse errors
    * and evaluation results, are printed via the supplied compiler's
    * reporter. Values defined are available for future interpreted strings.
@@ -801,6 +821,7 @@ import org.apache.spark.annotation.DeveloperApi
   def interpret(line: String): IR.Result = interpret(line, false)
 
   /**
+   * :: DeveloperApi ::
    * Interpret one line of input. All feedback, including parse errors
    * and evaluation results, are printed via the supplied compiler's
    * reporter. Values defined are available for future interpreted strings.
@@ -855,6 +876,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Bind a specified name to a specified value.  The name may
    * later be used by expressions passed to interpret.
    *
@@ -891,6 +913,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Bind a specified name to a specified value directly.
    *
    * @note This updates internal bound names directly
@@ -914,6 +937,7 @@ import org.apache.spark.annotation.DeveloperApi
   private def directBind[T: ru.TypeTag : ClassTag](name: String, value: T): IR.Result = directBind((name, value))
 
   /**
+   * :: DeveloperApi ::
    * Overwrites previously-bound val with a new instance.
    *
    * @param p The named parameters used to provide the name, value, and type
@@ -933,6 +957,7 @@ import org.apache.spark.annotation.DeveloperApi
   private def quietImport(ids: String*): IR.Result = beQuietDuring(addImports(ids: _*))
 
   /**
+   * :: DeveloperApi ::
    * Executes an import statement per "id" provided
    *
    * @example addImports("org.apache.spark.SparkContext")
@@ -955,6 +980,7 @@ import org.apache.spark.annotation.DeveloperApi
   private def bindValue(name: String, x: Any): IR.Result                        = bind(name, TypeStrings.fromValue(x), x)
 
   /**
+   * :: DeveloperApi ::
    * Reset this interpreter, forgetting all user-specified requests.
    */
   @DeveloperApi
@@ -970,6 +996,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Stops the underlying REPL class server and flushes the reporter used
    * for compiler output.
    */
@@ -979,6 +1006,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Captures the session names (which are set by system properties) once, instead of for each line.
    */
   @DeveloperApi
@@ -1332,6 +1360,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Returns the name of the most recent interpreter result. Useful for
    * for extracting information regarding the previous result.
    *
@@ -1350,6 +1379,7 @@ import org.apache.spark.annotation.DeveloperApi
   private var mostRecentWarnings: List[(global.Position, String)] = Nil
 
   /**
+   * :: DeveloperApi ::
    * Returns a list of recent warnings from compiler execution.
    *
    * @return The list of tuples (compiler position, warning)
@@ -1382,6 +1412,7 @@ import org.apache.spark.annotation.DeveloperApi
     }
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the object representing the id (variable name, method name,
    * class name, etc) provided.
    *
@@ -1395,6 +1426,7 @@ import org.apache.spark.annotation.DeveloperApi
     requestForName(newTermName(id)) flatMap (_.getEval)
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the class representing the id (variable name, method name,
    * class name, etc) provided.
    *
@@ -1408,6 +1440,7 @@ import org.apache.spark.annotation.DeveloperApi
     valueOfTerm(id) map (_.getClass)
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the type representing the id (variable name, method name,
    * class name, etc) provided.
    *
@@ -1423,6 +1456,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the symbol representing the id (variable name, method name,
    * class name, etc) provided.
    *
@@ -1440,6 +1474,7 @@ import org.apache.spark.annotation.DeveloperApi
     requestForName(newTypeName(id)).fold(NoSymbol: Symbol)(_ definedTypeSymbol id)
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the runtime class and type representing the id (variable name,
    * method name, class name, etc) provided.
    *
@@ -1459,6 +1494,7 @@ import org.apache.spark.annotation.DeveloperApi
   }
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the runtime type representing the id (variable name,
    * method name, class name, etc) provided.
    *
@@ -1494,6 +1530,7 @@ import org.apache.spark.annotation.DeveloperApi
   } with SparkExprTyper { }
 
   /**
+   * :: DeveloperApi ::
    * Constructs a list of abstract syntax trees representing the provided code.
    *
    * @param line The line of code to parse and construct into ASTs
@@ -1504,6 +1541,7 @@ import org.apache.spark.annotation.DeveloperApi
   def parse(line: String): Option[List[Tree]] = exprTyper.parse(line)
 
   /**
+   * :: DeveloperApi ::
    * Constructs a Symbol representing the final result of the expression
    * provided or representing the definition provided.
    *
@@ -1516,6 +1554,7 @@ import org.apache.spark.annotation.DeveloperApi
     exprTyper.symbolOfLine(code)
 
   /**
+   * :: DeveloperApi ::
    * Constructs type information based on the provided expression's final
    * result or the definition provided.
    *
@@ -1533,6 +1572,7 @@ import org.apache.spark.annotation.DeveloperApi
   protected def onlyTypes(xs: List[Name]) = xs collect { case x: TypeName => x }
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the defined, public names in the compiler.
    *
    * @return The list of matching "term" names
@@ -1541,6 +1581,7 @@ import org.apache.spark.annotation.DeveloperApi
   def definedTerms      = onlyTerms(allDefinedNames) filterNot isInternalTermName
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the defined type names in the compiler.
    *
    * @return The list of matching type names
@@ -1549,6 +1590,7 @@ import org.apache.spark.annotation.DeveloperApi
   def definedTypes      = onlyTypes(allDefinedNames)
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the defined symbols in the compiler.
    *
    * @return The set of matching Symbol instances
@@ -1557,6 +1599,7 @@ import org.apache.spark.annotation.DeveloperApi
   def definedSymbols    = prevRequestList.flatMap(_.definedSymbols.values).toSet[Symbol]
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the list of public symbols in the compiler.
    *
    * @return The list of public Symbol instances
@@ -1567,6 +1610,7 @@ import org.apache.spark.annotation.DeveloperApi
   // Terms with user-given names (i.e. not res0 and not synthetic)
 
   /**
+   * :: DeveloperApi ::
    * Retrieves defined, public names that are not res0 or the result of a direct bind.
    *
    * @return The list of matching "term" names
@@ -1595,6 +1639,7 @@ import org.apache.spark.annotation.DeveloperApi
   private def apply[T: ClassTag] : Symbol = apply(classTag[T].runtimeClass.getName)
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the Symbols representing classes in the compiler.
    *
    * @return The list of matching ClassSymbol instances
@@ -1603,6 +1648,7 @@ import org.apache.spark.annotation.DeveloperApi
   def classSymbols  = allDefSymbols collect { case x: ClassSymbol => x }
 
   /**
+   * :: DeveloperApi ::
    * Retrieves the Symbols representing methods in the compiler.
    *
    * @return The list of matching MethodSymbol instances

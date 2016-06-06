@@ -25,6 +25,7 @@ import org.apache.spark.ml.linalg.{Matrices, Matrix, Vector, Vectors}
 
 
 /**
+ * :: DeveloperApi ::
  * This class provides basic functionality for a Multivariate Gaussian (Normal) Distribution. In
  * the event that the covariance matrix is singular, the density will be computed in a
  * reduced dimensional subspace under which the distribution is supported.

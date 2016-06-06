@@ -401,11 +401,17 @@ class BlockManagerMasterEndpoint(
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long) {
   def isCached: Boolean = memSize + diskSize > 0
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 object BlockStatus {
   def empty: BlockStatus = BlockStatus(StorageLevel.NONE, memSize = 0L, diskSize = 0L)

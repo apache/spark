@@ -30,6 +30,9 @@ trait LeaderElectionAgent {
   def stop() {} // to avoid noops in implementations.
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 trait LeaderElectable {
   def electedLeader(): Unit

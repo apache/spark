@@ -28,6 +28,9 @@ import org.apache.spark.sql.execution.metric._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.AccumulatorContext
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerSQLExecutionStart(
     executionId: Long,
@@ -38,6 +41,9 @@ case class SparkListenerSQLExecutionStart(
     time: Long)
   extends SparkListenerEvent
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 case class SparkListenerSQLExecutionEnd(executionId: Long, time: Long)
   extends SparkListenerEvent

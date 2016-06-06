@@ -26,6 +26,9 @@ import org.apache.hadoop.io.Writable
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.util.Utils
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 class SerializableWritable[T <: Writable](@transient var t: T) extends Serializable {
 

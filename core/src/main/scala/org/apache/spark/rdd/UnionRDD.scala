@@ -58,6 +58,9 @@ private[spark] class UnionPartition[T: ClassTag](
   }
 }
 
+/**
+ * :: DeveloperApi ::
+ */
 @DeveloperApi
 class UnionRDD[T: ClassTag](
     sc: SparkContext,

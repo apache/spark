@@ -23,11 +23,13 @@ import org.apache.spark.annotation.DeveloperApi
 //       settings "explicitParentLoader" method
 
 /**
+ * :: DeveloperApi ::
  * Provides exposure for the explicitParentLoader method on settings instances.
  */
 @DeveloperApi
 object SparkHelper {
   /**
+   * :: DeveloperApi ::
    * Retrieves the explicit parent loader for the provided settings.
    *
    * @param settings The settings whose explicit parent loader to retrieve
