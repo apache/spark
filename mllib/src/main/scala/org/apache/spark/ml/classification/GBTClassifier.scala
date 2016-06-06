@@ -148,6 +148,9 @@ class GBTClassifier @Since("1.4.0") (
   override def copy(extra: ParamMap): GBTClassifier = defaultCopy(extra)
 }
 
+/**
+ * :: Experimental ::
+ */
 @Since("1.4.0")
 @Experimental
 object GBTClassifier extends DefaultParamsReadable[GBTClassifier] {

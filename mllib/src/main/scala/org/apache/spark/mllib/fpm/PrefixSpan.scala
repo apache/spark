@@ -230,6 +230,9 @@ class PrefixSpan private (
 
 }
 
+/**
+ * :: Experimental ::
+ */
 @Experimental
 @Since("1.5.0")
 object PrefixSpan extends Logging {

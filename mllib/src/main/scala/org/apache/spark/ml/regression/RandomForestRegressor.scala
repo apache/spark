@@ -117,6 +117,9 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   override def copy(extra: ParamMap): RandomForestRegressor = defaultCopy(extra)
 }
 
+/**
+ * :: Experimental ::
+ */
 @Since("1.4.0")
 @Experimental
 object RandomForestRegressor extends DefaultParamsReadable[RandomForestRegressor]{
