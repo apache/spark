@@ -110,6 +110,7 @@ statement
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | REFRESH TABLE tableIdentifier                                    #refreshTable
+    | REFRESH .*?                                                      #refreshResource
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache

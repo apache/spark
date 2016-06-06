@@ -101,6 +101,15 @@ case class RefreshTable(tableIdent: TableIdentifier)
   }
 }
 
+case class RefreshResource(path: String)
+  extends RunnableCommand {
+
+  override def run(sparkSession: SparkSession): Seq[Row] = {
+    sparkSession.catalog.refreshResource(path)
+    Seq.empty[Row]
+  }
+}
+
 /**
  * Builds a map in which keys are case insensitive
  */
