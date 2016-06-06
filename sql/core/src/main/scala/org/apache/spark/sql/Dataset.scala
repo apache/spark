@@ -192,24 +192,24 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * An unresolved version of the internal encoder for the type of this [[Dataset]]. This one is
-   * marked implicit so that we can use it when constructing new [[Dataset]] objects that have the
-   * same object type (that will be possibly resolved to a different schema).
+   * Currently [[ExpressionEncoder]] is the only implementation of [[Encoder]], here we turn the
+   * passed in encoder to [[ExpressionEncoder]] explicitly, and mark it implicit so that we can use
+   * it when constructing new [[Dataset]] objects that have the same object type (that will be
+   * possibly resolved to a different schema).
    */
-  private[sql] implicit val unresolvedTEncoder: ExpressionEncoder[T] = encoderFor(encoder)
-  unresolvedTEncoder.validate(logicalPlan.output)
-
-  /** The encoder for this [[Dataset]] that has been resolved to its output schema. */
-  private[sql] val resolvedTEncoder: ExpressionEncoder[T] =
-    unresolvedTEncoder.resolve(logicalPlan.output, OuterScopes.outerScopes)
+  private[sql] implicit val exprEnc: ExpressionEncoder[T] = encoderFor(encoder)
 
   /**
-   * The encoder where the expressions used to construct an object from an input row have been
-   * bound to the ordinals of this [[Dataset]]'s output schema.
+   * Encoder is used mostly as a container of serde expressions in [[Dataset]].  We build logical
+   * plans by these serde expressions and execute it within the query framework.  However, for
+   * performance reasons we may want to use encoder as a function to deserialize internal rows to
+   * custom objects, e.g. collect.  Here we resolve and bind the encoder so that we can call its
+   * `fromRow` method later.
    */
-  private[sql] val boundTEncoder = resolvedTEncoder.bind(logicalPlan.output)
+  private val boundEnc =
+    exprEnc.resolveAndBind(logicalPlan.output, sparkSession.sessionState.analyzer)
 
-  private implicit def classTag = unresolvedTEncoder.clsTag
+  private implicit def classTag = exprEnc.clsTag
 
   // sqlContext must be val because a stable identifier is expected when you import implicits
   @transient lazy val sqlContext: SQLContext = sparkSession.sqlContext
@@ -747,31 +747,62 @@ class Dataset[T] private[sql](
    */
   @Experimental
   def joinWith[U](other: Dataset[U], condition: Column, joinType: String): Dataset[(T, U)] = {
-    val left = this.logicalPlan
-    val right = other.logicalPlan
+    // Creates a Join node and resolve it first, to get join condition resolved, self-join resolved,
+    // etc.
+    val joined = sparkSession.sessionState.executePlan(
+      Join(
+        this.logicalPlan,
+        other.logicalPlan,
+        JoinType(joinType),
+        Some(condition.expr))).analyzed.asInstanceOf[Join]
 
-    val joined = sparkSession.sessionState.executePlan(Join(left, right, joinType =
-      JoinType(joinType), Some(condition.expr)))
-    val leftOutput = joined.analyzed.output.take(left.output.length)
-    val rightOutput = joined.analyzed.output.takeRight(right.output.length)
-
-    val leftData = this.unresolvedTEncoder match {
-      case e if e.flat => Alias(leftOutput.head, "_1")()
-      case _ => Alias(CreateStruct(leftOutput), "_1")()
+    // For both join side, combine all outputs into a single column and alias it with "_1" or "_2",
+    // to match the schema for the encoder of the join result.
+    // Note that we do this before joining them, to enable the join operator to return null for one
+    // side, in cases like outer-join.
+    val left = {
+      val combined = if (this.exprEnc.flat) {
+        assert(joined.left.output.length == 1)
+        Alias(joined.left.output.head, "_1")()
+      } else {
+        Alias(CreateStruct(joined.left.output), "_1")()
+      }
+      Project(combined :: Nil, joined.left)
     }
-    val rightData = other.unresolvedTEncoder match {
-      case e if e.flat => Alias(rightOutput.head, "_2")()
-      case _ => Alias(CreateStruct(rightOutput), "_2")()
+
+    val right = {
+      val combined = if (other.exprEnc.flat) {
+        assert(joined.right.output.length == 1)
+        Alias(joined.right.output.head, "_2")()
+      } else {
+        Alias(CreateStruct(joined.right.output), "_2")()
+      }
+      Project(combined :: Nil, joined.right)
+    }
+
+    // Rewrites the join condition to make the attribute point to correct column/field, after we
+    // combine the outputs of each join side.
+    val conditionExpr = joined.condition.get transformUp {
+      case a: Attribute if joined.left.outputSet.contains(a) =>
+        if (this.exprEnc.flat) {
+          left.output.head
+        } else {
+          val index = joined.left.output.indexWhere(_.exprId == a.exprId)
+          GetStructField(left.output.head, index)
+        }
+      case a: Attribute if joined.right.outputSet.contains(a) =>
+        if (other.exprEnc.flat) {
+          right.output.head
+        } else {
+          val index = joined.right.output.indexWhere(_.exprId == a.exprId)
+          GetStructField(right.output.head, index)
+        }
     }
 
     implicit val tuple2Encoder: Encoder[(T, U)] =
-      ExpressionEncoder.tuple(this.unresolvedTEncoder, other.unresolvedTEncoder)
+      ExpressionEncoder.tuple(this.exprEnc, other.exprEnc)
 
-    withTypedPlan {
-      Project(
-        leftData :: rightData :: Nil,
-        joined.analyzed)
-    }
+    withTypedPlan(Join(left, right, joined.joinType, Some(conditionExpr)))
   }
 
   /**
@@ -993,7 +1024,7 @@ class Dataset[T] private[sql](
       sparkSession,
       Project(
         c1.withInputType(
-          unresolvedTEncoder.deserializer,
+          exprEnc.deserializer,
           logicalPlan.output).named :: Nil,
         logicalPlan),
       implicitly[Encoder[U1]])
@@ -1007,7 +1038,7 @@ class Dataset[T] private[sql](
   protected def selectUntyped(columns: TypedColumn[_, _]*): Dataset[_] = {
     val encoders = columns.map(_.encoder)
     val namedColumns =
-      columns.map(_.withInputType(unresolvedTEncoder.deserializer, logicalPlan.output).named)
+      columns.map(_.withInputType(exprEnc.deserializer, logicalPlan.output).named)
     val execution = new QueryExecution(sparkSession, Project(namedColumns, logicalPlan))
     new Dataset(sparkSession, execution, ExpressionEncoder.tuple(encoders))
   }
@@ -2122,14 +2153,14 @@ class Dataset[T] private[sql](
    */
   def collectAsList(): java.util.List[T] = withCallback("collectAsList", toDF()) { _ =>
     withNewExecutionId {
-      val values = queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
+      val values = queryExecution.executedPlan.executeCollect().map(boundEnc.fromRow)
       java.util.Arrays.asList(values : _*)
     }
   }
 
   private def collect(needCallback: Boolean): Array[T] = {
     def execute(): Array[T] = withNewExecutionId {
-      queryExecution.executedPlan.executeCollect().map(boundTEncoder.fromRow)
+      queryExecution.executedPlan.executeCollect().map(boundEnc.fromRow)
     }
 
     if (needCallback) {
@@ -2153,7 +2184,7 @@ class Dataset[T] private[sql](
    */
   def toLocalIterator(): java.util.Iterator[T] = withCallback("toLocalIterator", toDF()) { _ =>
     withNewExecutionId {
-      queryExecution.executedPlan.executeToIterator().map(boundTEncoder.fromRow).asJava
+      queryExecution.executedPlan.executeToIterator().map(boundEnc.fromRow).asJava
     }
   }
 
@@ -2291,7 +2322,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   lazy val rdd: RDD[T] = {
-    val objectType = unresolvedTEncoder.deserializer.dataType
+    val objectType = exprEnc.deserializer.dataType
     val deserialized = CatalystSerde.deserialize[T](logicalPlan)
     sparkSession.sessionState.executePlan(deserialized).toRdd.mapPartitions { rows =>
       rows.map(_.get(0, objectType).asInstanceOf[T])

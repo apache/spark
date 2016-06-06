@@ -94,6 +94,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
+      ReorderAssociativeOperator,
       LikeSimplification,
       BooleanSimplification,
       SimplifyConditionals,
@@ -734,6 +735,44 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
           additionalConstraints.reduceOption(And)
       }
       if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
+  }
+}
+
+/**
+ * Reorder associative integral-type operators and fold all constants into one.
+ */
+object ReorderAssociativeOperator extends Rule[LogicalPlan] {
+  private def flattenAdd(e: Expression): Seq[Expression] = e match {
+    case Add(l, r) => flattenAdd(l) ++ flattenAdd(r)
+    case other => other :: Nil
+  }
+
+  private def flattenMultiply(e: Expression): Seq[Expression] = e match {
+    case Multiply(l, r) => flattenMultiply(l) ++ flattenMultiply(r)
+    case other => other :: Nil
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenAdd(a).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
+          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+        } else {
+          a
+        }
+      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenMultiply(m).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
+          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+        } else {
+          m
+        }
+    }
   }
 }
 
@@ -1472,9 +1511,14 @@ object DecimalAggregates extends Rule[LogicalPlan] {
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data)) =>
+    case Project(projectList, LocalRelation(output, data))
+        if !projectList.exists(hasUnevaluableExpr) =>
       val projection = new InterpretedProjection(projectList, output)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+  }
+
+  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
   }
 }
 

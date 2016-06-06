@@ -24,6 +24,7 @@ import org.apache.spark.sql.expressions.Aggregator
 import org.apache.spark.sql.expressions.scalalang.typed
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.test.SharedSQLContext
+import org.apache.spark.sql.types.StringType
 
 
 object ComplexResultAgg extends Aggregator[(String, Int), (Long, Long), (Long, Long)] {
@@ -48,6 +49,16 @@ object ClassInputAgg extends Aggregator[AggData, Int, Int] {
   override def finish(reduction: Int): Int = reduction
   override def merge(b1: Int, b2: Int): Int = b1 + b2
   override def bufferEncoder: Encoder[Int] = Encoders.scalaInt
+  override def outputEncoder: Encoder[Int] = Encoders.scalaInt
+}
+
+
+object ClassBufferAggregator extends Aggregator[AggData, AggData, Int] {
+  override def zero: AggData = AggData(0, "")
+  override def reduce(b: AggData, a: AggData): AggData = AggData(b.a + a.a, "")
+  override def finish(reduction: AggData): Int = reduction.a
+  override def merge(b1: AggData, b2: AggData): AggData = AggData(b1.a + b2.a, "")
+  override def bufferEncoder: Encoder[AggData] = Encoders.product[AggData]
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
@@ -171,6 +182,14 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     checkDataset(
       ds.groupByKey(_.b).agg(ClassInputAgg.toColumn),
       ("one", 1))
+  }
+
+  test("Typed aggregation using aggregator") {
+    // based on Dataset complex Aggregator test of DatasetBenchmark
+    val ds = Seq(AggData(1, "x"), AggData(2, "y"), AggData(3, "z")).toDS()
+    checkDataset(
+      ds.select(ClassBufferAggregator.toColumn),
+      6)
   }
 
   test("typed aggregation: complex input") {

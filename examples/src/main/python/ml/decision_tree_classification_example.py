@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     # Select (prediction, true label) and compute test error
     evaluator = MulticlassClassificationEvaluator(
-        labelCol="indexedLabel", predictionCol="prediction", metricName="precision")
+        labelCol="indexedLabel", predictionCol="prediction", metricName="accuracy")
     accuracy = evaluator.evaluate(predictions)
     print("Test Error = %g " % (1.0 - accuracy))
 
