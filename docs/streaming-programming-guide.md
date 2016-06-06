@@ -1259,7 +1259,7 @@ dstream.foreachRDD(sendRecord)
 </div>
 
 This is incorrect as this requires the connection object to be serialized and sent from the
-driver to the worker. Such connection objects are rarely transferrable across machines. This
+driver to the worker. Such connection objects are rarely transferable across machines. This
 error may manifest as serialization errors (connection object not serializable), initialization
 errors (connection object needs to be initialized at the workers), etc. The correct solution is
 to create the connection object at the worker.
@@ -2037,7 +2037,7 @@ and configuring them to receive different partitions of the data stream from the
 For example, a single Kafka input DStream receiving two topics of data can be split into two
 Kafka input streams, each receiving only one topic. This would run two receivers,
 allowing data to be received in parallel, thus increasing overall throughput. These multiple
-DStreams can be unioned together to create a single DStream. Then the transformations that were
+DStreams can be united together to create a single DStream. Then the transformations that were
 being applied on a single input DStream can be applied on the unified stream. This is done as follows.
 
 <div class="codetabs">
