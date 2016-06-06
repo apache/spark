@@ -350,7 +350,7 @@ case class WholeStageCodegenExec(child: SparkPlan) extends UnaryExecNode with Co
     } catch {
       case e: Exception if !Utils.isTesting && sqlContext.conf.wholeStageFallback =>
         // We should already saw the error message
-        logWarning(s"Temporary disable whole-stage codegen for this plan:\n $treeString")
+        logWarning(s"Whole-stage codegen disabled for this plan:\n $treeString")
         return child.execute()
     }
     val references = ctx.references.toArray
