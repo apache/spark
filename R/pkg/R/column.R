@@ -57,7 +57,7 @@ operators <- list(
   "^" = "pow"
 )
 column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
-column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
+column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -148,6 +148,40 @@ setMethod("alias",
 setMethod("substr", signature(x = "Column"),
           function(x, start, stop) {
             jc <- callJMethod(x@jc, "substr", as.integer(start - 1), as.integer(stop - start + 1))
+            column(jc)
+          })
+
+#' startsWith
+#'
+#' Determines if entries of x start with string (entries of) prefix respectively,
+#' where strings are recycled to common lengths.
+#'
+#' @rdname startsWith
+#' @name startsWith
+#' @family colum_func
+#'
+#' @param x vector of character string whose “starts” are considered
+#' @param prefix character vector (often of length one)
+setMethod("startsWith", signature(x = "Column"),
+          function(x, prefix) {
+            jc <- callJMethod(x@jc, "startsWith", as.vector(prefix))
+            column(jc)
+          })
+
+#' endsWith
+#'
+#' Determines if entries of x end with string (entries of) suffix respectively,
+#' where strings are recycled to common lengths.
+#'
+#' @rdname endsWith
+#' @name endsWith
+#' @family colum_func
+#'
+#' @param x vector of character string whose “ends” are considered
+#' @param suffix character vector (often of length one)
+setMethod("endsWith", signature(x = "Column"),
+          function(x, suffix) {
+            jc <- callJMethod(x@jc, "endsWith", as.vector(suffix))
             column(jc)
           })
 

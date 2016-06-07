@@ -112,7 +112,8 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     }
   }
 
-  override def hashCode(): Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
+  private lazy val _hashCode: Int = java.util.Arrays.hashCode(fields.asInstanceOf[Array[AnyRef]])
+  override def hashCode(): Int = _hashCode
 
   /**
    * Creates a new [[StructType]] by adding a new field.
