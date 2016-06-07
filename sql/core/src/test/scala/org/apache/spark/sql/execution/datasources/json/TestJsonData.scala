@@ -17,14 +17,14 @@
 
 package org.apache.spark.sql.execution.datasources.json
 
-import org.apache.spark.sql.{Dataset, SparkSession, SQLContext}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.test.SharedSQLContext
 
 private[json] trait TestJsonData extends SharedSQLContext {
   import testImplicits._
 
   def primitiveFieldAndType: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"string":"this is a simple string.",
           "integer":10,
           "long":21474836470,
@@ -35,7 +35,7 @@ private[json] trait TestJsonData extends SharedSQLContext {
       }"""  :: Nil)
 
   def primitiveFieldValueTypeConflict: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"num_num_1":11, "num_num_2":null, "num_num_3": 1.1,
           "num_bool":true, "num_str":13.1, "str_bool":"str1"}""" ::
       """{"num_num_1":null, "num_num_2":21474836470.9, "num_num_3": null,
@@ -46,14 +46,14 @@ private[json] trait TestJsonData extends SharedSQLContext {
           "num_bool":null, "num_str":92233720368547758070, "str_bool":null}""" :: Nil)
 
   def jsonNullStruct: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"nullstr":"","ip":"27.31.100.29","headers":{"Host":"1.abc.com","Charset":"UTF-8"}}""" ::
         """{"nullstr":"","ip":"27.31.100.29","headers":{}}""" ::
         """{"nullstr":"","ip":"27.31.100.29","headers":""}""" ::
         """{"nullstr":null,"ip":"27.31.100.29","headers":null}""" :: Nil)
 
   def complexFieldValueTypeConflict: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"num_struct":11, "str_array":[1, 2, 3],
           "array":[], "struct_array":[], "struct": {}}""" ::
       """{"num_struct":{"field":false}, "str_array":null,
@@ -64,14 +64,14 @@ private[json] trait TestJsonData extends SharedSQLContext {
           "array":[7], "struct_array":{"field": true}, "struct": {"field": "str"}}""" :: Nil)
 
   def arrayElementTypeConflict: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"array1": [1, 1.1, true, null, [], {}, [2,3,4], {"field":"str"}],
           "array2": [{"field":214748364700}, {"field":1}]}""" ::
       """{"array3": [{"field":"str"}, {"field":1}]}""" ::
       """{"array3": [1, 2, 3]}""" :: Nil)
 
   def missingFields: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"a":true}""" ::
       """{"b":21474836470}""" ::
       """{"c":[33, 44]}""" ::
@@ -79,7 +79,7 @@ private[json] trait TestJsonData extends SharedSQLContext {
       """{"e":"str"}""" :: Nil)
 
   def complexFieldAndType1: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"struct":{"field1": true, "field2": 92233720368547758070},
           "structWithArrayFields":{"field1":[4, 5, 6], "field2":["str1", "str2"]},
           "arrayOfString":["str1", "str2"],
@@ -95,7 +95,7 @@ private[json] trait TestJsonData extends SharedSQLContext {
          }"""  :: Nil)
 
   def complexFieldAndType2: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"arrayOfStruct":[{"field1": true, "field2": "str1"}, {"field1": false}, {"field3": null}],
           "complexArrayOfStruct": [
           {
@@ -149,7 +149,7 @@ private[json] trait TestJsonData extends SharedSQLContext {
       }""" :: Nil)
 
   def mapType1: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"map": {"a": 1}}""" ::
       """{"map": {"b": 2}}""" ::
       """{"map": {"c": 3}}""" ::
@@ -157,7 +157,7 @@ private[json] trait TestJsonData extends SharedSQLContext {
       """{"map": {"e": null}}""" :: Nil)
 
   def mapType2: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"map": {"a": {"field1": [1, 2, 3, null]}}}""" ::
       """{"map": {"b": {"field2": 2}}}""" ::
       """{"map": {"c": {"field1": [], "field2": 4}}}""" ::
@@ -166,21 +166,21 @@ private[json] trait TestJsonData extends SharedSQLContext {
       """{"map": {"f": {"field1": null}}}""" :: Nil)
 
   def nullsInArrays: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"field1":[[null], [[["Test"]]]]}""" ::
       """{"field2":[null, [{"Test":1}]]}""" ::
       """{"field3":[[null], [{"Test":"2"}]]}""" ::
       """{"field4":[[null, [1,2,3]]]}""" :: Nil)
 
   def jsonArray: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """[{"a":"str_a_1"}]""" ::
       """[{"a":"str_a_2"}, {"b":"str_b_3"}]""" ::
       """{"b":"str_b_4", "a":"str_a_4", "c":"str_c_4"}""" ::
       """[]""" :: Nil)
 
   def corruptRecords: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{""" ::
       """""" ::
       """{"a":1, b:2}""" ::
@@ -189,7 +189,7 @@ private[json] trait TestJsonData extends SharedSQLContext {
       """]""" :: Nil)
 
   def additionalCorruptRecords: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"dummy":"test"}""" ::
       """[1,2,3]""" ::
       """":"test", "a":1}""" ::
@@ -197,7 +197,7 @@ private[json] trait TestJsonData extends SharedSQLContext {
       """     ","ian":"test"}""" :: Nil)
 
   def emptyRecords: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{""" ::
         """""" ::
         """{"a": {}}""" ::
@@ -206,23 +206,23 @@ private[json] trait TestJsonData extends SharedSQLContext {
         """]""" :: Nil)
 
   def timestampAsLong: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"ts":1451732645}""" :: Nil)
 
   def arrayAndStructRecords: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       """{"a": {"b": 1}}""" ::
       """{"a": []}""" :: Nil)
 
   def floatingValueRecords: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       s"""{"a": 0.${"0" * 38}1, "b": 0.01}""" :: Nil)
 
   def bigIntegerRecords: Dataset[String] =
-    sqlContext.createDataset(
+    spark.createDataset(
       s"""{"a": 1${"0" * 38}, "b": 92233720368547758070}""" :: Nil)
 
-  lazy val singleRow: Dataset[String] = sqlContext.createDataset("""{"a":123}""" :: Nil)
+  lazy val singleRow: Dataset[String] = spark.createDataset("""{"a":123}""" :: Nil)
 
-  def empty: Dataset[String] = sqlContext.createDataset(Seq[String]())
+  def empty: Dataset[String] = spark.createDataset(Seq[String]())
 }
