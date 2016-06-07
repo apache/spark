@@ -127,7 +127,11 @@ abstract class ProbabilisticClassificationModel[
       numColsOutput += 1
     }
     if ($(predictionCol).nonEmpty) {
-      val predUDF = {
+      val predUDF = if ($(rawPredictionCol).nonEmpty) {
+        udf(raw2prediction _).apply(col($(rawPredictionCol)))
+      } else if ($(probabilityCol).nonEmpty) {
+        udf(probability2prediction _).apply(col($(probabilityCol)))
+      } else {
         val predictUDF = udf { (features: Any) =>
           predict(features.asInstanceOf[FeaturesType])
         }

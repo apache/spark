@@ -171,7 +171,7 @@ class DecisionTreeClassificationModel private[ml] (
   }
 
   override protected def predictRaw(features: Vector): Vector = {
-    Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
+    Vectors.dense(rootNode.predictImpl(features).impurityStats.weightedStats.clone())
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {

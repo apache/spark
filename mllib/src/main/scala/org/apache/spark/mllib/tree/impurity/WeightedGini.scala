@@ -122,7 +122,7 @@ private[spark] class WeightedGiniAggregator(numClasses: Int, classWeights: Array
 private[spark] class WeightedGiniCalculator(stats: Array[Double], classWeights: Array[Double])
   extends ImpurityCalculator(stats) {
 
-  var weightedStats = stats.zip(classWeights).map(x => x._1 * x._2)
+  override val weightedStats = stats.zip(classWeights).map(x => x._1 * x._2)
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */

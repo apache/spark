@@ -99,6 +99,7 @@ private[spark] abstract class ImpurityAggregator(val statsSize: Int) extends Ser
  */
 private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) extends Serializable {
 
+  val weightedStats: Array[Double] = stats
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */

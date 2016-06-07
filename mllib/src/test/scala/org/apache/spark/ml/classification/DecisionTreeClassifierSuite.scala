@@ -96,7 +96,7 @@ class DecisionTreeClassifierSuite
       .setMaxDepth(3)
       .setMaxBins(400)
       .setMinInstancesPerNode(1)
-      .setClassWeights(Array(1, 10000))
+      .setClassWeights(Array(1, 1))
     val categoricalFeatures: Map[Int, Int] = Map()
     val newData: DataFrame = TreeTests.setMetadata(IrIsRDD, categoricalFeatures, 2)
     val newTree = dt.fit(newData)
