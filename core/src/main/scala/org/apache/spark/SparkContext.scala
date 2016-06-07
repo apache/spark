@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.{Arrays, Properties, ServiceLoader, UUID}
+import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
@@ -56,10 +56,9 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
-  SparkDeploySchedulerBackend}
-import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import org.apache.spark.scheduler.local.LocalBackend
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, StandaloneSchedulerBackend}
+import org.apache.spark.scheduler.cluster.mesos.{MesosCoarseGrainedSchedulerBackend, MesosFineGrainedSchedulerBackend}
+import org.apache.spark.scheduler.local.LocalSchedulerBackendEndpoint
 import org.apache.spark.storage._
 import org.apache.spark.storage.BlockManagerMessages.TriggerThreadDump
 import org.apache.spark.ui.{ConsoleProgressBar, SparkUI}
@@ -94,7 +93,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] val stopped: AtomicBoolean = new AtomicBoolean(false)
 
-  private def assertNotStopped(): Unit = {
+  private[spark] def assertNotStopped(): Unit = {
     if (stopped.get()) {
       val activeContext = SparkContext.activeContext.get()
       val activeCreationSite =
@@ -357,12 +356,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
   def setLogLevel(logLevel: String) {
-    val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
-    if (!validLevels.contains(logLevel)) {
-      throw new IllegalArgumentException(
-        s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
-    }
-    Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
+    // let's allow lowcase or mixed case too
+    val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
+    require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
+      s"Supplied level $logLevel did not match one of:" +
+        s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
+    Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
   try {
@@ -1305,7 +1304,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator: LongAccumulator = {
     val acc = new LongAccumulator
@@ -1314,7 +1313,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a long accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def longAccumulator(name: String): LongAccumulator = {
     val acc = new LongAccumulator
@@ -1323,7 +1322,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator: DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -1332,7 +1331,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `+=`.
+   * Create and register a double accumulator, which starts with 0 and accumulates inputs by `add`.
    */
   def doubleAccumulator(name: String): DoubleAccumulator = {
     val acc = new DoubleAccumulator
@@ -1385,6 +1384,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   def addFile(path: String): Unit = {
     addFile(path, false)
   }
+
+  /**
+   * Returns a list of file paths that are added to resources.
+   */
+  def listFiles(): Seq[String] = addedFiles.keySet.toSeq
 
   /**
    * Add a file to be downloaded with this Spark job on every node.
@@ -1723,6 +1727,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
     }
     postEnvironmentUpdate()
   }
+
+  /**
+   * Returns a list of jar files that are added to resources.
+   */
+  def listJars(): Seq[String] = addedJars.keySet.toSeq
 
   // Shut down the SparkContext.
   def stop() {
@@ -2170,6 +2179,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
  * various Spark features.
  */
 object SparkContext extends Logging {
+  private val VALID_LOG_LEVELS =
+    Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**
    * Lock that guards access to global variables that track SparkContext construction.
@@ -2244,6 +2255,9 @@ object SparkContext extends Logging {
     SPARK_CONTEXT_CONSTRUCTOR_LOCK.synchronized {
       if (activeContext.get() == null) {
         setActiveContext(new SparkContext(config), allowMultipleContexts = false)
+      }
+      if (config.getAll.nonEmpty) {
+        logWarning("Use an existing SparkContext, some configuration may not take effect.")
       }
       activeContext.get()
     }
@@ -2416,7 +2430,7 @@ object SparkContext extends Logging {
     master match {
       case "local" =>
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(sc.getConf, scheduler, 1)
+        val backend = new LocalSchedulerBackendEndpoint(sc.getConf, scheduler, 1)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2428,7 +2442,7 @@ object SparkContext extends Logging {
           throw new SparkException(s"Asked to run locally with $threadCount threads")
         }
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(sc.getConf, scheduler, threadCount)
+        val backend = new LocalSchedulerBackendEndpoint(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2438,14 +2452,14 @@ object SparkContext extends Logging {
         // local[N, M] means exactly N threads with M failures
         val threadCount = if (threads == "*") localCpuCount else threads.toInt
         val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
-        val backend = new LocalBackend(sc.getConf, scheduler, threadCount)
+        val backend = new LocalSchedulerBackendEndpoint(sc.getConf, scheduler, threadCount)
         scheduler.initialize(backend)
         (backend, scheduler)
 
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
+        val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         (backend, scheduler)
 
@@ -2462,9 +2476,9 @@ object SparkContext extends Logging {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt, sc.conf)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
+        val backend = new StandaloneSchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
-        backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
+        backend.shutdownCallback = (backend: StandaloneSchedulerBackend) => {
           localCluster.stop()
         }
         (backend, scheduler)
@@ -2474,9 +2488,9 @@ object SparkContext extends Logging {
         val scheduler = new TaskSchedulerImpl(sc)
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", defaultValue = true)
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, mesosUrl, sc.env.securityManager)
+          new MesosCoarseGrainedSchedulerBackend(scheduler, sc, mesosUrl, sc.env.securityManager)
         } else {
-          new MesosSchedulerBackend(scheduler, sc, mesosUrl)
+          new MesosFineGrainedSchedulerBackend(scheduler, sc, mesosUrl)
         }
         scheduler.initialize(backend)
         (backend, scheduler)

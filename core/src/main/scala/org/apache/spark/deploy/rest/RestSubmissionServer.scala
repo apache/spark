@@ -17,13 +17,12 @@
 
 package org.apache.spark.deploy.rest
 
-import java.net.InetSocketAddress
 import javax.servlet.http.{HttpServlet, HttpServletRequest, HttpServletResponse}
 
 import scala.io.Source
 
 import com.fasterxml.jackson.core.JsonProcessingException
-import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.{Server, ServerConnector}
 import org.eclipse.jetty.servlet.{ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 import org.json4s._
@@ -80,18 +79,24 @@ private[spark] abstract class RestSubmissionServer(
    * Return a 2-tuple of the started server and the bound port.
    */
   private def doStart(startPort: Int): (Server, Int) = {
-    val server = new Server(new InetSocketAddress(host, startPort))
     val threadPool = new QueuedThreadPool
     threadPool.setDaemon(true)
-    server.setThreadPool(threadPool)
+    val server = new Server(threadPool)
+
+    val connector = new ServerConnector(server)
+    connector.setHost(host)
+    connector.setPort(startPort)
+    server.addConnector(connector)
+
     val mainHandler = new ServletContextHandler
+    mainHandler.setServer(server)
     mainHandler.setContextPath("/")
     contextToServlet.foreach { case (prefix, servlet) =>
       mainHandler.addServlet(new ServletHolder(servlet), prefix)
     }
     server.setHandler(mainHandler)
     server.start()
-    val boundPort = server.getConnectors()(0).getLocalPort
+    val boundPort = connector.getLocalPort
     (server, boundPort)
   }
 

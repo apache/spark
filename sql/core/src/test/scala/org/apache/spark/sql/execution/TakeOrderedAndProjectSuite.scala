@@ -42,7 +42,7 @@ class TakeOrderedAndProjectSuite extends SparkPlanTest with SharedSQLContext {
       .add("a", IntegerType, nullable = false)
       .add("b", IntegerType, nullable = false)
     val inputData = Seq.fill(10000)(Row(rand.nextInt(), rand.nextInt()))
-    sqlContext.createDataFrame(sparkContext.parallelize(Random.shuffle(inputData), 10), schema)
+    spark.createDataFrame(sparkContext.parallelize(Random.shuffle(inputData), 10), schema)
   }
 
   /**

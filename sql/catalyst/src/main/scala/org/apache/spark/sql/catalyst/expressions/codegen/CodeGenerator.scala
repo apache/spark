@@ -19,11 +19,12 @@ package org.apache.spark.sql.catalyst.expressions.codegen
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.language.existentials
 
 import com.google.common.cache.{CacheBuilder, CacheLoader}
 import org.codehaus.janino.ClassBodyEvaluator
+import scala.language.existentials
 
+import org.apache.spark.SparkEnv
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
@@ -31,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayData, MapData}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.types._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ParentClassLoader, Utils}
 
 /**
  * Java source for evaluating an [[Expression]] given a [[InternalRow]] of input.
@@ -198,6 +199,11 @@ class CodegenContext {
    * A prefix used to generate fresh name.
    */
   var freshNamePrefix = ""
+
+  /**
+   * The map from a place holder to a corresponding comment
+   */
+  private val placeHolderToComments = new mutable.HashMap[String, String]
 
   /**
    * Returns a term name that is unique within this instance of a `CodegenContext`.
@@ -555,6 +561,10 @@ class CodegenContext {
    * @param expressions the codes to evaluate expressions.
    */
   def splitExpressions(row: String, expressions: Seq[String]): String = {
+    if (row == null) {
+      // Cannot split these expressions because they are not created from a row object.
+      return expressions.mkString("\n")
+    }
     val blocks = new ArrayBuffer[String]()
     val blockBuilder = new StringBuilder()
     for (code <- expressions) {
@@ -706,6 +716,33 @@ class CodegenContext {
     if (doSubexpressionElimination) subexpressionElimination(expressions)
     expressions.map(e => e.genCode(this))
   }
+
+  /**
+   * get a map of the pair of a place holder and a corresponding comment
+   */
+  def getPlaceHolderToComments(): collection.Map[String, String] = placeHolderToComments
+
+  /**
+   * Register a comment and return the corresponding place holder
+   */
+  def registerComment(text: => String): String = {
+    // By default, disable comments in generated code because computing the comments themselves can
+    // be extremely expensive in certain cases, such as deeply-nested expressions which operate over
+    // inputs with wide schemas. For more details on the performance issues that motivated this
+    // flat, see SPARK-15680.
+    if (SparkEnv.get != null && SparkEnv.get.conf.getBoolean("spark.sql.codegen.comments", false)) {
+      val name = freshName("c")
+      val comment = if (text.contains("\n") || text.contains("\r")) {
+        text.split("(\r\n)|\r|\n").mkString("/**\n * ", "\n * ", "\n */")
+      } else {
+        s"// $text"
+      }
+      placeHolderToComments += (name -> comment)
+      s"/*$name*/"
+    } else {
+      ""
+    }
+  }
 }
 
 /**
@@ -714,6 +751,19 @@ class CodegenContext {
  */
 abstract class GeneratedClass {
   def generate(references: Array[Any]): Any
+}
+
+/**
+ * A wrapper for the source code to be compiled by [[CodeGenerator]].
+ */
+class CodeAndComment(val body: String, val comment: collection.Map[String, String])
+  extends Serializable {
+  override def equals(that: Any): Boolean = that match {
+    case t: CodeAndComment if t.body == body => true
+    case _ => false
+  }
+
+  override def hashCode(): Int = body.hashCode
 }
 
 /**
@@ -760,16 +810,26 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  def compile(code: String): GeneratedClass = {
+  def compile(code: CodeAndComment): GeneratedClass = {
     cache.get(code)
   }
 
   /**
    * Compile the Java source code into a Java class, using Janino.
    */
-  private[this] def doCompile(code: String): GeneratedClass = {
+  private[this] def doCompile(code: CodeAndComment): GeneratedClass = {
     val evaluator = new ClassBodyEvaluator()
-    evaluator.setParentClassLoader(Utils.getContextOrSparkClassLoader)
+
+    // A special classloader used to wrap the actual parent classloader of
+    // [[org.codehaus.janino.ClassBodyEvaluator]] (see CodeGenerator.doCompile). This classloader
+    // does not throw a ClassNotFoundException with a cause set (i.e. exception.getCause returns
+    // a null). This classloader is needed because janino will throw the exception directly if
+    // the parent classloader throws a ClassNotFoundException with cause set instead of trying to
+    // find other possible classes (see org.codehaus.janinoClassLoaderIClassLoader's
+    // findIClass method). Please also see https://issues.apache.org/jira/browse/SPARK-15622 and
+    // https://issues.apache.org/jira/browse/SPARK-11636.
+    val parentClassLoader = new ParentClassLoader(Utils.getContextOrSparkClassLoader)
+    evaluator.setParentClassLoader(parentClassLoader)
     // Cannot be under package codegen, or fail with java.lang.InstantiationException
     evaluator.setClassName("org.apache.spark.sql.catalyst.expressions.GeneratedClass")
     evaluator.setDefaultImports(Array(
@@ -788,7 +848,7 @@ object CodeGenerator extends Logging {
     ))
     evaluator.setExtendedClass(classOf[GeneratedClass])
 
-    def formatted = CodeFormatter.format(code)
+    lazy val formatted = CodeFormatter.format(code)
 
     logDebug({
       // Only add extra debugging info to byte code when we are going to print the source code.
@@ -797,7 +857,7 @@ object CodeGenerator extends Logging {
     })
 
     try {
-      evaluator.cook("generated.java", code)
+      evaluator.cook("generated.java", code.body)
     } catch {
       case e: Exception =>
         val msg = s"failed to compile: $e\n$formatted"
@@ -819,8 +879,8 @@ object CodeGenerator extends Logging {
   private val cache = CacheBuilder.newBuilder()
     .maximumSize(100)
     .build(
-      new CacheLoader[String, GeneratedClass]() {
-        override def load(code: String): GeneratedClass = {
+      new CacheLoader[CodeAndComment, GeneratedClass]() {
+        override def load(code: CodeAndComment): GeneratedClass = {
           val startTime = System.nanoTime()
           val result = doCompile(code)
           val endTime = System.nanoTime()

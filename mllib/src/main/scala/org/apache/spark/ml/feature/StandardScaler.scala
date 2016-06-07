@@ -21,11 +21,14 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
+import org.apache.spark.mllib.linalg.{Vector => OldVector, Vectors => OldVectors}
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -58,6 +61,15 @@ private[feature] trait StandardScalerParams extends Params with HasInputCol with
 
   /** @group getParam */
   def getWithStd: Boolean = $(withStd)
+
+  /** Validates and transforms the input schema. */
+  protected def validateAndTransformSchema(schema: StructType): StructType = {
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    require(!schema.fieldNames.contains($(outputCol)),
+      s"Output column ${$(outputCol)} already exists.")
+    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
+    StructType(outputFields)
+  }
 
   setDefault(withMean -> false, withStd -> true)
 }
@@ -93,20 +105,16 @@ class StandardScaler(override val uid: String) extends Estimator[StandardScalerM
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): StandardScalerModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(inputCol)).rdd.map { case Row(v: Vector) => v }
+    val input: RDD[OldVector] = dataset.select($(inputCol)).rdd.map {
+      case Row(v: Vector) => OldVectors.fromML(v)
+    }
     val scaler = new feature.StandardScaler(withMean = $(withMean), withStd = $(withStd))
     val scalerModel = scaler.fit(input)
     copyValues(new StandardScalerModel(uid, scalerModel.std, scalerModel.mean).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
-    require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${$(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains($(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    validateAndTransformSchema(schema)
   }
 
   override def copy(extra: ParamMap): StandardScaler = defaultCopy(extra)
@@ -145,18 +153,16 @@ class StandardScalerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val scaler = new feature.StandardScalerModel(std, mean, $(withStd), $(withMean))
-    val scale = udf { scaler.transform _ }
+
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    val transformer: Vector => Vector = v => scaler.transform(OldVectors.fromML(v)).asML
+
+    val scale = udf(transformer)
     dataset.withColumn($(outputCol), scale(col($(inputCol))))
   }
 
   override def transformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
-    require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${$(inputCol)} must be a vector column")
-    require(!schema.fieldNames.contains($(outputCol)),
-      s"Output column ${$(outputCol)} already exists.")
-    val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
-    StructType(outputFields)
+    validateAndTransformSchema(schema)
   }
 
   override def copy(extra: ParamMap): StandardScalerModel = {

@@ -108,6 +108,13 @@ public final class UnsafeExternalRowSorter {
     return sorter.getPeakMemoryUsedBytes();
   }
 
+  /**
+   * @return the total amount of time spent sorting data (in-memory only).
+   */
+  public long getSortTimeNanos() {
+    return sorter.getSortTimeNanos();
+  }
+
   private void cleanupResources() {
     sorter.cleanupResources();
   }

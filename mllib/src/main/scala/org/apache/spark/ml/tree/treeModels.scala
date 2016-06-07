@@ -23,12 +23,12 @@ import org.apache.hadoop.fs.Path
 import org.json4s._
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.{Param, Params}
 import org.apache.spark.ml.tree.DecisionTreeModelReadWrite.NodeData
 import org.apache.spark.ml.tree.impl.{CallableVectorDouble, CodeGenerationDecisionTreeModel}
 import org.apache.spark.ml.util.{DefaultParamsReader, DefaultParamsWriter}
 import org.apache.spark.ml.util.DefaultParamsReader.Metadata
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.tree.impurity.ImpurityCalculator
 import org.apache.spark.mllib.tree.model.{DecisionTreeModel => OldDecisionTreeModel}
 import org.apache.spark.rdd.RDD

@@ -450,6 +450,10 @@ setGeneric("covar_pop", function(col1, col2) {standardGeneric("covar_pop") })
 #' @export
 setGeneric("dapply", function(x, func, schema) { standardGeneric("dapply") })
 
+#' @rdname dapply
+#' @export
+setGeneric("dapplyCollect", function(x, func) { standardGeneric("dapplyCollect") })
+
 #' @rdname summary
 #' @export
 setGeneric("describe", function(x, col, ...) { standardGeneric("describe") })
@@ -691,7 +695,7 @@ setGeneric("desc", function(x) { standardGeneric("desc") })
 
 #' @rdname column
 #' @export
-setGeneric("endsWith", function(x, ...) { standardGeneric("endsWith") })
+setGeneric("endsWith", function(x, suffix) { standardGeneric("endsWith") })
 
 #' @rdname column
 #' @export
@@ -723,7 +727,7 @@ setGeneric("rlike", function(x, ...) { standardGeneric("rlike") })
 
 #' @rdname column
 #' @export
-setGeneric("startsWith", function(x, ...) { standardGeneric("startsWith") })
+setGeneric("startsWith", function(x, prefix) { standardGeneric("startsWith") })
 
 #' @rdname column
 #' @export

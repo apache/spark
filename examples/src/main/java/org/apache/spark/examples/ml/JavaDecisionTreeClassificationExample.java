@@ -32,7 +32,9 @@ import org.apache.spark.sql.SparkSession;
 public class JavaDecisionTreeClassificationExample {
   public static void main(String[] args) {
     SparkSession spark = SparkSession
-      .builder().appName("JavaDecisionTreeClassificationExample").getOrCreate();
+      .builder()
+      .appName("JavaDecisionTreeClassificationExample")
+      .getOrCreate();
 
     // $example on$
     // Load the data stored in LIBSVM format as a DataFrame.
@@ -52,10 +54,10 @@ public class JavaDecisionTreeClassificationExample {
     VectorIndexerModel featureIndexer = new VectorIndexer()
       .setInputCol("features")
       .setOutputCol("indexedFeatures")
-      .setMaxCategories(4) // features with > 4 distinct values are treated as continuous
+      .setMaxCategories(4) // features with > 4 distinct values are treated as continuous.
       .fit(data);
 
-    // Split the data into training and test sets (30% held out for testing)
+    // Split the data into training and test sets (30% held out for testing).
     Dataset<Row>[] splits = data.randomSplit(new double[]{0.7, 0.3});
     Dataset<Row> trainingData = splits[0];
     Dataset<Row> testData = splits[1];
@@ -71,11 +73,11 @@ public class JavaDecisionTreeClassificationExample {
       .setOutputCol("predictedLabel")
       .setLabels(labelIndexer.labels());
 
-    // Chain indexers and tree in a Pipeline
+    // Chain indexers and tree in a Pipeline.
     Pipeline pipeline = new Pipeline()
       .setStages(new PipelineStage[]{labelIndexer, featureIndexer, dt, labelConverter});
 
-    // Train model.  This also runs the indexers.
+    // Train model. This also runs the indexers.
     PipelineModel model = pipeline.fit(trainingData);
 
     // Make predictions.
@@ -84,11 +86,11 @@ public class JavaDecisionTreeClassificationExample {
     // Select example rows to display.
     predictions.select("predictedLabel", "label", "features").show(5);
 
-    // Select (prediction, true label) and compute test error
+    // Select (prediction, true label) and compute test error.
     MulticlassClassificationEvaluator evaluator = new MulticlassClassificationEvaluator()
       .setLabelCol("indexedLabel")
       .setPredictionCol("prediction")
-      .setMetricName("precision");
+      .setMetricName("accuracy");
     double accuracy = evaluator.evaluate(predictions);
     System.out.println("Test Error = " + (1.0 - accuracy));
 

@@ -29,7 +29,7 @@ case class WindowData(month: Int, area: String, product: Int)
  * Test suite for SQL window functions.
  */
 class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   test("window function: udaf with aggregate expression") {
     val data = Seq(
@@ -40,7 +40,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
     checkAnswer(
       sql(
@@ -112,7 +112,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
     checkAnswer(
       sql(
@@ -139,7 +139,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
     checkAnswer(
       sql(
@@ -182,7 +182,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
     val e = intercept[AnalysisException] {
       sql(
@@ -203,7 +203,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
       WindowData(5, "c", 9),
       WindowData(6, "c", 10)
     )
-    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
     checkAnswer(
       sql(
@@ -232,7 +232,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
       WindowData(5, "c", 9),
       WindowData(6, "c", 11)
     )
-    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
     checkAnswer(
       sql("select month, product, sum(product + 1) over() from windowData order by area"),
@@ -301,7 +301,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
       WindowData(5, "c", 9),
       WindowData(6, "c", 11)
     )
-    sparkContext.parallelize(data).toDF().registerTempTable("windowData")
+    sparkContext.parallelize(data).toDF().createOrReplaceTempView("windowData")
 
     checkAnswer(
       sql(
@@ -322,7 +322,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
 
   test("window function: multiple window expressions in a single expression") {
     val nums = sparkContext.parallelize(1 to 10).map(x => (x, x % 2)).toDF("x", "y")
-    nums.registerTempTable("nums")
+    nums.createOrReplaceTempView("nums")
 
     val expected =
       Row(1, 1, 1, 55, 1, 57) ::
@@ -353,7 +353,7 @@ class SQLWindowFunctionSuite extends QueryTest with SQLTestUtils with TestHiveSi
 
     checkAnswer(actual, expected)
 
-    sqlContext.dropTempTable("nums")
+    spark.catalog.dropTempView("nums")
   }
 
   test("SPARK-7595: Window will cause resolve failed with self join") {

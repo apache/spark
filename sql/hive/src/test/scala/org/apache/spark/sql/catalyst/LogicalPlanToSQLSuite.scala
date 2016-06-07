@@ -33,16 +33,16 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     sql("DROP TABLE IF EXISTS parquet_t2")
     sql("DROP TABLE IF EXISTS t0")
 
-    sqlContext.range(10).write.saveAsTable("parquet_t0")
+    spark.range(10).write.saveAsTable("parquet_t0")
     sql("CREATE TABLE t0 AS SELECT * FROM parquet_t0")
 
-    sqlContext
+    spark
       .range(10)
       .select('id as 'key, concat(lit("val_"), 'id) as 'value)
       .write
       .saveAsTable("parquet_t1")
 
-    sqlContext
+    spark
       .range(10)
       .select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd)
       .write
@@ -52,7 +52,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
       when(id % 3 === 0, lit(null)).otherwise(array('id, 'id + 1))
     }
 
-    sqlContext
+    spark
       .range(10)
       .select(
         createArray('id).as("arr"),
@@ -394,7 +394,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
     Seq("orc", "json", "parquet").foreach { format =>
       val tableName = s"${format}_parquet_t0"
       withTable(tableName) {
-        sqlContext.range(10).write.format(format).saveAsTable(tableName)
+        spark.range(10).write.format(format).saveAsTable(tableName)
         checkHiveQl(s"SELECT id FROM $tableName")
       }
     }
@@ -458,7 +458,7 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   }
 
   test("plans with non-SQL expressions") {
-    sqlContext.udf.register("foo", (_: Int) * 2)
+    spark.udf.register("foo", (_: Int) * 2)
     intercept[UnsupportedOperationException](new SQLBuilder(sql("SELECT foo(id) FROM t0")).toSQL)
   }
 
@@ -740,5 +740,19 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
 
   test("filter after subquery") {
     checkHiveQl("SELECT a FROM (SELECT key + 1 AS a FROM parquet_t1) t WHERE a > 5")
+  }
+
+  test("SPARK-14933 - select parquet table") {
+    withTable("parquet_t") {
+      sql("create table parquet_t stored as parquet as select 1 as c1, 'abc' as c2")
+      checkHiveQl("select * from parquet_t")
+    }
+  }
+
+  test("SPARK-14933 - select orc table") {
+    withTable("orc_t") {
+      sql("create table orc_t stored as orc as select 1 as c1, 'abc' as c2")
+      checkHiveQl("select * from orc_t")
+    }
   }
 }

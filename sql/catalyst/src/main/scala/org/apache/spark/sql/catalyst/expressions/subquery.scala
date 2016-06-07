@@ -129,7 +129,7 @@ object PredicateSubquery {
 
 /**
  * A [[ListQuery]] expression defines the query which we want to search in an IN subquery
- * expression. It should and can only be used in conjunction with a IN expression.
+ * expression. It should and can only be used in conjunction with an IN expression.
  *
  * For example (SQL):
  * {{{

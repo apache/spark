@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.command
 import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, NoSuchFunctionException}
-import org.apache.spark.sql.catalyst.catalog.CatalogFunction
+import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, ExpressionInfo}
 import org.apache.spark.sql.types.{StringType, StructField, StructType}
 
@@ -39,12 +39,11 @@ import org.apache.spark.sql.types.{StringType, StructField, StructType}
  *    AS className [USING JAR\FILE 'uri' [, JAR|FILE 'uri']]
  * }}}
  */
-// TODO: Use Seq[FunctionResource] instead of Seq[(String, String)] for resources.
-case class CreateFunction(
+case class CreateFunctionCommand(
     databaseName: Option[String],
     functionName: String,
     className: String,
-    resources: Seq[(String, String)],
+    resources: Seq[FunctionResource],
     isTemp: Boolean)
   extends RunnableCommand {
 
@@ -82,7 +81,7 @@ case class CreateFunction(
  *   DESCRIBE FUNCTION [EXTENDED] upper;
  * }}}
  */
-case class DescribeFunction(
+case class DescribeFunctionCommand(
     functionName: FunctionIdentifier,
     isExtended: Boolean) extends RunnableCommand {
 
@@ -143,7 +142,7 @@ case class DescribeFunction(
  * ifExists: returns an error if the function doesn't exist, unless this is true.
  * isTemp: indicates if it is a temporary function.
  */
-case class DropFunction(
+case class DropFunctionCommand(
     databaseName: Option[String],
     functionName: String,
     ifExists: Boolean,
@@ -181,10 +180,10 @@ case class DropFunction(
  * For the pattern, '*' matches any sequence of characters (including no characters) and
  * '|' is for alternation.
  * For example, "show functions like 'yea*|windo*'" will return "window" and "year".
- *
- * TODO currently we are simply ignore the db
  */
-case class ShowFunctions(db: Option[String], pattern: Option[String]) extends RunnableCommand {
+case class ShowFunctionsCommand(db: Option[String], pattern: Option[String])
+  extends RunnableCommand {
+
   override val output: Seq[Attribute] = {
     val schema = StructType(StructField("function", StringType, nullable = false) :: Nil)
     schema.toAttributes

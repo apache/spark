@@ -17,37 +17,22 @@
 
 package org.apache.spark.mllib.regression;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Random;
 
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
+import org.apache.spark.SharedSparkSession;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.mllib.util.LinearDataGenerator;
 
-public class JavaRidgeRegressionSuite implements Serializable {
-  private transient JavaSparkContext sc;
-
-  @Before
-  public void setUp() {
-      sc = new JavaSparkContext("local", "JavaRidgeRegressionSuite");
-  }
-
-  @After
-  public void tearDown() {
-      sc.stop();
-      sc = null;
-  }
+public class JavaRidgeRegressionSuite extends SharedSparkSession {
 
   private static double predictionError(List<LabeledPoint> validationData,
                                         RidgeRegressionModel model) {
     double errorSum = 0;
-    for (LabeledPoint point: validationData) {
+    for (LabeledPoint point : validationData) {
       Double prediction = model.predict(point.features());
       errorSum += (prediction - point.label()) * (prediction - point.label());
     }
@@ -68,9 +53,9 @@ public class JavaRidgeRegressionSuite implements Serializable {
   public void runRidgeRegressionUsingConstructor() {
     int numExamples = 50;
     int numFeatures = 20;
-    List<LabeledPoint> data = generateRidgeData(2*numExamples, numFeatures, 10.0);
+    List<LabeledPoint> data = generateRidgeData(2 * numExamples, numFeatures, 10.0);
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, numExamples));
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(data.subList(0, numExamples));
     List<LabeledPoint> validationData = data.subList(numExamples, 2 * numExamples);
 
     RidgeRegressionWithSGD ridgeSGDImpl = new RidgeRegressionWithSGD();
@@ -94,7 +79,7 @@ public class JavaRidgeRegressionSuite implements Serializable {
     int numFeatures = 20;
     List<LabeledPoint> data = generateRidgeData(2 * numExamples, numFeatures, 10.0);
 
-    JavaRDD<LabeledPoint> testRDD = sc.parallelize(data.subList(0, numExamples));
+    JavaRDD<LabeledPoint> testRDD = jsc.parallelize(data.subList(0, numExamples));
     List<LabeledPoint> validationData = data.subList(numExamples, 2 * numExamples);
 
     RidgeRegressionModel model = RidgeRegressionWithSGD.train(testRDD.rdd(), 200, 1.0, 0.0);

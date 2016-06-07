@@ -18,21 +18,13 @@
 package org.apache.spark.sql.test
 
 import org.apache.spark.{SparkConf, SparkContext}
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.internal.{SessionState, SQLConf}
 
 /**
- * A special [[SQLContext]] prepared for testing.
+ * A special [[SparkSession]] prepared for testing.
  */
-private[sql] class TestSQLContext(
-    @transient override val sparkSession: SparkSession,
-    isRootContext: Boolean)
-  extends SQLContext(sparkSession, isRootContext) { self =>
-
-  def this(sc: SparkContext) {
-    this(new TestSparkSession(sc), true)
-  }
-
+private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
   def this(sparkConf: SparkConf) {
     this(new SparkContext("local[2]", "test-sql-context",
       sparkConf.set("spark.sql.testkey", "true")))
@@ -41,20 +33,6 @@ private[sql] class TestSQLContext(
   def this() {
     this(new SparkConf)
   }
-
-  // Needed for Java tests
-  def loadTestData(): Unit = {
-    testData.loadTestData()
-  }
-
-  private object testData extends SQLTestData {
-    protected override def sqlContext: SQLContext = self
-  }
-
-}
-
-
-private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) { self =>
 
   @transient
   protected[sql] override lazy val sessionState: SessionState = new SessionState(self) {
@@ -70,6 +48,14 @@ private[sql] class TestSparkSession(sc: SparkContext) extends SparkSession(sc) {
     }
   }
 
+  // Needed for Java tests
+  def loadTestData(): Unit = {
+    testData.loadTestData()
+  }
+
+  private object testData extends SQLTestData {
+    protected override def spark: SparkSession = self
+  }
 }
 
 

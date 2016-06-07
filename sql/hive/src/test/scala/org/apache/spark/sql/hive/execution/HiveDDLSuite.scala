@@ -22,7 +22,7 @@ import java.io.File
 import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfterEach
 
-import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, CatalogTableType}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.hive.test.TestHiveSingleton
@@ -31,12 +31,12 @@ import org.apache.spark.sql.test.SQLTestUtils
 
 class HiveDDLSuite
   extends QueryTest with SQLTestUtils with TestHiveSingleton with BeforeAndAfterEach {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   override def afterEach(): Unit = {
     try {
       // drop all databases, tables and functions after each test
-      sqlContext.sessionState.catalog.reset()
+      spark.sessionState.catalog.reset()
     } finally {
       super.afterEach()
     }
@@ -52,7 +52,7 @@ class HiveDDLSuite
         new Path(new Path(dbPath.get), tableIdentifier.table).toString
       }
     val filesystemPath = new Path(expectedTablePath)
-    val fs = filesystemPath.getFileSystem(hiveContext.sessionState.newHadoopConf())
+    val fs = filesystemPath.getFileSystem(spark.sessionState.newHadoopConf())
     fs.exists(filesystemPath)
   }
 
@@ -72,7 +72,7 @@ class HiveDDLSuite
     }
   }
 
-  test("drop managed tables in default database") {
+  test("drop external tables in default database") {
     withTempDir { tmpDir =>
       val tabName = "tab1"
       withTable(tabName) {
@@ -86,15 +86,12 @@ class HiveDDLSuite
           """.stripMargin)
 
         val hiveTable =
-          hiveContext.sessionState.catalog
-            .getTableMetadata(TableIdentifier(tabName, Some("default")))
-        // It is a managed table, although it uses external in SQL
-        assert(hiveTable.tableType == CatalogTableType.MANAGED)
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+        assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
         assert(tmpDir.listFiles.nonEmpty)
         sql(s"DROP TABLE $tabName")
-        // The data are deleted since the table type is not EXTERNAL
-        assert(tmpDir.listFiles == null)
+        assert(tmpDir.listFiles.nonEmpty)
       }
     }
   }
@@ -115,8 +112,7 @@ class HiveDDLSuite
         }
 
         val hiveTable =
-          hiveContext.sessionState.catalog
-            .getTableMetadata(TableIdentifier(tabName, Some("default")))
+          spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
         // This data source table is external table
         assert(hiveTable.tableType == CatalogTableType.EXTERNAL)
 
@@ -129,7 +125,7 @@ class HiveDDLSuite
   }
 
   test("create table and view with comment") {
-    val catalog = hiveContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val tabName = "tab1"
     withTable(tabName) {
       sql(s"CREATE TABLE $tabName(c1 int) COMMENT 'BLABLA'")
@@ -145,7 +141,7 @@ class HiveDDLSuite
   }
 
   test("add/drop partitions - external table") {
-    val catalog = hiveContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     withTempDir { tmpDir =>
       val basePath = tmpDir.getCanonicalPath
       val partitionPath_1stCol_part1 = new File(basePath + "/ds=2008-04-08")
@@ -186,10 +182,17 @@ class HiveDDLSuite
         // After data insertion, all the directory are not empty
         assert(dirSet.forall(dir => dir.listFiles.nonEmpty))
 
+        val message = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-09', unknownCol='12')")
+        }
+        assert(message.getMessage.contains(
+          "Partition spec is invalid. The spec (ds, unknowncol) must be contained within the " +
+            "partition spec (ds, hr) defined in table '`default`.`exttable_with_partitions`'"))
+
         sql(
           s"""
              |ALTER TABLE $externalTab DROP PARTITION (ds='2008-04-08'),
-             |PARTITION (ds='2008-04-09', hr='12')
+             |PARTITION (hr='12')
           """.stripMargin)
         assert(catalog.listPartitions(TableIdentifier(externalTab)).map(_.spec).toSet ==
           Set(Map("ds" -> "2008-04-09", "hr" -> "11")))
@@ -212,7 +215,7 @@ class HiveDDLSuite
   test("drop views") {
     withTable("tab1") {
       val tabName = "tab1"
-      sqlContext.range(10).write.saveAsTable("tab1")
+      spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         val viewName = "view1"
 
@@ -233,11 +236,11 @@ class HiveDDLSuite
   test("alter views - rename") {
     val tabName = "tab1"
     withTable(tabName) {
-      sqlContext.range(10).write.saveAsTable(tabName)
+      spark.range(10).write.saveAsTable(tabName)
       val oldViewName = "view1"
       val newViewName = "view2"
       withView(oldViewName, newViewName) {
-        val catalog = hiveContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
 
         assert(catalog.tableExists(TableIdentifier(oldViewName)))
@@ -252,10 +255,10 @@ class HiveDDLSuite
   test("alter views - set/unset tblproperties") {
     val tabName = "tab1"
     withTable(tabName) {
-      sqlContext.range(10).write.saveAsTable(tabName)
+      spark.range(10).write.saveAsTable(tabName)
       val viewName = "view1"
       withView(viewName) {
-        val catalog = hiveContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $viewName AS SELECT * FROM $tabName")
 
         assert(catalog.getTableMetadata(TableIdentifier(viewName))
@@ -282,7 +285,7 @@ class HiveDDLSuite
           sql(s"ALTER VIEW $viewName UNSET TBLPROPERTIES ('p')")
         }.getMessage
         assert(message.contains(
-          "attempted to unset non-existent property 'p' in table '`view1`'"))
+          "Attempted to unset non-existent property 'p' in table '`view1`'"))
       }
     }
   }
@@ -290,11 +293,11 @@ class HiveDDLSuite
   test("alter views and alter table - misuse") {
     val tabName = "tab1"
     withTable(tabName) {
-      sqlContext.range(10).write.saveAsTable(tabName)
+      spark.range(10).write.saveAsTable(tabName)
       val oldViewName = "view1"
       val newViewName = "view2"
       withView(oldViewName, newViewName) {
-        val catalog = hiveContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         sql(s"CREATE VIEW $oldViewName AS SELECT * FROM $tabName")
 
         assert(catalog.tableExists(TableIdentifier(tabName)))
@@ -342,6 +345,28 @@ class HiveDDLSuite
     }
   }
 
+  test("alter table partition - storage information") {
+    sql("CREATE TABLE boxes (height INT, length INT) PARTITIONED BY (width INT)")
+    sql("INSERT OVERWRITE TABLE boxes PARTITION (width=4) SELECT 4, 4")
+    val catalog = spark.sessionState.catalog
+    val expectedSerde = "com.sparkbricks.serde.ColumnarSerDe"
+    val expectedSerdeProps = Map("compress" -> "true")
+    val expectedSerdePropsString =
+      expectedSerdeProps.map { case (k, v) => s"'$k'='$v'" }.mkString(", ")
+    val oldPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
+    assume(oldPart.storage.serde != Some(expectedSerde), "bad test: serde was already set")
+    assume(oldPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) !=
+      expectedSerdeProps, "bad test: serde properties were already set")
+    sql(s"""ALTER TABLE boxes PARTITION (width=4)
+      |    SET SERDE '$expectedSerde'
+      |    WITH SERDEPROPERTIES ($expectedSerdePropsString)
+      |""".stripMargin)
+    val newPart = catalog.getPartition(TableIdentifier("boxes"), Map("width" -> "4"))
+    assert(newPart.storage.serde == Some(expectedSerde))
+    assume(newPart.storage.serdeProperties.filterKeys(expectedSerdeProps.contains) ==
+      expectedSerdeProps)
+  }
+
   test("drop table using drop view") {
     withTable("tab1") {
       sql("CREATE TABLE tab1(c1 int)")
@@ -354,7 +379,7 @@ class HiveDDLSuite
 
   test("drop view using drop table") {
     withTable("tab1") {
-      sqlContext.range(10).write.saveAsTable("tab1")
+      spark.range(10).write.saveAsTable("tab1")
       withView("view1") {
         sql("CREATE VIEW view1 AS SELECT * FROM tab1")
         val message = intercept[AnalysisException] {
@@ -383,10 +408,10 @@ class HiveDDLSuite
   }
 
   private def createDatabaseWithLocation(tmpDir: File, dirExists: Boolean): Unit = {
-    val catalog = sqlContext.sessionState.catalog
+    val catalog = spark.sessionState.catalog
     val dbName = "db1"
     val tabName = "tab1"
-    val fs = new Path(tmpDir.toString).getFileSystem(hiveContext.sessionState.newHadoopConf())
+    val fs = new Path(tmpDir.toString).getFileSystem(spark.sessionState.newHadoopConf())
     withTable(tabName) {
       if (dirExists) {
         assert(tmpDir.listFiles.isEmpty)
@@ -436,13 +461,13 @@ class HiveDDLSuite
       val path = tmpDir.toString
       withSQLConf(SQLConf.WAREHOUSE_PATH.key -> path) {
         val dbName = "db1"
-        val fs = new Path(path).getFileSystem(hiveContext.sessionState.newHadoopConf())
+        val fs = new Path(path).getFileSystem(spark.sessionState.newHadoopConf())
         val dbPath = new Path(path)
         // the database directory does not exist
         assert(!fs.exists(dbPath))
 
         sql(s"CREATE DATABASE $dbName")
-        val catalog = sqlContext.sessionState.catalog
+        val catalog = spark.sessionState.catalog
         val expectedDBLocation = "file:" + appendTrailingSlash(dbPath.toString) + s"$dbName.db"
         val db1 = catalog.getDatabaseMetadata(dbName)
         assert(db1 == CatalogDatabase(
@@ -498,16 +523,27 @@ class HiveDDLSuite
   }
 
   test("drop default database") {
-    val message = intercept[AnalysisException] {
-      sql("DROP DATABASE default")
-    }.getMessage
-    assert(message.contains("Can not drop default database"))
+    Seq("true", "false").foreach { caseSensitive =>
+      withSQLConf(SQLConf.CASE_SENSITIVE.key -> caseSensitive) {
+        var message = intercept[AnalysisException] {
+          sql("DROP DATABASE default")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+
+        // SQLConf.CASE_SENSITIVE does not affect the result
+        // because the Hive metastore is not case sensitive.
+        message = intercept[AnalysisException] {
+          sql("DROP DATABASE DeFault")
+        }.getMessage
+        assert(message.contains("Can not drop default database"))
+      }
+    }
   }
 
   test("desc table for data source table") {
     withTable("tab1") {
       val tabName = "tab1"
-      sqlContext.range(1).write.format("json").saveAsTable(tabName)
+      spark.range(1).write.format("json").saveAsTable(tabName)
 
       assert(sql(s"DESC $tabName").collect().length == 1)
 
@@ -518,6 +554,60 @@ class HiveDDLSuite
       assert(
         sql(s"DESC EXTENDED $tabName").collect()
           .exists(_.getString(0) == "# Detailed Table Information"))
+    }
+  }
+
+  test("desc table for data source table - no user-defined schema") {
+    withTable("t1") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).write.parquet(path)
+        sql(s"CREATE TABLE t1 USING parquet OPTIONS (PATH '$path')")
+
+        val desc = sql("DESC FORMATTED t1").collect().toSeq
+
+        assert(desc.contains(Row("# Schema of this table is inferred at runtime", "", "")))
+      }
+    }
+  }
+
+  test("desc table for data source table - partitioned bucketed table") {
+    withTable("t1") {
+      spark
+        .range(1).select('id as 'a, 'id as 'b, 'id as 'c, 'id as 'd).write
+        .bucketBy(2, "b").sortBy("c").partitionBy("d")
+        .saveAsTable("t1")
+
+      val formattedDesc = sql("DESC FORMATTED t1").collect()
+
+      assert(formattedDesc.containsSlice(
+        Seq(
+          Row("a", "bigint", ""),
+          Row("b", "bigint", ""),
+          Row("c", "bigint", ""),
+          Row("d", "bigint", ""),
+          Row("# Partition Information", "", ""),
+          Row("# col_name", "", ""),
+          Row("d", "", ""),
+          Row("", "", ""),
+          Row("# Detailed Table Information", "", ""),
+          Row("Database:", "default", "")
+        )
+      ))
+
+      assert(formattedDesc.containsSlice(
+        Seq(
+          Row("Table Type:", "MANAGED", "")
+        )
+      ))
+
+      assert(formattedDesc.containsSlice(
+        Seq(
+          Row("Num Buckets:", "2", ""),
+          Row("Bucket Columns:", "[b]", ""),
+          Row("Sort Columns:", "[c]", "")
+        )
+      ))
     }
   }
 }

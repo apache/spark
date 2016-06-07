@@ -22,7 +22,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.NominalAttribute
 import org.apache.spark.ml.param._
-import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol, HasSeed}
+import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.types.{DoubleType, StructType}
@@ -31,7 +31,7 @@ import org.apache.spark.sql.types.{DoubleType, StructType}
  * Params for [[QuantileDiscretizer]].
  */
 private[feature] trait QuantileDiscretizerBase extends Params
-  with HasInputCol with HasOutputCol with HasSeed {
+  with HasInputCol with HasOutputCol {
 
   /**
    * Number of buckets (quantiles, or categories) into which data points are grouped. Must
@@ -50,13 +50,13 @@ private[feature] trait QuantileDiscretizerBase extends Params
   /**
    * Relative error (see documentation for
    * [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]] for description)
-   * Must be a number in [0, 1].
+   * Must be in the range [0, 1].
    * default: 0.001
    * @group param
    */
   val relativeError = new DoubleParam(this, "relativeError", "The relative target precision " +
-    "for approxQuantile",
-    ParamValidators.inRange(0.0, 1.0))
+    "for the approximate quantile algorithm used to generate buckets. " +
+    "Must be in the range [0, 1].", ParamValidators.inRange(0.0, 1.0))
   setDefault(relativeError -> 0.001)
 
   /** @group getParam */
@@ -66,8 +66,11 @@ private[feature] trait QuantileDiscretizerBase extends Params
 /**
  * :: Experimental ::
  * `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
- * categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
- * into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
+ * categorical features. The number of bins can be set using the `numBuckets` parameter.
+ * The bin ranges are chosen using an approximate algorithm (see the documentation for
+ * [[org.apache.spark.sql.DataFrameStatFunctions.approxQuantile approxQuantile]]
+ * for a detailed description). The precision of the approximation can be controlled with the
+ * `relativeError` parameter. The lower and upper bin bounds will be `-Infinity` and `+Infinity`,
  * covering all real values.
  */
 @Experimental
@@ -87,9 +90,6 @@ final class QuantileDiscretizer(override val uid: String)
 
   /** @group setParam */
   def setOutputCol(value: String): this.type = set(outputCol, value)
-
-  /** @group setParam */
-  def setSeed(value: Long): this.type = set(seed, value)
 
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(inputCol), DoubleType)

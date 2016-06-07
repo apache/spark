@@ -38,7 +38,7 @@ import org.apache.spark.sql.types.ObjectType
 
 abstract class QueryTest extends PlanTest {
 
-  protected def sqlContext: SQLContext
+  protected def spark: SparkSession
 
   // Timezone is fixed to America/Los_Angeles for those timezone sensitive tests (timestamp_*)
   TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
@@ -81,7 +81,7 @@ abstract class QueryTest extends PlanTest {
       expectedAnswer: T*): Unit = {
     checkAnswer(
       ds.toDF(),
-      sqlContext.createDataset(expectedAnswer)(ds.unresolvedTEncoder).toDF().collect().toSeq)
+      spark.createDataset(expectedAnswer)(ds.exprEnc).toDF().collect().toSeq)
 
     checkDecoding(ds, expectedAnswer: _*)
   }
@@ -94,8 +94,8 @@ abstract class QueryTest extends PlanTest {
         fail(
           s"""
              |Exception collecting dataset as objects
-             |${ds.resolvedTEncoder}
-             |${ds.resolvedTEncoder.deserializer.treeString}
+             |${ds.exprEnc}
+             |${ds.exprEnc.deserializer.treeString}
              |${ds.queryExecution}
            """.stripMargin, e)
     }
@@ -114,7 +114,7 @@ abstract class QueryTest extends PlanTest {
       fail(
         s"""Decoded objects do not match expected objects:
             |$comparison
-            |${ds.resolvedTEncoder.deserializer.treeString}
+            |${ds.exprEnc.deserializer.treeString}
          """.stripMargin)
     }
   }
@@ -267,7 +267,7 @@ abstract class QueryTest extends PlanTest {
 
 
     val jsonBackPlan = try {
-      TreeNode.fromJSON[LogicalPlan](jsonString, sqlContext.sparkContext)
+      TreeNode.fromJSON[LogicalPlan](jsonString, spark.sparkContext)
     } catch {
       case NonFatal(e) =>
         fail(
@@ -282,7 +282,7 @@ abstract class QueryTest extends PlanTest {
     def renormalize: PartialFunction[LogicalPlan, LogicalPlan] = {
       case l: LogicalRDD =>
         val origin = logicalRDDs.pop()
-        LogicalRDD(l.output, origin.rdd)(sqlContext.sparkSession)
+        LogicalRDD(l.output, origin.rdd)(spark)
       case l: LocalRelation =>
         val origin = localRelations.pop()
         l.copy(data = origin.data)
