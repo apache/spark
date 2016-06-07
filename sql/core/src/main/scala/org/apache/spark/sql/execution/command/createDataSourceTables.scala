@@ -197,6 +197,15 @@ case class CreateDataSourceTableAsSelectCommand(
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+              // check if the file formats match
+              l.relation match {
+                case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
+                  throw new AnalysisException(
+                    s"The file format of the existing table $tableIdent is " +
+                      s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
+                      s"format `$provider`")
+                case _ =>
+              }
               if (query.schema.size != l.schema.size) {
                 throw new AnalysisException(
                   s"The column number of the existing schema[${l.schema}] " +
