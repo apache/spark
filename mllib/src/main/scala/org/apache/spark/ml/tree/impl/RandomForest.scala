@@ -657,8 +657,15 @@ private[spark] object RandomForest extends Logging {
     val leftImpurity = leftImpurityCalculator.calculate() // Note: This equals 0 if count = 0
     val rightImpurity = rightImpurityCalculator.calculate()
 
-    val leftWeight = leftCount / totalCount.toDouble
-    val rightWeight = rightCount / totalCount.toDouble
+    // Weighted count is equivalent to normal count using Gini or Entropy impurity
+    // where the class weights are assumed to be uniform
+    val leftWeightedCount = leftImpurityCalculator.weightedCount
+    val rightWeightedCount = rightImpurityCalculator.weightedCount
+
+    val totalWeightedCount = leftWeightedCount + rightWeightedCount
+
+    val leftWeight = leftWeightedCount / totalWeightedCount.toDouble
+    val rightWeight = rightWeightedCount / totalWeightedCount.toDouble
 
     val gain = impurity - leftWeight * leftImpurity - rightWeight * rightImpurity
 

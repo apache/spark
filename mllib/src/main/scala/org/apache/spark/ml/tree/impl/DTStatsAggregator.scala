@@ -20,7 +20,6 @@ package org.apache.spark.ml.tree.impl
 import org.apache.spark.mllib.tree.impurity._
 
 
-
 /**
  * DecisionTree statistics aggregator for a node.
  * This holds a flat array of statistics for a set of (features, bins)
@@ -38,6 +37,7 @@ private[spark] class DTStatsAggregator(
     case Gini => new GiniAggregator(metadata.numClasses)
     case Entropy => new EntropyAggregator(metadata.numClasses)
     case Variance => new VarianceAggregator()
+    case WeightedGini => new WeightedGiniAggregator(metadata.numClasses, metadata.classWeights)
     case _ => throw new IllegalArgumentException(s"Bad impurity parameter: ${metadata.impurity}")
   }
 

@@ -23,7 +23,7 @@ import scala.collection.JavaConverters._
 import org.apache.spark.annotation.Since
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
-import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance, WeightedGini}
 
 /**
  * Stores all the configuration options for tree construction
@@ -32,6 +32,7 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini, Impurity, Variance}
  *              [[org.apache.spark.mllib.tree.configuration.Algo.Regression]]
  * @param impurity Criterion used for information gain calculation.
  *                 Supported for Classification: [[org.apache.spark.mllib.tree.impurity.Gini]],
+  *                 [[org.apache.spark.mllib.tree.impurity.WeightedGini]],
  *                  [[org.apache.spark.mllib.tree.impurity.Entropy]].
  *                 Supported for Regression: [[org.apache.spark.mllib.tree.impurity.Variance]].
  * @param maxDepth Maximum depth of the tree (e.g. depth 0 means 1 leaf node, depth 1 means
@@ -80,7 +81,8 @@ class Strategy @Since("1.3.0") (
     @Since("1.0.0") @BeanProperty var maxMemoryInMB: Int = 256,
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
-    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10) extends Serializable {
+    @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
+    @Since("2.0.0") @BeanProperty var classWeights: Array[Double] = Array()) extends Serializable {
 
   /**
    */
@@ -140,9 +142,9 @@ class Strategy @Since("1.3.0") (
         require(numClasses >= 2,
           s"DecisionTree Strategy for Classification must have numClasses >= 2," +
           s" but numClasses = $numClasses.")
-        require(Set(Gini, Entropy).contains(impurity),
+        require(Set(Gini, Entropy, WeightedGini).contains(impurity),
           s"DecisionTree Strategy given invalid impurity for Classification: $impurity." +
-          s"  Valid settings: Gini, Entropy")
+          s"  Valid settings: Gini, Entropy, WeightedGini")
       case Regression =>
         require(impurity == Variance,
           s"DecisionTree Strategy given invalid impurity for Regression: $impurity." +
@@ -163,6 +165,14 @@ class Strategy @Since("1.3.0") (
     require(subsamplingRate > 0 && subsamplingRate <= 1,
       s"DecisionTree Strategy requires subsamplingRate <=1 and >0, but was given " +
       s"$subsamplingRate")
+    if (impurity == WeightedGini) {
+      require(numClasses == classWeights.length,
+        s"DecisionTree Strategy requires the number of class weights be the same as the " +
+        s"number of classes, but there are $numClasses classes and ${classWeights.length} weights")
+      require(classWeights.forall((x: Double) => x >= 0),
+        s"DecisionTree Strategy requires the all the class weights be non-negative" +
+        s", but at least one of them is negative")
+    }
   }
 
   /**
@@ -172,7 +182,7 @@ class Strategy @Since("1.3.0") (
   def copy: Strategy = {
     new Strategy(algo, impurity, maxDepth, numClasses, maxBins,
       quantileCalculationStrategy, categoricalFeaturesInfo, minInstancesPerNode, minInfoGain,
-      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointInterval)
+      maxMemoryInMB, subsamplingRate, useNodeIdCache, checkpointInterval, classWeights)
   }
 }
 

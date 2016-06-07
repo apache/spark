@@ -64,7 +64,7 @@ object WeightedGini extends Impurity {
   @Since("1.0.0")
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
-    throw new UnsupportedOperationException("Gini.calculate")
+    throw new UnsupportedOperationException("WeightedGini.calculate")
 
   /**
    * Get this impurity instance.
@@ -82,7 +82,7 @@ object WeightedGini extends Impurity {
  * @param numClasses  Number of classes for label.
  * @param weights Weights of classes
  */
-private[tree] class WeightedGiniAggregator(numClasses: Int, weights: Array[Double])
+private[spark] class WeightedGiniAggregator(numClasses: Int, weights: Array[Double])
   extends ImpurityAggregator(numClasses) with Serializable {
 
   /**

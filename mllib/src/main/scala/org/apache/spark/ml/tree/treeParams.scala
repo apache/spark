@@ -18,13 +18,12 @@
 package org.apache.spark.ml.tree
 
 import scala.util.Try
-
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.mllib.tree.impurity.{WeightedGini, Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
 import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -102,8 +101,16 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     " algorithm will cache node IDs for each instance. Caching can speed up training of deeper" +
     " trees.")
 
+  /**
+   * An array that stores the weights of class labels. All elements must be non-negative.
+   * (default = Array())
+   * @group expertParam
+   */
+  final val classWeights: DoubleArrayParam = new DoubleArrayParam(this, "classWeights", "An array" +
+    " that stores the weights of class labels. All elements must be non-negative.")
+
   setDefault(maxDepth -> 5, maxBins -> 32, minInstancesPerNode -> 1, minInfoGain -> 0.0,
-    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10)
+    maxMemoryInMB -> 256, cacheNodeIds -> false, checkpointInterval -> 10, classWeights -> Array())
 
   /** @group setParam */
   def setMaxDepth(value: Int): this.type = set(maxDepth, value)
@@ -144,6 +151,12 @@ private[ml] trait DecisionTreeParams extends PredictorParams
   /** @group expertGetParam */
   final def getCacheNodeIds: Boolean = $(cacheNodeIds)
 
+  /** @group expertSetParam */
+  def setClassWeights(value: Array[Double]): this.type = set(classWeights, value)
+
+  /** @group expertGetParam */
+  final def getClassWeights: Array[Double] = $(classWeights)
+
   /**
    * Specifies how often to checkpoint the cached node IDs.
    * E.g. 10 means that the cache will get checkpointed every 10 iterations.
@@ -174,6 +187,7 @@ private[ml] trait DecisionTreeParams extends PredictorParams
     strategy.numClasses = numClasses
     strategy.categoricalFeaturesInfo = categoricalFeatures
     strategy.subsamplingRate = subsamplingRate
+    strategy.classWeights = getClassWeights
     strategy
   }
 }
@@ -207,6 +221,7 @@ private[ml] trait TreeClassifierParams extends Params {
     getImpurity match {
       case "entropy" => OldEntropy
       case "gini" => OldGini
+      case "weightedgini" => WeightedGini
       case _ =>
         // Should never happen because of check in setter method.
         throw new RuntimeException(
@@ -217,7 +232,7 @@ private[ml] trait TreeClassifierParams extends Params {
 
 private[ml] object TreeClassifierParams {
   // These options should be lowercase.
-  final val supportedImpurities: Array[String] = Array("entropy", "gini").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] = Array("entropy", "gini", "weightedgini").map(_.toLowerCase)
 }
 
 private[ml] trait DecisionTreeClassifierParams

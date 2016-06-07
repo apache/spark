@@ -82,6 +82,9 @@ class DecisionTreeClassifier @Since("1.4.0") (
   @Since("1.6.0")
   override def setSeed(value: Long): this.type = super.setSeed(value)
 
+  @Since("2.0.0")
+  override def setClassWeights(value: Array[Double]): this.type = super.setClassWeights(value)
+
   override protected def train(dataset: Dataset[_]): DecisionTreeClassificationModel = {
     val categoricalFeatures: Map[Int, Int] =
       MetadataUtils.getCategoricalFeatures(dataset.schema($(featuresCol)))

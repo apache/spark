@@ -53,7 +53,8 @@ private[spark] class DecisionTreeMetadata(
     val minInstancesPerNode: Int,
     val minInfoGain: Double,
     val numTrees: Int,
-    val numFeaturesPerNode: Int) extends Serializable {
+    val numFeaturesPerNode: Int,
+    val classWeights: Array[Double]) extends Serializable {
 
   def isUnordered(featureIndex: Int): Boolean = unorderedFeatures.contains(featureIndex)
 
@@ -207,7 +208,8 @@ private[spark] object DecisionTreeMetadata extends Logging {
     new DecisionTreeMetadata(numFeatures, numExamples, numClasses, numBins.max,
       strategy.categoricalFeaturesInfo, unorderedFeatures.toSet, numBins,
       strategy.impurity, strategy.quantileCalculationStrategy, strategy.maxDepth,
-      strategy.minInstancesPerNode, strategy.minInfoGain, numTrees, numFeaturesPerNode)
+      strategy.minInstancesPerNode, strategy.minInfoGain, numTrees, numFeaturesPerNode,
+      strategy.classWeights)
   }
 
   /**
