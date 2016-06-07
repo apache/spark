@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.execution.ui
 
-import java.text.NumberFormat
-
 import scala.collection.mutable
 
 import org.apache.spark.{JobExecutionStatus, SparkConf}
@@ -310,10 +308,9 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
           }
         }.filter { case (id, _) => executionUIData.accumulatorMetrics.contains(id) }
 
-        val formatter = NumberFormat.getInstance()
-        val driverUpdates = executionUIData.driverAccumUpdates.mapValues(formatter.format)
-        mergeAccumulatorUpdates(accumulatorUpdates, accumulatorId =>
-          executionUIData.accumulatorMetrics(accumulatorId).metricType) ++ driverUpdates
+        val driverUpdates = executionUIData.driverAccumUpdates.toSeq
+        mergeAccumulatorUpdates(accumulatorUpdates ++ driverUpdates, accumulatorId =>
+          executionUIData.accumulatorMetrics(accumulatorId).metricType)
       case None =>
         // This execution has been dropped
         Map.empty
