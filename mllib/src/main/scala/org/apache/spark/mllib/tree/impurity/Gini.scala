@@ -135,6 +135,11 @@ private[spark] class GiniCalculator(stats: Array[Double]) extends ImpurityCalcul
   def count: Long = stats.sum.toLong
 
   /**
+   * Weighted summary statistics of data points, which in this case assume uniform class weights
+   */
+  def weightedCount: Double = stats.sum
+
+  /**
    * Prediction which should be made based on the sufficient statistics.
    */
   def predict: Double = if (count == 0) {

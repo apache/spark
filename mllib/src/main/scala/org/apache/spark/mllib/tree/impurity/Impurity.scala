@@ -148,6 +148,11 @@ private[spark] abstract class ImpurityCalculator(val stats: Array[Double]) exten
   def count: Long
 
   /**
+   * Weighted summary statistics of data points
+   */
+  def weightedCount: Double
+
+  /**
    * Prediction which should be made based on the sufficient statistics.
    */
   def predict: Double

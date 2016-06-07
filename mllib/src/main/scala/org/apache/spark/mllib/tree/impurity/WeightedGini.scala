@@ -21,37 +21,33 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Since}
 
 /**
  * :: Experimental ::
- * Class for calculating [[http://en.wikipedia.org/wiki/Binary_entropy_function entropy]] during
- * binary classification.
+ * Class for calculating the
+ * [[http://en.wikipedia.org/wiki/Decision_tree_learning#Gini_impurity Gini impurity]]
+ * during binary classification.
  */
 @Since("1.0.0")
 @Experimental
-object Entropy extends Impurity {
-
-  private[tree] def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
+object WeightedGini extends Impurity {
 
   /**
    * :: DeveloperApi ::
    * information calculation for multiclass classification
-   * @param counts Array[Double] with counts for each label
-   * @param totalCount sum of counts for all labels
+   * @param weightedCounts Array[Double] with counts for each label
+   * @param weightedTotalCount sum of counts for all labels
    * @return information value, or 0 if totalCount = 0
    */
   @Since("1.1.0")
   @DeveloperApi
-  override def calculate(counts: Array[Double], totalCount: Double): Double = {
-    if (totalCount == 0) {
+  override def calculate(weightedCounts: Array[Double], weightedTotalCount: Double): Double = {
+    if (weightedTotalCount == 0) {
       return 0
     }
-    val numClasses = counts.length
-    var impurity = 0.0
+    val numClasses = weightedCounts.length
+    var impurity = 1.0
     var classIndex = 0
     while (classIndex < numClasses) {
-      val classCount = counts(classIndex)
-      if (classCount != 0) {
-        val freq = classCount / totalCount
-        impurity -= freq * log2(freq)
-      }
+      val freq = weightedCounts(classIndex) / weightedTotalCount
+      impurity -= freq * freq
       classIndex += 1
     }
     impurity
@@ -68,7 +64,7 @@ object Entropy extends Impurity {
   @Since("1.0.0")
   @DeveloperApi
   override def calculate(count: Double, sum: Double, sumSquares: Double): Double =
-    throw new UnsupportedOperationException("Entropy.calculate")
+    throw new UnsupportedOperationException("Gini.calculate")
 
   /**
    * Get this impurity instance.
@@ -84,8 +80,9 @@ object Entropy extends Impurity {
  * in order to compute impurity from a sample.
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param numClasses  Number of classes for label.
+ * @param weights Weights of classes
  */
-private[spark] class EntropyAggregator(numClasses: Int)
+private[tree] class WeightedGiniAggregator(numClasses: Int, weights: Array[Double])
   extends ImpurityAggregator(numClasses) with Serializable {
 
   /**
@@ -95,11 +92,11 @@ private[spark] class EntropyAggregator(numClasses: Int)
    */
   def update(allStats: Array[Double], offset: Int, label: Double, instanceWeight: Double): Unit = {
     if (label >= statsSize) {
-      throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
+      throw new IllegalArgumentException(s"WeightedGiniAggregator given label $label" +
         s" but requires label < numClasses (= $statsSize).")
     }
     if (label < 0) {
-      throw new IllegalArgumentException(s"EntropyAggregator given label $label" +
+      throw new IllegalArgumentException(s"WeightedGiniAggregator given label $label" +
         s"but requires label is non-negative.")
     }
     allStats(offset + label.toInt) += instanceWeight
@@ -110,28 +107,31 @@ private[spark] class EntropyAggregator(numClasses: Int)
    * @param allStats  Flat stats array, with stats for this (node, feature, bin) contiguous.
    * @param offset    Start index of stats for this (node, feature, bin).
    */
-  def getCalculator(allStats: Array[Double], offset: Int): EntropyCalculator = {
-    new EntropyCalculator(allStats.view(offset, offset + statsSize).toArray)
+  def getCalculator(allStats: Array[Double], offset: Int): WeightedGiniCalculator = {
+    new WeightedGiniCalculator(allStats.view(offset, offset + statsSize).toArray, weights)
   }
 }
 
 /**
  * Stores statistics for one (node, feature, bin) for calculating impurity.
- * Unlike [[EntropyAggregator]], this class stores its own data and is for a specific
+ * Unlike [[WeightedGiniAggregator]], this class stores its own data and is for a specific
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
+ * @param weights Weights of classes
  */
-private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCalculator(stats) {
+private[spark] class WeightedGiniCalculator(stats: Array[Double], weights: Array[Double])
+  extends ImpurityCalculator(stats) {
 
+  var weightedStats = stats.zip(weights).map(x => x._1 * x._2)
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */
-  def copy: EntropyCalculator = new EntropyCalculator(stats.clone())
+  def copy: WeightedGiniCalculator = new WeightedGiniCalculator(stats.clone(), weights.clone())
 
   /**
    * Calculate the impurity from the stored sufficient statistics.
    */
-  def calculate(): Double = Entropy.calculate(stats, stats.sum)
+  def calculate(): Double = WeightedGini.calculate(weightedStats, weightedStats.sum)
 
   /**
    * Number of data points accounted for in the sufficient statistics.
@@ -139,9 +139,9 @@ private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCal
   def count: Long = stats.sum.toLong
 
   /**
-    * Weighted summary statistics of data points, which in this case assume uniform class weights
-    */
-  def weightedCount: Double = stats.sum
+   * Weighted summary statistics of data points
+   */
+  def weightedCount: Double = weightedStats.sum
 
   /**
    * Prediction which should be made based on the sufficient statistics.
@@ -149,7 +149,7 @@ private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCal
   def predict: Double = if (count == 0) {
     0
   } else {
-    indexOfLargestArrayElement(stats)
+    indexOfLargestArrayElement(weightedStats)
   }
 
   /**
@@ -158,16 +158,53 @@ private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCal
   override def prob(label: Double): Double = {
     val lbl = label.toInt
     require(lbl < stats.length,
-      s"EntropyCalculator.prob given invalid label: $lbl (should be < ${stats.length}")
-    require(lbl >= 0, "Entropy does not support negative labels")
-    val cnt = count
+      s"WeightedGiniCalculator.prob given invalid label: $lbl (should be < ${stats.length}")
+    require(lbl >= 0, "WeightedGiniImpurity does not support negative labels")
+    val cnt = weightedCount
     if (cnt == 0) {
       0
     } else {
-      stats(lbl) / cnt
+      weightedStats(lbl) / cnt
     }
   }
 
-  override def toString: String = s"EntropyCalculator(stats = [${stats.mkString(", ")}])"
+  override def toString: String = s"WeightedGiniCalculator(stats = [${stats.mkString(", ")}])"
 
+  /**
+   * Add the stats from another calculator into this one, modifying and returning this calculator.
+   * Update the weightedStats at the same time
+   */
+  override def add(other: ImpurityCalculator): ImpurityCalculator = {
+    require(stats.length == other.stats.length,
+      s"Two ImpurityCalculator instances cannot be added with different counts sizes." +
+        s"  Sizes are ${stats.length} and ${other.stats.length}.")
+    val otherCalculator = other.asInstanceOf[WeightedGiniCalculator]
+    var i = 0
+    val len = other.stats.length
+    while (i < len) {
+      stats(i) += other.stats(i)
+      weightedStats(i) += otherCalculator.weightedStats(i)
+      i += 1
+    }
+    this
+  }
+
+  /**
+   * Subtract the stats from another calculator from this one, modifying and returning this
+   * calculator. Update the weightedStats at the same time
+   */
+  override def subtract(other: ImpurityCalculator): ImpurityCalculator = {
+    require(stats.length == other.stats.length,
+      s"Two ImpurityCalculator instances cannot be subtracted with different counts sizes." +
+        s"  Sizes are ${stats.length} and ${other.stats.length}.")
+    val otherCalculator = other.asInstanceOf[WeightedGiniCalculator]
+    var i = 0
+    val len = other.stats.length
+    while (i < len) {
+      stats(i) -= other.stats(i)
+      weightedStats(i) -= otherCalculator.weightedStats(i)
+      i += 1
+    }
+    this
+  }
 }
