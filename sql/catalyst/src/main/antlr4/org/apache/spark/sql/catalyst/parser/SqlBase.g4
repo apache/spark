@@ -90,6 +90,9 @@ statement
         identifierCommentList? (COMMENT STRING)?
         (PARTITIONED ON identifierList)?
         (TBLPROPERTIES tablePropertyList)? AS query                    #createView
+    | CREATE (OR REPLACE)? TEMPORARY VIEW
+        tableIdentifier ('(' colTypeList ')')? tableProvider
+        (OPTIONS tablePropertyList)?                                   #createTempViewUsing
     | ALTER VIEW tableIdentifier AS? query                             #alterViewQuery
     | CREATE TEMPORARY? FUNCTION qualifiedName AS className=STRING
         (USING resource (',' resource)*)?                              #createFunction
