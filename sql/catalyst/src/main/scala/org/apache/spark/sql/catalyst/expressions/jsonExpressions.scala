@@ -26,7 +26,6 @@ import com.fasterxml.jackson.core._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
-import org.apache.spark.sql.catalyst.util.GenericArrayData
 import org.apache.spark.sql.types.{DataType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -328,9 +327,6 @@ case class GetJsonObject(json: Expression, path: Expression)
 // scalastyle:on line.size.limit
 case class JsonTuple(children: Seq[Expression]) extends Generator {
 
-  // a row is always returned
-  override def nullable: Boolean = false
-
   // if processing fails this shared value will be returned
   @transient private lazy val nullRow: Seq[InternalRow] =
     new GenericInternalRow(fieldExpressions.length) :: Nil
@@ -399,17 +395,16 @@ case class JsonTuple(children: Seq[Expression]) extends Generator {
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val arrayDataClass = classOf[GenericArrayData].getName
+    val iteratorClass = classOf[Iterator[_]].getName
     val rowClass = classOf[GenericInternalRow].getName
-    def newArrayData(p: String): String = s"new $arrayDataClass(new Object[]{new $rowClass($p)})"
 
     // Add an empty row to default to.
     val fieldCount = fieldExpressions.length
     val nullRow = ctx.freshName("nullRow")
     ctx.addMutableState(
-      arrayDataClass,
+      rowClass,
       nullRow,
-      s"this.$nullRow = ${newArrayData(fieldCount.toString)};")
+      s"this.$nullRow = new $rowClass(${fieldCount.toString});")
 
     // Add the field names as a class field and add the foldable field names.
     val fieldNames = ctx.freshName("fieldNames")
@@ -432,19 +427,19 @@ case class JsonTuple(children: Seq[Expression]) extends Generator {
 
     // Create the generated code.
     val jsonSource = jsonExpr.genCode(ctx)
-    val result = ctx.freshName("result")
+    val raw = ctx.freshName("raw")
+    val row = ctx.freshName("row")
     val jsonTupleClass = classOf[JsonTuple].getName
     ev.copy(code = s"""
          |${jsonSource.code}
          |boolean ${ev.isNull} = false;
-         |ArrayData ${ev.value} = null;
-         |if (${jsonSource.isNull}) {
-         |  ${ev.value} = $nullRow;
-         |} else {
+         |InternalRow $row = $nullRow;
+         |if (!(${jsonSource.isNull})) {
          |  ${evalFieldNames.mkString("")}
-         |  Object[] $result = $jsonTupleClass.extractTuple(${jsonSource.value}, $fieldNames);
-         |  ${ev.value} = $result == null ? $nullRow : ${newArrayData(result)};
+         |  Object[] $raw = $jsonTupleClass.extractTuple(${jsonSource.value}, $fieldNames);
+         |  $row = $raw != null ? new $rowClass($raw) : $nullRow;
          |}
+         |$iteratorClass<InternalRow> ${ev.value} = $iteratorClass$$.MODULE$$.single($row);
     """.stripMargin)
   }
 }

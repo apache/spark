@@ -113,46 +113,48 @@ case class GenerateExec(
   }
 
   override def doConsume(ctx: CodegenContext, input: Seq[ExprCode], row: ExprCode): String = {
-    boundGenerator match {
-      case e: Explode => codeGen(ctx, e.child, expand = false, input, row)
-      case g => codeGen(ctx, g, expand = true, input, row)
-    }
-  }
-
-  /** Generate code for Generate. */
-  private def codeGen(
-      ctx: CodegenContext,
-      e: Expression,
-      expand: Boolean,
-      input: Seq[ExprCode],
-      row: ExprCode): String = {
     ctx.currentVars = input
     ctx.copyResult = true
 
+    // Add input rows to the values when we are joining
+    val values = if (join) {
+      input
+    } else {
+      Seq.empty
+    }
+
     // Generate the driving expression.
-    val data = e.genCode(ctx)
+    val data = boundGenerator.genCode(ctx)
+
+    boundGenerator match {
+      case e: Explode => codeGenExplode(ctx, e.child, values, data, row)
+      case g => codeGenTraversableOnce(ctx, g, values, data, row)
+    }
+  }
+
+  /**
+   * Generate code for [[Explode]].
+   */
+  private def codeGenExplode(
+      ctx: CodegenContext,
+      e: Expression,
+      input: Seq[ExprCode],
+      data: ExprCode,
+      row: ExprCode): String = {
 
     // Generate looping variables.
-    val numOutput = metricTerm(ctx, "numOutputRows")
     val index = ctx.freshName("index")
-    val numElements = ctx.freshName("numElements")
 
     // Add a check if the generate outer flag is true.
     val checks = optionalCode(outer, data.isNull)
-    val (initArrayData, initValues, values) = e.dataType match {
-      case ArrayType(st: StructType, nullable) if expand =>
-        val rowCode = codeGenAccessor(ctx, data.value, "col", index, st, nullable, checks)
-        val extendedChecks = checks ++ optionalCode(nullable, rowCode.isNull)
-        val values = st.fields.toSeq.zipWithIndex.map { case (f, i) =>
-          codeGenAccessor(ctx, rowCode.value, f.name, s"$i", f.dataType, f.nullable, extendedChecks)
-        }
-        ("", rowCode.code, values)
 
+    // Generate code for either ArrayData or MapData
+    val (initMapData, values) = e.dataType match {
       case ArrayType(dataType, nullable) =>
-        ("", "", Seq(codeGenAccessor(ctx, data.value, "col", index, dataType, nullable, checks)))
+        ("", Seq(codeGenAccessor(ctx, data.value, "col", index, dataType, nullable, checks)))
 
       case MapType(keyType, valueType, valueContainsNull) =>
-        // Materialize the key and the value array before we enter the loop.
+        // Materialize the key and the value arrays before we enter the loop.
         val keyArray = ctx.freshName("keyArray")
         val valueArray = ctx.freshName("valueArray")
         val initArrayData =
@@ -163,34 +165,75 @@ case class GenerateExec(
         val values = Seq(
           codeGenAccessor(ctx, keyArray, "key", index, keyType, nullable = false, checks),
           codeGenAccessor(ctx, valueArray, "value", index, valueType, valueContainsNull, checks))
-        (initArrayData, "", values)
-    }
-
-    // Determine result vars.
-    val outputValues = if (join) {
-      input ++ values
-    } else {
-      values
+        (initArrayData, values)
     }
 
     // In case of outer we need to make sure the loop is executed at-least once when the array/map
     // contains no input. We do this by setting the looping index to -1 if there is no input,
     // evaluation of the array is prevented by a check in the accessor code.
+    val numElements = ctx.freshName("numElements")
     val init = if (outer) s"$numElements == 0 ? -1 : 0" else "0"
+    val numOutput = metricTerm(ctx, "numOutputRows")
     s"""
        |${data.code}
-       |$initArrayData
+       |$initMapData
        |int $numElements = ${data.isNull} ? 0 : ${data.value}.numElements();
        |for (int $index = $init; $index < $numElements; $index++) {
        |  $numOutput.add(1);
-       |  $initValues
-       |  ${consume(ctx, outputValues)}
+       |  ${consume(ctx, input ++ values)}
        |}
      """.stripMargin
   }
 
   /**
-   * Generate for accessor code for ArrayData and InternalRows.
+   * Generate code for a regular [[TraversableOnce]] returning [[Generator]].
+   */
+  private def codeGenTraversableOnce(
+      ctx: CodegenContext,
+      e: Expression,
+      input: Seq[ExprCode],
+      data: ExprCode,
+      row: ExprCode): String = {
+
+    // Generate looping variables.
+    val iterator = ctx.freshName("iterator")
+    val hasNext = ctx.freshName("hasNext")
+    val current = ctx.freshName("row")
+
+    // Add a check if the generate outer flag is true.
+    val checks = optionalCode(outer, hasNext)
+    val values = e.dataType match {
+      case ArrayType(st: StructType, nullable) =>
+        st.fields.toSeq.zipWithIndex.map { case (f, i) =>
+          codeGenAccessor(ctx, current, f.name, s"$i", f.dataType, f.nullable, checks)
+        }
+    }
+
+    // In case of outer we need to make sure the loop is executed at-least-once when the iterator
+    // contains no input. We do this by adding an 'outer' variable which guarantees execution of
+    // the first iteration even if there is no input. Evaluation of the iterator is prevented by a
+    // check in the accessor code.
+    val hasNextCode = s"$hasNext = $iterator.hasNext()"
+    val outerVal = ctx.freshName("outer")
+    def concatIfOuter(s1: String, s2: String): String = s1 + (if (outer) s2 else "")
+    val init = concatIfOuter(s"boolean $hasNextCode", s", $outerVal = true")
+    val check = concatIfOuter(hasNext, s"|| $outerVal")
+    val update = concatIfOuter(hasNextCode, s", $outerVal = false")
+    val next = if (outer) s"$hasNext ? $iterator.next() : null" else s"$iterator.next()"
+    val numOutput = metricTerm(ctx, "numOutputRows")
+    s"""
+       |${data.code}
+       |scala.collection.Iterator<InternalRow> $iterator = ${data.value}.toIterator();
+       |for ($init; $check; $update) {
+       |  $numOutput.add(1);
+       |  InternalRow $current = (InternalRow) $next;
+       |  ${consume(ctx, input ++ values)}
+       |}
+     """.stripMargin
+  }
+
+  /**
+   * Generate accessor code for ArrayData and InternalRows.
    */
   private def codeGenAccessor(
       ctx: CodegenContext,
@@ -210,7 +253,7 @@ case class GenerateExec(
         s"""
            |boolean $isNull = ${checks.mkString(" || ")};
            |$javaType $value = $isNull ? ${ctx.defaultValue(dt)} : $getter;
-           """.stripMargin
+         """.stripMargin
       ExprCode(code, isNull, value)
     } else {
       ExprCode(s"$javaType $value = $getter;", "false", value)
