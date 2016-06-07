@@ -115,8 +115,9 @@ private[spark] object Utils extends Logging {
           "Truncated the string representation of a plan since it was too large. This " +
           "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
       }
-      seq.take(maxNumFields - 1).mkString(
-        start, sep, sep + "... " + (seq.length - maxNumFields + 1) + " more fields" + end)
+      val numFields = math.max(0, maxNumFields - 1)
+      seq.take(numFields).mkString(
+        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
     } else {
       seq.mkString(start, sep, end)
     }

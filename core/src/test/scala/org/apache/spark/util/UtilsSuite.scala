@@ -44,6 +44,7 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties with Logging {
     assert(Utils.truncatedString(Nil, "[", ", ", "]", 2) == "[]")
     assert(Utils.truncatedString(Seq(1, 2), "[", ", ", "]", 2) == "[1, 2]")
     assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", 2) == "[1, ... 2 more fields]")
+    assert(Utils.truncatedString(Seq(1, 2, 3), "[", ", ", "]", -5) == "[, ... 3 more fields]")
     assert(Utils.truncatedString(Seq(1, 2, 3), ", ") == "1, 2, 3")
   }
 
