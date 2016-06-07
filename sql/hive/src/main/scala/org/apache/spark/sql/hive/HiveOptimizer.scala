@@ -20,7 +20,7 @@ package org.apache.spark.sql.hive
 import org.apache.spark.sql.{catalyst, ExperimentalMethods, SparkSession}
 import org.apache.spark.sql.catalyst.expressions.{AttributeSet, Expression, PredicateHelper}
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.internal.SQLConf
 
@@ -33,8 +33,7 @@ class HiveOptimizer (
 
   override def batches: Seq[Batch] = super.batches :+
     Batch("Push filter into relation", Once, PushFilterIntoRelation(conf)) :+
-      Batch("Push Project into relation", Once, PushProjectIntoRelation(conf)) :+
-        Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
+      Batch("User Provided Optimizers", fixedPoint, experimentalMethods.extraOptimizations: _*)
 }
 
 case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with PredicateHelper {
@@ -56,33 +55,6 @@ case class PushFilterIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] with 
         }
 
         filterCondition.map(Filter(_, relation)).getOrElse(relation)
-    }
-  }
-}
-
-case class PushProjectIntoRelation(conf: SQLConf) extends Rule[LogicalPlan] {
-
-  override def apply(plan: LogicalPlan): LogicalPlan = {
-    plan.transform {
-      case p @Project(projectList, relation: MetastoreRelation) =>
-        val projectSet = AttributeSet(projectList.flatMap(_.references))
-        relation.requiredAttributes = projectSet.toSeq
-        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet) {
-          relation
-        } else {
-          Project(projectList, relation)
-        }
-
-      case p @Project(projectList, filter@Filter(condition, relation: MetastoreRelation)) =>
-        val projectSet = AttributeSet(projectList.flatMap(_.references))
-        val filterSet = AttributeSet(condition.flatMap(_.references))
-        relation.requiredAttributes = (projectSet ++ filterSet).toSeq
-        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
-          filterSet.subsetOf(projectSet)) {
-          filter
-        } else {
-          Project(projectList, filter)
-        }
     }
   }
 }

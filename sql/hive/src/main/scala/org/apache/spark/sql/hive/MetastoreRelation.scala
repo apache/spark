@@ -44,8 +44,7 @@ private[hive] case class MetastoreRelation(
     databaseName: String,
     tableName: String,
     alias: Option[String],
-    var partitionPruningPred: Seq[Expression] = Seq.empty[Expression],
-    var requiredAttributes: Seq[Attribute] = Seq.empty[Attribute])
+    var partitionPruningPred: Seq[Expression] = Seq.empty[Expression])
     (val catalogTable: CatalogTable,
      @transient private val client: HiveClient,
      @transient private val sparkSession: SparkSession)
@@ -287,7 +286,7 @@ private[hive] case class MetastoreRelation(
   }
 
   override def newInstance(): MetastoreRelation = {
-    MetastoreRelation(databaseName, tableName, alias, partitionPruningPred, requiredAttributes)(
+    MetastoreRelation(databaseName, tableName, alias, partitionPruningPred)(
       catalogTable, client, sparkSession)
   }
 }

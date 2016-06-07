@@ -18,8 +18,9 @@
 package org.apache.spark.sql.hive
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet}
 import org.apache.spark.sql.catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.hive.execution._
 
@@ -58,13 +59,29 @@ private[hive] trait HiveStrategies {
    */
   object HiveTableScans extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case relation: MetastoreRelation =>
-        val requiredAttributes = if (relation.requiredAttributes.isEmpty) {
-          relation.output
+      case p @Project(projectList, relation: MetastoreRelation) =>
+        val projectSet = AttributeSet(projectList.flatMap(_.references))
+        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet) {
+          HiveTableScanExec(projectList.asInstanceOf[Seq[Attribute]], relation,
+            relation.partitionPruningPred)(sparkSession) :: Nil
         } else {
-          relation.requiredAttributes
+          ProjectExec(projectList, HiveTableScanExec(projectSet.toSeq, relation,
+            relation.partitionPruningPred)(sparkSession)) :: Nil
         }
-        HiveTableScanExec(requiredAttributes, relation, relation.partitionPruningPred)(
+      case p @Project(projectList, filter@Filter(condition, relation: MetastoreRelation)) =>
+        val projectSet = AttributeSet(projectList.flatMap(_.references))
+        val filterSet = AttributeSet(condition.flatMap(_.references))
+        if (AttributeSet(projectList.map(_.toAttribute)) == projectSet &&
+          filterSet.subsetOf(projectSet)) {
+          FilterExec(condition, HiveTableScanExec(projectList.asInstanceOf[Seq[Attribute]],
+            relation, relation.partitionPruningPred)(sparkSession)) :: Nil
+        } else {
+          val scan = HiveTableScanExec((projectSet ++ filterSet).toSeq, relation,
+            relation.partitionPruningPred)(sparkSession)
+          ProjectExec(projectList, FilterExec(condition, scan)) :: Nil
+        }
+      case relation: MetastoreRelation =>
+        HiveTableScanExec(relation.output, relation, relation.partitionPruningPred)(
           sparkSession) :: Nil
       case _ =>
         Nil
