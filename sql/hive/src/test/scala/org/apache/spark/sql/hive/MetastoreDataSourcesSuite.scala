@@ -896,34 +896,34 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
       (from to to).map(i => i -> s"str$i").toDF("c1", "c2")
     }
 
-    withTable("appendParquetToOrc") {
-      createDF(0, 9).write.format("parquet").saveAsTable("appendParquetToOrc")
+    withTable("appendOrcToParquet") {
+      createDF(0, 9).write.format("parquet").saveAsTable("appendOrcToParquet")
       val e = intercept[AnalysisException] {
-        createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendParquetToOrc")
+        createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendOrcToParquet")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendParquetToOrc` " +
+      assert(e.getMessage.contains("The file format of the existing table `appendOrcToParquet` " +
         "is `org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat`. " +
         "It doesn't match the specified format `orc`"))
     }
 
-    withTable("appendJsonToCSV") {
-      createDF(0, 9).write.format("json").saveAsTable("appendJsonToCSV")
+    withTable("appendParquetToJson") {
+      createDF(0, 9).write.format("json").saveAsTable("appendParquetToJson")
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
-          .saveAsTable("appendJsonToCSV")
+          .saveAsTable("appendParquetToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendJsonToCSV` is " +
-        "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
+      assert(e.getMessage.contains("The file format of the existing table `appendParquetToJson` " +
+        "is `org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `parquet`"))
     }
 
-    withTable("appendJsonToText") {
-      createDF(0, 9).write.format("json").saveAsTable("appendJsonToText")
+    withTable("appendTextToJson") {
+      createDF(0, 9).write.format("json").saveAsTable("appendTextToJson")
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
-          .saveAsTable("appendJsonToText")
+          .saveAsTable("appendTextToJson")
       }
-      assert(e.getMessage.contains("The file format of the existing table `appendJsonToText` is " +
+      assert(e.getMessage.contains("The file format of the existing table `appendTextToJson` is " +
         "`org.apache.spark.sql.execution.datasources.json.JsonFileFormat`. " +
         "It doesn't match the specified format `text`"))
     }
