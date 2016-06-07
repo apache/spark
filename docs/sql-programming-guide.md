@@ -1575,7 +1575,7 @@ a regular multi-line JSON file will most often fail.
 # sc is an existing SparkContext.
 from pyspark.sql import SparkSession
 spark = ... // spark is an existing SparkSession.
-sc = spark.sparkContext()
+sc = spark.sparkContext
 
 # A JSON dataset is pointed to by path.
 # The path can be either a single text file or a directory storing text files.
