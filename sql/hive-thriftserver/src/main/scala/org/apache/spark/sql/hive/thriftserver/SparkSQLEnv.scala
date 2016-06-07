@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.thriftserver
 
 import java.io.PrintStream
 
-import scala.collection.JavaConverters._
+import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.internal.Logging
@@ -63,6 +63,14 @@ private[hive] object SparkSQLEnv extends Logging {
       sessionState.metadataHive.setInfo(new PrintStream(System.err, true, "UTF-8"))
       sessionState.metadataHive.setError(new PrintStream(System.err, true, "UTF-8"))
       sparkSession.conf.set("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
+    }
+  }
+
+  def applyOverridedConf(ss: SessionState): Unit = {
+    val it = ss.getOverriddenConfigurations.entrySet().iterator()
+    while (it.hasNext) {
+      val kv = it.next()
+      SparkSQLEnv.sqlContext.setConf(kv.getKey, kv.getValue)
     }
   }
 

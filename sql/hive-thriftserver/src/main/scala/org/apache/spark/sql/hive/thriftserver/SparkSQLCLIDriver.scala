@@ -156,6 +156,9 @@ private[hive] object SparkSQLCLIDriver extends Logging {
     // Execute -i init files (always in silent mode)
     cli.processInitFiles(sessionState)
 
+    // Respect the configurations from the command line and .hiverc for backward-compatible
+    SparkSQLEnv.applyOverridedConf(sessionState)
+
     if (sessionState.execString != null) {
       System.exit(cli.processLine(sessionState.execString))
     }
