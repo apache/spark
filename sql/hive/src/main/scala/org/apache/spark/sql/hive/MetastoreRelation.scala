@@ -58,9 +58,7 @@ private[hive] case class MetastoreRelation(
         alias == relation.alias &&
         output == relation.output &&
         partitionPruningPred.size == relation.partitionPruningPred.size &&
-        (partitionPruningPred, relation.partitionPruningPred).zipped.forall(_ semanticEquals _) &&
-        requiredAttributes.size == relation.requiredAttributes.size &&
-        (requiredAttributes, relation.requiredAttributes).zipped.forall(_ semanticEquals _)
+        (partitionPruningPred, relation.partitionPruningPred).zipped.forall(_ semanticEquals _)
     case _ => false
   }
 
@@ -233,9 +231,7 @@ private[hive] case class MetastoreRelation(
       case mr: MetastoreRelation =>
         mr.databaseName == databaseName && mr.tableName == tableName &&
           partitionPruningPred.size == mr.partitionPruningPred.size &&
-          (partitionPruningPred, mr.partitionPruningPred).zipped.forall(_ semanticEquals _) &&
-          requiredAttributes.size == mr.requiredAttributes.size &&
-          (requiredAttributes, mr.requiredAttributes).zipped.forall(_ semanticEquals _)
+          (partitionPruningPred, mr.partitionPruningPred).zipped.forall(_ semanticEquals _)
       case _ => false
     }
   }
