@@ -1383,8 +1383,8 @@ metadata.
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-// sqlContext is an existing HiveContext
-sqlContext.refreshTable("my_table")
+// spark is an existing SparkSession
+spark.catalog.refreshTable("my_table")
 {% endhighlight %}
 
 </div>
@@ -1392,8 +1392,8 @@ sqlContext.refreshTable("my_table")
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-// sqlContext is an existing HiveContext
-sqlContext.refreshTable("my_table")
+// spark is an existing SparkSession
+spark.catalog.refreshTable("my_table")
 {% endhighlight %}
 
 </div>
@@ -1401,8 +1401,8 @@ sqlContext.refreshTable("my_table")
 <div data-lang="python"  markdown="1">
 
 {% highlight python %}
-# sqlContext is an existing HiveContext
-sqlContext.refreshTable("my_table")
+# // spark is an existing SparkSession
+spark.catalog.refreshTable("my_table")
 {% endhighlight %}
 
 </div>
@@ -2157,7 +2157,7 @@ options.
  - JSON data source will not automatically load new files that are created by other applications
    (i.e. files that are not inserted to the dataset through Spark SQL).
    For a JSON persistent table (i.e. the metadata of the table is stored in Hive Metastore),
-   users can use `REFRESH TABLE` SQL command or `HiveContext`'s `refreshTable` method
+   users can use `REFRESH TABLE` SQL command or `SparkSession.catalog`'s `refreshTable` method
    to include those new files to the table. For a DataFrame representing a JSON dataset, users need to recreate
    the DataFrame and the new DataFrame will include new files.
  - DataFrame.withColumn method in pySpark supports adding a new column or replacing existing columns of the same name.
