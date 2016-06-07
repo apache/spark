@@ -18,17 +18,17 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.execution.streaming.Source
 
 /**
  * :: Experimental ::
- * Status and metrics of a streaming [[Source]].
+ * A class used to report information about the progress of a [[ContinuousQuery]].
  *
- * @param description Description of the source corresponding to this status
- * @param offsetDesc Description of the current [[Source]] offset if known
- * @since 2.0.0
+ * @param name The [[ContinuousQuery]] name.
+ * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
+ * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
  */
 @Experimental
-class SourceStatus private[sql] (
-    val description: String,
-    val offsetDesc: Option[String])
+class ContinuousQueryInfo private[sql](
+  val name: String,
+  val sourceStatuses: Seq[SourceStatus],
+  val sinkStatus: SinkStatus)
