@@ -579,7 +579,7 @@ for the JavaBean.
 
 {% highlight java %}
 SparkSession spark = ...; // An existing SparkSession.
-SparkContext sc = spark.sparkContext();
+JavaSparkContext sc = new JavaSparkContext(spark.sparkContext());
 
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").map(
@@ -737,7 +737,7 @@ import org.apache.spark.sql.Row;
 import org.apache.spark.sql.RowFactory;
 
 SparkSession spark = ...; // An existing SparkSession.
-SparkContext sc = spark.sparkContext();
+JavaSparkContext sc = new JavaSparkContext(spark.sparkContext());
 
 // Load a text file and convert each line to a JavaBean.
 JavaRDD<String> people = sc.textFile("examples/src/main/resources/people.txt");
