@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
+import org.apache.spark.sql.catalyst.plans.physical.ClusteredDistribution
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.streaming.{StateStoreRestoreExec, StateStoreSaveExec}
 
@@ -81,13 +82,18 @@ object AggUtils {
       groupingExpressions: Seq[NamedExpression],
       aggregateExpressions: Seq[AggregateExpression],
       resultExpressions: Seq[NamedExpression],
-      partialAggregation: Boolean,
       child: SparkPlan): Seq[SparkPlan] = {
-    // Check if we can use HashAggregate.
+    // Check if the child operator satisfies the group-by distribution requirements
+    val skipPartialAggregation = if (groupingExpressions != Nil) {
+      child.outputPartitioning.satisfies(ClusteredDistribution(groupingExpressions))
+    } else {
+      false
+    }
 
+    // Check if we can use HashAggregate.
     val groupingAttributes = groupingExpressions.map(_.toAttribute)
 
-    if (partialAggregation) {
+    if (skipPartialAggregation) {
       // A single-stage aggregation is enough to get the final result because input data are
       // already clustered.
       val completeAggregateExpressions = aggregateExpressions.map(_.copy(mode = Complete))
