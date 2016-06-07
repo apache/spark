@@ -320,7 +320,8 @@ class DataFrameReader(object):
                          it uses the default value, ``UTF-8``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``.
+                      value, ``"``. If you would like to turn off quotations, you need to set an
+                      empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
         :param comment: sets the single character used for skipping lines beginning with this
@@ -804,7 +805,8 @@ class DataFrameWriter(object):
                     set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``.
+                      value, ``"``. If you would like to turn off quotations, you need to set an
+                      empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: A flag indicating whether values containing quotes should always

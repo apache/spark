@@ -370,7 +370,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
+   * the separator can be part of the value. If you would like to turn off quotations, you need to
+   * set not `null` but an empty string. This behaviour is different form
+   * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`comment` (default empty string): sets the single character used for skipping lines
