@@ -150,7 +150,8 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
 
       case StringType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addBinary(Binary.fromByteArray(row.getUTF8String(ordinal).getBytes))
+          recordConsumer.addBinary(
+            Binary.fromReusedByteArray(row.getUTF8String(ordinal).getBytes))
 
       case TimestampType =>
         (row: SpecializedGetters, ordinal: Int) => {
@@ -165,12 +166,12 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           val (julianDay, timeOfDayNanos) = DateTimeUtils.toJulianDay(row.getLong(ordinal))
           val buf = ByteBuffer.wrap(timestampBuffer)
           buf.order(ByteOrder.LITTLE_ENDIAN).putLong(timeOfDayNanos).putInt(julianDay)
-          recordConsumer.addBinary(Binary.fromByteArray(timestampBuffer))
+          recordConsumer.addBinary(Binary.fromReusedByteArray(timestampBuffer))
         }
 
       case BinaryType =>
         (row: SpecializedGetters, ordinal: Int) =>
-          recordConsumer.addBinary(Binary.fromByteArray(row.getBinary(ordinal)))
+          recordConsumer.addBinary(Binary.fromReusedByteArray(row.getBinary(ordinal)))
 
       case DecimalType.Fixed(precision, scale) =>
         makeDecimalWriter(precision, scale)
@@ -227,7 +228,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           shift -= 8
         }
 
-        recordConsumer.addBinary(Binary.fromByteArray(decimalBuffer, 0, numBytes))
+        recordConsumer.addBinary(Binary.fromReusedByteArray(decimalBuffer, 0, numBytes))
       }
 
     val binaryWriterUsingUnscaledBytes =
@@ -248,7 +249,7 @@ private[parquet] class CatalystWriteSupport extends WriteSupport[InternalRow] wi
           decimalBuffer
         }
 
-        recordConsumer.addBinary(Binary.fromByteArray(fixedLengthBytes, 0, numBytes))
+        recordConsumer.addBinary(Binary.fromReusedByteArray(fixedLengthBytes, 0, numBytes))
       }
 
     writeLegacyParquetFormat match {
