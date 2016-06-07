@@ -345,15 +345,15 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-    * Loads an `Dataset[String]` storing JSON objects (one object per record) and
-    * returns the result as a [[DataFrame]].
-    *
-    * Unless the schema is specified using [[schema]] function, this function goes through the
-    * input once to determine the input schema.
-    *
-    * @param jsonDataset input Dataset with one JSON object per record
-    * @since 2.0.0
-    */
+   * Loads an `Dataset[String]` storing JSON objects (one object per record) and
+   * returns the result as a [[DataFrame]].
+   *
+   * Unless the schema is specified using [[schema]] function, this function goes through the
+   * input once to determine the input schema.
+   *
+   * @param jsonDataset input Dataset with one JSON object per record
+   * @since 2.0.0
+   */
   def json(jsonDataset: Dataset[String]): DataFrame = {
     val parsedOptions: JSONOptions = new JSONOptions(extraOptions.toMap)
     val columnNameOfCorruptRecord =
