@@ -69,18 +69,14 @@ public abstract class ColumnVector implements AutoCloseable {
       DataType type,
       MemoryMode mode,
       boolean isConstant) {
+    int childCapacity = capacity;
+    if (isConstant) {
+      capacity = 1;
+    }
     if (mode == MemoryMode.OFF_HEAP) {
-      if (isConstant) {
-        return new OffHeapConstantColumnVector(capacity, type);
-      } else {
-        return new OffHeapColumnVector(capacity, type);
-      }
+      return new OffHeapColumnVector(capacity, childCapacity, type, isConstant);
     } else {
-      if (isConstant) {
-        return new OnHeapConstantColumnVector(capacity, type);
-      } else {
-        return new OnHeapColumnVector(capacity, type);
-      }
+      return new OnHeapColumnVector(capacity, childCapacity, type, isConstant);
     }
   }
 
