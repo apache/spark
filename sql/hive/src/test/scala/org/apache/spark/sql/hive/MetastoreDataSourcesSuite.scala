@@ -898,10 +898,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable("appendParquetToOrc") {
       createDF(0, 9).write.format("parquet").saveAsTable("appendParquetToOrc")
-      checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM appendParquetToOrc p WHERE p.c1 > 5"),
-        (6 to 9).map(i => Row(i, s"str$i")))
-
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("orc").saveAsTable("appendParquetToOrc")
       }
@@ -912,10 +908,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable("appendJsonToCSV") {
       createDF(0, 9).write.format("json").saveAsTable("appendJsonToCSV")
-      checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM appendJsonToCSV p WHERE p.c1 > 5"),
-        (6 to 9).map(i => Row(i, s"str$i")))
-
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
           .saveAsTable("appendJsonToCSV")
@@ -927,10 +919,6 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable("appendJsonToText") {
       createDF(0, 9).write.format("json").saveAsTable("appendJsonToText")
-      checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM appendJsonToText p WHERE p.c1 > 5"),
-        (6 to 9).map(i => Row(i, s"str$i")))
-
       val e = intercept[AnalysisException] {
         createDF(10, 19).write.mode(SaveMode.Append).format("text")
           .saveAsTable("appendJsonToText")
@@ -948,33 +936,30 @@ class MetastoreDataSourcesSuite extends QueryTest with SQLTestUtils with TestHiv
 
     withTable("appendParquet") {
       createDF(0, 9).write.format("parquet").saveAsTable("appendParquet")
-      checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
-        (6 to 9).map(i => Row(i, s"str$i")))
-
       createDF(10, 19).write.mode(SaveMode.Append).format("org.apache.spark.sql.parquet")
         .saveAsTable("appendParquet")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
     }
 
     withTable("appendParquet") {
       createDF(0, 9).write.format("org.apache.spark.sql.parquet").saveAsTable("appendParquet")
+      createDF(10, 19).write.mode(SaveMode.Append).format("parquet").saveAsTable("appendParquet")
       checkAnswer(
         sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
-        (6 to 9).map(i => Row(i, s"str$i")))
-
-      createDF(10, 19).write.mode(SaveMode.Append).format("parquet")
-        .saveAsTable("appendParquet")
+        (6 to 19).map(i => Row(i, s"str$i")))
     }
 
     withTable("appendParquet") {
-      createDF(0, 9).write.format("parquet").saveAsTable("appendParquet")
-      checkAnswer(
-        sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
-        (6 to 9).map(i => Row(i, s"str$i")))
-
+      createDF(0, 9).write.format("org.apache.spark.sql.parquet.DefaultSource")
+        .saveAsTable("appendParquet")
       createDF(10, 19).write.mode(SaveMode.Append)
         .format("org.apache.spark.sql.execution.datasources.parquet.DefaultSource")
         .saveAsTable("appendParquet")
+      checkAnswer(
+        sql("SELECT p.c1, p.c2 FROM appendParquet p WHERE p.c1 > 5"),
+        (6 to 19).map(i => Row(i, s"str$i")))
     }
   }
 
