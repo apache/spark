@@ -361,10 +361,8 @@ private[spark] class TaskSchedulerImpl(
               // by driver. For more details, can check in SPARK-14485.
               taskSet.removeRunningTask(tid)
               if (executorId != null && !executorIdToTaskCount.contains(executorId)) {
-                logInfo(
-                  ("Ignoring update with state %s for TID %s because its executor has already " +
-                    "removed by driver, and the task of this executor has re-queued")
-                    .format(state, tid))
+                logInfo(s"Ignoring update with state $state for TID $tid because its executor " +
+                  s"has already been removed by driver")
               } else {
                 taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
               }
