@@ -216,7 +216,7 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
     s"""== Parsed Logical Plan ==
        |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
-       |${analyzedPlan}
+       |$analyzedPlan
        |== Optimized Logical Plan ==
        |${stringOrError(optimizedPlan.treeString(verbose = true))}
        |== Physical Plan ==

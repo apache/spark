@@ -190,7 +190,8 @@ abstract class Expression extends TreeNode[Expression] {
     case single => single :: Nil
   }
 
-  // Marks this as final, verboseString of Expression is NEVER called.
+  // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
+  // overridden by concrete classes.
   final override def verboseString: String = simpleString
 
   override def simpleString: String = toString
