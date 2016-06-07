@@ -91,6 +91,8 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
          |  --hiveconf ${ConfVars.METASTORECONNECTURLKEY}=$jdbcUrl
          |  --hiveconf ${ConfVars.METASTOREWAREHOUSE}=$warehousePath
          |  --hiveconf ${ConfVars.SCRATCHDIR}=$scratchDirPath
+         |  --hiveconf conf1=conftest
+         |  --hiveconf conf2=1
        """.stripMargin.split("\\s+").toSeq ++ extraArgs
     }
 
@@ -270,6 +272,15 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
     runCliWithin(2.minute)(
       s"ADD FILE $dataFilePath;" -> "",
       s"LIST FILE $dataFilePath;" -> "small_kv.txt"
+    )
+  }
+
+  test("apply hiveconf from cli command") {
+    runCliWithin(2.minute)(
+      s"SET conf1;" -> "conftest",
+      s"SET conf2;" -> "1",
+      // bypassed by SparkSQLCLIDriver
+      s"SET ${ConfVars.METASTORECONNECTURLKEY};" -> "undefined"
     )
   }
 }
