@@ -30,6 +30,9 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
 
+import scala.io.Source
+import org.apache.spark.mllib.evaluation.MulticlassMetrics
+
 class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -68,6 +71,72 @@ class DecisionTreeClassifierSuite
   /////////////////////////////////////////////////////////////////////////////
   // Tests calling train()
   /////////////////////////////////////////////////////////////////////////////
+
+  test("classification with class weights") {
+    val buf = Source.fromFile("/Users/yueweina/Documents/spark/data/mllib/unbalenced_train.csv").getLines
+    val header = buf.take(1).next()
+    var data = new Array[LabeledPoint](1000)
+    var idx : Int = 0
+    for (row <- buf) {
+      val cols = row.split(",").map(_.trim)
+      // scalastyle:off println
+      //println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}|${cols(4)}")
+      //println( cols(0).getClass)
+      // scalastyle:on println
+      data(idx) = new LabeledPoint(cols(0).toDouble,
+        Vectors.dense(cols(1).toDouble, cols(2).toDouble))
+      idx += 1
+    }
+    // scalastyle:off println
+    //println(data)
+    // scalastyle:on println
+    val IrIsRDD = sc.parallelize(data)
+    val dt = new DecisionTreeClassifier()
+      .setImpurity("weightedgini")
+      .setMaxDepth(3)
+      .setMaxBins(400)
+      .setMinInstancesPerNode(1)
+      .setClassWeights(Array(1, 10000))
+    val categoricalFeatures: Map[Int, Int] = Map()
+    val newData: DataFrame = TreeTests.setMetadata(IrIsRDD, categoricalFeatures, 2)
+    val newTree = dt.fit(newData)
+    val predoutput = newTree.transform(newData)
+    // scalastyle:off println
+    predoutput.show(1000)
+    println(newTree.toDebugString)
+    // scalastyle:on println
+    /*
+    val predictionsAndLabels = predoutput.select("prediction", "label")
+      .map(row => (row.getDouble(0), row.getDouble(1)))
+    val metrics = new MulticlassMetrics(predictionsAndLabels)
+    val confusionMatrix = metrics.confusionMatrix
+    // scalastyle:off println
+    println(confusionMatrix.toString())
+    // scalastyle:on println
+    val buf2 = Source.fromFile("/Users/yueweina/Documents/spark/data/mllib/unbalenced_test.csv").getLines
+    val header2 = buf2.take(1).next()
+    var data2 = new Array[LabeledPoint](250)
+    idx = 0
+    for (row <- buf2) {
+      val cols = row.split(",").map(_.trim)
+      data2(idx) = new LabeledPoint(cols(0).toDouble,
+        Vectors.dense(cols(1).toDouble, cols(2).toDouble))
+      idx += 1
+    }
+    // scalastyle:off println
+    //println(data)
+    // scalastyle:on println
+    val IrIsRDD2 = sc.parallelize(data2)
+    val newData2: DataFrame = TreeTests.setMetadata(IrIsRDD2, categoricalFeatures, 2)
+    val predoutput2 = newTree.transform(newData2)
+    val predictions = predoutput2.select("prediction", "label")
+      .map(row => (row.getDouble(0), row.getDouble(1)))
+    val metrics2 = new MulticlassMetrics(predictions)
+    val confusionMatrix2 = metrics2.confusionMatrix
+    // scalastyle:off println
+    println(confusionMatrix2.toString())
+    // scalastyle:on println */
+  }
 
   test("Binary classification stump with ordered categorical features") {
     val dt = new DecisionTreeClassifier()
