@@ -57,8 +57,8 @@ class TypedFilterOptimizationSuite extends PlanTest {
     comparePlans(optimized, expected)
   }
 
-  // TODO: Remove this after we completely fixes SPARK-15632 by adding optimization rules
-  // For typed filters.
+  // TODO: Remove this after we completely fix SPARK-15632 by adding optimization rules
+  // for typed filters.
   ignore("embed deserializer in typed filter condition if there is only one filter") {
     val input = LocalRelation('_1.int, '_2.int)
     val f = (i: (Int, Int)) => i._1 > 0
