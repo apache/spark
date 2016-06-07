@@ -87,7 +87,8 @@ private[sql] case class JDBCRelation(
     url: String,
     table: String,
     parts: Array[Partition],
-    properties: Properties = new Properties())(@transient val sparkSession: SparkSession)
+    properties: Properties = new Properties(),
+    providedSchemaOption: Option[StructType] = None)(@transient val sparkSession: SparkSession)
   extends BaseRelation
   with PrunedFilteredScan
   with InsertableRelation {
@@ -96,7 +97,16 @@ private[sql] case class JDBCRelation(
 
   override val needConversion: Boolean = false
 
-  override val schema: StructType = JDBCRDD.resolveTable(url, table, properties)
+  override val schema: StructType = {
+    val resolvedSchema = JDBCRDD.resolveTable(url, table, properties)
+    providedSchemaOption match {
+      case Some(providedSchema) =>
+        if (providedSchema.sql.toLowerCase == resolvedSchema.sql.toLowerCase) resolvedSchema
+        else sys.error(s"User specified schema, $providedSchema, " +
+          s"does not match the actual schema, $resolvedSchema.")
+      case None => resolvedSchema
+    }
+  }
 
   // Check if JDBCRDD.compileFilter can accept input filters
   override def unhandledFilters(filters: Array[Filter]): Array[Filter] = {

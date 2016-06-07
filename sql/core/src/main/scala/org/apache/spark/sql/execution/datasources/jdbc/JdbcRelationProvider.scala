@@ -20,71 +20,90 @@ package org.apache.spark.sql.execution.datasources.jdbc
 import java.util.Properties
 
 import org.apache.spark.sql.{DataFrame, SaveMode, SQLContext}
-import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, RelationProvider}
+import org.apache.spark.sql.sources.{BaseRelation, CreatableRelationProvider, DataSourceRegister, RelationProvider, SchemaRelationProvider}
+import org.apache.spark.sql.types.StructType
 
-class JdbcRelationProvider extends RelationProvider with DataSourceRegister {
+class JdbcRelationProvider extends CreatableRelationProvider
+  with SchemaRelationProvider with RelationProvider with DataSourceRegister {
 
   override def shortName(): String = "jdbc"
+
+  override def createRelation(
+      sqlContext: SQLContext,
+      parameters: Map[String, String]): BaseRelation = {
+    createRelation(sqlContext, parameters, null)
+  }
 
   /** Returns a new base relation with the given parameters. */
   override def createRelation(
       sqlContext: SQLContext,
-      parameters: Map[String, String]): BaseRelation = {
-    val jdbcOptions = new JDBCOptions(parameters)
-    if (jdbcOptions.partitionColumn != null
-      && (jdbcOptions.lowerBound == null
-        || jdbcOptions.upperBound == null
-        || jdbcOptions.numPartitions == null)) {
+      parameters: Map[String, String],
+      schema: StructType): BaseRelation = {
+    val url = parameters.getOrElse("url", sys.error("Option 'url' not specified"))
+    val table = parameters.getOrElse("dbtable", sys.error("Option 'dbtable' not specified"))
+    val partitionColumn = parameters.getOrElse("partitionColumn", null)
+    val lowerBound = parameters.getOrElse("lowerBound", null)
+    val upperBound = parameters.getOrElse("upperBound", null)
+    val numPartitions = parameters.getOrElse("numPartitions", null)
+
+    if (partitionColumn != null
+      && (lowerBound == null || upperBound == null || numPartitions == null)) {
       sys.error("Partitioning incompletely specified")
     }
 
-    val partitionInfo = if (jdbcOptions.partitionColumn == null) {
-      null
-    } else {
+    val partitionInfo = if (partitionColumn == null) null
+    else {
       JDBCPartitioningInfo(
-        jdbcOptions.partitionColumn,
-        jdbcOptions.lowerBound.toLong,
-        jdbcOptions.upperBound.toLong,
-        jdbcOptions.numPartitions.toInt)
+        partitionColumn, lowerBound.toLong, upperBound.toLong, numPartitions.toInt)
     }
     val parts = JDBCRelation.columnPartition(partitionInfo)
     val properties = new Properties() // Additional properties that we will pass to getConnection
     parameters.foreach(kv => properties.setProperty(kv._1, kv._2))
-    JDBCRelation(jdbcOptions.url, jdbcOptions.table, parts, properties)(sqlContext.sparkSession)
+    JDBCRelation(url, table, parts, properties, Option(schema))(sqlContext.sparkSession)
   }
 
-  def write(mode: SaveMode, data: DataFrame, options: Map[String, String]): Unit = {
-    val url = options.getOrElse("url",
+  /*
+   * The following structure applies to this code:
+   *                 |    tableExists            |          !tableExists
+   *------------------------------------------------------------------------------------
+   * Ignore          | BaseRelation              | CreateTable, saveTable, BaseRelation
+   * ErrorIfExists   | ERROR                     | CreateTable, saveTable, BaseRelation
+   * Overwrite       | DropTable, CreateTable,   | CreateTable, saveTable, BaseRelation
+   *                 | saveTable, BaseRelation   |
+   * Append          | saveTable, BaseRelation   | CreateTable, saveTable, BaseRelation
+   */
+  override def createRelation(
+      sqlContext: SQLContext,
+      mode: SaveMode,
+      parameters: Map[String, String],
+      data: DataFrame): BaseRelation = {
+    val url = parameters.getOrElse("url",
       sys.error("Saving jdbc source requires url to be set." +
         " (ie. df.option(\"url\", \"ACTUAL_URL\")"))
-    val table = options.getOrElse("dbtable", options.getOrElse("table",
+    val table = parameters.getOrElse("dbtable", parameters.getOrElse("table",
       sys.error("Saving jdbc source requires dbtable to be set." +
         " (ie. df.option(\"dbtable\", \"ACTUAL_DB_TABLE\")")))
 
     import collection.JavaConverters._
     val props = new Properties()
-    props.putAll(options.asJava)
-
+    props.putAll(parameters.asJava)
     val conn = JdbcUtils.createConnectionFactory(url, props)()
 
     try {
-      var tableExists = JdbcUtils.tableExists(conn, url, table)
+      val tableExists = JdbcUtils.tableExists(conn, url, table)
 
-      if (mode == SaveMode.Ignore && tableExists) {
-        return
+      val (doCreate, doSave) = (mode, tableExists) match {
+        case (SaveMode.Ignore, true) => (false, false)
+        case (SaveMode.ErrorIfExists, true) => sys.error(s"Table $table already exists.")
+        case (SaveMode.Overwrite, true) =>
+          JdbcUtils.dropTable(conn, table)
+          (true, true)
+        case (SaveMode.Append, true) => (false, true)
+        case (_, true) => sys.error(s"Unexpected SaveMode, '$mode', for handling existing tables.")
+        case (_, false) => (true, true)
       }
 
-      if (mode == SaveMode.ErrorIfExists && tableExists) {
-        sys.error(s"Table $table already exists.")
-      }
-
-      if (mode == SaveMode.Overwrite && tableExists) {
-        JdbcUtils.dropTable(conn, table)
-        tableExists = false
-      }
-
-      // Create the table if the table didn't exist.
-      if (!tableExists) {
+      if(doCreate) {
         val schema = JdbcUtils.schemaString(data, url)
         val sql = s"CREATE TABLE $table ($schema)"
         val statement = conn.createStatement
@@ -94,10 +113,11 @@ class JdbcRelationProvider extends RelationProvider with DataSourceRegister {
           statement.close()
         }
       }
+      if(doSave) JdbcUtils.saveTable(data, url, table, props)
     } finally {
       conn.close()
     }
 
-    JdbcUtils.saveTable(data, url, table, props)
+    createRelation(sqlContext, parameters, data.schema)
   }
 }

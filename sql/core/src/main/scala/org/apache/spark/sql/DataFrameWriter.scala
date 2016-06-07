@@ -290,11 +290,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
       bucketSpec = getBucketSpec,
       options = extraOptions.toMap)
 
-    dataSource.providingClass.newInstance() match {
-      case jdbc: execution.datasources.jdbc.DefaultSource =>
-        jdbc.write(mode, df, extraOptions.toMap)
-      case _ => dataSource.write(mode, df)
-    }
+    dataSource.write(mode, df)
   }
 
   /**
