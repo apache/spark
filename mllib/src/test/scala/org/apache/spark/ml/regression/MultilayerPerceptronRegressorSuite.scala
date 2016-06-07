@@ -88,7 +88,7 @@ class MultilayerPerceptronRegressorSuite
       LabeledPoint(27, Vectors.dense(1, 2, 6, 4)),
       LabeledPoint(-12, Vectors.dense(6, 3, 2, 2))
     ))
-    val layers = Array[Int](2, 5, 2)
+    val layers = Array[Int](4, 5, 1)
     val trainer = new MultilayerPerceptronRegressor()
       .setLayers(layers)
       .setBlockSize(1)
@@ -104,9 +104,11 @@ class MultilayerPerceptronRegressorSuite
       "Training should produce the same weights given equal initial weights and number of steps")
   }
 
+  test("Can successfully get and set minimum and maximum values")
+
   test("read/write: MultilayerPerceptronRegressor") {
-    val mlp = new MultilayerPerceptronRegressor()
-      .setLayers(Array(2, 3, 2))
+    val mlpr = new MultilayerPerceptronRegressor()
+      .setLayers(Array(4, 3, 1))
       .setMaxIter(5)
       .setBlockSize(2)
       .setSeed(42)
@@ -114,7 +116,7 @@ class MultilayerPerceptronRegressorSuite
       .setFeaturesCol("myFeatures")
       .setLabelCol("myLabel")
       .setPredictionCol("myPrediction")
-    testDefaultReadWrite(mlp, testParams = true)
+    testDefaultReadWrite(mlpr, testParams = true)
   }
 
   test("read/write: MultilayerPerceptronRegressorModel") {

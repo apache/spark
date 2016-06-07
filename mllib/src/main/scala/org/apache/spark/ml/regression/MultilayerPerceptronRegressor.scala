@@ -199,7 +199,14 @@ private object LabelConverter {
 
   def encodeLabeledPoint(labeledPoint: LabeledPoint, min: Double, max: Double): (Vector, Vector) = {
     val output = Array.fill(1)(0.0)
-    output(0) = (labeledPoint.label-min)/(max-min)
+    if (max-min != 0) {
+      output(0) = (labeledPoint.label - min) / (max - min)
+    }
+    else {
+    // When min and max are equal, cannot min-max scale due to divide by zero error. Setting scaled
+    // result to zero will lead to consistent predictions, as the min will be added during decoding.
+      output(0) = (labeledPoint.label * 0)
+    }
     (labeledPoint.features, Vectors.dense(output))
   }
 
