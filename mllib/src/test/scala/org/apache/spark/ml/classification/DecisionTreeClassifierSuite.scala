@@ -79,7 +79,7 @@ class DecisionTreeClassifierSuite
     val numClasses = 2
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
   }
-
+/*
   test("Binary classification stump with fixed labels 0,1 for Entropy,Gini") {
     val dt = new DecisionTreeClassifier()
       .setMaxDepth(3)
@@ -91,7 +91,7 @@ class DecisionTreeClassifierSuite
         compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
       }
     }
-  }
+  }*/
 
   test("Multiclass classification stump with 3-ary (unordered) categorical features") {
     val rdd = categoricalDataPointsForMulticlassRDD

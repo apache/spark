@@ -80,9 +80,9 @@ object WeightedGini extends Impurity {
  * in order to compute impurity from a sample.
  * Note: Instances of this class do not hold the data; they operate on views of the data.
  * @param numClasses  Number of classes for label.
- * @param weights Weights of classes
+ * @param classWeights Weights of classes
  */
-private[spark] class WeightedGiniAggregator(numClasses: Int, weights: Array[Double])
+private[spark] class WeightedGiniAggregator(numClasses: Int, classWeights: Array[Double])
   extends ImpurityAggregator(numClasses) with Serializable {
 
   /**
@@ -108,7 +108,7 @@ private[spark] class WeightedGiniAggregator(numClasses: Int, weights: Array[Doub
    * @param offset    Start index of stats for this (node, feature, bin).
    */
   def getCalculator(allStats: Array[Double], offset: Int): WeightedGiniCalculator = {
-    new WeightedGiniCalculator(allStats.view(offset, offset + statsSize).toArray, weights)
+    new WeightedGiniCalculator(allStats.view(offset, offset + statsSize).toArray, classWeights)
   }
 }
 
@@ -117,16 +117,16 @@ private[spark] class WeightedGiniAggregator(numClasses: Int, weights: Array[Doub
  * Unlike [[WeightedGiniAggregator]], this class stores its own data and is for a specific
  * (node, feature, bin).
  * @param stats  Array of sufficient statistics for a (node, feature, bin).
- * @param weights Weights of classes
+ * @param classWeights Weights of classes
  */
-private[spark] class WeightedGiniCalculator(stats: Array[Double], weights: Array[Double])
+private[spark] class WeightedGiniCalculator(stats: Array[Double], classWeights: Array[Double])
   extends ImpurityCalculator(stats) {
 
-  var weightedStats = stats.zip(weights).map(x => x._1 * x._2)
+  var weightedStats = stats.zip(classWeights).map(x => x._1 * x._2)
   /**
    * Make a deep copy of this [[ImpurityCalculator]].
    */
-  def copy: WeightedGiniCalculator = new WeightedGiniCalculator(stats.clone(), weights.clone())
+  def copy: WeightedGiniCalculator = new WeightedGiniCalculator(stats.clone(), classWeights.clone())
 
   /**
    * Calculate the impurity from the stored sufficient statistics.

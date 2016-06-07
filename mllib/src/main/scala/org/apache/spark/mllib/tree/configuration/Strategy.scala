@@ -82,7 +82,8 @@ class Strategy @Since("1.3.0") (
     @Since("1.2.0") @BeanProperty var subsamplingRate: Double = 1,
     @Since("1.2.0") @BeanProperty var useNodeIdCache: Boolean = false,
     @Since("1.2.0") @BeanProperty var checkpointInterval: Int = 10,
-    @Since("2.0.0") @BeanProperty var classWeights: Array[Double] = Array()) extends Serializable {
+    @Since("2.0.0") @BeanProperty var classWeights: Array[Double] = Array(1, 1))
+  extends Serializable {
 
   /**
    */
