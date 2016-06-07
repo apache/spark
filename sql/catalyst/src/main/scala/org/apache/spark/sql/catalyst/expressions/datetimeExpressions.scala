@@ -561,8 +561,8 @@ case class FromUnixTime(sec: Expression, format: Expression)
           boolean ${ev.isNull} = true;
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
       } else {
-        val sdfTerm = ctx.freshName("formatter")
-        ctx.addMutableState(sdf, sdfTerm, s"""$sdfTerm = null;""")
+        val formatter = ctx.freshName("formatter")
+        ctx.addMutableState(sdf, formatter, s"""$formatter = null;""")
         val t = left.genCode(ctx)
         ev.copy(code = s"""
           ${t.code}
@@ -570,10 +570,10 @@ case class FromUnixTime(sec: Expression, format: Expression)
           ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};
           if (!${ev.isNull}) {
             try {
-              if ($sdfTerm == null) {
-                $sdfTerm = new $sdf("${constFormat.toString}");
+              if ($formatter == null) {
+                $formatter = new $sdf("${constFormat.toString}");
               }
-              ${ev.value} = UTF8String.fromString($sdfTerm.format(
+              ${ev.value} = UTF8String.fromString($formatter.format(
                 new java.util.Date(${t.value} * 1000L)));
             } catch (java.lang.Throwable e) {
               ${ev.isNull} = true;
