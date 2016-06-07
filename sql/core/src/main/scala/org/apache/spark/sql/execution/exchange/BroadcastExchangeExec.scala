@@ -94,8 +94,12 @@ case class BroadcastExchangeExec(
         val broadcasted = sparkContext.broadcast(relation)
         longMetric("broadcastTime") += (System.nanoTime() - beforeBroadcast) / 1000000
 
-        sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
-          executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
+        // There are some cases we don't care about the metrics and call `SparkPlan.doExecute`
+        // directly without setting an execution id. We should be tolerant to it.
+        if (executionId != null) {
+          sparkContext.listenerBus.post(SparkListenerDriverAccumUpdates(
+            executionId.toLong, metrics.values.map(m => m.id -> m.value).toSeq))
+        }
 
         broadcasted
       }
