@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming
 
 import java.lang.Thread.UncaughtExceptionHandler
 
@@ -33,11 +33,12 @@ import org.scalatest.exceptions.TestFailedDueToTimeoutException
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.sql.catalyst.analysis.{Append, OutputMode}
+import org.apache.spark.sql.{Dataset, Encoder, QueryTest, Row}
 import org.apache.spark.sql.catalyst.encoders.{encoderFor, ExpressionEncoder, RowEncoder}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
 
 /**
@@ -64,12 +65,10 @@ import org.apache.spark.util.{Clock, ManualClock, SystemClock, Utils}
  * avoid hanging forever in the case of failures. However, individual suites can change this
  * by overriding `streamingTimeout`.
  */
-trait StreamTest extends QueryTest with Timeouts {
+trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
 
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
-
-  val outputMode: OutputMode = Append
 
   /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
@@ -111,7 +110,7 @@ trait StreamTest extends QueryTest with Timeouts {
   object CheckAnswer {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
-      val toExternalRow = RowEncoder(encoder.schema)
+      val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
       CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), false)
     }
 
@@ -125,7 +124,7 @@ trait StreamTest extends QueryTest with Timeouts {
   object CheckLastBatch {
     def apply[A : Encoder](data: A*): CheckAnswerRows = {
       val encoder = encoderFor[A]
-      val toExternalRow = RowEncoder(encoder.schema)
+      val toExternalRow = RowEncoder(encoder.schema).resolveAndBind()
       CheckAnswerRows(data.map(d => toExternalRow.fromRow(encoder.toRow(d))), true)
     }
 
@@ -191,14 +190,17 @@ trait StreamTest extends QueryTest with Timeouts {
    * Note that if the stream is not explicitly started before an action that requires it to be
    * running then it will be automatically started before performing any other actions.
    */
-  def testStream(_stream: Dataset[_])(actions: StreamAction*): Unit = {
+  def testStream(
+      _stream: Dataset[_],
+      outputMode: OutputMode = OutputMode.Append)(actions: StreamAction*): Unit = {
+
     val stream = _stream.toDF()
     var pos = 0
     var currentPlan: LogicalPlan = stream.logicalPlan
     var currentStream: StreamExecution = null
     var lastStream: StreamExecution = null
     val awaiting = new mutable.HashMap[Int, Offset]() // source index -> offset to wait for
-    val sink = new MemorySink(stream.schema)
+    val sink = new MemorySink(stream.schema, outputMode)
 
     @volatile
     var streamDeathCause: Throwable = null
@@ -297,9 +299,9 @@ trait StreamTest extends QueryTest with Timeouts {
                   metadataRoot,
                   stream,
                   sink,
+                  outputMode,
                   trigger,
-                  triggerClock,
-                  outputMode = outputMode)
+                  triggerClock)
                 .asInstanceOf[StreamExecution]
             currentStream.microBatchThread.setUncaughtExceptionHandler(
               new UncaughtExceptionHandler {
@@ -429,7 +431,7 @@ trait StreamTest extends QueryTest with Timeouts {
               }
             }
 
-            val sparkAnswer = try if (lastOnly) sink.lastBatch else sink.allData catch {
+            val sparkAnswer = try if (lastOnly) sink.latestBatchData else sink.allData catch {
               case e: Exception =>
                 failTest("Exception while getting data from sink", e)
             }
@@ -523,7 +525,7 @@ trait StreamTest extends QueryTest with Timeouts {
     case class ExpectException[E <: Exception]()(implicit val t: ClassTag[E])
       extends ExpectedBehavior
 
-    private val DEFAULT_TEST_TIMEOUT = 1 second
+    private val DEFAULT_TEST_TIMEOUT = 1.second
 
     def test(
         expectedBehavior: ExpectedBehavior,

@@ -42,7 +42,7 @@ class Pipeline(Estimator, MLReadable, MLWritable):
     stage. If a stage is a :py:class:`Transformer`, its
     :py:meth:`Transformer.transform` method will be called to produce
     the dataset for the next stage. The fitted model from a
-    :py:class:`Pipeline` is an :py:class:`PipelineModel`, which
+    :py:class:`Pipeline` is a :py:class:`PipelineModel`, which
     consists of fitted models and transformers, corresponding to the
     pipeline stages. If there are no stages, the pipeline acts as an
     identity transformer.

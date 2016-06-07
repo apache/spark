@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
+package org.apache.spark.sql.streaming
 
 import java.util.concurrent.TimeUnit
 
@@ -29,9 +29,11 @@ import org.apache.spark.unsafe.types.CalendarInterval
 /**
  * :: Experimental ::
  * Used to indicate how often results should be produced by a [[ContinuousQuery]].
+ *
+ * @since 2.0.0
  */
 @Experimental
-sealed trait Trigger {}
+sealed trait Trigger
 
 /**
  * :: Experimental ::
@@ -53,6 +55,8 @@ sealed trait Trigger {}
  *   import java.util.concurrent.TimeUnit
  *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
  * }}}
+ *
+ * @since 2.0.0
  */
 @Experimental
 case class ProcessingTime(intervalMs: Long) extends Trigger {
@@ -62,6 +66,8 @@ case class ProcessingTime(intervalMs: Long) extends Trigger {
 /**
  * :: Experimental ::
  * Used to create [[ProcessingTime]] triggers for [[ContinuousQuery]]s.
+ *
+ * @since 2.0.0
  */
 @Experimental
 object ProcessingTime {
@@ -73,6 +79,8 @@ object ProcessingTime {
    * {{{
    *   df.write.trigger(ProcessingTime("10 seconds"))
    * }}}
+   *
+   * @since 2.0.0
    */
   def apply(interval: String): ProcessingTime = {
     if (StringUtils.isBlank(interval)) {
@@ -101,6 +109,8 @@ object ProcessingTime {
    *   import scala.concurrent.duration._
    *   df.write.trigger(ProcessingTime(10.seconds))
    * }}}
+   *
+   * @since 2.0.0
    */
   def apply(interval: Duration): ProcessingTime = {
     new ProcessingTime(interval.toMillis)
@@ -113,6 +123,8 @@ object ProcessingTime {
    * {{{
    *   df.write.trigger(ProcessingTime.create("10 seconds"))
    * }}}
+   *
+   * @since 2.0.0
    */
   def create(interval: String): ProcessingTime = {
     apply(interval)
@@ -126,6 +138,8 @@ object ProcessingTime {
    *   import java.util.concurrent.TimeUnit
    *   df.write.trigger(ProcessingTime.create(10, TimeUnit.SECONDS))
    * }}}
+   *
+   * @since 2.0.0
    */
   def create(interval: Long, unit: TimeUnit): ProcessingTime = {
     new ProcessingTime(unit.toMillis(interval))

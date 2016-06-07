@@ -40,7 +40,8 @@ import org.apache.ivy.plugins.matcher.GlobPatternMatcher
 import org.apache.ivy.plugins.repository.file.FileRepository
 import org.apache.ivy.plugins.resolver.{ChainResolver, FileSystemResolver, IBiblioResolver}
 
-import org.apache.spark.{SPARK_VERSION, SparkException, SparkUserAppException}
+import org.apache.spark.{SPARK_REVISION, SPARK_VERSION, SparkException, SparkUserAppException}
+import org.apache.spark.{SPARK_BRANCH, SPARK_BUILD_DATE, SPARK_BUILD_USER, SPARK_REPO_URL}
 import org.apache.spark.api.r.RUtils
 import org.apache.spark.deploy.rest._
 import org.apache.spark.launcher.SparkLauncher
@@ -103,6 +104,10 @@ object SparkSubmit {
    /___/ .__/\_,_/_/ /_/\_\   version %s
       /_/
                         """.format(SPARK_VERSION))
+    printStream.println("Branch %s".format(SPARK_BRANCH))
+    printStream.println("Compiled by user %s on %s".format(SPARK_BUILD_USER, SPARK_BUILD_DATE))
+    printStream.println("Revision %s".format(SPARK_REVISION))
+    printStream.println("Url %s".format(SPARK_REPO_URL))
     printStream.println("Type --help for more information.")
     exitFn(0)
   }
@@ -408,12 +413,12 @@ object SparkSubmit {
       printErrorAndExit("SparkR is not supported for Mesos cluster.")
     }
 
-    // If we're running a R app, set the main class to our specific R runner
+    // If we're running an R app, set the main class to our specific R runner
     if (args.isR && deployMode == CLIENT) {
       if (args.primaryResource == SPARKR_SHELL) {
         args.mainClass = "org.apache.spark.api.r.RBackend"
       } else {
-        // If a R file is provided, add it to the child arguments and list of files to deploy.
+        // If an R file is provided, add it to the child arguments and list of files to deploy.
         // Usage: RRunner <main R file> [app arguments]
         args.mainClass = "org.apache.spark.deploy.RRunner"
         args.childArgs = ArrayBuffer(args.primaryResource) ++ args.childArgs
@@ -422,7 +427,7 @@ object SparkSubmit {
     }
 
     if (isYarnCluster && args.isR) {
-      // In yarn-cluster mode for a R app, add primary resource to files
+      // In yarn-cluster mode for an R app, add primary resource to files
       // that can be distributed with the job
       args.files = mergeFileLists(args.files, args.primaryResource)
     }

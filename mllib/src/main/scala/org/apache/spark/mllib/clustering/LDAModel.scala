@@ -425,6 +425,13 @@ class LocalLDAModel private[spark] (
 
 }
 
+/**
+ * :: Experimental ::
+ *
+ * Local (non-distributed) model fitted by [[LDA]].
+ *
+ * This model stores the inferred topics only; it does not store info about the training dataset.
+ */
 @Experimental
 @Since("1.5.0")
 object LocalLDAModel extends Loader[LocalLDAModel] {
@@ -446,7 +453,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         docConcentration: Vector,
         topicConcentration: Double,
         gammaShape: Double): Unit = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val k = topicsMatrix.numCols
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
@@ -470,7 +477,7 @@ object LocalLDAModel extends Loader[LocalLDAModel] {
         topicConcentration: Double,
         gammaShape: Double): LocalLDAModel = {
       val dataPath = Loader.dataPath(path)
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val dataFrame = spark.read.parquet(dataPath)
 
       Loader.checkSchema[Data](dataFrame.schema)
@@ -814,7 +821,15 @@ class DistributedLDAModel private[clustering] (
   }
 }
 
-
+/**
+ * :: Experimental ::
+ *
+ * Distributed model fitted by [[LDA]].
+ * This type of model is currently only produced by Expectation-Maximization (EM).
+ *
+ * This model stores the inferred topics, the full training dataset, and the topic distribution
+ * for each training document.
+ */
 @Experimental
 @Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {
@@ -851,7 +866,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
         topicConcentration: Double,
         iterationTimes: Array[Double],
         gammaShape: Double): Unit = {
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       val metadata = compact(render
         (("class" -> thisClassName) ~ ("version" -> thisFormatVersion) ~
@@ -887,7 +902,7 @@ object DistributedLDAModel extends Loader[DistributedLDAModel] {
       val dataPath = new Path(Loader.dataPath(path), "globalTopicTotals").toUri.toString
       val vertexDataPath = new Path(Loader.dataPath(path), "topicCounts").toUri.toString
       val edgeDataPath = new Path(Loader.dataPath(path), "tokenCounts").toUri.toString
-      val spark = SparkSession.builder().config(sc.getConf).getOrCreate()
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       val dataFrame = spark.read.parquet(dataPath)
       val vertexDataFrame = spark.read.parquet(vertexDataPath)
       val edgeDataFrame = spark.read.parquet(edgeDataPath)

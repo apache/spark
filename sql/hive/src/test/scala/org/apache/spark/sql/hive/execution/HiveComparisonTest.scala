@@ -37,7 +37,7 @@ import org.apache.spark.sql.hive.test.{TestHive, TestHiveQueryExecution}
  * Allows the creations of tests that execute the same query against both hive
  * and catalyst, comparing the results.
  *
- * The "golden" results from Hive are cached in an retrieved both from the classpath and
+ * The "golden" results from Hive are cached in and retrieved both from the classpath and
  * [[answerCache]] to speed up testing.
  *
  * See the documentation of public vals in this class for information on how test execution can be

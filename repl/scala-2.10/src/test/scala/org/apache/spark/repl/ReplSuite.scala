@@ -107,13 +107,13 @@ class ReplSuite extends SparkFunSuite {
   test("simple foreach with accumulator") {
     val output = runInterpreter("local",
       """
-        |val accum = sc.accumulator(0)
-        |sc.parallelize(1 to 10).foreach(x => accum += x)
+        |val accum = sc.longAccumulator
+        |sc.parallelize(1 to 10).foreach(x => accum.add(x))
         |accum.value
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("res1: Int = 55", output)
+    assertContains("res1: Long = 55", output)
   }
 
   test("external vars") {
