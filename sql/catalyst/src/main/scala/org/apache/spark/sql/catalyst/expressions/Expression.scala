@@ -109,6 +109,11 @@ abstract class Expression extends TreeNode[Expression] {
       if (s"${isNull} = ".r.findAllIn(ve.code).size == 1 &&
           ve.code.matches(s"[\\s\\S]* boolean ${isNull} = false(?: \\|\\| false)*;[\\s\\S]*")) {
         ve.isNull = "false"
+
+        // make ${isNull} variable final to assure that noone overwrite this later
+        if (!ve.code.contains(s"final boolean ${isNull} = ")) {
+          ve.code = ve.code.replace(s"boolean ${isNull} = ", s"final boolean ${isNull} = ")
+        }
       }
 
       if (ve.code.nonEmpty) {
