@@ -22,11 +22,12 @@ import scala.util.Try
 
 import org.json4s.JsonDSL._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, InterpretedOrdering}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, LegacyTypeStringParser}
 import org.apache.spark.sql.catalyst.util.quoteIdentifier
+import org.apache.spark.util.Utils
 
 /**
  * :: DeveloperApi ::
@@ -294,7 +295,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
 
   override def simpleString: String = {
     val fieldTypes = fields.map(field => s"${field.name}:${field.dataType.simpleString}")
-    s"struct<${fieldTypes.mkString(",")}>"
+    Utils.truncatedString(fieldTypes, "struct<", ",", ">")
   }
 
   override def sql: String = {
@@ -307,16 +308,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val fieldTypes = fields.take(maxNumberFields).map {
       case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
     }
-    builder.append("struct<")
-    builder.append(fieldTypes.mkString(", "))
-    if (fields.length > 2) {
-      if (fields.length - fieldTypes.length == 1) {
-        builder.append(" ... 1 more field")
-      } else {
-        builder.append(" ... " + (fields.length - 2) + " more fields")
-      }
-    }
-    builder.append(">").toString()
+    Utils.truncatedString(fieldTypes, "struct<", ",", ">", maxNumberFields)
   }
 
   /**

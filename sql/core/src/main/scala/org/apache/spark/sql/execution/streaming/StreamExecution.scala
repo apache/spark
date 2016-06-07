@@ -332,7 +332,8 @@ class StreamExecution(
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
-            s"Invalid batch: ${output.mkString(",")} != ${newPlan.output.mkString(",")}")
+            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
+            s"${Utils.truncatedString(newPlan.output, ",")}")
           replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {

@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.physical.{AllTuples, ClusteredDistribution, Distribution, UnspecifiedDistribution}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.metric.SQLMetrics
+import org.apache.spark.util.Utils
 
 /**
  * Sort-based aggregate operator.
@@ -106,9 +107,9 @@ case class SortAggregateExec(
   override def simpleString: String = {
     val allAggregateExpressions = aggregateExpressions
 
-    val keyString = groupingExpressions.mkString("[", ",", "]")
-    val functionString = allAggregateExpressions.mkString("[", ",", "]")
-    val outputString = output.mkString("[", ",", "]")
+    val keyString = Utils.truncatedString(groupingExpressions, "[", ",", "]")
+    val functionString = Utils.truncatedString(allAggregateExpressions, "[", ",", "]")
+    val outputString = Utils.truncatedString(output, "[", ",", "]")
     s"SortAggregate(key=$keyString, functions=$functionString, output=$outputString)"
   }
 }
