@@ -596,8 +596,8 @@ qualifiedName
 
 identifier
     : strictIdentifier
-    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | UNION | INTERSECT | EXCEPT | DATABASE | ON | JOIN | CROSS
-    | SELECT | FROM | WHERE | HAVING | FROM | TO | TABLE | WITH | NOT
+    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
+    | UNION | INTERSECT | EXCEPT
     ;
 
 strictIdentifier
@@ -648,6 +648,7 @@ nonReserved
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
     | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
     | UNBOUNDED | WHEN
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
     ;
 
 SELECT: 'SELECT';
