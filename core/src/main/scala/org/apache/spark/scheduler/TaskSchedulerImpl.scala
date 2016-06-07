@@ -354,8 +354,8 @@ private[spark] class TaskSchedulerImpl(
               }
             }
             if (state == TaskState.FINISHED) {
-              // In some case, executor has already removed by driver for heartbeats timeout, but
-              // at sometime, before executor killed  by cluster, the task of running on this
+              // In some case, executor has already been removed by driver for heartbeats timeout,
+              // but at sometime, before executor killed by cluster, the task of running on this
               // executor is finished and return task success state to driver. However, this kinds
               // of task should be ignored, because the task on this executor is already re-queued
               // by driver. For more details, can check in SPARK-14485.
