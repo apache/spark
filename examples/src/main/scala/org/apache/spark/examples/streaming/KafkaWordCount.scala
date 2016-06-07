@@ -102,4 +102,3 @@ object KafkaWordCountProducer {
   }
 
 }
-// scalastyle:on println
