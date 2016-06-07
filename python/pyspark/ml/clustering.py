@@ -316,6 +316,72 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         """
         return self._call_java("computeCost", dataset)
 
+    @since("2.0.0")
+    def hasSummary(self):
+        """
+        Return true if there exists summary of model.
+        """
+        return self.summary is not None
+
+    @property
+    @since("2.0.0")
+    def summary(self):
+        """
+        Gets summary of model on training set.
+        """
+        return KMeansSummary(self._call_java("summary"))
+
+
+class KMeansSummary(JavaWrapper):
+    """
+    Summary of KMeans.
+
+    .. versionadded:: 2.0.0
+    """
+
+    def __init__(self, _java_summary):
+        super(KMeansSummary, self).__init__(_java_summary)
+
+    @property
+    @since("2.0.0")
+    def clusterSizes(self):
+        """
+        Size of (number of data points in) each cluster.
+        """
+        return self._call_java("clusterSizes")
+
+    @property
+    @since("2.0.0")
+    def predictions(self):
+        """
+        return the DataFrame of predictions that is produced by KMeansModel.transform().
+        """
+        return self._call_java("predictions")
+
+    @property
+    @since("2.0.0")
+    def predictionCol(self):
+        """
+        Name for column of predicted clusters.
+        """
+        return self._call_java("predictionCol")
+
+    @property
+    @since("2.0.0")
+    def featuresCol(self):
+        """
+        Name for column of features.
+        """
+        return self._call_java("featuresCol")
+
+    @property
+    @since("2.0.0")
+    def k(self):
+        """
+        Number of clusters.
+        """
+        return self._call_java("k")
+
 
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
@@ -330,6 +396,20 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> df = spark.createDataFrame(data, ["features"])
     >>> kmeans = KMeans(k=2, seed=1)
     >>> model = kmeans.fit(df)
+    >>> summary = model.summary
+    >>> summary.k
+    2
+    >>> summary.predictionCol
+    u'prediction'
+    >>> summary.featuresCol
+    u'features'
+    >>> summary.clusterSizes
+    [2, 2]
+    >>> rows = summary.predictions.collect()
+    >>> rows[0].prediction == rows[1].prediction
+    True
+    >>> rows[2].prediction == rows[3].prediction
+    True
     >>> centers = model.clusterCenters()
     >>> len(centers)
     2
