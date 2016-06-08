@@ -34,7 +34,7 @@ import org.apache.hive.service.cli.session.HiveSession
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{DataFrame, Row => SparkRow, SQLContext}
-import org.apache.spark.sql.execution.command.SetCommand
+import org.apache.spark.sql.execution.command.{ExecutedCommandExec, SetCommand}
 import org.apache.spark.sql.hive.HiveUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -225,7 +225,10 @@ private[hive] class SparkExecuteStatementOperation(
         if (useIncrementalCollect) {
           result.toLocalIterator.asScala
         } else {
-          result.collect().iterator
+          sqlContext.sessionState.executePlan(result.logicalPlan).executedPlan match {
+            case command: ExecutedCommandExec => command.executeCollectPublic().iterator
+            case _ => result.collect().iterator
+          }
         }
       }
       dataTypes = result.queryExecution.analyzed.output.map(_.dataType).toArray
