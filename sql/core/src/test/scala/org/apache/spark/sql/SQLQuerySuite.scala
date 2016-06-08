@@ -92,7 +92,6 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // For '*', we need to replace it to '.*'.
       checkAnswer(sql(s"SHOW FUNCTIONS '$pattern'"), getFunctions(pattern))
     }
-
     dropFunction(functions)
   }
 
