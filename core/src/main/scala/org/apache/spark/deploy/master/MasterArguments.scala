@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master
 
 import scala.annotation.tailrec
+
 import org.apache.spark.SparkConf
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.{IntParam, Utils}
