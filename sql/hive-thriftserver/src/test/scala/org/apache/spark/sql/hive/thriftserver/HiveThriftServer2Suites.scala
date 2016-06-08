@@ -222,6 +222,20 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
     }
   }
 
+  test("SPARK-15824 'with ... insert ...select'") {
+    withJdbcStatement { statement =>
+      val queries = Seq(
+        "DROP TABLE IF EXISTS ori",
+        "CREATE TABLE ori(key INT, value STRING)",
+        "")
+
+      queries.foreach(statement.execute)
+
+      statement.executeQuery(
+        "WITH v as (select 1, 'a') INSERT INTO TABLE result_parquet SELECT * FROM ori")
+    }
+  }
+
   test("test multiple session") {
     import org.apache.spark.sql.internal.SQLConf
     var defaultV1: String = null
