@@ -20,8 +20,8 @@ package org.apache.spark.ml.tree.impl
 import org.codehaus.janino.ClassBodyEvaluator
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.tree._
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
 
 /**
  * An object for creating a code generated decision tree model.
@@ -50,8 +50,8 @@ private[spark] object CodeGenerationDecisionTreeModel extends Logging {
     evaluator.setImplementedInterfaces(implements)
     evaluator.setClassName(clName)
     evaluator.setDefaultImports(Array(
-      "org.apache.spark.mllib.linalg.Vectors",
-      "org.apache.spark.mllib.linalg.Vector",
+      "org.apache.spark.ml.linalg.Vectors",
+      "org.apache.spark.ml.linalg.Vector",
       "java.util.Arrays",
       "java.util.HashSet"
     ))
