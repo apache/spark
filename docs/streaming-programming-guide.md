@@ -1259,7 +1259,7 @@ dstream.foreachRDD(sendRecord)
 </div>
 
 This is incorrect as this requires the connection object to be serialized and sent from the
-driver to the worker. Such connection objects are rarely transferrable across machines. This
+driver to the worker. Such connection objects are rarely transferable across machines. This
 error may manifest as serialization errors (connection object not serializable), initialization
 errors (connection object needs to be initialized at the workers), etc. The correct solution is
 to create the connection object at the worker.

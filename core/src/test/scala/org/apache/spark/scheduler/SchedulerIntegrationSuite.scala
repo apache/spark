@@ -17,6 +17,7 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
@@ -31,7 +32,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState._
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.{CallSite, Utils}
+import org.apache.spark.util.{CallSite, ThreadUtils, Utils}
 
 /**
  * Tests for the  entire scheduler code -- DAGScheduler, TaskSchedulerImpl, TaskSets,
@@ -239,6 +240,17 @@ private[spark] abstract class MockBackend(
     conf: SparkConf,
     val taskScheduler: TaskSchedulerImpl) extends SchedulerBackend with Logging {
 
+  // Periodically revive offers to allow delay scheduling to work
+  private val reviveThread =
+    ThreadUtils.newDaemonSingleThreadScheduledExecutor("driver-revive-thread")
+  private val reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "10ms")
+
+  reviveThread.scheduleAtFixedRate(new Runnable {
+    override def run(): Unit = Utils.tryLogNonFatalError {
+      reviveOffers()
+    }
+  }, 0, reviveIntervalMs, TimeUnit.MILLISECONDS)
+
   /**
    * Test backends should call this to get a task that has been assigned to them by the scheduler.
    * Each task should be responded to with either [[taskSuccess]] or [[taskFailed]].
@@ -308,7 +320,9 @@ private[spark] abstract class MockBackend(
 
   override def start(): Unit = {}
 
-  override def stop(): Unit = {}
+  override def stop(): Unit = {
+    reviveThread.shutdown()
+  }
 
   val env = SparkEnv.get
 
@@ -332,8 +346,9 @@ private[spark] abstract class MockBackend(
   }
 
   /**
-   * This is called by the scheduler whenever it has tasks it would like to schedule.  It gets
-   * called in the scheduling thread, not the backend thread.
+   * This is called by the scheduler whenever it has tasks it would like to schedule, when a tasks
+   * completes (which will be in a result-getter thread), and by the reviveOffers thread for delay
+   * scheduling.
    */
   override def reviveOffers(): Unit = {
     reviveWithOffers(generateOffers())

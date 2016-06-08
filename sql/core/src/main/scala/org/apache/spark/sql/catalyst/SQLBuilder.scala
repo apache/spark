@@ -274,7 +274,7 @@ class SQLBuilder(logicalPlan: LogicalPlan) extends Logging {
     //   5. the table alias for output columns of generator.
     //   6. the AS keyword
     //   7. the column alias, can be more than one, e.g. AS key, value
-    // An concrete example: "tbl LATERAL VIEW EXPLODE(map_col) sub_q AS key, value", and the builder
+    // A concrete example: "tbl LATERAL VIEW EXPLODE(map_col) sub_q AS key, value", and the builder
     // will put it in FROM clause later.
     build(
       childSQL,

@@ -214,7 +214,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     results.clear()
     securityMgr = new SecurityManager(conf)
     broadcastManager = new BroadcastManager(true, conf, securityMgr)
-    mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
+    mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true) {
+      override def sendTracker(message: Any): Unit = {
+        // no-op, just so we can stop this to avoid leaking threads
+      }
+    }
     scheduler = new DAGScheduler(
       sc,
       taskScheduler,
@@ -228,6 +232,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   override def afterEach(): Unit = {
     try {
       scheduler.stop()
+      dagEventProcessLoopTester.stop()
+      mapOutputTracker.stop()
+      broadcastManager.stop()
     } finally {
       super.afterEach()
     }
@@ -1712,7 +1719,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("reduce tasks should be placed locally with map output") {
-    // Create an shuffleMapRdd with 1 partition
+    // Create a shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
@@ -1733,7 +1740,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("reduce task locality preferences should only include machines with largest map outputs") {
     val numMapTasks = 4
-    // Create an shuffleMapRdd with more partitions
+    // Create a shuffleMapRdd with more partitions
     val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleId = shuffleDep.shuffleId
