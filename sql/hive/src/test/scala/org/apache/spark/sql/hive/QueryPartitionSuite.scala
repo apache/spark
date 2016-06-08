@@ -20,9 +20,13 @@ package org.apache.spark.sql.hive
 import com.google.common.io.Files
 
 import org.apache.spark.sql._
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.sql.types.IntegerType
 import org.apache.spark.util.Utils
 
 class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -64,5 +68,96 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       sql("DROP TABLE IF EXISTS table_with_partition")
       sql("DROP TABLE IF EXISTS createAndInsertTest")
     }
+  }
+
+  test("partition pruning in disjunction") {
+    withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "true")) {
+      val testData = sparkContext.parallelize(
+        (1 to 10).map(i => TestData(i, i.toString))).toDF()
+      testData.registerTempTable("testData")
+
+      val testData2 = sparkContext.parallelize(
+        (11 to 20).map(i => TestData(i, i.toString))).toDF()
+      testData2.registerTempTable("testData2")
+
+      val testData3 = sparkContext.parallelize(
+        (21 to 30).map(i => TestData(i, i.toString))).toDF()
+      testData3.registerTempTable("testData3")
+
+      val testData4 = sparkContext.parallelize(
+        (31 to 40).map(i => TestData(i, i.toString))).toDF()
+      testData4.registerTempTable("testData4")
+
+      val tmpDir = Files.createTempDir()
+      // create the table for test
+      sql(s"CREATE TABLE table_with_partition(key int,value string) " +
+        s"PARTITIONED by (ds string, ds2 string) location '${tmpDir.toURI.toString}' ")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='1', ds2='d1') " +
+        "SELECT key,value FROM testData")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='2', ds2='d1') " +
+        "SELECT key,value FROM testData2")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='3', ds2='d3') " +
+        "SELECT key,value FROM testData3")
+      sql("INSERT OVERWRITE TABLE table_with_partition  partition (ds='4', ds2='d4') " +
+        "SELECT key,value FROM testData4")
+
+      checkAnswer(sql("select key,value from table_with_partition"),
+        testData.collect ++ testData2.collect ++ testData3.collect ++ testData4.collect)
+
+      checkAnswer(
+        sql(
+          """select key,value from table_with_partition
+            | where (ds='4' and key=38) or (ds='3' and key=22)""".stripMargin),
+          Row(38, "38") :: Row(22, "22") :: Nil)
+
+      checkAnswer(
+        sql(
+          """select key,value from table_with_partition
+            | where (key<40 and key>38) or (ds='3' and key=22)""".stripMargin),
+        Row(39, "39") :: Row(22, "22") :: Nil)
+
+      sql("DROP TABLE table_with_partition")
+      sql("DROP TABLE createAndInsertTest")
+    }
+  }
+
+  test("extract partition expression from disjunction") {
+    def check(partitionKeys: AttributeSet, predicate: Expression, expected: Option[Expression])
+    : Unit = {
+      val answer = PhysicalOperation.partitionPrunningFromDisjunction(predicate, partitionKeys)
+      assert(expected === answer, s"Expected: ${expected} but got ${answer} for ${predicate}")
+    }
+
+    val part1 = AttributeReference("part1", IntegerType, true)()
+    val part2 = AttributeReference("part2", IntegerType, true)()
+    val a = AttributeReference("a", IntegerType, true)()
+    val b = AttributeReference("b", IntegerType, true)()
+    val c = AttributeReference("c", IntegerType, true)()
+
+    val partitionKeys = AttributeSet(part1 :: part2 :: Nil)
+
+    // (part1 == 1 and a > 3) or (part1 == 2 and a < 5)  ==> (part1 == 1 or part2 == 2)
+    val p1 = ((part1 === 1) && (a > 3)) || ((part2 === 2) && (a < 5))
+    check(partitionKeys, p1, Some((part1 === 1) || (part2 === 2)))
+
+    // (part1 == 1 and a > 3) or (a < 100) => None
+    val p2 = ((part1 === 1) && (a > 3)) || (a < 100)
+    check(partitionKeys, p2, None)
+
+    // (a > 100 and b < 100) or (part1 = 10) => None
+    val p3 = ((a > 100) && b < 100) || (part1 === 10)
+    check(partitionKeys, p3, None)
+
+    // (a > 100 and b < 100) and (part1 = 10) => (part1 = 10)
+    val p4 = ((a > 100) && b < 100) && (part1 === 10)
+    check(partitionKeys, p4, Some(part1 === 10))
+
+    // (a > 100 && b < 100 and part1 = 10) or (part1 == 2) => (part1 = 10 or part1 == 2)
+    val p5 = ((a > 100) && (b < 100) && (part1 === 10)) || (part1 === 2)
+    check(partitionKeys, p5, Some((part1 === 10) || (part1 === 2)))
+
+    // (a > 100 and b < 100) and (part1 = 10 or part2 = 5) => (part1 = 10 or part2 = 5)
+    val p6 = ((a > 100) && b < 100) && (part1 === 10 || part2 === 5)
+    check(partitionKeys, p6, Some(part1 === 10 || part2 === 5))
   }
 }
