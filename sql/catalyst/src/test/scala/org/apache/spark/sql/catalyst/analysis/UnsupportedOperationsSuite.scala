@@ -81,7 +81,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     outputMode = Append,
     expectedMsgs = "commands" :: Nil)
 
-  // Multiple streaming aggregations not supported
+  // Aggregation: Multiple streaming aggregations not supported
   def aggExprs(name: String): Seq[NamedExpression] = Seq(Count("*").as(name))
 
   assertSupportedInStreamingPlan(
@@ -189,9 +189,20 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
     _.intersect(_),
     streamStreamSupported = false)
 
-  // Unary operations
+  // Sort: supported only on batch subplans and on aggregation + complete output mode
   testUnaryOperatorInStreamingPlan("sort", Sort(Nil, true, _))
   testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
+  assertSupportedInStreamingPlan(
+    "sort - sort over aggregated data in Complete output mode",
+    Sort(Nil, true, Aggregate(Nil, aggExprs("c"), streamRelation)),
+    Complete)
+  assertNotSupportedInStreamingPlan(
+    "sort - sort over aggregated data in Update output mode",
+    Sort(Nil, true, Aggregate(Nil, aggExprs("c"), streamRelation)),
+    Update,
+    Seq("sort", "aggregat", "complete")) // sort on aggregations is supported on Complete mode only
+
+  // Other unary operations
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(
@@ -299,6 +310,7 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
       outputMode)
   }
 
+  /** Test output mode with and without aggregation in the streaming plan */
   def testOutputMode(
       outputMode: OutputMode,
       shouldSupportAggregation: Boolean): Unit = {
