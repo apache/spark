@@ -105,6 +105,14 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
     checkKeywordsExist(sql("describe functioN abcadf"), "Function: abcadf not found.")
   }
 
+  test("SPARK-14415: All functions should have own descriptions") {
+    for (f <- spark.sessionState.functionRegistry.listFunction()) {
+      if (!Seq("cube", "grouping", "grouping_id", "rollup", "window").contains(f)) {
+        checkKeywordsNotExist(sql(s"describe function `$f`"), "N/A.")
+      }
+    }
+  }
+
   test("SPARK-6743: no columns from cache") {
     Seq(
       (83, 0, 38),
