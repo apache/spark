@@ -23,7 +23,6 @@ import java.io.FilenameFilter
 import java.io.IOException
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
-import java.nio.charset.StandardCharsets
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
 
@@ -130,7 +129,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run(): Unit = {
         val err = proc.getErrorStream
         try {
-          for (line <- Source.fromInputStream(err)(StandardCharsets.UTF_8).getLines) {
+          for (line <- Source.fromInputStream(err).getLines) {
             // scalastyle:off println
             System.err.println(line)
             // scalastyle:on println
@@ -148,7 +147,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run(): Unit = {
         TaskContext.setTaskContext(context)
         val out = new PrintWriter(new BufferedWriter(
-          new OutputStreamWriter(proc.getOutputStream, StandardCharsets.UTF_8), bufferSize))
+          new OutputStreamWriter(proc.getOutputStream), bufferSize))
         try {
           // scalastyle:off println
           // input the pipe context firstly
