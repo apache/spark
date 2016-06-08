@@ -21,6 +21,7 @@ import java.util.UUID
 
 import scala.collection.Map
 import scala.collection.mutable.Stack
+import scala.reflect.ClassTag
 
 import org.apache.commons.lang.ClassUtils
 import org.json4s.JsonAST._
@@ -169,11 +170,24 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   }
 
   /**
+   * Efficient alternative to `productIterator.map(f).toArray`.
+   */
+  protected def mapProductIterator[B: ClassTag](f: Any => B): Array[B] = {
+    val arr = Array.ofDim[B](productArity)
+    var i = 0
+    while (i < arr.length) {
+      arr(i) = f(productElement(i))
+      i += 1
+    }
+    arr
+  }
+
+  /**
    * Returns a copy of this node where `f` has been applied to all the nodes children.
    */
   def mapChildren(f: BaseType => BaseType): BaseType = {
     var changed = false
-    val newArgs = productIterator.map {
+    val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = f(arg.asInstanceOf[BaseType])
         if (newChild fastEquals arg) {
@@ -184,7 +198,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         }
       case nonChild: AnyRef => nonChild
       case null => null
-    }.toArray
+    }
     if (changed) makeCopy(newArgs) else this
   }
 
@@ -197,7 +211,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     var changed = false
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
-    val newArgs = productIterator.map {
+    val newArgs = mapProductIterator {
       case s: StructType => s // Don't convert struct types to some other type of Seq[StructField]
       // Handle Seq[TreeNode] in TreeNode parameters.
       case s: Seq[_] => s.map {
@@ -237,7 +251,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
         }
       case nonChild: AnyRef => nonChild
       case null => null
-    }.toArray
+    }
 
     if (changed) makeCopy(newArgs) else this
   }
@@ -302,7 +316,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       rule: PartialFunction[BaseType, BaseType],
       nextOperation: (BaseType, PartialFunction[BaseType, BaseType]) => BaseType): BaseType = {
     var changed = false
-    val newArgs = productIterator.map {
+    val newArgs = mapProductIterator {
       case arg: TreeNode[_] if containsChild(arg) =>
         val newChild = nextOperation(arg.asInstanceOf[BaseType], rule)
         if (!(newChild fastEquals arg)) {
@@ -353,7 +367,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       }
       case nonChild: AnyRef => nonChild
       case null => null
-    }.toArray
+    }
     if (changed) makeCopy(newArgs) else this
   }
 
@@ -448,10 +462,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /** ONE line description of this node. */
   def simpleString: String = s"$nodeName $argString".trim
 
+  /** ONE line description of this node with more information */
+  def verboseString: String
+
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
-  def treeString: String = generateTreeString(0, Nil, new StringBuilder).toString
+  def treeString: String = treeString(verbose = true)
+
+  def treeString(verbose: Boolean): String = {
+    generateTreeString(0, Nil, new StringBuilder, verbose).toString
+  }
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
@@ -494,6 +515,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       depth: Int,
       lastChildren: Seq[Boolean],
       builder: StringBuilder,
+      verbose: Boolean,
       prefix: String = ""): StringBuilder = {
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -506,18 +528,21 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     builder.append(prefix)
-    builder.append(simpleString)
+    val headline = if (verbose) verboseString else simpleString
+    builder.append(headline)
     builder.append("\n")
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ false :+ false, builder))
-      innerChildren.last.generateTreeString(depth + 2, lastChildren :+ false :+ true, builder)
+        depth + 2, lastChildren :+ false :+ false, builder, verbose))
+      innerChildren.last.generateTreeString(
+        depth + 2, lastChildren :+ false :+ true, builder, verbose)
     }
 
     if (children.nonEmpty) {
-      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder, prefix))
-      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, prefix)
+      children.init.foreach(
+        _.generateTreeString(depth + 1, lastChildren :+ false, builder, verbose, prefix))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, verbose, prefix)
     }
 
     builder

@@ -14,24 +14,21 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.spark.status.api.v1
 
-import javax.ws.rs.WebApplicationException
+package org.apache.spark.sql.streaming
 
-import org.scalatest.Matchers
+import org.apache.spark.annotation.Experimental
 
-import org.apache.spark.SparkFunSuite
-
-class SimpleDateParamSuite extends SparkFunSuite with Matchers {
-
-  test("date parsing") {
-    new SimpleDateParam("2015-02-20T23:21:17.190GMT").timestamp should be (1424474477190L)
-    // don't use EST, it is ambiguous, use -0500 instead, see SPARK-15723
-    new SimpleDateParam("2015-02-20T17:21:17.190-0500").timestamp should be (1424470877190L)
-    new SimpleDateParam("2015-02-20").timestamp should be (1424390400000L) // GMT
-    intercept[WebApplicationException] {
-      new SimpleDateParam("invalid date")
-    }
-  }
-
-}
+/**
+ * :: Experimental ::
+ * A class used to report information about the progress of a [[ContinuousQuery]].
+ *
+ * @param name The [[ContinuousQuery]] name.
+ * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
+ * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
+ */
+@Experimental
+class ContinuousQueryInfo private[sql](
+  val name: String,
+  val sourceStatuses: Seq[SourceStatus],
+  val sinkStatus: SinkStatus)

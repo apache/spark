@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.SparkPlan
  *    is only done on top level columns, but formats should support pruning of nested columns as
  *    well.
  *  - Construct a reader function by passing filters and the schema into the FileFormat.
- *  - Using an partition pruning predicates, enumerate the list of files that should be read.
+ *  - Using a partition pruning predicates, enumerate the list of files that should be read.
  *  - Split the files into tasks and construct a FileScanRDD.
  *  - Add any projection or filters that must be evaluated after the scan.
  *
