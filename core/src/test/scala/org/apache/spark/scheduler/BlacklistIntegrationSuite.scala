@@ -42,7 +42,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   override def test(name: String, testTags: org.scalatest.Tag*)(body: => Unit): Unit = {
     var lastThreads = Set[Long]()
-    (0 until 5000).foreach { idx =>
+    (0 until 500).foreach { idx =>
       super.test(s"$name: $idx", testTags: _*) {
         body
       }

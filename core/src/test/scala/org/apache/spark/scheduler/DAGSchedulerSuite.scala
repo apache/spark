@@ -328,7 +328,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   override def test(name: String, testTags: org.scalatest.Tag*)(body: => Unit): Unit = {
     var lastThreads = Set[Long]()
-    (0 until 1000).foreach { idx =>
+    (0 until 50).foreach { idx =>
       super.test(s"$name: $idx", testTags: _*) {
         body
       }
