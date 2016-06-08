@@ -227,7 +227,8 @@ class HiveThriftHttpServerSuite extends HiveThriftJdbcTest {
       val queries = Seq(
         "DROP TABLE IF EXISTS ori",
         "CREATE TABLE ori(key INT, value STRING)",
-        "")
+        "DROP TABLE IF EXISTS result_parquet",
+        "CREATE TABLE result_parquet(key INT, value STRING) STORED AS parquet")
 
       queries.foreach(statement.execute)
 
