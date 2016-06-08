@@ -1259,7 +1259,7 @@ dstream.foreachRDD(sendRecord)
 </div>
 
 This is incorrect as this requires the connection object to be serialized and sent from the
-driver to the worker. Such connection objects are rarely transferrable across machines. This
+driver to the worker. Such connection objects are rarely transferable across machines. This
 error may manifest as serialization errors (connection object not serializable), initialization
 errors (connection object needs to be initialized at the workers), etc. The correct solution is
 to create the connection object at the worker.
@@ -1395,13 +1395,13 @@ object WordBlacklist {
 
 object DroppedWordsCounter {
 
-  @volatile private var instance: Accumulator[Long] = null
+  @volatile private var instance: LongAccumulator = null
 
-  def getInstance(sc: SparkContext): Accumulator[Long] = {
+  def getInstance(sc: SparkContext): LongAccumulator = {
     if (instance == null) {
       synchronized {
         if (instance == null) {
-          instance = sc.accumulator(0L, "WordsInBlacklistCounter")
+          instance = sc.longAccumulator("WordsInBlacklistCounter")
         }
       }
     }
@@ -1409,7 +1409,7 @@ object DroppedWordsCounter {
   }
 }
 
-wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
+wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
   // Get or register the blacklist Broadcast
   val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
   // Get or register the droppedWordsCounter Accumulator
@@ -1417,12 +1417,12 @@ wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
   // Use blacklist to drop words and use droppedWordsCounter to count them
   val counts = rdd.filter { case (word, count) =>
     if (blacklist.value.contains(word)) {
-      droppedWordsCounter += count
+      droppedWordsCounter.add(count)
       false
     } else {
       true
     }
-  }.collect()
+  }.collect().mkString("[", ", ", "]")
   val output = "Counts at time " + time + " " + counts
 })
 

@@ -314,7 +314,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
-   * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
+   * Loads a `JavaRDD[String]` storing JSON objects (one object per record) and
    * returns the result as a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the

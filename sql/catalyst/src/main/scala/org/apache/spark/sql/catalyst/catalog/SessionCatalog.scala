@@ -241,7 +241,7 @@ class SessionCatalog(
   /**
    * Retrieve the metadata of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
@@ -266,7 +266,7 @@ class SessionCatalog(
   /**
    * Load files stored in given path into an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def loadTable(
       name: TableIdentifier,
@@ -283,7 +283,7 @@ class SessionCatalog(
   /**
    * Load files stored in given path into the partition of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def loadPartition(
       name: TableIdentifier,
