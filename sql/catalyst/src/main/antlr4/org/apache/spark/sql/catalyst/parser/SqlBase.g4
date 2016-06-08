@@ -109,9 +109,9 @@ statement
     | SHOW FUNCTIONS (LIKE? (qualifiedName | pattern=STRING))?         #showFunctions
     | SHOW CREATE TABLE tableIdentifier                                #showCreateTable
     | (DESC | DESCRIBE) FUNCTION EXTENDED? describeFuncName            #describeFunction
+    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
-    | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | REFRESH TABLE tableIdentifier                                    #refreshTable
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
@@ -251,7 +251,7 @@ tableProperty
     ;
 
 tablePropertyKey
-    : looseIdentifier ('.' looseIdentifier)*
+    : identifier ('.' identifier)*
     | STRING
     ;
 
@@ -419,9 +419,9 @@ identifierComment
     ;
 
 relationPrimary
-    : tableIdentifier sample? (AS? identifier)?                     #tableName
-    | '(' queryNoWith ')' sample? (AS? identifier)?                 #aliasedQuery
-    | '(' relation ')' sample? (AS? identifier)?                    #aliasedRelation
+    : tableIdentifier sample? (AS? strictIdentifier)?               #tableName
+    | '(' queryNoWith ')' sample? (AS? strictIdentifier)?           #aliasedQuery
+    | '(' relation ')' sample? (AS? strictIdentifier)?              #aliasedRelation
     | inlineTable                                                   #inlineTableDefault2
     ;
 
@@ -456,8 +456,8 @@ expression
     ;
 
 booleanExpression
-    : predicated                                                   #booleanDefault
-    | NOT booleanExpression                                        #logicalNot
+    : NOT booleanExpression                                        #logicalNot
+    | predicated                                                   #booleanDefault
     | left=booleanExpression operator=AND right=booleanExpression  #logicalBinary
     | left=booleanExpression operator=OR right=booleanExpression   #logicalBinary
     | EXISTS '(' query ')'                                         #exists
@@ -597,16 +597,13 @@ qualifiedName
     : identifier ('.' identifier)*
     ;
 
-// Identifier that also allows the use of a number of SQL keywords (mainly for backwards compatibility).
-looseIdentifier
-    : identifier
-    | FROM
-    | TO
-    | TABLE
-    | WITH
+identifier
+    : strictIdentifier
+    | ANTI | FULL | INNER | LEFT | SEMI | RIGHT | NATURAL | JOIN | CROSS | ON
+    | UNION | INTERSECT | EXCEPT
     ;
 
-identifier
+strictIdentifier
     : IDENTIFIER             #unquotedIdentifier
     | quotedIdentifier       #quotedIdentifierAlternative
     | nonReserved            #unquotedIdentifier
@@ -652,6 +649,9 @@ nonReserved
     | AT | NULLS | OVERWRITE | ALL | ALTER | AS | BETWEEN | BY | CREATE | DELETE
     | DESCRIBE | DROP | EXISTS | FALSE | FOR | GROUP | IN | INSERT | INTO | IS |LIKE
     | NULL | ORDER | OUTER | TABLE | TRUE | WITH | RLIKE
+    | AND | CASE | CAST | DISTINCT | DIV | ELSE | END | FUNCTION | INTERVAL | MACRO | OR | STRATIFY | THEN
+    | UNBOUNDED | WHEN
+    | DATABASE | SELECT | FROM | WHERE | HAVING | TO | TABLE | WITH | NOT
     ;
 
 SELECT: 'SELECT';

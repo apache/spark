@@ -107,6 +107,7 @@ class PlanParserSuite extends PlanTest {
       table("db", "c").select('a, 'b).where('x < 1))
     assertEqual("select distinct a, b from db.c", Distinct(table("db", "c").select('a, 'b)))
     assertEqual("select all a, b from db.c", table("db", "c").select('a, 'b))
+    assertEqual("select from tbl", OneRowRelation.select('from.as("tbl")))
   }
 
   test("reverse select query") {
