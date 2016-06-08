@@ -22,15 +22,13 @@ import org.apache.spark.sql.streaming.ContinuousQueryListener
 import org.apache.spark.util.ListenerBus
 
 /**
- * A bus to forward events to [[ContinuousQueryListener]]s. This one will wrap received
- * [[ContinuousQueryListener.Event]]s as WrappedContinuousQueryListenerEvents and send them to the
- * Spark listener bus. It also registers itself with Spark listener bus, so that it can receive
- * WrappedContinuousQueryListenerEvents, unwrap them as ContinuousQueryListener.Events and
- * dispatch them to ContinuousQueryListener.
+ * A bus to forward events to [[ContinuousQueryListener]]s. This one will send received
+ * [[ContinuousQueryListener.Event]]s to the Spark listener bus. It also registers itself with
+ * Spark listener bus, so that it can receive [[ContinuousQueryListener.Event]]s and dispatch them
+ * to ContinuousQueryListener.
  */
 class ContinuousQueryListenerBus(sparkListenerBus: LiveListenerBus)
-  extends SparkListener
-    with ListenerBus[ContinuousQueryListener, ContinuousQueryListener.Event] {
+  extends SparkListener with ListenerBus[ContinuousQueryListener, ContinuousQueryListener.Event] {
 
   import ContinuousQueryListener._
 
@@ -45,13 +43,13 @@ class ContinuousQueryListenerBus(sparkListenerBus: LiveListenerBus)
       case s: QueryStarted =>
         postToAll(s)
       case _ =>
-        sparkListenerBus.post(new WrappedContinuousQueryListenerEvent(event))
+        sparkListenerBus.post(event)
     }
   }
 
   override def onOtherEvent(event: SparkListenerEvent): Unit = {
     event match {
-      case WrappedContinuousQueryListenerEvent(e) =>
+      case e: ContinuousQueryListener.Event =>
         postToAll(e)
       case _ =>
     }
@@ -71,15 +69,4 @@ class ContinuousQueryListenerBus(sparkListenerBus: LiveListenerBus)
     }
   }
 
-  /**
-   * Wrapper for StreamingListenerEvent as SparkListenerEvent so that it can be posted to Spark
-   * listener bus.
-   */
-  private case class WrappedContinuousQueryListenerEvent(
-      streamingListenerEvent: ContinuousQueryListener.Event)
-    extends SparkListenerEvent {
-
-    // Do not log streaming events in event log as history server does not support these events.
-    protected[spark] override def logEvent: Boolean = false
-  }
 }
