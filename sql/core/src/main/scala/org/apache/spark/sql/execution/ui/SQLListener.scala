@@ -229,7 +229,7 @@ private[sql] class SQLListener(conf: SparkConf) extends SparkListener with Loggi
       val sqlPlanMetrics = physicalPlanGraph.allNodes.flatMap { node =>
         node.metrics.map(metric => metric.accumulatorId -> metric)
       }
-      val executionUIData = SQLExecutionUIData(
+      val executionUIData = new SQLExecutionUIData(
         executionId,
         description,
         details,
@@ -374,14 +374,14 @@ private[spark] class SQLHistoryListener(conf: SparkConf, sparkUI: SparkUI)
 /**
  * Represent all necessary data for an execution that will be used in Web UI.
  */
-private[ui] case class SQLExecutionUIData(
-    executionId: Long,
-    description: String,
-    details: String,
-    physicalPlanDescription: String,
-    physicalPlanGraph: SparkPlanGraph,
-    accumulatorMetrics: Map[Long, SQLPlanMetric],
-    submissionTime: Long) {
+private[ui] class SQLExecutionUIData(
+    val executionId: Long,
+    val description: String,
+    val details: String,
+    val physicalPlanDescription: String,
+    val physicalPlanGraph: SparkPlanGraph,
+    val accumulatorMetrics: Map[Long, SQLPlanMetric],
+    val submissionTime: Long) {
 
   var completionTime: Option[Long] = None
 
