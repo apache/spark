@@ -20,6 +20,8 @@ from pyspark.ml.util import *
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.ml.param.shared import *
 from pyspark.ml.common import inherit_doc
+from pyspark.rdd import ignore_unicode_prefix
+
 
 __all__ = ['BisectingKMeans', 'BisectingKMeansModel', 'BisectingKMeansSummary',
            'KMeans', 'KMeansModel',
@@ -332,7 +334,6 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return KMeansSummary(self._call_java("summary"))
 
 
-@ignore_unicode_prefix
 class KMeansSummary(JavaWrapper):
     """
     Summary of KMeans.
@@ -355,7 +356,7 @@ class KMeansSummary(JavaWrapper):
     @since("2.0.0")
     def predictions(self):
         """
-        return the DataFrame of predictions that is produced by KMeansModel.transform().
+        return the DataFrame of predictions that is produced by KMeansModel.transform()
         """
         return self._call_java("predictions")
 
@@ -384,6 +385,7 @@ class KMeansSummary(JavaWrapper):
         return self._call_java("k")
 
 
+@ignore_unicode_prefix
 @inherit_doc
 class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol, HasSeed,
              JavaMLWritable, JavaMLReadable):
