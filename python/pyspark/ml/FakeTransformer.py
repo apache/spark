@@ -74,6 +74,7 @@ class Int2Str(Transformer, HasInputCol, HasOutputCol):
     def _transform(self, dataset):
         inc = self.getInputCol()
         ouc = self.getOutputCol()
+        suff2 = dataset.count()
         suff = self.getSuffix()
-        return dataset.withColumn(ouc, dataset[inc].cast("string") + suff)
+        return dataset.withColumn(ouc, dataset[inc].cast("string") + suff + str(suff2))
 
