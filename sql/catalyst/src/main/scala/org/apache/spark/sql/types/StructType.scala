@@ -304,10 +304,13 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
   }
 
   private[sql] override def simpleString(maxNumberFields: Int): String = {
-    val fieldTypes = fields.map(field => s"${field.name}: ${field.dataType.simpleString(maxNumberFields)}")
-    builder.append("struct<")		 +    Utils.truncatedString(fieldTypes, "struct<", ",", ">", maxNumberFields)
+    val builder = new StringBuilder		
+    val fieldTypes = fields.take(maxNumberFields).map {		 +    builder.append("struct<")		 +    Utils.truncatedString(fieldTypes, "struct<", ",", ">", maxNumberFields)
+      case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"		 +    builder.append(fieldTypes.mkString(", "))		
+    }
+    builder.append("struct<")
     builder.append(fieldTypes.mkString(", "))		
-    if (fields.length > 2) {		
+    if (fields.length > 2) {
       if (fields.length - fieldTypes.length == 1) {		
         builder.append(" ... 1 more field")		
       } else {		
