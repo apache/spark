@@ -1266,7 +1266,7 @@ class Dataset[T] private[sql](
   /**
    * :: Experimental ::
    * (Java-specific)
-   * Reduces the elements of this Dataset using the specified binary function. The given `func`
+   * Reduces the elements of this [[Dataset]] using the specified binary function. The given `func`
    * must be commutative and associative or the result may be non-deterministic.
    *
    * @group action
