@@ -144,7 +144,7 @@ class SparkSession(object):
             default.
 
             >>> s1 = SparkSession.builder.config("k1", "v1").getOrCreate()
-            >>> s1.conf.get("k1") == "v1"
+            >>> s1.conf.get("k1") == s1.sparkContext.getConf().get("k1") == "v1"
             True
 
             In case an existing SparkSession is returned, the config options specified
@@ -168,6 +168,8 @@ class SparkSession(object):
                     session = SparkSession(sc)
                 for key, value in self._options.items():
                     session.conf.set(key, value)
+                for key, value in self._options.items():
+                    session.sparkContext._conf.set(key, value)
                 return session
 
     builder = Builder()
@@ -358,7 +360,7 @@ class SparkSession(object):
 
     def _createFromLocal(self, data, schema):
         """
-        Create an RDD for DataFrame from an list or pandas.DataFrame, returns
+        Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
         """
         # make sure data could consumed multiple times

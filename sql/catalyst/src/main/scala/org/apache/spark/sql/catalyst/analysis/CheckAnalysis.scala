@@ -215,7 +215,7 @@ trait CheckAnalysis extends PredicateHelper {
               if (!RowOrdering.isOrderable(expr.dataType)) {
                 failAnalysis(
                   s"expression ${expr.sql} cannot be used as a grouping expression " +
-                    s"because its data type ${expr.dataType.simpleString} is not a orderable " +
+                    s"because its data type ${expr.dataType.simpleString} is not an orderable " +
                     s"data type.")
               }
 
@@ -309,14 +309,14 @@ trait CheckAnalysis extends PredicateHelper {
           case s: SimpleCatalogRelation =>
             failAnalysis(
               s"""
-                 |Please enable Hive support when selecting the regular tables:
+                 |Hive support is required to select over the following tables:
                  |${s.catalogTable.identifier}
                """.stripMargin)
 
           case InsertIntoTable(s: SimpleCatalogRelation, _, _, _, _) =>
             failAnalysis(
               s"""
-                 |Please enable Hive support when inserting the regular tables:
+                 |Hive support is required to insert into the following tables:
                  |${s.catalogTable.identifier}
                """.stripMargin)
 

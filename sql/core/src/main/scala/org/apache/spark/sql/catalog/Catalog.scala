@@ -24,6 +24,8 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Catalog interface for Spark. To access this, use `SparkSession.catalog`.
+ *
+ * @since 2.0.0
  */
 abstract class Catalog {
 

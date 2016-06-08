@@ -41,7 +41,7 @@ import org.apache.spark.unsafe.KVIterator
  *  - Step 0: Do hash-based aggregation.
  *  - Step 1: Sort all entries of the hash map based on values of grouping expressions and
  *            spill them to disk.
- *  - Step 2: Create a external sorter based on the spilled sorted map entries and reset the map.
+ *  - Step 2: Create an external sorter based on the spilled sorted map entries and reset the map.
  *  - Step 3: Get a sorted [[KVIterator]] from the external sorter.
  *  - Step 4: Repeat step 0 until no more input.
  *  - Step 5: Initialize sort-based aggregation on the sorted iterator.
@@ -434,12 +434,12 @@ class TungstenAggregationIterator(
   ///////////////////////////////////////////////////////////////////////////
 
   /**
-   * Generate a output row when there is no input and there is no grouping expression.
+   * Generate an output row when there is no input and there is no grouping expression.
    */
   def outputForEmptyGroupingKeyWithoutInput(): UnsafeRow = {
     if (groupingExpressions.isEmpty) {
       sortBasedAggregationBuffer.copyFrom(initialAggregationBuffer)
-      // We create a output row and copy it. So, we can free the map.
+      // We create an output row and copy it. So, we can free the map.
       val resultCopy =
         generateOutput(UnsafeRow.createFromByteArray(0, 0), sortBasedAggregationBuffer).copy()
       hashMap.free()

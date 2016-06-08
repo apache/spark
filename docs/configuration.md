@@ -380,6 +380,53 @@ Apart from these, the following properties are also available, and may be useful
     from JVM to Python worker for every task.
   </td>
 </tr>
+<tr>
+  <td><code>spark.files</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of files to be placed in the working directory of each executor.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.submit.pyFiles</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of local jars to include on the driver and executor classpaths.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.packages</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of maven coordinates of jars to include on the driver and executor
+    classpaths. Will search the local maven repo, then maven central and any additional remote
+    repositories given by <code>spark.jars.ivy</code>. The format for the coordinates should be
+    groupId:artifactId:version.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.excludes</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of groupId:artifactId, to exclude while resolving the dependencies
+    provided in <code>spark.jars.packages</code> to avoid dependency conflicts.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.ivy</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of additional remote repositories to search for the coordinates given
+    with <code>spark.jars.packages</code>.
+  </td>
+</tr>
 </table>
 
 #### Shuffle Behavior

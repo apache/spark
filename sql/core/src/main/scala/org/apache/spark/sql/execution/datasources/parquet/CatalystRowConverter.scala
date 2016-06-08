@@ -68,7 +68,7 @@ private[parquet] trait HasParentContainerUpdater {
 }
 
 /**
- * A convenient converter class for Parquet group types with an [[HasParentContainerUpdater]].
+ * A convenient converter class for Parquet group types with a [[HasParentContainerUpdater]].
  */
 private[parquet] abstract class CatalystGroupConverter(val updater: ParentContainerUpdater)
   extends GroupConverter with HasParentContainerUpdater
