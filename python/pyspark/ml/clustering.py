@@ -332,6 +332,7 @@ class KMeansModel(JavaModel, JavaMLWritable, JavaMLReadable):
         return KMeansSummary(self._call_java("summary"))
 
 
+@ignore_unicode_prefix
 class KMeansSummary(JavaWrapper):
     """
     Summary of KMeans.
