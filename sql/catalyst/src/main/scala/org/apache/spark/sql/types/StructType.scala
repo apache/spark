@@ -308,7 +308,7 @@ case class StructType(fields: Array[StructField]) extends DataType with Seq[Stru
     val fieldTypes = fields.take(maxNumberFields).map {
       case f => s"${f.name}: ${f.dataType.simpleString(maxNumberFields)}"
     }
-    Utils.truncatedString(fieldTypes, "struct<", ",", ">", maxNumberFields)
+    Utils.truncatedString(fieldTypes, "struct<", ", ", ">", maxNumberFields)
   }
 
   /**
