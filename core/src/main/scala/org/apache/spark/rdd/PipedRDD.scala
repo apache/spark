@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.io.Source
+import scala.io.{Codec, Source}
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
@@ -172,7 +172,7 @@ private[spark] class PipedRDD[T: ClassTag](
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream)(StandardCharsets.UTF_8).getLines
+    val lines = Source.fromInputStream(proc.getInputStream)(Codec.UTF8).getLines
     new Iterator[String] {
       def next(): String = {
         if (!hasNext()) {
