@@ -19,7 +19,8 @@ package org.apache.spark.sql.execution.datasources.parquet
 
 import java.io.File
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
@@ -46,7 +47,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
   test("appending") {
     val data = (0 until 10).map(i => (i, i.toString))
-    spark.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     // Query appends, don't test with both read modes.
     withParquetTable(data, "t", false) {
       sql("INSERT INTO TABLE t SELECT * FROM tmp")
@@ -58,7 +59,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
 
   test("overwriting") {
     val data = (0 until 10).map(i => (i, i.toString))
-    spark.createDataFrame(data).toDF("c1", "c2").registerTempTable("tmp")
+    spark.createDataFrame(data).toDF("c1", "c2").createOrReplaceTempView("tmp")
     withParquetTable(data, "t") {
       sql("INSERT OVERWRITE TABLE t SELECT * FROM tmp")
       checkAnswer(spark.table("t"), data.map(Row.fromTuple))
@@ -148,13 +149,18 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "true",
+      ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true"
+    ) {
       testSchemaMerging(2)
     }
 
-    withSQLConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
-      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false") {
+    withSQLConf(
+      SQLConf.PARQUET_SCHEMA_MERGING_ENABLED.key -> "true",
+      SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES.key -> "false"
+    ) {
       testSchemaMerging(3)
     }
   }
@@ -581,21 +587,11 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     assert(CatalystReadSupport.expandUDT(schema) === expected)
   }
 
-  test("read/write wide table") {
-    withTempPath { dir =>
-      val path = dir.getCanonicalPath
-
-      val df = spark.range(1000).select(Seq.tabulate(1000) {i => ('id + i).as(s"c$i")} : _*)
-      df.write.mode(SaveMode.Overwrite).parquet(path)
-      checkAnswer(spark.read.parquet(path), df)
-    }
-  }
-
   test("returning batch for wide table") {
-    withSQLConf("spark.sql.codegen.maxFields" -> "100") {
+    withSQLConf(SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "10") {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
-        val df = spark.range(100).select(Seq.tabulate(110) {i => ('id + i).as(s"c$i")} : _*)
+        val df = spark.range(10).select(Seq.tabulate(11) {i => ('id + i).as(s"c$i")} : _*)
         df.write.mode(SaveMode.Overwrite).parquet(path)
 
         // donot return batch, because whole stage codegen is disabled for wide table (>200 columns)
@@ -605,12 +601,27 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
         checkAnswer(df2, df)
 
         // return batch
-        val columns = Seq.tabulate(90) {i => s"c$i"}
+        val columns = Seq.tabulate(9) {i => s"c$i"}
         val df3 = df2.selectExpr(columns : _*)
         assert(
           df3.queryExecution.sparkPlan.find(_.isInstanceOf[BatchedDataSourceScanExec]).isDefined,
           "Should return batch")
         checkAnswer(df3, df.selectExpr(columns : _*))
+      }
+    }
+  }
+
+  test("SPARK-15719: disable writing summary files by default") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(3).write.parquet(path)
+
+      val fs = FileSystem.get(sparkContext.hadoopConfiguration)
+      val files = fs.listFiles(new Path(path), true)
+
+      while (files.hasNext) {
+        val file = files.next
+        assert(!file.getPath.getName.contains("_metadata"))
       }
     }
   }

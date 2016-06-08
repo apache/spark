@@ -134,7 +134,7 @@ private[spark] class SerializerManager(defaultSerializer: Serializer, conf: Spar
   }
 
   /**
-   * Deserializes a InputStream into an iterator of values and disposes of it when the end of
+   * Deserializes an InputStream into an iterator of values and disposes of it when the end of
    * the iterator is reached.
    */
   def dataDeserializeStream[T: ClassTag](

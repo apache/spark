@@ -31,6 +31,8 @@ import org.apache.spark.sql.test.{SharedSQLContext, SQLTestUtils}
 import org.apache.spark.sql.types._
 
 class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
+  import testImplicits._
+
   private val carsFile = "cars.csv"
   private val carsMalformedFile = "cars-malformed.csv"
   private val carsFile8859 = "cars_iso-8859-1.csv"
@@ -38,10 +40,12 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
   private val carsAltFile = "cars-alternative.csv"
   private val carsUnbalancedQuotesFile = "cars-unbalanced-quotes.csv"
   private val carsNullFile = "cars-null.csv"
+  private val carsBlankColName = "cars-blank-column-name.csv"
   private val emptyFile = "empty.csv"
   private val commentsFile = "comments.csv"
   private val disableCommentsFile = "disable_comments.csv"
   private val boolFile = "bool.csv"
+  private val decimalFile = "decimal.csv"
   private val simpleSparseFile = "simple_sparse.csv"
   private val numbersFile = "numbers.csv"
   private val datesFile = "dates.csv"
@@ -71,14 +75,14 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       if (withHeader) {
         assert(df.schema.fieldNames === Array("year", "make", "model", "comment", "blank"))
       } else {
-        assert(df.schema.fieldNames === Array("C0", "C1", "C2", "C3", "C4"))
+        assert(df.schema.fieldNames === Array("_c0", "_c1", "_c2", "_c3", "_c4"))
       }
     }
 
     if (checkValues) {
       val yearValues = List("2012", "1997", "2015")
       val actualYears = if (!withHeader) "year" :: yearValues else yearValues
-      val years = if (withHeader) df.select("year").collect() else df.select("C0").collect()
+      val years = if (withHeader) df.select("year").collect() else df.select("_c0").collect()
 
       years.zipWithIndex.foreach { case (year, index) =>
         if (checkTypes) {
@@ -129,6 +133,20 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
 
     val expectedSchema = StructType(List(
       StructField("bool", BooleanType, nullable = true)))
+    assert(result.schema === expectedSchema)
+  }
+
+  test("test inferring decimals") {
+    val result = spark.read
+      .format("csv")
+      .option("comment", "~")
+      .option("header", "true")
+      .option("inferSchema", "true")
+      .load(testFile(decimalFile))
+    val expectedSchema = StructType(List(
+      StructField("decimal", DecimalType(20, 0), nullable = true),
+      StructField("long", LongType, nullable = true),
+      StructField("double", DoubleType, nullable = true)))
     assert(result.schema === expectedSchema)
   }
 
@@ -222,6 +240,17 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(carsFile))
 
     assert(cars.select("year").collect().size === 2)
+  }
+
+  test("test for blank column names on read and select columns") {
+    val cars = spark.read
+      .format("csv")
+      .options(Map("header" -> "true", "inferSchema" -> "true"))
+      .load(testFile(carsBlankColName))
+
+    assert(cars.select("customer").collect().size == 2)
+    assert(cars.select("_c0").collect().size == 2)
+    assert(cars.select("_c1").collect().size == 2)
   }
 
   test("test for FAILFAST parsing mode") {
@@ -334,6 +363,57 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
         .load(csvDir)
 
       verifyCars(carsCopy, withHeader = true)
+    }
+  }
+
+  test("save csv with quote escaping enabled") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val data = Seq(("test \"quote\"", 123, "it \"works\"!", "\"very\" well"))
+      val df = spark.createDataFrame(data)
+
+      // escapeQuotes should be true by default
+      df.coalesce(1).write
+        .format("csv")
+        .option("quote", "\"")
+        .option("escape", "\"")
+        .save(csvDir)
+
+      val results = spark.read
+        .format("text")
+        .load(csvDir)
+        .collect()
+
+      val expected = "\"test \"\"quote\"\"\",123,\"it \"\"works\"\"!\",\"\"\"very\"\" well\""
+
+      assert(results.toSeq.map(_.toSeq) === Seq(Seq(expected)))
+    }
+  }
+
+  test("save csv with quote escaping disabled") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+
+      val data = Seq(("test \"quote\"", 123, "it \"works\"!", "\"very\" well"))
+      val df = spark.createDataFrame(data)
+
+      // escapeQuotes should be true by default
+      df.coalesce(1).write
+        .format("csv")
+        .option("quote", "\"")
+        .option("escapeQuotes", "false")
+        .option("escape", "\"")
+        .save(csvDir)
+
+      val results = spark.read
+        .format("text")
+        .load(csvDir)
+        .collect()
+
+      val expected = "test \"quote\",123,it \"works\"!,\"\"\"very\"\" well\""
+
+      assert(results.toSeq.map(_.toSeq) === Seq(Seq(expected)))
     }
   }
 
@@ -554,5 +634,25 @@ class CSVSuite extends QueryTest with SharedSQLContext with SQLTestUtils {
       .load(testFile(numbersFile))
 
     assert(numbers.count() == 8)
+  }
+
+  test("error handling for unsupported data types.") {
+    withTempDir { dir =>
+      val csvDir = new File(dir, "csv").getCanonicalPath
+      var msg = intercept[UnsupportedOperationException] {
+        Seq((1, "Tesla")).toDF("a", "b").selectExpr("struct(a, b)").write.csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support struct<a:int,b:string> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Map("Tesla" -> 3))).toDF("id", "cars").write.csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support map<string,int> data type"))
+
+      msg = intercept[UnsupportedOperationException] {
+        Seq((1, Array("Tesla", "Chevy", "Ford"))).toDF("id", "brands").write.csv(csvDir)
+      }.getMessage
+      assert(msg.contains("CSV data source does not support array<string> data type"))
+    }
   }
 }

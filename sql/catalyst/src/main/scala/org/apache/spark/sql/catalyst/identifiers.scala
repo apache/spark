@@ -44,7 +44,7 @@ sealed trait IdentifierWithDatabase {
 /**
  * Identifies a table in a database.
  * If `database` is not defined, the current database is used.
- * When we register a permenent function in the FunctionRegistry, we use
+ * When we register a permanent function in the FunctionRegistry, we use
  * unquotedString as the function name.
  */
 case class TableIdentifier(table: String, database: Option[String])

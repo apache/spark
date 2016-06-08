@@ -30,7 +30,7 @@ import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.util.collection.BitSet
 
 /**
- * Performs an sort merge join of two child relations.
+ * Performs a sort merge join of two child relations.
  */
 case class SortMergeJoinExec(
     leftKeys: Seq[Expression],

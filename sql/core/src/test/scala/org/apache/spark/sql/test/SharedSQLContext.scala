@@ -44,13 +44,13 @@ trait SharedSQLContext extends SQLTestUtils {
   /**
    * The [[TestSQLContext]] to use for all tests in this suite.
    */
-  protected implicit def sqlContext: SQLContext = _spark.wrapped
+  protected implicit def sqlContext: SQLContext = _spark.sqlContext
 
   /**
    * Initialize the [[TestSparkSession]].
    */
   protected override def beforeAll(): Unit = {
-    SQLContext.clearSqlListener()
+    SparkSession.sqlListener.set(null)
     if (_spark == null) {
       _spark = new TestSparkSession(sparkConf)
     }

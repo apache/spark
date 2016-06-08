@@ -19,15 +19,13 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from py4j.java_collections import JavaArray
-
 from pyspark import since, keyword_only
 from pyspark.rdd import ignore_unicode_prefix
+from pyspark.ml.linalg import _convert_to_vector
 from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
-from pyspark.mllib.linalg import _convert_to_vector
 
 __all__ = ['Binarizer',
            'Bucketizer',
@@ -66,7 +64,7 @@ class Binarizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
 
     Binarize a column of continuous features given a threshold.
 
-    >>> df = sqlContext.createDataFrame([(0.5,)], ["values"])
+    >>> df = spark.createDataFrame([(0.5,)], ["values"])
     >>> binarizer = Binarizer(threshold=1.0, inputCol="values", outputCol="features")
     >>> binarizer.transform(df).head().features
     0.0
@@ -131,7 +129,7 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
     Maps a column of continuous features to a column of feature buckets.
 
-    >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> df = spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> bucketizer = Bucketizer(splits=[-float("inf"), 0.5, 1.4, float("inf")],
     ...     inputCol="values", outputCol="buckets")
     >>> bucketed = bucketizer.transform(df).collect()
@@ -159,9 +157,9 @@ class Bucketizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
               "Split points for mapping continuous features into buckets. With n+1 splits, " +
               "there are n buckets. A bucket defined by splits x,y holds values in the " +
               "range [x,y) except the last bucket, which also includes y. The splits " +
-              "should be strictly increasing. Values at -inf, inf must be explicitly " +
-              "provided to cover all Double values; otherwise, values outside the splits " +
-              "specified will be treated as errors.",
+              "should be of length >= 3 and strictly increasing. Values at -inf, inf must be " +
+              "explicitly provided to cover all Double values; otherwise, values outside the " +
+              "splits specified will be treated as errors.",
               typeConverter=TypeConverters.toListFloat)
 
     @keyword_only
@@ -206,7 +204,7 @@ class CountVectorizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, 
 
     Extracts a vocabulary from document collections and generates a :py:attr:`CountVectorizerModel`.
 
-    >>> df = sqlContext.createDataFrame(
+    >>> df = spark.createDataFrame(
     ...    [(0, ["a", "b", "c"]), (1, ["a", "b", "b", "c", "a"])],
     ...    ["label", "raw"])
     >>> cv = CountVectorizer(inputCol="raw", outputCol="vectors")
@@ -352,7 +350,7 @@ class CountVectorizerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by CountVectorizer.
+    Model fitted by :py:class:`CountVectorizer`.
 
     .. versionadded:: 1.6.0
     """
@@ -380,8 +378,8 @@ class DCT(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWrit
     .. seealso:: `More information on Wikipedia \
     <https://en.wikipedia.org/wiki/Discrete_cosine_transform#DCT-II Wikipedia>`_.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df1 = sqlContext.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df1 = spark.createDataFrame([(Vectors.dense([5.0, 8.0, 6.0]),)], ["vec"])
     >>> dct = DCT(inverse=False, inputCol="vec", outputCol="resultVec")
     >>> df2 = dct.transform(df1)
     >>> df2.head().resultVec
@@ -447,8 +445,8 @@ class ElementwiseProduct(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReada
     with a provided "weight" vector. In other words, it scales each column of the dataset
     by a scalar multiplier.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(Vectors.dense([2.0, 1.0, 3.0]),)], ["values"])
     >>> ep = ElementwiseProduct(scalingVec=Vectors.dense([1.0, 2.0, 3.0]),
     ...     inputCol="values", outputCol="eprod")
     >>> ep.transform(df).head().eprod
@@ -516,7 +514,7 @@ class HashingTF(JavaTransformer, HasInputCol, HasOutputCol, HasNumFeatures, Java
     it is advisable to use a power of two as the numFeatures parameter;
     otherwise the features will not be mapped evenly to the columns.
 
-    >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["words"])
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["words"])
     >>> hashingTF = HashingTF(numFeatures=10, inputCol="words", outputCol="features")
     >>> hashingTF.transform(df).head().features
     SparseVector(10, {0: 1.0, 1: 1.0, 2: 1.0})
@@ -582,8 +580,8 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
 
     Compute the Inverse Document Frequency (IDF) given a collection of documents.
 
-    >>> from pyspark.mllib.linalg import DenseVector
-    >>> df = sqlContext.createDataFrame([(DenseVector([1.0, 2.0]),),
+    >>> from pyspark.ml.linalg import DenseVector
+    >>> df = spark.createDataFrame([(DenseVector([1.0, 2.0]),),
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
     >>> model = idf.fit(df)
@@ -609,7 +607,7 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     """
 
     minDocFreq = Param(Params._dummy(), "minDocFreq",
-                       "minimum of documents in which a term should appear for filtering",
+                       "minimum number of documents in which a term should appear for filtering",
                        typeConverter=TypeConverters.toInt)
 
     @keyword_only
@@ -655,7 +653,7 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by IDF.
+    Model fitted by :py:class:`IDF`.
 
     .. versionadded:: 1.4.0
     """
@@ -670,8 +668,8 @@ class MaxAbsScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     absolute value in each feature. It does not shift/center the data, and thus does not destroy
     any sparsity.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(Vectors.dense([1.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> maScaler = MaxAbsScaler(inputCol="a", outputCol="scaled")
     >>> model = maScaler.fit(df)
     >>> model.transform(df).show()
@@ -757,8 +755,8 @@ class MinMaxScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Jav
     Note that since zero values will probably be transformed to non-zero values, output of the
     transformer will be DenseVector even for sparse input.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> mmScaler = MinMaxScaler(inputCol="a", outputCol="scaled")
     >>> model = mmScaler.fit(df)
     >>> model.originalMin
@@ -889,7 +887,7 @@ class NGram(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWr
     When the input array length is less than n (number of elements per n-gram), no n-grams are
     returned.
 
-    >>> df = sqlContext.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
+    >>> df = spark.createDataFrame([Row(inputTokens=["a", "b", "c", "d", "e"])])
     >>> ngram = NGram(n=2, inputCol="inputTokens", outputCol="nGrams")
     >>> ngram.transform(df).head()
     Row(inputTokens=[u'a', u'b', u'c', u'd', u'e'], nGrams=[u'a b', u'b c', u'c d', u'd e'])
@@ -961,9 +959,9 @@ class Normalizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Jav
 
      Normalize a vector to have unit norm using the given p-norm.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> svec = Vectors.sparse(4, {1: 4.0, 3: 3.0})
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([3.0, -4.0]), svec)], ["dense", "sparse"])
+    >>> df = spark.createDataFrame([(Vectors.dense([3.0, -4.0]), svec)], ["dense", "sparse"])
     >>> normalizer = Normalizer(p=2.0, inputCol="dense", outputCol="features")
     >>> normalizer.transform(df).head().features
     DenseVector([0.6, -0.8])
@@ -1114,8 +1112,8 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
     multiplication distributes over addition". Take a 2-variable feature vector as an example:
     `(x, y)`, if we want to expand it with degree 2, then we get `(x, x * x, y, x * y, y * y)`.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(Vectors.dense([0.5, 2.0]),)], ["dense"])
     >>> px = PolynomialExpansion(degree=2, inputCol="dense", outputCol="expanded")
     >>> px.transform(df).head().expanded
     DenseVector([0.5, 0.25, 2.0, 1.0, 4.0])
@@ -1171,22 +1169,23 @@ class PolynomialExpansion(JavaTransformer, HasInputCol, HasOutputCol, JavaMLRead
 
 
 @inherit_doc
-class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, JavaMLReadable,
-                          JavaMLWritable):
+class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
     `QuantileDiscretizer` takes a column with continuous features and outputs a column with binned
-    categorical features. The bin ranges are chosen by taking a sample of the data and dividing it
-    into roughly equal parts. The lower and upper bin bounds will be -Infinity and +Infinity,
-    covering all real values. This attempts to find numBuckets partitions based on a sample of data,
-    but it may find fewer depending on the data sample values.
+    categorical features. The number of bins can be set using the :py:attr:`numBuckets` parameter.
+    The bin ranges are chosen using an approximate algorithm (see the documentation for
+    :py:meth:`~.DataFrameStatFunctions.approxQuantile` for a detailed description).
+    The precision of the approximation can be controlled with the
+    :py:attr:`relativeError` parameter.
+    The lower and upper bin bounds will be `-Infinity` and `+Infinity`, covering all real values.
 
-    >>> df = sqlContext.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
+    >>> df = spark.createDataFrame([(0.1,), (0.4,), (1.2,), (1.5,)], ["values"])
     >>> qds = QuantileDiscretizer(numBuckets=2,
-    ...     inputCol="values", outputCol="buckets", seed=123)
-    >>> qds.getSeed()
-    123
+    ...     inputCol="values", outputCol="buckets", relativeError=0.01)
+    >>> qds.getRelativeError()
+    0.01
     >>> bucketizer = qds.fit(df)
     >>> splits = bucketizer.getSplits()
     >>> splits[0]
@@ -1205,32 +1204,33 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
     .. versionadded:: 2.0.0
     """
 
-    # a placeholder to make it appear in the generated doc
     numBuckets = Param(Params._dummy(), "numBuckets",
                        "Maximum number of buckets (quantiles, or " +
-                       "categories) into which data points are grouped. Must be >= 2. Default 2.",
+                       "categories) into which data points are grouped. Must be >= 2.",
                        typeConverter=TypeConverters.toInt)
 
+    relativeError = Param(Params._dummy(), "relativeError", "The relative target precision for " +
+                          "the approximate quantile algorithm used to generate buckets. " +
+                          "Must be in the range [0, 1].",
+                          typeConverter=TypeConverters.toFloat)
+
     @keyword_only
-    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
+    def __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
         """
-        __init__(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
+        __init__(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
         """
         super(QuantileDiscretizer, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.QuantileDiscretizer",
                                             self.uid)
-        self.numBuckets = Param(self, "numBuckets",
-                                "Maximum number of buckets (quantiles, or " +
-                                "categories) into which data points are grouped. Must be >= 2.")
-        self._setDefault(numBuckets=2)
+        self._setDefault(numBuckets=2, relativeError=0.001)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("2.0.0")
-    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None):
+    def setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001):
         """
-        setParams(self, numBuckets=2, inputCol=None, outputCol=None, seed=None)
+        setParams(self, numBuckets=2, inputCol=None, outputCol=None, relativeError=0.001)
         Set the params for the QuantileDiscretizer
         """
         kwargs = self.setParams._input_kwargs
@@ -1249,6 +1249,20 @@ class QuantileDiscretizer(JavaEstimator, HasInputCol, HasOutputCol, HasSeed, Jav
         Gets the value of numBuckets or its default value.
         """
         return self.getOrDefault(self.numBuckets)
+
+    @since("2.0.0")
+    def setRelativeError(self, value):
+        """
+        Sets the value of :py:attr:`relativeError`.
+        """
+        return self._set(relativeError=value)
+
+    @since("2.0.0")
+    def getRelativeError(self):
+        """
+        Gets the value of relativeError or its default value.
+        """
+        return self.getOrDefault(self.relativeError)
 
     def _create_model(self, java_model):
         """
@@ -1272,7 +1286,7 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
     length.
     It returns an array of strings that can be empty.
 
-    >>> df = sqlContext.createDataFrame([("A B  c",)], ["text"])
+    >>> df = spark.createDataFrame([("A B  c",)], ["text"])
     >>> reTokenizer = RegexTokenizer(inputCol="text", outputCol="words")
     >>> reTokenizer.transform(df).head()
     Row(text=u'A B  c', words=[u'a', u'b', u'c'])
@@ -1302,7 +1316,8 @@ class RegexTokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable,
 
     minTokenLength = Param(Params._dummy(), "minTokenLength", "minimum token length (>= 0)",
                            typeConverter=TypeConverters.toInt)
-    gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens")
+    gaps = Param(Params._dummy(), "gaps", "whether regex splits on gaps (True) or matches tokens " +
+                 "(False)")
     pattern = Param(Params._dummy(), "pattern", "regex pattern (Java dialect) used for tokenizing",
                     typeConverter=TypeConverters.toString)
     toLowercase = Param(Params._dummy(), "toLowercase", "whether to convert all characters to " +
@@ -1399,7 +1414,7 @@ class SQLTransformer(JavaTransformer, JavaMLReadable, JavaMLWritable):
     Currently we only support SQL syntax like 'SELECT ... FROM __THIS__'
     where '__THIS__' represents the underlying table of the input dataset.
 
-    >>> df = sqlContext.createDataFrame([(0, 1.0, 3.0), (2, 2.0, 5.0)], ["id", "v1", "v2"])
+    >>> df = spark.createDataFrame([(0, 1.0, 3.0), (2, 2.0, 5.0)], ["id", "v1", "v2"])
     >>> sqlTrans = SQLTransformer(
     ...     statement="SELECT *, (v1 + v2) AS v3, (v1 * v2) AS v4 FROM __THIS__")
     >>> sqlTrans.transform(df).head()
@@ -1459,8 +1474,12 @@ class StandardScaler(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, J
     Standardizes features by removing the mean and scaling to unit variance using column summary
     statistics on the samples in the training set.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
+    The "unit std" is computed using the `corrected sample standard deviation \
+    <https://en.wikipedia.org/wiki/Standard_deviation#Corrected_sample_standard_deviation>`_,
+    which is computed as the square root of the unbiased sample variance.
+
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(Vectors.dense([0.0]),), (Vectors.dense([2.0]),)], ["a"])
     >>> standardScaler = StandardScaler(inputCol="a", outputCol="scaled")
     >>> model = standardScaler.fit(df)
     >>> model.mean
@@ -1549,7 +1568,7 @@ class StandardScalerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by StandardScaler.
+    Model fitted by :py:class:`StandardScaler`.
 
     .. versionadded:: 1.4.0
     """
@@ -1641,7 +1660,7 @@ class StringIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by StringIndexer.
+    Model fitted by :py:class:`StringIndexer`.
 
     .. versionadded:: 1.4.0
     """
@@ -1717,7 +1736,7 @@ class StopWordsRemover(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadabl
     A feature transformer that filters out stop words from input.
     Note: null values from input array are preserved unless adding null to stopWords explicitly.
 
-    >>> df = sqlContext.createDataFrame([(["a", "b", "c"],)], ["text"])
+    >>> df = spark.createDataFrame([(["a", "b", "c"],)], ["text"])
     >>> remover = StopWordsRemover(inputCol="text", outputCol="words", stopWords=["b"])
     >>> remover.transform(df).head().words == ['a', 'c']
     True
@@ -1809,7 +1828,7 @@ class Tokenizer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, Java
     A tokenizer that converts the input string to lowercase and then
     splits it by white spaces.
 
-    >>> df = sqlContext.createDataFrame([("a b c",)], ["text"])
+    >>> df = spark.createDataFrame([("a b c",)], ["text"])
     >>> tokenizer = Tokenizer(inputCol="text", outputCol="words")
     >>> tokenizer.transform(df).head()
     Row(text=u'a b c', words=[u'a', u'b', u'c'])
@@ -1863,7 +1882,7 @@ class VectorAssembler(JavaTransformer, HasInputCols, HasOutputCol, JavaMLReadabl
 
     A feature transformer that merges multiple columns into a vector column.
 
-    >>> df = sqlContext.createDataFrame([(1, 0, 3)], ["a", "b", "c"])
+    >>> df = spark.createDataFrame([(1, 0, 3)], ["a", "b", "c"])
     >>> vecAssembler = VectorAssembler(inputCols=["a", "b", "c"], outputCol="features")
     >>> vecAssembler.transform(df).head().features
     DenseVector([1.0, 0.0, 3.0])
@@ -1907,7 +1926,7 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
     """
     .. note:: Experimental
 
-    Class for indexing categorical feature columns in a dataset of [[Vector]].
+    Class for indexing categorical feature columns in a dataset of `Vector`.
 
     This has 2 usage modes:
       - Automatically identify categorical features (default behavior)
@@ -1942,8 +1961,8 @@ class VectorIndexer(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, Ja
       - Add warning if a categorical feature has only 1 category.
       - Add option for allowing unknown categories.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([(Vectors.dense([-1.0, 0.0]),),
     ...     (Vectors.dense([0.0, 1.0]),), (Vectors.dense([0.0, 2.0]),)], ["a"])
     >>> indexer = VectorIndexer(maxCategories=2, inputCol="a", outputCol="indexed")
     >>> model = indexer.fit(df)
@@ -2023,7 +2042,17 @@ class VectorIndexerModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by VectorIndexer.
+    Model fitted by :py:class:`VectorIndexer`.
+
+    Transform categorical features to use 0-based indices instead of their original values.
+      - Categorical features are mapped to indices.
+      - Continuous features (columns) are left unchanged.
+
+    This also appends metadata to the output column, marking features as Numeric (continuous),
+    Nominal (categorical), or Binary (either continuous or categorical).
+    Non-ML metadata is not carried over from the input to the output column.
+
+    This maintains vector sparsity.
 
     .. versionadded:: 1.4.0
     """
@@ -2062,8 +2091,8 @@ class VectorSlicer(JavaTransformer, HasInputCol, HasOutputCol, JavaMLReadable, J
     The output vector will order features with the selected indices first (in the order given),
     followed by the selected names (in the order given).
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame([
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame([
     ...     (Vectors.dense([-2.0, 2.3, 0.0, 0.0, 1.0]),),
     ...     (Vectors.dense([0.0, 0.0, 0.0, 0.0, 0.0]),),
     ...     (Vectors.dense([0.6, -1.1, -3.0, 4.5, 3.3]),)], ["features"])
@@ -2150,7 +2179,7 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     natural language processing or machine learning process.
 
     >>> sent = ("a b " * 100 + "a c " * 10).split(" ")
-    >>> doc = sqlContext.createDataFrame([(sent,), (sent,)], ["sentence"])
+    >>> doc = spark.createDataFrame([(sent,), (sent,)], ["sentence"])
     >>> word2Vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
     >>> model = word2Vec.fit(doc)
     >>> model.getVectors().show()
@@ -2296,7 +2325,7 @@ class Word2VecModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by Word2Vec.
+    Model fitted by :py:class:`Word2Vec`.
 
     .. versionadded:: 1.4.0
     """
@@ -2327,13 +2356,14 @@ class PCA(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     """
     .. note:: Experimental
 
-    PCA trains a model to project vectors to a low-dimensional space using PCA.
+    PCA trains a model to project vectors to a lower dimensional space of the
+    top :py:attr:`k` principal components.
 
-    >>> from pyspark.mllib.linalg import Vectors
+    >>> from pyspark.ml.linalg import Vectors
     >>> data = [(Vectors.sparse(5, [(1, 1.0), (3, 7.0)]),),
     ...     (Vectors.dense([2.0, 0.0, 3.0, 4.0, 5.0]),),
     ...     (Vectors.dense([4.0, 0.0, 0.0, 6.0, 7.0]),)]
-    >>> df = sqlContext.createDataFrame(data,["features"])
+    >>> df = spark.createDataFrame(data,["features"])
     >>> pca = PCA(k=2, inputCol="features", outputCol="pca_features")
     >>> model = pca.fit(df)
     >>> model.transform(df).collect()[0].pca_features
@@ -2401,7 +2431,7 @@ class PCAModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by PCA.
+    Model fitted by :py:class:`PCA`. Transforms vectors to a lower dimensional space.
 
     .. versionadded:: 1.5.0
     """
@@ -2435,7 +2465,7 @@ class RFormula(JavaEstimator, HasFeaturesCol, HasLabelCol, JavaMLReadable, JavaM
     operators, including '~', '.', ':', '+', and '-'. Also see the `R formula docs
     <http://stat.ethz.ch/R-manual/R-patched/library/stats/html/formula.html>`_.
 
-    >>> df = sqlContext.createDataFrame([
+    >>> df = spark.createDataFrame([
     ...     (1.0, 1.0, "a"),
     ...     (0.0, 2.0, "b"),
     ...     (0.0, 0.0, "a")
@@ -2532,7 +2562,8 @@ class RFormulaModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by :py:class:`RFormula`.
+    Model fitted by :py:class:`RFormula`. Fitting is required to determine the
+    factor levels of formula terms.
 
     .. versionadded:: 1.5.0
     """
@@ -2547,8 +2578,8 @@ class ChiSqSelector(JavaEstimator, HasFeaturesCol, HasOutputCol, HasLabelCol, Ja
     Chi-Squared feature selection, which selects categorical features to use for predicting a
     categorical label.
 
-    >>> from pyspark.mllib.linalg import Vectors
-    >>> df = sqlContext.createDataFrame(
+    >>> from pyspark.ml.linalg import Vectors
+    >>> df = spark.createDataFrame(
     ...    [(Vectors.dense([0.0, 0.0, 18.0, 1.0]), 1.0),
     ...     (Vectors.dense([0.0, 1.0, 12.0, 0.0]), 0.0),
     ...     (Vectors.dense([1.0, 0.0, 15.0, 0.1]), 0.0)],
@@ -2624,7 +2655,7 @@ class ChiSqSelectorModel(JavaModel, JavaMLReadable, JavaMLWritable):
     """
     .. note:: Experimental
 
-    Model fitted by ChiSqSelector.
+    Model fitted by :py:class:`ChiSqSelector`.
 
     .. versionadded:: 2.0.0
     """
@@ -2643,8 +2674,7 @@ if __name__ == "__main__":
     import tempfile
 
     import pyspark.ml.feature
-    from pyspark.context import SparkContext
-    from pyspark.sql import Row, SQLContext
+    from pyspark.sql import Row, SparkSession
 
     globs = globals().copy()
     features = pyspark.ml.feature.__dict__.copy()
@@ -2652,19 +2682,22 @@ if __name__ == "__main__":
 
     # The small batch size here ensures that we see multiple batches,
     # even in these small test examples:
-    sc = SparkContext("local[2]", "ml.feature tests")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession.builder\
+        .master("local[2]")\
+        .appName("ml.feature tests")\
+        .getOrCreate()
+    sc = spark.sparkContext
     globs['sc'] = sc
-    globs['sqlContext'] = sqlContext
+    globs['spark'] = spark
     testData = sc.parallelize([Row(id=0, label="a"), Row(id=1, label="b"),
                                Row(id=2, label="c"), Row(id=3, label="a"),
                                Row(id=4, label="a"), Row(id=5, label="c")], 2)
-    globs['stringIndDf'] = sqlContext.createDataFrame(testData)
+    globs['stringIndDf'] = spark.createDataFrame(testData)
     temp_path = tempfile.mkdtemp()
     globs['temp_path'] = temp_path
     try:
         (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-        sc.stop()
+        spark.stop()
     finally:
         from shutil import rmtree
         try:

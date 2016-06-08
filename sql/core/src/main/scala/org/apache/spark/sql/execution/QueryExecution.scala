@@ -60,20 +60,20 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
   }
 
   lazy val analyzed: LogicalPlan = {
-    SQLContext.setActive(sparkSession.wrapped)
+    SparkSession.setActiveSession(sparkSession)
     sparkSession.sessionState.analyzer.execute(logical)
   }
 
   lazy val withCachedData: LogicalPlan = {
     assertAnalyzed()
     assertSupported()
-    sparkSession.cacheManager.useCachedData(analyzed)
+    sparkSession.sharedState.cacheManager.useCachedData(analyzed)
   }
 
   lazy val optimizedPlan: LogicalPlan = sparkSession.sessionState.optimizer.execute(withCachedData)
 
   lazy val sparkPlan: SparkPlan = {
-    SQLContext.setActive(sparkSession.wrapped)
+    SparkSession.setActiveSession(sparkSession)
     planner.plan(ReturnAnswer(optimizedPlan)).next()
   }
 
@@ -201,24 +201,26 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   def simpleString: String = {
     s"""== Physical Plan ==
-       |${stringOrError(executedPlan)}
+       |${stringOrError(executedPlan.treeString(verbose = false))}
       """.stripMargin.trim
   }
 
   override def toString: String = {
     def output =
       analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
-    val analyzedPlan =
-      Seq(stringOrError(output), stringOrError(analyzed)).filter(_.nonEmpty).mkString("\n")
+    val analyzedPlan = Seq(
+      stringOrError(output),
+      stringOrError(analyzed.treeString(verbose = true))
+    ).filter(_.nonEmpty).mkString("\n")
 
     s"""== Parsed Logical Plan ==
-       |${stringOrError(logical)}
+       |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlan)}
+       |${stringOrError(optimizedPlan.treeString(verbose = true))}
        |== Physical Plan ==
-       |${stringOrError(executedPlan)}
+       |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
   }
 

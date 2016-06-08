@@ -41,7 +41,7 @@ case class SimpleDDLScan(
     table: String)(@transient val sparkSession: SparkSession)
   extends BaseRelation with TableScan {
 
-  override def sqlContext: SQLContext = sparkSession.wrapped
+  override def sqlContext: SQLContext = sparkSession.sqlContext
 
   override def schema: StructType =
     StructType(Seq(
@@ -78,7 +78,7 @@ case class SimpleDDLScan(
 }
 
 class DDLTestSuite extends DataSourceTest with SharedSQLContext {
-  protected override lazy val sql = caseInsensitiveContext.sql _
+  protected override lazy val sql = spark.sql _
 
   override def beforeAll(): Unit = {
     super.beforeAll()

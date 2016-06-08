@@ -266,7 +266,7 @@ class DataFrameReader(object):
         :param tableName: string, name of the table.
 
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
-        >>> df.registerTempTable('tmpTable')
+        >>> df.createOrReplaceTempView('tmpTable')
         >>> spark.read.table('tmpTable').dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
         """
@@ -286,6 +286,9 @@ class DataFrameReader(object):
     @since(1.6)
     def text(self, paths):
         """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+        If the directory structure of the text files contains partitioning information,
+        those are ignored in the resulting DataFrame. To include partitioning information as
+        columns, use ``read.format('text').load(...)``.
 
         Each line in the text file is a new row in the resulting DataFrame.
 
@@ -358,7 +361,7 @@ class DataFrameReader(object):
 
         >>> df = spark.read.csv('python/test_support/sql/ages.csv')
         >>> df.dtypes
-        [('C0', 'string'), ('C1', 'string')]
+        [('_c0', 'string'), ('_c1', 'string')]
         """
         if schema is not None:
             self.schema(schema)
@@ -402,10 +405,9 @@ class DataFrameReader(object):
     def orc(self, path):
         """Loads an ORC file, returning the result as a :class:`DataFrame`.
 
-        ::Note: Currently ORC support is only available together with
-        :class:`HiveContext`.
+        .. note:: Currently ORC support is only available together with Hive support.
 
-        >>> df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> df.dtypes
         [('a', 'bigint'), ('b', 'int'), ('c', 'int')]
         """
@@ -415,28 +417,31 @@ class DataFrameReader(object):
     def jdbc(self, url, table, column=None, lowerBound=None, upperBound=None, numPartitions=None,
              predicates=None, properties=None):
         """
-        Construct a :class:`DataFrame` representing the database table accessible
-        via JDBC URL `url` named `table` and connection `properties`.
+        Construct a :class:`DataFrame` representing the database table named ``table``
+        accessible via JDBC URL ``url`` and connection ``properties``.
 
-        The `column` parameter could be used to partition the table, then it will
-        be retrieved in parallel based on the parameters passed to this function.
+        Partitions of the table will be retrieved in parallel if either ``column`` or
+        ``predicates`` is specified.
 
-        The `predicates` parameter gives a list expressions suitable for inclusion
-        in WHERE clauses; each one defines one partition of the :class:`DataFrame`.
+        If both ``column`` and ``predicates`` are specified, ``column`` will be used.
 
-        ::Note: Don't create too many partitions in parallel on a large cluster;
+        .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.
 
-        :param url: a JDBC URL
-        :param table: name of table
-        :param column: the column used to partition
-        :param lowerBound: the lower bound of partition column
-        :param upperBound: the upper bound of the partition column
+        :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
+        :param table: the name of the table
+        :param column: the name of an integer column that will be used for partitioning;
+                       if this parameter is specified, then ``numPartitions``, ``lowerBound``
+                       (inclusive), and ``upperBound`` (exclusive) will form partition strides
+                       for generated WHERE clause expressions used to split the column
+                       ``column`` evenly
+        :param lowerBound: the minimum value of ``column`` used to decide partition stride
+        :param upperBound: the maximum value of ``column`` used to decide partition stride
         :param numPartitions: the number of partitions
-        :param predicates: a list of expressions
-        :param properties: JDBC database connection arguments, a list of arbitrary string
-                           tag/value. Normally at least a "user" and "password" property
-                           should be included.
+        :param predicates: a list of expressions suitable for inclusion in WHERE clauses;
+                           each one defines one partition of the :class:`DataFrame`
+        :param properties: a dictionary of JDBC database connection arguments; normally,
+                           at least a "user" and "password" property should be included
         :return: a DataFrame
         """
         if properties is None:
@@ -492,6 +497,26 @@ class DataFrameWriter(object):
             self._jwrite = self._jwrite.mode(saveMode)
         return self
 
+    @since(2.0)
+    def outputMode(self, outputMode):
+        """Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+
+        Options include:
+
+        * `append`:Only the new rows in the streaming DataFrame/Dataset will be written to
+           the sink
+        * `complete`:All the rows in the streaming DataFrame/Dataset will be written to the sink
+           every time these is some updates
+
+       .. note:: Experimental.
+
+        >>> writer = sdf.write.outputMode('append')
+        """
+        if not outputMode or type(outputMode) != str or len(outputMode.strip()) == 0:
+            raise ValueError('The output mode must be a non-empty string. Got: %s' % outputMode)
+        self._jwrite = self._jwrite.outputMode(outputMode)
+        return self
+
     @since(1.4)
     def format(self, source):
         """Specifies the underlying output data source.
@@ -538,7 +563,7 @@ class DataFrameWriter(object):
     def queryName(self, queryName):
         """Specifies the name of the :class:`ContinuousQuery` that can be started with
         :func:`startStream`. This name must be unique among all the currently active queries
-        in the associated spark
+        in the associated SparkSession.
 
         .. note:: Experimental.
 
@@ -761,7 +786,7 @@ class DataFrameWriter(object):
 
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
-            header=None, nullValue=None):
+            header=None, nullValue=None, escapeQuotes=None):
         """Saves the content of the [[DataFrame]] in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
@@ -782,6 +807,9 @@ class DataFrameWriter(object):
                       value, ``"``.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
+        :param escapeQuotes: A flag indicating whether values containing quotes should always
+                             be enclosed in quotes. If None is set, it uses the default value
+                             ``true``, escaping all values containing a quote character.
         :param header: writes the names of columns as the first line. If None is set, it uses
                        the default value, ``false``.
         :param nullValue: sets the string representation of a null value. If None is set, it uses
@@ -802,14 +830,15 @@ class DataFrameWriter(object):
             self.option("header", header)
         if nullValue is not None:
             self.option("nullValue", nullValue)
+        if escapeQuotes is not None:
+            self.option("escapeQuotes", nullValue)
         self._jwrite.csv(path)
 
     @since(1.5)
     def orc(self, path, mode=None, partitionBy=None, compression=None):
         """Saves the content of the :class:`DataFrame` in ORC format at the specified path.
 
-        ::Note: Currently ORC support is only available together with
-        :class:`HiveContext`.
+        .. note:: Currently ORC support is only available together with Hive support.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.
@@ -823,7 +852,7 @@ class DataFrameWriter(object):
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
                             This will overwrite ``orc.compress``.
 
-        >>> orc_df = hiveContext.read.orc('python/test_support/sql/orc_partitioned')
+        >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
         """
         self.mode(mode)
@@ -835,9 +864,9 @@ class DataFrameWriter(object):
 
     @since(1.4)
     def jdbc(self, url, table, mode=None, properties=None):
-        """Saves the content of the :class:`DataFrame` to a external database table via JDBC.
+        """Saves the content of the :class:`DataFrame` to an external database table via JDBC.
 
-        .. note:: Don't create too many partitions in parallel on a large cluster;\
+        .. note:: Don't create too many partitions in parallel on a large cluster; \
         otherwise Spark might crash your external database systems.
 
         :param url: a JDBC URL of the form ``jdbc:subprotocol:subname``
@@ -864,30 +893,32 @@ def _test():
     import doctest
     import os
     import tempfile
+    import py4j
     from pyspark.context import SparkContext
-    from pyspark.sql import SparkSession, Row, HiveContext
+    from pyspark.sql import SparkSession, Row
     import pyspark.sql.readwriter
 
     os.chdir(os.environ["SPARK_HOME"])
 
     globs = pyspark.sql.readwriter.__dict__.copy()
     sc = SparkContext('local[4]', 'PythonTest')
+    try:
+        spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+    except py4j.protocol.Py4JError:
+        spark = SparkSession(sc)
 
     globs['tempfile'] = tempfile
     globs['os'] = os
     globs['sc'] = sc
-    globs['spark'] = SparkSession.builder\
-        .enableHiveSupport()\
-        .getOrCreate()
-    globs['hiveContext'] = HiveContext._createForTesting(sc)
-    globs['df'] = globs['spark'].read.parquet('python/test_support/sql/parquet_partitioned')
+    globs['spark'] = spark
+    globs['df'] = spark.read.parquet('python/test_support/sql/parquet_partitioned')
     globs['sdf'] = \
-        globs['spark'].read.format('text').stream('python/test_support/sql/streaming')
+        spark.read.format('text').stream('python/test_support/sql/streaming')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.readwriter, globs=globs,
         optionflags=doctest.ELLIPSIS | doctest.NORMALIZE_WHITESPACE | doctest.REPORT_NDIFF)
-    globs['sc'].stop()
+    sc.stop()
     if failure_count:
         exit(-1)
 

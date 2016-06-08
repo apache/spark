@@ -79,7 +79,7 @@ private[streaming] abstract class ReceiverSupervisor(
       optionalBlockId: Option[StreamBlockId]
     ): Unit
 
-  /** Store a iterator of received data as a data block into Spark's memory. */
+  /** Store an iterator of received data as a data block into Spark's memory. */
   def pushIterator(
       iterator: Iterator[_],
       optionalMetadata: Option[Any],

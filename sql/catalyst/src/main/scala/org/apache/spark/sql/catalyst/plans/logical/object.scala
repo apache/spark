@@ -30,25 +30,12 @@ object CatalystSerde {
     DeserializeToObject(deserializer, generateObjAttr[T], child)
   }
 
-  def deserialize(child: LogicalPlan, encoder: ExpressionEncoder[Row]): DeserializeToObject = {
-    val deserializer = UnresolvedDeserializer(encoder.deserializer)
-    DeserializeToObject(deserializer, generateObjAttrForRow(encoder), child)
-  }
-
   def serialize[T : Encoder](child: LogicalPlan): SerializeFromObject = {
     SerializeFromObject(encoderFor[T].namedExpressions, child)
   }
 
-  def serialize(child: LogicalPlan, encoder: ExpressionEncoder[Row]): SerializeFromObject = {
-    SerializeFromObject(encoder.namedExpressions, child)
-  }
-
   def generateObjAttr[T : Encoder]: Attribute = {
     AttributeReference("obj", encoderFor[T].deserializer.dataType, nullable = false)()
-  }
-
-  def generateObjAttrForRow(encoder: ExpressionEncoder[Row]): Attribute = {
-    AttributeReference("obj", encoder.deserializer.dataType, nullable = false)()
   }
 }
 
@@ -94,7 +81,7 @@ case class DeserializeToObject(
  */
 case class SerializeFromObject(
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 }
@@ -118,7 +105,7 @@ object MapPartitions {
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
 
 object MapPartitionsInR {
   def apply(
@@ -128,16 +115,16 @@ object MapPartitionsInR {
       schema: StructType,
       encoder: ExpressionEncoder[Row],
       child: LogicalPlan): LogicalPlan = {
-    val deserialized = CatalystSerde.deserialize(child, encoder)
+    val deserialized = CatalystSerde.deserialize(child)(encoder)
     val mapped = MapPartitionsInR(
       func,
       packageNames,
       broadcastVars,
       encoder.schema,
       schema,
-      CatalystSerde.generateObjAttrForRow(RowEncoder(schema)),
+      CatalystSerde.generateObjAttr(RowEncoder(schema)),
       deserialized)
-    CatalystSerde.serialize(mapped, RowEncoder(schema))
+    CatalystSerde.serialize(mapped)(RowEncoder(schema))
   }
 }
 
@@ -152,7 +139,7 @@ case class MapPartitionsInR(
     inputSchema: StructType,
     outputSchema: StructType,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer {
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
   override lazy val schema = outputSchema
 }
 
@@ -175,7 +162,7 @@ object MapElements {
 case class MapElements(
     func: AnyRef,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
@@ -215,7 +202,7 @@ case class AppendColumnsWithObject(
     func: Any => Any,
     childSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 }

@@ -608,7 +608,7 @@ private[spark] class TaskSetManager(
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]): Unit = {
     val info = taskInfos(tid)
     val index = info.index
-    info.markSuccessful()
+    info.markFinished(TaskState.FINISHED)
     removeRunningTask(tid)
     // This method is called by "TaskSchedulerImpl.handleSuccessfulTask" which holds the
     // "TaskSchedulerImpl" lock until exiting. To avoid the SPARK-7655 issue, we should not
@@ -617,6 +617,14 @@ private[spark] class TaskSetManager(
     // Note: "result.value()" only deserializes the value when it's called at the first time, so
     // here "result.value()" just returns the value and won't block other threads.
     sched.dagScheduler.taskEnded(tasks(index), Success, result.value(), result.accumUpdates, info)
+    // Kill any other attempts for the same task (since those are unnecessary now that one
+    // attempt completed successfully).
+    for (attemptInfo <- taskAttempts(index) if attemptInfo.running) {
+      logInfo(s"Killing attempt ${attemptInfo.attemptNumber} for task ${attemptInfo.id} " +
+        s"in stage ${taskSet.id} (TID ${attemptInfo.taskId}) on ${attemptInfo.host} " +
+        s"as the attempt ${info.attemptNumber} succeeded on ${info.host}")
+      sched.backend.killTask(attemptInfo.taskId, attemptInfo.executorId, true)
+    }
     if (!successful(index)) {
       tasksSuccessful += 1
       logInfo("Finished task %s in stage %s (TID %d) in %d ms on %s (%d/%d)".format(
@@ -640,11 +648,11 @@ private[spark] class TaskSetManager(
    */
   def handleFailedTask(tid: Long, state: TaskState, reason: TaskEndReason) {
     val info = taskInfos(tid)
-    if (info.failed) {
+    if (info.failed || info.killed) {
       return
     }
     removeRunningTask(tid)
-    info.markFailed()
+    info.markFinished(state)
     val index = info.index
     copiesRunning(index) -= 1
     var accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty
@@ -821,7 +829,7 @@ private[spark] class TaskSetManager(
    * TODO: To make this scale to large jobs, we need to maintain a list of running tasks, so that
    * we don't scan the whole task set. It might also help to make this sorted by launch time.
    */
-  override def checkSpeculatableTasks(): Boolean = {
+  override def checkSpeculatableTasks(minTimeToSpeculation: Int): Boolean = {
     // Can't speculate if we only have one task, and no need to speculate if the task set is a
     // zombie.
     if (isZombie || numTasks == 1) {
@@ -835,7 +843,7 @@ private[spark] class TaskSetManager(
       val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
       Arrays.sort(durations)
       val medianDuration = durations(min((0.5 * tasksSuccessful).round.toInt, durations.length - 1))
-      val threshold = max(SPECULATION_MULTIPLIER * medianDuration, 100)
+      val threshold = max(SPECULATION_MULTIPLIER * medianDuration, minTimeToSpeculation)
       // TODO: Threshold should also look at standard deviation of task durations and have a lower
       // bound based on that.
       logDebug("Task length threshold for speculation: " + threshold)

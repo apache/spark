@@ -28,7 +28,7 @@ import org.scalatest.Matchers._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Union}
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchange}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -259,12 +259,20 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   }
 
   test("repartition") {
+    intercept[IllegalArgumentException] {
+      testData.select('key).repartition(0)
+    }
+
     checkAnswer(
       testData.select('key).repartition(10).select('key),
       testData.select('key).collect().toSeq)
   }
 
   test("coalesce") {
+    intercept[IllegalArgumentException] {
+      testData.select('key).coalesce(0)
+    }
+
     assert(testData.select('key).coalesce(1).rdd.partitions.size === 1)
 
     checkAnswer(
@@ -507,7 +515,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
     )
   }
 
-  test("callUDF in SQLContext") {
+  test("callUDF without Hive Support") {
     val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
     df.sparkSession.udf.register("simpleUDF", (v: Int) => v * v)
     checkAnswer(
@@ -599,6 +607,27 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       }.toSeq)
     assert(df.schema.map(_.name) === Seq("id", "name", "age", "salary"))
     assert(df("id") == person("id"))
+  }
+
+  test("drop top level columns that contains dot") {
+    val df1 = Seq((1, 2)).toDF("a.b", "a.c")
+    checkAnswer(df1.drop("a.b"), Row(2))
+
+    // Creates data set: {"a.b": 1, "a": {"b": 3}}
+    val df2 = Seq((1)).toDF("a.b").withColumn("a", struct(lit(3) as "b"))
+    // Not like select(), drop() parses the column name "a.b" literally without interpreting "."
+    checkAnswer(df2.drop("a.b").select("a.b"), Row(3))
+
+    // "`" is treated as a normal char here with no interpreting, "`a`b" is a valid column name.
+    assert(df2.drop("`a.b`").columns.size == 2)
+  }
+
+  test("drop(name: String) search and drop all top level columns that matchs the name") {
+    val df1 = Seq((1, 2)).toDF("a", "b")
+    val df2 = Seq((3, 4)).toDF("a", "b")
+    checkAnswer(df1.join(df2), Row(1, 2, 3, 4))
+    // Finds and drops all columns that match the name (case insensitive).
+    checkAnswer(df1.join(df2).drop("A"), Row(2, 4))
   }
 
   test("withColumnRenamed") {
@@ -994,17 +1023,18 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       // pass case: parquet table (HadoopFsRelation)
       df.write.mode(SaveMode.Overwrite).parquet(tempParquetFile.getCanonicalPath)
       val pdf = spark.read.parquet(tempParquetFile.getCanonicalPath)
-      pdf.registerTempTable("parquet_base")
+      pdf.createOrReplaceTempView("parquet_base")
+
       insertion.write.insertInto("parquet_base")
 
       // pass case: json table (InsertableRelation)
       df.write.mode(SaveMode.Overwrite).json(tempJsonFile.getCanonicalPath)
       val jdf = spark.read.json(tempJsonFile.getCanonicalPath)
-      jdf.registerTempTable("json_base")
+      jdf.createOrReplaceTempView("json_base")
       insertion.write.mode(SaveMode.Overwrite).insertInto("json_base")
 
       // error cases: insert into an RDD
-      df.registerTempTable("rdd_base")
+      df.createOrReplaceTempView("rdd_base")
       val e1 = intercept[AnalysisException] {
         insertion.write.insertInto("rdd_base")
       }
@@ -1012,14 +1042,14 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
 
       // error case: insert into a logical plan that is not a LeafNode
       val indirectDS = pdf.select("_1").filter($"_1" > 5)
-      indirectDS.registerTempTable("indirect_ds")
+      indirectDS.createOrReplaceTempView("indirect_ds")
       val e2 = intercept[AnalysisException] {
         insertion.write.insertInto("indirect_ds")
       }
       assert(e2.getMessage.contains("Inserting into an RDD-based table is not allowed."))
 
       // error case: insert into an OneRowRelation
-      Dataset.ofRows(spark, OneRowRelation).registerTempTable("one_row")
+      Dataset.ofRows(spark, OneRowRelation).createOrReplaceTempView("one_row")
       val e3 = intercept[AnalysisException] {
         insertion.write.insertInto("one_row")
       }
@@ -1197,7 +1227,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyNonExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
-      case agg: TungstenAggregate =>
+      case agg: HashAggregateExec =>
         atFirstAgg = !atFirstAgg
       case _ =>
         if (atFirstAgg) {
@@ -1212,7 +1242,7 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   private def verifyExchangingAgg(df: DataFrame) = {
     var atFirstAgg: Boolean = false
     df.queryExecution.executedPlan.foreach {
-      case agg: TungstenAggregate =>
+      case agg: HashAggregateExec =>
         if (atFirstAgg) {
           fail("Should not have back to back Aggregates")
         }
@@ -1443,13 +1473,13 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
   test("SPARK-12982: Add table name validation in temp table registration") {
     val df = Seq("foo", "bar").map(Tuple1.apply).toDF("col")
     // invalid table name test as below
-    intercept[AnalysisException](df.registerTempTable("t~"))
+    intercept[AnalysisException](df.createOrReplaceTempView("t~"))
     // valid table name test as below
-    df.registerTempTable("table1")
+    df.createOrReplaceTempView("table1")
     // another invalid table name test as below
-    intercept[AnalysisException](df.registerTempTable("#$@sum"))
+    intercept[AnalysisException](df.createOrReplaceTempView("#$@sum"))
     // another invalid table name test as below
-    intercept[AnalysisException](df.registerTempTable("table!#"))
+    intercept[AnalysisException](df.createOrReplaceTempView("table!#"))
   }
 
   test("assertAnalyzed shouldn't replace original stack trace") {
