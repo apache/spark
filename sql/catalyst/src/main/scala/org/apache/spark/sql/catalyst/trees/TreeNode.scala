@@ -462,10 +462,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
   /** ONE line description of this node. */
   def simpleString: String = s"$nodeName $argString".trim
 
+  /** ONE line description of this node with more information */
+  def verboseString: String
+
   override def toString: String = treeString
 
   /** Returns a string representation of the nodes in this tree */
-  def treeString: String = generateTreeString(0, Nil, new StringBuilder).toString
+  def treeString: String = treeString(verbose = true)
+
+  def treeString(verbose: Boolean): String = {
+    generateTreeString(0, Nil, new StringBuilder, verbose).toString
+  }
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
@@ -508,6 +515,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
       depth: Int,
       lastChildren: Seq[Boolean],
       builder: StringBuilder,
+      verbose: Boolean,
       prefix: String = ""): StringBuilder = {
     if (depth > 0) {
       lastChildren.init.foreach { isLast =>
@@ -520,18 +528,21 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] extends Product {
     }
 
     builder.append(prefix)
-    builder.append(simpleString)
+    val headline = if (verbose) verboseString else simpleString
+    builder.append(headline)
     builder.append("\n")
 
     if (innerChildren.nonEmpty) {
       innerChildren.init.foreach(_.generateTreeString(
-        depth + 2, lastChildren :+ false :+ false, builder))
-      innerChildren.last.generateTreeString(depth + 2, lastChildren :+ false :+ true, builder)
+        depth + 2, lastChildren :+ false :+ false, builder, verbose))
+      innerChildren.last.generateTreeString(
+        depth + 2, lastChildren :+ false :+ true, builder, verbose)
     }
 
     if (children.nonEmpty) {
-      children.init.foreach(_.generateTreeString(depth + 1, lastChildren :+ false, builder, prefix))
-      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, prefix)
+      children.init.foreach(
+        _.generateTreeString(depth + 1, lastChildren :+ false, builder, verbose, prefix))
+      children.last.generateTreeString(depth + 1, lastChildren :+ true, builder, verbose, prefix)
     }
 
     builder

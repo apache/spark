@@ -62,6 +62,8 @@ For more background and more details about the implementation, refer to the docu
 
   > The current implementation of logistic regression in `spark.ml` only supports binary classes. Support for multiclass regression will be added in the future.
 
+  > When fitting LogisticRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
+
 **Example**
 
 The following example shows how to train a logistic regression model
@@ -350,6 +352,8 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 The interface for working with linear regression models and model
 summaries is similar to the logistic regression case.
+
+  > When fitting LinearRegressionModel without intercept on dataset with constant nonzero column by "l-bfgs" solver, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
 
 **Example**
 
@@ -665,6 +669,8 @@ that depends on the coefficients vector $\beta$ and the log of scale parameter $
 The optimization algorithm underlying the implementation is L-BFGS.
 The implementation matches the result from R's survival function 
 [survreg](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/survreg.html)
+
+  > When fitting AFTSurvivalRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is different from R survival::survreg.
 
 **Example**
 

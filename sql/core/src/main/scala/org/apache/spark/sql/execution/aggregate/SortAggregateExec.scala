@@ -104,12 +104,20 @@ case class SortAggregateExec(
     }
   }
 
-  override def simpleString: String = {
+  override def simpleString: String = toString(verbose = false)
+
+  override def verboseString: String = toString(verbose = true)
+
+  private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
     val keyString = Utils.truncatedString(groupingExpressions, "[", ",", "]")
     val functionString = Utils.truncatedString(allAggregateExpressions, "[", ",", "]")
     val outputString = Utils.truncatedString(output, "[", ",", "]")
-    s"SortAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+    if (verbose) {
+      s"SortAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+    } else {
+      s"SortAggregate(key=$keyString, functions=$functionString)"
+    }
   }
 }

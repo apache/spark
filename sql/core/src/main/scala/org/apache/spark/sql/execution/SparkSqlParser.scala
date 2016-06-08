@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, OneRowRelation, ScriptInputOutputSchema}
 import org.apache.spark.sql.execution.command._
-import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.execution.datasources.{CreateTempViewUsing, _}
 import org.apache.spark.sql.internal.{HiveSerDe, SQLConf, VariableSubstitution}
 import org.apache.spark.sql.types.DataType
 
@@ -344,6 +344,19 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
         ifNotExists,
         managedIfNoPath = true)
     }
+  }
+
+  /**
+   * Creates a [[CreateTempViewUsing]] logical plan.
+   */
+  override def visitCreateTempViewUsing(
+      ctx: CreateTempViewUsingContext): LogicalPlan = withOrigin(ctx) {
+    CreateTempViewUsing(
+      tableIdent = visitTableIdentifier(ctx.tableIdentifier()),
+      userSpecifiedSchema = Option(ctx.colTypeList()).map(createStructType),
+      replace = ctx.REPLACE != null,
+      provider = ctx.tableProvider.qualifiedName.getText,
+      options = Option(ctx.tablePropertyList).map(visitPropertyKeyValues).getOrElse(Map.empty))
   }
 
   /**
