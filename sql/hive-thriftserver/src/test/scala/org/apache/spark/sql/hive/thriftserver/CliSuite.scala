@@ -277,10 +277,10 @@ class CliSuite extends SparkFunSuite with BeforeAndAfterAll with Logging {
 
   test("apply hiveconf from cli command") {
     runCliWithin(2.minute)(
-      s"SET conf1;" -> "conftest",
-      s"SET conf2;" -> "1",
-      // bypassed by SparkSQLCLIDriver
-      s"SET ${ConfVars.METASTORECONNECTURLKEY};" -> "undefined"
+      "SET conf1;" -> "conftest",
+      "SET conf2;" -> "1",
+      "SET conf3=${hiveconf:conf1};" -> "conftest",
+      "SET conf3;" -> "conftest"
     )
   }
 }
