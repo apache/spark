@@ -1505,23 +1505,4 @@ class DataFrameSuite extends QueryTest with SharedSQLContext {
       getMessage()
     assert(e1.startsWith("Path does not exist"))
   }
-
-  test("SPARK-12987: drop column ") {
-    val df = Seq((1, 2)).toDF("a_b", "a.c")
-    val df1 = df.drop("a_b")
-    checkAnswer(df1, Row(2))
-    assert(df1.schema.map(_.name) === Seq("a.c"))
-  }
-
-  test("SPARK-14759: drop column ") {
-    val df1 = sqlContext.createDataFrame(Seq((1, 2), (3, 4))).toDF("any", "hour")
-    val df2 = sqlContext.createDataFrame(Seq((1, 3))).toDF("any").withColumn("hour", lit(10))
-    val j = df1.join(df2, $"df1.hour" === $"df2.hour", "left")
-    assert(j.schema.map(_.name) === Seq("any","hour","any","hour"))
-    print("Columns after join:{0}".format(j.columns))
-    val jj = j.drop($"df2.hour")
-    assert(jj.schema.map(_.name) === Seq("any"))
-    print("Columns after drop 'hour':{0}".format(jj.columns))
-  }
-
 }

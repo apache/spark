@@ -625,6 +625,22 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
       }
     }
   }
+
+  test("SPARK-15804: write out the metadata to parquet file") {
+    val data = (1, "abc") ::(2, "helloabcde") :: Nil
+    val df = spark.createDataFrame(data).toDF("a", "b")
+    val md = new MetadataBuilder().putString("key", "value").build()
+    val dfWithmeta = df.select(Column("a"), Column("b").as("b", md))
+
+    withTempPath { dir =>
+      val path = s"${dir.getCanonicalPath}/data"
+      dfWithmeta.write.parquet(path)
+
+      readParquetFile(path) { dfwithmeta2 =>
+        assert(dfwithmeta2.schema.json.contains("\"key\":\"value\""))
+      }
+    }
+  }
 }
 
 object TestingUDT {
