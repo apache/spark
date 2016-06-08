@@ -24,6 +24,7 @@ import org.apache.spark._
 class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
   val badHost = "host-0"
+  val duration = Duration(10, SECONDS)
 
   /**
    * This backend just always fails if the task is executed on a bad host, but otherwise succeeds
@@ -39,13 +40,21 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     }
   }
 
+  override def test(name: String, testTags: org.scalatest.Tag*)(body: => Unit): Unit = {
+    var lastThreads = Set[Long]()
+    (0 until 500).foreach { idx =>
+      super.test(s"$name: $idx", testTags: _*) {
+        body
+      }
+    }
+  }
+
   // Test demonstrating the issue -- without a config change, the scheduler keeps scheduling
   // according to locality preferences, and so the job fails
-  ignore("If preferred node is bad, without blacklist job will fail") {
+  testScheduler("If preferred node is bad, without blacklist job will fail") {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
       Await.ready(jobFuture, duration)
     }
     assertDataStructuresEmpty(noFailure = false)
@@ -54,7 +63,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   // even with the blacklist turned on, if maxTaskFailures is not more than the number
   // of executors on the bad node, then locality preferences will lead to us cycling through
   // the executors on the bad node, and still failing the job
-  ignoreScheduler(
+  testScheduler(
     "With blacklist on, job will still fail if there are too many bad executors on bad host",
     extraConfs = Seq(
       // just set this to something much longer than the test duration
@@ -64,7 +73,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 10).toArray)
-      val duration = Duration(3, SECONDS)
       Await.ready(jobFuture, duration)
     }
     assertDataStructuresEmpty(noFailure = false)
@@ -72,7 +80,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   // Here we run with the blacklist on, and maxTaskFailures high enough that we'll eventually
   // schedule on a good node and succeed the job
-  ignoreScheduler(
+  testScheduler(
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
       // just set this to something much longer than the test duration
@@ -86,7 +94,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
       Await.ready(jobFuture, duration)
     }
     assert(results === (0 until 10).map { _ -> 42 }.toMap)

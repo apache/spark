@@ -214,7 +214,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     results.clear()
     securityMgr = new SecurityManager(conf)
     broadcastManager = new BroadcastManager(true, conf, securityMgr)
-    mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true)
+    mapOutputTracker = new MapOutputTrackerMaster(conf, broadcastManager, true) {
+      override def sendTracker(message: Any): Unit = {
+        // no-op, just so we can stop this to avoid leaking threads
+      }
+    }
     scheduler = new DAGScheduler(
       sc,
       taskScheduler,
@@ -228,6 +232,9 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   override def afterEach(): Unit = {
     try {
       scheduler.stop()
+      dagEventProcessLoopTester.stop()
+      mapOutputTracker.stop()
+      broadcastManager.stop()
     } finally {
       super.afterEach()
     }
@@ -317,6 +324,15 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   /** Sends JobCancelled to the DAG scheduler. */
   private def cancel(jobId: Int) {
     runEvent(JobCancelled(jobId))
+  }
+
+  override def test(name: String, testTags: org.scalatest.Tag*)(body: => Unit): Unit = {
+    var lastThreads = Set[Long]()
+    (0 until 50).foreach { idx =>
+      super.test(s"$name: $idx", testTags: _*) {
+        body
+      }
+    }
   }
 
   test("[SPARK-3353] parent stage should have lower stage id") {
