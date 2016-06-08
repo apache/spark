@@ -64,9 +64,10 @@ case class CreateTableUsingAsSelect(
   override def output: Seq[Attribute] = Seq.empty[Attribute]
 }
 
-case class CreateTempTableUsing(
+case class CreateTempViewUsing(
     tableIdent: TableIdentifier,
     userSpecifiedSchema: Option[StructType],
+    replace: Boolean,
     provider: String,
     options: Map[String, String]) extends RunnableCommand {
 
@@ -84,7 +85,7 @@ case class CreateTempTableUsing(
     sparkSession.sessionState.catalog.createTempView(
       tableIdent.table,
       Dataset.ofRows(sparkSession, LogicalRelation(dataSource.resolveRelation())).logicalPlan,
-      overrideIfExists = true)
+      replace)
 
     Seq.empty[Row]
   }
