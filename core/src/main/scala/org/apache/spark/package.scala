@@ -44,6 +44,7 @@ package org.apache
 import java.util.Properties
 
 package object spark {
+<<<<<<< HEAD
 
   private object SparkBuildInfo {
 
@@ -94,5 +95,9 @@ package object spark {
   val SPARK_BUILD_USER = SparkBuildInfo.spark_build_user
   val SPARK_REPO_URL = SparkBuildInfo.spark_repo_url
   val SPARK_BUILD_DATE = SparkBuildInfo.spark_build_date
+=======
+  // For package docs only
+  val SPARK_VERSION = "2.0.0-preview"
+>>>>>>> a2f43c2f59b461a37947a5696198a4aa7339579d
 }
 

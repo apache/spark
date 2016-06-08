@@ -19,7 +19,10 @@ package org.apache.spark.network.yarn
 import java.io.{DataOutputStream, File, FileOutputStream}
 
 import scala.annotation.tailrec
+<<<<<<< HEAD
 import scala.concurrent.duration._
+=======
+>>>>>>> a2f43c2f59b461a37947a5696198a4aa7339579d
 import scala.language.postfixOps
 
 import org.apache.hadoop.fs.Path

@@ -33,4 +33,8 @@ package org.apache.spark.sql.catalyst.plans.logical
  *                    defaults to the product of children's `sizeInBytes`.
  * @param isBroadcastable If true, output is small enough to be used in a broadcast join.
  */
+<<<<<<< HEAD
 case class Statistics(sizeInBytes: BigInt, isBroadcastable: Boolean = false)
+=======
+private[sql] case class Statistics(sizeInBytes: BigInt, isBroadcastable: Boolean = false)
+>>>>>>> a2f43c2f59b461a37947a5696198a4aa7339579d

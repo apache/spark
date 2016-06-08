@@ -372,6 +372,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(mapStageB.parents === List(mapStageA))
     assert(mapStageC.parents === List(mapStageA, mapStageB))
     assert(finalStage.parents === List(mapStageC))
+<<<<<<< HEAD
 
     complete(taskSets(0), Seq((Success, makeMapStatus("hostA", 1))))
     complete(taskSets(1), Seq((Success, makeMapStatus("hostA", 1))))
@@ -379,6 +380,8 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     complete(taskSets(3), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty()
+=======
+>>>>>>> a2f43c2f59b461a37947a5696198a4aa7339579d
   }
 
   test("zero split job") {
