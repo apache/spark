@@ -1774,7 +1774,7 @@ class Dataset[T] private[sql](
 
   /**
    * Returns a new [[Dataset]] with a column dropped.
-   * This version of drop accepts a Column rather than a name.
+   * This version of drop accepts a [[Column]] rather than a name.
    * This is a no-op if the Dataset doesn't have a column
    * with an equivalent expression.
    *
@@ -2357,7 +2357,7 @@ class Dataset[T] private[sql](
 
   /**
    * Creates a temporary view using the given name. The lifetime of this
-   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   * temporary view is tied to the [[SparkSession]] that was used to create this [[Dataset]].
    *
    * @throws AnalysisException if the view name already exists
    *
@@ -2377,7 +2377,7 @@ class Dataset[T] private[sql](
 
   /**
    * Creates a temporary view using the given name. The lifetime of this
-   * temporary view is tied to the [[SparkSession]] that was used to create this Dataset.
+   * temporary view is tied to the [[SparkSession]] that was used to create this [[Dataset]].
    *
    * @group basic
    * @since 2.0.0
@@ -2435,7 +2435,7 @@ class Dataset[T] private[sql](
   }
 
   /**
-   * Returns a best-effort snapshot of the files that compose this Dataset. This method simply
+   * Returns a best-effort snapshot of the files that compose this [[Dataset]]. This method simply
    * asks each constituent BaseRelation for its respective files and takes the union of all results.
    * Depending on the source relations, this may not find all input files. Duplicates are removed.
    *
