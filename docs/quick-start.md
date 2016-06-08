@@ -289,13 +289,13 @@ $ find .
 # Package a jar containing your application
 $ sbt package
 ...
-[info] Packaging {..}/{..}/target/scala-2.10/simple-project_2.10-1.0.jar
+[info] Packaging {..}/{..}/target/scala-2.11/simple-project_2.11-1.0.jar
 
 # Use spark-submit to run your application
 $ YOUR_SPARK_HOME/bin/spark-submit \
   --class "SimpleApp" \
   --master local[4] \
-  target/scala-2.10/simple-project_2.10-1.0.jar
+  target/scala-2.11/simple-project_2.11-1.0.jar
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}
