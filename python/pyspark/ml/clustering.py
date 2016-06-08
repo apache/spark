@@ -356,7 +356,7 @@ class KMeansSummary(JavaWrapper):
     @since("2.0.0")
     def predictions(self):
         """
-        return the DataFrame of predictions that is produced by KMeansModel.transform()
+        return the DataFrame of predictions that is produced by KMeansModel.transform().
         """
         return self._call_java("predictions")
 
