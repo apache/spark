@@ -40,15 +40,6 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     }
   }
 
-  override def test(name: String, testTags: org.scalatest.Tag*)(body: => Unit): Unit = {
-    var lastThreads = Set[Long]()
-    (0 until 500).foreach { idx =>
-      super.test(s"$name: $idx", testTags: _*) {
-        body
-      }
-    }
-  }
-
   // Test demonstrating the issue -- without a config change, the scheduler keeps scheduling
   // according to locality preferences, and so the job fails
   testScheduler("If preferred node is bad, without blacklist job will fail") {

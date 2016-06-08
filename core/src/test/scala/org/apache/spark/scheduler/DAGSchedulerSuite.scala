@@ -326,15 +326,6 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     runEvent(JobCancelled(jobId))
   }
 
-  override def test(name: String, testTags: org.scalatest.Tag*)(body: => Unit): Unit = {
-    var lastThreads = Set[Long]()
-    (0 until 50).foreach { idx =>
-      super.test(s"$name: $idx", testTags: _*) {
-        body
-      }
-    }
-  }
-
   test("[SPARK-3353] parent stage should have lower stage id") {
     sparkListener.stageByOrderOfExecution.clear()
     sc.parallelize(1 to 10).map(x => (x, x)).reduceByKey(_ + _, 4).count()
