@@ -318,12 +318,8 @@ abstract class TextBasedFileFormat extends FileFormat {
       options: Map[String, String],
       path: Path): Boolean = {
     if (codecFactory == null) {
-      synchronized {
-        if (codecFactory == null) {
-          codecFactory = new CompressionCodecFactory(
-            sparkSession.sessionState.newHadoopConfWithOptions(options))
-        }
-      }
+      codecFactory = new CompressionCodecFactory(
+        sparkSession.sessionState.newHadoopConfWithOptions(options))
     }
     val codec = codecFactory.getCodec(path)
     codec == null || codec.isInstanceOf[SplittableCompressionCodec]
