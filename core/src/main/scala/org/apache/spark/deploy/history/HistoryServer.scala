@@ -269,7 +269,7 @@ object HistoryServer extends Logging {
     Utils.initDaemon(log)
     new HistoryServerArguments(conf, argStrings)
     initSecurity()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = createSecurityManager(conf)
 
     val providerName = conf.getOption("spark.history.provider")
       .getOrElse(classOf[FsHistoryProvider].getName())
@@ -287,6 +287,34 @@ object HistoryServer extends Logging {
 
     // Wait until the end of the world... or if the HistoryServer process is manually stopped
     while(true) { Thread.sleep(Int.MaxValue) }
+  }
+
+  /**
+   * Create a security manager.
+   * This includes any fixup of the configurations needed to produce a security manager
+   * capable of starting the History Server.
+   * @param config configuration for the SecurityManager constructor
+   * @return
+   */
+  def createSecurityManager(config: SparkConf): SecurityManager = {
+    patchSecuritySettings(config)
+    new SecurityManager(config)
+  }
+
+  /**
+   * Fix up the configuration of a spark configuration so that the security manager will
+   * start. Specifically, if spark authentication is set via an environment variable
+   * or a a spark config option, the configuration must be patched with a dummy authentication
+   * secret.
+   * @param config configuration to be used in a SecurityManager constructor
+   */
+  private def patchSecuritySettings(config: SparkConf): Unit = {
+    if (config.getBoolean(SecurityManager.SPARK_AUTH_CONF, false)
+        && config.getenv(SecurityManager.ENV_AUTH_SECRET) == null
+        && config.getOption(SecurityManager.SPARK_AUTH_SECRET_CONF).isEmpty) {
+      logDebug(s"Setting ${SecurityManager.SPARK_AUTH_SECRET_CONF} to a dummy value")
+      config.set(SecurityManager.SPARK_AUTH_SECRET_CONF, "dummy")
+    }
   }
 
   def initSecurity() {

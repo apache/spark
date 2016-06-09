@@ -75,7 +75,7 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       .set("spark.testing", "true")
     provider = new FsHistoryProvider(conf)
     provider.checkForLogs()
-    val securityManager = new SecurityManager(conf)
+    val securityManager = HistoryServer.createSecurityManager(conf)
 
     server = new HistoryServer(conf, provider, securityManager, 18080)
     server.initialize()
@@ -347,6 +347,15 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
       quit()
     }
 
+  /**
+   * Verify that the security manager needed for the history server can be instantiated
+   * even if spark.authenticate is set
+   */
+  test("SecurityManagerStartsWithSecureShuffle") {
+    val conf = new SparkConf()
+        .set("spark.testing", "true")
+        .set(SecurityManager.SPARK_AUTH_CONF, "true")
+    HistoryServer.createSecurityManager(conf)
   }
 
   test("incomplete apps get refreshed") {
