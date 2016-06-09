@@ -59,7 +59,7 @@ private[sql] class ParquetOptions(
 
 
 private[sql] object ParquetOptions {
-  private val MERGE_SCHEMA = "mergeSchema"
+  private[sql] val MERGE_SCHEMA = "mergeSchema"
 
   // The parquet compression short names
   private val shortParquetCompressionCodecNames = Map(
