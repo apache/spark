@@ -38,7 +38,9 @@ private[spark] class RRunner[U](
     serializer: String,
     packageNames: Array[Byte],
     broadcastVars: Array[Broadcast[Object]],
-    numPartitions: Int = -1)
+    numPartitions: Int = -1,
+    isDataFrame: Boolean = false,
+    colNames: Array[String] = null)
   extends Logging {
   private var bootTime: Double = _
   private var dataStream: DataInputStream = _
@@ -53,8 +55,7 @@ private[spark] class RRunner[U](
 
   def compute(
       inputIterator: Iterator[_],
-      partitionIndex: Int,
-      context: TaskContext): Iterator[U] = {
+      partitionIndex: Int): Iterator[U] = {
     // Timing start
     bootTime = System.currentTimeMillis / 1000.0
 
@@ -147,6 +148,12 @@ private[spark] class RRunner[U](
           }
 
           dataOut.writeInt(numPartitions)
+
+          dataOut.writeInt(if (isDataFrame) 1 else 0)
+
+          if (isDataFrame) {
+            SerDe.writeObject(dataOut, colNames)
+          }
 
           if (!iter.hasNext) {
             dataOut.writeInt(0)

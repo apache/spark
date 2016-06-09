@@ -21,7 +21,6 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.trees.TreeNode
-import org.apache.spark.sql.catalyst.util.toCommentSafeString
 import org.apache.spark.sql.types._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -45,6 +44,7 @@ import org.apache.spark.sql.types._
  * - [[LeafExpression]]: an expression that has no child.
  * - [[UnaryExpression]]: an expression that has one child.
  * - [[BinaryExpression]]: an expression that has two children.
+ * - [[TernaryExpression]]: an expression that has three children.
  * - [[BinaryOperator]]: a special case of [[BinaryExpression]] that requires two children to have
  *                       the same output data type.
  *
@@ -96,15 +96,14 @@ abstract class Expression extends TreeNode[Expression] {
     ctx.subExprEliminationExprs.get(this).map { subExprState =>
       // This expression is repeated which means that the code to evaluate it has already been added
       // as a function before. In that case, we just re-use it.
-      val code = s"/* ${toCommentSafeString(this.toString)} */"
-      ExprCode(code, subExprState.isNull, subExprState.value)
+      ExprCode(ctx.registerComment(this.toString), subExprState.isNull, subExprState.value)
     }.getOrElse {
       val isNull = ctx.freshName("isNull")
       val value = ctx.freshName("value")
       val ve = doGenCode(ctx, ExprCode("", isNull, value))
       if (ve.code.nonEmpty) {
         // Add `this` in the comment.
-        ve.copy(s"/* ${toCommentSafeString(this.toString)} */\n" + ve.code.trim)
+        ve.copy(code = s"${ctx.registerComment(this.toString)}\n" + ve.code.trim)
       } else {
         ve
       }
@@ -186,10 +185,14 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyName: String = nodeName.toLowerCase
 
-  private def flatArguments = productIterator.flatMap {
+  protected def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
+
+  // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
+  // overridden by concrete classes.
+  final override def verboseString: String = simpleString
 
   override def simpleString: String = toString
 
@@ -217,6 +220,33 @@ trait Unevaluable extends Expression {
 
   final override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw new UnsupportedOperationException(s"Cannot evaluate expression: $this")
+}
+
+
+/**
+ * An expression that gets replaced at runtime (currently by the optimizer) into a different
+ * expression for evaluation. This is mainly used to provide compatibility with other databases.
+ * For example, we use this to support "nvl" by replacing it with "coalesce".
+ */
+trait RuntimeReplaceable extends Unevaluable {
+  /**
+   * Method for concrete implementations to override that specifies how to construct the expression
+   * that should replace the current one.
+   */
+  def replaceForEvaluation(): Expression
+
+  /**
+   * Method for concrete implementations to override that specifies how to coerce the input types.
+   */
+  def replaceForTypeCoercion(): Expression
+
+  /** The expression that should be used during evaluation. */
+  lazy val replaced: Expression = replaceForEvaluation()
+
+  override def nullable: Boolean = replaced.nullable
+  override def foldable: Boolean = replaced.foldable
+  override def dataType: DataType = replaced.dataType
+  override def checkInputDataTypes(): TypeCheckResult = replaced.checkInputDataTypes()
 }
 
 
@@ -531,7 +561,7 @@ abstract class TernaryExpression extends Expression {
    * of evaluation process, we should override [[eval]].
    */
   protected def nullSafeEval(input1: Any, input2: Any, input3: Any): Any =
-    sys.error(s"BinaryExpressions must override either eval or nullSafeEval")
+    sys.error(s"TernaryExpressions must override either eval or nullSafeEval")
 
   /**
    * Short hand for generating ternary evaluation code.

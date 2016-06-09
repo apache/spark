@@ -73,6 +73,8 @@ public final class UnsafeKVExternalSorter {
     PrefixComparator prefixComparator = SortPrefixUtils.getPrefixComparator(keySchema);
     BaseOrdering ordering = GenerateOrdering.create(keySchema);
     KVComparator recordComparator = new KVComparator(ordering, keySchema.length());
+    boolean canUseRadixSort = keySchema.length() == 1 &&
+      SortPrefixUtils.canSortFullyWithPrefix(keySchema.apply(0));
 
     TaskMemoryManager taskMemoryManager = taskContext.taskMemoryManager();
 
@@ -85,13 +87,17 @@ public final class UnsafeKVExternalSorter {
         recordComparator,
         prefixComparator,
         /* initialSize */ 4096,
-        pageSizeBytes);
+        pageSizeBytes,
+        canUseRadixSort);
     } else {
+      // The array will be used to do in-place sort, which require half of the space to be empty.
+      assert(map.numKeys() <= map.getArray().size() / 2);
       // During spilling, the array in map will not be used, so we can borrow that and use it
       // as the underline array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
-        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray());
+        null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
+        canUseRadixSort);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.
@@ -172,6 +178,13 @@ public final class UnsafeKVExternalSorter {
       cleanupResources();
       throw e;
     }
+  }
+
+  /**
+   * Return the total number of bytes that has been spilled into disk so far.
+   */
+  public long getSpillSize() {
+    return sorter.getSpillSize();
   }
 
   /**

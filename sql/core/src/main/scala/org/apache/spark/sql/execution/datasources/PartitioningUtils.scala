@@ -424,7 +424,7 @@ private[sql] object PartitioningUtils {
     path.foreach { c =>
       if (needsEscaping(c)) {
         builder.append('%')
-        builder.append(f"${c.asInstanceOf[Int]}%02x")
+        builder.append(f"${c.asInstanceOf[Int]}%02X")
       } else {
         builder.append(c)
       }
@@ -441,9 +441,9 @@ private[sql] object PartitioningUtils {
       val c = path.charAt(i)
       if (c == '%' && i + 2 < path.length) {
         val code: Int = try {
-          Integer.valueOf(path.substring(i + 1, i + 3), 16)
-        } catch { case e: Exception =>
-          -1: Integer
+          Integer.parseInt(path.substring(i + 1, i + 3), 16)
+        } catch {
+          case _: Exception => -1
         }
         if (code >= 0) {
           sb.append(code.asInstanceOf[Char])

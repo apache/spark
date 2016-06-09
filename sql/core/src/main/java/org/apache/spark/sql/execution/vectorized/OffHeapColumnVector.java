@@ -16,9 +16,8 @@
  */
 package org.apache.spark.sql.execution.vectorized;
 
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-
-import org.apache.commons.lang.NotImplementedException;
 
 import org.apache.spark.memory.MemoryMode;
 import org.apache.spark.sql.types.*;
@@ -28,6 +27,10 @@ import org.apache.spark.unsafe.Platform;
  * Column data backed using offheap memory.
  */
 public final class OffHeapColumnVector extends ColumnVector {
+
+  private static final boolean bigEndianPlatform =
+    ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+
   // The data stored in these two allocations need to maintain binary compatible. We can
   // directly pass this buffer to external components.
   private long nulls;
@@ -39,9 +42,7 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   protected OffHeapColumnVector(int capacity, DataType type) {
     super(capacity, type, MemoryMode.OFF_HEAP);
-    if (!ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN)) {
-      throw new NotImplementedException("Only little endian is supported.");
-    }
+
     nulls = 0;
     data = 0;
     lengthData = 0;
@@ -221,8 +222,17 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void putIntsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
-        null, data + 4 * rowId, count * 4);
+    if (!bigEndianPlatform) {
+      Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
+          null, data + 4 * rowId, count * 4);
+    } else {
+      int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+      long offset = data + 4 * rowId;
+      for (int i = 0; i < count; ++i, offset += 4, srcOffset += 4) {
+        Platform.putInt(null, offset,
+            java.lang.Integer.reverseBytes(Platform.getInt(src, srcOffset)));
+      }
+    }
   }
 
   @Override
@@ -259,8 +269,17 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void putLongsLittleEndian(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
-        null, data + 8 * rowId, count * 8);
+    if (!bigEndianPlatform) {
+      Platform.copyMemory(src, srcIndex + Platform.BYTE_ARRAY_OFFSET,
+          null, data + 8 * rowId, count * 8);
+    } else {
+      int srcOffset = srcIndex + Platform.BYTE_ARRAY_OFFSET;
+      long offset = data + 8 * rowId;
+      for (int i = 0; i < count; ++i, offset += 8, srcOffset += 8) {
+        Platform.putLong(null, offset,
+            java.lang.Long.reverseBytes(Platform.getLong(src, srcOffset)));
+      }
+    }
   }
 
   @Override
@@ -297,8 +316,16 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void putFloats(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
-        null, data + rowId * 4, count * 4);
+    if (!bigEndianPlatform) {
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+          null, data + rowId * 4, count * 4);
+    } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
+      long offset = data + 4 * rowId;
+      for (int i = 0; i < count; ++i, offset += 4) {
+        Platform.putFloat(null, offset, bb.getFloat(srcIndex + (4 * i)));
+      }
+    }
   }
 
   @Override
@@ -336,8 +363,16 @@ public final class OffHeapColumnVector extends ColumnVector {
 
   @Override
   public void putDoubles(int rowId, int count, byte[] src, int srcIndex) {
-    Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
+    if (!bigEndianPlatform) {
+      Platform.copyMemory(src, Platform.BYTE_ARRAY_OFFSET + srcIndex,
         null, data + rowId * 8, count * 8);
+    } else {
+      ByteBuffer bb = ByteBuffer.wrap(src).order(ByteOrder.LITTLE_ENDIAN);
+      long offset = data + 8 * rowId;
+      for (int i = 0; i < count; ++i, offset += 8) {
+        Platform.putDouble(null, offset, bb.getDouble(srcIndex + (8 * i)));
+      }
+    }
   }
 
   @Override

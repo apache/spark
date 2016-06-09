@@ -139,7 +139,7 @@ readEnv <- function(con) {
   env
 }
 
-# Read a field of StructType from DataFrame
+# Read a field of StructType from SparkDataFrame
 # into a named list in R whose class is "struct"
 readStruct <- function(con) {
   names <- readObject(con)

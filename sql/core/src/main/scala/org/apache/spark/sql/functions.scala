@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans.logical.BroadcastHint
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.expressions.UserDefinedFunction
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
@@ -194,17 +195,13 @@ object functions {
   /**
    * Aggregate function: returns a list of objects with duplicates.
    *
-   * For now this is an alias for the collect_list Hive UDAF.
-   *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_list(e: Column): Column = callUDF("collect_list", e)
+  def collect_list(e: Column): Column = withAggregateFunction { CollectList(e.expr) }
 
   /**
    * Aggregate function: returns a list of objects with duplicates.
-   *
-   * For now this is an alias for the collect_list Hive UDAF.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -214,17 +211,13 @@ object functions {
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
    *
-   * For now this is an alias for the collect_set Hive UDAF.
-   *
    * @group agg_funcs
    * @since 1.6.0
    */
-  def collect_set(e: Column): Column = callUDF("collect_set", e)
+  def collect_set(e: Column): Column = withAggregateFunction { CollectSet(e.expr) }
 
   /**
    * Aggregate function: returns a set of objects with duplicate elements eliminated.
-   *
-   * For now this is an alias for the collect_set Hive UDAF.
    *
    * @group agg_funcs
    * @since 1.6.0
@@ -930,8 +923,8 @@ object functions {
    * @group normal_funcs
    * @since 1.5.0
    */
-  def broadcast(df: DataFrame): DataFrame = {
-    Dataset.ofRows(df.sqlContext, BroadcastHint(df.logicalPlan))
+  def broadcast[T](df: Dataset[T]): Dataset[T] = {
+    Dataset[T](df.sparkSession, BroadcastHint(df.logicalPlan))(df.exprEnc)
   }
 
   /**
@@ -1175,7 +1168,10 @@ object functions {
    * @group normal_funcs
    */
   def expr(expr: String): Column = {
-    Column(SparkSqlParser.parseExpression(expr))
+    val parser = SparkSession.getActiveSession.map(_.sessionState.sqlParser).getOrElse {
+      new SparkSqlParser(new SQLConf)
+    }
+    Column(parser.parseExpression(expr))
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////
@@ -2000,7 +1996,7 @@ object functions {
 
   /**
    * Computes the numeric value of the first character of the string column, and returns the
-   * result as a int column.
+   * result as an int column.
    *
    * @group string_funcs
    * @since 1.5.0
@@ -2956,8 +2952,8 @@ object functions {
    *  import org.apache.spark.sql._
    *
    *  val df = Seq(("id1", 1), ("id2", 4), ("id3", 5)).toDF("id", "value")
-   *  val sqlContext = df.sqlContext
-   *  sqlContext.udf.register("simpleUDF", (v: Int) => v * v)
+   *  val spark = df.sparkSession
+   *  spark.udf.register("simpleUDF", (v: Int) => v * v)
    *  df.select($"id", callUDF("simpleUDF", $"value"))
    * }}}
    *

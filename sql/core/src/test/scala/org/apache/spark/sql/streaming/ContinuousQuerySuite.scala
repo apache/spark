@@ -18,11 +18,10 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.StreamTest
 import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, MemoryStream, StreamExecution}
-import org.apache.spark.sql.test.SharedSQLContext
 
-class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
+
+class ContinuousQuerySuite extends StreamTest {
 
   import AwaitTerminationTester._
   import testImplicits._
@@ -45,7 +44,7 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
       TestAwaitTermination(ExpectNotBlocked),
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 2000, expectedReturnValue = true),
       TestAwaitTermination(ExpectNotBlocked, timeoutMs = 10, expectedReturnValue = true),
-      StartStream,
+      StartStream(),
       AssertOnQuery(_.isActive === true),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
@@ -67,21 +66,21 @@ class ContinuousQuerySuite extends StreamTest with SharedSQLContext {
     testStream(mapped)(
       AssertOnQuery(_.sourceStatuses.length === 1),
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
-      AssertOnQuery(_.sourceStatuses(0).offset === None),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === None),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.sinkStatus.offset === new CompositeOffset(None :: Nil)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === new CompositeOffset(None :: Nil).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(0))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(0))),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(1))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1))),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(2))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1)))
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
     )
   }
 

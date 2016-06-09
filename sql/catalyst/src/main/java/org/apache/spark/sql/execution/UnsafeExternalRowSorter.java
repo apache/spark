@@ -59,7 +59,8 @@ public final class UnsafeExternalRowSorter {
       Ordering<InternalRow> ordering,
       PrefixComparator prefixComparator,
       PrefixComputer prefixComputer,
-      long pageSizeBytes) throws IOException {
+      long pageSizeBytes,
+      boolean canUseRadixSort) throws IOException {
     this.schema = schema;
     this.prefixComputer = prefixComputer;
     final SparkEnv sparkEnv = SparkEnv.get();
@@ -72,7 +73,8 @@ public final class UnsafeExternalRowSorter {
       new RowComparator(ordering, schema.length()),
       prefixComparator,
       /* initialSize */ 4096,
-      pageSizeBytes
+      pageSizeBytes,
+      canUseRadixSort
     );
   }
 
@@ -104,6 +106,13 @@ public final class UnsafeExternalRowSorter {
    */
   public long getPeakMemoryUsage() {
     return sorter.getPeakMemoryUsedBytes();
+  }
+
+  /**
+   * @return the total amount of time spent sorting data (in-memory only).
+   */
+  public long getSortTimeNanos() {
+    return sorter.getSortTimeNanos();
   }
 
   private void cleanupResources() {

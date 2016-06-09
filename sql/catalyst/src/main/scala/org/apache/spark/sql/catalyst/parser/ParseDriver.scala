@@ -53,18 +53,14 @@ abstract class AbstractSqlParser extends ParserInterface with Logging {
   override def parsePlan(sqlText: String): LogicalPlan = parse(sqlText) { parser =>
     astBuilder.visitSingleStatement(parser.singleStatement()) match {
       case plan: LogicalPlan => plan
-      case _ => nativeCommand(sqlText)
+      case _ =>
+        val position = Origin(None, None)
+        throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
     }
   }
 
-  /** Get the builder (visitor) which converts a ParseTree into a AST. */
+  /** Get the builder (visitor) which converts a ParseTree into an AST. */
   protected def astBuilder: AstBuilder
-
-  /** Create a native command, or fail when this is not supported. */
-  protected def nativeCommand(sqlText: String): LogicalPlan = {
-    val position = Origin(None, None)
-    throw new ParseException(Option(sqlText), "Unsupported SQL statement", position, position)
-  }
 
   protected def parse[T](command: String)(toResult: SqlBaseParser => T): T = {
     logInfo(s"Parsing command: $command")

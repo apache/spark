@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
+import java.util.Objects
 
 import org.json4s.JsonAST._
 
@@ -170,6 +171,8 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override def toString: String = if (value != null) value.toString else "null"
 
+  override def hashCode(): Int = 31 * (31 * Objects.hashCode(dataType)) + Objects.hashCode(value)
+
   override def equals(other: Any): Boolean = other match {
     case o: Literal =>
       dataType.equals(o.dataType) &&
@@ -179,7 +182,7 @@ case class Literal protected (value: Any, dataType: DataType)
 
   override protected def jsonFields: List[JField] = {
     // Turns all kinds of literal values to string in json field, as the type info is hard to
-    // retain in json format, e.g. {"a": 123} can be a int, or double, or decimal, etc.
+    // retain in json format, e.g. {"a": 123} can be an int, or double, or decimal, etc.
     val jsonValue = (value, dataType) match {
       case (null, _) => JNull
       case (i: Int, DateType) => JString(DateTimeUtils.toJavaDate(i).toString)

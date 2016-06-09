@@ -48,8 +48,8 @@ import org.apache.spark.network.util.TransportConf;
 
 public class ExternalShuffleIntegrationSuite {
 
-  static String APP_ID = "app-id";
-  static String SORT_MANAGER = "sort";
+  private static final String APP_ID = "app-id";
+  private static final String SORT_MANAGER = "org.apache.spark.shuffle.sort.SortShuffleManager";
 
   // Executor 0 is sort-based
   static TestShuffleDataContext dataContext0;
@@ -184,12 +184,9 @@ public class ExternalShuffleIntegrationSuite {
     exec0Fetch.releaseBuffers();
   }
 
-  @Test
-  public void testFetchInvalidShuffle() throws Exception {
+  @Test (expected = RuntimeException.class)
+  public void testRegisterInvalidExecutor() throws Exception {
     registerExecutor("exec-1", dataContext0.createExecutorInfo("unknown sort manager"));
-    FetchResult execFetch = fetchBlocks("exec-1", new String[] { "shuffle_1_0_0" });
-    assertTrue(execFetch.successBlocks.isEmpty());
-    assertEquals(Sets.newHashSet("shuffle_1_0_0"), execFetch.failedBlocks);
   }
 
   @Test

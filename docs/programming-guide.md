@@ -24,7 +24,8 @@ along with if you launch Spark's interactive shell -- either `bin/spark-shell` f
 
 <div data-lang="scala"  markdown="1">
 
-Spark {{site.SPARK_VERSION}} uses Scala {{site.SCALA_BINARY_VERSION}}. To write
+Spark {{site.SPARK_VERSION}} is built and distributed to work with Scala {{site.SCALA_BINARY_VERSION}} 
+by default. (Spark can be built to work with other versions of Scala, too.) To write
 applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X).
 
 To write a Spark application, you need to add a Maven dependency on Spark. Spark is available through Maven Central at:
@@ -239,16 +240,17 @@ use IPython, set the `PYSPARK_DRIVER_PYTHON` variable to `ipython` when running 
 $ PYSPARK_DRIVER_PYTHON=ipython ./bin/pyspark
 {% endhighlight %}
 
-You can customize the `ipython` command by setting `PYSPARK_DRIVER_PYTHON_OPTS`. For example, to launch
-the [IPython Notebook](http://ipython.org/notebook.html) with PyLab plot support:
+To use the Jupyter notebook (previously known as the IPython notebook), 
 
 {% highlight bash %}
-$ PYSPARK_DRIVER_PYTHON=ipython PYSPARK_DRIVER_PYTHON_OPTS="notebook" ./bin/pyspark
+$ PYSPARK_DRIVER_PYTHON=jupyter ./bin/pyspark
 {% endhighlight %}
 
-After the IPython Notebook server is launched, you can create a new "Python 2" notebook from
+You can customize the `ipython` or `jupyter` commands by setting `PYSPARK_DRIVER_PYTHON_OPTS`. 
+
+After the Jupyter Notebook server is launched, you can create a new "Python 2" notebook from
 the "Files" tab. Inside the notebook, you can input the command `%pylab inline` as part of
-your notebook before you start to try Spark from the IPython notebook.
+your notebook before you start to try Spark from the Jupyter notebook.
 
 </div>
 
@@ -326,7 +328,7 @@ Text file RDDs can be created using `SparkContext`'s `textFile` method. This met
 
 {% highlight scala %}
 scala> val distFile = sc.textFile("data.txt")
-distFile: RDD[String] = MappedRDD@1d4cee08
+distFile: org.apache.spark.rdd.RDD[String] = data.txt MapPartitionsRDD[10] at textFile at <console>:26
 {% endhighlight %}
 
 Once created, `distFile` can be acted on by dataset operations. For example, we can add up the sizes of all the lines using the `map` and `reduce` operations as follows: `distFile.map(s => s.length).reduce((a, b) => a + b)`.
@@ -1328,12 +1330,18 @@ value of the broadcast variable (e.g. if the variable is shipped to a new node l
 Accumulators are variables that are only "added" to through an associative and commutative operation and can
 therefore be efficiently supported in parallel. They can be used to implement counters (as in
 MapReduce) or sums. Spark natively supports accumulators of numeric types, and programmers
-can add support for new types. If accumulators are created with a name, they will be
+can add support for new types.
+
+If accumulators are created with a name, they will be
 displayed in Spark's UI. This can be useful for understanding the progress of
 running stages (NOTE: this is not yet supported in Python).
 
+<p style="text-align: center;">
+  <img src="img/spark-webui-accumulators.png" title="Accumulators in the Spark UI" alt="Accumulators in the Spark UI" />
+</p>
+
 An accumulator is created from an initial value `v` by calling `SparkContext.accumulator(v)`. Tasks
-running on the cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
+running on a cluster can then add to it using the `add` method or the `+=` operator (in Scala and Python).
 However, they cannot read its value.
 Only the driver program can read the accumulator's value, using its `value` method.
 
@@ -1344,41 +1352,42 @@ The code below shows an accumulator being used to add up the elements of an arra
 <div data-lang="scala"  markdown="1">
 
 {% highlight scala %}
-scala> val accum = sc.accumulator(0, "My Accumulator")
-accum: spark.Accumulator[Int] = 0
+scala> val accum = sc.longAccumulator("My Accumulator")
+accum: org.apache.spark.util.LongAccumulator = LongAccumulator(id: 0, name: Some(My Accumulator), value: 0)
 
-scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
+scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum.add(x))
 ...
 10/09/29 18:41:08 INFO SparkContext: Tasks finished in 0.317106 s
 
 scala> accum.value
-res2: Int = 10
+res2: Long = 10
 {% endhighlight %}
 
-While this code used the built-in support for accumulators of type Int, programmers can also
-create their own types by subclassing [AccumulatorParam](api/scala/index.html#org.apache.spark.AccumulatorParam).
-The AccumulatorParam interface has two methods: `zero` for providing a "zero value" for your data
-type, and `addInPlace` for adding two values together. For example, supposing we had a `Vector` class
+While this code used the built-in support for accumulators of type Long, programmers can also
+create their own types by subclassing [AccumulatorV2](api/scala/index.html#org.apache.spark.AccumulatorV2).
+The AccumulatorV2 abstract class has several methods which need to override: 
+`reset` for resetting the accumulator to zero, and `add` for add anothor value into the accumulator, `merge` for merging another same-type accumulator into this one. Other methods need to override can refer to scala API document. For example, supposing we had a `MyVector` class
 representing mathematical vectors, we could write:
 
 {% highlight scala %}
-object VectorAccumulatorParam extends AccumulatorParam[Vector] {
-  def zero(initialValue: Vector): Vector = {
-    Vector.zeros(initialValue.size)
+object VectorAccumulatorV2 extends AccumulatorV2[MyVector, MyVector] {
+  val vec_ : MyVector = MyVector.createZeroVector
+  def reset(): MyVector = {
+    vec_.reset()
   }
-  def addInPlace(v1: Vector, v2: Vector): Vector = {
-    v1 += v2
+  def add(v1: MyVector, v2: MyVector): MyVector = {
+    vec_.add(v2)
   }
+  ...
 }
 
 // Then, create an Accumulator of this type:
-val vecAccum = sc.accumulator(new Vector(...))(VectorAccumulatorParam)
+val myVectorAcc = new VectorAccumulatorV2
+// Then, register it into spark context:
+sc.register(myVectorAcc, "MyVectorAcc1")
 {% endhighlight %}
 
-In Scala, Spark also supports the more general [Accumulable](api/scala/index.html#org.apache.spark.Accumulable)
-interface to accumulate data where the resulting type is not the same as the elements added (e.g. build
-a list by collecting together elements), and the `SparkContext.accumulableCollection` method for accumulating
-common Scala collection types.
+Note that, when programmers define their own type of AccumulatorV2, the resulting type can be same or not same with the elements added.
 
 </div>
 
@@ -1466,11 +1475,11 @@ Accumulators do not change the lazy evaluation model of Spark. If they are being
 
 <div class="codetabs">
 
-<div data-lang="scala"  markdown="1">
+<div data-lang="scala" markdown="1">
 {% highlight scala %}
 val accum = sc.accumulator(0)
-data.map { x => accum += x; f(x) }
-// Here, accum is still 0 because no actions have caused the <code>map</code> to be computed.
+data.map { x => accum += x; x }
+// Here, accum is still 0 because no actions have caused the map operation to be computed.
 {% endhighlight %}
 </div>
 

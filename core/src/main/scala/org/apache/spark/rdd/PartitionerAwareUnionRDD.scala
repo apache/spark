@@ -31,12 +31,13 @@ import org.apache.spark.util.Utils
 private[spark]
 class PartitionerAwareUnionRDDPartition(
     @transient val rdds: Seq[RDD[_]],
-    val idx: Int
+    override val index: Int
   ) extends Partition {
-  var parents = rdds.map(_.partitions(idx)).toArray
+  var parents = rdds.map(_.partitions(index)).toArray
 
-  override val index = idx
-  override def hashCode(): Int = idx
+  override def hashCode(): Int = index
+
+  override def equals(other: Any): Boolean = super.equals(other)
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream): Unit = Utils.tryOrIOException {

@@ -19,11 +19,12 @@ package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.attribute.AttributeGroup
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamsSuite
 import org.apache.spark.ml.util.DefaultReadWriteTest
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.feature.{HashingTF => MLlibHashingTF}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
 class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
@@ -33,7 +34,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
   }
 
   test("hashingTF") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, "a a b b c d".split(" ").toSeq)
     )).toDF("id", "words")
     val n = 100
@@ -46,14 +47,14 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     require(attrGroup.numAttributes === Some(n))
     val features = output.select("features").first().getAs[Vector](0)
     // Assume perfect hash on "a", "b", "c", and "d".
-    def idx: Any => Int = featureIdx(n)
+    def idx: Any => Int = murmur3FeatureIdx(n)
     val expected = Vectors.sparse(n,
       Seq((idx("a"), 2.0), (idx("b"), 2.0), (idx("c"), 1.0), (idx("d"), 1.0)))
     assert(features ~== expected absTol 1e-14)
   }
 
   test("applying binary term freqs") {
-    val df = sqlContext.createDataFrame(Seq(
+    val df = spark.createDataFrame(Seq(
       (0, "a a b c c c".split(" ").toSeq)
     )).toDF("id", "words")
     val n = 100
@@ -64,7 +65,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
         .setBinary(true)
     val output = hashingTF.transform(df)
     val features = output.select("features").first().getAs[Vector](0)
-    def idx: Any => Int = featureIdx(n)  // Assume perfect hash on input features
+    def idx: Any => Int = murmur3FeatureIdx(n)  // Assume perfect hash on input features
     val expected = Vectors.sparse(n,
       Seq((idx("a"), 1.0), (idx("b"), 1.0), (idx("c"), 1.0)))
     assert(features ~== expected absTol 1e-14)
@@ -78,7 +79,7 @@ class HashingTFSuite extends SparkFunSuite with MLlibTestSparkContext with Defau
     testDefaultReadWrite(t)
   }
 
-  private def featureIdx(numFeatures: Int)(term: Any): Int = {
-    Utils.nonNegativeMod(term.##, numFeatures)
+  private def murmur3FeatureIdx(numFeatures: Int)(term: Any): Int = {
+    Utils.nonNegativeMod(MLlibHashingTF.murmur3Hash(term), numFeatures)
   }
 }

@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
-import org.apache.spark.sql.Encoder
+import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.sql.{Encoder, Row}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedDeserializer
 import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.sql.types._
 
 object CatalystSerde {
   def deserialize[T : Encoder](child: LogicalPlan): DeserializeToObject = {
@@ -80,7 +81,7 @@ case class DeserializeToObject(
  */
 case class SerializeFromObject(
     serializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = serializer.map(_.toAttribute)
 }
@@ -104,7 +105,43 @@ object MapPartitions {
 case class MapPartitions(
     func: Iterator[Any] => Iterator[Any],
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
+
+object MapPartitionsInR {
+  def apply(
+      func: Array[Byte],
+      packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
+      schema: StructType,
+      encoder: ExpressionEncoder[Row],
+      child: LogicalPlan): LogicalPlan = {
+    val deserialized = CatalystSerde.deserialize(child)(encoder)
+    val mapped = MapPartitionsInR(
+      func,
+      packageNames,
+      broadcastVars,
+      encoder.schema,
+      schema,
+      CatalystSerde.generateObjAttr(RowEncoder(schema)),
+      deserialized)
+    CatalystSerde.serialize(mapped)(RowEncoder(schema))
+  }
+}
+
+/**
+ * A relation produced by applying a serialized R function `func` to each partition of the `child`.
+ *
+ */
+case class MapPartitionsInR(
+    func: Array[Byte],
+    packageNames: Array[Byte],
+    broadcastVars: Array[Broadcast[Object]],
+    inputSchema: StructType,
+    outputSchema: StructType,
+    outputObjAttr: Attribute,
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
+  override lazy val schema = outputSchema
+}
 
 object MapElements {
   def apply[T : Encoder, U : Encoder](
@@ -125,7 +162,7 @@ object MapElements {
 case class MapElements(
     func: AnyRef,
     outputObjAttr: Attribute,
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer with ObjectProducer
+    child: LogicalPlan) extends ObjectConsumer with ObjectProducer
 
 /** Factory for constructing new `AppendColumn` nodes. */
 object AppendColumns {
@@ -165,7 +202,7 @@ case class AppendColumnsWithObject(
     func: Any => Any,
     childSerializer: Seq[NamedExpression],
     newColumnsSerializer: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode with ObjectConsumer {
+    child: LogicalPlan) extends ObjectConsumer {
 
   override def output: Seq[Attribute] = (childSerializer ++ newColumnsSerializer).map(_.toAttribute)
 }

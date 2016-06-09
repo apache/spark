@@ -29,8 +29,8 @@ import warnings
 from py4j.java_gateway import JavaObject
 
 from pyspark import since
+from pyspark.ml.linalg import DenseVector, Vector
 from pyspark.ml.util import Identifiable
-from pyspark.mllib.linalg import DenseVector, Vector
 
 
 __all__ = ['Param', 'Params', 'TypeConverters']
@@ -40,22 +40,15 @@ class Param(object):
     """
     A param with self-contained documentation.
 
-    Note: `expectedType` is deprecated and will be removed in 2.1. Use typeConverter instead,
-          as a keyword argument.
-
     .. versionadded:: 1.3.0
     """
 
-    def __init__(self, parent, name, doc, expectedType=None, typeConverter=None):
+    def __init__(self, parent, name, doc, typeConverter=None):
         if not isinstance(parent, Identifiable):
             raise TypeError("Parent must be an Identifiable but got type %s." % type(parent))
         self.parent = parent.uid
         self.name = str(name)
         self.doc = str(doc)
-        self.expectedType = expectedType
-        if expectedType is not None:
-            warnings.warn("expectedType is deprecated and will be removed in 2.1. " +
-                          "Use typeConverter instead, as a keyword argument.")
         self.typeConverter = TypeConverters.identity if typeConverter is None else typeConverter
 
     def _copy_new_parent(self, parent):

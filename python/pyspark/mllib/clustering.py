@@ -179,7 +179,7 @@ class KMeansModel(Saveable, Loader):
 
     >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4, 2)
     >>> model = KMeans.train(
-    ...     sc.parallelize(data), 2, maxIterations=10, runs=30, initializationMode="random",
+    ...     sc.parallelize(data), 2, maxIterations=10, initializationMode="random",
     ...                    seed=50, initializationSteps=5, epsilon=1e-4)
     >>> model.predict(array([0.0, 0.0])) == model.predict(array([1.0, 1.0]))
     True
@@ -323,9 +323,7 @@ class KMeans(object):
           Maximum number of iterations allowed.
           (default: 100)
         :param runs:
-          Number of runs to execute in parallel. The best model according
-          to the cost function will be returned (deprecated in 1.6.0).
-          (default: 1)
+          This param has no effect since Spark 2.0.0.
         :param initializationMode:
           The initialization algorithm. This can be either "random" or
           "k-means||".
@@ -350,8 +348,7 @@ class KMeans(object):
           (default: None)
         """
         if runs != 1:
-            warnings.warn(
-                "Support for runs is deprecated in 1.6.0. This param will have no effect in 2.0.0.")
+            warnings.warn("The param `runs` has no effect since Spark 2.0.0.")
         clusterInitialModel = []
         if initialModel is not None:
             if not isinstance(initialModel, KMeansModel):
