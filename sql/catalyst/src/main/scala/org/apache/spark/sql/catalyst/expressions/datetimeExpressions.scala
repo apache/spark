@@ -437,9 +437,7 @@ abstract class UnixTime extends BinaryExpression with ExpectsInputTypes {
       case StringType if right.foldable =>
         val sdf = classOf[SimpleDateFormat].getName
         if (formatter == null) {
-          ev.copy(code = s"""
-            boolean ${ev.isNull} = true;
-            ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
+          ExprCode("", "true", ctx.defaultValue(dataType))
         } else {
           val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
           val eval1 = left.genCode(ctx)
@@ -553,9 +551,7 @@ case class FromUnixTime(sec: Expression, format: Expression)
     val sdf = classOf[SimpleDateFormat].getName
     if (format.foldable) {
       if (formatter == null) {
-        ev.copy(code = s"""
-          boolean ${ev.isNull} = true;
-          ${ctx.javaType(dataType)} ${ev.value} = ${ctx.defaultValue(dataType)};""")
+        ExprCode("", "true", "(UTF8String) null")
       } else {
         val formatterName = ctx.addReferenceObj("formatter", formatter, sdf)
         val t = left.genCode(ctx)
