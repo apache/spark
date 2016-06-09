@@ -59,13 +59,24 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
   def fit(formula: String, data: DataFrame, laplace: Double): NaiveBayesWrapper = {
     val rFormula = new RFormula()
       .setFormula(formula)
-      .fit(data)
+
+    if (data.schema.fieldNames.contains("label")) {
+      data.withColumnRenamed("label", "label_input")
+      rFormula.setLabelCol("label_input")
+    }
+
+    if (data.schema.fieldNames.contains("features")) {
+      data.withColumnRenamed("features", "features_input")
+      rFormula.setFeaturesCol("features_input")
+    }
+
+    val model = rFormula.fit(data)
     // get labels and feature names from output schema
-    val schema = rFormula.transform(data).schema
-    val labelAttr = Attribute.fromStructField(schema(rFormula.getLabelCol))
+    val schema = model.transform(data).schema
+    val labelAttr = Attribute.fromStructField(schema(model.getLabelCol))
       .asInstanceOf[NominalAttribute]
     val labels = labelAttr.values.get
-    val featureAttrs = AttributeGroup.fromStructField(schema(rFormula.getFeaturesCol))
+    val featureAttrs = AttributeGroup.fromStructField(schema(model.getFeaturesCol))
       .attributes.get
     val features = featureAttrs.map(_.name.get)
     // assemble and fit the pipeline
@@ -78,7 +89,7 @@ private[r] object NaiveBayesWrapper extends MLReadable[NaiveBayesWrapper] {
       .setOutputCol(PREDICTED_LABEL_COL)
       .setLabels(labels)
     val pipeline = new Pipeline()
-      .setStages(Array(rFormula, naiveBayes, idxToStr))
+      .setStages(Array(model, naiveBayes, idxToStr))
       .fit(data)
     new NaiveBayesWrapper(pipeline, labels, features)
   }
