@@ -30,18 +30,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst._
-import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.streaming.ContinuousQueryManager
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 /**
- * The entry point for working with structured data (rows and columns) in Spark, in Spark 1.x.
+ * The entry point for working with structured data (rows and columns) in Spark 1.x.
  *
  * As of Spark 2.0, this is replaced by [[SparkSession]]. However, we are keeping the class
  * here for backward compatibility.
@@ -171,13 +169,11 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   def experimental: ExperimentalMethods = sparkSession.experimental
 
   /**
-   * :: Experimental ::
    * Returns a [[DataFrame]] with no rows or columns.
    *
    * @group basic
    * @since 1.3.0
    */
-  @Experimental
   def emptyDataFrame: DataFrame = sparkSession.emptyDataFrame
 
   /**
@@ -374,7 +370,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[JavaRDD]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[JavaRDD]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided RDD matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -388,7 +384,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: DeveloperApi ::
-   * Creates a [[DataFrame]] from an [[java.util.List]] containing [[Row]]s using the given schema.
+   * Creates a [[DataFrame]] from a [[java.util.List]] containing [[Row]]s using the given schema.
    * It is important to make sure that the structure of every [[Row]] of the provided List matches
    * the provided schema. Otherwise, there will be runtime exception.
    *
@@ -425,7 +421,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Applies a schema to an List of Java Beans.
+   * Applies a schema to a List of Java Beans.
    *
    * WARNING: Since there is no guaranteed ordering for fields in a Java Bean,
    *          SELECT * queries will return the columns in an undefined order.
@@ -437,7 +433,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
    * {{{
    *   sqlContext.read.parquet("/path/to/file.parquet")
@@ -447,31 +442,26 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group genericdata
    * @since 1.4.0
    */
-  @Experimental
   def read: DataFrameReader = sparkSession.read
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path and returns the corresponding DataFrame.
    * It will use the default data source configured by spark.sql.sources.default.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(tableName: String, path: String): DataFrame = {
     sparkSession.catalog.createExternalTable(tableName, path)
   }
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path based on a data source
    * and returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       path: String,
@@ -480,14 +470,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * Creates an external table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -496,7 +484,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Creates an external table from the given path based on a data source and a set of options.
    * Then, returns the corresponding DataFrame.
@@ -504,7 +491,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -513,14 +499,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * Create an external table from the given path based on a data source, a schema and
    * a set of options. Then, returns the corresponding DataFrame.
    *
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -530,7 +514,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * :: Experimental ::
    * (Scala-specific)
    * Create an external table from the given path based on a data source, a schema and
    * a set of options. Then, returns the corresponding DataFrame.
@@ -538,7 +521,6 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group ddl_ops
    * @since 1.3.0
    */
-  @Experimental
   def createExternalTable(
       tableName: String,
       source: String,
@@ -552,7 +534,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * only during the lifetime of this instance of SQLContext.
    */
   private[sql] def registerDataFrameAsTable(df: DataFrame, tableName: String): Unit = {
-    sparkSession.createTempView(tableName, df, replaceIfExists = true)
+    df.createOrReplaceTempView(tableName)
   }
 
   /**
@@ -570,7 +552,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from 0 to `end` (exclusive) with step value 1.
+   * in a range from 0 to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    * @group dataset
@@ -581,7 +563,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with step value 1.
+   * in a range from `start` to `end` (exclusive) with step value 1.
    *
    * @since 2.0.0
    * @group dataset
@@ -592,7 +574,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value.
+   * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
    * @group dataset
@@ -605,7 +587,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * :: Experimental ::
    * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value, with partition number
+   * in a range from `start` to `end` (exclusive) with a step value, with partition number
    * specified.
    *
    * @since 2.0.0
@@ -661,7 +643,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[org.apache.spark.sql.ContinuousQuery ContinuousQueries]] active on `this` context.
+   * [[org.apache.spark.sql.streaming.ContinuousQuery ContinuousQueries]] active on `this` context.
    *
    * @since 2.0.0
    */

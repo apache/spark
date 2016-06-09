@@ -17,12 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -74,15 +73,14 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    val dummyRDD = sc.parallelize(Seq(Row.empty))
-    val dummyDF = sqlContext.createDataFrame(dummyRDD, schema)
+    val spark = SparkSession.builder().getOrCreate()
+    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
+    val dummyDF = spark.createDataFrame(dummyRDD, schema)
     val tableName = Identifiable.randomUID(uid)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
     dummyDF.createOrReplaceTempView(tableName)
-    val outputSchema = sqlContext.sql(realStatement).schema
-    sqlContext.dropTempTable(tableName)
+    val outputSchema = spark.sql(realStatement).schema
+    spark.catalog.dropTempView(tableName)
     outputSchema
   }
 

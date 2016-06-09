@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.parser.LegacyTypeStringParser
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -122,6 +123,11 @@ private[sql] class ParquetFileFormat
 
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
+
+    // SPARK-15719: Disables writing Parquet summary files by default.
+    if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
+      conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+    }
 
     new OutputWriterFactory {
       override def newInstance(
@@ -526,7 +532,8 @@ private[sql] class ParquetOutputWriter(
         //     partitions in the case of dynamic partitioning.
         override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
           val configuration = context.getConfiguration
-          val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+          val uniqueWriteJobId = configuration.get(
+            CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
           val taskAttemptId = context.getTaskAttemptID
           val split = taskAttemptId.getTaskID.getId
           val bucketString = bucketId.map(BucketingUtils.bucketIdToString).getOrElse("")
@@ -733,7 +740,7 @@ private[sql] object ParquetFileFormat extends Logging {
     //
     // Parquet requires `FileStatus`es to read footers.  Here we try to send cached `FileStatus`es
     // to executor side to avoid fetching them again.  However, `FileStatus` is not `Serializable`
-    // but only `Writable`.  What makes it worth, for some reason, `FileStatus` doesn't play well
+    // but only `Writable`.  What makes it worse, for some reason, `FileStatus` doesn't play well
     // with `SerializableWritable[T]` and always causes a weird `IllegalStateException`.  These
     // facts virtually prevents us to serialize `FileStatus`es.
     //

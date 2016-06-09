@@ -27,6 +27,7 @@ import org.apache.spark.sql.{AnalysisException, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{BufferHolder, UnsafeRowWriter}
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.types.{StringType, StructType}
@@ -91,20 +92,31 @@ class TextFileFormat extends FileFormat with DataSourceRegister {
       filters: Seq[Filter],
       options: Map[String, String],
       hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    assert(
+      requiredSchema.length <= 1,
+      "Text data source only produces a single data column named \"value\".")
+
     val broadcastedHadoopConf =
       sparkSession.sparkContext.broadcast(new SerializableConfiguration(hadoopConf))
 
     (file: PartitionedFile) => {
-      val unsafeRow = new UnsafeRow(1)
-      val bufferHolder = new BufferHolder(unsafeRow)
-      val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+      val reader = new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value)
 
-      new HadoopFileLinesReader(file, broadcastedHadoopConf.value.value).map { line =>
-        // Writes to an UnsafeRow directly
-        bufferHolder.reset()
-        unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
-        unsafeRow.setTotalSize(bufferHolder.totalSize())
-        unsafeRow
+      if (requiredSchema.isEmpty) {
+        val emptyUnsafeRow = new UnsafeRow(0)
+        reader.map(_ => emptyUnsafeRow)
+      } else {
+        val unsafeRow = new UnsafeRow(1)
+        val bufferHolder = new BufferHolder(unsafeRow)
+        val unsafeRowWriter = new UnsafeRowWriter(bufferHolder, 1)
+
+        reader.map { line =>
+          // Writes to an UnsafeRow directly
+          bufferHolder.reset()
+          unsafeRowWriter.write(0, line.getBytes, 0, line.getLength)
+          unsafeRow.setTotalSize(bufferHolder.totalSize())
+          unsafeRow
+        }
       }
     }
   }
@@ -119,7 +131,7 @@ class TextOutputWriter(path: String, dataSchema: StructType, context: TaskAttemp
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.txt$extension")

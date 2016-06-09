@@ -23,6 +23,7 @@ import java.util.Date
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.control.NonFatal
+import scala.util.Try
 
 import org.apache.hadoop.fs.Path
 
@@ -38,7 +39,7 @@ import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.types._
 import org.apache.spark.util.Utils
 
-case class CreateTableAsSelectLogicalPlan(
+case class CreateHiveTableAsSelectLogicalPlan(
     tableDesc: CatalogTable,
     child: LogicalPlan,
     allowExisting: Boolean) extends UnaryNode with Command {
@@ -145,8 +146,38 @@ case class AlterTableRenameCommand(
   override def run(sparkSession: SparkSession): Seq[Row] = {
     val catalog = sparkSession.sessionState.catalog
     DDLUtils.verifyAlterTableType(catalog, oldName, isView)
-    catalog.invalidateTable(oldName)
-    catalog.renameTable(oldName, newName)
+    // If this is a temp view, just rename the view.
+    // Otherwise, if this is a real table, we also need to uncache and invalidate the table.
+    val isTemporary = catalog.isTemporaryTable(oldName)
+    if (isTemporary) {
+      catalog.renameTable(oldName, newName)
+    } else {
+      // If an exception is thrown here we can just assume the table is uncached;
+      // this can happen with Hive tables when the underlying catalog is in-memory.
+      val wasCached = Try(sparkSession.catalog.isCached(oldName.unquotedString)).getOrElse(false)
+      if (wasCached) {
+        try {
+          sparkSession.catalog.uncacheTable(oldName.unquotedString)
+        } catch {
+          case NonFatal(e) => log.warn(e.toString, e)
+        }
+      }
+      // For datasource tables, we also need to update the "path" serde property
+      val table = catalog.getTableMetadata(oldName)
+      if (DDLUtils.isDatasourceTable(table) && table.tableType == CatalogTableType.MANAGED) {
+        val newPath = catalog.defaultTablePath(newName)
+        val newTable = table.withNewStorage(
+          serdeProperties = table.storage.serdeProperties ++ Map("path" -> newPath))
+        catalog.alterTable(newTable)
+      }
+      // Invalidate the table last, otherwise uncaching the table would load the logical plan
+      // back into the hive metastore cache
+      catalog.invalidateTable(oldName)
+      catalog.renameTable(oldName, newName)
+      if (wasCached) {
+        sparkSession.catalog.cacheTable(newName.unquotedString)
+      }
+    }
     Seq.empty[Row]
   }
 
@@ -443,7 +474,7 @@ case class DescribeTableCommand(table: TableIdentifier, isExtended: Boolean, isF
     table.properties.filterNot {
       // Hides schema properties that hold user-defined schema, partition columns, and bucketing
       // information since they are already extracted and shown in other parts.
-      case (key, _) => key.startsWith("spark.sql.sources.schema")
+      case (key, _) => key.startsWith(CreateDataSourceTableUtils.DATASOURCE_SCHEMA)
     }.foreach { case (key, value) =>
       append(buffer, s"  $key", value, "")
     }
@@ -860,7 +891,7 @@ case class ShowCreateTableCommand(table: TableIdentifier) extends RunnableComman
   private def showDataSourceTableOptions(metadata: CatalogTable, builder: StringBuilder): Unit = {
     val props = metadata.properties
 
-    builder ++= s"USING ${props("spark.sql.sources.provider")}\n"
+    builder ++= s"USING ${props(CreateDataSourceTableUtils.DATASOURCE_PROVIDER)}\n"
 
     val dataSourceOptions = metadata.storage.serdeProperties.filterNot {
       case (key, value) =>

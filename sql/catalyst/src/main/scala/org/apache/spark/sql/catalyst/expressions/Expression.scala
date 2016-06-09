@@ -185,10 +185,14 @@ abstract class Expression extends TreeNode[Expression] {
    */
   def prettyName: String = nodeName.toLowerCase
 
-  private def flatArguments = productIterator.flatMap {
+  protected def flatArguments = productIterator.flatMap {
     case t: Traversable[_] => t
     case single => single :: Nil
   }
+
+  // Marks this as final, Expression.verboseString should never be called, and thus shouldn't be
+  // overridden by concrete classes.
+  final override def verboseString: String = simpleString
 
   override def simpleString: String = toString
 

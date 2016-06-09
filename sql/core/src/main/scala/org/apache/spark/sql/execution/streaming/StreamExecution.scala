@@ -28,14 +28,12 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.analysis.OutputMode
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.util.ContinuousQueryListener
-import org.apache.spark.sql.util.ContinuousQueryListener._
+import org.apache.spark.sql.streaming._
 import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
 
 /**
@@ -54,6 +52,8 @@ class StreamExecution(
     private[sql] val triggerClock: Clock,
     val outputMode: OutputMode)
   extends ContinuousQuery with Logging {
+
+  import org.apache.spark.sql.streaming.ContinuousQueryListener._
 
   /**
    * A lock used to wait/notify when batches complete. Use a fair lock to avoid thread starvation.
@@ -131,12 +131,13 @@ class StreamExecution(
   /** Returns current status of all the sources. */
   override def sourceStatuses: Array[SourceStatus] = {
     val localAvailableOffsets = availableOffsets
-    sources.map(s => new SourceStatus(s.toString, localAvailableOffsets.get(s))).toArray
+    sources.map(s =>
+      new SourceStatus(s.toString, localAvailableOffsets.get(s).map(_.toString))).toArray
   }
 
   /** Returns current status of the sink. */
   override def sinkStatus: SinkStatus =
-    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources))
+    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources).toString)
 
   /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
   override def exception: Option[ContinuousQueryException] = Option(streamDeathCause)
@@ -167,7 +168,7 @@ class StreamExecution(
       // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
       // so must mark this as ACTIVE first.
       state = ACTIVE
-      postEvent(new QueryStarted(this)) // Assumption: Does not throw exception.
+      postEvent(new QueryStarted(this.toInfo)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -206,7 +207,10 @@ class StreamExecution(
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(new QueryTerminated(this))
+      postEvent(new QueryTerminated(
+        this.toInfo,
+        exception.map(_.getMessage),
+        exception.map(_.getStackTrace.toSeq).getOrElse(Nil)))
       terminationLatch.countDown()
     }
   }
@@ -374,7 +378,7 @@ class StreamExecution(
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
     committedOffsets ++= availableOffsets
-    postEvent(new QueryProgress(this))
+    postEvent(new QueryProgress(this.toInfo))
   }
 
   private def postEvent(event: ContinuousQueryListener.Event) {
@@ -482,6 +486,13 @@ class StreamExecution(
        |
        |$deathCauseStr
      """.stripMargin
+  }
+
+  private def toInfo: ContinuousQueryInfo = {
+    new ContinuousQueryInfo(
+      this.name,
+      this.sourceStatuses,
+      this.sinkStatus)
   }
 
   trait State
