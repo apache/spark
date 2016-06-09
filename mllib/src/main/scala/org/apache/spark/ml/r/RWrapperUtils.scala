@@ -17,10 +17,11 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.feature.RFormula
 import org.apache.spark.sql.Dataset
 
-object RWrapperUtils {
+object RWrapperUtils extends Logging {
 
   /**
    * DataFrame column check.
@@ -35,10 +36,12 @@ object RWrapperUtils {
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
 
     if (data.schema.fieldNames.contains("label")) {
+      logWarning("data containing 'label' column, so change its name to avoid conflict")
       rFormula.setLabelCol("label_output")
     }
 
     if (data.schema.fieldNames.contains("features")) {
+      logWarning("data containing 'features' column, so change its name to avoid conflict")
       rFormula.setFeaturesCol("features_output")
     }
   }
