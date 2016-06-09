@@ -122,6 +122,18 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assertDataStructuresEmpty(noFailure = false)
   }
 
+  test("executors can be blacklisted with only a few failures per stage") {
+    pending
+  }
+
+  test("executors aren't blacklisted if task sets fail") {
+    pending
+  }
+
+  test("can blacklist executor for just one stage") {
+    pending
+  }
+
 }
 
 class MultiExecutorMockBackend(

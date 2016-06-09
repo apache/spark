@@ -181,4 +181,16 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
     // TODO clarify the semantics around executors with some successes
     pending
   }
+
+  test("executors can be blacklisted with only a few failures per stage") {
+    pending
+  }
+
+  test("executors aren't blacklisted if task sets fail") {
+    pending
+  }
+
+  test("blacklisted executors and nodes get recovered with time") {
+    pending
+  }
 }
