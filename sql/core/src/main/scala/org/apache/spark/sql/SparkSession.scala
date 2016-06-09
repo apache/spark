@@ -74,7 +74,7 @@ import org.apache.spark.util.Utils
  * @groupname dataset Custom DataFrame Creation
  * @groupname ddl_ops Persistent Catalog DDL
  * @groupname genericdata Generic Data Sources
- * @groupname Support functions for language integrated queries
+ * @groupname Ungrouped Support functions for language integrated queries
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
