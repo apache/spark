@@ -34,6 +34,7 @@ import org.apache.spark.mllib.tree.model.{RandomForestModel => OldRandomForestMo
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.types.DoubleType
 
 
 /**
@@ -92,6 +93,10 @@ class RandomForestRegressor @Since("1.4.0") (@Since("1.4.0") override val uid: S
   @Since("1.4.0")
   override def setFeatureSubsetStrategy(value: String): this.type =
     super.setFeatureSubsetStrategy(value)
+
+  @Since("2.1.0")
+  /** @group getParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
 
   override protected def train(dataset: Dataset[_]): RandomForestRegressionModel = {
     val categoricalFeatures: Map[Int, Int] =
@@ -168,15 +173,40 @@ class RandomForestRegressionModel private[ml] (
   // Note: We may add support for weights (based on tree performance) later on.
   private lazy val _treeWeights: Array[Double] = Array.fill[Double](_trees.length)(1.0)
 
+  @Since("2.1.0")
+  /** @group getParam */
+  def setVarianceCol(value: String): this.type = set(varianceCol, value)
+
   @Since("1.4.0")
   override def treeWeights: Array[Double] = _treeWeights
 
   override protected def transformImpl(dataset: Dataset[_]): DataFrame = {
     val bcastModel = dataset.sparkSession.sparkContext.broadcast(this)
+
+    var output = dataset
+
     val predictUDF = udf { (features: Any) =>
       bcastModel.value.predict(features.asInstanceOf[Vector])
     }
-    dataset.withColumn($(predictionCol), predictUDF(col($(featuresCol))))
+    val predictions = predictUDF(col($(featuresCol)))
+    output = dataset.withColumn($(predictionCol), predictions)
+
+    val varianceUDF = udf { (features: Any) =>
+      val leafNodes = bcastModel.value.returnLeafNodes(features.asInstanceOf[Vector])
+      val variance = leafNodes.map(_.impurityStats.calculate()).sum / getNumTrees
+      val predSquared = leafNodes.map(x => math.pow(x.prediction, 2)).sum / getNumTrees
+      val pred = leafNodes.map(_.prediction).sum / getNumTrees
+      variance + predSquared - math.pow(pred, 2)
+    }
+    val variance = varianceUDF(col($(featuresCol)))
+
+    output = output.withColumn($(varianceCol), variance)
+    output.toDF
+  }
+
+  private def returnLeafNodes(features: Vector): Array[LeafNode] = {
+    // Return the leaf nodes of each forest.
+    _trees.map(_.rootNode.predictImpl(features))
   }
 
   override protected def predict(features: Vector): Double = {

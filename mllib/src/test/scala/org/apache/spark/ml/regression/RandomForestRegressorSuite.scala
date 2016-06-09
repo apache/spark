@@ -19,6 +19,7 @@ package org.apache.spark.ml.regression
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
+import org.apache.spark.ml.linalg.Vector
 import org.apache.spark.ml.tree.impl.TreeTests
 import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
 import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
@@ -27,6 +28,8 @@ import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.functions._
 
 /**
  * Test suite for [[RandomForestRegressor]].
@@ -103,6 +106,55 @@ class RandomForestRegressorSuite extends SparkFunSuite with MLlibTestSparkContex
       rf, spark, isClassification = false) { (expected, actual) =>
         TreeTests.checkEqual(expected, actual)
       }
+  }
+
+  test("Random Forest variance") {
+    val categoricalFeatures = Map.empty[Int, Int]
+    val df: DataFrame = TreeTests.setMetadata(
+      orderedLabeledPoints50_1000, categoricalFeatures, 0)
+
+    // RF with one tree should have the same variance as that of the tree.
+    val rf = new RandomForestRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(30)
+      .setNumTrees(1)
+      .setMaxBins(10)
+      .setFeatureSubsetStrategy("all")
+      .setSubsamplingRate(1.0)
+      .setSeed(123)
+
+    val rfModel = rf.fit(df)
+    val rfVariances = rfModel.transform(df).select("variance").collect()
+
+    val dt = new DecisionTreeRegressor()
+      .setImpurity("variance")
+      .setMaxDepth(30)
+      .setMaxBins(10)
+      .setSeed(123)
+    val dtModel = dt.fit(df)
+    val dtVariances = dtModel.transform(df).select("variance").collect()
+    val nSamples = dtVariances.size
+    (0 to nSamples - 1).foreach { i =>
+      val diff = math.abs(rfVariances(i).getDouble(0) - dtVariances(i).getDouble(0))
+      assert(diff < 1e-6)
+    }
+
+    rf.setMaxDepth(2)
+    rf.setNumTrees(20)
+    val rfNewModel = rf.fit(df)
+    val results = rfNewModel.transform(df).select("features", "variance").collect()
+    val features = col("features")
+    val trees = rfNewModel.trees
+    val numTrees = rfNewModel.getNumTrees
+    results.map { case Row(features: Vector, variance: Double) =>
+      val rootNodes = trees.map(_.rootNode.predictImpl(features))
+      val predsquared = rootNodes.map(x => math.pow(x.prediction, 2)).sum / numTrees
+      val variance = rootNodes.map(_.impurityStats.calculate()).sum / numTrees
+      val predictions = rootNodes.map(_.prediction).sum / numTrees
+      val expectedVariance = -math.pow(predictions, 2) + variance + predsquared
+      assert(variance === expectedVariance,
+        s"Expected variance $expectedVariance but got $variance.")
+    }
   }
 
   /////////////////////////////////////////////////////////////////////////////

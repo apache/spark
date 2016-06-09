@@ -409,10 +409,24 @@ private[ml] trait RandomForestClassificationModelParams extends TreeEnsemblePara
   with HasFeatureSubsetStrategy with TreeClassifierParams
 
 private[ml] trait RandomForestRegressorParams
-  extends RandomForestParams with TreeRegressorParams
+  extends RandomForestParams with TreeRegressorParams with HasVarianceCol
 
 private[ml] trait RandomForestRegressionModelParams extends TreeEnsembleParams
-  with HasFeatureSubsetStrategy with TreeRegressorParams
+  with HasFeatureSubsetStrategy with TreeRegressorParams with HasVarianceCol {
+
+  override protected def validateAndTransformSchema(
+      schema: StructType,
+      fitting: Boolean,
+      featuresDataType: DataType): StructType = {
+    val newSchema = super.validateAndTransformSchema(schema, fitting, featuresDataType)
+    if (isDefined(varianceCol) && $(varianceCol).nonEmpty) {
+      SchemaUtils.appendColumn(newSchema, $(varianceCol), DoubleType)
+    } else {
+      newSchema
+    }
+  }
+
+}
 
 /**
  * Parameters for Gradient-Boosted Tree algorithms.

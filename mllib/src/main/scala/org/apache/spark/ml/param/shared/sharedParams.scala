@@ -149,6 +149,8 @@ private[ml] trait HasVarianceCol extends Params {
    */
   final val varianceCol: Param[String] = new Param[String](this, "varianceCol", "Column name for the biased sample variance of prediction")
 
+  setDefault(varianceCol, "variance")
+
   /** @group getParam */
   final def getVarianceCol: String = $(varianceCol)
 }
