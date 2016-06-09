@@ -632,7 +632,7 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     val dfWithmeta = df.select('a, 'b.as("b", md))
 
     withTempPath { dir =>
-      val path = s"${dir.getCanonicalPath}"
+      val path = dir.getCanonicalPath
       dfWithmeta.write.parquet(path)
 
       readParquetFile(path) { df =>
