@@ -24,7 +24,6 @@ import java.util.regex.Pattern
 import scala.collection.mutable
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Queue}
 import scala.collection.JavaConverters._
-import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.conf.Configuration
@@ -143,7 +142,6 @@ private[yarn] class YarnAllocator(
 
   private val launcherPool = ThreadUtils.newDaemonCachedThreadPool(
     "ContainerLauncher", sparkConf.get(CONTAINER_LAUNCH_MAX_THREADS))
-  implicit private val executionContext = ExecutionContext.fromExecutor(launcherPool)
 
   // For testing
   private val launchContainers = sparkConf.getBoolean("spark.yarn.launchContainers", true)
@@ -498,36 +496,32 @@ private[yarn] class YarnAllocator(
         logInfo("Launching ExecutorRunnable. driverUrl: %s,  executorHostname: %s".format(
           driverUrl, executorHostname))
 
-        val future = Future {
-          new ExecutorRunnable(
-            container,
-            conf,
-            sparkConf,
-            driverUrl,
-            executorId,
-            executorHostname,
-            executorMemory,
-            executorCores,
-            appAttemptId.getApplicationId.toString,
-            securityMgr,
-            localResources)
-            .run()
-        }
-
-        future.onSuccess {
-          case _ =>
-            // Only change the state when executor is successfully launched.
-            updateInternalState()
-        }(ThreadUtils.sameThread)
-
-        future.onFailure {
-          case NonFatal(e) =>
-            logError(s"Failed to launch executor $executorId on container $containerId", e)
-            // Assigned container should be released immediately to avoid unnecessary resource
-            // occupation.
-            amClient.releaseAssignedContainer(containerId)
-          case t => throw t
-        }(ThreadUtils.sameThread)
+        launcherPool.execute(new Runnable {
+          override def run(): Unit = {
+            try {
+              new ExecutorRunnable(
+                container,
+                conf,
+                sparkConf,
+                driverUrl,
+                executorId,
+                executorHostname,
+                executorMemory,
+                executorCores,
+                appAttemptId.getApplicationId.toString,
+                securityMgr,
+                localResources
+              ).run()
+              updateInternalState()
+            } catch {
+              case NonFatal(e) =>
+                logError(s"Failed to launch executor $executorId on container $containerId", e)
+                // Assigned container should be released immediately to avoid unnecessary resource
+                // occupation.
+                amClient.releaseAssignedContainer(containerId)
+            }
+          }
+        })
       } else {
         // For test only
         updateInternalState()
