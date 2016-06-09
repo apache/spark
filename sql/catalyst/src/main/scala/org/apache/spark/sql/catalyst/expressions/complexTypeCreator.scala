@@ -91,7 +91,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (children.size % 2 != 0) {
-      TypeCheckResult.TypeCheckFailure(s"$prettyName expects an positive even number of arguments.")
+      TypeCheckResult.TypeCheckFailure(s"$prettyName expects a positive even number of arguments.")
     } else if (keys.map(_.dataType).distinct.length > 1) {
       TypeCheckResult.TypeCheckFailure("The given keys of function map should all be the same " +
         "type, but they are " + keys.map(_.dataType.simpleString).mkString("[", ", ", "]"))
@@ -252,9 +252,13 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
   private lazy val names = nameExprs.map(_.eval(EmptyRow))
 
   override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map { case (name, valExpr) =>
-      StructField(name.asInstanceOf[UTF8String].toString,
-        valExpr.dataType, valExpr.nullable, Metadata.empty)
+    val fields = names.zip(valExprs).map {
+      case (name, valExpr: NamedExpression) =>
+        StructField(name.asInstanceOf[UTF8String].toString,
+          valExpr.dataType, valExpr.nullable, valExpr.metadata)
+      case (name, valExpr) =>
+        StructField(name.asInstanceOf[UTF8String].toString,
+          valExpr.dataType, valExpr.nullable, Metadata.empty)
     }
     StructType(fields)
   }
@@ -365,8 +369,11 @@ case class CreateNamedStructUnsafe(children: Seq[Expression]) extends Expression
   private lazy val names = nameExprs.map(_.eval(EmptyRow).toString)
 
   override lazy val dataType: StructType = {
-    val fields = names.zip(valExprs).map { case (name, valExpr) =>
-      StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
+    val fields = names.zip(valExprs).map {
+      case (name, valExpr: NamedExpression) =>
+        StructField(name, valExpr.dataType, valExpr.nullable, valExpr.metadata)
+      case (name, valExpr) =>
+        StructField(name, valExpr.dataType, valExpr.nullable, Metadata.empty)
     }
     StructType(fields)
   }

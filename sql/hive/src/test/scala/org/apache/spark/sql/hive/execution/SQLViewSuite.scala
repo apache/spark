@@ -26,7 +26,7 @@ import org.apache.spark.sql.test.SQLTestUtils
  * A suite for testing view related functionality.
  */
 class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   override def beforeAll(): Unit = {
     // Create a simple table with two columns: id and id1
@@ -301,6 +301,30 @@ class SQLViewSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
         checkAnswer(sql("SELECT * FROM testView ORDER BY id1"), (1 to 9).map(i => Row(i, i)))
 
         sql("DROP VIEW testView")
+      }
+    }
+  }
+
+  test("SPARK-14933 - create view from hive parquet tabale") {
+    withTable("t_part") {
+      withView("v_part") {
+        spark.sql("create table t_part stored as parquet as select 1 as a, 2 as b")
+        spark.sql("create view v_part as select * from t_part")
+        checkAnswer(
+          sql("select * from t_part"),
+          sql("select * from v_part"))
+      }
+    }
+  }
+
+  test("SPARK-14933 - create view from hive orc tabale") {
+    withTable("t_orc") {
+      withView("v_orc") {
+        spark.sql("create table t_orc stored as orc as select 1 as a, 2 as b")
+        spark.sql("create view v_orc as select * from t_orc")
+        checkAnswer(
+          sql("select * from t_orc"),
+          sql("select * from v_orc"))
       }
     }
   }

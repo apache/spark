@@ -186,15 +186,19 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     if (columns == null) {
       this.requestedSchema = fileSchema;
     } else {
-      Types.MessageTypeBuilder builder = Types.buildMessage();
-      for (String s: columns) {
-        if (!fileSchema.containsField(s)) {
-          throw new IOException("Can only project existing columns. Unknown field: " + s +
-            " File schema:\n" + fileSchema);
+      if (columns.size() > 0) {
+        Types.MessageTypeBuilder builder = Types.buildMessage();
+        for (String s: columns) {
+          if (!fileSchema.containsField(s)) {
+            throw new IOException("Can only project existing columns. Unknown field: " + s +
+                    " File schema:\n" + fileSchema);
+          }
+          builder.addFields(fileSchema.getType(s));
         }
-        builder.addFields(fileSchema.getType(s));
+        this.requestedSchema = builder.named(CatalystSchemaConverter.SPARK_PARQUET_SCHEMA_NAME());
+      } else {
+        this.requestedSchema = CatalystSchemaConverter.EMPTY_MESSAGE();
       }
-      this.requestedSchema = builder.named("spark_schema");
     }
     this.sparkSchema = new CatalystSchemaConverter(config).convert(requestedSchema);
     this.reader = new ParquetFileReader(config, file, blocks, requestedSchema.getColumns());

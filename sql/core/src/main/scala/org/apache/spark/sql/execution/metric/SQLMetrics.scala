@@ -21,7 +21,7 @@ import java.text.NumberFormat
 
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler.AccumulableInfo
-import org.apache.spark.util.{AccumulatorV2, Utils}
+import org.apache.spark.util.{AccumulatorContext, AccumulatorV2, Utils}
 
 
 class SQLMetric(val metricType: String, initValue: Long = 0L) extends AccumulatorV2[Long, Long] {
@@ -30,8 +30,15 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
   // update it at the end of task and the value will be at least 0. Then we can filter out the -1
   // values before calculate max, min, etc.
   private[this] var _value = initValue
+  private var _zeroValue = initValue
 
-  override def copyAndReset(): SQLMetric = new SQLMetric(metricType, initValue)
+  override def copy(): SQLMetric = {
+    val newAcc = new SQLMetric(metricType, _value)
+    newAcc._zeroValue = initValue
+    newAcc
+  }
+
+  override def reset(): Unit = _value = _zeroValue
 
   override def merge(other: AccumulatorV2[Long, Long]): Unit = other match {
     case o: SQLMetric => _value += o.value
@@ -39,7 +46,7 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def isZero(): Boolean = _value == initValue
+  override def isZero(): Boolean = _value == _zeroValue
 
   override def add(v: Long): Unit = _value += v
 
@@ -49,17 +56,13 @@ class SQLMetric(val metricType: String, initValue: Long = 0L) extends Accumulato
 
   // Provide special identifier as metadata so we can tell that this is a `SQLMetric` later
   private[spark] override def toInfo(update: Option[Any], value: Option[Any]): AccumulableInfo = {
-    new AccumulableInfo(id, name, update, value, true, true, Some(SQLMetrics.ACCUM_IDENTIFIER))
+    new AccumulableInfo(
+      id, name, update, value, true, true, Some(AccumulatorContext.SQL_ACCUM_IDENTIFIER))
   }
-
-  def reset(): Unit = _value = initValue
 }
 
 
 private[sql] object SQLMetrics {
-  // Identifier for distinguishing SQL metrics from other accumulators
-  private[sql] val ACCUM_IDENTIFIER = "sql"
-
   private[sql] val SUM_METRIC = "sum"
   private[sql] val SIZE_METRIC = "size"
   private[sql] val TIMING_METRIC = "timing"

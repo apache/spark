@@ -17,12 +17,11 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.param.{Param, ParamMap}
 import org.apache.spark.ml.Transformer
 import org.apache.spark.ml.util._
-import org.apache.spark.sql.{DataFrame, Dataset, Row, SQLContext}
+import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.types.StructType
 
 /**
@@ -48,6 +47,7 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
 
   /**
    * SQL statement parameter. The statement is provided in string form.
+   *
    * @group param
    */
   @Since("1.6.0")
@@ -66,22 +66,21 @@ class SQLTransformer @Since("1.6.0") (override val uid: String) extends Transfor
   @Since("2.0.0")
   override def transform(dataset: Dataset[_]): DataFrame = {
     val tableName = Identifiable.randomUID(uid)
-    dataset.registerTempTable(tableName)
+    dataset.createOrReplaceTempView(tableName)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
     dataset.sparkSession.sql(realStatement)
   }
 
   @Since("1.6.0")
   override def transformSchema(schema: StructType): StructType = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    val dummyRDD = sc.parallelize(Seq(Row.empty))
-    val dummyDF = sqlContext.createDataFrame(dummyRDD, schema)
+    val spark = SparkSession.builder().getOrCreate()
+    val dummyRDD = spark.sparkContext.parallelize(Seq(Row.empty))
+    val dummyDF = spark.createDataFrame(dummyRDD, schema)
     val tableName = Identifiable.randomUID(uid)
     val realStatement = $(statement).replace(tableIdentifier, tableName)
-    dummyDF.registerTempTable(tableName)
-    val outputSchema = sqlContext.sql(realStatement).schema
-    sqlContext.dropTempTable(tableName)
+    dummyDF.createOrReplaceTempView(tableName)
+    val outputSchema = spark.sql(realStatement).schema
+    spark.catalog.dropTempView(tableName)
     outputSchema
   }
 

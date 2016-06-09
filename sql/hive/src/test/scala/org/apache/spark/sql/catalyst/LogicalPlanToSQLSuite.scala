@@ -741,4 +741,18 @@ class LogicalPlanToSQLSuite extends SQLBuilderTest with SQLTestUtils {
   test("filter after subquery") {
     checkHiveQl("SELECT a FROM (SELECT key + 1 AS a FROM parquet_t1) t WHERE a > 5")
   }
+
+  test("SPARK-14933 - select parquet table") {
+    withTable("parquet_t") {
+      sql("create table parquet_t stored as parquet as select 1 as c1, 'abc' as c2")
+      checkHiveQl("select * from parquet_t")
+    }
+  }
+
+  test("SPARK-14933 - select orc table") {
+    withTable("orc_t") {
+      sql("create table orc_t stored as orc as select 1 as c1, 'abc' as c2")
+      checkHiveQl("select * from orc_t")
+    }
+  }
 }

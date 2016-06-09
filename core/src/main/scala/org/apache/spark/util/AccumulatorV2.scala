@@ -19,6 +19,7 @@ package org.apache.spark.util
 
 import java.{lang => jl}
 import java.io.ObjectInputStream
+import java.util.ArrayList
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
@@ -54,7 +55,7 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
 
   /**
    * Returns true if this accumulator has been registered.  Note that all accumulators must be
-   * registered before ues, or it will throw exception.
+   * registered before use, or it will throw exception.
    */
   final def isRegistered: Boolean =
     metadata != null && AccumulatorContext.get(metadata.id).isDefined
@@ -112,7 +113,22 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
    * Creates a new copy of this accumulator, which is zero value. i.e. call `isZero` on the copy
    * must return true.
    */
-  def copyAndReset(): AccumulatorV2[IN, OUT]
+  def copyAndReset(): AccumulatorV2[IN, OUT] = {
+    val copyAcc = copy()
+    copyAcc.reset()
+    copyAcc
+  }
+
+  /**
+   * Creates a new copy of this accumulator.
+   */
+  def copy(): AccumulatorV2[IN, OUT]
+
+  /**
+   * Resets this accumulator, which is zero value. i.e. call `isZero` must
+   * return true.
+   */
+  def reset(): Unit
 
   /**
    * Takes the inputs and accumulates. e.g. it can be a simple `+=` for counter accumulator.
@@ -137,10 +153,10 @@ abstract class AccumulatorV2[IN, OUT] extends Serializable {
         throw new UnsupportedOperationException(
           "Accumulator must be registered before send to executor")
       }
-      val copy = copyAndReset()
-      assert(copy.isZero, "copyAndReset must return a zero value copy")
-      copy.metadata = metadata
-      copy
+      val copyAcc = copyAndReset()
+      assert(copyAcc.isZero, "copyAndReset must return a zero value copy")
+      copyAcc.metadata = metadata
+      copyAcc
     } else {
       this
     }
@@ -240,6 +256,9 @@ private[spark] object AccumulatorContext {
   def clear(): Unit = {
     originals.clear()
   }
+
+  // Identifier for distinguishing SQL metrics from other accumulators
+  private[spark] val SQL_ACCUM_IDENTIFIER = "sql"
 }
 
 
@@ -249,8 +268,8 @@ private[spark] object AccumulatorContext {
  * @since 2.0.0
  */
 class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
-  private[this] var _sum = 0L
-  private[this] var _count = 0L
+  private var _sum = 0L
+  private var _count = 0L
 
   /**
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
@@ -258,7 +277,17 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
    */
   override def isZero: Boolean = _sum == 0L && _count == 0
 
-  override def copyAndReset(): LongAccumulator = new LongAccumulator
+  override def copy(): LongAccumulator = {
+    val newAcc = new LongAccumulator
+    newAcc._count = this._count
+    newAcc._sum = this._sum
+    newAcc
+  }
+
+  override def reset(): Unit = {
+    _sum = 0L
+    _count = 0L
+  }
 
   /**
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
@@ -318,12 +347,22 @@ class LongAccumulator extends AccumulatorV2[jl.Long, jl.Long] {
  * @since 2.0.0
  */
 class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
-  private[this] var _sum = 0.0
-  private[this] var _count = 0L
+  private var _sum = 0.0
+  private var _count = 0L
 
   override def isZero: Boolean = _sum == 0.0 && _count == 0
 
-  override def copyAndReset(): DoubleAccumulator = new DoubleAccumulator
+  override def copy(): DoubleAccumulator = {
+    val newAcc = new DoubleAccumulator
+    newAcc._count = this._count
+    newAcc._sum = this._sum
+    newAcc
+  }
+
+  override def reset(): Unit = {
+    _sum = 0.0
+    _count = 0L
+  }
 
   /**
    * Adds v to the accumulator, i.e. increment sum by v and count by 1.
@@ -377,11 +416,19 @@ class DoubleAccumulator extends AccumulatorV2[jl.Double, jl.Double] {
 
 
 class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
-  private[this] val _list: java.util.List[T] = new java.util.ArrayList[T]
+  private val _list: java.util.List[T] = new ArrayList[T]
 
   override def isZero: Boolean = _list.isEmpty
 
   override def copyAndReset(): ListAccumulator[T] = new ListAccumulator
+
+  override def copy(): ListAccumulator[T] = {
+    val newAcc = new ListAccumulator[T]
+    newAcc._list.addAll(_list)
+    newAcc
+  }
+
+  override def reset(): Unit = _list.clear()
 
   override def add(v: T): Unit = _list.add(v)
 
@@ -391,7 +438,9 @@ class ListAccumulator[T] extends AccumulatorV2[T, java.util.List[T]] {
       s"Cannot merge ${this.getClass.getName} with ${other.getClass.getName}")
   }
 
-  override def value: java.util.List[T] = java.util.Collections.unmodifiableList(_list)
+  override def value: java.util.List[T] = _list.synchronized {
+    java.util.Collections.unmodifiableList(new ArrayList[T](_list))
+  }
 
   private[spark] def setValue(newValue: java.util.List[T]): Unit = {
     _list.clear()
@@ -407,10 +456,14 @@ class LegacyAccumulatorWrapper[R, T](
 
   override def isZero: Boolean = _value == param.zero(initialValue)
 
-  override def copyAndReset(): LegacyAccumulatorWrapper[R, T] = {
+  override def copy(): LegacyAccumulatorWrapper[R, T] = {
     val acc = new LegacyAccumulatorWrapper(initialValue, param)
-    acc._value = param.zero(initialValue)
+    acc._value = _value
     acc
+  }
+
+  override def reset(): Unit = {
+    _value = param.zero(initialValue)
   }
 
   override def add(v: T): Unit = _value = param.addAccumulator(_value, v)

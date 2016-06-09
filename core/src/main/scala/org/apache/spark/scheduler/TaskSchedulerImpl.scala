@@ -33,21 +33,22 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.internal.Logging
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler.TaskLocality.TaskLocality
+import org.apache.spark.scheduler.local.LocalSchedulerBackendEndpoint
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, ThreadUtils, Utils}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
- * It can also work with a local setup by using a LocalBackend and setting isLocal to true.
- * It handles common logic, like determining a scheduling order across jobs, waking up to launch
- * speculative tasks, etc.
+ * It can also work with a local setup by using a [[LocalSchedulerBackendEndpoint]] and setting
+ * isLocal to true. It handles common logic, like determining a scheduling order across jobs, waking
+ * up to launch speculative tasks, etc.
  *
  * Clients should first call initialize() and start(), then submit task sets through the
  * runTasks method.
  *
- * THREADING: SchedulerBackends and task-submitting clients can call this class from multiple
+ * THREADING: [[SchedulerBackend]]s and task-submitting clients can call this class from multiple
  * threads, so it needs locks in public API methods to maintain its state. In addition, some
- * SchedulerBackends synchronize on themselves when they want to send events here, and then
+ * [[SchedulerBackend]]s synchronize on themselves when they want to send events here, and then
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
@@ -64,6 +65,11 @@ private[spark] class TaskSchedulerImpl(
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
 
+  // Duplicate copies of a task will only be launched if the original copy has been running for
+  // at least this amount of time. This is to avoid the overhead of launching speculative copies
+  // of tasks that are very short.
+  val MIN_TIME_TO_SPECULATION = 100
+
   private val speculationScheduler =
     ThreadUtils.newDaemonSingleThreadScheduledExecutor("task-scheduler-speculation")
 
@@ -77,6 +83,7 @@ private[spark] class TaskSchedulerImpl(
   // on this class.
   private val taskSetsByStageIdAndAttempt = new HashMap[Int, HashMap[Int, TaskSetManager]]
 
+  // Protected by `this`
   private[scheduler] val taskIdToTaskSetManager = new HashMap[Long, TaskSetManager]
   val taskIdToExecutorId = new HashMap[Long, String]
 
@@ -345,9 +352,11 @@ private[spark] class TaskSchedulerImpl(
         }
         taskIdToTaskSetManager.get(tid) match {
           case Some(taskSet) =>
+            var executorId: String = null
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetManager.remove(tid)
               taskIdToExecutorId.remove(tid).foreach { execId =>
+                executorId = execId
                 if (executorIdToTaskCount.contains(execId)) {
                   executorIdToTaskCount(execId) -= 1
                 }
@@ -355,7 +364,17 @@ private[spark] class TaskSchedulerImpl(
             }
             if (state == TaskState.FINISHED) {
               taskSet.removeRunningTask(tid)
-              taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              // In some case, executor has already been removed by driver for heartbeats timeout,
+              // but at sometime, before executor killed by cluster, the task of running on this
+              // executor is finished and return task success state to driver. However, this kinds
+              // of task should be ignored, because the task on this executor is already re-queued
+              // by driver. For more details, can check in SPARK-14485.
+              if (executorId != null && !executorIdToTaskCount.contains(executorId)) {
+                logInfo(s"Ignoring update with state $state for TID $tid because its executor " +
+                  s"has already been removed by driver")
+              } else {
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              }
             } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
               taskSet.removeRunningTask(tid)
               taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
@@ -462,7 +481,7 @@ private[spark] class TaskSchedulerImpl(
   def checkSpeculatableTasks() {
     var shouldRevive = false
     synchronized {
-      shouldRevive = rootPool.checkSpeculatableTasks()
+      shouldRevive = rootPool.checkSpeculatableTasks(MIN_TIME_TO_SPECULATION)
     }
     if (shouldRevive) {
       backend.reviveOffers()
