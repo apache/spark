@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -173,19 +173,9 @@ private[sql] class CacheManager extends Logging {
       val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
       (fs, path.makeQualified(fs.getUri, fs.getWorkingDirectory))
     }
+
     cachedData.foreach {
-      case data if data.plan.find {
-        case lr: LogicalRelation => lr.relation match {
-          case hr: HadoopFsRelation =>
-            val invalidate = hr.location.paths
-              .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-              .contains(qualifiedPath)
-            if (invalidate) hr.location.refresh()
-            invalidate
-          case _ => false
-        }
-        case _ => false
-      }.isDefined =>
+      case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined =>
         val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
         if (dataIndex >= 0) {
           cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
@@ -193,6 +183,27 @@ private[sql] class CacheManager extends Logging {
         }
         sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
       case _ => // Do Nothing
+    }
+  }
+
+  /**
+   * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
+   * [[org.apache.spark.sql.execution.datasources.FileCatalog]] of any [[HadoopFsRelation]] node
+   * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
+   * false.
+   */
+  private def lookupAndRefresh(plan: LogicalPlan, fs: FileSystem, qualifiedPath: Path): Boolean = {
+    plan match {
+      case lr: LogicalRelation => lr.relation match {
+        case hr: HadoopFsRelation =>
+          val invalidate = hr.location.paths
+            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+            .contains(qualifiedPath)
+          if (invalidate) hr.location.refresh()
+          invalidate
+        case _ => false
+      }
+      case _ => false
     }
   }
 }
