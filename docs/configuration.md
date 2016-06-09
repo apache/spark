@@ -778,7 +778,7 @@ Apart from these, the following properties are also available, and may be useful
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
   <td><code>spark.memory.fraction</code></td>
-  <td>0.75</td>
+  <td>0.66</td>
   <td>
     Fraction of (heap space - 300MB) used for execution and storage. The lower this is, the
     more frequently spills and cached data eviction occur. The purpose of this config is to set
