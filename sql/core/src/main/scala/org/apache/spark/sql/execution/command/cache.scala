@@ -38,7 +38,7 @@ case class CacheTableCommand(
         throw new AnalysisException("Could not create a temporary view in Cache Table As Select, " +
           s"because temporary view $tableIdent already exists.")
       }
-      Dataset.ofRows(sparkSession, logicalPlan).createOrReplaceTempView(tableIdent.quotedString)
+      Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
     }
     sparkSession.catalog.cacheTable(tableIdent.quotedString)
 
