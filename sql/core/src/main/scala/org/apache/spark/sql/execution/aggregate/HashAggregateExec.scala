@@ -764,7 +764,11 @@ case class HashAggregateExec(
      """
   }
 
-  override def simpleString: String = {
+  override def verboseString: String = toString(verbose = true)
+
+  override def simpleString: String = toString(verbose = false)
+
+  private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
     testFallbackStartsAt match {
@@ -772,7 +776,11 @@ case class HashAggregateExec(
         val keyString = groupingExpressions.mkString("[", ",", "]")
         val functionString = allAggregateExpressions.mkString("[", ",", "]")
         val outputString = output.mkString("[", ",", "]")
-        s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        if (verbose) {
+          s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        } else {
+          s"HashAggregate(key=$keyString, functions=$functionString)"
+        }
       case Some(fallbackStartsAt) =>
         s"HashAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
