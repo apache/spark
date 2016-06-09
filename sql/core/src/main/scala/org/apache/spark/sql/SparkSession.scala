@@ -67,6 +67,14 @@ import org.apache.spark.util.Utils
  *     .config("spark.some.config.option", "some-value").
  *     .getOrCreate()
  * }}}
+ *
+ * @groupname basic Basic Operations
+ * @groupname config Configuration
+ * @groupname dataframes Custom DataFrame Creation
+ * @groupname dataset Custom DataFrame Creation
+ * @groupname ddl_ops Persistent Catalog DDL
+ * @groupname genericdata Generic Data Sources
+ * @groupname Support functions for language integrated queries
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
