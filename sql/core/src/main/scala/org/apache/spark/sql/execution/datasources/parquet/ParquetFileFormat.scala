@@ -488,7 +488,12 @@ private[sql] class ParquetOutputWriterFactory(
     // Custom ParquetOutputFormat that disable use of committer and writes to the given path
     val outputFormat = new ParquetOutputFormat[InternalRow]() {
       override def getOutputCommitter(c: TaskAttemptContext): OutputCommitter = { null }
-      override def getDefaultWorkFile(c: TaskAttemptContext, ext: String): Path = { new Path(path) }
+      override def getDefaultWorkFile(c: TaskAttemptContext, ext: String): Path = {
+        // It has the `.parquet` extension at the end because (de)compression tools
+        // such as gunzip would not be able to decompress this as the compression
+        // is not applied on this whole file but on each "page" in Parquet format.
+        new Path(s"$path$ext")
+      }
     }
     outputFormat.getRecordWriter(hadoopAttemptContext)
   }
