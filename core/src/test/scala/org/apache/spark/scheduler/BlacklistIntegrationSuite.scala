@@ -96,7 +96,8 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assertDataStructuresEmpty(noFailure = true)
   }
 
-  // No progress if there are fewer executors than maxTaxFailures
+  // Make sure that is we've failed on all executors, but haven't hit task.maxFailures yet, the job
+  // doesn't hang
   testScheduler(
     "Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
@@ -114,9 +115,9 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     }
     withBackend(runBackend _) {
       val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
-      val duration = Duration(1, SECONDS)
       Await.ready(jobFuture, duration)
-      failure.getMessage.contains("test task failure")
+      assert(failure.getMessage.contains("Aborting TaskSet 0.0 because it has a task which " +
+        "cannot be scheduled on any executor due to blacklists"))
     }
     assertDataStructuresEmpty(noFailure = false)
   }

@@ -289,7 +289,49 @@ private[spark] class TaskSchedulerImpl(
         }
       }
     }
+    if (!launchedTask && isTaskSetCompletelyBlacklisted(taskSet, nodeBlacklist)) {
+      taskSet.abort(s"Aborting ${taskSet.taskSet} because it has a task which cannot be scheduled" +
+        s" on any executor due to blacklists.")
+    }
     return launchedTask
+  }
+
+  /**
+   * Check whether the given task set has been blacklisted to the point that it can't run anywhere.
+   *
+   * It is possible that this taskset has become impossible to schedule *anywhere* due to the
+   * blacklist.  The most scenario would be if there are fewer executors than the
+   * spark.task.maxFailures.  In that case, we just fail the task set, otherwise the job
+   * will just hang.
+   *
+   * The check here is a balance between always catching this eventually, but not wasting
+   * too much time inside the scheduling loop.  Just check if the last task is schedulable
+   * on any of the available executors.  So this is O(numExecutors) worst-case, but it'll
+   * really be fast unless you've got a bunch of things blacklisted.
+   */
+  private[scheduler] def isTaskSetCompletelyBlacklisted(
+      taskSet: TaskSetManager,
+      nodeBlacklist: Set[String]): Boolean = {
+    taskSet.pollPendingTask.map { task =>
+      executorsByHost.foreach { case (host, execs) =>
+        if (!nodeBlacklist.contains(host)) {
+          execs.foreach { exec =>
+            val stage = taskSet.stageId
+            if (
+              !blacklistTracker.isExecutorBlacklisted(stage, exec) &&
+                // TODO exec-stage level blacklisting
+                !blacklistTracker.isExecutorBlacklisted(exec, task, stage)
+            ) {
+              // we've found some executor this task can run on.  Its possible that some *other*
+              // task isn't schedulable anywhere, but we will discover that in some later call,
+              // when that unschedulable task is the last task remaining.
+              return false
+            }
+          }
+        }
+      }
+      true
+    }.getOrElse(false)
   }
 
   /**

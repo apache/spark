@@ -385,6 +385,16 @@ private[spark] class TaskSetManager(
       case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
   }
 
+
+  /**
+   * Return some task which is pending, but do not remove it from the list of pending tasks.
+   * Used as a simple way to test if this task set is schedulable anywhere, or if it has been
+   * completely blacklisted.
+   */
+  private[scheduler] def pollPendingTask: Option[Int] = {
+    allPendingTasks.lastOption
+  }
+
   /**
    * Respond to an offer of a single executor from the scheduler by finding a task
    *
