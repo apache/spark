@@ -276,7 +276,7 @@ class DataFrameReader(object):
     def parquet(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
-        You can set the following JSON-specific options to deal with non-standard JSON files:
+        You can set the following Parquet-specific option(s) for reading Parquet files:
             * ``mergeSchema`` (default ``false``): sets whether we should merge schemas collected \
                 from all Parquet part-files.
 
