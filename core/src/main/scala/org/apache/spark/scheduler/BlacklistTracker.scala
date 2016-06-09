@@ -317,3 +317,46 @@ private[scheduler] final class FailureStatus(val host: String) {
 }
 
 private[scheduler] case class StageAndPartition(val stageId: Int, val partition: Int)
+
+
+private[spark] class NoopBlacklistTracker(
+    sparkConf: SparkConf,
+    scheduler: TaskSchedulerImpl) extends BlacklistTracker(sparkConf, scheduler) {
+
+  // TODO don't extend, just have a common interface
+  override def start: Unit = {}
+  override def stop: Unit = {}
+
+  override def taskSetCompleted(stageId: Int): Unit = {}
+
+  override def isExecutorBlacklisted(stageId: Int, executorId: String): Boolean = {
+    false
+  }
+
+  override def executorBlacklist(stageId: Int, partition: Int): Set[String] = {
+    Set()
+  }
+
+  override def nodeBlacklist(): Set[String] = {
+    Set()
+  }
+
+  override def isExecutorBlacklisted(
+      executorId: String,
+      stageId: Int,
+      partition: Int) : Boolean = {
+    false
+  }
+
+  override def removeFailedExecutors(executorId: String) : Unit = {}
+
+  override def taskSucceeded(
+    stageId: Int,
+    partition: Int,
+    info: TaskInfo): Unit = {}
+
+  override def taskFailed(
+    stageId: Int,
+    partition: Int,
+    info: TaskInfo): Unit = {}
+}

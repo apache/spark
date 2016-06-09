@@ -42,7 +42,10 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
 
   // Test demonstrating the issue -- without a config change, the scheduler keeps scheduling
   // according to locality preferences, and so the job fails
-  testScheduler("If preferred node is bad, without blacklist job will fail") {
+  testScheduler("If preferred node is bad, without blacklist job will fail",
+      extraConfs = Seq(
+        "spark.scheduler.blacklist.enabled" -> "false"
+      )) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
     withBackend(badHostBackend _) {
       val jobFuture = submit(rdd, (0 until 10).toArray)
@@ -57,8 +60,9 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "With blacklist on, job will still fail if there are too many bad executors on bad host",
     extraConfs = Seq(
+      "spark.scheduler.blacklist.enabled" -> "true",
       // just set this to something much longer than the test duration
-      ("spark.scheduler.executorTaskBlacklistTime", "10000000")
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000"
     )
   ) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
@@ -74,12 +78,13 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "Bad node with multiple executors, job will still succeed with the right confs",
     extraConfs = Seq(
+      "spark.scheduler.blacklist.enabled" -> "true",
       // just set this to something much longer than the test duration
-      ("spark.scheduler.executorTaskBlacklistTime", "10000000"),
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
       // this has to be higher than the number of executors on the bad host
-      ("spark.task.maxFailures", "5"),
+      "spark.task.maxFailures" -> "5",
       // just to avoid this test taking too long
-      ("spark.locality.wait", "10ms")
+      "spark.locality.wait" -> "10ms"
     )
   ) {
     val rdd = new MockRDDWithLocalityPrefs(sc, 10, Nil, badHost)
@@ -95,6 +100,7 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
   testScheduler(
     "Progress with fewer executors than maxTaskFailures",
     extraConfs = Seq(
+      "spark.scheduler.blacklist.enabled" -> "true",
       // just set this to something much longer than the test duration
       "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
       "spark.testing.nHosts" -> "2",

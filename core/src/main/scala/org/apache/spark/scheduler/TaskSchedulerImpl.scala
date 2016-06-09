@@ -61,6 +61,8 @@ private[spark] class TaskSchedulerImpl(
   def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
 
   val conf = sc.conf
+  // can't be a val b/c of initialization order
+  private def blacklistTracker = sc.blacklistTracker
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL_MS = conf.getTimeAsMs("spark.speculation.interval", "100ms")
@@ -260,12 +262,10 @@ private[spark] class TaskSchedulerImpl(
     // This is an optimization -- the taskSet might contain a very long list of pending tasks.
     // Rather than wasting time checking the offer against each task, and then realizing the
     // executor is blacklisted, just filter out the bad executor immediately.
-    val nodeBlacklist = taskSet.blacklistTracker.map{_.nodeBlacklistForStage(taskSet.stageId)}
-      .getOrElse(Set())
+    val nodeBlacklist = blacklistTracker.nodeBlacklistForStage(taskSet.stageId)
     for (i <- 0 until shuffledOffers.size) {
       val execId = shuffledOffers(i).executorId
-      val execBlacklisted = taskSet.blacklistTracker.map{
-        _.isExecutorBlacklisted(taskSet.stageId, execId)}.getOrElse(true)
+      val execBlacklisted = blacklistTracker.isExecutorBlacklisted(taskSet.stageId, execId)
       val host = shuffledOffers(i).host
       if (!nodeBlacklist(host) && !execBlacklisted && availableCpus(i) >= CPUS_PER_TASK) {
         try {

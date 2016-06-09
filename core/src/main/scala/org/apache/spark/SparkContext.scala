@@ -218,7 +218,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   private var _jars: Seq[String] = _
   private var _files: Seq[String] = _
   private var _shutdownHookRef: AnyRef = _
-  private var _blacklistTracker: Option[BlacklistTracker] = _
+  private var _blacklistTracker: BlacklistTracker = _
 
   /* ------------------------------------------------------------------------------------- *
    | Accessors and public fields. These provide access to the internal state of the        |
@@ -328,7 +328,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   private[spark] def cleaner: Option[ContextCleaner] = _cleaner
 
-  private[spark] def blacklistTracker: Option[BlacklistTracker] = _blacklistTracker
+  private[spark] def blacklistTracker: BlacklistTracker = _blacklistTracker
 
   private[spark] var checkpointDir: Option[String] = None
 
@@ -539,11 +539,11 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
     // By default blacklistTracker is enabled.
     _blacklistTracker = if (_conf.getBoolean("spark.scheduler.blacklist.enabled", true)) {
-      Some(new BlacklistTracker(_conf, scheduler = taskScheduler.asInstanceOf[TaskSchedulerImpl]))
+      new BlacklistTracker(_conf, scheduler = taskScheduler.asInstanceOf[TaskSchedulerImpl])
     } else {
-      None
+      new NoopBlacklistTracker(_conf, taskScheduler.asInstanceOf[TaskSchedulerImpl])
     }
-    _blacklistTracker.foreach(_.start())
+    _blacklistTracker.start()
 
     _cleaner =
       if (_conf.getBoolean("spark.cleaner.referenceTracking", true)) {
@@ -1778,7 +1778,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
       _executorAllocationManager.foreach(_.stop())
     }
     Utils.tryLogNonFatalError {
-      _blacklistTracker.foreach(_.stop())
+      _blacklistTracker.stop()
     }
 
     if (_listenerBusStarted) {

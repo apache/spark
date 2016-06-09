@@ -239,8 +239,7 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (!blacklistTracker.map(_.isExecutorBlacklisted(execId, stageId, index))
-            .getOrElse(false)) {
+      if (!blacklistTracker.isExecutorBlacklisted(execId, stageId, index)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
@@ -260,7 +259,7 @@ private[spark] class TaskSetManager(
 
   /** VisibleForTesting */
   private[scheduler] def setBlacklistTracker (tracker: BlacklistTracker) = {
-    blacklistTracker = Some(tracker)
+    blacklistTracker = tracker
   }
 
   /**
@@ -276,8 +275,7 @@ private[spark] class TaskSetManager(
 
     def canRunOnHost(index: Int): Boolean =
       !hasAttemptOnHost(index, host) &&
-        !blacklistTracker.map(_.isExecutorBlacklisted(execId, stageId, index))
-          .getOrElse(false)
+        !blacklistTracker.isExecutorBlacklisted(execId, stageId, index)
 
     if (!speculatableTasks.isEmpty) {
       // Check for process-local tasks; note that tasks can be process-local
@@ -624,9 +622,7 @@ private[spark] class TaskSetManager(
         " because task " + index + " has already completed successfully")
     }
 
-    blacklistTracker.foreach{
-      _.taskSucceeded(stageId, tasks(index).partitionId, info)
-    }
+    blacklistTracker.taskSucceeded(stageId, tasks(index).partitionId, info)
     maybeFinishTaskSet()
   }
 
@@ -710,9 +706,7 @@ private[spark] class TaskSetManager(
     }
 
     // always add to failed executors
-    blacklistTracker.foreach {
-      _.taskFailed(stageId, tasks(index).partitionId, info)
-    }
+    blacklistTracker.taskFailed(stageId, tasks(index).partitionId, info)
 
     sched.dagScheduler.taskEnded(tasks(index), reason, null, accumUpdates, info)
 
