@@ -191,18 +191,19 @@ class UnsupportedOperationsSuite extends SparkFunSuite {
 
   // Sort: supported only on batch subplans and on aggregation + complete output mode
   testUnaryOperatorInStreamingPlan("sort", Sort(Nil, true, _))
-  testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
   assertSupportedInStreamingPlan(
     "sort - sort over aggregated data in Complete output mode",
-    Sort(Nil, true, Aggregate(Nil, aggExprs("c"), streamRelation)),
+    streamRelation.groupBy()(Count("*")).sortBy(),
     Complete)
   assertNotSupportedInStreamingPlan(
     "sort - sort over aggregated data in Update output mode",
-    Sort(Nil, true, Aggregate(Nil, aggExprs("c"), streamRelation)),
+    streamRelation.groupBy()(Count("*")).sortBy(),
     Update,
     Seq("sort", "aggregat", "complete")) // sort on aggregations is supported on Complete mode only
 
+
   // Other unary operations
+  testUnaryOperatorInStreamingPlan("sort partitions", SortPartitions(Nil, _), expectedMsg = "sort")
   testUnaryOperatorInStreamingPlan(
     "sample", Sample(0.1, 1, true, 1L, _)(), expectedMsg = "sampling")
   testUnaryOperatorInStreamingPlan(

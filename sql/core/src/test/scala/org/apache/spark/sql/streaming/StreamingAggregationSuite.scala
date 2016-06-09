@@ -104,7 +104,7 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
     }
   }
 
-  test("operation after aggregate in complete mode") {
+  test("sort after aggregate in complete mode") {
     val inputData = MemoryStream[Int]
 
     val aggregated =
