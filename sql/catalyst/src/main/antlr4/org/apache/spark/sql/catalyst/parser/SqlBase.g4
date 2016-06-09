@@ -110,8 +110,8 @@ statement
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | (DESC | DESCRIBE) DATABASE EXTENDED? identifier                  #describeDatabase
     | REFRESH TABLE tableIdentifier                                    #refreshTable
-    | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
-    | UNCACHE TABLE identifier                                         #uncacheTable
+    | CACHE LAZY? TABLE tableIdentifier (AS? query)?                   #cacheTable
+    | UNCACHE TABLE tableIdentifier                                    #uncacheTable
     | CLEAR CACHE                                                      #clearCache
     | LOAD DATA LOCAL? INPATH path=STRING OVERWRITE? INTO TABLE
         tableIdentifier partitionSpec?                                 #loadData
