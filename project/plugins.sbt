@@ -29,6 +29,4 @@ addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.7.11")
 // In the long run, we should try to merge our patch upstream and switch to an upstream version of
 // the plugin; this is tracked at SPARK-14401.
 
-resolvers += "Spark fork of sbt-pom-reader" at "https://oss.sonatype.org/content/repositories/orgspark-project-1124"
-
 addSbtPlugin("org.spark-project" % "sbt-pom-reader" % "1.0.0-spark")
