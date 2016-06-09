@@ -341,10 +341,16 @@ object QueryTest {
    *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
+  def checkAnswer(
+      df: DataFrame,
+      expectedAnswer: Seq[Row],
+      checkToRDD: Boolean = true): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
-
+    if (checkToRDD) {
+      df.rdd.count()  // Also attempt to deserialize as an RDD [SPARK-15791]
+    }
 
     val sparkAnswer = try df.collect().toSeq catch {
       case e: Exception =>
