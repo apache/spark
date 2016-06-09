@@ -276,6 +276,10 @@ class DataFrameReader(object):
     def parquet(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
+        You can set the following JSON-specific options to deal with non-standard JSON files:
+            * ``mergeSchema`` (default ``false``): sets whether we should merge schemas collected \
+                from all Parquet part-files.
+
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
@@ -285,7 +289,7 @@ class DataFrameReader(object):
     @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths):
-        """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
+        """Loads a text file and returns a :class:`DataFrame` with a single string column named "value".
         If the directory structure of the text files contains partitioning information,
         those are ignored in the resulting DataFrame. To include partitioning information as
         columns, use ``read.format('text').load(...)``.
@@ -304,13 +308,13 @@ class DataFrameReader(object):
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
-            comment=None, header=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            nullValue=None, nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
-            maxColumns=None, maxCharsPerColumn=None, mode=None):
-        """Loads a CSV file and returns the result as a [[DataFrame]].
+            comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
+            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
+            negativeInf=None, dateFormat=None, maxColumns=None, maxCharsPerColumn=None, mode=None):
+        """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
         This function goes through the input once to determine the input schema. To avoid going
-        through the entire data once, specify the schema explicitly using [[schema]].
+        through the entire data once, specify the schema explicitly using ``schema``.
 
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
@@ -327,6 +331,8 @@ class DataFrameReader(object):
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
+        :param inferSchema: infers the input schema automatically from data. It requires one extra
+                       pass over the data. If None is set, it uses the default value, ``false``.
         :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
                                         being read should be skipped. If None is set, it uses
                                         the default value, ``false``.
@@ -377,6 +383,8 @@ class DataFrameReader(object):
             self.option("comment", comment)
         if header is not None:
             self.option("header", header)
+        if inferSchema is not None:
+            self.option("inferSchema", inferSchema)
         if ignoreLeadingWhiteSpace is not None:
             self.option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
         if ignoreTrailingWhiteSpace is not None:
@@ -463,7 +471,7 @@ class DataFrameReader(object):
 
 class DataFrameWriter(object):
     """
-    Interface used to write a [[DataFrame]] to external storage systems
+    Interface used to write a :class:`DataFrame` to external storage systems
     (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
     to access this.
 
@@ -700,7 +708,7 @@ class DataFrameWriter(object):
 
         In the case the table already exists, behavior of this function depends on the
         save mode, specified by the `mode` function (default to throwing an exception).
-        When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+        When `mode` is `Overwrite`, the schema of the :class:`DataFrame` does not need to be
         the same as that of the existing table.
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
@@ -787,7 +795,7 @@ class DataFrameWriter(object):
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None):
-        """Saves the content of the [[DataFrame]] in CSV format at the specified path.
+        """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.

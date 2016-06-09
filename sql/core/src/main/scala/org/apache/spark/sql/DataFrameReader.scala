@@ -376,6 +376,8 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`comment` (default empty string): sets the single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
+   * requires one extra pass over the data.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
    * from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
@@ -411,6 +413,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
    * [[DataFrame]] if no paths are passed in.
+   *
+   * You can set the following Parquet-specific option(s) for reading Parquet files:
+   * <li>`mergeSchema` (default `false`): sets whether we should merge schemas collected from all
+   * Parquet part-files.</li>
    *
    * @since 1.4.0
    */
