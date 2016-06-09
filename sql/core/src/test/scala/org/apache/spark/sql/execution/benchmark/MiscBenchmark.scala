@@ -170,12 +170,12 @@ class MiscBenchmark extends BenchmarkBase {
      */
   }
 
-  ignore("generate regular generator") {
-    val N = 1 << 20
+  test("generate regular generator") {
+    val N = 1 << 24
     runBenchmark("generate json_tuple", N) {
       val df = sparkSession.range(N).selectExpr(
         "id as key",
-        "concat('{key: ', id, ', value: \\'v_', id, '\\'}') json")
+        "concat('{\"key\": ', id, ', \"value\": \"v_', id, '\"}') json")
       df.selectExpr("key", "json_tuple(json, 'key', 'value') as (k, v)").count()
     }
 
@@ -185,8 +185,8 @@ class MiscBenchmark extends BenchmarkBase {
 
     generate json_tuple:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    generate json_tuple wholestage off            3136 / 3229          0.3        2990.4       1.0X
-    generate json_tuple wholestage on             2190 / 2211          0.5        2088.2       1.4X
+    generate json_tuple wholestage off          13097 / 13323          1.3         780.6       1.0X
+    generate json_tuple wholestage on           11815 / 11899          1.4         704.2       1.1X
      */
   }
 }
