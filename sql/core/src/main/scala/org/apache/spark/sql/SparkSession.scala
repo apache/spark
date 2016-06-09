@@ -228,6 +228,7 @@ class SparkSession private(
    * Creates a new [[Dataset]] of type T containing zero elements.
    *
    * @return 2.0.0
+   * @group dataset
    */
   @Experimental
   def emptyDataset[T: Encoder]: Dataset[T] = {
