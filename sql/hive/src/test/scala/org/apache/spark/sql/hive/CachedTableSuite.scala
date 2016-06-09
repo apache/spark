@@ -242,7 +242,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
       val tempTable = "cachedTable"
       withTempTable(tempTable) {
         Seq((1, "2")).toDF("int", "str").createOrReplaceTempView(tempTable)
-
         val e = intercept[AnalysisException] {
           sql(s"CACHE TABLE $tempTable AS SELECT 1")
         }.getMessage
