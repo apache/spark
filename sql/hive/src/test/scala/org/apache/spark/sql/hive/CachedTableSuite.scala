@@ -264,12 +264,12 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
   }
 
   test("SPARK-11246 cache parquet table") {
-    withTable("cachedTable") {
-      sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
+    sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
 
-      cacheTable("cachedTable")
-      val sparkPlan = sql("SELECT * FROM cachedTable").queryExecution.sparkPlan
-      assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 1)
-    }
+    cacheTable("cachedTable")
+    val sparkPlan = sql("SELECT * FROM cachedTable").queryExecution.sparkPlan
+    assert(sparkPlan.collect { case e: InMemoryTableScanExec => e }.size === 1)
+
+    sql("DROP TABLE cachedTable")
   }
 }
