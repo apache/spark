@@ -632,11 +632,11 @@ class ParquetQuerySuite extends QueryTest with ParquetTest with SharedSQLContext
     val dfWithmeta = df.select('a, 'b.as("b", md))
 
     withTempPath { dir =>
-      val path = s"${dir.getCanonicalPath}/data"
+      val path = s"${dir.getCanonicalPath}"
       dfWithmeta.write.parquet(path)
 
       readParquetFile(path) { df =>
-        assert(df.schema.json.contains("\"key\":\"value\""))
+        assert(df.schema.last.metadata.getString("key") == "value")
       }
     }
   }
