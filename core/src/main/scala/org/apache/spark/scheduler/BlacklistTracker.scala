@@ -85,13 +85,22 @@ private[spark] class BlacklistTracker(
     }
   }
 
-  def taskSetCompleted(stageId: Int): Unit = {
+  def taskSetSucceeded(stageId: Int): Unit = {
+    // TODO
+  }
+
+  def taskSetFailed(stageId: Int): Unit = {
     // TODO
   }
 
   def isExecutorBlacklisted(stageId: Int, executorId: String): Boolean = {
     // TODO
     false
+  }
+
+  def executorBlacklist(): Set[String] = {
+    // TODO
+    Set()
   }
 
   // The actual implementation is delegated to strategy
@@ -327,13 +336,19 @@ private[spark] class NoopBlacklistTracker(
   override def start: Unit = {}
   override def stop: Unit = {}
 
-  override def taskSetCompleted(stageId: Int): Unit = {}
+  override def taskSetSucceeded(stageId: Int): Unit = {}
+
+  override def taskSetFailed(stageId: Int): Unit = {}
 
   override def isExecutorBlacklisted(stageId: Int, executorId: String): Boolean = {
     false
   }
 
   override def executorBlacklist(stageId: Int, partition: Int): Set[String] = {
+    Set()
+  }
+
+  override def executorBlacklist(): Set[String] = {
     Set()
   }
 

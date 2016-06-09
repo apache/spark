@@ -182,12 +182,47 @@ class BlacklistTrackerSuite extends SparkFunSuite with BeforeAndAfter with Mocki
     pending
   }
 
-  test("executors can be blacklisted with only a few failures per stage") {
-    pending
+  def trackerFixture: BlacklistTracker = {
+     val conf = new SparkConf().setAppName("test").setMaster("local")
+      .set("spark.ui.enabled", "false")
+      .set("spark.scheduler.blacklist.advancedStrategy", "true")
+      .set("spark.scheduler.executorTaskBlacklistTime", "1000")
+    val scheduler = mock[TaskSchedulerImpl]
+    when(scheduler.getExecutorsAliveOnHost("hostA")).thenReturn(Some(Set("1", "2", "4")))
+    Set("1", "2", "4").foreach { execId =>
+      when(scheduler.getHostForExecutor(execId)).thenReturn("hostA")
+    }
+
+    clock.setTime(0)
+    new BlacklistTracker(conf, scheduler, clock)
   }
 
+  test("executors can be blacklisted with only a few failures per stage") {
+    val tracker = trackerFixture
+    // for 4 different stages, executor 1 fails a task, then executor 2 succeeds the task,
+    // and then the task set is done.  Not enough failures to blacklist the executor *within*
+    // any particular taskset, but we still blacklist the executor overall eventually
+    (0 until 4).foreach { stage =>
+      tracker.taskFailed(stage, 0,
+        new TaskInfo(stage, 0, 0, 0, "1", "hostA", TaskLocality.ANY, false))
+      tracker.taskSucceeded(stage, 0,
+        new TaskInfo(stage, 0, 1, 0, "2", "hostA", TaskLocality.ANY, false))
+      tracker.taskSetSucceeded(stage)
+    }
+    assert(tracker.executorBlacklist() === Set("1"))
+  }
+
+  // if an executor has many task failures, but the task set ends up failing, don't count it
+  // against the executor
   test("executors aren't blacklisted if task sets fail") {
-    pending
+    val tracker = trackerFixture
+    // for 4 different stages, executor 1 fails a task, and then the taskSet fails.
+    (0 until 4).foreach { stage =>
+      tracker.taskFailed(stage, 0,
+        new TaskInfo(stage, 0, 0, 0, "1", "hostA", TaskLocality.ANY, false))
+      tracker.taskSetFailed(stage)
+    }
+    assert(tracker.executorBlacklist() === Set())
   }
 
   test("blacklisted executors and nodes get recovered with time") {
