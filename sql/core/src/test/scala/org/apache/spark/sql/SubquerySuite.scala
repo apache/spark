@@ -54,7 +54,7 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     t.createOrReplaceTempView("t")
   }
 
-  test("rdd deserialization does not crash") {
+  test("rdd deserialization does not crash [SPARK-15791]") {
     sql("select (select 1 as b) as b").rdd.count()
   }
 
