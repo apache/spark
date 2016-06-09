@@ -17,6 +17,29 @@
 
 package org.apache.spark.ml.r
 
+import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.sql.Dataset
+
 object RWrapperUtils {
 
+  /**
+   * DataFrame column check.
+   * When loading data, default columns "features" and "label" will be added. And these two names
+   * would conflict with RFormula default feature and label column names.
+   * Here is to change the column name to avoid "column already exists" error.
+   *
+   * @param rFormula RFormula instance
+   * @param data input dataset
+   * @return Unit
+   */
+  def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
+
+    if (data.schema.fieldNames.contains("label")) {
+      rFormula.setLabelCol("label_output")
+    }
+
+    if (data.schema.fieldNames.contains("features")) {
+      rFormula.setFeaturesCol("features_output")
+    }
+  }
 }
