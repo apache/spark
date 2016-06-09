@@ -102,7 +102,7 @@ class MiscBenchmark extends BenchmarkBase {
     }
     benchmark.run()
 
-    /**
+    /*
     Intel(R) Core(TM) i7-4558U CPU @ 2.80GHz
     collect:                            Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
@@ -124,7 +124,7 @@ class MiscBenchmark extends BenchmarkBase {
     }
     benchmark.run()
 
-    /**
+    /*
     model name      : Westmere E56xx/L56xx/X56xx (Nehalem-C)
     collect limit:                      Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     -------------------------------------------------------------------------------------------
@@ -135,20 +135,58 @@ class MiscBenchmark extends BenchmarkBase {
 
   ignore("generate explode") {
     val N = 1 << 24
-    runBenchmark("generate explode", N) {
+    runBenchmark("generate explode array", N) {
       val df = sparkSession.range(N).selectExpr(
         "id as key",
         "array(rand(), rand(), rand(), rand(), rand()) as values")
       df.selectExpr("key", "explode(values) value").count()
     }
 
-    /**
-    Java HotSpot(TM) 64-Bit Server VM 1.8.0_66-b17 on Linux 4.4.0-21-generic
-    Intel(R) Core(TM) i7-4750HQ CPU @ 2.00GHz
-    generate explode:                        Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate explode array:                  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
     ------------------------------------------------------------------------------------------------
-    generate explode wholestage off               8916 / 9250          1.9         531.5       1.0X
-    generate explode wholestage on                 732 /  781         22.9          43.6      12.2X
+    generate explode array wholestage off         7095 / 7331          2.4         422.9       1.0X
+    generate explode array wholestage on           631 /  641         26.6          37.6      11.2X
+     */
+
+    runBenchmark("generate explode map", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "map('a', rand(), 'b', rand(), 'c', rand(), 'd', rand(), 'e', rand()) pairs")
+      df.selectExpr("key", "explode(pairs) as (k, v)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate explode map:                    Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate explode map wholestage off         12856 / 13569          1.3         766.3       1.0X
+    generate explode map wholestage on             865 /  873         19.4          51.6      14.9X
+     */
+  }
+
+  ignore("generate regular generator") {
+    val N = 1 << 20
+    runBenchmark("generate json_tuple", N) {
+      val df = sparkSession.range(N).selectExpr(
+        "id as key",
+        "concat('{key: ', id, ', value: \\'v_', id, '\\'}') json")
+      df.selectExpr("key", "json_tuple(json, 'key', 'value') as (k, v)").count()
+    }
+
+    /*
+    Java HotSpot(TM) 64-Bit Server VM 1.8.0_92-b14 on Mac OS X 10.11.4
+    Intel(R) Core(TM) i7-4980HQ CPU @ 2.80GHz
+
+    generate json_tuple:                     Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+    ------------------------------------------------------------------------------------------------
+    generate json_tuple wholestage off            3136 / 3229          0.3        2990.4       1.0X
+    generate json_tuple wholestage on             2190 / 2211          0.5        2088.2       1.4X
      */
   }
 }
