@@ -236,24 +236,30 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("Cache Table As Select ") {
+  test("Cache Table As Select - temp table already exists") {
     import testImplicits._
     withTempDatabase { db =>
       val tempTable = "cachedTable"
       withTempTable(tempTable) {
         Seq((1, "2")).toDF("int", "str").createOrReplaceTempView(tempTable)
 
-        var e = intercept[ParseException] {
-          sql(s"CACHE TABLE $db.$tempTable AS SELECT 1")
-        }.getMessage
-        assert(e.contains("It is not allowed to add database prefix ") &&
-          e.contains("to the table name in Cache Table As Select"))
-
-        e = intercept[AnalysisException] {
+        val e = intercept[AnalysisException] {
           sql(s"CACHE TABLE $tempTable AS SELECT 1")
         }.getMessage
         assert(e.contains("Could not create a temporary view in Cache Table As Select, " +
           s"because temporary view `$tempTable` already exists"))
+      }
+    }
+  }
+
+  test("Cache Table As Select - having database name") {
+    withTempDatabase { db =>
+      withTempTable("cachedTable") {
+        val e = intercept[ParseException] {
+          sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
+        }.getMessage
+        assert(e.contains("It is not allowed to add database prefix ") &&
+          e.contains("to the table name in Cache Table As Select"))
       }
     }
   }
