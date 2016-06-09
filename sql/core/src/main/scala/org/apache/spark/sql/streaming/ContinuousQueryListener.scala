@@ -18,6 +18,7 @@
 package org.apache.spark.sql.streaming
 
 import org.apache.spark.annotation.Experimental
+import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
  * :: Experimental ::
@@ -70,26 +71,43 @@ abstract class ContinuousQueryListener {
 object ContinuousQueryListener {
 
   /**
-   * Base type of [[ContinuousQueryListener]] events.
+   * :: Experimental ::
+   * Base type of [[ContinuousQueryListener]] events
    * @since 2.0.0
    */
-  trait Event
+  @Experimental
+  trait Event extends SparkListenerEvent
 
   /**
-   * Event representing the start of a query.
+   * :: Experimental ::
+   * Event representing the start of a query
    * @since 2.0.0
    */
-  class QueryStarted private[sql](val query: ContinuousQuery) extends Event
+  @Experimental
+  class QueryStarted private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 
   /**
-   * Event representing any progress updates in a query.
+   * :: Experimental ::
+   * Event representing any progress updates in a query
    * @since 2.0.0
    */
-  class QueryProgress private[sql](val query: ContinuousQuery) extends Event
+  @Experimental
+  class QueryProgress private[sql](val queryInfo: ContinuousQueryInfo) extends Event
 
   /**
-   * Event representing that termination of a query.
+   * :: Experimental ::
+   * Event representing that termination of a query
+   *
+   * @param queryInfo Information about the status of the query.
+   * @param exception The exception message of the [[ContinuousQuery]] if the query was terminated
+   *                  with an exception. Otherwise, it will be `None`.
+   * @param stackTrace The stack trace of the exception if the query was terminated with an
+   *                   exception. It will be empty if there was no error.
    * @since 2.0.0
    */
-  class QueryTerminated private[sql](val query: ContinuousQuery) extends Event
+  @Experimental
+  class QueryTerminated private[sql](
+      val queryInfo: ContinuousQueryInfo,
+      val exception: Option[String],
+      val stackTrace: Seq[StackTraceElement]) extends Event
 }
