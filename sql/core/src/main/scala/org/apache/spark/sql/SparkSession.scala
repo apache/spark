@@ -71,7 +71,7 @@ import org.apache.spark.util.Utils
  * @groupname basic Basic Operations
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
- * @groupname dataset Custom DataFrame Creation
+ * @groupname dataset Custom Dataset Creation
  * @groupname ddl_ops Persistent Catalog DDL
  * @groupname genericdata Generic Data Sources
  * @groupname Ungrouped Support functions for language integrated queries
