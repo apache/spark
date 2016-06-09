@@ -51,7 +51,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
- * @groupname dataset Custom DataFrame Creation
+ * @groupname dataset Custom Dataset Creation
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
