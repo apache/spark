@@ -585,6 +585,8 @@ class IDF(JavaEstimator, HasInputCol, HasOutputCol, JavaMLReadable, JavaMLWritab
     ...     (DenseVector([0.0, 1.0]),), (DenseVector([3.0, 0.2]),)], ["tf"])
     >>> idf = IDF(minDocFreq=3, inputCol="tf", outputCol="idf")
     >>> model = idf.fit(df)
+    >>> model.idf
+    DenseVector([0.0, 0.0])
     >>> model.transform(df).head().idf
     DenseVector([0.0, 0.0])
     >>> idf.setParams(outputCol="freqs").fit(df).transform(df).collect()[1].freqs
@@ -657,6 +659,14 @@ class IDFModel(JavaModel, JavaMLReadable, JavaMLWritable):
 
     .. versionadded:: 1.4.0
     """
+
+    @property
+    @since("2.0.0")
+    def idf(self):
+        """
+        Returns the IDF vector.
+        """
+        return self._call_java("idf")
 
 
 @inherit_doc
