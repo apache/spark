@@ -403,9 +403,9 @@ class KMeans(JavaEstimator, HasFeaturesCol, HasPredictionCol, HasMaxIter, HasTol
     >>> summary.k
     2
     >>> summary.predictionCol
-    'prediction'
+    u'prediction'
     >>> summary.featuresCol
-    'features'
+    u'features'
     >>> summary.clusterSizes
     [2, 2]
     >>> rows = summary.predictions.collect()
