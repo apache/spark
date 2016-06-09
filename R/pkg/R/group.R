@@ -187,13 +187,13 @@ setMethod("gapply",
           signature(x = "GroupedData"),
           function(x, func, schema) {
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
-                                         connection = NULL)
+                                 connection = NULL)
             broadcastArr <- lapply(ls(.broadcastNames),
-                                   function(name) { get(name, .broadcastNames) })
+                              function(name) { get(name, .broadcastNames) })
             sdf <- callJMethod(x@sgd, "flatMapGroupsInR",
-                               serialize(cleanClosure(func), connection = NULL),
-                               packageNamesArr,
-                               broadcastArr,
-                               schema$jobj)
+                     serialize(cleanClosure(func), connection = NULL),
+                     packageNamesArr,
+                     broadcastArr,
+                     schema$jobj)
             dataFrame(sdf)
           })
