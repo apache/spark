@@ -353,7 +353,7 @@ private[yarn] class YarnAllocator(
 
     } else if (missing < 0) {
       val numToCancel = math.min(numPendingAllocate, -missing)
-      logInfo(s"Canceled requests for $numToCancel executor container(s)")
+      logInfo(s"Canceling requests for $numToCancel executor container(s) to have a new desired total $targetNumExecutors executors.")
 
       val matchingRequests = amClient.getMatchingRequests(RM_REQUEST_PRIORITY, ANY_HOST, resource)
       if (!matchingRequests.isEmpty) {
