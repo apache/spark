@@ -278,7 +278,7 @@ class DataFrameReader(object):
 
         You can set the following Parquet-specific option(s) for reading Parquet files:
             * ``mergeSchema`` (default ``false``): sets whether we should merge schemas collected \
-                from all Parquet part-files.
+                from all Parquet part-files. This will overwrite ``spark.sql.parquet.mergeSchema``.
 
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
