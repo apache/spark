@@ -170,7 +170,7 @@ class MiscBenchmark extends BenchmarkBase {
      */
   }
 
-  test("generate regular generator") {
+  ignore("generate regular generator") {
     val N = 1 << 24
     runBenchmark("generate json_tuple", N) {
       val df = sparkSession.range(N).selectExpr(
