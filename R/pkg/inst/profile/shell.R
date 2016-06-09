@@ -24,11 +24,11 @@
   old <- getOption("defaultPackages")
   options(defaultPackages = c(old, "SparkR"))
 
-  sc <- SparkR::sparkR.init()
+  spark <- SparkR::sparkR.session.getOrCreate()
+  assign("spark", spark, envir=.GlobalEnv)
+  sc <- SparkR:::callJMethod(spark, "sparkContext")
   assign("sc", sc, envir=.GlobalEnv)
-  sqlContext <- SparkR::sparkRSQL.init(sc)
   sparkVer <- SparkR:::callJMethod(sc, "version")
-  assign("sqlContext", sqlContext, envir=.GlobalEnv)
   cat("\n Welcome to")
   cat("\n")
   cat("    ____              __", "\n")
@@ -43,5 +43,5 @@
   cat("    /_/", "\n")
   cat("\n")
 
-  cat("\n Spark context is available as sc, SQL context is available as sqlContext\n")
+  cat("\n SparkSession available as 'spark'.\n")
 }

@@ -20,10 +20,7 @@ library(testthat)
 context("MLlib functions")
 
 # Tests for MLlib functions in SparkR
-
-sc <- sparkR.init()
-
-sqlContext <- sparkRSQL.init(sc)
+sparkSession <- sparkR.session.getOrCreate()
 
 test_that("formula of spark.glm", {
   training <- suppressWarnings(createDataFrame(iris))
@@ -456,3 +453,5 @@ test_that("spark.survreg", {
     expect_equal(predict(model, rData)[[1]], 3.724591, tolerance = 1e-4)
   }
 })
+
+#sparkR.session.stop()

@@ -40,19 +40,18 @@ setHiveContext <- function(sc) {
   error = function(err) {
     skip("Hive is not build with SparkSQL, skipped")
   })
-  assign(".sparkRHivesc", hiveCtx, envir = .sparkREnv)
+  assign(".sparkRsession", hiveCtx, envir = .sparkREnv)
   hiveCtx
 }
 
 unsetHiveContext <- function() {
-  remove(".sparkRHivesc", envir = .sparkREnv)
+  remove(".sparkRsession", envir = .sparkREnv)
 }
 
 # Tests for SparkSQL functions in SparkR
 
-sc <- sparkR.init()
-
-sqlContext <- sparkRSQL.init(sc)
+sparkSession <- sparkR.session.getOrCreate()
+sc <- callJStatic("org.apache.spark.sql.api.r.SQLUtils", "getJavaSparkContext", sparkSession)
 
 mockLines <- c("{\"name\":\"Michael\"}",
                "{\"name\":\"Andy\", \"age\":30}",
@@ -79,7 +78,16 @@ complexTypeJsonPath <- tempfile(pattern = "sparkr-test", fileext = ".tmp")
 writeLines(mockLinesComplexType, complexTypeJsonPath)
 
 test_that("calling sparkRSQL.init returns existing SQL context", {
-  expect_equal(sparkRSQL.init(sc), sqlContext)
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sqlContext)
+})
+
+test_that("calling sparkRSQL.init returns existing SparkSession", {
+  expect_equal(suppressWarnings(sparkRSQL.init(sc)), sparkSession)
+})
+
+test_that("calling sparkR.session.getOrCreate returns existing SparkSession", {
+  expect_equal(sparkR.session.getOrCreate(), sparkSession)
 })
 
 test_that("infer types and check types", {
@@ -431,6 +439,7 @@ test_that("read/write json files", {
 })
 
 test_that("jsonRDD() on a RDD with json string", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   rdd <- parallelize(sc, mockLines)
   expect_equal(count(rdd), 3)
   df <- suppressWarnings(jsonRDD(sqlContext, rdd))
@@ -2257,6 +2266,7 @@ test_that("Window functions on a DataFrame", {
 })
 
 test_that("createDataFrame sqlContext parameter backward compatibility", {
+  sqlContext <- suppressWarnings(sparkRSQL.init(sc))
   a <- 1:3
   b <- c("a", "b", "c")
   ldf <- data.frame(a, b)
@@ -2297,6 +2307,7 @@ test_that("randomSplit", {
   expect_equal(num, sum(counts))
   expect_true(all(sapply(abs(counts / num - weights / sum(weights)), function(e) { e < 0.05 })))
 })
+
 
 unlink(parquetPath)
 unlink(jsonPath)
