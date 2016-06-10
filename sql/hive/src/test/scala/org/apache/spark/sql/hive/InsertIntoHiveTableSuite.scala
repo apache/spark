@@ -365,7 +365,12 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
       data.write.insertInto("source")
       checkAnswer(sql("SELECT * FROM source"), data.collect().toSeq)
 
-      spark.table("source").write.option("matchByName", true).insertInto("partitioned")
+      intercept[AnalysisException] {
+        spark.table("source").write.option("matchByName", true).insertInto("partitioned")
+      }
+
+      spark.table("source").select("data", "id", "part").write.option("matchByName", true)
+          .insertInto("partitioned")
 
       val expected = data.select("id", "data", "part")
       checkAnswer(sql("SELECT * FROM partitioned"), expected.collect().toSeq)

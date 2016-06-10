@@ -518,9 +518,9 @@ class Analyzer(
   }
 
   object ResolveOutputColumns extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperators {
       case ins @ InsertIntoTable(relation: LogicalPlan, partition, _, _, _, _)
-          if relation.resolved && !ins.resolved =>
+          if relation.resolved && ins.childrenResolved && !ins.resolved =>
         resolveOutputColumns(ins, expectedColumns(relation, partition), relation.toString)
     }
 
@@ -548,9 +548,23 @@ class Analyzer(
         output: Seq[Attribute],
         data: LogicalPlan,
         relation: String): Seq[NamedExpression] = {
+      if (output.size > data.output.size) {
+        // always a problem
+        throw new AnalysisException(
+          s"""Not enough data columns to write into $relation:
+              |Data columns: ${data.output.mkString(",")}
+              |Table columns: ${output.mkString(",")}""".stripMargin)
+      } else if (output.size < data.output.size) {
+        // be conservative and fail if there are too many columns
+        throw new AnalysisException(
+          s"""Extra data columns to write into $relation:
+              |Data columns: ${data.output.mkString(",")}
+              |Table columns: ${output.mkString(",")}""".stripMargin)
+      }
+
       output.map { col =>
         data.resolveQuoted(col.name, resolver) match {
-          case Some(inCol) if col.dataType != inCol.dataType =>
+          case Some(inCol) if !col.dataType.sameType(inCol.dataType) =>
             Alias(UpCast(inCol, col.dataType, Seq()), col.name)()
           case Some(inCol) => inCol
           case None =>
@@ -574,18 +588,11 @@ class Analyzer(
              |Data columns: ${data.output.mkString(",")}
              |Table columns: ${outputNames.mkString(",")}""".stripMargin)
       } else if (output.size < data.output.size) {
-        if (outputNames.toSet.subsetOf(inputNames.toSet)) {
-          throw new AnalysisException(
-            s"""Table column names are a subset of the input data columns:
-               |Data columns: ${inputNames.mkString(",")}
-               |Table columns: ${outputNames.mkString(",")}""".stripMargin)
-        } else {
-          // be conservative and fail if there are too many columns
-          throw new AnalysisException(
-            s"""Extra data columns to write into $relation:
-               |Data columns: ${data.output.mkString(",")}
-               |Table columns: ${outputNames.mkString(",")}""".stripMargin)
-        }
+        // be conservative and fail if there are too many columns
+        throw new AnalysisException(
+          s"""Extra data columns to write into $relation:
+             |Data columns: ${data.output.mkString(",")}
+             |Table columns: ${outputNames.mkString(",")}""".stripMargin)
       } else {
         // check for reordered names and warn. this may be on purpose, so it isn't an error.
         if (outputNames.toSet == inputNames.toSet && outputNames != inputNames) {
