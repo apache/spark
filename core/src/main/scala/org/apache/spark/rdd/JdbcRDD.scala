@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.sql.{Connection, ResultSet}
+import java.sql.{Connection, ResultSet, PreparedStatement}
 
 import scala.reflect.ClassTag
 
@@ -27,10 +27,6 @@ import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.internal.Logging
 import org.apache.spark.util.NextIterator
-
-private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) extends Partition {
-  override def index: Int = idx
-}
 
 // TODO: Expose a jdbcRDD function in SparkContext and mark this as semi-private
 /**
@@ -56,26 +52,32 @@ class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,
     sql: String,
+    partitions: JdbcPartitions,
+    mapRow: (ResultSet) => T)
+  extends RDD[T](sc, Nil) with Logging {
+  
+  def this(
+    sc: SparkContext,
+    getConnection: () => Connection,
+    sql: String,
     lowerBound: Long,
     upperBound: Long,
     numPartitions: Int,
-    mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _)
-  extends RDD[T](sc, Nil) with Logging {
-
+    mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _) {
+    this(sc, getConnection, sql, JdbcPartitions(lowerBound, upperBound, numPartitions), mapRow)
+  }
+  
   override def getPartitions: Array[Partition] = {
-    // bounds are inclusive, hence the + 1 here and - 1 on end
-    val length = BigInt(1) + upperBound - lowerBound
-    (0 until numPartitions).map { i =>
-      val start = lowerBound + ((i * length) / numPartitions)
-      val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
-      new JdbcPartition(i, start.toLong, end.toLong)
+    partitions.mapPartition { case(partition, index) =>
+      new JdbcPartitionAdapter(index, partition, 
+          partitions.lowerBoundParameterIndexes, 
+          partitions.upperBoundParameterIndexes)
     }.toArray
   }
 
-  override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T]
-  {
+  override def compute(thePart: Partition, context: TaskContext): Iterator[T] = new NextIterator[T] {
     context.addTaskCompletionListener{ context => closeIfNeeded() }
-    val part = thePart.asInstanceOf[JdbcPartition]
+    val part = thePart.asInstanceOf[JdbcPartitionAdapter]
     val conn = getConnection()
     val stmt = conn.prepareStatement(sql, ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY)
 
@@ -87,8 +89,7 @@ class JdbcRDD[T: ClassTag](
       logInfo("statement fetch size set to: " + stmt.getFetchSize + " to force MySQL streaming ")
     }
 
-    stmt.setLong(1, part.lower)
-    stmt.setLong(2, part.upper)
+    part.fill(stmt)
     val rs = stmt.executeQuery()
 
     override def getNext(): T = {
@@ -123,6 +124,101 @@ class JdbcRDD[T: ClassTag](
       } catch {
         case e: Exception => logWarning("Exception closing connection", e)
       }
+    }
+  }
+}
+
+class JdbcPartitions(
+    private val partitions: Seq[JdbcPartition],
+    val lowerBoundParameterIndexes:Seq[Int] = JdbcPartitions.DefaultLowerBoundParameterIndexes,
+    val upperBoundParameterIndexes:Seq[Int] = JdbcPartitions.DefaultUpperBoundParameterIndexes) 
+  extends Serializable {
+  private[spark] def mapPartition[R](f: (JdbcPartition, Int) => R): Seq[R] = {
+    partitions.view.zipWithIndex.map{ case(partition, index) => 
+      f(partition, index)
+    }
+  }
+}
+    
+object JdbcPartitions {
+
+  def apply(lowerBound: Long, upperBound: Long, numPartitions: Int, 
+      lowerBoundParameterIndexes:Seq[Int] = DefaultLowerBoundParameterIndexes, 
+      upperBoundParameterIndexes:Seq[Int] = DefaultUpperBoundParameterIndexes
+      ): JdbcPartitions = {
+    // bounds are inclusive, hence the + 1 here and - 1 on end
+    val length = BigInt(1) + upperBound - lowerBound
+    val partitions = (0 until numPartitions).map { i =>
+      val start = lowerBound + ((i * length) / numPartitions)
+      val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
+      JdbcPartition.longPartition(start.toLong, end.toLong)
+    }
+    
+    new JdbcPartitions(partitions, lowerBoundParameterIndexes, upperBoundParameterIndexes)
+  }
+
+  def apply(partitions: JdbcPartition*): JdbcPartitions = {
+    new JdbcPartitions(partitions, DefaultLowerBoundParameterIndexes, DefaultUpperBoundParameterIndexes)
+  }
+  
+  private val DefaultLowerBoundParameterIndexes = Seq(1)
+  private val DefaultUpperBoundParameterIndexes = Seq(2)
+  
+}
+    
+trait JdbcPartition extends Serializable {
+  def fillLowerBound(paramterIndex: Int, stmt: PreparedStatement): Unit
+  
+  def fillUpperBound(paramterIndex: Int, stmt: PreparedStatement): Unit
+}
+
+object JdbcPartition {
+  def longPartition(lowerBound: Long, upperBound: Long): JdbcPartition = {
+    new LongJdbcPartition(lowerBound, upperBound)
+  }
+
+  def stringPartition(lowerBound: String, upperBound: String): JdbcPartition = {
+    new StringJdbcPartition(lowerBound, upperBound)
+  }
+}
+
+private class LongJdbcPartition(
+    val lowerBound: Long,
+    val upperBound: Long) 
+  extends JdbcPartition {
+  override def fillLowerBound(paramterIndex: Int, stmt: PreparedStatement): Unit = {
+    stmt.setLong(paramterIndex, lowerBound)
+  }
+
+  override def fillUpperBound(paramterIndex: Int, stmt: PreparedStatement): Unit = {
+    stmt.setLong(paramterIndex, upperBound)
+  }
+}
+
+private class StringJdbcPartition(
+    val lowerBound: String,
+    val upperBound: String) 
+  extends JdbcPartition {
+  override def fillLowerBound(paramterIndex: Int, stmt: PreparedStatement): Unit = {
+    stmt.setString(paramterIndex, lowerBound)
+  }
+
+  override def fillUpperBound(paramterIndex: Int, stmt: PreparedStatement): Unit = {
+    stmt.setString(paramterIndex, upperBound)
+  }
+}
+
+private class JdbcPartitionAdapter(
+    val index: Int, partition: JdbcPartition,
+    val lowerBoundParameterIndexes:Seq[Int],
+    val upperBoundParameterIndexes:Seq[Int]) extends Partition {
+  def fill(stmt: PreparedStatement): Unit = {
+    lowerBoundParameterIndexes.foreach { paramterIndex =>
+      partition.fillLowerBound(paramterIndex, stmt)
+    }
+    
+    upperBoundParameterIndexes.foreach { paramterIndex =>
+      partition.fillUpperBound(paramterIndex, stmt)
     }
   }
 }
@@ -208,5 +304,14 @@ object JdbcRDD {
     }
 
     create(sc, connectionFactory, sql, lowerBound, upperBound, numPartitions, mapRow)
+  }
+  
+  def create[T: ClassTag](
+    sc: SparkContext,
+    getConnection: () => Connection,
+    sql: String,
+    partitions: JdbcPartitions,
+    mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _): JdbcRDD[T] = {
+    new JdbcRDD(sc, getConnection, sql, partitions, mapRow)
   }
 }
