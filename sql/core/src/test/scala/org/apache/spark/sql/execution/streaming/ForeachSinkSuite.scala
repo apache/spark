@@ -21,55 +21,43 @@ import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.collection.mutable
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.test.SharedSQLContext
 
-class ForeachSinkSuite extends StreamTest with SharedSQLContext {
+class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
 
   import testImplicits._
 
+  after {
+    sqlContext.streams.active.foreach(_.stop())
+  }
+
   test("foreach") {
-    ForeachWriterEvent.clear()
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(2).write
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .foreach(new ForeachWriter[Int] {
-
-          private val events = mutable.ArrayBuffer[ForeachWriterEvent.Event]()
-
-          override def open(partitionId: Long, version: Long): Boolean = {
-            events += ForeachWriterEvent.Open(partition = partitionId, version = version)
-            true
-          }
-
-          override def process(value: Int): Unit = {
-            events += ForeachWriterEvent.Process(value)
-          }
-
-          override def close(errorOrNull: Throwable): Unit = {
-            events += ForeachWriterEvent.Close(error = Option(errorOrNull))
-            ForeachWriterEvent.addEvents(events)
-          }
-        })
+        .foreach(new TestForeachWriter())
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 
       val expectedEventsForPartition0 = Seq(
-        ForeachWriterEvent.Open(partition = 0, version = 0),
-        ForeachWriterEvent.Process(value = 1),
-        ForeachWriterEvent.Process(value = 3),
-        ForeachWriterEvent.Close(None)
+        ForeachSinkSuite.Open(partition = 0, version = 0),
+        ForeachSinkSuite.Process(value = 1),
+        ForeachSinkSuite.Process(value = 3),
+        ForeachSinkSuite.Close(None)
       )
       val expectedEventsForPartition1 = Seq(
-        ForeachWriterEvent.Open(partition = 1, version = 0),
-        ForeachWriterEvent.Process(value = 2),
-        ForeachWriterEvent.Process(value = 4),
-        ForeachWriterEvent.Close(None)
+        ForeachSinkSuite.Open(partition = 1, version = 0),
+        ForeachSinkSuite.Process(value = 2),
+        ForeachSinkSuite.Process(value = 4),
+        ForeachSinkSuite.Close(None)
       )
 
-      val allEvents = ForeachWriterEvent.allEvents()
+      val allEvents = ForeachSinkSuite.allEvents()
       assert(allEvents.size === 2)
       assert {
         allEvents === Seq(expectedEventsForPartition0, expectedEventsForPartition1) ||
@@ -79,42 +67,25 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext {
     }
   }
 
-  test("foreach error") {
-    ForeachWriterEvent.clear()
+  test("foreach with error") {
     withTempDir { checkpointDir =>
       val input = MemoryStream[Int]
       val query = input.toDS().repartition(1).write
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
-        .foreach(new ForeachWriter[Int] {
-
-          private val events = mutable.ArrayBuffer[ForeachWriterEvent.Event]()
-
-          private var currentPartitionId = -1L
-
-          override def open(partitionId: Long, version: Long): Boolean = {
-            currentPartitionId = partitionId
-            events += ForeachWriterEvent.Open(partition = partitionId, version = version)
-            true
-          }
-
+        .foreach(new TestForeachWriter() {
           override def process(value: Int): Unit = {
-            events += ForeachWriterEvent.Process(value)
+            super.process(value)
             throw new RuntimeException("error")
-          }
-
-          override def close(errorOrNull: Throwable): Unit = {
-            events += ForeachWriterEvent.Close(error = Option(errorOrNull))
-            ForeachWriterEvent.addEvents(events)
           }
         })
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 
-      val allEvents = ForeachWriterEvent.allEvents()
+      val allEvents = ForeachSinkSuite.allEvents()
       assert(allEvents.size === 1)
-      assert(allEvents(0)(0) === ForeachWriterEvent.Open(partition = 0, version = 0))
-      assert(allEvents(0)(1) ===  ForeachWriterEvent.Process(value = 1))
-      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachWriterEvent.Close]
+      assert(allEvents(0)(0) === ForeachSinkSuite.Open(partition = 0, version = 0))
+      assert(allEvents(0)(1) ===  ForeachSinkSuite.Process(value = 1))
+      val errorEvent = allEvents(0)(2).asInstanceOf[ForeachSinkSuite.Close]
       assert(errorEvent.error.get.isInstanceOf[RuntimeException])
       assert(errorEvent.error.get.getMessage === "error")
       query.stop()
@@ -122,8 +93,8 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext {
   }
 }
 
-/** A global object to collect events in the executor side */
-object ForeachWriterEvent {
+/** A global object to collect events in the executor */
+object ForeachSinkSuite {
 
   trait Event
 
@@ -145,5 +116,26 @@ object ForeachWriterEvent {
 
   def clear(): Unit = {
     _allEvents.clear()
+  }
+}
+
+/** A [[ForeachWriter]] that writes collected events to ForeachSinkSuite */
+class TestForeachWriter extends ForeachWriter[Int] {
+  ForeachSinkSuite.clear()
+
+  private val events = mutable.ArrayBuffer[ForeachSinkSuite.Event]()
+
+  override def open(partitionId: Long, version: Long): Boolean = {
+    events += ForeachSinkSuite.Open(partition = partitionId, version = version)
+    true
+  }
+
+  override def process(value: Int): Unit = {
+    events += ForeachSinkSuite.Process(value)
+  }
+
+  override def close(errorOrNull: Throwable): Unit = {
+    events += ForeachSinkSuite.Close(error = Option(errorOrNull))
+    ForeachSinkSuite.addEvents(events)
   }
 }

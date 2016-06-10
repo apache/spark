@@ -20,6 +20,13 @@ package org.apache.spark.sql.execution.streaming
 import org.apache.spark.TaskContext
 import org.apache.spark.sql.{DataFrame, Encoder, ForeachWriter}
 
+/**
+ * A [[Sink]] that forwards all data into [[ForeachWriter]] according to the contract defined by
+ * [[ForeachWriter]].
+ *
+ * @param writer The [[ForeachWriter]] to process all data.
+ * @tparam T The expected type of the sink.
+ */
 class ForeachSink[T : Encoder](writer: ForeachWriter[T]) extends Sink with Serializable {
 
   override def addBatch(batchId: Long, data: DataFrame): Unit = {

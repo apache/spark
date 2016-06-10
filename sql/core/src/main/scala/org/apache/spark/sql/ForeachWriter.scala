@@ -30,14 +30,17 @@ import org.apache.spark.sql.streaming.ContinuousQuery
  * Scala example:
  * {{{
  *   datasetOfString.write.foreach(new ForeachWriter[String] {
+ *
  *     def open(partitionId: Long, version: Long): Boolean = {
- *        // open connection
+ *       // open connection
  *     }
+ *
  *     def process(record: String) = {
- *        // write string to connection
+ *       // write string to connection
  *     }
+ *
  *     def close(errorOrNull: Throwable): Unit = {
- *        // close the connection
+ *       // close the connection
  *     }
  *   })
  * }}}
@@ -68,9 +71,9 @@ import org.apache.spark.sql.streaming.ContinuousQuery
 abstract class ForeachWriter[T] extends Serializable {
 
   /**
-   * Called when starting to process one partition of new data in the executor side. `version` is
-   * for data deduplication. When recovering from a failure, some data may be processed twice. But
-   * it's guarantee that they will be opened with the same "version".
+   * Called when starting to process one partition of new data in the executor. The `version` is
+   * for data deduplication when there are failures. When recovering from a failure, some data may
+   * be generated multiple times but they will always have the same version.
    *
    * If this method finds this is a partition from a duplicated data set, it can return `false` to
    * skip the further data processing. However, `close` still will be called for cleaning up

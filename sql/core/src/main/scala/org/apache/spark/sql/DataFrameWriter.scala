@@ -392,14 +392,17 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * Scala example:
    * {{{
    *   datasetOfString.write.foreach(new ForeachWriter[String] {
+   *
    *     def open(partitionId: Long, version: Long): Boolean = {
-  *        // open connection
+   *       // open connection
    *     }
+   *
    *     def process(record: String) = {
-  *        // write string to connection
+   *       // write string to connection
    *     }
+   *
    *     def close(errorOrNull: Throwable): Unit = {
-  *        // close the connection
+   *       // close the connection
    *     }
    *   })
    * }}}
