@@ -140,7 +140,11 @@ case class MapPartitionsInR(
     outputSchema: StructType,
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
+
   override lazy val schema = outputSchema
+
+  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
+    outputObjAttr, child)
 }
 
 object MapElements {
@@ -286,6 +290,9 @@ case class FlatMapGroupsInR(
     child: LogicalPlan) extends UnaryNode with ObjectProducer{
 
   override lazy val schema = outputSchema
+
+  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
+    outputObjAttr, child)
 }
 
 /** Factory for constructing new `CoGroup` nodes. */
