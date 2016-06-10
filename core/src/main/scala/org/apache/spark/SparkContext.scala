@@ -1340,21 +1340,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a list accumulator, which starts with empty list and accumulates inputs
-   * by adding them into the inner list.
+   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * inputs by adding them into the list.
    */
-  def listAccumulator[T]: ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def collectionAccumulator[T]: CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
     register(acc)
     acc
   }
 
   /**
-   * Create and register a list accumulator, which starts with empty list and accumulates inputs
-   * by adding them into the inner list.
+   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * inputs by adding them into the list.
    */
-  def listAccumulator[T](name: String): ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
     register(acc, name)
     acc
   }
