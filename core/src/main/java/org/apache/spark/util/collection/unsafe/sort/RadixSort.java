@@ -214,8 +214,8 @@ public class RadixSort {
     long[][] counts = new long[8][];
     long bitwiseMax = 0;
     long bitwiseMin = -1L;
-    long baseOffset = array.getBaseOffset() + startIndex * 8;
-    long limit = baseOffset + numRecords * 16;
+    long baseOffset = array.getBaseOffset() + startIndex * 8L;
+    long limit = baseOffset + numRecords * 16L;
     Object baseObject = array.getBaseObject();
     for (long offset = baseOffset; offset < limit; offset += 16) {
       long value = Platform.getLong(baseObject, offset + 8);
@@ -244,8 +244,8 @@ public class RadixSort {
     long[] offsets = transformCountsToOffsets(
       counts, numRecords, array.getBaseOffset() + outIndex * 8, 16, desc, signed);
     Object baseObject = array.getBaseObject();
-    long baseOffset = array.getBaseOffset() + inIndex * 8;
-    long maxOffset = baseOffset + numRecords * 16;
+    long baseOffset = array.getBaseOffset() + inIndex * 8L;
+    long maxOffset = baseOffset + numRecords * 16L;
     for (long offset = baseOffset; offset < maxOffset; offset += 16) {
       long key = Platform.getLong(baseObject, offset);
       long prefix = Platform.getLong(baseObject, offset + 8);

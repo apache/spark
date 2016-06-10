@@ -95,11 +95,11 @@ public final class UnsafeInMemorySorter {
 
   /**
    * If sorting with radix sort, specifies the starting position in the sort buffer where records
-   * with non-null prefixes are kept. Positions [0..nullPos) will contain null-prefixed records,
-   * and positions [nullPos..pos) non-null prefixed records. This lets us avoid radix sorting
-   * over null values.
+   * with non-null prefixes are kept. Positions [0..nullBoundaryPos) will contain null-prefixed
+   * records, and positions [nullBoundaryPos..pos) non-null prefixed records. This lets us avoid
+   * radix sorting over null values.
    */
-  private int nullPos = 0;
+  private int nullBoundaryPos = 0;
 
   /*
    * How many records could be inserted, because part of the array should be left for sorting.
@@ -169,7 +169,7 @@ public final class UnsafeInMemorySorter {
       usableCapacity = getUsableCapacity();
     }
     pos = 0;
-    nullPos = 0;
+    nullBoundaryPos = 0;
   }
 
   /**
@@ -222,15 +222,15 @@ public final class UnsafeInMemorySorter {
     }
     if (prefixIsNull && radixSortSupport != null) {
       // Swap forward a non-null record to make room for this one at the beginning of the array.
-      array.set(pos, array.get(nullPos));
+      array.set(pos, array.get(nullBoundaryPos));
       pos++;
-      array.set(pos, array.get(nullPos + 1));
+      array.set(pos, array.get(nullBoundaryPos + 1));
       pos++;
       // Place this record in the vacated position.
-      array.set(nullPos, recordPointer);
-      nullPos++;
-      array.set(nullPos, keyPrefix);
-      nullPos++;
+      array.set(nullBoundaryPos, recordPointer);
+      nullBoundaryPos++;
+      array.set(nullBoundaryPos, keyPrefix);
+      nullBoundaryPos++;
     } else {
       array.set(pos, recordPointer);
       pos++;
@@ -309,7 +309,7 @@ public final class UnsafeInMemorySorter {
     if (sortComparator != null) {
       if (this.radixSortSupport != null) {
         offset = RadixSort.sortKeyPrefixArray(
-          array, nullPos, (pos - nullPos) / 2, 0, 7,
+          array, nullBoundaryPos, (pos - nullBoundaryPos) / 2, 0, 7,
           radixSortSupport.sortDescending(), radixSortSupport.sortSigned());
       } else {
         MemoryBlock unused = new MemoryBlock(
@@ -323,15 +323,16 @@ public final class UnsafeInMemorySorter {
       }
     }
     totalSortTimeNanos += System.nanoTime() - start;
-    if (nullPos > 0) {
+    if (nullBoundaryPos > 0) {
       assert radixSortSupport != null : "Nulls are only stored separately with radix sort";
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
       if (radixSortSupport.sortDescending()) {
-        queue.add(new SortedIterator((pos - nullPos) / 2, offset));
-        queue.add(new SortedIterator(nullPos / 2, 0));
+        // Nulls are smaller than non-nulls
+        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
+        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
       } else {
-        queue.add(new SortedIterator(nullPos / 2, 0));
-        queue.add(new SortedIterator((pos - nullPos) / 2, offset));
+        queue.add(new SortedIterator(nullBoundaryPos / 2, 0));
+        queue.add(new SortedIterator((pos - nullBoundaryPos) / 2, offset));
       }
       return new UnsafeExternalSorter.ChainedIterator(queue);
     } else {
