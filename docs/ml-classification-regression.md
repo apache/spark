@@ -815,7 +815,7 @@ The main differences between this API and the [original MLlib ensembles API](mll
 ## Random Forests
 
 [Random forests](http://en.wikipedia.org/wiki/Random_forest)
-are ensembles of [decision trees](ml-decision-tree.html).
+are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 Random forests combine many decision trees in order to reduce the risk of overfitting.
 The `spark.ml` implementation supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
@@ -896,7 +896,7 @@ All output columns are optional; to exclude an output column, set its correspond
 ## Gradient-Boosted Trees (GBTs)
 
 [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
-are ensembles of [decision trees](ml-decision-tree.html).
+are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 GBTs iteratively train decision trees in order to minimize a loss function.
 The `spark.ml` implementation supports GBTs for binary classification and for regression,
 using both continuous and categorical features.
