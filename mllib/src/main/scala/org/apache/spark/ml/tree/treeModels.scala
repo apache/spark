@@ -342,9 +342,15 @@ private[ml] object DecisionTreeModelReadWrite {
       Param.jsonDecode[String](compact(render(impurityJson)))
     }
 
+    val classWeights: Array[Double] = {
+      val classWeightsJson: JValue = metadata.getParamValue("classWeights")
+      compact(render(classWeightsJson)).split("\\[|,|\\]")
+        .filter((s: String) => s.length() != 0).map((s: String) => s.toDouble)
+    }
+
     val dataPath = new Path(path, "data").toString
     val data = sqlContext.read.parquet(dataPath).as[NodeData]
-    buildTreeFromNodes(data.collect(), impurityType)
+    buildTreeFromNodes(data.collect(), impurityType, classWeights)
   }
 
   /**
@@ -353,7 +359,8 @@ private[ml] object DecisionTreeModelReadWrite {
    * @param impurityType  Impurity type for this tree
    * @return Root node of reconstructed tree
    */
-  def buildTreeFromNodes(data: Array[NodeData], impurityType: String): Node = {
+  def buildTreeFromNodes(data: Array[NodeData], impurityType: String,
+                         classWeights: Array[Double]): Node = {
     // Load all nodes, sorted by ID.
     val nodes = data.sortBy(_.id)
     // Sanity checks; could remove
@@ -365,7 +372,8 @@ private[ml] object DecisionTreeModelReadWrite {
     // traversal, this guarantees that child nodes will be built before parent nodes.
     val finalNodes = new Array[Node](nodes.length)
     nodes.reverseIterator.foreach { case n: NodeData =>
-      val impurityStats = ImpurityCalculator.getCalculator(impurityType, n.impurityStats)
+      val impurityStats = ImpurityCalculator.getCalculator(impurityType,
+        n.impurityStats, classWeights)
       val node = if (n.leftChild != -1) {
         val leftChild = finalNodes(n.leftChild)
         val rightChild = finalNodes(n.rightChild)
@@ -437,6 +445,12 @@ private[ml] object EnsembleModelReadWrite {
       Param.jsonDecode[String](compact(render(impurityJson)))
     }
 
+    val classWeights: Array[Double] = {
+      val classWeightsJson: JValue = metadata.getParamValue("classWeights")
+      val classWeightsVector = Param.jsonDecode[Vector](compact(render(classWeightsJson)))
+      classWeightsVector.toArray
+    }
+
     val treesMetadataPath = new Path(path, "treesMetadata").toString
     val treesMetadataRDD: RDD[(Int, (Metadata, Double))] = sql.read.parquet(treesMetadataPath)
       .select("treeID", "metadata", "weights").as[(Int, String, Double)].rdd.map {
@@ -454,7 +468,7 @@ private[ml] object EnsembleModelReadWrite {
     val rootNodesRDD: RDD[(Int, Node)] =
       nodeData.rdd.map(d => (d.treeID, d.nodeData)).groupByKey().map {
         case (treeID: Int, nodeData: Iterable[NodeData]) =>
-          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType)
+          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType, classWeights)
       }
     val rootNodes: Array[Node] = rootNodesRDD.sortByKey().values.collect()
     (metadata, treesMetadata.zip(rootNodes), treesWeights)
