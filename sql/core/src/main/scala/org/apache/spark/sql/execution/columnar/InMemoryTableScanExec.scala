@@ -35,7 +35,7 @@ import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{AccumulatorContext, ListAccumulator, LongAccumulator}
+import org.apache.spark.util.{AccumulatorContext, CollectionAccumulator, LongAccumulator}
 
 
 private[sql] object InMemoryRelation {
@@ -67,16 +67,16 @@ private[sql] case class InMemoryRelation(
     tableName: Option[String])(
     @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null,
     @transient private[sql] var _statistics: Statistics = null,
-    private[sql] var _batchStats: ListAccumulator[InternalRow] = null)
+    private[sql] var _batchStats: CollectionAccumulator[InternalRow] = null)
   extends logical.LeafNode with MultiInstanceRelation {
 
   override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
   override def producedAttributes: AttributeSet = outputSet
 
-  private[sql] val batchStats: ListAccumulator[InternalRow] =
+  private[sql] val batchStats: CollectionAccumulator[InternalRow] =
     if (_batchStats == null) {
-      child.sqlContext.sparkContext.listAccumulator[InternalRow]
+      child.sqlContext.sparkContext.collectionAccumulator[InternalRow]
     } else {
       _batchStats
     }
