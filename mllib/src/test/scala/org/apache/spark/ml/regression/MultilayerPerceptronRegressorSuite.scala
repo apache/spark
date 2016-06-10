@@ -21,6 +21,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vectors}
 import org.apache.spark.ml.util.DefaultReadWriteTest
+import org.apache.spark.ml.util.MLTestingUtils
 import org.apache.spark.ml.util.TestingUtils._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 
@@ -95,16 +96,19 @@ class MultilayerPerceptronRegressorSuite
       .setSeed(12L)
       .setMaxIter(1)
       .setTol(1e-6)
+    // Compute weights to initialize network with.
     val initialWeights = trainer.fit(dataFrame).weights
+    // Set trainer weights to the initialization for this test.
     trainer.setInitialWeights(initialWeights.copy)
+    // Compute new weights with our initialization.
     val weights1 = trainer.fit(dataFrame).weights
+    // Reset weights back to our initialization.
     trainer.setInitialWeights(initialWeights.copy)
+    // Compute another set of weights with our initialization.
     val weights2 = trainer.fit(dataFrame).weights
     assert(weights1 ~== weights2 absTol 10e-5,
       "Training should produce the same weights given equal initial weights and number of steps")
   }
-
-  test("Can successfully get and set minimum and maximum values")
 
   test("read/write: MultilayerPerceptronRegressor") {
     val mlpr = new MultilayerPerceptronRegressor()
@@ -136,5 +140,15 @@ class MultilayerPerceptronRegressorSuite
   }
 
   /* Test for numeric types after rewriting max/min for Dataframe method to handle Long/BigInt */
+//  test("should support all NumericType labels and not support other types") {
+//    val layers = Array(1, 1)
+//    val mpc = new MultilayerPerceptronRegressor().setLayers(layers).setMaxIter(1)
+//    MLTestingUtils.checkNumericTypes[
+//      MultilayerPerceptronRegressorModel, MultilayerPerceptronRegressor](
+//      mpc, spark) { (expected, actual) =>
+//      assert(expected.layers === actual.layers)
+//      assert(expected.weights === actual.weights)
+//    }
+//  }
 
 }

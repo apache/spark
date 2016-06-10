@@ -30,13 +30,10 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.Column
 import org.apache.spark.sql.Dataset
-import org.apache.spark.sql.functions.{max, min}
+// import org.apache.spark.sql.functions.{max, min}
 
-  /**
-   * Params for Multilayer Perceptron.
-   */
+/** Params for Multilayer Perceptron. */
 private[regression] trait MultilayerPerceptronParams extends PredictorParams
   with HasSeed with HasMaxIter with HasTol with HasStepSize {
    /**
@@ -44,6 +41,7 @@ private[regression] trait MultilayerPerceptronParams extends PredictorParams
     *
     * @group param
     */
+  @Since("2.0.0")
   final val layers: IntArrayParam = new IntArrayParam(this, "layers",
     "Sizes of layers including input and output from bottom to the top." +
       " E.g., Array(780, 100, 10) means 780 inputs, " +
@@ -51,35 +49,40 @@ private[regression] trait MultilayerPerceptronParams extends PredictorParams
      (t: Array[Int]) => t.forall(ParamValidators.gt(0)) && t.length > 1
   )
 
-    /** @group setParam */
-    def setLayers(value: Array[Int]): this.type = set(layers, value)
+  /** @group setParam */
+  @Since("2.0.0")
+  def setLayers(value: Array[Int]): this.type = set(layers, value)
 
-    /** @group getParam */
-    final def getLayers: Array[Int] = $(layers)
+  /** @group getParam */
+  @Since("2.0.0")
+  final def getLayers: Array[Int] = $(layers)
 
-   /**
-    * Block size for stacking input data in matrices. Speeds up the computations.
-    * Cannot be more than the size of the dataset.
-    *
-    * @group expertParam
-    */
+  /**
+   * Block size for stacking input data in matrices. Speeds up the computations.
+   * Cannot be more than the size of the dataset.
+   *
+   * @group expertParam
+   */
+  @Since("2.0.0")
   final val blockSize: IntParam = new IntParam(this, "blockSize",
     "Block size for stacking input data in matrices.",
     ParamValidators.gt(0))
 
   /** @group setParam */
+  @Since("2.0.0")
   def setBlockSize(value: Int): this.type = set(blockSize, value)
 
   /** @group getParam */
+  @Since("2.0.0")
   final def getBlockSize: Int = $(blockSize)
 
-   /**
-    * The solver algorithm for optimization.
-    * Supported options: "gd" (minibatch gradient descent) or "l-bfgs".
-    * Default: "l-bfgs"
-    *
-    * @group expertParam
-    */
+  /**
+   * The solver algorithm for optimization.
+   * Supported options: "gd" (minibatch gradient descent) or "l-bfgs".
+   * Default: "l-bfgs"
+   *
+   * @group expertParam
+   */
   @Since("2.0.0")
   final val solver: Param[String] = new Param[String](this, "solver",
     "The solver algorithm for optimization. Supported options: " +
@@ -90,43 +93,46 @@ private[regression] trait MultilayerPerceptronParams extends PredictorParams
   @Since("2.0.0")
   final def getSolver: String = $(solver)
 
-   /**
-    * Set the maximum number of iterations.
-    * Default is 100.
-    *
-    * @group setParam
-    */
+  /**
+   * Set the maximum number of iterations.
+   * Default is 100.
+   *
+   * @group setParam
+   */
+  @Since("2.0.0")
   def setMaxIter(value: Int): this.type = set(maxIter, value)
 
-   /**
-    * Set the convergence tolerance of iterations.
-    * Smaller value will lead to higher accuracy with the cost of more iterations.
-    * Default is 1E-4.
-    *
-    * @group setParam
-    */
+  /**
+   * Set the convergence tolerance of iterations.
+   * Smaller value will lead to higher accuracy with the cost of more iterations.
+   * Default is 1E-4.
+   *
+   * @group setParam
+   */
+  @Since("2.0.0")
   def setTol(value: Double): this.type = set(tol, value)
 
-   /**
-    * Set the seed for weights initialization.
-    * Default is 11L.
-    *
-    * @group setParam
-    */
+  /**
+   * Set the seed for weights initialization.
+   * Default is 11L.
+   *
+   * @group setParam
+   */
+  @Since("2.0.0")
   def setSeed(value: Long): this.type = set(seed, value)
 
-   /**
-    * The initial weights of the model.
-    *
-    * @group expertParam
-    */
-    @Since("2.0.0")
-    final val initialWeights: Param[Vector] = new Param[Vector](this, "initialWeights",
-      "The initial weights of the model")
+  /**
+   * The initial weights of the model.
+   *
+   * @group expertParam
+   */
+  @Since("2.0.0")
+  final val initialWeights: Param[Vector] = new Param[Vector](this, "initialWeights",
+    "The initial weights of the model")
 
-    /** @group expertGetParam */
-    @Since("2.0.0")
-    final def getInitialWeights: Vector = $(initialWeights)
+  /** @group expertGetParam */
+  @Since("2.0.0")
+  final def getInitialWeights: Vector = $(initialWeights)
 
   setDefault(seed -> 11L, maxIter -> 100, tol -> 1e-4, layers -> Array(1, 1),
     solver -> MultilayerPerceptronRegressor.LBFGS, stepSize -> 0.03, blockSize -> 128)
@@ -138,85 +144,69 @@ private[regression] trait MultilayerPerceptronParams extends PredictorParams
   */
 private[regression] trait MultilayerPerceptronRegressorParams extends PredictorParams {
 
+  @Since("2.0.0")
   final val minimum: DoubleParam = new DoubleParam(this, "min",
     "Minimum value for scaling data.")
 
- /**
-  * Set the minimum value in the training set labels.
-  *
-  * @group setParam
-  */
+  /**
+   * Set the minimum value in the training set labels.
+   *
+   * @group setParam
+   */
+  @Since("2.0.0")
   def setMin(value: Double): this.type = set(minimum, value)
 
   /** @group getParam */
+  @Since("2.0.0")
   final def getMin: Double = $(minimum)
 
+  @Since("2.0.0")
   final val maximum: DoubleParam = new DoubleParam(this, "max",
     "Max value for scaling data.")
 
- /**
-  * Set the maximum value in the training set labels.
-  *
-  * @group setParam
-  */
+  /**
+   * Set the maximum value in the training set labels.
+   *
+   * @group setParam
+   */
+  @Since("2.0.0")
   def setMax(value: Double): this.type = set(maximum, value)
 
   /** @group getParam */
+  @Since("2.0.0")
   final def getMax: Double = $(maximum)
 }
-
-
-
 
 /** Label to vector converter. */
 private object LabelConverter {
 
-  /* Consider using MinMaxScaler once it sets metadata, converting to column vector */
-  /* Rewrite max and min with column aggregator methods */
-//
-//  var min = 0.0
-//  var max = 0.0
-//
-//  def getMin(minimum: Double): Unit = {
-//    min = train.select("label").rdd.map(x => x(0).asInstanceOf[Double]).min()
-//    _min = min(train("label")).cast("Double").asInstanceOf[Double]
-//    min = minimum
-//  }
-//
-//  def getMax(maximum: Double): Unit = {
-//    max = train.select("label").rdd.map(x => x(0).asInstanceOf[Double]).max()
-//    _max = max(train("label")).cast("Double").asInstanceOf[Double]
-//    max = maximum
-//  }
-
-   /**
-    * Encodes a label as a vector.
-    * Returns a vector of length 1 with the label in the 0th position
-    *
-    * @param labeledPoint labeled point
-    * @return pair of features and vector encoding of a label
-    */
-
+  /**
+   * Encodes a label as a vector.
+   * Returns a vector of length 1 with the label in the 0th position
+   *
+   * @param labeledPoint labeled point
+   * @return pair of features and vector encoding of a label
+   */
   def encodeLabeledPoint(labeledPoint: LabeledPoint, min: Double, max: Double): (Vector, Vector) = {
     val output = Array.fill(1)(0.0)
-    if (max-min != 0) {
+    if (max-min != 0.0) {
       output(0) = (labeledPoint.label - min) / (max - min)
     }
     else {
     // When min and max are equal, cannot min-max scale due to divide by zero error. Setting scaled
     // result to zero will lead to consistent predictions, as the min will be added during decoding.
-      output(0) = (labeledPoint.label * 0)
+      output(0) = labeledPoint.label - min
     }
     (labeledPoint.features, Vectors.dense(output))
   }
 
-   /**
-    * Converts a vector to a label.
-    * Returns the value of the 0th element of the output vector.
-    *
-    * @param output label encoded with a vector
-    * @return label
-    */
+  /**
+   * Converts a vector to a label.
+   * Returns the value of the 0th element of the output vector.
+   *
+   * @param output label encoded with a vector
+   * @return label
+   */
   def decodeLabel(output: Vector, min: Double, max: Double): Double = {
      (output(0)*(max-min)) + min
   }
@@ -242,8 +232,8 @@ class MultilayerPerceptronRegressor @Since("2.0.0") (
    *
    * @group expertSetParam
    */
-   @Since("2.0.0")
-   def setInitialWeights(value: Vector): this.type = set(initialWeights, value)
+  @Since("2.0.0")
+  def setInitialWeights(value: Vector): this.type = set(initialWeights, value)
 
   /**
    * Sets the value of param [[solver]].
@@ -251,8 +241,8 @@ class MultilayerPerceptronRegressor @Since("2.0.0") (
    *
    * @group expertSetParam
    */
-   @Since("2.0.0")
-   def setSolver(value: String): this.type = set(solver, value)
+  @Since("2.0.0")
+  def setSolver(value: String): this.type = set(solver, value)
 
   /**
    * Sets the value of param [[stepSize]] (applicable only for solver "gd").
@@ -260,26 +250,32 @@ class MultilayerPerceptronRegressor @Since("2.0.0") (
    *
    * @group setParam
    */
-   @Since("2.0.0")
-   def setStepSize(value: Double): this.type = set(stepSize, value)
+  @Since("2.0.0")
+  def setStepSize(value: Double): this.type = set(stepSize, value)
 
-   /**
-    * Train a model using the given dataset and parameters.
-    *
-    * @param dataset Training dataset
-    * @return Fitted model
-    */
+  @Since("2.0.0")
+  def this() = this(Identifiable.randomUID("mlpr"))
+
+  override def copy(extra: ParamMap): MultilayerPerceptronRegressor = defaultCopy(extra)
+
+  /**
+   * Train a model using the given dataset and parameters.
+   *
+   * @param dataset Training dataset
+   * @return Fitted model
+   */
   override protected def train(dataset: Dataset[_]): MultilayerPerceptronRegressorModel = {
     val myLayers = getLayers
     val lpData: RDD[LabeledPoint] = extractLabeledPoints(dataset)
+    // Compute minimum and maximum values in the training labels for scaling.
     setMin(dataset.select("label").rdd.map(x => x(0).asInstanceOf[Double]).min())
-//    LabelConverter.getMin($(minimum))
     setMax(dataset.select("label").rdd.map(x => x(0).asInstanceOf[Double]).max())
-//    LabelConverter.getMax($(maximum))
+    // Encode and scale labels to prepare for training.
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, $(minimum), $(maximum)))
+    // Initialize the network architecture with the specified layer count and sizes.
     val topology = FeedForwardTopology.multiLayerPerceptronRegression(myLayers)
+    // Prepare the Network trainer based on our settings.
     val trainer = new FeedForwardTrainer(topology, myLayers(0), myLayers.last)
-    // Set up conditional for setting weights here.
     if (isDefined(initialWeights)) {
       trainer.setWeights($(initialWeights))
     } else {
@@ -296,18 +292,13 @@ class MultilayerPerceptronRegressor @Since("2.0.0") (
          .setStepSize($(stepSize))
      } else {
        throw new IllegalArgumentException(
-         s"The solver $solver is not supported by MultilayerPerceptronClassifier.")
+         s"The solver $solver is not supported by MultilayerPerceptronRegressor.")
      }
     trainer.setStackSize($(blockSize))
-     println("Beginning Training")
+    // Train Model.
     val mlpModel = trainer.train(data)
     new MultilayerPerceptronRegressorModel(uid, myLayers, mlpModel.weights)
   }
-
-  @Since("2.0.0")
-  def this() = this(Identifiable.randomUID("mlpr"))
-
-  override def copy(extra: ParamMap): MultilayerPerceptronRegressor = defaultCopy(extra)
 }
 
 
@@ -329,15 +320,17 @@ object MultilayerPerceptronRegressor
 }
 
 
-   /**
-    * :: Experimental ::
-    * Multi-layer perceptron regression model.
-    *
-    * @param uid uid
-    * @param layers array of layer sizes including input and output
-    * @param weights weights (or parameters) of the model
-    * @return prediction model
-    */
+/**
+ * :: Experimental ::
+ * Multi-layer perceptron regression model.
+ * Each layer has sigmoid activation function, output layer has softmax.
+ *
+ * @param uid uid
+ * @param layers array of layer sizes including input and output
+ * @param weights weights (or parameters) of the model
+ * @return prediction model
+ */
+@Since("2.0.0")
 @Experimental
 class MultilayerPerceptronRegressorModel private[ml] (
     @Since("2.0.0") override val uid: String,
@@ -346,16 +339,19 @@ class MultilayerPerceptronRegressorModel private[ml] (
   extends PredictionModel[Vector, MultilayerPerceptronRegressorModel]
     with Serializable with MultilayerPerceptronRegressorParams with MLWritable {
 
+  @Since("2.0.0")
+  override val numFeatures: Int = layers.head
+
   private val mlpModel =
     FeedForwardTopology.multiLayerPerceptronRegression(layers).model(weights)
 
   /** Returns layers in a Java List. */
   private[ml] def javaLayers: java.util.List[Int] = layers.toList.asJava
 
-   /**
-    * Predict label for the given features.
-    * This internal method is used to implement [[transform()]] and output [[predictionCol]].
-    */
+  /**
+   * Predict label for the given features.
+   * This internal method is used to implement [[transform()]] and output [[predictionCol]].
+   */
   override def predict(features: Vector): Double = {
     LabelConverter.decodeLabel(mlpModel.predict(features), $(minimum), $(maximum))
   }
@@ -372,7 +368,7 @@ class MultilayerPerceptronRegressorModel private[ml] (
 
 @Since("2.0.0")
 object MultilayerPerceptronRegressorModel
-  extends MLReadable[MultilayerPerceptronRegressorModel]{
+  extends MLReadable[MultilayerPerceptronRegressorModel] {
 
   @Since("2.0.0")
   override def read: MLReader[MultilayerPerceptronRegressorModel] =

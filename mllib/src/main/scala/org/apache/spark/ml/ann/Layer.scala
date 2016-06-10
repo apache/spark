@@ -431,46 +431,39 @@ private[ml] object FeedForwardTopology {
   def multiLayerPerceptron(
     layerSizes: Array[Int],
     softmaxOnTop: Boolean = true): FeedForwardTopology = {
-    println("Initializing Topology")
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
     for (i <- 0 until layerSizes.length - 1) {
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
       layers(i * 2 + 1) =
         if (i == layerSizes.length - 2) {
           if (softmaxOnTop) {
-            println("Softmax Layer Added on Top with Cross Entropy Loss")
             new SoftmaxLayerWithCrossEntropyLoss()
           } else {
             // TODO: squared error is more natural but converges slower
-            println("Sigmoid Layer Added on Top\n")
             new SigmoidLayerWithSquaredError()
           }
         } else {
-          println("Functional Layer Added with Sigmoid Argument")
           new FunctionalLayer(new SigmoidFunction())
         }
     }
     FeedForwardTopology(layers)
   }
 
- /**
-  * Creates a multi-layer perceptron regression
-  *
-  * @param layerSizes sizes of layers including input and output size
-  * @return multilayer perceptron topology
-  */
+  /**
+   * Creates a multi-layer perceptron regression
+   *
+   * @param layerSizes sizes of layers including input and output size
+   * @return multilayer perceptron topology
+   */
   def multiLayerPerceptronRegression(
     layerSizes: Array[Int]): FeedForwardTopology = {
-    println("Initializing Topology")
     val layers = new Array[Layer]((layerSizes.length - 1) * 2)
     for (i <- 0 until layerSizes.length - 1) {
       layers(i * 2) = new AffineLayer(layerSizes(i), layerSizes(i + 1))
       layers(i * 2 + 1) =
         if (i == layerSizes.length - 2) {
-          println("Linear Layer with Squared Error Added")
           new LinearLayerWithSquaredError()
         } else {
-          println("Functional Layer Added with Sigmoid Argument")
           new FunctionalLayer(new SigmoidFunction())
         }
     }
@@ -531,7 +524,6 @@ private[ml] class FeedForwardModel private(
     target: BDM[Double],
     cumGradient: Vector,
     realBatchSize: Int): Double = {
-    println("Computing Gradient")
     val outputs = forward(data)
     val currentBatchSize = data.cols
     // TODO: allocate deltas as one big array and then create BDMs from it
@@ -653,7 +645,6 @@ private[ann] class DataStacker(stackSize: Int, inputSize: Int, outputSize: Int)
    * @return RDD of double (always zero) and vector that contains the stacked vectors
    */
   def stack(data: RDD[(Vector, Vector)]): RDD[(Double, Vector)] = {
-    println("Stacking the Data")
     val stackedData = if (stackSize == 1) {
       data.map { v =>
         (0.0,

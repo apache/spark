@@ -56,16 +56,9 @@ private[ann] class LinearLayerWithSquaredError extends Layer {
 private[ann] class LinearLayerModelWithSquaredError
   extends FunctionalLayerModel(new FunctionalLayer(new LinearFunction)) with LossFunction {
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
-    println("Output:")
-    println(output)
-    println("Target:")
-    println(target)
-    println("Delta:")
-    println(delta)
     ApplyInPlace(output, target, delta, (o: Double, t: Double) => o - t)
     val error = Bsum(delta :* delta) / 2 / output.cols
     ApplyInPlace(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
-    println("Error = " + error)
     error
   }
 }
