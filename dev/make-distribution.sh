@@ -42,7 +42,8 @@ function exit_with_usage {
   echo "usage:"
   cl_options="[--name] [--tgz] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
-  echo "Decrease build times with the -T option: -T 1C will result in Maven using one thread per core."
+  echo "Decrease build times by adding the -T option: -T 1C will result in Maven using one thread per core."
+  echo "For example, dev/make-distribution.sh -T 1C --name hadoop-2.7.2 -Psparkr -Pyarn -Phadoop-2.7 -Phive -Phive-thriftserver -Dscala-2.11"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
   exit 1
@@ -79,6 +80,10 @@ while (( "$#" )); do
     --help)
       exit_with_usage
       ;;
+    -T)
+    NUM_THREADS="$2"
+    shift
+    ;;
     *)
       break
       ;;
@@ -151,7 +156,13 @@ export MAVEN_OPTS="${MAVEN_OPTS:--Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCac
 # Store the command as an array because $MVN variable might have spaces in it.
 # Normal quoting tricks don't work.
 # See: http://mywiki.wooledge.org/BashFAQ/050
-BUILD_COMMAND=("$MVN" clean package -DskipTests $@)
+
+# If NUM_THREADS is set we actually want to add the -T in (removed with shift earlier)
+if [ -n "$NUM_THREADS" ]; then
+  MVN_T_OPTION="-T"
+fi
+
+BUILD_COMMAND=("$MVN" $MVN_T_OPTION $NUM_THREADS clean package -DskipTests $@)
 
 # Actually build the jar
 echo -e "\nBuilding with..."
