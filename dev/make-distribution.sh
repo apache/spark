@@ -43,7 +43,7 @@ function exit_with_usage {
   cl_options="[--name] [--tgz] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
   echo "Decrease build times by adding the -T option: -T 1C will result in Maven using one thread per core."
-  echo "For example, dev/make-distribution.sh -T 1C --name hadoop-2.7.2 -Psparkr -Pyarn -Phadoop-2.7 -Phive -Phive-thriftserver -Dscala-2.11"
+  echo "For example, dev/make-distribution.sh -T 1C --name hadoop-2.7 -Phadoop-2.7"
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
   exit 1
