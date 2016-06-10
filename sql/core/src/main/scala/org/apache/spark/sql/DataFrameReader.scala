@@ -306,7 +306,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * </ul>
    * <li>`columnNameOfCorruptRecord` (default is the value specified in
    * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
-   * created by `PERMISSIVE` mode. This overwrites `spark.sql.columnNameOfCorruptRecord`.</li>
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    *
    * @since 1.6.0
    */
@@ -417,7 +417,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following Parquet-specific option(s) for reading Parquet files:
    * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
-   * whether we should merge schemas collected from all Parquet part-files. This will overwrite
+   * whether we should merge schemas collected from all Parquet part-files. This will override
    * `spark.sql.parquet.mergeSchema`.</li>
    *
    * @since 1.4.0
