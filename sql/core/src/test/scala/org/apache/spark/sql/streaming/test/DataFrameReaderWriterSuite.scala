@@ -572,25 +572,4 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     cq.awaitTermination(2000L)
   }
-
-  test("foreach") {
-    import testImplicits._
-
-    val ds = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-      .as[Int]
-
-    val cq = ds.write
-      .format("console")
-      .option("checkpointLocation", newMetadataDir)
-      .trigger(ProcessingTime(2.seconds))
-      .foreach(new ForeachWriter[Int] {
-        override def open(partitionId: Long, version: Long): Boolean = true
-        override def process(value: Int): Unit = {}
-        override def close(errorOrNull: Throwable): Unit = {}
-      })
-
-    cq.awaitTermination(2000L)
-  }
 }
