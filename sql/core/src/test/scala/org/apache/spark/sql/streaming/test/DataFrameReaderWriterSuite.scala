@@ -399,7 +399,21 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(e.getMessage == "startStream() can only be called on streaming Datasets/DataFrames;")
   }
 
-  test("check mode(SaveMode) can only be called on non-continuous queries") {
+  test("check foreach() can only be called on streaming Datasets/DataFrames") {
+    val df = spark.read.text(newTextInput)
+    val w = df.write.option("checkpointLocation", newMetadataDir)
+    val foreachWriter = new ForeachWriter[String] {
+      override def open(partitionId: Long, version: Long): Boolean = false
+      override def process(value: String): Unit = {}
+      override def close(errorOrNull: Throwable): Unit = {}
+    }
+    val e = intercept[AnalysisException](w.foreach(foreachWriter))
+    Seq("foreach()", "streaming Datasets/DataFrames").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
+  test("check mode(SaveMode) can only be called on non-streaming Datasets/DataFrames") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
