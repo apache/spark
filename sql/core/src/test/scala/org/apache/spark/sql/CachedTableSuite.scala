@@ -513,4 +513,23 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       spark.catalog.uncacheTable("t2")
     }
   }
+
+  test("[SPARK-15870] DataFrame can't execute after uncacheTable") {
+    val selectStar = sql("SELECT * FROM testData WHERE key = 1")
+    selectStar.createOrReplaceTempView("selectStar")
+
+    spark.catalog.cacheTable("selectStar")
+    assert(
+      selectStar.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i
+      }.size == 1)
+    checkAnswer(
+      selectStar,
+      Seq(Row(1, "1")))
+
+    spark.catalog.uncacheTable("selectStar")
+    checkAnswer(
+      selectStar,
+      Seq(Row(1, "1")))
+  }
 }
