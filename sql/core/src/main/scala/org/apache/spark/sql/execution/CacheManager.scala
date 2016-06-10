@@ -178,7 +178,7 @@ private[sql] class CacheManager extends Logging {
       case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined =>
         val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
         if (dataIndex >= 0) {
-          cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
+          data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
           cachedData.remove(dataIndex)
         }
         sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
@@ -188,7 +188,7 @@ private[sql] class CacheManager extends Logging {
 
   /**
    * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
-   * [[org.apache.spark.sql.execution.datasources.FileCatalog]] of any [[HadoopFsRelation]] node
+   * [[org.apache.spark.sql.execution.datasources.FileCatalog]] of any [[HadoopFsRelation]] nodes
    * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
    * false.
    */

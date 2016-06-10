@@ -232,5 +232,5 @@ abstract class Catalog {
    *
    * @since 2.0.0
    */
-  def refreshResource(path: String): Unit
+  def refreshByPath(path: String): Unit
 }

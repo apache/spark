@@ -105,7 +105,7 @@ case class RefreshResource(path: String)
   extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.catalog.refreshResource(path)
+    sparkSession.catalog.refreshByPath(path)
     Seq.empty[Row]
   }
 }
