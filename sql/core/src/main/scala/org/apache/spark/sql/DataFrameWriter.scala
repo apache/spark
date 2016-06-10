@@ -432,7 +432,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed("insertInto")
     assertNotStreaming("insertInto() can only be called on non-continuous queries")
-    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
+    val partitions = normalizedParCols.map(_.map(col => col -> (Option.empty[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
     // A partitioned relation's schema can be different from the input logicalPlan, since
