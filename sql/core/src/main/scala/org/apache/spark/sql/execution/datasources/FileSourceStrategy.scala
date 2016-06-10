@@ -143,8 +143,18 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val defaultParallelism = files.sparkSession.sparkContext.defaultParallelism
           val totalBytes = selectedPartitions.flatMap(_.files.map(_.getLen + openCostInBytes)).sum
           val bytesPerCore = totalBytes / defaultParallelism
-          val maxSplitBytes = Math.min(defaultMaxSplitBytes,
-            Math.max(openCostInBytes, bytesPerCore))
+          val maxSplitBytes = {
+            // Since `LineRecordReader` in hadoop cannot split files compressed by some codecs
+            // (e.g., gzip), check if all the input files are splittable here.
+            if (files.fileFormat.canSplitFiles(
+                selectedPartitions.flatMap(_.files).map(_.getPath),
+                files.sparkSession.sessionState.newHadoopConfWithOptions(files.options))) {
+              Math.min(defaultMaxSplitBytes, Math.max(openCostInBytes, bytesPerCore))
+            } else {
+              Long.MaxValue
+            }
+          }
+
           logInfo(s"Planning scan with bin packing, max size: $maxSplitBytes bytes, " +
             s"open cost is considered as scanning $openCostInBytes bytes.")
 

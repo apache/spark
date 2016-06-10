@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Expression, ExpressionSet, PredicateHelper}
 import org.apache.spark.sql.catalyst.util
 import org.apache.spark.sql.execution.DataSourceScanExec
+import org.apache.spark.sql.execution.datasources.text.TextFileFormat
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -340,6 +341,38 @@ class FileSourceStrategySuite extends QueryTest with SharedSQLContext with Predi
     }
   }
 
+  test("SPARK-15654 filter out non-splittable files") {
+    // Check if a non-splittable file is not assigned into partitions
+    Seq("gz", "snappy", "lz4").map { suffix =>
+       val table = createTable(
+        files = Seq(s"file.${suffix}" -> 3)
+      )
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 1)
+          assert(partitions(0).files.size == 1)
+        }
+      }
+    }
+
+    // Check if a compressed file isnot assigned into multiple partitions
+    Seq("bz2").map { suffix =>
+       val table = createTable(
+        files = Seq(s"file.${suffix}" -> 3)
+      )
+      withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "1",
+        SQLConf.FILES_OPEN_COST_IN_BYTES.key -> "0") {
+        checkScan(table.select('c1)) { partitions =>
+          assert(partitions.size == 3)
+          assert(partitions(0).files.size == 1)
+          assert(partitions(1).files.size == 1)
+          assert(partitions(2).files.size == 1)
+        }
+      }
+    }
+  }
+
   // Helpers for checking the arguments passed to the FileFormat.
 
   protected val checkPartitionSchema =
@@ -434,7 +467,7 @@ object LastArguments {
 }
 
 /** A test [[FileFormat]] that records the arguments passed to buildReader, and returns nothing. */
-class TestFileFormat extends FileFormat {
+class TestFileFormat extends TextFileFormat {
 
   override def toString: String = "TestFileFormat"
 
