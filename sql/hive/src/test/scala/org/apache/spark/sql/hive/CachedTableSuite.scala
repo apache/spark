@@ -236,21 +236,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     }
   }
 
-  test("Cache Table As Select - temp table already exists") {
-    import testImplicits._
-    withTempDatabase { db =>
-      val tempTable = "cachedTable"
-      withTempTable(tempTable) {
-        Seq((1, "2")).toDF("int", "str").createOrReplaceTempView(tempTable)
-        val e = intercept[AnalysisException] {
-          sql(s"CACHE TABLE $tempTable AS SELECT 1")
-        }.getMessage
-        assert(e.contains("Could not create a temporary view in Cache Table As Select, " +
-          s"because temporary view `$tempTable` already exists"))
-      }
-    }
-  }
-
   test("Cache Table As Select - having database name") {
     withTempDatabase { db =>
       withTempTable("cachedTable") {

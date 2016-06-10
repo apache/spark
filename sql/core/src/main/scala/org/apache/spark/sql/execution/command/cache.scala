@@ -34,10 +34,6 @@ case class CacheTableCommand(
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     plan.foreach { logicalPlan =>
-      if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
-        throw new AnalysisException("Could not create a temporary view in Cache Table As Select, " +
-          s"because temporary view $tableIdent already exists.")
-      }
       Dataset.ofRows(sparkSession, logicalPlan).createTempView(tableIdent.quotedString)
     }
     sparkSession.catalog.cacheTable(tableIdent.quotedString)
