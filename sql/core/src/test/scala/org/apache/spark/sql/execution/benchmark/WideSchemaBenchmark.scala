@@ -34,8 +34,8 @@ import org.apache.spark.util.{Benchmark, Utils}
  */
 class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
   private val scaleFactor = 100000
-  private val widthsToTest = Seq(1, 100, 1000, 10000)
-  private val depthsToTest = Seq(1, 100)
+  private val widthsToTest = Seq(1, 100, 2500)
+  private val depthsToTest = Seq(1, 100, 250)
   assert(scaleFactor > widthsToTest.max)
 
   private lazy val sparkSession = SparkSession.builder
@@ -112,7 +112,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  test("many column field read and write") {
+  ignore("many column field read and write") {
     val benchmark = new Benchmark("many column field r/w", scaleFactor, output = Some(out))
     for (width <- widthsToTest) {
       // normalize by width to keep constant data size
@@ -123,7 +123,6 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
       addCases(benchmark, df, s"$width cols x $numRows rows", "a_1")
     }
     benchmark.run()
-
   }
 
   ignore("wide shallowly nested struct field read and write") {
@@ -165,9 +164,9 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  ignore("bushy struct field read and write") {
+  test("bushy struct field read and write") {
     val benchmark = new Benchmark("bushy struct field r/w", scaleFactor, output = Some(out))
-    for (width <- Seq(1000)) {
+    for (width <- Seq(1, 100, 1000)) {
       val numRows = scaleFactor / width
       var numNodes = 1
       var datum: String = "{\"value\": 1}"
