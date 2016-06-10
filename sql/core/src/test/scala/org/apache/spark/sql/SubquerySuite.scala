@@ -367,4 +367,11 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         "from r where l.a = r.c) = 0"),
       Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
   }
+
+  test("SPARK-15370: COUNT bug with attribute ref in subquery input and output ") {
+    checkAnswer(
+      sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
+        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
 }
