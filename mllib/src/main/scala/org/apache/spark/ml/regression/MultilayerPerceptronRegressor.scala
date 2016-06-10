@@ -31,7 +31,8 @@ import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.Dataset
-// import org.apache.spark.sql.functions.{max, min}
+import org.apache.spark.sql.functions.{max, min}
+import org.apache.spark.sql.types._
 
 /** Params for Multilayer Perceptron. */
 private[regression] trait MultilayerPerceptronParams extends PredictorParams

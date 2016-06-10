@@ -471,8 +471,6 @@ private[ml] object FeedForwardTopology {
   }
 }
 
-
-
 /**
  * Model of Feed Forward Neural Network.
  * Implements forward, gradient computation and can return weights in vector format.
@@ -846,7 +844,6 @@ private[ml] class FeedForwardTrainer(
     val newWeights = optimizer.optimize(dataStacker.stack(data).map { v =>
       (v._1, OldVectors.fromML(v._2))
     }, w)
-//    val newWeights = optimizer.optimize(dataStacker.stack(data), w)
     topology.model(newWeights)
   }
 
