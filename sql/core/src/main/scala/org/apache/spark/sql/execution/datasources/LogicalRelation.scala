@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference}
 import org.apache.spark.sql.catalyst.plans.logical.{LeafNode, LogicalPlan, Statistics}
 import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.util.Utils
 
 /**
  * Used to link a [[BaseRelation]] in to a logical query plan.
@@ -82,5 +83,5 @@ case class LogicalRelation(
       expectedOutputAttributes,
       metastoreTableIdentifier).asInstanceOf[this.type]
 
-  override def simpleString: String = s"Relation[${output.mkString(",")}] $relation"
+  override def simpleString: String = s"Relation[${Utils.truncatedString(output, ",")}] $relation"
 }
