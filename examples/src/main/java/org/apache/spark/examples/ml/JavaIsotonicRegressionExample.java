@@ -17,6 +17,7 @@
 package org.apache.spark.examples.ml;
 
 // $example on$
+
 import org.apache.spark.ml.regression.IsotonicRegression;
 import org.apache.spark.ml.regression.IsotonicRegressionModel;
 import org.apache.spark.sql.Dataset;

@@ -53,7 +53,7 @@ object IsotonicRegressionExample {
     println(s"Predictions associated with the boundaries: ${model.predictions}")
 
     // Makes predictions.
-    model.transform(dataset).show
+    model.transform(dataset).show()
     // $example off$
 
     spark.stop()
