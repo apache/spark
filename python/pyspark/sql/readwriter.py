@@ -277,8 +277,9 @@ class DataFrameReader(object):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
         You can set the following Parquet-specific option(s) for reading Parquet files:
-            * ``mergeSchema`` (default ``false``): sets whether we should merge schemas collected \
-                from all Parquet part-files. This will overwrite ``spark.sql.parquet.mergeSchema``.
+            * ``mergeSchema``: sets whether we should merge schemas collected from all \
+                Parquet part-files. This will overwrite ``spark.sql.parquet.mergeSchema``. \
+                The default value is specified in ``spark.sql.parquet.mergeSchema``.
 
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
@@ -766,7 +767,9 @@ class DataFrameWriter(object):
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, gzip, and lzo).
-                            This will overwrite ``spark.sql.parquet.compression.codec``.
+                            This will overwrite ``spark.sql.parquet.compression.codec``. If None
+                            is set, it uses the value specified in
+                            ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -859,6 +862,8 @@ class DataFrameWriter(object):
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
+                            This will overwrite ``orc.compress``. If None is set, it uses the
+                            default value, ``snappy``.
 
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))

@@ -416,8 +416,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * [[DataFrame]] if no paths are passed in.
    *
    * You can set the following Parquet-specific option(s) for reading Parquet files:
-   * <li>`mergeSchema` (default `false`): sets whether we should merge schemas collected from all
-   * Parquet part-files. This will overwrite `spark.sql.parquet.mergeSchema`.</li>
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
+   * whether we should merge schemas collected from all Parquet part-files. This will overwrite
+   * `spark.sql.parquet.mergeSchema`.</li>
    *
    * @since 1.4.0
    */
