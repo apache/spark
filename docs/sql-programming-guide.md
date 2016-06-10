@@ -2248,7 +2248,7 @@ import pyspark.sql.functions as func
 
 # In 1.3.x, in order for the grouping column "department" to show up,
 # it must be included explicitly as part of the agg function call.
-df.groupBy("department").agg("department"), func.max("age"), func.sum("expense"))
+df.groupBy("department").agg(df["department"], func.max("age"), func.sum("expense"))
 
 # In 1.4+, grouping column "department" is included automatically.
 df.groupBy("department").agg(func.max("age"), func.sum("expense"))
