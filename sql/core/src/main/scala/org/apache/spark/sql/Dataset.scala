@@ -2400,7 +2400,7 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   @Experimental
-  def write: DataFrameWriter = new DataFrameWriter(toDF())
+  def write: DataFrameWriter[T] = new DataFrameWriter[T](this)
 
   /**
    * Returns the content of the Dataset as a Dataset of JSON strings.
