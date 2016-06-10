@@ -1803,12 +1803,12 @@ class UserDefinedJythonFunction(object):
                 return v.__module__.startswith("pyspark")
 
             # Sort out PySpark and non PySpark requirements
-            req_vars = {k: v for k, v in req.items() if not isClass(v) or not isInternal(v)}
-            req_imports = {k: v for k, v in req.items() if isClass(v) and isInternal(v)}
+            req_vars = dict((k, v) for k, v in req.items() if not isClass(v) or not isInternal(v))
+            req_imports = dict((k, v) for k, v in req.items() if isClass(v) and isInternal(v))
             if req_vars:
                 serialized_vars = b64encode(ser.dumps(req_vars)).decode("utf-8")
             if req_imports:
-                formatted_imports = {(v.__module__, v.__name__, k) for k, v in req_imports.items()}
+                formatted_imports = list((v.__module__, v.__name__, k) for k, v in req_imports.items())
                 serialized_imports = b64encode(ser.dumps(formatted_imports)).decode("utf-8")
 
         ctx = SQLContext.getOrCreate(sc)
