@@ -155,6 +155,55 @@ many column field r/w:                   Best/Avg Time(ms)    Rate(M/s)   Per Ro
 */
   }
 
+  ignore("wide shallowly nested struct field read and write") {
+    val benchmark = new Benchmark(
+      "wide shallowly nested struct field r/w", scaleFactor)
+    for (width <- widthsToTest) {
+      val numRows = scaleFactor / width
+      var datum: String = "{"
+      for (i <- 1 to width) {
+        if (i == 1) {
+          datum += s""""value_$i": 1"""
+        } else {
+          datum += s""", "value_$i": 1"""
+        }
+      }
+      datum += "}"
+      datum = s"""{"a": {"b": {"c": $datum, "d": $datum}, "e": $datum}}"""
+      val df = sparkSession.read.json(sparkSession.range(numRows).map(_ => datum).rdd).cache()
+      df.count()  // force caching
+      addCases(benchmark, df, s"$width wide x $numRows rows", "a.b.c.value_1")
+    }
+    benchmark.run()
+
+/*
+Java HotSpot(TM) 64-Bit Server VM 1.7.0_80-b15 on Linux 4.2.0-36-generic
+Intel(R) Xeon(R) CPU E5-1650 v3 @ 3.50GHz
+wide shallowly nested struct field r/w:  Best/Avg Time(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------
+1 wide x 100000 rows (read in-mem)             100 /  125          1.0         997.7       1.0X
+1 wide x 100000 rows (write in-mem)            130 /  147          0.8        1302.9       0.8X
+1 wide x 100000 rows (read parquet)            195 /  228          0.5        1951.4       0.5X
+1 wide x 100000 rows (write parquet)           248 /  259          0.4        2479.7       0.4X
+10 wide x 10000 rows (read in-mem)              76 /   89          1.3         757.2       1.3X
+10 wide x 10000 rows (write in-mem)             90 /  116          1.1         900.0       1.1X
+10 wide x 10000 rows (read parquet)             90 /  135          1.1         903.9       1.1X
+10 wide x 10000 rows (write parquet)           222 /  240          0.4        2222.8       0.4X
+100 wide x 1000 rows (read in-mem)              71 /   91          1.4         710.8       1.4X
+100 wide x 1000 rows (write in-mem)            252 /  324          0.4        2522.4       0.4X
+100 wide x 1000 rows (read parquet)            310 /  329          0.3        3095.9       0.3X
+100 wide x 1000 rows (write parquet)           253 /  267          0.4        2525.7       0.4X
+1000 wide x 100 rows (read in-mem)             144 /  160          0.7        1439.5       0.7X
+1000 wide x 100 rows (write in-mem)           2055 / 2326          0.0       20553.9       0.0X
+1000 wide x 100 rows (read parquet)            750 /  925          0.1        7496.8       0.1X
+1000 wide x 100 rows (write parquet)           235 /  317          0.4        2347.5       0.4X
+2500 wide x 40 rows (read in-mem)              219 /  227          0.5        2190.9       0.5X
+2500 wide x 40 rows (write in-mem)            5177 / 5423          0.0       51773.2       0.0X
+2500 wide x 40 rows (read parquet)            1642 / 1714          0.1       16417.7       0.1X
+2500 wide x 40 rows (write parquet)            357 /  381          0.3        3568.2       0.3X
+*/
+  }
+
   ignore("wide struct field read and write") {
     val benchmark = new Benchmark("wide struct field r/w", scaleFactor)
     for (width <- widthsToTest) {
