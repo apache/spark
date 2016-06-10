@@ -89,6 +89,10 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.iterator.map(_._1).toList.sorted
   }
 
+  private[catalyst] def functionSet(): Set[String] = synchronized {
+    functionBuilders.iterator.map(_._1).toSet
+  }
+
   override def lookupFunction(name: String): Option[ExpressionInfo] = synchronized {
     functionBuilders.get(name).map(_._1)
   }
