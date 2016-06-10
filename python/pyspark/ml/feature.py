@@ -2244,28 +2244,33 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
     windowSize = Param(Params._dummy(), "windowSize",
                        "the window size (context words from [-window, window]). Default value is 5",
                        typeConverter=TypeConverters.toInt)
+    maxSentenceLength = Param(Params._dummy(), "maxSentenceLength",
+                              "Maximum length (in words) of each sentence in the input data. " +
+                              "Any sentence longer than this threshold will " +
+                              "be divided into chunks up to the size.",
+                              typeConverter=TypeConverters.toInt)
 
     @keyword_only
     def __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                 seed=None, inputCol=None, outputCol=None, windowSize=5):
+                 seed=None, inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000):
         """
         __init__(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, \
-                 seed=None, inputCol=None, outputCol=None, windowSize=5)
+                 seed=None, inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000)
         """
         super(Word2Vec, self).__init__()
         self._java_obj = self._new_java_obj("org.apache.spark.ml.feature.Word2Vec", self.uid)
         self._setDefault(vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                         seed=None, windowSize=5)
+                         seed=None, windowSize=5, maxSentenceLength=1000)
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
 
     @keyword_only
     @since("1.4.0")
     def setParams(self, vectorSize=100, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1,
-                  seed=None, inputCol=None, outputCol=None, windowSize=5):
+                  seed=None, inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000):
         """
         setParams(self, minCount=5, numPartitions=1, stepSize=0.025, maxIter=1, seed=None, \
-                 inputCol=None, outputCol=None, windowSize=5)
+                 inputCol=None, outputCol=None, windowSize=5, maxSentenceLength=1000)
         Sets params for this Word2Vec.
         """
         kwargs = self.setParams._input_kwargs
@@ -2326,6 +2331,20 @@ class Word2Vec(JavaEstimator, HasStepSize, HasMaxIter, HasSeed, HasInputCol, Has
         Gets the value of windowSize or its default value.
         """
         return self.getOrDefault(self.windowSize)
+
+    @since("2.0.0")
+    def setMaxSentenceLength(self, value):
+        """
+        Sets the value of :py:attr:`maxSentenceLength`.
+        """
+        return self._set(maxSentenceLength=value)
+
+    @since("2.0.0")
+    def getMaxSentenceLength(self):
+        """
+        Gets the value of maxSentenceLength or its default value.
+        """
+        return self.getOrDefault(self.maxSentenceLength)
 
     def _create_model(self, java_model):
         return Word2VecModel(java_model)
