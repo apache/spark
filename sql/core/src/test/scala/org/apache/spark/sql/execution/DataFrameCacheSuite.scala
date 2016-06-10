@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.execution.aggregate.TungstenAggregate
+import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
@@ -66,7 +66,7 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
   }
 
   test("Aggregate with grouping keys should be included in WholeStageCodegen with column codegen") {
@@ -77,7 +77,7 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
   }
 
   test("Aggregate with columns should be included in WholeStageCodegen with column codegen") {
@@ -88,7 +88,7 @@ class DataFrameCacheSuite extends QueryTest with SharedSQLContext {
     assert(plan.find(p =>
       p.isInstanceOf[WholeStageCodegenExec] &&
         p.asInstanceOf[WholeStageCodegenExec].enableColumnCodeGen &&
-        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[TungstenAggregate]).isDefined)
+        p.asInstanceOf[WholeStageCodegenExec].child.isInstanceOf[HashAggregateExec]).isDefined)
   }
 
   test("Sort should be included in WholeStageCodegen without column codegen") {

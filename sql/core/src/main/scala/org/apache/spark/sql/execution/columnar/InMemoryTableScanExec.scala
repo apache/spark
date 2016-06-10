@@ -22,10 +22,9 @@ import org.apache.spark.sql.SQLContext
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
-import org.apache.spark.sql.execution.LeafExecNode
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.execution.{CodegenSupport, LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.execution.vectorized.ColumnVector
@@ -116,7 +115,7 @@ private[sql] case class InMemoryTableScanExec(
   lazy val readBatches = sparkContext.longAccumulator
 
   def incrementReadPartitionAccumulator(): Unit = {
-    readPartitions += 1
+    readPartitions.add(1)
   }
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
