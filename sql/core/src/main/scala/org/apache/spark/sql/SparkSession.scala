@@ -67,6 +67,14 @@ import org.apache.spark.util.Utils
  *     .config("spark.some.config.option", "some-value").
  *     .getOrCreate()
  * }}}
+ *
+ * @groupname basic Basic Operations
+ * @groupname config Configuration
+ * @groupname dataframes Custom DataFrame Creation
+ * @groupname dataset Custom Dataset Creation
+ * @groupname ddl_ops Persistent Catalog DDL
+ * @groupname genericdata Generic Data Sources
+ * @groupname Ungrouped Support functions for language integrated queries
  */
 class SparkSession private(
     @transient val sparkContext: SparkContext,
@@ -228,6 +236,7 @@ class SparkSession private(
    * Creates a new [[Dataset]] of type T containing zero elements.
    *
    * @return 2.0.0
+   * @group dataset
    */
   @Experimental
   def emptyDataset[T: Encoder]: Dataset[T] = {
