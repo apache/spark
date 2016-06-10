@@ -321,7 +321,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(spark.sharedState.cacheManager.isEmpty)
   }
 
-  test("Clear accumulators when uncacheTable to prevent memory leaking") {
+  test("Ensure accumulators to be cleared after GC when uncacheTable") {
     sql("SELECT key FROM testData LIMIT 10").createOrReplaceTempView("t1")
     sql("SELECT key FROM testData LIMIT 5").createOrReplaceTempView("t2")
 
@@ -343,6 +343,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
 
     spark.catalog.uncacheTable("t1")
     spark.catalog.uncacheTable("t2")
+
+    System.gc()
+    Thread.sleep(50) // Wait for cleaning by ContextCleaner.
 
     assert(AccumulatorContext.get(accId1).isEmpty)
     assert(AccumulatorContext.get(accId2).isEmpty)

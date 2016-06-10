@@ -210,12 +210,6 @@ private[sql] case class InMemoryRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
-
-  private[sql] def uncache(blocking: Boolean): Unit = {
-    AccumulatorContext.remove(batchStats.id)
-    cachedColumnBuffers.unpersist(blocking)
-    _cachedColumnBuffers = null
-  }
 }
 
 private[sql] case class InMemoryTableScanExec(
