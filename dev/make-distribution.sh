@@ -42,6 +42,7 @@ function exit_with_usage {
   echo "usage:"
   cl_options="[--name] [--tgz] [--mvn <mvn-command>]"
   echo "make-distribution.sh $cl_options <maven build options>"
+  echo "Decrease build times with the -T option: -T 1C will result in Maven using one thread per core."
   echo "See Spark's \"Building Spark\" doc for correct Maven options."
   echo ""
   exit 1
@@ -53,7 +54,7 @@ while (( "$#" )); do
     --hadoop)
       echo "Error: '--hadoop' is no longer supported:"
       echo "Error: use Maven profiles and options -Dhadoop.version and -Dyarn.version instead."
-      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3 and hadoop-2.4."
+      echo "Error: Related profiles include hadoop-2.2, hadoop-2.3, hadoop-2.4 and hadoop-2.7."
       exit_with_usage
       ;;
     --with-yarn)
