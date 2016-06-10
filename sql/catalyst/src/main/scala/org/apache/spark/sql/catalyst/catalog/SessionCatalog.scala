@@ -855,7 +855,7 @@ class SessionCatalog(
       .map { f => FunctionIdentifier(f, Some(dbName)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
-    val builtInFunctions = FunctionRegistry.builtin.functionSet()
+    val builtInFunctions = FunctionRegistry.builtin.functionSet
     (dbFunctions ++ loadedFunctions).filterNot(f => builtInFunctions.contains(f.funcName))
   }
 
