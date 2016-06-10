@@ -503,7 +503,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed("insertInto")
     assertNotStreaming("insertInto() can only be called on non-continuous queries")
-    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
+    val partitions = normalizedParCols.map(_.map(col => col -> (Option.empty[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
     df.sparkSession.sessionState.executePlan(
