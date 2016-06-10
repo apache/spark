@@ -25,7 +25,7 @@ class RWrapperUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("avoid column name conflicting") {
     val rFormula = new RFormula().setFormula("label ~ features")
-    val data = spark.read.format("libsvm").load("data/mllib/sample_libsvm_data.txt")
+    val data = spark.read.format("libsvm").load("../data/mllib/sample_libsvm_data.txt")
 
     // if not checking column name, then IllegalArgumentException
     intercept[IllegalArgumentException] {
