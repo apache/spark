@@ -269,8 +269,10 @@ class MultilayerPerceptronRegressor @Since("2.0.0") (
     val myLayers = getLayers
     val lpData: RDD[LabeledPoint] = extractLabeledPoints(dataset)
     // Compute minimum and maximum values in the training labels for scaling.
-    setMin(dataset.select("label").rdd.map(x => x(0).asInstanceOf[Double]).min())
-    setMax(dataset.select("label").rdd.map(x => x(0).asInstanceOf[Double]).max())
+    val minmax = dataset
+      .agg(max("label").cast(DoubleType), min("label").cast(DoubleType)).collect()(0)
+    setMin(minmax(1).asInstanceOf[Double])
+    setMax(minmax(0).asInstanceOf[Double])
     // Encode and scale labels to prepare for training.
     val data = lpData.map(lp => LabelConverter.encodeLabeledPoint(lp, $(minimum), $(maximum)))
     // Initialize the network architecture with the specified layer count and sizes.

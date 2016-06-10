@@ -110,8 +110,6 @@ class MultilayerPerceptronRegressorSuite
       "Training should produce the same weights given equal initial weights and number of steps")
   }
 
-  /* Test for numeric types after rewriting max/min for Dataframe method to handle Long/BigInt */
-
   test("read/write: MultilayerPerceptronRegressor") {
     val mlpr = new MultilayerPerceptronRegressor()
       .setLayers(Array(4, 3, 1))
@@ -139,6 +137,17 @@ class MultilayerPerceptronRegressorSuite
     val newMlpModel = testDefaultReadWrite(mlpModel, testParams = true)
     assert(newMlpModel.layers === mlpModel.layers)
     assert(newMlpModel.weights === mlpModel.weights)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val layers = Array(1, 1)
+    val mpc = new MultilayerPerceptronRegressor().setLayers(layers).setMaxIter(1)
+    MLTestingUtils.checkNumericTypes[
+      MultilayerPerceptronRegressorModel, MultilayerPerceptronRegressor](
+      mpc, spark) { (expected, actual) =>
+      assert(expected.layers === actual.layers)
+      assert(expected.weights === actual.weights)
+    }
   }
 
 }
