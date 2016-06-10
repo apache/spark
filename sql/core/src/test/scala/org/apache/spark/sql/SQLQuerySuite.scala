@@ -2144,7 +2144,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       // is correct.
       def verifyCallCount(df: DataFrame, expectedResult: Row, expectedCount: Int): Unit = {
         countAcc.setValue(0)
-        checkAnswer(df, expectedResult)
+        QueryTest.checkAnswer(
+          df, Seq(expectedResult), checkToRDD = false /* avoid duplicate exec */)
         assert(countAcc.value == expectedCount)
       }
 
