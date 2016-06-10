@@ -432,6 +432,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Experimental
   def foreach(writer: ForeachWriter[T]): ContinuousQuery = {
+    assertNotPartitioned("foreach")
     assertNotBucketed("foreach")
     assertStreaming(
       "foreach() can only be called on streaming Datasets/DataFrames.")
@@ -562,8 +563,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def assertNotBucketed(operation: String): Unit = {
     if (numBuckets.isDefined || sortColumnNames.isDefined) {
-      throw new IllegalArgumentException(
-        s"'$operation' does not support bucketing right now.")
+      throw new AnalysisException(s"'$operation' does not support bucketing right now")
+    }
+  }
+
+  private def assertNotPartitioned(operation: String): Unit = {
+    if (partitioningColumns.isDefined) {
+      throw new AnalysisException( s"'$operation' does not support partitioning")
     }
   }
 
@@ -646,6 +652,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
+    assertNotPartitioned("jdbc")
+    assertNotBucketed("jdbc")
     assertNotStreaming("jdbc() can only be called on non-continuous queries")
 
     val props = new Properties()
