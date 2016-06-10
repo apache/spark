@@ -89,7 +89,7 @@ class SimpleFunctionRegistry extends FunctionRegistry {
     functionBuilders.iterator.map(_._1).toList.sorted
   }
 
-  private[catalyst] lazy val functionSet: Set[String] = synchronized {
+  private[catalyst] def functionSet(): Set[String] = synchronized {
     functionBuilders.iterator.map(_._1).toSet
   }
 
