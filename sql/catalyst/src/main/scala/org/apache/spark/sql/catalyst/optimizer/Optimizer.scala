@@ -616,7 +616,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
         val newChildren = children.filter(nonNullLiteral)
-        if (newChildren.length == 0) {
+        if (newChildren.isEmpty) {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
           newChildren.head
