@@ -400,7 +400,7 @@ private[sql] class ParquetFileFormat
     new ParquetOutputWriterFactory(
       sqlContext.conf,
       dataSchema,
-      sqlContext.sparkContext.hadoopConfiguration,
+      sqlContext.sessionState.newHadoopConf(),
       options)
   }
 }
