@@ -227,7 +227,7 @@ class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
   }
 
 
-  /** Run a body of code by defining a query each on multiple datasets */
+  /** Run a body of code by defining a query on each dataset */
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {

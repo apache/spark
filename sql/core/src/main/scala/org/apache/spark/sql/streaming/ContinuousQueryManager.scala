@@ -19,13 +19,15 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * :: Experimental ::
@@ -170,18 +172,50 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
 
   /** Start a query */
   private[sql] def startQuery(
-      name: String,
-      checkpointLocation: String,
+      userSpecifiedName: Option[String],
+      userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
       sink: Sink,
       outputMode: OutputMode,
+      useTempCheckpointLocation: Boolean = false,
+      recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock()): ContinuousQuery = {
     activeQueriesLock.synchronized {
+      val id = StreamExecution.nextId
+      val name = userSpecifiedName.getOrElse(s"query-$id")
       if (activeQueries.contains(name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
+      val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
+        new Path(userSpecified).toUri.toString
+      }.orElse {
+        df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION).map { location =>
+          new Path(location, name).toUri.toString
+        }
+      }.getOrElse {
+        if (useTempCheckpointLocation) {
+          Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+        } else {
+          throw new AnalysisException(
+            "checkpointLocation must be specified either " +
+              """through option("checkpointLocation", ...) or """ +
+              s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+        }
+      }
+
+      // If offsets have already been created, we trying to resume a query.
+      if (!recoverFromCheckpointLocation) {
+        val checkpointPath = new Path(checkpointLocation, "offsets")
+        val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
+        if (fs.exists(checkpointPath)) {
+          throw new AnalysisException(
+            s"This query does not support recovering from checkpoint location. " +
+              s"Delete $checkpointPath to start over.")
+        }
+      }
+
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
@@ -203,6 +237,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
       }
       val query = new StreamExecution(
         sparkSession,
+        id,
         name,
         checkpointLocation,
         logicalPlan,
