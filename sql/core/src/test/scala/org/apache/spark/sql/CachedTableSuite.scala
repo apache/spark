@@ -321,7 +321,8 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assert(spark.sharedState.cacheManager.isEmpty)
   }
 
-  test("Ensure accumulators to be cleared after GC when uncacheTable") {
+  // This test would be flaky.
+  ignore("Ensure accumulators to be cleared after GC when uncacheTable") {
     sql("SELECT key FROM testData LIMIT 10").createOrReplaceTempView("t1")
     sql("SELECT key FROM testData LIMIT 5").createOrReplaceTempView("t2")
 
