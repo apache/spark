@@ -164,7 +164,7 @@ class WideSchemaBenchmark extends SparkFunSuite with BeforeAndAfterEach {
     benchmark.run()
   }
 
-  test("bushy struct field read and write") {
+  ignore("bushy struct field read and write") {
     val benchmark = new Benchmark("bushy struct field r/w", scaleFactor, output = Some(out))
     for (width <- Seq(1, 100, 1000)) {
       val numRows = scaleFactor / width
