@@ -26,6 +26,7 @@ import com.codahale.metrics.health.HealthCheckRegistry
 
 import org.apache.spark.SparkException
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd, SparkListenerApplicationStart, SparkListenerBlockManagerAdded, SparkListenerBlockManagerRemoved, SparkListenerBlockUpdated, SparkListenerEnvironmentUpdate, SparkListenerEvent, SparkListenerExecutorAdded, SparkListenerExecutorMetricsUpdate, SparkListenerExecutorRemoved, SparkListenerJobEnd, SparkListenerJobStart, SparkListenerStageCompleted, SparkListenerStageSubmitted, SparkListenerTaskEnd, SparkListenerTaskGettingResult, SparkListenerTaskStart, SparkListenerUnpersistRDD}
 import org.apache.spark.ui.SparkUI
 
 private[spark] case class ApplicationAttemptInfo(
@@ -163,4 +164,88 @@ private[history] abstract class ApplicationHistoryProvider {
    * @return html text to display when the application list is empty
    */
   def getEmptyListingHtml(): Seq[Node] = Seq.empty
+}
+
+/**
+ * A simple counter of events.
+ * There is no concurrency support here: all events must come in sequentially.
+ */
+private[history] class EventCountListener extends SparkListener {
+  var eventCount = 0L
+
+  def process(event: SparkListenerEvent): Unit = {
+    eventCount += 1
+  }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted): Unit = {
+    process(stageCompleted)
+  }
+
+  override def onStageSubmitted(event: SparkListenerStageSubmitted): Unit = {
+    process(event)
+  }
+
+  override def onTaskStart(event: SparkListenerTaskStart): Unit = {
+    process(event)
+  }
+
+  override def onTaskGettingResult(event: SparkListenerTaskGettingResult): Unit = {
+    process(event)
+  }
+
+  override def onTaskEnd(event: SparkListenerTaskEnd): Unit = {
+    process(event)
+  }
+
+  override def onJobStart(event: SparkListenerJobStart): Unit = {
+    process(event)
+  }
+
+  override def onJobEnd(event: SparkListenerJobEnd): Unit = {
+    process(event)
+  }
+
+  override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate): Unit = {
+    process(event)
+  }
+
+  override def onBlockManagerAdded(event: SparkListenerBlockManagerAdded): Unit = {
+    process(event)
+  }
+
+  override def onBlockManagerRemoved(event: SparkListenerBlockManagerRemoved): Unit = {
+    process(event)
+  }
+
+  override def onUnpersistRDD(event: SparkListenerUnpersistRDD): Unit = {
+    process(event)
+  }
+
+  override def onApplicationStart(event: SparkListenerApplicationStart): Unit = {
+    process(event)
+  }
+
+  override def onApplicationEnd(event: SparkListenerApplicationEnd): Unit = {
+    process(event)
+  }
+
+  override def onExecutorMetricsUpdate(event: SparkListenerExecutorMetricsUpdate): Unit = {
+    process(event)
+  }
+
+  override def onExecutorAdded(event: SparkListenerExecutorAdded): Unit = {
+    process(event)
+  }
+
+  override def onExecutorRemoved(event: SparkListenerExecutorRemoved): Unit = {
+    process(event)
+  }
+
+  override def onBlockUpdated(event: SparkListenerBlockUpdated): Unit = {
+    process(event)
+  }
+
+  override def onOtherEvent(event: SparkListenerEvent): Unit = {
+    process(event)
+  }
 }

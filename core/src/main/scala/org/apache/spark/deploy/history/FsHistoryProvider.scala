@@ -28,7 +28,7 @@ import scala.xml.Node
 import com.codahale.metrics.{Counter, MetricRegistry, Timer}
 import com.google.common.io.ByteStreams
 import com.google.common.util.concurrent.{MoreExecutors, ThreadFactoryBuilder}
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileStatus, Path}
 import org.apache.hadoop.hdfs.DistributedFileSystem
 import org.apache.hadoop.hdfs.protocol.HdfsConstants
 import org.apache.hadoop.security.AccessControlException
@@ -282,7 +282,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
 
             val fileStatus = fs.getFileStatus(new Path(logDir, attempt.logPath))
 
-            val appListener = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+            val (appListener, count) = replay(fileStatus, isApplicationCompleted(fileStatus), replayBus)
+            metrics.eventReplayedCount.inc(count)
 
             if (appListener.appId.isDefined) {
               ui.getSecurityManager.setAcls(HISTORY_UI_ACLS_ENABLE)
@@ -508,7 +509,8 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
       // won't change whenever HistoryServer restarts and reloads the file.
       val lastUpdated = if (appCompleted) fileStatus.getModificationTime else clock.getTimeMillis()
 
-      val appListener = replay(fileStatus, appCompleted, new ReplayListenerBus(), eventsFilter)
+      val (appListener, count) = replay(fileStatus, appCompleted, new ReplayListenerBus(), eventsFilter)
+      metrics.eventReplayedCount.inc(count)
 
       // Without an app ID, new logs will render incorrectly in the listing page, so do not list or
       // try to show their UI.
@@ -677,12 +679,19 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * an `ApplicationEventListener` instance with event data captured from the replay.
    * `ReplayEventsFilter` determines what events are replayed and can therefore limit the
    * data captured in the returned `ApplicationEventListener` instance.
+   *
+   * @param eventLog reference to the event log to play back.
+   * @param appCompleted has the application completed?
+   * @param bus event bus to play events to
+   * @param eventsFilter filter for events
+   * @return the event listener and the number of processed events
+   *
    */
   private def replay(
       eventLog: FileStatus,
       appCompleted: Boolean,
       bus: ReplayListenerBus,
-      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): ApplicationEventListener = {
+      eventsFilter: ReplayEventsFilter = SELECT_ALL_FILTER): (ApplicationEventListener, Long) = {
     val logPath = eventLog.getPath()
     logInfo(s"Replaying log path: $logPath")
     // Note that the eventLog may have *increased* in size since when we grabbed the filestatus,
@@ -693,10 +702,12 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     // after it's created, so we get a file size that is no bigger than what is actually read.
     val logInput = EventLoggingListener.openEventLog(logPath, fs)
     try {
+      var countListener = new EventCountListener()
       val appListener = new ApplicationEventListener
       bus.addListener(appListener)
+      bus.addListener(countListener)
       bus.replay(logInput, logPath.toString, !appCompleted, eventsFilter)
-      appListener
+      (appListener, countListener.eventCount)
     } finally {
       logInput.close()
     }
@@ -814,6 +825,9 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extend
   /** Number of update failures. */
   val updateFailureCount = new Counter()
 
+  /** Number of events replayed. This includes those on UI playback as well as listing merge. */
+  val eventReplayedCount = new Counter()
+
   /** Update duration timer. */
   val updateTimer = new Timer()
 
@@ -839,6 +853,7 @@ private[history] class FsHistoryProviderMetrics(owner: FsHistoryProvider) extend
   val mergeApplicationListingTimer = new Timer()
 
   private val countersAndGauges = Seq(
+    ("event.replay.count", eventReplayedCount),
     ("update.count", updateCount),
     ("update.failure.count", updateFailureCount),
     ("update.last.attempted", updateLastAttempted),

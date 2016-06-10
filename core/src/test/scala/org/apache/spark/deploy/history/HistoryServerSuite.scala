@@ -416,7 +416,6 @@ class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with Matchers
     // stop the server with the old config, and start the new one
     server.stop()
     server = new HistoryServer(myConf, provider, securityManager, 18080)
-    server.initialize()
     server.bind()
     val port = server.boundPort
     val metrics = server.cacheMetrics
