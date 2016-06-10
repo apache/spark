@@ -179,6 +179,20 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     StatFunctions.crossTabulate(df, col1, col2)
   }
 
+  def tab(col: String,
+          weightCol: Option[String] = None,
+          frequencyColumnName: String = "Frequency",
+          percentColumnName: String = "Proportion"): DataFrame =
+    StatFunctions.tabulate(df, col, weightCol, frequencyColumnName, percentColumnName)
+
+  def tab(col: String,
+          weightCol: String,
+          frequencyColumnName: String,
+          percentColumnName: String): DataFrame =
+    tab(col, Some(weightCol), frequencyColumnName, percentColumnName)
+
+  def tab(col: String, weightCol: String): DataFrame = tab(col, Some(weightCol))
+
   /**
    * Finding frequent items for columns, possibly with false positives. Using the
    * frequent element count algorithm described in
