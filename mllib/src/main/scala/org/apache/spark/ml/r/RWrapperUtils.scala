@@ -34,7 +34,6 @@ object RWrapperUtils extends Logging {
    * @return Unit
    */
   def checkDataColumns(rFormula: RFormula, data: Dataset[_]): Unit = {
-
     if (data.schema.fieldNames.contains("label")) {
       logWarning("data containing 'label' column, so change its name to avoid conflict")
       rFormula.setLabelCol("label_output")

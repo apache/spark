@@ -18,29 +18,28 @@
 package org.apache.spark.ml.r
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.RFormula
+import org.apache.spark.ml.feature.{RFormula, RFormulaModel}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-
 
 class RWrapperUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
   test("avoid column name conflicting") {
     val rFormula = new RFormula().setFormula("label ~ features")
-    val data = spark.read.format("libsvm")
-      .load("../../data/mllib/sample_libsvm_data.txt")
+    val data = spark.read.format("libsvm").load("../../data/mllib/sample_libsvm_data.txt")
 
     // if not checking column name, then IllegalArgumentException
     intercept[IllegalArgumentException] {
       rFormula.fit(data)
     }
 
-    // after checking
+    // after checking, model build is ok
     RWrapperUtils.checkDataColumns(rFormula, data)
 
     assert(rFormula.getLabelCol == "label_output")
     assert(rFormula.getFeaturesCol == "features_output")
 
     val model = rFormula.fit(data)
+    assert(model.isInstanceOf[RFormulaModel])
 
     assert(model.getLabelCol == "label_output")
     assert(model.getFeaturesCol == "features_output")
