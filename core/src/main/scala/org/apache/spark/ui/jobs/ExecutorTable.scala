@@ -84,6 +84,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
           <th>Shuffle Spill (Memory)</th>
           <th>Shuffle Spill (Disk)</th>
         }}
+        <th>Logs</th>
       </thead>
       <tbody>
         {createExecutorTable()}
@@ -147,6 +148,14 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
                 {Utils.bytesToString(v.diskBytesSpilled)}
               </td>
             }}
+            <td>
+              {val logs = parent.executorsListener.executorToLogUrls(k)
+               if (logs.isEmpty) {
+                 "No Logs Found"
+               } else logs.map {
+                case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+              }}
+            </td>
           </tr>
         }
       case None =>
