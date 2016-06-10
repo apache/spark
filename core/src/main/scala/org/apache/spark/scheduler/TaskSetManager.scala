@@ -270,7 +270,7 @@ private[spark] class TaskSetManager(
    * Is this re-execution of a failed task on an executor it already failed in before
    * EXECUTOR_TASK_BLACKLIST_TIMEOUT has elapsed ?
    */
-  private def executorIsBlacklisted(execId: String, taskId: Int): Boolean = {
+  private[scheduler] def executorIsBlacklisted(execId: String, taskId: Int): Boolean = {
     if (failedExecutors.contains(taskId)) {
       val failed = failedExecutors.get(taskId).get
 
@@ -401,6 +401,25 @@ private[spark] class TaskSetManager(
     // find a speculative task if all others tasks have been scheduled
     dequeueSpeculativeTask(execId, host, maxLocality).map {
       case (taskIndex, allowedLocality) => (taskIndex, allowedLocality, true)}
+  }
+
+  /**
+   * Return some task which is pending, but do not remove it from the list of pending tasks.
+   * Used as a simple way to test if this task set is schedulable anywhere, or if it has been
+   * completely blacklisted.
+   */
+  private[scheduler] def pollPendingTask: Option[Int] = {
+    // usually this will just take the last pending task, but because of the lazy removal
+    // from each list, we may need to go deeper in the list
+    var indexOffset = allPendingTasks.size
+    while (indexOffset > 0) {
+      indexOffset -= 1
+      val index = allPendingTasks(indexOffset)
+      if (copiesRunning(index) == 0 && !successful(index)) {
+        return Some(index)
+      }
+    }
+    None
   }
 
   /**

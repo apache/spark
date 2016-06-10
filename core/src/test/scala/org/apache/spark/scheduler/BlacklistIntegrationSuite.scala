@@ -24,6 +24,7 @@ import org.apache.spark._
 class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorMockBackend]{
 
   val badHost = "host-0"
+  val duration = Duration(10, SECONDS)
 
   /**
    * This backend just always fails if the task is executed on a bad host, but otherwise succeeds
@@ -93,6 +94,30 @@ class BlacklistIntegrationSuite extends SchedulerIntegrationSuite[MultiExecutorM
     assertDataStructuresEmpty(noFailure = true)
   }
 
+  // Make sure that if we've failed on all executors, but haven't hit task.maxFailures yet, the job
+  // doesn't hang
+  testScheduler(
+    "SPARK-15865 Progress with fewer executors than maxTaskFailures",
+    extraConfs = Seq(
+      // set this to something much longer than the test duration
+      "spark.scheduler.executorTaskBlacklistTime" -> "10000000",
+      "spark.testing.nHosts" -> "2",
+      "spark.testing.nExecutorsPerHost" -> "1",
+      "spark.testing.nCoresPerExecutor" -> "1"
+    )
+  ) {
+    def runBackend(): Unit = {
+      val (taskDescription, _) = backend.beginTask()
+      backend.taskFailed(taskDescription, new RuntimeException("test task failure"))
+    }
+    withBackend(runBackend _) {
+      val jobFuture = submit(new MockRDD(sc, 10, Nil), (0 until 10).toArray)
+      Await.ready(jobFuture, duration)
+      assert(failure.getMessage.contains("Aborting TaskSet 0.0 because it has a task which " +
+        "cannot be scheduled on any executor due to blacklists"))
+    }
+    assertDataStructuresEmpty(noFailure = false)
+  }
 }
 
 class MultiExecutorMockBackend(
