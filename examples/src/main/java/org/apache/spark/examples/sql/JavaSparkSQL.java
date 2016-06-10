@@ -25,6 +25,7 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.Function;
 
 import org.apache.spark.sql.Dataset;
+import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.Row;
 import org.apache.spark.sql.SparkSession;
 
@@ -59,7 +60,7 @@ public class JavaSparkSQL {
     System.out.println("=== Data source: RDD ===");
     // Load a text file and convert each line to a Java Bean.
     String file = "examples/src/main/resources/people.txt";
-    JavaRDD<Person> people = spark.read().text(file).javaRDD().map(
+    JavaRDD<Person> people = spark.read().text(file).as(Encoders.STRING()).javaRDD().map(
       new Function<String, Person>() {
         @Override
         public Person call(String line) {

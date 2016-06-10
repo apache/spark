@@ -72,6 +72,7 @@ object SparkHdfsLR {
       .getOrCreate()
 
     val inputPath = args(0)
+    import spark.implicits._
     val lines = spark.read.text(inputPath).as[String].rdd
 
     val points = lines.map(parsePoint).cache()

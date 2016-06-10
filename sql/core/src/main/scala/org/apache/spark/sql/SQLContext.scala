@@ -609,51 +609,51 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in a range from 0 to `end` (exclusive) with step value 1.
    *
-   * @since 1.4.1
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(end: Long): DataFrame = sparkSession.range(end).toDF()
+  def range(end: Long): Dataset[java.lang.Long] = sparkSession.range(end)
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with step value 1.
    *
-   * @since 1.4.0
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
+  def range(start: Long, end: Long): Dataset[java.lang.Long] = sparkSession.range(start, end)
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
-   * @group dataframe
+   * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long): DataFrame = {
-    sparkSession.range(start, end, step).toDF()
+  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
+    sparkSession.range(start, end, step)
   }
 
   /**
    * :: Experimental ::
-   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
-   * in an range from `start` to `end` (exclusive) with an step value, with partition number
+   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * in a range from `start` to `end` (exclusive) with a step value, with partition number
    * specified.
    *
-   * @since 1.4.0
-   * @group dataframe
+   * @since 2.0.0
+   * @group dataset
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
-    sparkSession.range(start, end, step, numPartitions).toDF()
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
+    sparkSession.range(start, end, step, numPartitions)
   }
 
   /**

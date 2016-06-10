@@ -71,6 +71,7 @@ object SparkKMeans {
       .appName("SparkKMeans")
       .getOrCreate()
 
+    import spark.implicits._
     val lines = spark.read.text(args(0)).as[String].rdd
     val data = lines.map(parseVector _).cache()
     val K = args(1).toInt
