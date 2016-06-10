@@ -30,6 +30,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.{AccumulableInfo, TaskInfo, TaskLocality}
 import org.apache.spark.ui._
+import org.apache.spark.ui.exec.ExecutorsListener
 import org.apache.spark.ui.jobs.UIData._
 import org.apache.spark.util.{Distribution, Utils}
 
@@ -39,6 +40,7 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
 
   private val progressListener = parent.progressListener
   private val operationGraphListener = parent.operationGraphListener
+  private val executorsListener = parent.executorsListener
 
   private val TIMELINE_LEGEND = {
     <div class="legend-area">
@@ -296,7 +298,8 @@ private[ui] class StagePage(parent: StagesTab) extends WebUIPage("stage") {
           currentTime,
           pageSize = taskPageSize,
           sortColumn = taskSortColumn,
-          desc = taskSortDesc
+          desc = taskSortDesc,
+          executorsListener = executorsListener
         )
         (_taskTable, _taskTable.table(page))
       } catch {
@@ -835,7 +838,8 @@ private[ui] class TaskTableRowData(
     val shuffleRead: Option[TaskTableRowShuffleReadData],
     val shuffleWrite: Option[TaskTableRowShuffleWriteData],
     val bytesSpilled: Option[TaskTableRowBytesSpilledData],
-    val error: String)
+    val error: String,
+    val logs: Map[String, String])
 
 private[ui] class TaskDataSource(
     tasks: Seq[TaskUIData],
@@ -848,7 +852,8 @@ private[ui] class TaskDataSource(
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedDataSource[TaskTableRowData](pageSize) {
+    desc: Boolean,
+    executorsListener: ExecutorsListener) extends PagedDataSource[TaskTableRowData](pageSize) {
   import StagePage._
 
   // Convert TaskUIData to TaskTableRowData which contains the final contents to show in the table
@@ -992,6 +997,8 @@ private[ui] class TaskDataSource(
         None
       }
 
+    val logs = executorsListener.executorToLogUrls.getOrElse(info.executorId, Map.empty)
+
     new TaskTableRowData(
       info.index,
       info.taskId,
@@ -1015,7 +1022,8 @@ private[ui] class TaskDataSource(
       shuffleRead,
       shuffleWrite,
       bytesSpilled,
-      taskData.errorMessage.getOrElse(""))
+      taskData.errorMessage.getOrElse(""),
+      logs)
   }
 
   /**
@@ -1193,6 +1201,16 @@ private[ui] class TaskDataSource(
         override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
           Ordering.String.compare(x.error, y.error)
       }
+      case "Logs" => new Ordering[TaskTableRowData] {
+        override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
+          if (x.logs.isEmpty == y.logs.isEmpty) {
+            return 0
+          } else if (x.logs.isEmpty) {
+            return -1;
+          } else {
+            return 1;
+          }
+      }
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")
     }
     if (desc) {
@@ -1217,7 +1235,8 @@ private[ui] class TaskPagedTable(
     currentTime: Long,
     pageSize: Int,
     sortColumn: String,
-    desc: Boolean) extends PagedTable[TaskTableRowData] {
+    desc: Boolean,
+    executorsListener: ExecutorsListener) extends PagedTable[TaskTableRowData] {
 
   // We only track peak memory used for unsafe operators
   private val displayPeakExecutionMemory = conf.getBoolean("spark.sql.unsafe.enabled", true)
@@ -1244,7 +1263,8 @@ private[ui] class TaskPagedTable(
     currentTime,
     pageSize,
     sortColumn,
-    desc)
+    desc,
+    executorsListener)
 
   override def pageLink(page: Int): String = {
     val encodedSortColumn = URLEncoder.encode(sortColumn, "UTF-8")
@@ -1297,7 +1317,8 @@ private[ui] class TaskPagedTable(
         } else {
           Nil
         }} ++
-        Seq(("Errors", ""))
+        Seq(("Errors", "")) ++
+        Seq(("Logs", ""))
 
     if (!taskHeadersAndCssClasses.map(_._1).contains(sortColumn)) {
       throw new IllegalArgumentException(s"Unknown column: $sortColumn")
@@ -1391,6 +1412,13 @@ private[ui] class TaskPagedTable(
         <td>{task.bytesSpilled.get.diskBytesSpilledReadable}</td>
       }}
       {errorMessageCell(task.error)}
+      <td>
+      {if (task.logs.isEmpty) {
+        "No Logs Found"
+      } else task.logs.map {
+        case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
+      }}
+      </td>
     </tr>
   }
 
