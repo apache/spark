@@ -597,22 +597,6 @@ class SparkSession(object):
         self._sc.stop()
         SparkSession._instantiatedContext = None
 
-    @since(2.0)
-    def __enter__(self):
-        """
-        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
-        """
-        return self
-
-    @since(2.0)
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """
-        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
-
-        Specifically stop the SparkSession on exit of the with block.
-        """
-        self.stop()
-
 
 def _test():
     import os
