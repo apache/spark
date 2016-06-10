@@ -127,22 +127,6 @@ class RowEncoderSuite extends SparkFunSuite {
         new StructType().add("array", arrayOfString).add("map", mapOfString))
       .add("structOfUDT", structOfUDT))
 
-  test(s"encode/decode: Product") {
-    val schema = new StructType()
-      .add("structAsProduct",
-        new StructType()
-          .add("int", IntegerType)
-          .add("string", StringType)
-          .add("double", DoubleType))
-
-    val encoder = RowEncoder(schema).resolveAndBind()
-
-    val input: Row = Row((100, "test", 0.123))
-    val row = encoder.toRow(input)
-    val convertedBack = encoder.fromRow(row)
-    assert(input.getStruct(0) == convertedBack.getStruct(0))
-  }
-
   test("encode/decode decimal type") {
     val schema = new StructType()
       .add("int", IntegerType)
@@ -230,6 +214,37 @@ class RowEncoderSuite extends SparkFunSuite {
     val e = intercept[RuntimeException](encoder.toRow(null))
     assert(e.getMessage.contains("Null value appeared in non-nullable field"))
     assert(e.getMessage.contains("top level row object"))
+  }
+
+  test("RowEncoder should validate external type") {
+    val e1 = intercept[RuntimeException] {
+      val schema = new StructType().add("a", IntegerType)
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(1.toShort))
+    }
+    assert(e1.getMessage.contains("java.lang.Short is not a valid external type"))
+
+    val e2 = intercept[RuntimeException] {
+      val schema = new StructType().add("a", StringType)
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(1))
+    }
+    assert(e2.getMessage.contains("java.lang.Integer is not a valid external type"))
+
+    val e3 = intercept[RuntimeException] {
+      val schema = new StructType().add("a",
+        new StructType().add("b", IntegerType).add("c", StringType))
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(1 -> "a"))
+    }
+    assert(e3.getMessage.contains("scala.Tuple2 is not a valid external type"))
+
+    val e4 = intercept[RuntimeException] {
+      val schema = new StructType().add("a", ArrayType(TimestampType))
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(Array("a")))
+    }
+    assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
   }
 
   private def encodeDecodeTest(schema: StructType): Unit = {

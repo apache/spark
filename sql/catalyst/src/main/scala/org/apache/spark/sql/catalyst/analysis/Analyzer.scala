@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
 /**
- * A trivial [[Analyzer]] with an dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
+ * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
@@ -1496,7 +1496,7 @@ class Analyzer(
    * This rule handles three cases:
    *  - A [[Project]] having [[WindowExpression]]s in its projectList;
    *  - An [[Aggregate]] having [[WindowExpression]]s in its aggregateExpressions.
-   *  - An [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
+   *  - A [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
    *    clause and the [[Aggregate]] has [[WindowExpression]]s in its aggregateExpressions.
    * Note: If there is a GROUP BY clause in the query, aggregations and corresponding
    * filters (expressions in the HAVING clause) should be evaluated before any

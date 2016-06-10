@@ -351,7 +351,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     def roc(self):
         """
         Returns the receiver operating characteristic (ROC) curve,
-        which is an Dataframe having two fields (FPR, TPR) with
+        which is a Dataframe having two fields (FPR, TPR) with
         (0.0, 0.0) prepended and (1.0, 1.0) appended to it.
 
         .. seealso:: `Wikipedia reference \
@@ -380,7 +380,7 @@ class BinaryLogisticRegressionSummary(LogisticRegressionSummary):
     @since("2.0.0")
     def pr(self):
         """
-        Returns the precision-recall curve, which is an Dataframe
+        Returns the precision-recall curve, which is a Dataframe
         containing two fields recall, precision with (0.0, 1.0) prepended
         to it.
 

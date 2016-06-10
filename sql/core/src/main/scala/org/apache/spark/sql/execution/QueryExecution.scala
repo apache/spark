@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.command.{DescribeTableCommand, ExecutedCom
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, ReuseExchange}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BinaryType, DateType, DecimalType, TimestampType, _}
+import org.apache.spark.util.Utils
 
 /**
  * The primary workflow for executing relational queries using Spark.  Designed to allow easy
@@ -201,24 +202,26 @@ class QueryExecution(val sparkSession: SparkSession, val logical: LogicalPlan) {
 
   def simpleString: String = {
     s"""== Physical Plan ==
-       |${stringOrError(executedPlan)}
+       |${stringOrError(executedPlan.treeString(verbose = false))}
       """.stripMargin.trim
   }
 
   override def toString: String = {
-    def output =
-      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}").mkString(", ")
-    val analyzedPlan =
-      Seq(stringOrError(output), stringOrError(analyzed)).filter(_.nonEmpty).mkString("\n")
+    def output = Utils.truncatedString(
+      analyzed.output.map(o => s"${o.name}: ${o.dataType.simpleString}"), ", ")
+    val analyzedPlan = Seq(
+      stringOrError(output),
+      stringOrError(analyzed.treeString(verbose = true))
+    ).filter(_.nonEmpty).mkString("\n")
 
     s"""== Parsed Logical Plan ==
-       |${stringOrError(logical)}
+       |${stringOrError(logical.treeString(verbose = true))}
        |== Analyzed Logical Plan ==
        |$analyzedPlan
        |== Optimized Logical Plan ==
-       |${stringOrError(optimizedPlan)}
+       |${stringOrError(optimizedPlan.treeString(verbose = true))}
        |== Physical Plan ==
-       |${stringOrError(executedPlan)}
+       |${stringOrError(executedPlan.treeString(verbose = true))}
     """.stripMargin.trim
   }
 

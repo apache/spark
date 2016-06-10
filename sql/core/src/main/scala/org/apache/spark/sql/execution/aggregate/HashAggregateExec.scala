@@ -29,6 +29,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.util.Utils
 
 /**
  * Hash-based aggregate operator that can also fallback to sorting when data exceeds memory size.
@@ -49,7 +50,7 @@ case class HashAggregateExec(
 
   require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
-  override lazy val allAttributes: Seq[Attribute] =
+  override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
@@ -764,15 +765,23 @@ case class HashAggregateExec(
      """
   }
 
-  override def simpleString: String = {
+  override def verboseString: String = toString(verbose = true)
+
+  override def simpleString: String = toString(verbose = false)
+
+  private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
     testFallbackStartsAt match {
       case None =>
-        val keyString = groupingExpressions.mkString("[", ",", "]")
-        val functionString = allAggregateExpressions.mkString("[", ",", "]")
-        val outputString = output.mkString("[", ",", "]")
-        s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        val keyString = Utils.truncatedString(groupingExpressions, "[", ",", "]")
+        val functionString = Utils.truncatedString(allAggregateExpressions, "[", ",", "]")
+        val outputString = Utils.truncatedString(output, "[", ",", "]")
+        if (verbose) {
+          s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        } else {
+          s"HashAggregate(key=$keyString, functions=$functionString)"
+        }
       case Some(fallbackStartsAt) =>
         s"HashAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"

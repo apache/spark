@@ -40,7 +40,7 @@ private[sql] case class MapPartitionsRWrapper(
 
     val (newIter, deserializer, colNames) =
       if (!isSerializedRData) {
-        // Serialize each row into an byte array that can be deserialized in the R worker
+        // Serialize each row into a byte array that can be deserialized in the R worker
         (iter.asInstanceOf[Iterator[Row]].map {row => rowToRBytes(row)},
          SerializationFormats.ROW, inputSchema.fieldNames)
       } else {
