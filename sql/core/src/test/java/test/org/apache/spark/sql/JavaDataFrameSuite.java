@@ -338,10 +338,10 @@ public class JavaDataFrameSuite {
 
   @Test
   public void testTextLoad() {
-    Dataset<String> ds1 = spark.read().text(getResource("text-suite.txt"));
+    Dataset<Row> ds1 = spark.read().text(getResource("text-suite.txt"));
     Assert.assertEquals(4L, ds1.count());
 
-    Dataset<String> ds2 = spark.read().text(
+    Dataset<Row> ds2 = spark.read().text(
       getResource("text-suite.txt"),
       getResource("text-suite2.txt"));
     Assert.assertEquals(5L, ds2.count());
