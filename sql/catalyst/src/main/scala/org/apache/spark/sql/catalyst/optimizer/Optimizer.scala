@@ -1715,45 +1715,24 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
         case (p, PredicateSubquery(sub, conditions, _, _)) =>
-          if (!conditions.exists(PredicateSubquery.hasPredicateSubquery)) {
-            // Simply build the join.
-            Join(p, sub, LeftSemi, conditions.reduceOption(And))
-          }
-          else {
-            // Rewrite the conditions, then build the join.
-            val (joinCond, outerPlan) = rewriteExprWithSubPred(conditions.reduce(And), p)
-            Join(outerPlan, sub, LeftSemi, Option(joinCond))
-          }
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions.reduceOption(And), p)
+          Join(outerPlan, sub, LeftSemi, joinCond)
         case (p, Not(PredicateSubquery(sub, conditions, false, _))) =>
-          if (!conditions.exists(PredicateSubquery.hasPredicateSubquery)) {
-            // Simply build the join.
-            Join(p, sub, LeftAnti, conditions.reduceOption(And))
-          }
-          else {
-            // Rewrite the conditions, then build the join.
-            val (joinCond, outerPlan) = rewriteExprWithSubPred(conditions.reduce(And), p)
-            Join(outerPlan, sub, LeftAnti, Option(joinCond))
-          }
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions.reduceOption(And), p)
+          Join(outerPlan, sub, LeftAnti, joinCond)
         case (p, Not(PredicateSubquery(sub, conditions, true, _))) =>
-          // This is a NULL-aware (left) anti join (NAAJ).
+          // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
-          if (!conditions.exists(PredicateSubquery.hasPredicateSubquery)) {
-            val anyNull = conditions.map(IsNull).reduceLeft(Or)
-            val condition = conditions.reduceLeft(And)
 
-            // Note that will almost certainly be planned as a Broadcast Nested Loop join.
-            // Use EXISTS if performance matters to you.
-            Join(p, sub, LeftAnti, Option(Or(anyNull, condition)))
-          }
-          else {
-            val (joinCond, outerPlan) = rewriteExprWithSubPred(conditions.reduceLeft(And), p)
-            val anyNull = splitConjunctivePredicates(joinCond).map(IsNull).reduceLeft(Or)
-            Join(outerPlan, sub, LeftAnti, Option(Or(anyNull, joinCond)))
-          }
+          // Note that will almost certainly be planned as a Broadcast Nested Loop join.
+          // Use EXISTS if performance matters to you.
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions.reduceLeftOption(And), p)
+          val anyNull = splitConjunctivePredicates(joinCond.get).map(IsNull).reduceLeft(Or)
+          Join(outerPlan, sub, LeftAnti, Option(Or(anyNull, joinCond.get)))
         case (p, predicate) =>
-          val (newCond, inputPlan) = rewriteExprWithSubPred(predicate, p)
-          Project(p.output, Filter(newCond, inputPlan))
+          val (newCond, inputPlan) = rewriteExistentialExpr(Option(predicate), p)
+          Project(p.output, Filter(newCond.get, inputPlan))
       }
   }
 
@@ -1764,18 +1743,23 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    * Currently, it does not support null-aware joins. Embedded NOT IN predicates
    * are blocked in the Analyzer.
    */
-  private def rewriteExprWithSubPred(
-      expr: Expression,
-      plan: LogicalPlan): (Expression, LogicalPlan) = {
+  private def rewriteExistentialExpr(
+      expr: Option[Expression],
+      plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
     var newPlan = plan
-    val newExpr = expr transformUp {
-      case PredicateSubquery(sub, conditions, nullAware, _) =>
-        // TODO: support null-aware join
-        val exists = AttributeReference("exists", BooleanType, nullable = false)()
-        newPlan = Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
-        exists
+    expr match {
+      case Some(e) =>
+        val newExpr = e transformUp {
+          case PredicateSubquery(sub, conditions, nullAware, _) =>
+            // TODO: support null-aware join
+            val exists = AttributeReference("exists", BooleanType, nullable = false)()
+            newPlan = Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
+            exists
+        }
+        (Option(newExpr), newPlan)
+      case None =>
+        (expr, plan)
     }
-    (newExpr, newPlan)
   }
 }
 

@@ -272,6 +272,62 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         sql(
           """
             | select c1 from t1
+            | where c2 IN (select c2 from t2)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where c2 NOT IN (select c2 from t2)
+            |
+          """.stripMargin),
+       Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where EXISTS (select c2 from t2)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+       checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where NOT EXISTS (select c2 from t2)
+            |
+          """.stripMargin),
+      Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where NOT EXISTS (select c2 from t2) and
+            |       c2 IN (select c2 from t3)
+            |
+          """.stripMargin),
+        Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (case when c2 IN (select 1 as one) then 1
+            |             else 2 end) = c1
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
             | where (case when c2 IN (select 1 as one) then 1
             |             else 2 end)
             |        IN (select c2 from t2)
