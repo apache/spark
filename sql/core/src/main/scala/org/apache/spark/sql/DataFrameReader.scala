@@ -361,8 +361,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads a CSV file and returns the result as a [[DataFrame]].
    *
-   * This function goes through the input once to determine the input schema. To avoid going
-   * through the entire data once, specify the schema explicitly using [[schema]].
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <li>`sep` (default `,`): sets the single character as a separator for each

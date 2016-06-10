@@ -677,8 +677,7 @@ final class DataFrameWriter private[sql](df: DataFrame) {
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
    * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
-   * This will overwrite `orc.compress`. </li>
+   * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).</li>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support

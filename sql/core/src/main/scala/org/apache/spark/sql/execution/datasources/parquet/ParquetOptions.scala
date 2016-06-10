@@ -49,12 +49,10 @@ private[sql] class ParquetOptions(
    * Whether it merges schemas or not. When the given Parquet files have different schemas,
    * the schemas can be merged.  By default use the value specified in SQLConf.
    */
-  val mergeSchema: Boolean = {
-    parameters
-      .get(MERGE_SCHEMA)
-      .map(_.toBoolean)
-      .getOrElse(sqlConf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
-  }
+  val mergeSchema: Boolean = parameters
+    .get(MERGE_SCHEMA)
+    .map(_.toBoolean)
+    .getOrElse(sqlConf.getConf(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
 }
 
 

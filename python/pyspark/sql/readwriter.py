@@ -313,8 +313,9 @@ class DataFrameReader(object):
             negativeInf=None, dateFormat=None, maxColumns=None, maxCharsPerColumn=None, mode=None):
         """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
-        This function goes through the input once to determine the input schema. To avoid going
-        through the entire data once, specify the schema explicitly using ``schema``.
+        This function will go through the input once to determine the input schema if
+        ``inferSchema`` is enabled. To avoid going through the entire data once, disable
+        ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
@@ -858,7 +859,6 @@ class DataFrameWriter(object):
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
-                            This will overwrite ``orc.compress``.
 
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
