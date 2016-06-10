@@ -1,7 +1,7 @@
 ---
 layout: global
-displayTitle: Spark SQL and Datasets Guide
-title: Spark SQL and Datasets
+displayTitle: Spark SQL, DataFrames and Datasets Guide
+title: Spark SQL and DataFrames
 ---
 
 * This will become a table of contents (this text will be scraped).
@@ -44,7 +44,7 @@ However, [Java API][java-datasets] users must use `Dataset<Row>` instead.
 [scala-datasets]: api/scala/index.html#org.apache.spark.sql.Dataset
 [java-datasets]: api/java/index.html?org/apache/spark/sql/Dataset.html
 
-Python does not yet have support for the Dataset API, but due to its dynamic nature many of the
+Python does not have support for the Dataset API, but due to its dynamic nature many of the
 benefits are already available (i.e. you can access the field of a row by name naturally
 `row.columnName`). The case for R is similar.
 
@@ -57,12 +57,16 @@ Throughout this document, we will often refer to Scala/Java Datasets of `Row`s a
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 
-The entry point into all functionality in Spark SQL is the
-[`SparkSession`](api/scala/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, all you need is a `SparkContext`.
+The entry point into all functionality in Spark SQL is the [`SparkSession`](api/scala/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.builder()`:
 
 {% highlight scala %}
-val sc: SparkContext // An existing SparkContext.
-val spark = new org.apache.spark.sql.SparkSession(sc)
+import org.apache.spark.sql.SparkSession
+
+val spark = SparkSession.build()
+  .master("local")
+  .appName("Word Count")
+  .config("spark.some.config.option", "some-value")
+  .getOrCreate()
 
 // this is used to implicitly convert an RDD to a DataFrame.
 import spark.implicits._
@@ -72,24 +76,30 @@ import spark.implicits._
 
 <div data-lang="java" markdown="1">
 
-The entry point into all functionality in Spark SQL is the
-[`SparkSession`](api/java/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, all you need is a `SparkContext`.
+The entry point into all functionality in Spark SQL is the [`SparkSession`](api/java/index.html#org.apache.spark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.build()`:
 
 {% highlight java %}
-JavaSparkContext sc = ...; // An existing JavaSparkContext.
-SparkSession spark = new org.apache.spark.sql.SparkSession(sc);
-{% endhighlight %}
+import org.apache.spark.sql.SparkSession
 
+SparkSession spark = SparkSession.build()
+  .master("local")
+  .appName("Word Count")
+  .config("spark.some.config.option", "some-value")
+  .getOrCreate();
+{% endhighlight %}
 </div>
 
 <div data-lang="python"  markdown="1">
 
-The entry point into all relational functionality in Spark is the
-[`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, all you need is a `SparkContext`.
+The entry point into all relational functionality in Spark is the [`SparkSession`](api/python/pyspark.sql.html#pyspark.sql.SparkSession) class. To create a basic `SparkSession`, just use `SparkSession.build`:
 
 {% highlight python %}
 from pyspark.sql import SparkSession
-spark = SparkSession(sc)
+spark = SparkSession.build \
+  .master("local") \
+  .appName("Word Count") \
+  .config("spark.some.config.option", "some-value") \
+  .getOrCreate()
 {% endhighlight %}
 
 </div>
@@ -123,8 +133,7 @@ As an example, the following creates a DataFrame based on the content of a JSON 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
-val sc: SparkContext // An existing SparkContext.
-val spark = new org.apache.spark.sql.SparkSession(sc)
+val spark: SparkSession // An existing SparkSession.
 
 val df = spark.read.json("examples/src/main/resources/people.json")
 
@@ -136,7 +145,7 @@ df.show()
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-JavaSparkContext sc = ...; // An existing JavaSparkContext.
+SparkSession spark = ...; // An existing SparkSession.
 SparkSession spark = new org.apache.spark.sql.SparkSession(sc);
 
 Dataset<Row> df = spark.read().json("examples/src/main/resources/people.json");
@@ -175,17 +184,18 @@ showDF(df)
 </div>
 
 
-## Untyped Dataset Operations
+## Untyped Dataset Operations (aka DataFrame Operations)
 
-Datasets provide an untyped domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.Dataset), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/DataFrame.html).
+DataFrames provide a domain-specific language for structured data manipulation in [Scala](api/scala/index.html#org.apache.spark.sql.Dataset), [Java](api/java/index.html?org/apache/spark/sql/Dataset.html), [Python](api/python/pyspark.sql.html#pyspark.sql.DataFrame) and [R](api/R/DataFrame.html).
+
+As mentioned above, in Spark 2.0, DataFrames are just Dataset of `Row`s in Scala and Java API. These operations are also referred as "untyped transformations" in contrast to "typed transformations" come with strongly typed Scala/Java Datasets.
 
 Here we include some basic examples of structured data processing using Datasets:
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1">
 {% highlight scala %}
-val sc: SparkContext // An existing SparkContext.
-val spark = new org.apache.spark.sql.SparkSession(sc)
+val spark: SparkSession // An existing SparkSession
 
 // Create the DataFrame
 val df = spark.read.json("examples/src/main/resources/people.json")
@@ -239,8 +249,7 @@ In addition to simple column references and expressions, Datasets also have a ri
 
 <div data-lang="java" markdown="1">
 {% highlight java %}
-JavaSparkContext sc // An existing SparkContext.
-SparkSession spark = new org.apache.spark.sql.SparkSession(sc)
+SparkSession spark = ...; // An existing SparkSession
 
 // Create the DataFrame
 Dataset<Row> df = spark.read().json("examples/src/main/resources/people.json");
@@ -508,8 +517,7 @@ types such as Sequences or Arrays. This RDD can be implicitly converted to a Dat
 registered as a table. Tables can be used in subsequent SQL statements.
 
 {% highlight scala %}
-// sc is an existing SparkContext.
-val spark = new org.apache.spark.sql.SparkSession(sc)
+val spark: SparkSession // An existing SparkSession
 // this is used to implicitly convert an RDD to a DataFrame.
 import spark.implicits._
 
@@ -625,9 +633,9 @@ key/value pairs as kwargs to the Row class. The keys of this list define the col
 and the types are inferred by sampling the whole datase, similar to the inference that is performed on JSON files.
 
 {% highlight python %}
-# sc is an existing SparkContext.
-from pyspark.sql import SparkSession, Row
-spark = SparkSession(sc)
+# spark is an existing SparkSession.
+from pyspark.sql import Row
+sc = spark.sparkContext
 
 # Load a text file and convert each line to a Row.
 lines = sc.textFile("examples/src/main/resources/people.txt")
@@ -670,8 +678,7 @@ by `SparkSession`.
 
 For example:
 {% highlight scala %}
-// sc is an existing SparkContext.
-val spark = new org.apache.spark.sql.SparkSession(sc)
+val spark: SparkSession // An existing SparkSession
 
 // Create an RDD
 val people = sc.textFile("examples/src/main/resources/people.txt")
@@ -796,11 +803,10 @@ tuples or lists in the RDD created in the step 1.
 For example:
 {% highlight python %}
 # Import SparkSession and data types
-from pyspark.sql import SparkSession
 from pyspark.sql.types import *
 
-# sc is an existing SparkContext.
-spark = SparkSession(sc)
+# spark is an existing SparkSession.
+sc = spark.sparkContext
 
 # Load a text file and convert each line to a tuple.
 lines = sc.textFile("examples/src/main/resources/people.txt")
@@ -1485,8 +1491,7 @@ line must contain a separate, self-contained valid JSON object. As a consequence
 a regular multi-line JSON file will most often fail.
 
 {% highlight scala %}
-// sc is an existing SparkContext.
-val spark = new org.apache.spark.sql.SparkSession(sc)
+val spark: SparkSession // An existing SparkSession
 
 // A JSON dataset is pointed to by path.
 // The path can be either a single text file or a directory storing text files.
@@ -1561,9 +1566,7 @@ line must contain a separate, self-contained valid JSON object. As a consequence
 a regular multi-line JSON file will most often fail.
 
 {% highlight python %}
-# sc is an existing SparkContext.
-from pyspark.sql import SparkSession
-spark = SparkSession(sc)
+# spark is an existing SparkSession.
 
 # A JSON dataset is pointed to by path.
 # The path can be either a single text file or a directory storing text files.
