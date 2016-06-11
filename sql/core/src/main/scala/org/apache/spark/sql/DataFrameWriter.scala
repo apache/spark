@@ -336,6 +336,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertStreaming("startStream() can only be called on streaming Datasets/DataFrames.")
 
     if (source == "memory") {
+      if (extraOptions.get("queryName").isEmpty) {
+        throw new AnalysisException("queryName must be specified for memory sink")
+      }
+
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
       val query = df.sparkSession.sessionState.continuousQueryManager.startQuery(
