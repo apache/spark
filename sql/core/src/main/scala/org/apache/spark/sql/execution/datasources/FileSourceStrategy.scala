@@ -84,7 +84,14 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
       logInfo(s"Pruning directories with: ${partitionKeyFilters.mkString(",")}")
 
       val dataColumns =
-        l.resolve(files.dataSchema, files.sparkSession.sessionState.analyzer.resolver)
+        l.resolve(files.dataSchema, files.sparkSession.sessionState.analyzer.resolver).map { c =>
+          files.dataSchema.find(_.name == c.name).map { f =>
+            c match {
+              case a: AttributeReference => a.withMetadata(f.metadata)
+              case _ => c
+            }
+          }.getOrElse(c)
+        }
 
       // Partition keys are not available in the statistics of the files.
       val dataFilters = normalizedFilters.filter(_.references.intersect(partitionSet).isEmpty)
@@ -151,11 +158,18 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
               val blockLocations = getBlockLocations(file)
-              (0L until file.getLen by maxSplitBytes).map { offset =>
-                val remaining = file.getLen - offset
-                val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                val hosts = getBlockHosts(blockLocations, offset, size)
-                PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size, hosts)
+              if (files.fileFormat.isSplitable(files.sparkSession, files.options, file.getPath)) {
+                (0L until file.getLen by maxSplitBytes).map { offset =>
+                  val remaining = file.getLen - offset
+                  val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
+                  val hosts = getBlockHosts(blockLocations, offset, size)
+                  PartitionedFile(
+                    partition.values, file.getPath.toUri.toString, offset, size, hosts)
+                }
+              } else {
+                val hosts = getBlockHosts(blockLocations, 0, file.getLen)
+                Seq(PartitionedFile(
+                  partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
               }
             }
           }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)

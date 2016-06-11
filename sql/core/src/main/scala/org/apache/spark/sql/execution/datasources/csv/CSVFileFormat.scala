@@ -36,7 +36,7 @@ import org.apache.spark.util.SerializableConfiguration
 /**
  * Provides access to CSV data from pure SQL statements.
  */
-class CSVFileFormat extends FileFormat with DataSourceRegister {
+class CSVFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   override def shortName(): String = "csv"
 

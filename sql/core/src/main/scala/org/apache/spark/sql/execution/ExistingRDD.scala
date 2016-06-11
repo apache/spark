@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.BaseRelation
 import org.apache.spark.sql.types.{DataType, StructType}
+import org.apache.spark.util.Utils
 
 object RDDConversions {
   def productToRowRdd[A <: Product](data: RDD[A], outputTypes: Seq[DataType]): RDD[InternalRow] = {
@@ -123,7 +124,7 @@ private[sql] case class RDDScanExec(
   }
 
   override def simpleString: String = {
-    s"Scan $nodeName${output.mkString("[", ",", "]")}"
+    s"Scan $nodeName${Utils.truncatedString(output, "[", ",", "]")}"
   }
 }
 
@@ -186,7 +187,8 @@ private[sql] case class RowDataSourceScanExec(
       key + ": " + StringUtils.abbreviate(value, 100)
     }
 
-    s"$nodeName${output.mkString("[", ",", "]")}${metadataEntries.mkString(" ", ", ", "")}"
+    s"$nodeName${Utils.truncatedString(output, "[", ",", "]")}" +
+      s"${Utils.truncatedString(metadataEntries, " ", ", ", "")}"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {
@@ -239,8 +241,8 @@ private[sql] case class BatchedDataSourceScanExec(
     val metadataEntries = for ((key, value) <- metadata.toSeq.sorted) yield {
       key + ": " + StringUtils.abbreviate(value, 100)
     }
-    val metadataStr = metadataEntries.mkString(" ", ", ", "")
-    s"Batched$nodeName${output.mkString("[", ",", "]")}$metadataStr"
+    val metadataStr = Utils.truncatedString(metadataEntries, " ", ", ", "")
+    s"Batched$nodeName${Utils.truncatedString(output, "[", ",", "]")}$metadataStr"
   }
 
   override def inputRDDs(): Seq[RDD[InternalRow]] = {

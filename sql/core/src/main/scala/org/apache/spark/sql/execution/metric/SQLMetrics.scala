@@ -113,7 +113,7 @@ private[sql] object SQLMetrics {
 
       val validValues = values.filter(_ >= 0)
       val Seq(sum, min, med, max) = {
-        val metric = if (validValues.length == 0) {
+        val metric = if (validValues.isEmpty) {
           Seq.fill(4)(0L)
         } else {
           val sorted = validValues.sorted
