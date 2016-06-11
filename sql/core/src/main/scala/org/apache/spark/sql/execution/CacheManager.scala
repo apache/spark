@@ -22,7 +22,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{AnalysisException, Dataset}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
@@ -106,19 +105,11 @@ private[sql] class CacheManager extends Logging {
   }
 
   /** Removes the data for the given [[Dataset]] from the cache */
-  private[sql] def uncacheQuery(
-      query: Dataset[_],
-      blocking: Boolean = true,
-      tableName: Option[String] = None): Unit = writeLock {
+  private[sql] def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
-    if (dataIndex >= 0) {
-      cachedData(dataIndex).cachedRepresentation.uncache(blocking)
-      cachedData.remove(dataIndex)
-    } else {
-      val table = tableName.getOrElse(query.toString)
-      throw new AnalysisException(s"Table `$table` is not cached")
-    }
+    cachedData(dataIndex).cachedRepresentation.uncache(blocking)
+    cachedData.remove(dataIndex)
   }
 
   /**
@@ -132,7 +123,7 @@ private[sql] class CacheManager extends Logging {
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     val found = dataIndex >= 0
     if (found) {
-      cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
+      cachedData(dataIndex).cachedRepresentation.uncache(blocking)
       cachedData.remove(dataIndex)
     }
     found

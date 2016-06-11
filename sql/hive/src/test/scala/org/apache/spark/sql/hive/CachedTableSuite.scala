@@ -108,16 +108,9 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
     val tableName = "newTable"
     withTable(tableName) {
       sql(s"CREATE TABLE $tableName(a INT)")
-      var e = intercept[AnalysisException] {
-        spark.catalog.uncacheTable(tableName)
-      }
-      assert(e.getMessage.contains(s"Table `$tableName` is not cached"))
-      e = intercept[AnalysisException] {
-        sql("UNCACHE TABLE newTable")
-      }
-      assert(e.getMessage.contains(s"Table `$tableName` is not cached"))
-
-      // no error will be reported if we are using the API unpersist
+      // no error will be reported in the following three ways to uncache a table.
+      spark.catalog.uncacheTable(tableName)
+      sql("UNCACHE TABLE newTable")
       sparkSession.table(tableName).unpersist()
     }
   }
