@@ -20,7 +20,7 @@ Estimator Transformer Param Example.
 """
 
 # $example on$
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 from pyspark.ml.classification import LogisticRegression
 # $example off$
 from pyspark.sql import SparkSession

@@ -20,7 +20,7 @@ from __future__ import print_function
 from pyspark.sql import SparkSession
 # $example on$
 from pyspark.ml.feature import ChiSqSelector
-from pyspark.mllib.linalg import Vectors
+from pyspark.ml.linalg import Vectors
 # $example off$
 
 if __name__ == "__main__":

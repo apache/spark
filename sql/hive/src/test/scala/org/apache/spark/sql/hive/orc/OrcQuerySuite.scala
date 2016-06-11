@@ -147,11 +147,11 @@ class OrcQuerySuite extends QueryTest with BeforeAndAfterAll with OrcTest {
 
   test("save and load case class RDD with `None`s as orc") {
     val data = (
-      None: Option[Int],
-      None: Option[Long],
-      None: Option[Float],
-      None: Option[Double],
-      None: Option[Boolean]
+      Option.empty[Int],
+      Option.empty[Long],
+      Option.empty[Float],
+      Option.empty[Double],
+      Option.empty[Boolean]
     ) :: Nil
 
     withOrcFile(data) { file =>

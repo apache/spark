@@ -182,7 +182,7 @@ class RFormula(override val uid: String)
 
   override def copy(extra: ParamMap): RFormula = defaultCopy(extra)
 
-  override def toString: String = s"RFormula(${get(formula)}) (uid=$uid)"
+  override def toString: String = s"RFormula(${get(formula).getOrElse("")}) (uid=$uid)"
 }
 
 @Since("2.0.0")
