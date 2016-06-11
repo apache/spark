@@ -455,8 +455,8 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
-    val e = intercept[IllegalArgumentException](w.bucketBy(1, "text").startStream())
-    assert(e.getMessage == "'startStream' does not support bucketing right now.")
+    val e = intercept[AnalysisException](w.bucketBy(1, "text").startStream())
+    assert(e.getMessage == "'startStream' does not support bucketing right now;")
   }
 
   test("check sortBy() can only be called on non-continuous queries;") {
@@ -464,8 +464,8 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
-    val e = intercept[IllegalArgumentException](w.sortBy("text").startStream())
-    assert(e.getMessage == "'startStream' does not support bucketing right now.")
+    val e = intercept[AnalysisException](w.sortBy("text").startStream())
+    assert(e.getMessage == "'startStream' does not support bucketing right now;")
   }
 
   test("check save(path) can only be called on non-continuous queries") {
@@ -558,6 +558,40 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(e.getMessage == "csv() can only be called on non-continuous queries;")
   }
 
+  test("check foreach() does not support partitioning or bucketing") {
+    val df = spark.read
+      .format("org.apache.spark.sql.streaming.test")
+      .stream()
+
+    var w = df.write.partitionBy("value")
+    var e = intercept[AnalysisException](w.foreach(null))
+    Seq("foreach", "partitioning").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+
+    w = df.write.bucketBy(2, "value")
+    e = intercept[AnalysisException](w.foreach(null))
+    Seq("foreach", "bucketing").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
+  test("check jdbc() does not support partitioning or bucketing") {
+    val df = spark.read.text(newTextInput)
+
+    var w = df.write.partitionBy("value")
+    var e = intercept[AnalysisException](w.jdbc(null, null, null))
+    Seq("jdbc", "partitioning").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+
+    w = df.write.bucketBy(2, "value")
+    e = intercept[AnalysisException](w.jdbc(null, null, null))
+    Seq("jdbc", "bucketing").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
   test("ConsoleSink can be correctly loaded") {
     LastOptions.clear()
     val df = spark.read
@@ -571,5 +605,17 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .startStream()
 
     cq.awaitTermination(2000L)
+  }
+
+  test("prevent all column partitioning") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      intercept[AnalysisException] {
+        spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
+      }
+      intercept[AnalysisException] {
+        spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
+      }
+    }
   }
 }

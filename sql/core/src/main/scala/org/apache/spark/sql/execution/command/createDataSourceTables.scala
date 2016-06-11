@@ -169,7 +169,7 @@ case class CreateDataSourceTableAsSelectCommand(
         options
       }
 
-    var existingSchema = None: Option[StructType]
+    var existingSchema = Option.empty[StructType]
     if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {

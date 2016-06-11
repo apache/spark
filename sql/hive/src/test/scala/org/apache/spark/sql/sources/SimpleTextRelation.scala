@@ -34,7 +34,7 @@ import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.types.{DataType, StructType}
 import org.apache.spark.util.SerializableConfiguration
 
-class SimpleTextSource extends FileFormat with DataSourceRegister {
+class SimpleTextSource extends TextBasedFileFormat with DataSourceRegister {
   override def shortName(): String = "test"
 
   override def inferSchema(

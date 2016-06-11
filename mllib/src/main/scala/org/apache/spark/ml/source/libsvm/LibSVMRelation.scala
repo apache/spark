@@ -112,7 +112,7 @@ private[libsvm] class LibSVMOutputWriter(
  */
 // If this is moved or renamed, please update DataSource's backwardCompatibilityMap.
 @Since("1.6.0")
-class LibSVMFileFormat extends FileFormat with DataSourceRegister {
+class LibSVMFileFormat extends TextBasedFileFormat with DataSourceRegister {
 
   @Since("1.6.0")
   override def shortName(): String = "libsvm"

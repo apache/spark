@@ -26,7 +26,9 @@ import org.scalatest.concurrent.Eventually._
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.SpanSugar._
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming._
+import org.apache.spark.util.JsonProtocol
 
 
 class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
@@ -51,14 +53,13 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
         Assert("Incorrect query status in onQueryStarted") {
           val status = listener.startStatus
           assert(status != null)
-          assert(status.active == true)
           assert(status.sourceStatuses.size === 1)
           assert(status.sourceStatuses(0).description.contains("Memory"))
 
           // The source and sink offsets must be None as this must be called before the
           // batches have started
-          assert(status.sourceStatuses(0).offset === None)
-          assert(status.sinkStatus.offset === CompositeOffset(None :: Nil))
+          assert(status.sourceStatuses(0).offsetDesc === None)
+          assert(status.sinkStatus.offsetDesc === CompositeOffset(None :: Nil).toString)
 
           // No progress events or termination events
           assert(listener.progressStatuses.isEmpty)
@@ -73,9 +74,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
             assert(listener.progressStatuses.size === 1)
             val status = listener.progressStatuses.peek()
             assert(status != null)
-            assert(status.active == true)
-            assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
+            assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
+            assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
 
             // No termination events
             assert(listener.terminationStatus === null)
@@ -86,10 +86,8 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
           eventually(Timeout(streamingTimeout)) {
             val status = listener.terminationStatus
             assert(status != null)
-
-            assert(status.active === false) // must be inactive by the time onQueryTerm is called
-            assert(status.sourceStatuses(0).offset === Some(LongOffset(0)))
-            assert(status.sinkStatus.offset === CompositeOffset.fill(LongOffset(0)))
+            assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
+            assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
           }
           listener.checkAsyncErrors()
         }
@@ -141,6 +139,92 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     }
   }
 
+  test("exception should be reported in QueryTerminated") {
+    val listener = new QueryStatusCollector
+    withListenerAdded(listener) {
+      val input = MemoryStream[Int]
+      testStream(input.toDS.map(_ / 0))(
+        StartStream(),
+        AddData(input, 1),
+        ExpectFailure[SparkException](),
+        Assert {
+          spark.sparkContext.listenerBus.waitUntilEmpty(10000)
+          assert(listener.terminationStatus !== null)
+          assert(listener.terminationException.isDefined)
+          assert(listener.terminationException.get.contains("java.lang.ArithmeticException"))
+          assert(listener.terminationStackTrace.nonEmpty)
+        }
+      )
+    }
+  }
+
+  test("QueryStarted serialization") {
+    val queryStartedInfo = new ContinuousQueryInfo(
+      "name",
+      Seq(new SourceStatus("source1", None), new SourceStatus("source2", None)),
+      new SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString))
+    val queryStarted = new ContinuousQueryListener.QueryStarted(queryStartedInfo)
+    val json = JsonProtocol.sparkEventToJson(queryStarted)
+    val newQueryStarted = JsonProtocol.sparkEventFromJson(json)
+      .asInstanceOf[ContinuousQueryListener.QueryStarted]
+    assertContinuousQueryInfoEquals(queryStarted.queryInfo, newQueryStarted.queryInfo)
+  }
+
+  test("QueryProgress serialization") {
+    val queryProcessInfo = new ContinuousQueryInfo(
+      "name",
+      Seq(
+        new SourceStatus("source1", Some(LongOffset(0).toString)),
+        new SourceStatus("source2", Some(LongOffset(1).toString))),
+      new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1)))).toString))
+    val queryProcess = new ContinuousQueryListener.QueryProgress(queryProcessInfo)
+    val json = JsonProtocol.sparkEventToJson(queryProcess)
+    val newQueryProcess = JsonProtocol.sparkEventFromJson(json)
+      .asInstanceOf[ContinuousQueryListener.QueryProgress]
+    assertContinuousQueryInfoEquals(queryProcess.queryInfo, newQueryProcess.queryInfo)
+  }
+
+  test("QueryTerminated serialization") {
+    val queryTerminatedInfo = new ContinuousQueryInfo(
+      "name",
+      Seq(
+        new SourceStatus("source1", Some(LongOffset(0).toString)),
+        new SourceStatus("source2", Some(LongOffset(1).toString))),
+      new SinkStatus("sink", new CompositeOffset(Array(None, Some(LongOffset(1)))).toString))
+    val exception = new RuntimeException("exception")
+    val queryQueryTerminated = new ContinuousQueryListener.QueryTerminated(
+      queryTerminatedInfo,
+      Some(exception.getMessage),
+      exception.getStackTrace)
+    val json =
+      JsonProtocol.sparkEventToJson(queryQueryTerminated)
+    val newQueryTerminated = JsonProtocol.sparkEventFromJson(json)
+      .asInstanceOf[ContinuousQueryListener.QueryTerminated]
+    assertContinuousQueryInfoEquals(queryQueryTerminated.queryInfo, newQueryTerminated.queryInfo)
+    assert(queryQueryTerminated.exception === newQueryTerminated.exception)
+  }
+
+  private def assertContinuousQueryInfoEquals(
+      expected: ContinuousQueryInfo,
+      actual: ContinuousQueryInfo): Unit = {
+    assert(expected.name === actual.name)
+    assert(expected.sourceStatuses.size === actual.sourceStatuses.size)
+    expected.sourceStatuses.zip(actual.sourceStatuses).foreach {
+      case (expectedSource, actualSource) =>
+        assertSourceStatus(expectedSource, actualSource)
+    }
+    assertSinkStatus(expected.sinkStatus, actual.sinkStatus)
+  }
+
+  private def assertSourceStatus(expected: SourceStatus, actual: SourceStatus): Unit = {
+    assert(expected.description === actual.description)
+    assert(expected.offsetDesc === actual.offsetDesc)
+  }
+
+  private def assertSinkStatus(expected: SinkStatus, actual: SinkStatus): Unit = {
+    assert(expected.description === actual.description)
+    assert(expected.offsetDesc === actual.offsetDesc)
+  }
 
   private def withListenerAdded(listener: ContinuousQueryListener)(body: => Unit): Unit = {
     try {
@@ -164,9 +248,12 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     // to catch errors in the async listener events
     @volatile private var asyncTestWaiter = new Waiter
 
-    @volatile var startStatus: QueryStatus = null
-    @volatile var terminationStatus: QueryStatus = null
-    val progressStatuses = new ConcurrentLinkedQueue[QueryStatus]
+    @volatile var startStatus: ContinuousQueryInfo = null
+    @volatile var terminationStatus: ContinuousQueryInfo = null
+    @volatile var terminationException: Option[String] = null
+    @volatile var terminationStackTrace: Seq[StackTraceElement] = null
+
+    val progressStatuses = new ConcurrentLinkedQueue[ContinuousQueryInfo]
 
     def reset(): Unit = {
       startStatus = null
@@ -182,35 +269,25 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
 
     override def onQueryStarted(queryStarted: QueryStarted): Unit = {
       asyncTestWaiter {
-        startStatus = QueryStatus(queryStarted.query)
+        startStatus = queryStarted.queryInfo
       }
     }
 
     override def onQueryProgress(queryProgress: QueryProgress): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryProgress called before onQueryStarted")
-        progressStatuses.add(QueryStatus(queryProgress.query))
+        progressStatuses.add(queryProgress.queryInfo)
       }
     }
 
     override def onQueryTerminated(queryTerminated: QueryTerminated): Unit = {
       asyncTestWaiter {
         assert(startStatus != null, "onQueryTerminated called before onQueryStarted")
-        terminationStatus = QueryStatus(queryTerminated.query)
+        terminationStatus = queryTerminated.queryInfo
+        terminationException = queryTerminated.exception
+        terminationStackTrace = queryTerminated.stackTrace
       }
       asyncTestWaiter.dismiss()
-    }
-  }
-
-  case class QueryStatus(
-    active: Boolean,
-    exception: Option[Exception],
-    sourceStatuses: Array[SourceStatus],
-    sinkStatus: SinkStatus)
-
-  object QueryStatus {
-    def apply(query: ContinuousQuery): QueryStatus = {
-      QueryStatus(query.isActive, query.exception, query.sourceStatuses, query.sinkStatus)
     }
   }
 }
