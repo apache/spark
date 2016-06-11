@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.lang.reflect.Constructor
 import java.net.URI
-import java.util.{Arrays, Properties, ServiceLoader, UUID}
+import java.util.{Arrays, Locale, Properties, ServiceLoader, UUID}
 import java.util.concurrent.ConcurrentMap
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
@@ -356,12 +356,12 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
    * Valid log levels include: ALL, DEBUG, ERROR, FATAL, INFO, OFF, TRACE, WARN
    */
   def setLogLevel(logLevel: String) {
-    val validLevels = Seq("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
-    if (!validLevels.contains(logLevel)) {
-      throw new IllegalArgumentException(
-        s"Supplied level $logLevel did not match one of: ${validLevels.mkString(",")}")
-    }
-    Utils.setLogLevel(org.apache.log4j.Level.toLevel(logLevel))
+    // let's allow lowcase or mixed case too
+    val upperCased = logLevel.toUpperCase(Locale.ENGLISH)
+    require(SparkContext.VALID_LOG_LEVELS.contains(upperCased),
+      s"Supplied level $logLevel did not match one of:" +
+        s" ${SparkContext.VALID_LOG_LEVELS.mkString(",")}")
+    Utils.setLogLevel(org.apache.log4j.Level.toLevel(upperCased))
   }
 
   try {
@@ -1340,21 +1340,21 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
   }
 
   /**
-   * Create and register a list accumulator, which starts with empty list and accumulates inputs
-   * by adding them into the inner list.
+   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * inputs by adding them into the list.
    */
-  def listAccumulator[T]: ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def collectionAccumulator[T]: CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
     register(acc)
     acc
   }
 
   /**
-   * Create and register a list accumulator, which starts with empty list and accumulates inputs
-   * by adding them into the inner list.
+   * Create and register a [[CollectionAccumulator]], which starts with empty list and accumulates
+   * inputs by adding them into the list.
    */
-  def listAccumulator[T](name: String): ListAccumulator[T] = {
-    val acc = new ListAccumulator[T]
+  def collectionAccumulator[T](name: String): CollectionAccumulator[T] = {
+    val acc = new CollectionAccumulator[T]
     register(acc, name)
     acc
   }
@@ -2179,6 +2179,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
  * various Spark features.
  */
 object SparkContext extends Logging {
+  private val VALID_LOG_LEVELS =
+    Set("ALL", "DEBUG", "ERROR", "FATAL", "INFO", "OFF", "TRACE", "WARN")
 
   /**
    * Lock that guards access to global variables that track SparkContext construction.

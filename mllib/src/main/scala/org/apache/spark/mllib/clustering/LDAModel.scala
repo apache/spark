@@ -425,6 +425,13 @@ class LocalLDAModel private[spark] (
 
 }
 
+/**
+ * :: Experimental ::
+ *
+ * Local (non-distributed) model fitted by [[LDA]].
+ *
+ * This model stores the inferred topics only; it does not store info about the training dataset.
+ */
 @Experimental
 @Since("1.5.0")
 object LocalLDAModel extends Loader[LocalLDAModel] {
@@ -814,7 +821,15 @@ class DistributedLDAModel private[clustering] (
   }
 }
 
-
+/**
+ * :: Experimental ::
+ *
+ * Distributed model fitted by [[LDA]].
+ * This type of model is currently only produced by Expectation-Maximization (EM).
+ *
+ * This model stores the inferred topics, the full training dataset, and the topic distribution
+ * for each training document.
+ */
 @Experimental
 @Since("1.5.0")
 object DistributedLDAModel extends Loader[DistributedLDAModel] {

@@ -237,6 +237,21 @@ class DDLCommandSuite extends PlanTest {
     comparePlans(parsed4, expected4)
   }
 
+  test("create table - table file format") {
+    val allSources = Seq("parquet", "parquetfile", "orc", "orcfile", "avro", "avrofile",
+      "sequencefile", "rcfile", "textfile")
+
+    allSources.foreach { s =>
+      val query = s"CREATE TABLE my_tab STORED AS $s"
+      val ct = parseAs[CreateTableCommand](query)
+      val hiveSerde = HiveSerDe.sourceToSerDe(s, new SQLConf)
+      assert(hiveSerde.isDefined)
+      assert(ct.table.storage.serde == hiveSerde.get.serde)
+      assert(ct.table.storage.inputFormat == hiveSerde.get.inputFormat)
+      assert(ct.table.storage.outputFormat == hiveSerde.get.outputFormat)
+    }
+  }
+
   test("create table - row format and table file format") {
     val createTableStart = "CREATE TABLE my_tab ROW FORMAT"
     val fileFormat = s"STORED AS INPUTFORMAT 'inputfmt' OUTPUTFORMAT 'outputfmt'"

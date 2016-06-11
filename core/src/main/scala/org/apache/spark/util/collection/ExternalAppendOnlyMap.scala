@@ -375,14 +375,14 @@ class ExternalAppendOnlyMap[K, V, C](
     /**
      * Return true if there exists an input stream that still has unvisited pairs.
      */
-    override def hasNext: Boolean = mergeHeap.length > 0
+    override def hasNext: Boolean = mergeHeap.nonEmpty
 
     /**
      * Select a key with the minimum hash, then combine all values with the same key from all
      * input streams.
      */
     override def next(): (K, C) = {
-      if (mergeHeap.length == 0) {
+      if (mergeHeap.isEmpty) {
         throw new NoSuchElementException
       }
       // Select a key from the StreamBuffer that holds the lowest key hash
@@ -397,7 +397,7 @@ class ExternalAppendOnlyMap[K, V, C](
       // For all other streams that may have this key (i.e. have the same minimum key hash),
       // merge in the corresponding value (if any) from that stream
       val mergedBuffers = ArrayBuffer[StreamBuffer](minBuffer)
-      while (mergeHeap.length > 0 && mergeHeap.head.minKeyHash == minHash) {
+      while (mergeHeap.nonEmpty && mergeHeap.head.minKeyHash == minHash) {
         val newBuffer = mergeHeap.dequeue()
         minCombiner = mergeIfKeyExists(minKey, minCombiner, newBuffer)
         mergedBuffers += newBuffer

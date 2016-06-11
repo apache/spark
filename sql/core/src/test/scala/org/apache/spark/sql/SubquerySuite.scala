@@ -54,6 +54,10 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
     t.createOrReplaceTempView("t")
   }
 
+  test("rdd deserialization does not crash [SPARK-15791]") {
+    sql("select (select 1 as b) as b").rdd.count()
+  }
+
   test("simple uncorrelated scalar subquery") {
     checkAnswer(
       sql("select (select 1 as b) as b"),
@@ -121,6 +125,33 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         " where key = (select max(key) from subqueryData) - 1)"),
       Array(Row("two"))
     )
+  }
+
+  test("SPARK-15677: Queries against local relations with scalar subquery in Select list") {
+    withTempTable("t1", "t2") {
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+
+      checkAnswer(
+        sql("SELECT (select 1 as col) from t1"),
+        Row(1) :: Row(1) :: Nil)
+
+      checkAnswer(
+        sql("SELECT (select max(c1) from t2) from t1"),
+        Row(2) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql("SELECT 1 + (select 1 as col) from t1"),
+        Row(2) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql("SELECT c1, (select max(c1) from t2) + c2 from t1"),
+        Row(1, 3) :: Row(2, 4) :: Nil)
+
+      checkAnswer(
+        sql("SELECT c1, (select max(c1) from t2 where t1.c2 = t2.c2) from t1"),
+        Row(1, 1) :: Row(2, 2) :: Nil)
+    }
   }
 
   test("SPARK-14791: scalar subquery inside broadcast join") {
