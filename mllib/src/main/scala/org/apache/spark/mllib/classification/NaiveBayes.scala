@@ -355,6 +355,43 @@ class NaiveBayes private (
    */
   @Since("0.9.0")
   def run(data: RDD[LabeledPoint]): NaiveBayesModel = {
+    val aggregated: Array[(Double, (Long, DenseVector))] = getAggregatedData(data)
+
+    val numLabels = aggregated.length
+    var numDocuments = 0L
+    aggregated.foreach { case (_, (n, _)) =>
+      numDocuments += n
+    }
+    val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
+
+    val labels = new Array[Double](numLabels)
+    val pi = new Array[Double](numLabels)
+    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
+
+    val piLogDenom = math.log(numDocuments + numLabels * lambda)
+    var i = 0
+    aggregated.foreach { case (label, (n, sumTermFreqs)) =>
+      labels(i) = label
+      pi(i) = math.log(n + lambda) - piLogDenom
+      val thetaLogDenom = modelType match {
+        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        case Bernoulli => math.log(n + 2.0 * lambda)
+        case _ =>
+          // This should never happen.
+          throw new UnknownError(s"Invalid modelType: $modelType.")
+      }
+      var j = 0
+      while (j < numFeatures) {
+        theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        j += 1
+      }
+      i += 1
+    }
+
+    new NaiveBayesModel(labels, pi, theta, modelType)
+  }
+
+  protected def getAggregatedData(data: RDD[LabeledPoint]): Array[(Double, (Long, DenseVector))] = {
     val requireNonnegativeValues: Vector => Unit = (v: Vector) => {
       val values = v match {
         case sv: SparseVector => sv.values
@@ -398,39 +435,7 @@ class NaiveBayes private (
         (c1._1 + c2._1, c1._2)
       }
     ).collect().sortBy(_._1)
-
-    val numLabels = aggregated.length
-    var numDocuments = 0L
-    aggregated.foreach { case (_, (n, _)) =>
-      numDocuments += n
-    }
-    val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
-
-    val labels = new Array[Double](numLabels)
-    val pi = new Array[Double](numLabels)
-    val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
-
-    val piLogDenom = math.log(numDocuments + numLabels * lambda)
-    var i = 0
-    aggregated.foreach { case (label, (n, sumTermFreqs)) =>
-      labels(i) = label
-      pi(i) = math.log(n + lambda) - piLogDenom
-      val thetaLogDenom = modelType match {
-        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
-        case Bernoulli => math.log(n + 2.0 * lambda)
-        case _ =>
-          // This should never happen.
-          throw new UnknownError(s"Invalid modelType: $modelType.")
-      }
-      var j = 0
-      while (j < numFeatures) {
-        theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
-        j += 1
-      }
-      i += 1
-    }
-
-    new NaiveBayesModel(labels, pi, theta, modelType)
+    aggregated
   }
 }
 
