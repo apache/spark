@@ -385,18 +385,18 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(e.getMessage == "queryName() can only be called on continuous queries;")
   }
 
-  test("check startStream() can only be called on streaming Datasets/DataFrames") {
+  test("check startStream() can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.startStream())
-    assert(e.getMessage == "startStream() can only be called on streaming Datasets/DataFrames.;")
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
   }
 
-  test("check startStream(path) can only be called on streaming Datasets/DataFrames") {
+  test("check startStream(path) can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.startStream("non_exist_path"))
-    assert(e.getMessage == "startStream() can only be called on streaming Datasets/DataFrames;")
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
   }
 
   test("check mode(SaveMode) can only be called on non-continuous queries") {
