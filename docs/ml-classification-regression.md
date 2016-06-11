@@ -704,7 +704,7 @@ Essentially isotonic regression is a
 [monotonic function](http://en.wikipedia.org/wiki/Monotonic_function)
 best fitting the original data points.
 
-In `spark.ml`, we implement a
+We implement a
 [pool adjacent violators algorithm](http://doi.org/10.1198/TECH.2010.10111)
 which uses an approach to
 [parallelizing isotonic regression](http://doi.org/10.1007/978-3-642-99789-1_10).
