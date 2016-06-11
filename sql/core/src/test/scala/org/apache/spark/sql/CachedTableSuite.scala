@@ -348,17 +348,13 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     toBeCleanedAccIds += accId2
 
     val cleanerListener = new CleanerListener {
-      def rddCleaned(rddId: Int): Unit = {
-      }
-      def shuffleCleaned(shuffleId: Int): Unit = {
-      }
-      def broadcastCleaned(broadcastId: Long): Unit = {
-      }
+      def rddCleaned(rddId: Int): Unit = {}
+      def shuffleCleaned(shuffleId: Int): Unit = {}
+      def broadcastCleaned(broadcastId: Long): Unit = {}
       def accumCleaned(accId: Long): Unit = {
         toBeCleanedAccIds.synchronized { toBeCleanedAccIds -= accId }
       }
-      def checkpointCleaned(rddId: Long): Unit = {
-      }
+      def checkpointCleaned(rddId: Long): Unit = {}
     }
     spark.sparkContext.cleaner.get.attachListener(cleanerListener)
 
@@ -542,15 +538,11 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     }
   }
 
-  test("[SPARK-15870] DataFrame can't execute after uncacheTable") {
+  test("SPARK-15870 DataFrame can't execute after uncacheTable") {
     val selectStar = sql("SELECT * FROM testData WHERE key = 1")
     selectStar.createOrReplaceTempView("selectStar")
 
     spark.catalog.cacheTable("selectStar")
-    assert(
-      selectStar.queryExecution.withCachedData.collect {
-        case i: InMemoryRelation => i
-      }.size == 1)
     checkAnswer(
       selectStar,
       Seq(Row(1, "1")))
