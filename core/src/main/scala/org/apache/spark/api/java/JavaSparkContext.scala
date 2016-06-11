@@ -530,7 +530,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().longAccumulator()", "2.0.0")
   def intAccumulator(initialValue: Int): Accumulator[java.lang.Integer] =
     sc.accumulator(initialValue)(IntAccumulatorParam).asInstanceOf[Accumulator[java.lang.Integer]]
 
@@ -540,7 +540,7 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * This version supports naming the accumulator for display in Spark's web UI.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().longAccumulator(String)", "2.0.0")
   def intAccumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
     sc.accumulator(initialValue, name)(IntAccumulatorParam)
       .asInstanceOf[Accumulator[java.lang.Integer]]
@@ -549,7 +549,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().doubleAccumulator()", "2.0.0")
   def doubleAccumulator(initialValue: Double): Accumulator[java.lang.Double] =
     sc.accumulator(initialValue)(DoubleAccumulatorParam).asInstanceOf[Accumulator[java.lang.Double]]
 
@@ -559,7 +559,7 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * This version supports naming the accumulator for display in Spark's web UI.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().doubleAccumulator(String)", "2.0.0")
   def doubleAccumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
     sc.accumulator(initialValue, name)(DoubleAccumulatorParam)
       .asInstanceOf[Accumulator[java.lang.Double]]
@@ -568,7 +568,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] integer variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().longAccumulator()", "2.0.0")
   def accumulator(initialValue: Int): Accumulator[java.lang.Integer] = intAccumulator(initialValue)
 
   /**
@@ -577,7 +577,7 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * This version supports naming the accumulator for display in Spark's web UI.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().longAccumulator(String)", "2.0.0")
   def accumulator(initialValue: Int, name: String): Accumulator[java.lang.Integer] =
     intAccumulator(initialValue, name)
 
@@ -585,7 +585,7 @@ class JavaSparkContext(val sc: SparkContext)
    * Create an [[org.apache.spark.Accumulator]] double variable, which tasks can "add" values
    * to using the `add` method. Only the master can access the accumulator's `value`.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().doubleAccumulator()", "2.0.0")
   def accumulator(initialValue: Double): Accumulator[java.lang.Double] =
     doubleAccumulator(initialValue)
 
@@ -596,7 +596,7 @@ class JavaSparkContext(val sc: SparkContext)
    *
    * This version supports naming the accumulator for display in Spark's web UI.
    */
-  @deprecated("use AccumulatorV2", "2.0.0")
+  @deprecated("use sc().doubleAccumulator(String)", "2.0.0")
   def accumulator(initialValue: Double, name: String): Accumulator[java.lang.Double] =
     doubleAccumulator(initialValue, name)
 
