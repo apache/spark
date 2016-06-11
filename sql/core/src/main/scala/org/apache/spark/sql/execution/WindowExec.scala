@@ -347,13 +347,13 @@ case class WindowExec(
                   SparkEnv.get.memoryManager.pageSizeBytes,
                   false)
                 rows.foreach { r =>
-                  sorter.insertRecord(r.getBaseObject, r.getBaseOffset, r.getSizeInBytes, 0, false)
+                  sorter.insertRecord(r.getBaseObject, r.getBaseOffset, r.getSizeInBytes, 0)
                 }
                 rows.clear()
               }
             } else {
               sorter.insertRecord(nextRow.getBaseObject, nextRow.getBaseOffset,
-                nextRow.getSizeInBytes, 0, false)
+                nextRow.getSizeInBytes, 0)
             }
             fetchNextRow()
           }

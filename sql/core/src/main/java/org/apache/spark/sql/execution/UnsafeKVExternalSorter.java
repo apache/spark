@@ -118,10 +118,9 @@ public final class UnsafeKVExternalSorter {
 
         // Compute prefix
         row.pointTo(baseObject, baseOffset, loc.getKeyLength());
-        final UnsafeExternalRowSorter.PrefixComputer.Prefix prefix =
-          prefixComputer.computePrefix(row);
+        final long prefix = prefixComputer.computePrefix(row);
 
-        inMemSorter.insertRecord(address, prefix.value, prefix.isNull);
+        inMemSorter.insertRecord(address, prefix);
       }
 
       sorter = UnsafeExternalSorter.createWithExistingInMemorySorter(
@@ -147,12 +146,10 @@ public final class UnsafeKVExternalSorter {
    * sorted runs, and then reallocates memory to hold the new record.
    */
   public void insertKV(UnsafeRow key, UnsafeRow value) throws IOException {
-    final UnsafeExternalRowSorter.PrefixComputer.Prefix prefix =
-      prefixComputer.computePrefix(key);
+    final long prefix = prefixComputer.computePrefix(key);
     sorter.insertKVRecord(
       key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes(),
-      value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(),
-      prefix.value, prefix.isNull);
+      value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
   }
 
   /**

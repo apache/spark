@@ -120,7 +120,7 @@ public class UnsafeInMemorySorterSuite {
       final long address = memoryManager.encodePageNumberAndOffset(dataPage, position);
       final String str = getStringFromDataPage(baseObject, position + 4, recordLength);
       final int partitionId = hashPartitioner.getPartition(str);
-      sorter.insertRecord(address, partitionId, false);
+      sorter.insertRecord(address, partitionId);
       position += 4 + recordLength;
     }
     final UnsafeSorterIterator iter = sorter.getSortedIterator();
