@@ -430,7 +430,7 @@ private[sql] object HadoopFsRelation extends Logging {
 
     // Set the number of parallelism to prevent following file listing from generating many tasks
     // in case of large #defaultParallelism.
-    val numParallelism = paths.size / Math.max(sqlConf.parallelPartitionDiscoveryThreshold, 1) + 1
+    val numParallelism = Math.min(paths.size, 10000)
 
     val fakeStatuses = sparkContext
         .parallelize(serializedPaths, numParallelism)
