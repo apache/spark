@@ -450,7 +450,7 @@ private[ml] object FeedForwardTopology {
   }
 
   /**
-   * Creates a multi-layer perceptron regression
+   * Creates a multi-layer perceptron for regression
    *
    * @param layerSizes sizes of layers including input and output size
    * @return multilayer perceptron topology

@@ -52,7 +52,6 @@ private[ann] class LinearLayerWithSquaredError extends Layer {
     new LinearLayerModelWithSquaredError()
 }
 
-
 private[ann] class LinearLayerModelWithSquaredError
   extends FunctionalLayerModel(new FunctionalLayer(new LinearFunction)) with LossFunction {
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {

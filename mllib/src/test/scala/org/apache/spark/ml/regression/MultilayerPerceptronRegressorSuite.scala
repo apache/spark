@@ -149,5 +149,4 @@ class MultilayerPerceptronRegressorSuite
       assert(expected.weights === actual.weights)
     }
   }
-
 }
