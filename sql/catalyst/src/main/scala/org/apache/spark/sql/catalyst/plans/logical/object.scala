@@ -141,6 +141,9 @@ case class MapPartitionsInR(
     outputObjAttr: Attribute,
     child: LogicalPlan) extends ObjectConsumer with ObjectProducer {
   override lazy val schema = outputSchema
+
+  override protected def stringArgs: Iterator[Any] = Iterator(inputSchema, outputSchema,
+    outputObjAttr, child)
 }
 
 object MapElements {
