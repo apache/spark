@@ -38,24 +38,37 @@ import org.apache.spark.util.NextIterator
  * @param sql the text of the query.
  *   The query must contain two ? placeholders for parameters used to partition the results.
  *   E.g. "select title, author from books where ? <= id and id <= ?"
- * @param lowerBound the minimum value of the first placeholder
- * @param upperBound the maximum value of the second placeholder
- *   The lower and upper bounds are inclusive.
- * @param numPartitions the number of partitions.
- *   Given a lowerBound of 1, an upperBound of 20, and a numPartitions of 2,
- *   the query would be executed twice, once with (1, 10) and once with (11, 20)
+ * @param partitions a list of partitions to apply to sql.
  * @param mapRow a function from a ResultSet to a single row of the desired result type(s).
  *   This should only call getInt, getString, etc; the RDD takes care of calling next.
- *   The default maps a ResultSet to an array of Object.
  */
 class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,
     sql: String,
-    partitions: JdbcPartitions,
+    partitions: Seq[JdbcPartition],
     mapRow: (ResultSet) => T)
   extends RDD[T](sc, Nil) with Logging {
   
+  /**
+   * An RDD that executes a SQL query on a JDBC connection and reads results.
+   * For usage example, see test case JdbcRDDSuite.
+   *
+   * @param getConnection a function that returns an open Connection.
+   *   The RDD takes care of closing the connection.
+   * @param sql the text of the query.
+   *   The query must contain two ? placeholders for parameters used to partition the results.
+   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   * @param lowerBound the minimum value of the first placeholder
+   * @param upperBound the maximum value of the second placeholder
+   *   The lower and upper bounds are inclusive.
+   * @param numPartitions the number of partitions.
+   *   Given a lowerBound of 1, an upperBound of 20, and a numPartitions of 2,
+   *   the query would be executed twice, once with (1, 10) and once with (11, 20)
+   * @param mapRow a function from a ResultSet to a single row of the desired result type(s).
+   *   This should only call getInt, getString, etc; the RDD takes care of calling next.
+   *   The default maps a ResultSet to an array of Object.
+   */
   def this(
     sc: SparkContext,
     getConnection: () => Connection,
@@ -64,14 +77,12 @@ class JdbcRDD[T: ClassTag](
     upperBound: Long,
     numPartitions: Int,
     mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _) {
-    this(sc, getConnection, sql, JdbcPartitions(lowerBound, upperBound, numPartitions), mapRow)
+    this(sc, getConnection, sql, JdbcPartition.longPartitions(lowerBound, upperBound, numPartitions), mapRow)
   }
   
   override def getPartitions: Array[Partition] = {
-    partitions.mapPartition { case(partition, index) =>
-      new JdbcPartitionAdapter(index, partition, 
-          partitions.lowerBoundParameterIndexes, 
-          partitions.upperBoundParameterIndexes)
+    partitions.view.zipWithIndex.map{ case(partition, index) => 
+      new JdbcPartitionAdapter(index, partition)
     }.toArray
   }
 
@@ -126,66 +137,114 @@ class JdbcRDD[T: ClassTag](
       }
     }
   }
+} 
+
+/**
+ * A JdbcParition carries sql partition information, e.g., lowerBound and upperBound.
+ */
+trait JdbcPartition extends Serializable {
+  /**
+   * Fill given sql statement with partition information.
+   */
+  def fill(stmt: PreparedStatement): Unit
 }
 
-class JdbcPartitions(
-    private val partitions: Seq[JdbcPartition],
-    val lowerBoundParameterIndexes:Seq[Int] = JdbcPartitions.DefaultLowerBoundParameterIndexes,
-    val upperBoundParameterIndexes:Seq[Int] = JdbcPartitions.DefaultUpperBoundParameterIndexes) 
-  extends Serializable {
-  private[spark] def mapPartition[R](f: (JdbcPartition, Int) => R): Seq[R] = {
-    partitions.view.zipWithIndex.map{ case(partition, index) => 
-      f(partition, index)
-    }
-  }
-}
-    
-object JdbcPartitions {
-
-  def apply(lowerBound: Long, upperBound: Long, numPartitions: Int, 
+object JdbcPartition {
+  /**
+   * Create a partition of long lower&upper bounds.
+   *
+   * @param lowerBound the minimum value of the partition.
+   * @param upperBound the maximum value of the partition.
+   *   The lower and upper bounds are inclusive.
+   * @param lowerBoundParameterIndexes the sql placeholder indices of lowerBound.
+   *   Default to 1. There can be more than one lowerBound placeholder, in a sql with sub-queries, e.g., (1, 3)
+   * @param upperBoundParameterIndexes the sql placeholder indices of upperBound.
+   *   Default to 2. There can be more than one lowerBound placeholder, in a sql with sub-queries, e.g., (2, 4)
+   */
+  def longPartition(lowerBound: Long, upperBound: Long,
       lowerBoundParameterIndexes:Seq[Int] = DefaultLowerBoundParameterIndexes, 
-      upperBoundParameterIndexes:Seq[Int] = DefaultUpperBoundParameterIndexes
-      ): JdbcPartitions = {
+      upperBoundParameterIndexes:Seq[Int] = DefaultUpperBoundParameterIndexes): JdbcPartition = {
+    new MultiBoundsJdbcPartition(new LongBoundFiller(lowerBound, upperBound),
+        lowerBoundParameterIndexes, upperBoundParameterIndexes)
+  }
+  
+  /**
+   * Create a list of partitions of long lower&upper bounds. 
+   * For usage example, see test case JdbcRDDSuite.
+   *
+   * @param lowerBound the minimum value of all the partitions.
+   * @param upperBound the maximum value of all the partitions.
+   *   The lower and upper bounds are inclusive.
+   * @param numPartitions the number of partitions.
+   *   Given a lowerBound of 1, an upperBound of 20, and a numPartitions of 2,
+   *   the query would be executed twice, once with (1, 10) and once with (11, 20)
+   * @param lowerBoundParameterIndexes the sql placeholder indices of lowerBound.
+   *   Default to 1. There can be more than one lowerBound placeholder, in a sql with sub-queries, e.g., (1, 3)
+   * @param upperBoundParameterIndexes the sql placeholder indices of upperBound.
+   *   Default to 2. There can be more than one lowerBound placeholder, in a sql with sub-queries, e.g., (2, 4)
+   */
+  def longPartitions(lowerBound: Long, upperBound: Long, numPartitions: Int, 
+      lowerBoundParameterIndexes:Seq[Int] = DefaultLowerBoundParameterIndexes, 
+      upperBoundParameterIndexes:Seq[Int] = DefaultUpperBoundParameterIndexes): Seq[JdbcPartition] = {
     // bounds are inclusive, hence the + 1 here and - 1 on end
     val length = BigInt(1) + upperBound - lowerBound
-    val partitions = (0 until numPartitions).map { i =>
+    (0 until numPartitions).map { i =>
       val start = lowerBound + ((i * length) / numPartitions)
       val end = lowerBound + (((i + 1) * length) / numPartitions) - 1
-      JdbcPartition.longPartition(start.toLong, end.toLong)
+      longPartition(start.toLong, end.toLong,
+          lowerBoundParameterIndexes, upperBoundParameterIndexes)
     }
-    
-    new JdbcPartitions(partitions, lowerBoundParameterIndexes, upperBoundParameterIndexes)
   }
 
-  def apply(partitions: JdbcPartition*): JdbcPartitions = {
-    new JdbcPartitions(partitions, DefaultLowerBoundParameterIndexes, DefaultUpperBoundParameterIndexes)
+  /**
+   * Create a partition of string lower&upper bounds.
+   *
+   * @param lowerBound the minimum value of the partition.
+   * @param upperBound the maximum value of the partition.
+   *   The lower and upper bounds are inclusive.
+   * @param lowerBoundParameterIndexes the sql placeholder indices of lowerBound.
+   *   Default to 1. There can be more than one lowerBound placeholder, in a sql with sub-queries, e.g., (1, 3)
+   * @param upperBoundParameterIndexes the sql placeholder indices of upperBound.
+   *   Default to 2. There can be more than one lowerBound placeholder, in a sql with sub-queries, e.g., (2, 4)
+   */
+  def stringPartition(lowerBound: String, upperBound: String,
+      lowerBoundParameterIndexes:Seq[Int] = DefaultLowerBoundParameterIndexes, 
+      upperBoundParameterIndexes:Seq[Int] = DefaultUpperBoundParameterIndexes): JdbcPartition = {
+    new MultiBoundsJdbcPartition(new StringBoundFiller(lowerBound, upperBound),
+        lowerBoundParameterIndexes, upperBoundParameterIndexes)
   }
   
   private val DefaultLowerBoundParameterIndexes = Seq(1)
   private val DefaultUpperBoundParameterIndexes = Seq(2)
-  
 }
-    
-trait JdbcPartition extends Serializable {
-  def fillLowerBound(paramterIndex: Int, stmt: PreparedStatement): Unit
+
+private class MultiBoundsJdbcPartition(
+    val boundFiller: BoundFiller,
+    val lowerBoundParameterIndexes:Seq[Int],
+    val upperBoundParameterIndexes:Seq[Int]  
+  ) extends JdbcPartition {
   
+  override def fill(stmt: PreparedStatement): Unit = {
+    lowerBoundParameterIndexes.foreach { paramterIndex =>
+      boundFiller.fillLowerBound(paramterIndex, stmt)
+    }
+    
+    upperBoundParameterIndexes.foreach { paramterIndex =>
+      boundFiller.fillUpperBound(paramterIndex, stmt)
+    }
+  }
+}
+
+private trait BoundFiller extends Serializable {
+  def fillLowerBound(paramterIndex: Int, stmt: PreparedStatement): Unit
+
   def fillUpperBound(paramterIndex: Int, stmt: PreparedStatement): Unit
 }
 
-object JdbcPartition {
-  def longPartition(lowerBound: Long, upperBound: Long): JdbcPartition = {
-    new LongJdbcPartition(lowerBound, upperBound)
-  }
-
-  def stringPartition(lowerBound: String, upperBound: String): JdbcPartition = {
-    new StringJdbcPartition(lowerBound, upperBound)
-  }
-}
-
-private class LongJdbcPartition(
+private class LongBoundFiller(
     val lowerBound: Long,
     val upperBound: Long) 
-  extends JdbcPartition {
+  extends BoundFiller {
   override def fillLowerBound(paramterIndex: Int, stmt: PreparedStatement): Unit = {
     stmt.setLong(paramterIndex, lowerBound)
   }
@@ -195,10 +254,10 @@ private class LongJdbcPartition(
   }
 }
 
-private class StringJdbcPartition(
+private class StringBoundFiller(
     val lowerBound: String,
     val upperBound: String) 
-  extends JdbcPartition {
+  extends BoundFiller {
   override def fillLowerBound(paramterIndex: Int, stmt: PreparedStatement): Unit = {
     stmt.setString(paramterIndex, lowerBound)
   }
@@ -209,17 +268,9 @@ private class StringJdbcPartition(
 }
 
 private class JdbcPartitionAdapter(
-    val index: Int, partition: JdbcPartition,
-    val lowerBoundParameterIndexes:Seq[Int],
-    val upperBoundParameterIndexes:Seq[Int]) extends Partition {
+    val index: Int, partition: JdbcPartition) extends Partition {
   def fill(stmt: PreparedStatement): Unit = {
-    lowerBoundParameterIndexes.foreach { paramterIndex =>
-      partition.fillLowerBound(paramterIndex, stmt)
-    }
-    
-    upperBoundParameterIndexes.foreach { paramterIndex =>
-      partition.fillUpperBound(paramterIndex, stmt)
-    }
+    partition.fill(stmt)
   }
 }
 
@@ -306,11 +357,26 @@ object JdbcRDD {
     create(sc, connectionFactory, sql, lowerBound, upperBound, numPartitions, mapRow)
   }
   
+
+  /**
+   * Create an RDD that executes a SQL query on a JDBC connection and reads results. Each row is
+   * For usage example, see test case JavaAPISuite.testJavaJdbcRDD.
+   *
+   * @param getConnection a function that returns an open Connection.
+   *   The RDD takes care of closing the connection.
+   * @param sql the text of the query.
+   *   The query must contain two ? placeholders for parameters used to partition the results.
+   *   E.g. "select title, author from books where ? <= id and id <= ?"
+   * @param partitions a list of partitions to apply to sql.
+   * @param mapRow a function from a ResultSet to a single row of the desired result type(s).
+   *   This should only call getInt, getString, etc; the RDD takes care of calling next.
+   *   The default maps a ResultSet to an array of Object.
+   */  
   def create[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,
     sql: String,
-    partitions: JdbcPartitions,
+    partitions: Seq[JdbcPartition],
     mapRow: (ResultSet) => T = JdbcRDD.resultSetToObjectArray _): JdbcRDD[T] = {
     new JdbcRDD(sc, getConnection, sql, partitions, mapRow)
   }

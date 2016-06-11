@@ -177,7 +177,7 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
       sc,
       () => DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb"),
       s"SELECT DATA FROM ${Table} WHERE ? <= ID AND ID <= ?",
-      JdbcPartitions(JdbcPartition.stringPartition("a", "c"), JdbcPartition.stringPartition("d", "j")),
+      Seq(JdbcPartition.stringPartition("a", "c"), JdbcPartition.stringPartition("d", "j")),
       (r: ResultSet) => { r.getInt(1) } ).cache()
       
     assert(rdd.count === ids.size)
@@ -271,7 +271,7 @@ class JdbcRDDSuite extends SparkFunSuite with BeforeAndAfter with LocalSparkCont
       sc,
       () => DriverManager.getConnection("jdbc:derby:target/JdbcRDDSuiteDb"),
       sql,
-      JdbcPartitions(lowerBound = 1, upperBound = 4, numPartitions = 2, 
+      JdbcPartition.longPartitions(lowerBound = 1, upperBound = 4, numPartitions = 2, 
         lowerBoundParameterIndexes = Seq(1, 3), upperBoundParameterIndexes = Seq(2, 4)),
       (r: ResultSet) => { (r.getDouble(2), r.getBoolean(3)) } ).cache()
     
