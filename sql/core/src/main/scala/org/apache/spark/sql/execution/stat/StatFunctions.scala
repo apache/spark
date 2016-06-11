@@ -55,7 +55,7 @@ private[sql] object StatFunctions extends Logging {
    * @param relativeError The relative target precision to achieve (>= 0).
    *   If set to zero, the exact quantiles are computed, which could be very expensive.
    *   Note that values greater than 1 are accepted but give the same result as 1.
-    * @return for each column, returns the requested approximations
+   * @return for each column, returns the requested approximations
    */
   def multipleApproxQuantiles(
       df: DataFrame,
@@ -128,8 +128,8 @@ private[sql] object StatFunctions extends Logging {
      * Returns a summary with the given observation inserted into the summary.
      * This method may either modify in place the current summary (and return the same summary,
      * modified in place), or it may create a new summary from scratch it necessary.
-      *
-      * @param x the new observation to insert into the summary
+     *
+     * @param x the new observation to insert into the summary
      */
     def insert(x: Double): QuantileSummaries = {
       headSampled.append(x)
@@ -297,8 +297,8 @@ private[sql] object StatFunctions extends Logging {
 
     /**
      * Statistics from the Greenwald-Khanna paper.
-      *
-      * @param value the sampled value
+     *
+     * @param value the sampled value
      * @param g the minimum rank jump from the previous value's minimum rank
      * @param delta the maximum span of the rank.
      */
@@ -404,8 +404,8 @@ private[sql] object StatFunctions extends Logging {
 
   /**
    * Calculate the covariance of two numerical columns of a DataFrame.
-    *
-    * @param df The DataFrame
+   *
+   * @param df The DataFrame
    * @param cols the column names
    * @return the covariance of the two columns.
    */
@@ -414,6 +414,16 @@ private[sql] object StatFunctions extends Logging {
     counts.cov
   }
 
+  /**
+    * Calculate the covariance of two numerical columns of a DataFrame.
+    *
+    * @param df The DataFrame
+    * @param col1 the name of the column over which to tabulate the values
+    * @param maybeWeightCol the column with the weights
+    * @param frequencyColumnName the name of the column created with the frequency tabulation
+    * @param percentColumnName the name of the column created with the percent tabulation
+    * @return a dataframe with the tabulation.
+  */
   private[sql] def tabulate(
     df: DataFrame,
     col1: String,
