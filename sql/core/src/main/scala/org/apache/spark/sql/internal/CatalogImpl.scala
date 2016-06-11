@@ -373,6 +373,16 @@ class CatalogImpl(sparkSession: SparkSession) extends Catalog {
     }
   }
 
+  /**
+   * Refresh the cache entry and the associated metadata for all dataframes (if any), that contain
+   * the given data source path.
+   *
+   * @group cachemgmt
+   * @since 2.0.0
+   */
+  override def refreshByPath(resourcePath: String): Unit = {
+    sparkSession.sharedState.cacheManager.invalidateCachedPath(sparkSession, resourcePath)
+  }
 }
 
 
