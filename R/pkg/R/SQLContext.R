@@ -506,10 +506,10 @@ tables <- function(x, ...) {
 
 tableNames.default <- function(databaseName = NULL) {
   sparkSession <- getSparkSession()
-  jdf <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
-                     "getTableNames",
-                     sparkSession,
-                     databaseName)
+  callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+              "getTableNames",
+              sparkSession,
+              databaseName)
 }
 
 tableNames <- function(x, ...) {

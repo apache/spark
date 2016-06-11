@@ -33,19 +33,29 @@ markUtf8 <- function(s) {
 }
 
 setHiveContext <- function(sc) {
-  ssc <- callJMethod(sc, "sc")
-  hiveCtx <- tryCatch({
-    newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
-  },
-  error = function(err) {
-    skip("Hive is not build with SparkSQL, skipped")
-  })
-  assign(".sparkRsession", hiveCtx, envir = .sparkREnv)
-  hiveCtx
+  if (exists(".testHiveSession", envir = .sparkREnv)) {
+    hiveSession <- get(".testHiveSession", envir = .sparkREnv)
+  } else {
+    # initialize once and reuse
+    ssc <- callJMethod(sc, "sc")
+    hiveCtx <- tryCatch({
+      newJObject("org.apache.spark.sql.hive.test.TestHiveContext", ssc)
+    },
+    error = function(err) {
+      skip("Hive is not build with SparkSQL, skipped")
+    })
+    hiveSession <- callJMethod(hiveCtx, "sparkSession")
+  }
+  previousSession <- get(".sparkRsession", envir = .sparkREnv)
+  assign(".sparkRsession", hiveSession, envir = .sparkREnv)
+  assign(".prevSparkRsession", previousSession, envir = .sparkREnv)
+  hiveSession
 }
 
 unsetHiveContext <- function() {
-  remove(".sparkRsession", envir = .sparkREnv)
+  previousSession <- get(".prevSparkRsession", envir = .sparkREnv)
+  assign(".sparkRsession", previousSession, envir = .sparkREnv)
+  remove(".prevSparkRsession", envir = .sparkREnv)
 }
 
 # Tests for SparkSQL functions in SparkR
@@ -2237,7 +2247,6 @@ test_that("gapply() on a DataFrame", {
 })
 
 test_that("Window functions on a DataFrame", {
-  setHiveContext(sc)
   df <- createDataFrame(list(list(1L, "1"), list(2L, "2"), list(1L, "1"), list(2L, "2")),
                         schema = c("key", "value"))
   ws <- orderBy(window.partitionBy("key"), "value")
@@ -2262,7 +2271,6 @@ test_that("Window functions on a DataFrame", {
   result <- collect(select(df, over(lead("key", 1), ws), over(lead("value", 1), ws)))
   names(result) <- c("key", "value")
   expect_equal(result, expected)
-  unsetHiveContext()
 })
 
 test_that("createDataFrame sqlContext parameter backward compatibility", {
