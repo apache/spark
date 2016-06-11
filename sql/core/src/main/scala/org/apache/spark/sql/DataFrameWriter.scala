@@ -284,7 +284,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def save(): Unit = {
     assertNotBucketed("save")
-    assertNotStreaming("save() can only be called on non-continuous queries")
+    assertNotStreaming("save() can only be called on streaming Datasets/DataFrames")
     val dataSource = DataSource(
       df.sparkSession,
       className = source,
@@ -304,7 +304,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Experimental
   def queryName(queryName: String): DataFrameWriter[T] = {
-    assertStreaming("queryName() can only be called on continuous queries")
+    assertStreaming("queryName() can only be called on streaming Datasets/DataFrames")
     this.extraOptions += ("queryName" -> queryName)
     this
   }
@@ -333,7 +333,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   @Experimental
   def startStream(): ContinuousQuery = {
     assertNotBucketed("startStream")
-    assertStreaming("startStream() can only be called on streaming Datasets/DataFrames.")
+    assertStreaming("startStream() can only be called on streaming Datasets/DataFrames")
 
     if (source == "memory") {
       if (extraOptions.get("queryName").isEmpty) {

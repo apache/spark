@@ -170,7 +170,21 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
     listenerBus.post(event)
   }
 
-  /** Start a query */
+  /**
+   * Start a [[ContinuousQuery]].
+   * @param userSpecifiedName Query name optionally specified by the user.
+   * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
+   * @param df Streaming DataFrame.
+   * @param sink  Sink to write the streaming outputs.
+   * @param outputMode  Output mode for the sink.
+   * @param useTempCheckpointLocation  Whether to use a temporary checkpoint location when the user
+   *                                   has not specified one. If false, then error will be thrown.
+   * @param recoverFromCheckpointLocation  Whether to recover query from the checkpoint location.
+   *                                       If false and the checkpoint location exists, then error
+   *                                       will be thrown.
+   * @param trigger [[Trigger]] for the query.
+   * @param triggerClock [[Clock]] to use for the triggering.
+   */
   private[sql] def startQuery(
       userSpecifiedName: Option[String],
       userSpecifiedCheckpointLocation: Option[String],
