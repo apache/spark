@@ -292,14 +292,6 @@ case class AttributeReference(
     }
   }
 
-  def withMetadata(newMetadata: Metadata): AttributeReference = {
-    if (metadata == newMetadata) {
-      this
-    } else {
-      AttributeReference(name, dataType, nullable, newMetadata)(exprId, qualifier, isGenerated)
-    }
-  }
-
   override protected final def otherCopyArgs: Seq[AnyRef] = {
     exprId :: qualifier :: isGenerated :: Nil
   }
