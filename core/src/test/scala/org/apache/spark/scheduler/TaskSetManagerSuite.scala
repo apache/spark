@@ -684,13 +684,18 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // node-local tasks are scheduled without delay
+    assert(manager.pollPendingTask.isDefined)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(manager.pollPendingTask != 0)
     assert(manager.resourceOffer("execA", "host2", NODE_LOCAL).get.index === 1)
+    assert(!Set(0, 1).contains(manager.pollPendingTask.get))
     assert(manager.resourceOffer("execA", "host3", NODE_LOCAL).get.index === 3)
+    assert(!Set(0, 1, 3).contains(manager.pollPendingTask.get))
     assert(manager.resourceOffer("execA", "host3", NODE_LOCAL) === None)
 
     // schedule no-preference after node local ones
     assert(manager.resourceOffer("execA", "host3", NO_PREF).get.index === 2)
+    assert(manager.pollPendingTask === None)
   }
 
   test("SPARK-4939: node-local tasks should be scheduled right after process-local tasks finished")
@@ -706,11 +711,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // process-local tasks are scheduled first
+    assert(manager.pollPendingTask.isDefined)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 2)
+    assert(manager.pollPendingTask.get != 2)
     assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 3)
+    assert(!Set(2, 3).contains(manager.pollPendingTask.get))
     // node-local tasks are scheduled without delay
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL).get.index === 0)
+    assert(!Set(0, 2, 3).contains(manager.pollPendingTask.get))
     assert(manager.resourceOffer("execB", "host2", NODE_LOCAL).get.index === 1)
+    assert(manager.pollPendingTask === None)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
     assert(manager.resourceOffer("execB", "host2", NODE_LOCAL) == None)
   }
@@ -726,12 +736,16 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // process-local tasks are scheduled first
+    assert(manager.pollPendingTask.isDefined)
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL).get.index === 1)
+    assert(manager.pollPendingTask.get != 1)
     assert(manager.resourceOffer("execB", "host2", PROCESS_LOCAL).get.index === 2)
+    assert(!Set(1, 2).contains(manager.pollPendingTask.get))
     // no-pref tasks are scheduled without delay
     assert(manager.resourceOffer("execA", "host1", PROCESS_LOCAL) == None)
     assert(manager.resourceOffer("execA", "host1", NODE_LOCAL) == None)
     assert(manager.resourceOffer("execA", "host1", NO_PREF).get.index === 0)
+    assert(manager.pollPendingTask == None)
     assert(manager.resourceOffer("execA", "host1", ANY) == None)
   }
 
