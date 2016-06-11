@@ -179,18 +179,43 @@ final class DataFrameStatFunctions private[sql](df: DataFrame) {
     StatFunctions.crossTabulate(df, col1, col2)
   }
 
+  /**
+    * One-way table of frequencies
+    *
+    * @param col the name of the column over which to tabulate frequencies
+    * @param maybeWeightCol the name of the column with the weights
+    * @param frequencyColumnName the name to give the column with the frequencies
+    * @param proportionColumnName the name to give the column with the proportions
+    * @return a dataframe with the tabulation
+    */
   def tab(col: String,
-          weightCol: Option[String] = None,
+          maybeWeightCol: Option[String] = None,
           frequencyColumnName: String = "Frequency",
-          percentColumnName: String = "Proportion"): DataFrame =
-    StatFunctions.tabulate(df, col, weightCol, frequencyColumnName, percentColumnName)
+          proportionColumnName: String = "Proportion"): DataFrame =
+    StatFunctions.tabulate(df, col, maybeWeightCol, frequencyColumnName, proportionColumnName)
 
+  /**
+    * One-way table of frequencies
+    *
+    * @param col the name of the column over which to tabulate frequencies
+    * @param weightCol the name of the column with the weights
+    * @param frequencyColumnName the name to give the column with the frequencies
+    * @param proportionColumnName the name to give the column with the proportions
+    * @return a dataframe with the tabulation
+    */
   def tab(col: String,
           weightCol: String,
           frequencyColumnName: String,
-          percentColumnName: String): DataFrame =
-    tab(col, Some(weightCol), frequencyColumnName, percentColumnName)
+          proportionColumnName: String): DataFrame =
+    tab(col, Some(weightCol), frequencyColumnName, proportionColumnName)
 
+  /**
+    * One-way table of frequencies
+    *
+    * @param col the name of the column over which to tabulate frequencies
+    * @param weightCol the name of the column with the weights
+    * @return a dataframe with the tabulation
+    */
   def tab(col: String, weightCol: String): DataFrame = tab(col, Some(weightCol))
 
   /**

@@ -421,15 +421,15 @@ private[sql] object StatFunctions extends Logging {
     * @param col1 the name of the column over which to tabulate the values
     * @param maybeWeightCol the column with the weights
     * @param frequencyColumnName the name of the column created with the frequency tabulation
-    * @param percentColumnName the name of the column created with the percent tabulation
+    * @param proportionColumnName the name of the column created with the percent tabulation
     * @return a dataframe with the tabulation.
   */
   private[sql] def tabulate(
-    df: DataFrame,
-    col1: String,
-    maybeWeightCol: Option[String],
-    frequencyColumnName: String,
-    percentColumnName: String): DataFrame = {
+     df: DataFrame,
+     col1: String,
+     maybeWeightCol: Option[String],
+     frequencyColumnName: String,
+     proportionColumnName: String): DataFrame = {
 
     import df.sqlContext.implicits._
 
@@ -446,7 +446,7 @@ private[sql] object StatFunctions extends Logging {
 
     dfWithWeightColumn.groupBy(col1).agg(count(col1), sum(weightCol) as weightCol)
       .withColumn(frequencyColumnName, col(weightCol) * numberOfObservations / sumOfWeights)
-      .withColumn(percentColumnName, col(frequencyColumnName) / numberOfObservations)
+      .withColumn(proportionColumnName, col(frequencyColumnName) / numberOfObservations)
       .drop(weightCol)
   }
 
