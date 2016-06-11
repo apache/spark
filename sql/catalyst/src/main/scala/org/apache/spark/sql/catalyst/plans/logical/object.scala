@@ -250,25 +250,25 @@ object FlatMapGroupsInR {
       packageNames: Array[Byte],
       broadcastVars: Array[Broadcast[Object]],
       schema: StructType,
-      encoder: Expression,
-      keyEncoder: Expression,
-      rowEncoder: ExpressionEncoder[Row],
+      keyDeserializer: Expression,
+      valueDeserializer: Expression,
+      inputSchema: StructType,
       groupingAttributes: Seq[Attribute],
       dataAttributes: Seq[Attribute],
       child: LogicalPlan): LogicalPlan = {
-     val mapped = FlatMapGroupsInR(
-       func,
-       packageNames,
-       broadcastVars,
-       rowEncoder.schema,
-       schema,
-       UnresolvedDeserializer(keyEncoder, groupingAttributes),
-       UnresolvedDeserializer(encoder, dataAttributes),
-       groupingAttributes,
-       dataAttributes,
-       CatalystSerde.generateObjAttr(RowEncoder(schema)),
-       child)
-     CatalystSerde.serialize(mapped)(RowEncoder(schema))
+    val mapped = FlatMapGroupsInR(
+      func,
+      packageNames,
+      broadcastVars,
+      inputSchema,
+      schema,
+      UnresolvedDeserializer(keyDeserializer, groupingAttributes),
+      UnresolvedDeserializer(valueDeserializer, dataAttributes),
+      groupingAttributes,
+      dataAttributes,
+      CatalystSerde.generateObjAttr(RowEncoder(schema)),
+      child)
+    CatalystSerde.serialize(mapped)(RowEncoder(schema))
   }
 }
 

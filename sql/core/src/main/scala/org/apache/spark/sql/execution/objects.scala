@@ -377,7 +377,7 @@ case class FlatMapGroupsInRExec(
       val groupedRBytes = grouped.flatMap { case (key, rowIter) =>
         val deserializedIter = rowIter.map(getValue)
         val newIter =
-          deserializedIter.asInstanceOf[Iterator[Row]].map {row => rowToRBytes(row)}
+          deserializedIter.asInstanceOf[Iterator[Row]].map { row => rowToRBytes(row) }
         val newKey = rowToRBytes(getKey(key).asInstanceOf[Row])
         Iterator((newKey, newIter))
       }

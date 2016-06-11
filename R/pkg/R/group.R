@@ -194,6 +194,6 @@ setMethod("gapply",
                      serialize(cleanClosure(func), connection = NULL),
                      packageNamesArr,
                      broadcastArr,
-                     schema$jobj)
+                     if (is.null(schema)) { schema } else { schema$jobj })
             dataFrame(sdf)
           })
