@@ -725,9 +725,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`none`, `snappy`, `gzip`, and `lzo`).
-   * This will overwrite `spark.sql.parquet.compression.codec`. </li>
+   * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
+   * compression codec to use when saving to file. This can be one of the known case-insensitive
+   * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
+   * `spark.sql.parquet.compression.codec`.</li>
    *
    * @since 1.4.0
    */
@@ -744,9 +745,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
-   * This will overwrite `orc.compress`. </li>
+   * This will override `orc.compress`.</li>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support

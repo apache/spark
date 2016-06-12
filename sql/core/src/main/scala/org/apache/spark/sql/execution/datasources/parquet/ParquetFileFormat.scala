@@ -144,12 +144,10 @@ private[sql] class ParquetFileFormat
       sparkSession: SparkSession,
       parameters: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val parquetOptions = new ParquetOptions(parameters, sparkSession.sessionState.conf)
+
     // Should we merge schemas from all Parquet part-files?
-    val shouldMergeSchemas =
-      parameters
-          .get(ParquetFileFormat.MERGE_SCHEMA)
-          .map(_.toBoolean)
-          .getOrElse(sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+    val shouldMergeSchemas = parquetOptions.mergeSchema
 
     val mergeRespectSummaries = sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
@@ -558,17 +556,6 @@ private[sql] class ParquetOutputWriter(
 }
 
 private[sql] object ParquetFileFormat extends Logging {
-  // Whether we should merge schemas collected from all Parquet part-files.
-  private[sql] val MERGE_SCHEMA = "mergeSchema"
-
-  // Hive Metastore schema, used when converting Metastore Parquet tables.  This option is only used
-  // internally.
-  private[sql] val METASTORE_SCHEMA = "metastoreSchema"
-
-  // If a ParquetRelation is converted from a Hive metastore table, this option is set to the
-  // original Hive table name.
-  private[sql] val METASTORE_TABLE_NAME = "metastoreTableName"
-
   /**
    * If parquet's block size (row group size) setting is larger than the min split size,
    * we use parquet's block size setting as the min split size. Otherwise, we will create
