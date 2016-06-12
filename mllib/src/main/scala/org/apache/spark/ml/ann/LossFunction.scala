@@ -57,7 +57,6 @@ private[ann] class LinearLayerModelWithSquaredError
   override def loss(output: BDM[Double], target: BDM[Double], delta: BDM[Double]): Double = {
     ApplyInPlace(output, target, delta, (o: Double, t: Double) => o - t)
     val error = Bsum(delta :* delta) / 2 / output.cols
-    ApplyInPlace(delta, output, delta, (x: Double, o: Double) => x * (o - o * o))
     error
   }
 }
