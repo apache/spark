@@ -2417,7 +2417,6 @@ object SparkContext extends Logging {
    * Create a task scheduler based on a given master URL.
    * Return a 2-tuple of the scheduler backend and the task scheduler.
    */
-  @tailrec
   private def createTaskScheduler(
       sc: SparkContext,
       master: String,
@@ -2494,11 +2493,6 @@ object SparkContext extends Logging {
         }
         scheduler.initialize(backend)
         (backend, scheduler)
-
-      case zkUrl if zkUrl.startsWith("zk://") =>
-        logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
-          "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
-        createTaskScheduler(sc, "mesos://" + zkUrl, deployMode)
 
       case masterUrl =>
         val cm = getClusterManager(masterUrl) match {
