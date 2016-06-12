@@ -71,8 +71,7 @@ object SparkKMeans {
       .appName("SparkKMeans")
       .getOrCreate()
 
-    import spark.implicits._
-    val lines = spark.read.text(args(0)).as[String].rdd
+    val lines = spark.read.textFile(args(0)).rdd
     val data = lines.map(parseVector _).cache()
     val K = args(1).toInt
     val convergeDist = args(2).toDouble

@@ -24,7 +24,7 @@ import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
 import org.apache.spark.sql.test.SharedSQLContext
-import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
+import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
 class TextSuite extends QueryTest with SharedSQLContext {
@@ -63,11 +63,20 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("support for partitioned reading") {
+  test("reading partitioned data using read.textFile()") {
+    val partitionedData = Thread.currentThread().getContextClassLoader
+      .getResource("text-partitioned").toString
+    val ds = spark.read.textFile(partitionedData)
+    val data = ds.collect()
+
+    assert(ds.schema == new StructType().add("value", StringType))
+    assert(data.length == 2)
+  }
+
+  test("support for partitioned reading using read.text()") {
     val partitionedData = Thread.currentThread().getContextClassLoader
       .getResource("text-partitioned").toString
     val df = spark.read.text(partitionedData)
-    assert(df.schema == new StructType().add("value", StringType).add("year", IntegerType))
     val data = df.filter("year = '2015'").select("value").collect()
 
     assert(data(0) == Row("2015-test"))

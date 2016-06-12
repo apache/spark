@@ -24,7 +24,6 @@ import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFunction;
-import org.apache.spark.sql.Encoders;
 import org.apache.spark.sql.SparkSession;
 
 import java.util.Arrays;
@@ -47,7 +46,7 @@ public final class JavaWordCount {
       .appName("JavaWordCount")
       .getOrCreate();
 
-    JavaRDD<String> lines = spark.read().text(args[0]).as(Encoders.STRING()).javaRDD();
+    JavaRDD<String> lines = spark.read().textFile(args[0]).javaRDD();
 
     JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
