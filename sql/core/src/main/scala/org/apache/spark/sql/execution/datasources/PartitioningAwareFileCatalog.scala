@@ -96,9 +96,13 @@ abstract class PartitioningAwareFileCatalog(
 
   protected def inferPartitioning(): PartitionSpec = {
     // We use leaf dirs containing data files to discover the schema.
-    val leafDirs = leafDirToChildrenFiles.filterNot {
-      // SPARK-15895: Metadata files like Parquet summary files should not be counted as data files.
-      case (_, files) => files.forall(_.getPath.getName.startsWith("_"))
+    val leafDirs = leafDirToChildrenFiles.filterNot { case (_, files) =>
+      // SPARK-15895: Metadata files (e.g. Parquet summary files) and temporary files should not be
+      // counted as data files, so that they shouldn't participate partition discovery.
+      files.forall { file =>
+        val name = file.getPath.getName
+        name.startsWith("_") || name.startsWith(".")
+      }
     }.keys.toSeq
     partitionSchema match {
       case Some(userProvidedSchema) if userProvidedSchema.nonEmpty =>
