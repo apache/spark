@@ -398,7 +398,7 @@ class AFTSurvivalRegressionSuite
     // should not throw an exception.
     val dataset = spark.createDataFrame(
       sc.parallelize(generateAFTInput(
-        1, Array(5.5), Array(0.8), 1000, 42, 1.0, 2.0, 2.0).take(2), numSlices = 3))
+        1, Array(5.5), Array(0.8), 2, 42, 1.0, 2.0, 2.0), numSlices = 3))
     val trainer = new AFTSurvivalRegression()
     trainer.fit(dataset)
   }
