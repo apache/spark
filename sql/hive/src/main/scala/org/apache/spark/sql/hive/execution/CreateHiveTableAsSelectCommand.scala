@@ -88,7 +88,7 @@ case class CreateHiveTableAsSelectCommand(
       }
     } else {
       sparkSession.sessionState.executePlan(InsertIntoTable(
-        metastoreRelation, Map(), query, overwrite = true, ifNotExists = false)).toRdd
+        metastoreRelation, Map(), query, overwrite = true, ifNotExists = false, Map.empty)).toRdd
     }
 
     Seq.empty[Row]

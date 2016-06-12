@@ -512,7 +512,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
         partitions.getOrElse(Map.empty[String, Option[String]]),
         df.logicalPlan,
         overwrite,
-        ifNotExists = false)).toRdd
+        ifNotExists = false,
+        options = extraOptions.toMap)).toRdd
   }
 
   private def normalizedParCols: Option[Seq[String]] = partitioningColumns.map { cols =>
