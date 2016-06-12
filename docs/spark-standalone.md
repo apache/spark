@@ -94,8 +94,8 @@ You can optionally configure the cluster further by setting environment variable
 <table class="table">
   <tr><th style="width:21%">Environment Variable</th><th>Meaning</th></tr>
   <tr>
-    <td><code>SPARK_MASTER_IP</code></td>
-    <td>Bind the master to a specific IP address, for example a public one.</td>
+    <td><code>SPARK_MASTER_HOST</code></td>
+    <td>Bind the master to a specific hostname or IP address, for example a public one.</td>
   </tr>
   <tr>
     <td><code>SPARK_MASTER_PORT</code></td>
