@@ -198,6 +198,16 @@ case class InsertIntoHiveTable(
       if (isDynamic.init.zip(isDynamic.tail).contains((true, false))) {
         throw new SparkException(ErrorMsg.PARTITION_DYN_STA_ORDER.getMsg)
       }
+
+      // For Hive tables, table.outputSet includes both data columns and partition columns
+      assert(table.output.size > partition.size)
+
+      val numDataCols = table.output.size - partition.size
+      if (numDataCols + numDynamicPartitions > child.output.size) {
+        throw new SparkException("Cannot insert into target table because column number are " +
+          s"different: Table requires `${numDataCols + numDynamicPartitions}` columns, but the " +
+          s"input has `${child.output.size}` columns")
+      }
     }
 
     val jobConf = new JobConf(hadoopConf)

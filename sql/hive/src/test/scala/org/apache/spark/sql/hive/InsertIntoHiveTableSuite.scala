@@ -257,6 +257,31 @@ class InsertIntoHiveTableSuite extends QueryTest with TestHiveSingleton with Bef
     }
   }
 
+  test("Dynamic partitioning - not enough input columns") {
+    withTempDir { tmpDir =>
+      val table = "table_with_partition"
+      withTable(table) {
+        sql(
+          s"""
+             |CREATE TABLE $table(c1 string)
+             |PARTITIONED by (p1 string,p2 string)
+             |location '${tmpDir.toURI.toString}'
+           """.stripMargin)
+
+        val e = intercept[SparkException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE TABLE $table
+               |partition (p1='a',p2)
+               |SELECT 'blarr1'
+             """.stripMargin)
+        }.getMessage
+        assert(e.contains("Cannot insert into target table because column number are " +
+          "different: Table requires `2` columns, but the input has `1` columns"))
+      }
+    }
+  }
+
   test("Detect table partitioning with correct partition order") {
     withSQLConf(("hive.exec.dynamic.partition.mode", "nonstrict")) {
       sql("CREATE TABLE source (id bigint, part2 string, part1 string, data string)")
