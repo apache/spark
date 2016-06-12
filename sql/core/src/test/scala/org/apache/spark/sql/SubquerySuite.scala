@@ -266,6 +266,172 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
       Row(null) :: Row(1) :: Row(3) :: Nil)
   }
 
+  test("SPARK-15832: Test embedded existential predicate sub-queries") {
+    withTempTable("t1", "t2", "t3", "t4", "t5") {
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t1")
+      Seq((1, 1), (2, 2)).toDF("c1", "c2").createOrReplaceTempView("t2")
+      Seq((1, 1), (2, 2), (1, 2)).toDF("c1", "c2").createOrReplaceTempView("t3")
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where c2 IN (select c2 from t2)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where c2 NOT IN (select c2 from t2)
+            |
+          """.stripMargin),
+       Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where EXISTS (select c2 from t2)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+       checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where NOT EXISTS (select c2 from t2)
+            |
+          """.stripMargin),
+      Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where NOT EXISTS (select c2 from t2) and
+            |       c2 IN (select c2 from t3)
+            |
+          """.stripMargin),
+        Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (case when c2 IN (select 1 as one) then 1
+            |             else 2 end) = c1
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (case when c2 IN (select 1 as one) then 1
+            |             else 2 end)
+            |        IN (select c2 from t2)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (case when c2 IN (select c2 from t2) then 1
+            |             else 2 end)
+            |       IN (select c2 from t3)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (case when c2 IN (select c2 from t2) then 1
+            |             when c2 IN (select c2 from t3) then 2
+            |             else 3 end)
+            |       IN (select c2 from t1)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (c1, (case when c2 IN (select c2 from t2) then 1
+            |                  when c2 IN (select c2 from t3) then 2
+            |                  else 3 end))
+            |       IN (select c1, c2 from t1)
+            |
+          """.stripMargin),
+        Row(1) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t3
+            | where ((case when c2 IN (select c2 from t2) then 1 else 2 end),
+            |        (case when c2 IN (select c2 from t3) then 2 else 3 end))
+            |     IN (select c1, c2 from t3)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Row(1) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where ((case when EXISTS (select c2 from t2) then 1 else 2 end),
+            |        (case when c2 IN (select c2 from t3) then 2 else 3 end))
+            |     IN (select c1, c2 from t3)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (case when c2 IN (select c2 from t2) then 3
+            |             else 2 end)
+            |       NOT IN (select c2 from t3)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where ((case when c2 IN (select c2 from t2) then 1 else 2 end),
+            |        (case when NOT EXISTS (select c2 from t3) then 2
+            |              when EXISTS (select c2 from t2) then 3
+            |              else 3 end))
+            |     NOT IN (select c1, c2 from t3)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+
+      checkAnswer(
+        sql(
+          """
+            | select c1 from t1
+            | where (select max(c1) from t2 where c2 IN (select c2 from t3))
+            |       IN (select c2 from t2)
+            |
+          """.stripMargin),
+        Row(1) :: Row(2) :: Nil)
+    }
+  }
+
   test("correlated scalar subquery in where") {
     checkAnswer(
       sql("select * from l where b < (select max(d) from r where a = c)"),
