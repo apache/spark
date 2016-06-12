@@ -113,6 +113,7 @@ statement
     | (DESC | DESCRIBE) option=(EXTENDED | FORMATTED)?
         tableIdentifier partitionSpec? describeColName?                #describeTable
     | REFRESH TABLE tableIdentifier                                    #refreshTable
+    | REFRESH .*?                                                      #refreshResource
     | CACHE LAZY? TABLE identifier (AS? query)?                        #cacheTable
     | UNCACHE TABLE identifier                                         #uncacheTable
     | CLEAR CACHE                                                      #clearCache

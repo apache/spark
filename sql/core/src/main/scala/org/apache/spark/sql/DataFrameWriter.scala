@@ -432,6 +432,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Experimental
   def foreach(writer: ForeachWriter[T]): ContinuousQuery = {
+    assertNotPartitioned("foreach")
     assertNotBucketed("foreach")
     assertStreaming(
       "foreach() can only be called on streaming Datasets/DataFrames.")
@@ -502,24 +503,14 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed("insertInto")
     assertNotStreaming("insertInto() can only be called on non-continuous queries")
-    val partitions = normalizedParCols.map(_.map(col => col -> (None: Option[String])).toMap)
+    val partitions = normalizedParCols.map(_.map(col => col -> (Option.empty[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
-
-    // A partitioned relation's schema can be different from the input logicalPlan, since
-    // partition columns are all moved after data columns. We Project to adjust the ordering.
-    // TODO: this belongs to the analyzer.
-    val input = normalizedParCols.map { parCols =>
-      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
-        parCols.contains(attr.name)
-      }
-      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
-    }.getOrElse(df.logicalPlan)
 
     df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
         UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
-        input,
+        df.logicalPlan,
         overwrite,
         ifNotExists = false)).toRdd
   }
@@ -572,8 +563,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def assertNotBucketed(operation: String): Unit = {
     if (numBuckets.isDefined || sortColumnNames.isDefined) {
-      throw new IllegalArgumentException(
-        s"'$operation' does not support bucketing right now.")
+      throw new AnalysisException(s"'$operation' does not support bucketing right now")
+    }
+  }
+
+  private def assertNotPartitioned(operation: String): Unit = {
+    if (partitioningColumns.isDefined) {
+      throw new AnalysisException( s"'$operation' does not support partitioning")
     }
   }
 
@@ -656,6 +652,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
+    assertNotPartitioned("jdbc")
+    assertNotBucketed("jdbc")
     assertNotStreaming("jdbc() can only be called on non-continuous queries")
 
     val props = new Properties()
@@ -727,9 +725,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`none`, `snappy`, `gzip`, and `lzo`).
-   * This will overwrite `spark.sql.parquet.compression.codec`. </li>
+   * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
+   * compression codec to use when saving to file. This can be one of the known case-insensitive
+   * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
+   * `spark.sql.parquet.compression.codec`.</li>
    *
    * @since 1.4.0
    */
@@ -746,9 +745,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
-   * This will overwrite `orc.compress`. </li>
+   * This will override `orc.compress`.</li>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support

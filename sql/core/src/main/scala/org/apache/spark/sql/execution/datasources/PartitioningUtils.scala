@@ -339,7 +339,7 @@ private[sql] object PartitioningUtils {
   private val upCastingOrder: Seq[DataType] =
     Seq(NullType, IntegerType, LongType, FloatType, DoubleType, StringType)
 
-  def validatePartitionColumnDataTypes(
+  def validatePartitionColumn(
       schema: StructType,
       partitionColumns: Seq[String],
       caseSensitive: Boolean): Unit = {
@@ -350,6 +350,10 @@ private[sql] object PartitioningUtils {
         case _ => throw new AnalysisException(s"Cannot use ${field.dataType} for partition column")
       }
     }
+
+    if (partitionColumns.size == schema.fields.size) {
+      throw new AnalysisException(s"Cannot use all columns for partition columns")
+    }
   }
 
   def partitionColumnsSchema(
@@ -359,7 +363,7 @@ private[sql] object PartitioningUtils {
     val equality = columnNameEquality(caseSensitive)
     StructType(partitionColumns.map { col =>
       schema.find(f => equality(f.name, col)).getOrElse {
-        throw new RuntimeException(s"Partition column $col not found in schema $schema")
+        throw new AnalysisException(s"Partition column $col not found in schema $schema")
       }
     }).asNullable
   }

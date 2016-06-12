@@ -23,6 +23,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
@@ -134,6 +135,22 @@ class TextSuite extends QueryTest with SharedSQLContext {
       checkDataset(
         spark.read.format("text").load(path).select($"part"),
         Row("a"), Row("b"))
+    }
+  }
+
+  test("SPARK-15654: should not split gz files") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df1 = spark.range(0, 1000).selectExpr("CAST(id AS STRING) AS s")
+      df1.write.option("compression", "gzip").mode("overwrite").text(path)
+
+      val expected = df1.collect()
+      Seq(10, 100, 1000).foreach { bytes =>
+        withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> bytes.toString) {
+          val df2 = spark.read.format("text").load(path)
+          checkAnswer(df2, expected)
+        }
+      }
     }
   }
 

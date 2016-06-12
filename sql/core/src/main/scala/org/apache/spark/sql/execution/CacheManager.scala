@@ -19,10 +19,14 @@ package org.apache.spark.sql.execution
 
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
+import org.apache.hadoop.fs.{FileSystem, Path}
+
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.Dataset
+import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -105,7 +109,7 @@ private[sql] class CacheManager extends Logging {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     require(dataIndex >= 0, s"Table $query is not cached.")
-    cachedData(dataIndex).cachedRepresentation.uncache(blocking)
+    cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
     cachedData.remove(dataIndex)
   }
 
@@ -155,6 +159,51 @@ private[sql] class CacheManager extends Logging {
       case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
         data.cachedRepresentation.recache()
       case _ =>
+    }
+  }
+
+  /**
+   * Invalidates the cache of any data that contains `resourcePath` in one or more
+   * `HadoopFsRelation` node(s) as part of its logical plan.
+   */
+  private[sql] def invalidateCachedPath(
+      sparkSession: SparkSession, resourcePath: String): Unit = writeLock {
+    val (fs, qualifiedPath) = {
+      val path = new Path(resourcePath)
+      val fs = path.getFileSystem(sparkSession.sessionState.newHadoopConf())
+      (fs, path.makeQualified(fs.getUri, fs.getWorkingDirectory))
+    }
+
+    cachedData.foreach {
+      case data if data.plan.find(lookupAndRefresh(_, fs, qualifiedPath)).isDefined =>
+        val dataIndex = cachedData.indexWhere(cd => data.plan.sameResult(cd.plan))
+        if (dataIndex >= 0) {
+          data.cachedRepresentation.cachedColumnBuffers.unpersist(blocking = true)
+          cachedData.remove(dataIndex)
+        }
+        sparkSession.sharedState.cacheManager.cacheQuery(Dataset.ofRows(sparkSession, data.plan))
+      case _ => // Do Nothing
+    }
+  }
+
+  /**
+   * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
+   * [[org.apache.spark.sql.execution.datasources.FileCatalog]] of any [[HadoopFsRelation]] nodes
+   * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
+   * false.
+   */
+  private def lookupAndRefresh(plan: LogicalPlan, fs: FileSystem, qualifiedPath: Path): Boolean = {
+    plan match {
+      case lr: LogicalRelation => lr.relation match {
+        case hr: HadoopFsRelation =>
+          val invalidate = hr.location.paths
+            .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+            .contains(qualifiedPath)
+          if (invalidate) hr.location.refresh()
+          invalidate
+        case _ => false
+      }
+      case _ => false
     }
   }
 }

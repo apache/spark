@@ -206,6 +206,51 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
     Utils.deleteRecursively(tempPath)
   }
 
+  test("SPARK-15678: REFRESH PATH") {
+    val tempPath: File = Utils.createTempDir()
+    tempPath.delete()
+    table("src").write.mode(SaveMode.Overwrite).parquet(tempPath.toString)
+    sql("DROP TABLE IF EXISTS refreshTable")
+    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    checkAnswer(
+      table("refreshTable"),
+      table("src").collect())
+    // Cache the table.
+    sql("CACHE TABLE refreshTable")
+    assertCached(table("refreshTable"))
+    // Append new data.
+    table("src").write.mode(SaveMode.Append).parquet(tempPath.toString)
+    // We are still using the old data.
+    assertCached(table("refreshTable"))
+    checkAnswer(
+      table("refreshTable"),
+      table("src").collect())
+    // Refresh the table.
+    sql(s"REFRESH ${tempPath.toString}")
+    // We are using the new data.
+    assertCached(table("refreshTable"))
+    checkAnswer(
+      table("refreshTable"),
+      table("src").union(table("src")).collect())
+
+    // Drop the table and create it again.
+    sql("DROP TABLE refreshTable")
+    sparkSession.catalog.createExternalTable("refreshTable", tempPath.toString, "parquet")
+    // It is not cached.
+    assert(!isCached("refreshTable"), "refreshTable should not be cached.")
+    // Refresh the table. REFRESH command should not make a uncached
+    // table cached.
+    sql(s"REFRESH ${tempPath.toString}")
+    checkAnswer(
+      table("refreshTable"),
+      table("src").union(table("src")).collect())
+    // It is not cached.
+    assert(!isCached("refreshTable"), "refreshTable should not be cached.")
+
+    sql("DROP TABLE refreshTable")
+    Utils.deleteRecursively(tempPath)
+  }
+
   test("SPARK-11246 cache parquet table") {
     sql("CREATE TABLE cachedTable STORED AS PARQUET AS SELECT 1")
 
