@@ -1701,9 +1701,9 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    */
   private def evalExpr(expr: Expression, bindings: Map[ExprId, Option[Any]]) : Option[Any] = {
     val rewrittenExpr = expr transform {
-      case r @ AttributeReference(_, dataType, _, _) =>
+      case r: AttributeReference =>
         bindings(r.exprId) match {
-          case Some(v) => Literal.create(v, dataType)
+          case Some(v) => Literal.create(v, r.dataType)
           case None => Literal.default(NullType)
         }
     }
@@ -1721,7 +1721,7 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
       case a @ AggregateExpression(aggFunc, _, _, resultId) =>
         aggFunc.defaultResult.getOrElse(Literal.default(NullType))
 
-      case AttributeReference(_, _, _, _) => Literal.default(NullType)
+      case _: AttributeReference => Literal.default(NullType)
     }
     Option(rewrittenExpr.eval())
   }
@@ -1737,38 +1737,36 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
     // Inputs to this method will start with a chain of zero or more SubqueryAlias
     // and Project operators, followed by an optional Filter, followed by an
     // Aggregate. Traverse the operators recursively.
-    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = {
-      lp match {
-        case SubqueryAlias(_, child) => evalPlan(child)
-        case Filter(condition, child) =>
-          val bindings = evalPlan(child)
-          if (bindings.isEmpty) bindings
-          else {
-            val exprResult = evalExpr(condition, bindings).getOrElse(false)
-              .asInstanceOf[Boolean]
-            if (exprResult) bindings else Map.empty
-          }
+    def evalPlan(lp : LogicalPlan) : Map[ExprId, Option[Any]] = lp match {
+      case SubqueryAlias(_, child) => evalPlan(child)
+      case Filter(condition, child) =>
+        val bindings = evalPlan(child)
+        if (bindings.isEmpty) bindings
+        else {
+          val exprResult = evalExpr(condition, bindings).getOrElse(false)
+            .asInstanceOf[Boolean]
+          if (exprResult) bindings else Map.empty
+        }
 
-        case Project(projectList, child) =>
-          val bindings = evalPlan(child)
-          if (bindings.isEmpty) {
-            bindings
-          } else {
-            projectList.map(ne => (ne.exprId, evalExpr(ne, bindings))).toMap
-          }
+      case Project(projectList, child) =>
+        val bindings = evalPlan(child)
+        if (bindings.isEmpty) {
+          bindings
+        } else {
+          projectList.map(ne => (ne.exprId, evalExpr(ne, bindings))).toMap
+        }
 
-        case Aggregate(_, aggExprs, _) =>
-          // Some of the expressions under the Aggregate node are the join columns
-          // for joining with the outer query block. Fill those expressions in with
-          // nulls and statically evaluate the remainder.
-          aggExprs.map(ne => ne match {
-            case AttributeReference(_, _, _, _) => (ne.exprId, None)
-            case Alias(AttributeReference(_, _, _, _), _) => (ne.exprId, None)
-            case _ => (ne.exprId, evalAggOnZeroTups(ne))
-          }).toMap
+      case Aggregate(_, aggExprs, _) =>
+        // Some of the expressions under the Aggregate node are the join columns
+        // for joining with the outer query block. Fill those expressions in with
+        // nulls and statically evaluate the remainder.
+        aggExprs.map {
+          case ref: AttributeReference => (ref.exprId, None)
+          case alias @ Alias(_: AttributeReference, _) => (alias.exprId, None)
+          case ne => (ne.exprId, evalAggOnZeroTups(ne))
+        }.toMap
 
-        case _ => sys.error(s"Unexpected operator in scalar subquery: $lp")
-      }
+      case _ => sys.error(s"Unexpected operator in scalar subquery: $lp")
     }
 
     val resultMap = evalPlan(plan)
@@ -1784,35 +1782,33 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
    */
   private def splitSubquery(plan: LogicalPlan) : (Seq[LogicalPlan], Option[Filter], Aggregate) = {
     val topPart = ArrayBuffer.empty[LogicalPlan]
-    var bottomPart : LogicalPlan = plan
+    var bottomPart: LogicalPlan = plan
     while (true) {
       bottomPart match {
-        case havingPart@Filter(_, aggPart@Aggregate(_, _, _)) =>
-          return (topPart, Option(havingPart), aggPart.asInstanceOf[Aggregate])
+        case havingPart @ Filter(_, aggPart: Aggregate) =>
+          return (topPart, Option(havingPart), aggPart)
 
-        case aggPart@Aggregate(_, _, _) =>
+        case aggPart: Aggregate =>
           // No HAVING clause
           return (topPart, None, aggPart)
 
-        case p@Project(_, child) =>
+        case p @ Project(_, child) =>
           topPart += p
           bottomPart = child
 
-        case s@SubqueryAlias(_, child) =>
+        case s @ SubqueryAlias(_, child) =>
           topPart += s
           bottomPart = child
 
-        case Filter(_, op@_) =>
+        case Filter(_, op) =>
           sys.error(s"Correlated subquery has unexpected operator $op below filter")
 
-        case op@_ => sys.error(s"Unexpected operator $op in correlated subquery")
+        case op @ _ => sys.error(s"Unexpected operator $op in correlated subquery")
       }
     }
 
     sys.error("This line should be unreachable")
   }
-
-
 
   // Name of generated column used in rewrite below
   val ALWAYS_TRUE_COLNAME = "alwaysTrue"
@@ -1849,13 +1845,13 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
 
           val aggValRef = query.output.head
 
-          if (!havingNode.isDefined) {
+          if (havingNode.isEmpty) {
             // CASE 2: Subquery with no HAVING clause
             Project(
               currentChild.output :+
                 Alias(
                   If(IsNull(alwaysTrueRef),
-                    Literal(resultWithZeroTups.get, origOutput.dataType),
+                    Literal.create(resultWithZeroTups.get, origOutput.dataType),
                     aggValRef), origOutput.name)(exprId = origOutput.exprId),
               Join(currentChild,
                 Project(query.output :+ alwaysTrueExpr, query),
@@ -1865,27 +1861,25 @@ object RewriteCorrelatedScalarSubquery extends Rule[LogicalPlan] {
             // CASE 3: Subquery with HAVING clause. Pull the HAVING clause above the join.
             // Need to modify any operators below the join to pass through all columns
             // referenced in the HAVING clause.
-            var subqueryRoot : UnaryNode = aggNode
-            val havingInputs : Seq[NamedExpression] = aggNode.output
+            var subqueryRoot: UnaryNode = aggNode
+            val havingInputs: Seq[NamedExpression] = aggNode.output
 
-            topPart.reverse.foreach(
-              _ match {
-                case Project(projList, _) =>
-                  subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
-                case s@SubqueryAlias(alias, _) => subqueryRoot = SubqueryAlias(alias, subqueryRoot)
-                case op@_ => sys.error(s"Unexpected operator $op in corelated subquery")
-              }
-            )
+            topPart.reverse.foreach {
+              case Project(projList, _) =>
+                subqueryRoot = Project(projList ++ havingInputs, subqueryRoot)
+              case s @ SubqueryAlias(alias, _) =>
+                subqueryRoot = SubqueryAlias(alias, subqueryRoot)
+              case op => sys.error(s"Unexpected operator $op in corelated subquery")
+            }
 
             // CASE WHEN alwayTrue IS NULL THEN resultOnZeroTups
             //      WHEN NOT (original HAVING clause expr) THEN CAST(null AS <type of aggVal>)
             //      ELSE (aggregate value) END AS (original column name)
-            val caseExpr = Alias(CaseWhen(
-              Seq[(Expression, Expression)] (
-                (IsNull(alwaysTrueRef), Literal(resultWithZeroTups.get, origOutput.dataType)),
-                (Not(havingNode.get.condition), Literal(null, aggValRef.dataType))
-              ), aggValRef
-            ), origOutput.name) (exprId = origOutput.exprId)
+            val caseExpr = Alias(CaseWhen(Seq(
+              (IsNull(alwaysTrueRef), Literal.create(resultWithZeroTups.get, origOutput.dataType)),
+              (Not(havingNode.get.condition), Literal.create(null, aggValRef.dataType))),
+              aggValRef),
+              origOutput.name)(exprId = origOutput.exprId)
 
             Project(
               currentChild.output :+ caseExpr,
