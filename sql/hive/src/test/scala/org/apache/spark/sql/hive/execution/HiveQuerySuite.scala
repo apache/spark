@@ -1057,8 +1057,11 @@ class HiveQuerySuite extends HiveComparisonTest with BeforeAndAfter {
       sql("SET hive.exec.dynamic.partition.mode=nonstrict")
 
       sql("CREATE TABLE IF NOT EXISTS withparts LIKE srcpart")
-      sql("INSERT INTO TABLE withparts PARTITION(ds, hr) SELECT key, value FROM src")
-        .queryExecution.analyzed
+      sql(
+        s"""
+           |INSERT INTO TABLE withparts PARTITION(ds, hr)
+           |SELECT key, value, '2008-04-09', '12' FROM src
+         """.stripMargin).queryExecution.analyzed
     }
 
     assertResult(2, "Duplicated project detected\n" + analyzedPlan) {
