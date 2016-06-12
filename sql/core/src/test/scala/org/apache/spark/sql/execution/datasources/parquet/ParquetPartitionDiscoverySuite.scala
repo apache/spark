@@ -25,11 +25,13 @@ import scala.collection.mutable.ArrayBuffer
 
 import com.google.common.io.Files
 import org.apache.hadoop.fs.Path
+import org.apache.parquet.hadoop.ParquetOutputFormat
 
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation, PartitionDirectory => Partition, PartitioningUtils, PartitionSpec}
+import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types._
@@ -888,6 +890,28 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
         df.write.partitionBy("b", "c").parquet(path)
         checkAnswer(spark.read.parquet(path), df)
       }
+    }
+  }
+
+  test("SPARK-15895 summary files in non-leaf partition directories") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+
+      withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+        spark.range(3).write.parquet(s"$path/p0=0/p1=0")
+      }
+
+      val p0 = new File(path, "p0=0")
+      val p1 = new File(p0, "p1=0")
+
+      Files.copy(new File(p1, "_metadata"), new File(p0, "_metadata"))
+      Files.copy(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
+
+      checkAnswer(spark.read.parquet(s"$path"), Seq(
+        Row(0, 0, 0),
+        Row(1, 0, 0),
+        Row(2, 0, 0)
+      ))
     }
   }
 }
