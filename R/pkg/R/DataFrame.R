@@ -715,7 +715,7 @@ setMethod("saveAsParquetFile",
 
 #' Save the content of SparkDataFrame in a text file at the specified path.
 #'
-#' Saves the content of the SparkDataFrame in a text file at the specified path.
+#' Save the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
 #' Each row becomes a new line in the output file.
 #'
@@ -820,8 +820,6 @@ setMethod("sample_frac",
             sample(x, withReplacement, fraction, seed)
           })
 
-#' nrow
-#'
 #' Returns the number of rows in a SparkDataFrame
 #'
 #' @param x A SparkDataFrame
@@ -852,8 +850,6 @@ setMethod("nrow",
             count(x)
           })
 
-#' ncol
-#'
 #' Returns the number of columns in a SparkDataFrame
 #'
 #' @param x a SparkDataFrame
@@ -876,7 +872,7 @@ setMethod("ncol",
             length(columns(x))
           })
 
-#' dim
+#' Returns the dimensions of SparkDataFrame
 #'
 #' Returns the dimensions (number of rows and columns) of a SparkDataFrame
 #' @param x a SparkDataFrame
@@ -899,8 +895,6 @@ setMethod("dim",
             c(count(x), ncol(x))
           })
 
-#' collect
-#'
 #' Collects all the elements of a SparkDataFrame and coerces them into an R data.frame.
 #'
 #' @param x A SparkDataFrame
@@ -998,8 +992,6 @@ setMethod("limit",
             dataFrame(res)
           })
 
-#' take
-#'
 #' Take the first NUM rows of a SparkDataFrame and return a the results as a data.frame
 #'
 #' @family SparkDataFrame functions
@@ -1050,8 +1042,6 @@ setMethod("head",
             take(x, num)
           })
 
-#' first
-#'
 #' Return the first row of a SparkDataFrame
 #'
 #' @param x A SparkDataFrame
@@ -2058,8 +2048,6 @@ setMethod("merge",
             joinRes
           })
 
-#' generateAliasesForIntersectedCols
-#'
 #' Creates a list of columns by replacing the intersected ones with aliases.
 #' The name of the alias column is formed by concatanating the original column name and a suffix.
 #'
@@ -2189,9 +2177,9 @@ setMethod("except",
 
 #' Save the contents of SparkDataFrame to a data source.
 #'
-#' Save the contents of the SparkDataFrame to a data source. The data source is specified by the
-#' `source` and a set of options (...). If `source` is not specified, the default data source
-#' configured by spark.sql.sources.default will be used.
+#' The data source is specified by the `source` and a set of options (...).
+#' If `source` is not specified, the default data source configured by
+#' spark.sql.sources.default will be used.
 #'
 #' Additionally, mode is used to specify the behavior of the save operation when data already
 #' exists in the data source. There are four modes:
@@ -2250,8 +2238,6 @@ setMethod("saveDF",
             write.df(df, path, source, mode, ...)
           })
 
-#' saveAsTable
-#'
 #' Save the contents of the SparkDataFrame to a data source as a table
 #'
 #' The data source is specified by the `source` and a set of options (...).
@@ -2791,7 +2777,7 @@ setMethod("histogram",
 
 #' Save the content of SparkDataFrame to an external database table via JDBC.
 #'
-#' Saves the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
+#' Save the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
 #' database connection properties can be set (...)
 #'
 #' Also, mode is used to specify the behavior of the save operation when
