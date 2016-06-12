@@ -226,4 +226,11 @@ abstract class Catalog {
    */
   def refreshTable(tableName: String): Unit
 
+  /**
+   * Invalidate and refresh all the cached data (and the associated metadata) for any dataframe that
+   * contains the given data source path.
+   *
+   * @since 2.0.0
+   */
+  def refreshByPath(path: String): Unit
 }
