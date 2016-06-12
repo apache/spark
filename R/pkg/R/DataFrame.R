@@ -23,9 +23,11 @@ NULL
 setOldClass("jobj")
 setOldClass("structType")
 
-#' @title S4 class that represents a SparkDataFrame
-#' @description DataFrames can be created using functions like \link{createDataFrame},
-#'              \link{read.json}, \link{table} etc.
+#' S4 class that represents a SparkDataFrame
+#'
+#' DataFrames can be created using functions like \link{createDataFrame},
+#' \link{read.json}, \link{table} etc.
+#'
 #' @family SparkDataFrame functions
 #' @rdname SparkDataFrame
 #' @docType class
@@ -1940,8 +1942,9 @@ setMethod("join",
             dataFrame(sdf)
           })
 
+#' Merges two data frames
+#'
 #' @name merge
-#' @title Merges two data frames
 #' @param x the first data frame to be joined
 #' @param y the second data frame to be joined
 #' @param by a character vector specifying the join columns. If by is not
@@ -2111,8 +2114,9 @@ setMethod("unionAll",
             dataFrame(unioned)
           })
 
-#' @title Union two or more SparkDataFrames
-#' @description Returns a new SparkDataFrame containing rows of all parameters.
+#' Union two or more SparkDataFrames
+#'
+#' Returns a new SparkDataFrame containing rows of all parameters.
 #'
 #' @rdname rbind
 #' @name rbind
@@ -2474,11 +2478,12 @@ setMethod("fillna",
             dataFrame(sdf)
           })
 
+#' Download data from a SparkDataFrame into a data.frame
+#'
 #' This function downloads the contents of a SparkDataFrame into an R's data.frame.
 #' Since data.frames are held in memory, ensure that you have enough memory
 #' in your system to accommodate the contents.
 #'
-#' @title Download data from a SparkDataFrame into a data.frame
 #' @param x a SparkDataFrame
 #' @return a data.frame
 #' @family SparkDataFrame functions
@@ -2494,13 +2499,14 @@ setMethod("as.data.frame",
             as.data.frame(collect(x), row.names, optional, ...)
           })
 
+#' Attach SparkDataFrame to R search path
+#'
 #' The specified SparkDataFrame is attached to the R search path. This means that
 #' the SparkDataFrame is searched by R when evaluating a variable, so columns in
 #' the SparkDataFrame can be accessed by simply giving their names.
 #'
 #' @family SparkDataFrame functions
 #' @rdname attach
-#' @title Attach SparkDataFrame to R search path
 #' @param what (SparkDataFrame) The SparkDataFrame to attach
 #' @param pos (integer) Specify position in search() where to attach.
 #' @param name (character) Name to use for the attached SparkDataFrame. Names
@@ -2520,7 +2526,7 @@ setMethod("attach",
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
 
-#' Evaluate an expression in an environment constructed from SparkDataFrame
+#' Evaluate a R expression in an environment constructed from a SparkDataFrame
 #'
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
 #' with() allows access to columns of a SparkDataFrame by simply referring to
@@ -2530,7 +2536,6 @@ setMethod("attach",
 #'
 #' @rdname with
 #' @family SparkDataFrame functions
-#' @title Evaluate a R expression in an environment constructed from a SparkDataFrame
 #' @param data (SparkDataFrame) SparkDataFrame to use for constructing an environment.
 #' @param expr (expression) Expression to evaluate.
 #' @param ... arguments to be passed to future methods.
@@ -2546,10 +2551,12 @@ setMethod("with",
             eval(substitute(expr), envir = newEnv, enclos = newEnv)
           })
 
+#' Compactly display the structure of a dataset
+#'
 #' Display the structure of a SparkDataFrame, including column names, column types, as well as a
 #' a small sample of rows.
+#'
 #' @name str
-#' @title Compactly display the structure of a dataset
 #' @rdname str
 #' @family SparkDataFrame functions
 #' @param object a SparkDataFrame
@@ -2662,10 +2669,11 @@ setMethod("drop",
             base::drop(x)
           })
 
+#' Histogram
+#'
 #' This function computes a histogram for a given SparkR Column.
 #'
 #' @name histogram
-#' @title Histogram
 #' @param nbins the number of bins (optional). Default value is 10.
 #' @param df the SparkDataFrame containing the Column to build the histogram from.
 #' @param colname the name of the column to build the histogram from.

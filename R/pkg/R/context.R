@@ -173,9 +173,8 @@ includePackage <- function(sc, pkg) {
   .sparkREnv$.packages <- packages
 }
 
-#' @title Broadcast a variable to all workers
+#' Broadcast a variable to all workers
 #'
-#' @description
 #' Broadcast a read-only variable to the cluster, returning a \code{Broadcast}
 #' object for reading it in distributed functions.
 #'
@@ -207,7 +206,7 @@ broadcast <- function(sc, object) {
   Broadcast(id, object, jBroadcast, objName)
 }
 
-#' @title Set the checkpoint directory
+#' Set the checkpoint directory
 #'
 #' Set the directory under which RDDs are going to be checkpointed. The
 #' directory must be a HDFS path if running on a cluster.
@@ -226,9 +225,8 @@ setCheckpointDir <- function(sc, dirName) {
   invisible(callJMethod(sc, "setCheckpointDir", suppressWarnings(normalizePath(dirName))))
 }
 
-#' @title Run a function over a list of elements, distributing the computations with Spark.
+#' Run a function over a list of elements, distributing the computations with Spark.
 #'
-#' @description
 #' Applies a function in a manner that is similar to doParallel or lapply to elements of a list.
 #' The computations are distributed using Spark. It is conceptually the same as the following code:
 #'   lapply(list, func)

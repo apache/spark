@@ -22,8 +22,10 @@ NULL
 
 setOldClass("jobj")
 
-#' @title S4 class that represents a SparkDataFrame column
-#' @description The column class supports unary, binary operations on SparkDataFrame columns
+#' S4 class that represents a SparkDataFrame column
+#'
+#' The column class supports unary, binary operations on SparkDataFrame columns
+#'
 #' @rdname column
 #'
 #' @slot jc reference to JVM SparkDataFrame column

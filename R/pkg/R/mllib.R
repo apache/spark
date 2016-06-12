@@ -25,22 +25,26 @@
 # - a set of methods that reflect the arguments of the other languages supported by Spark. These
 #   methods are prefixed with the `spark.` prefix: spark.glm, spark.kmeans, etc.
 
-#' @title S4 class that represents a generalized linear model
+#' S4 class that represents a generalized linear model
+#'
 #' @param jobj a Java object reference to the backing Scala GeneralizedLinearRegressionWrapper
 #' @export
 setClass("GeneralizedLinearRegressionModel", representation(jobj = "jobj"))
 
-#' @title S4 class that represents a NaiveBayesModel
+#' S4 class that represents a NaiveBayesModel
+#'
 #' @param jobj a Java object reference to the backing Scala NaiveBayesWrapper
 #' @export
 setClass("NaiveBayesModel", representation(jobj = "jobj"))
 
-#' @title S4 class that represents a AFTSurvivalRegressionModel
+#' S4 class that represents a AFTSurvivalRegressionModel
+#'
 #' @param jobj a Java object reference to the backing Scala AFTSurvivalRegressionWrapper
 #' @export
 setClass("AFTSurvivalRegressionModel", representation(jobj = "jobj"))
 
-#' @title S4 class that represents a KMeansModel
+#' S4 class that represents a KMeansModel
+#'
 #' @param jobj a Java object reference to the backing Scala KMeansModel
 #' @export
 setClass("KMeansModel", representation(jobj = "jobj"))
@@ -197,10 +201,11 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
+#' predict
+#'
 #' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #' similarly to R's predict().
 #'
-#' @title predict
 #' @param object A fitted generalized linear model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"
@@ -217,10 +222,11 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
+#' predict
+#'
 #' Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
 #' similarly to R package e1071's predict.
 #'
-#' @title predict
 #' @param object A fitted naive Bayes model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"
@@ -355,9 +361,10 @@ setMethod("summary", signature(object = "KMeansModel"),
                    cluster = cluster, is.loaded = is.loaded))
           })
 
+#' predict
+#'
 #' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
-#' @title predict
 #' @param object A fitted k-means model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"
@@ -579,10 +586,11 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             return(list(coefficients = coefficients))
           })
 
+#' predict
+#'
 #' Makes predictions from an AFT survival regression model or a model produced by spark.survreg(),
 #' similarly to R package survival's predict.
 #'
-#' @title predict
 #' @param object A fitted AFT survival regression model
 #' @param newData SparkDataFrame for testing
 #' @return SparkDataFrame containing predicted labels in a column named "prediction"

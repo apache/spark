@@ -20,9 +20,10 @@
 #' @include generics.R jobj.R column.R
 NULL
 
-#' @title S4 class that represents a WindowSpec
-#' @description WindowSpec can be created by using window.partitionBy()
-#'              or window.orderBy()
+#' S4 class that represents a WindowSpec
+#'
+#' WindowSpec can be created by using window.partitionBy() or window.orderBy()
+#'
 #' @rdname WindowSpec
 #' @seealso \link{window.partitionBy}, \link{window.orderBy}
 #'

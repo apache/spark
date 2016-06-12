@@ -19,9 +19,11 @@
 
 setOldClass("jobj")
 
-#' @title S4 class that represents an RDD
-#' @description RDD can be created using functions like
+#' S4 class that represents an RDD
+#'
+#' RDD can be created using functions like
 #'              \code{parallelize}, \code{textFile} etc.
+#'
 #' @rdname RDD
 #' @seealso parallelize, textFile
 #' @slot env An R environment that stores bookkeeping states of the RDD
