@@ -70,6 +70,7 @@ import org.apache.spark.partial.PartialResult;
 import org.apache.spark.rdd.RDD;
 import org.apache.spark.serializer.KryoSerializer;
 import org.apache.spark.storage.StorageLevel;
+import org.apache.spark.util.LongAccumulator;
 import org.apache.spark.util.StatCounter;
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
@@ -287,7 +288,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreach() {
-    final Accumulator<Integer> accum = sc.accumulator(0);
+    final LongAccumulator accum = sc.sc().longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreach(new VoidFunction<String>() {
       @Override
@@ -300,7 +301,7 @@ public class JavaAPISuite implements Serializable {
 
   @Test
   public void foreachPartition() {
-    final Accumulator<Integer> accum = sc.accumulator(0);
+    final LongAccumulator accum = sc.sc().longAccumulator();
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
     rdd.foreachPartition(new VoidFunction<Iterator<String>>() {
       @Override
@@ -1377,6 +1378,7 @@ public class JavaAPISuite implements Serializable {
     assertEquals("[3, 2, 3, 2]", sizes.collect().toString());
   }
 
+  @SuppressWarnings("deprecation")
   @Test
   public void accumulators() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));

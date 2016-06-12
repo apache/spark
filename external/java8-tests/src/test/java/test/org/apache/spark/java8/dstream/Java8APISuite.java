@@ -27,7 +27,6 @@ import com.google.common.collect.Sets;
 import org.junit.Assert;
 import org.junit.Test;
 
-import org.apache.spark.Accumulator;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.Optional;
 import org.apache.spark.api.java.JavaPairRDD;
@@ -359,33 +358,6 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
     assertOrderInvariantEquals(expected, result);
-  }
-
-  @Test
-  public void testForeachRDD() {
-    final Accumulator<Integer> accumRdd = ssc.sparkContext().accumulator(0);
-    final Accumulator<Integer> accumEle = ssc.sparkContext().accumulator(0);
-    List<List<Integer>> inputData = Arrays.asList(
-        Arrays.asList(1,1,1),
-        Arrays.asList(1,1,1));
-
-    JavaDStream<Integer> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaTestUtils.attachTestOutputStream(stream.count()); // dummy output
-
-    stream.foreachRDD(rdd -> {
-      accumRdd.add(1);
-      rdd.foreach(x -> accumEle.add(1));
-    });
-
-    // This is a test to make sure foreachRDD(VoidFunction2) can be called from Java
-    stream.foreachRDD((rdd, time) -> {
-      return;
-    });
-
-    JavaTestUtils.runStreams(ssc, 2, 2);
-
-    Assert.assertEquals(2, accumRdd.value().intValue());
-    Assert.assertEquals(6, accumEle.value().intValue());
   }
 
   @Test
