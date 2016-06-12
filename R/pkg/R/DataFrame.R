@@ -646,7 +646,7 @@ setMethod("toJSON",
             RDD(jrdd, serializedMode = "string")
           })
 
-#' Save the contents of DataFrame as a JSON file
+#' Save the contents of SparkDataFrame as a JSON file
 #'
 #' Save the contents of a SparkDataFrame as a JSON file (one object per line). Files written out
 #' with this method can be read back in as a SparkDataFrame using read.json().
@@ -673,7 +673,7 @@ setMethod("write.json",
             invisible(callJMethod(write, "json", path))
           })
 
-#' Save the contents of DataFrame as a Parquet file, preserving the schema.
+#' Save the contents of SparkDataFrame as a Parquet file, preserving the schema.
 #'
 #' Save the contents of a SparkDataFrame as a Parquet file, preserving the schema. Files written out
 #' with this method can be read back in as a SparkDataFrame using read.parquet().
@@ -711,7 +711,7 @@ setMethod("saveAsParquetFile",
             write.parquet(x, path)
           })
 
-#' Save the content of DataFrame in a text file at the specified path.
+#' Save the content of SparkDataFrame in a text file at the specified path.
 #'
 #' Saves the content of the SparkDataFrame in a text file at the specified path.
 #' The SparkDataFrame must have only one column of string type with the name "value".
@@ -2183,7 +2183,7 @@ setMethod("except",
             dataFrame(excepted)
           })
 
-#' Save the contents of DataFrame to a data source.
+#' Save the contents of SparkDataFrame to a data source.
 #'
 #' Save the contents of the SparkDataFrame to a data source. The data source is specified by the
 #' `source` and a set of options (...). If `source` is not specified, the default data source
@@ -2520,7 +2520,7 @@ setMethod("attach",
             attach(newEnv, pos = pos, name = name, warn.conflicts = warn.conflicts)
           })
 
-#' Evaluate an expression in an environment constructed from DataFrame
+#' Evaluate an expression in an environment constructed from SparkDataFrame
 #'
 #' Evaluate a R expression in an environment constructed from a SparkDataFrame
 #' with() allows access to columns of a SparkDataFrame by simply referring to
@@ -2781,7 +2781,7 @@ setMethod("histogram",
             return(histStats)
           })
 
-#' Save the content of DataFrame to an external database table via JDBC.
+#' Save the content of SparkDataFrame to an external database table via JDBC.
 #'
 #' Saves the content of the SparkDataFrame to an external database table via JDBC. Additional JDBC
 #' database connection properties can be set (...)
