@@ -39,9 +39,7 @@ private[feature] trait MaxAbsScalerParams extends Params with HasInputCol with H
 
    /** Validates and transforms the input schema. */
   protected def validateAndTransformSchema(schema: StructType): StructType = {
-    val inputType = schema($(inputCol)).dataType
-    require(inputType.isInstanceOf[VectorUDT],
-      s"Input column ${$(inputCol)} must be a vector column")
+    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
     require(!schema.fieldNames.contains($(outputCol)),
       s"Output column ${$(outputCol)} already exists.")
     val outputFields = schema.fields :+ StructField($(outputCol), new VectorUDT, false)
@@ -122,7 +120,7 @@ class MaxAbsScalerModel private[ml] (
     // TODO: this looks hack, we may have to handle sparse and dense vectors separately.
     val maxAbsUnzero = Vectors.dense(maxAbs.toArray.map(x => if (x == 0) 1 else x))
     val reScale = udf { (vector: Vector) =>
-      val brz = vector.toBreeze / maxAbsUnzero.toBreeze
+      val brz = vector.asBreeze / maxAbsUnzero.asBreeze
       Vectors.fromBreeze(brz)
     }
     dataset.withColumn($(outputCol), reScale(col($(inputCol))))

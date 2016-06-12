@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.SparkPlan
  *    is only done on top level columns, but formats should support pruning of nested columns as
  *    well.
  *  - Construct a reader function by passing filters and the schema into the FileFormat.
- *  - Using an partition pruning predicates, enumerate the list of files that should be read.
+ *  - Using a partition pruning predicates, enumerate the list of files that should be read.
  *  - Split the files into tasks and construct a FileScanRDD.
  *  - Add any projection or filters that must be evaluated after the scan.
  *
@@ -151,11 +151,18 @@ private[sql] object FileSourceStrategy extends Strategy with Logging {
           val splitFiles = selectedPartitions.flatMap { partition =>
             partition.files.flatMap { file =>
               val blockLocations = getBlockLocations(file)
-              (0L until file.getLen by maxSplitBytes).map { offset =>
-                val remaining = file.getLen - offset
-                val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
-                val hosts = getBlockHosts(blockLocations, offset, size)
-                PartitionedFile(partition.values, file.getPath.toUri.toString, offset, size, hosts)
+              if (files.fileFormat.isSplitable(files.sparkSession, files.options, file.getPath)) {
+                (0L until file.getLen by maxSplitBytes).map { offset =>
+                  val remaining = file.getLen - offset
+                  val size = if (remaining > maxSplitBytes) maxSplitBytes else remaining
+                  val hosts = getBlockHosts(blockLocations, offset, size)
+                  PartitionedFile(
+                    partition.values, file.getPath.toUri.toString, offset, size, hosts)
+                }
+              } else {
+                val hosts = getBlockHosts(blockLocations, 0, file.getLen)
+                Seq(PartitionedFile(
+                  partition.values, file.getPath.toUri.toString, 0, file.getLen, hosts))
               }
             }
           }.toArray.sortBy(_.length)(implicitly[Ordering[Long]].reverse)

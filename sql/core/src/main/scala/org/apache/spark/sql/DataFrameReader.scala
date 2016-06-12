@@ -293,8 +293,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * </li>
    * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
    * (e.g. 00012)</li>
-   * <li>`allowNonNumericNumbers` (default `true`): allows using non-numeric numbers such as "NaN",
-   * "Infinity", "-Infinity", "INF", "-INF", which are convertd to floating point numbers.</li>
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
@@ -306,9 +304,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
-   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
-   * having malformed string created by `PERMISSIVE` mode. This overrides
-   * `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`columnNameOfCorruptRecord` (default is the value specified in
+   * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    *
    * @since 1.6.0
    */
@@ -316,7 +314,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
-   * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
+   * Loads a `JavaRDD[String]` storing JSON objects (one object per record) and
    * returns the result as a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the
@@ -363,8 +361,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads a CSV file and returns the result as a [[DataFrame]].
    *
-   * This function goes through the input once to determine the input schema. To avoid going
-   * through the entire data once, specify the schema explicitly using [[schema]].
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <li>`sep` (default `,`): sets the single character as a separator for each
@@ -372,12 +371,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
+   * the separator can be part of the value. If you would like to turn off quotations, you need to
+   * set not `null` but an empty string. This behaviour is different form
+   * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`comment` (default empty string): sets the single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
+   * requires one extra pass over the data.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
    * from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
@@ -414,6 +417,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
    * [[DataFrame]] if no paths are passed in.
    *
+   * You can set the following Parquet-specific option(s) for reading Parquet files:
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
+   * whether we should merge schemas collected from all Parquet part-files. This will override
+   * `spark.sql.parquet.mergeSchema`.</li>
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -426,7 +434,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param path input path
    * @since 1.5.0
-   * @note Currently, this method can only be used together with `HiveContext`.
+   * @note Currently, this method can only be used after enabling Hive support.
    */
   def orc(path: String): DataFrame = format("orc").load(path)
 

@@ -191,6 +191,7 @@ object LDAExample {
 
     val spark = SparkSession
       .builder
+      .sparkContext(sc)
       .getOrCreate()
     import spark.implicits._
 

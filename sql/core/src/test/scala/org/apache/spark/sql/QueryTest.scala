@@ -81,7 +81,7 @@ abstract class QueryTest extends PlanTest {
       expectedAnswer: T*): Unit = {
     checkAnswer(
       ds.toDF(),
-      spark.createDataset(expectedAnswer)(ds.unresolvedTEncoder).toDF().collect().toSeq)
+      spark.createDataset(expectedAnswer)(ds.exprEnc).toDF().collect().toSeq)
 
     checkDecoding(ds, expectedAnswer: _*)
   }
@@ -94,8 +94,8 @@ abstract class QueryTest extends PlanTest {
         fail(
           s"""
              |Exception collecting dataset as objects
-             |${ds.resolvedTEncoder}
-             |${ds.resolvedTEncoder.deserializer.treeString}
+             |${ds.exprEnc}
+             |${ds.exprEnc.deserializer.treeString}
              |${ds.queryExecution}
            """.stripMargin, e)
     }
@@ -114,7 +114,7 @@ abstract class QueryTest extends PlanTest {
       fail(
         s"""Decoded objects do not match expected objects:
             |$comparison
-            |${ds.resolvedTEncoder.deserializer.treeString}
+            |${ds.exprEnc.deserializer.treeString}
          """.stripMargin)
     }
   }
@@ -341,10 +341,16 @@ object QueryTest {
    *
    * @param df the [[DataFrame]] to be executed
    * @param expectedAnswer the expected result in a [[Seq]] of [[Row]]s.
+   * @param checkToRDD whether to verify deserialization to an RDD. This runs the query twice.
    */
-  def checkAnswer(df: DataFrame, expectedAnswer: Seq[Row]): Option[String] = {
+  def checkAnswer(
+      df: DataFrame,
+      expectedAnswer: Seq[Row],
+      checkToRDD: Boolean = true): Option[String] = {
     val isSorted = df.logicalPlan.collect { case s: logical.Sort => s }.nonEmpty
-
+    if (checkToRDD) {
+      df.rdd.count()  // Also attempt to deserialize as an RDD [SPARK-15791]
+    }
 
     val sparkAnswer = try df.collect().toSeq catch {
       case e: Exception =>

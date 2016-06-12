@@ -19,18 +19,17 @@ package org.apache.spark.sql.execution.datasources.text
 
 import java.io.File
 
-import scala.collection.JavaConverters._
-
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.GzipCodec
 
 import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row, SaveMode}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{StringType, StructType}
 import org.apache.spark.util.Utils
 
 class TextSuite extends QueryTest with SharedSQLContext {
+  import testImplicits._
 
   test("reading text file") {
     verifyFrame(spark.read.format("text").load(testFile))
@@ -123,6 +122,35 @@ class TextSuite extends QueryTest with SharedSQLContext {
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
       verifyFrame(spark.read.options(extraOptions).text(tempDirPath).toDF())
+    }
+  }
+
+  test("SPARK-14343: select partitioning column") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      val ds1 = spark.range(1).selectExpr("CONCAT('val_', id)")
+      ds1.write.text(s"$path/part=a")
+      ds1.write.text(s"$path/part=b")
+
+      checkDataset(
+        spark.read.format("text").load(path).select($"part"),
+        Row("a"), Row("b"))
+    }
+  }
+
+  test("SPARK-15654: should not split gz files") {
+    withTempDir { dir =>
+      val path = dir.getCanonicalPath
+      val df1 = spark.range(0, 1000).selectExpr("CAST(id AS STRING) AS s")
+      df1.write.option("compression", "gzip").mode("overwrite").text(path)
+
+      val expected = df1.collect()
+      Seq(10, 100, 1000).foreach { bytes =>
+        withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> bytes.toString) {
+          val df2 = spark.read.format("text").load(path)
+          checkAnswer(df2, expected)
+        }
+      }
     }
   }
 

@@ -94,6 +94,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       FoldablePropagation,
       OptimizeIn(conf),
       ConstantFolding,
+      ReorderAssociativeOperator,
       LikeSimplification,
       BooleanSimplification,
       SimplifyConditionals,
@@ -617,7 +618,7 @@ object NullPropagation extends Rule[LogicalPlan] {
       // For Coalesce, remove null literals.
       case e @ Coalesce(children) =>
         val newChildren = children.filter(nonNullLiteral)
-        if (newChildren.length == 0) {
+        if (newChildren.isEmpty) {
           Literal.create(null, e.dataType)
         } else if (newChildren.length == 1) {
           newChildren.head
@@ -735,6 +736,44 @@ object InferFiltersFromConstraints extends Rule[LogicalPlan] with PredicateHelpe
           additionalConstraints.reduceOption(And)
       }
       if (newConditionOpt.isDefined) Join(left, right, joinType, newConditionOpt) else join
+  }
+}
+
+/**
+ * Reorder associative integral-type operators and fold all constants into one.
+ */
+object ReorderAssociativeOperator extends Rule[LogicalPlan] {
+  private def flattenAdd(e: Expression): Seq[Expression] = e match {
+    case Add(l, r) => flattenAdd(l) ++ flattenAdd(r)
+    case other => other :: Nil
+  }
+
+  private def flattenMultiply(e: Expression): Seq[Expression] = e match {
+    case Multiply(l, r) => flattenMultiply(l) ++ flattenMultiply(r)
+    case other => other :: Nil
+  }
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
+      case a: Add if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenAdd(a).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Add(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), a.dataType)
+          if (others.isEmpty) c else Add(others.reduce((x, y) => Add(x, y)), c)
+        } else {
+          a
+        }
+      case m: Multiply if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
+        val (foldables, others) = flattenMultiply(m).partition(_.foldable)
+        if (foldables.size > 1) {
+          val foldableExpr = foldables.reduce((x, y) => Multiply(x, y))
+          val c = Literal.create(foldableExpr.eval(EmptyRow), m.dataType)
+          if (others.isEmpty) c else Multiply(others.reduce((x, y) => Multiply(x, y)), c)
+        } else {
+          m
+        }
+    }
   }
 }
 
@@ -927,7 +966,7 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
       case e @ CaseWhen(branches, _) if branches.headOption.map(_._1) == Some(TrueLiteral) =>
         // If the first branch is a true literal, remove the entire CaseWhen and use the value
         // from that. Note that CaseWhen.branches should never be empty, and as a result the
-        // headOption (rather than head) added above is just a extra (and unnecessary) safeguard.
+        // headOption (rather than head) added above is just an extra (and unnecessary) safeguard.
         branches.head._2
     }
   }
@@ -938,8 +977,12 @@ object SimplifyConditionals extends Rule[LogicalPlan] with PredicateHelper {
  */
 case class OptimizeCodegen(conf: CatalystConf) extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
-    case e @ CaseWhen(branches, _) if branches.size < conf.maxCaseBranchesForCodegen =>
-      e.toCodegen()
+    case e: CaseWhen if canCodegen(e) => e.toCodegen()
+  }
+
+  private def canCodegen(e: CaseWhen): Boolean = {
+    val numBranches = e.branches.size + e.elseValue.size
+    numBranches <= conf.maxCaseBranchesForCodegen
   }
 }
 
@@ -1469,9 +1512,14 @@ object DecimalAggregates extends Rule[LogicalPlan] {
  */
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case Project(projectList, LocalRelation(output, data)) =>
+    case Project(projectList, LocalRelation(output, data))
+        if !projectList.exists(hasUnevaluableExpr) =>
       val projection = new InterpretedProjection(projectList, output)
       LocalRelation(projectList.map(_.toAttribute), data.map(projection))
+  }
+
+  private def hasUnevaluableExpr(expr: Expression): Boolean = {
+    expr.find(e => e.isInstanceOf[Unevaluable] && !e.isInstanceOf[AttributeReference]).isDefined
   }
 }
 
@@ -1598,7 +1646,19 @@ case class GetCurrentDatabase(sessionCatalog: SessionCatalog) extends Rule[Logic
  */
 object EmbedSerializerInFilter extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject)) =>
+    case s @ SerializeFromObject(_, Filter(condition, d: DeserializeToObject))
+      // SPARK-15632: Conceptually, filter operator should never introduce schema change. This
+      // optimization rule also relies on this assumption. However, Dataset typed filter operator
+      // does introduce schema changes in some cases. Thus, we only enable this optimization when
+      //
+      //  1. either input and output schemata are exactly the same, or
+      //  2. both input and output schemata are single-field schema and share the same type.
+      //
+      // The 2nd case is included because encoders for primitive types always have only a single
+      // field with hard-coded field name "value".
+      // TODO Cleans this up after fixing SPARK-15632.
+      if s.schema == d.child.schema || samePrimitiveType(s.schema, d.child.schema) =>
+
       val numObjects = condition.collect {
         case a: Attribute if a == d.output.head => a
       }.length
@@ -1622,6 +1682,13 @@ object EmbedSerializerInFilter extends Rule[LogicalPlan] {
         }
         Project(objAttrs, filter)
       }
+  }
+
+  def samePrimitiveType(lhs: StructType, rhs: StructType): Boolean = {
+    (lhs, rhs) match {
+      case (StructType(Array(f1)), StructType(Array(f2))) => f1.dataType == f2.dataType
+      case _ => false
+    }
   }
 }
 
@@ -1649,30 +1716,51 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       // Filter the plan by applying left semi and left anti joins.
       withSubquery.foldLeft(newFilter) {
         case (p, PredicateSubquery(sub, conditions, _, _)) =>
-          Join(p, sub, LeftSemi, conditions.reduceOption(And))
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions.reduceOption(And), p)
+          Join(outerPlan, sub, LeftSemi, joinCond)
         case (p, Not(PredicateSubquery(sub, conditions, false, _))) =>
-          Join(p, sub, LeftAnti, conditions.reduceOption(And))
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions.reduceOption(And), p)
+          Join(outerPlan, sub, LeftAnti, joinCond)
         case (p, Not(PredicateSubquery(sub, conditions, true, _))) =>
-          // This is a NULL-aware (left) anti join (NAAJ).
+          // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
-          val anyNull = conditions.map(IsNull).reduceLeft(Or)
-          val condition = conditions.reduceLeft(And)
 
-          // Note that will almost certainly be planned as a Broadcast Nested Loop join. Use EXISTS
-          // if performance matters to you.
-          Join(p, sub, LeftAnti, Option(Or(anyNull, condition)))
+          // Note that will almost certainly be planned as a Broadcast Nested Loop join.
+          // Use EXISTS if performance matters to you.
+          val (joinCond, outerPlan) = rewriteExistentialExpr(conditions.reduceLeftOption(And), p)
+          val anyNull = splitConjunctivePredicates(joinCond.get).map(IsNull).reduceLeft(Or)
+          Join(outerPlan, sub, LeftAnti, Option(Or(anyNull, joinCond.get)))
         case (p, predicate) =>
-          var joined = p
-          val replaced = predicate transformUp {
-            case PredicateSubquery(sub, conditions, nullAware, _) =>
-              // TODO: support null-aware join
-              val exists = AttributeReference("exists", BooleanType, nullable = false)()
-              joined = Join(joined, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
-              exists
-          }
-          Project(p.output, Filter(replaced, joined))
+          val (newCond, inputPlan) = rewriteExistentialExpr(Option(predicate), p)
+          Project(p.output, Filter(newCond.get, inputPlan))
       }
+  }
+
+  /**
+   * Given a predicate expression and an input plan, it rewrites
+   * any embedded existential sub-query into an existential join.
+   * It returns the rewritten expression together with the updated plan.
+   * Currently, it does not support null-aware joins. Embedded NOT IN predicates
+   * are blocked in the Analyzer.
+   */
+  private def rewriteExistentialExpr(
+      expr: Option[Expression],
+      plan: LogicalPlan): (Option[Expression], LogicalPlan) = {
+    var newPlan = plan
+    expr match {
+      case Some(e) =>
+        val newExpr = e transformUp {
+          case PredicateSubquery(sub, conditions, nullAware, _) =>
+            // TODO: support null-aware join
+            val exists = AttributeReference("exists", BooleanType, nullable = false)()
+            newPlan = Join(newPlan, sub, ExistenceJoin(exists), conditions.reduceLeftOption(And))
+            exists
+        }
+        (Option(newExpr), newPlan)
+      case None =>
+        (expr, plan)
+    }
   }
 }
 

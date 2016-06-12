@@ -26,7 +26,7 @@ sc <- sparkR.init()
 sqlContext <- sparkRSQL.init(sc)
 
 test_that("formula of spark.glm", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   # directly calling the spark API
   # dot minus and intercept vs native glm
   model <- spark.glm(training, Sepal_Width ~ . - Species + 0)
@@ -41,7 +41,7 @@ test_that("formula of spark.glm", {
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
   # glm should work with long formula
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   training$LongLongLongLongLongName <- training$Sepal_Width
   training$VeryLongLongLongLonLongName <- training$Sepal_Length
   training$AnotherLongLongLongLongName <- training$Species
@@ -53,7 +53,7 @@ test_that("formula of spark.glm", {
 })
 
 test_that("spark.glm and predict", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   # gaussian family
   model <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species)
   prediction <- predict(model, training)
@@ -80,7 +80,7 @@ test_that("spark.glm and predict", {
 
 test_that("spark.glm summary", {
   # gaussian family
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   stats <- summary(spark.glm(training, Sepal_Width ~ Sepal_Length + Species))
 
   rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
@@ -99,7 +99,7 @@ test_that("spark.glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   # binomial family
-  df <- suppressWarnings(createDataFrame(sqlContext, iris))
+  df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   stats <- summary(spark.glm(training, Species ~ Sepal_Length + Sepal_Width,
     family = binomial(link = "logit")))
@@ -128,7 +128,7 @@ test_that("spark.glm summary", {
 })
 
 test_that("spark.glm save/load", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   m <- spark.glm(training, Sepal_Width ~ Sepal_Length + Species)
   s <- summary(m)
 
@@ -157,7 +157,7 @@ test_that("spark.glm save/load", {
 
 
 test_that("formula of glm", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   # dot minus and intercept vs native glm
   model <- glm(Sepal_Width ~ . - Species + 0, data = training)
   vals <- collect(select(predict(model, training), "prediction"))
@@ -171,7 +171,7 @@ test_that("formula of glm", {
   expect_true(all(abs(rVals - vals) < 1e-6), rVals - vals)
 
   # glm should work with long formula
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   training$LongLongLongLongLongName <- training$Sepal_Width
   training$VeryLongLongLongLonLongName <- training$Sepal_Length
   training$AnotherLongLongLongLongName <- training$Species
@@ -183,7 +183,7 @@ test_that("formula of glm", {
 })
 
 test_that("glm and predict", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   # gaussian family
   model <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
   prediction <- predict(model, training)
@@ -210,7 +210,7 @@ test_that("glm and predict", {
 
 test_that("glm summary", {
   # gaussian family
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   stats <- summary(glm(Sepal_Width ~ Sepal_Length + Species, data = training))
 
   rStats <- summary(glm(Sepal.Width ~ Sepal.Length + Species, data = iris))
@@ -229,7 +229,7 @@ test_that("glm summary", {
   expect_equal(stats$aic, rStats$aic)
 
   # binomial family
-  df <- suppressWarnings(createDataFrame(sqlContext, iris))
+  df <- suppressWarnings(createDataFrame(iris))
   training <- df[df$Species %in% c("versicolor", "virginica"), ]
   stats <- summary(glm(Species ~ Sepal_Length + Sepal_Width, data = training,
     family = binomial(link = "logit")))
@@ -258,7 +258,7 @@ test_that("glm summary", {
 })
 
 test_that("glm save/load", {
-  training <- suppressWarnings(createDataFrame(sqlContext, iris))
+  training <- suppressWarnings(createDataFrame(iris))
   m <- glm(Sepal_Width ~ Sepal_Length + Species, data = training)
   s <- summary(m)
 
@@ -287,7 +287,7 @@ test_that("glm save/load", {
 test_that("spark.kmeans", {
   newIris <- iris
   newIris$Species <- NULL
-  training <- suppressWarnings(createDataFrame(sqlContext, newIris))
+  training <- suppressWarnings(createDataFrame(newIris))
 
   take(training, 1)
 
@@ -365,7 +365,7 @@ test_that("spark.naiveBayes", {
 
   t <- as.data.frame(Titanic)
   t1 <- t[t$Freq > 0, -5]
-  df <- suppressWarnings(createDataFrame(sqlContext, t1))
+  df <- suppressWarnings(createDataFrame(t1))
   m <- spark.naiveBayes(df, Survived ~ .)
   s <- summary(m)
   expect_equal(as.double(s$apriori[1, "Yes"]), 0.5833333, tolerance = 1e-6)
@@ -420,7 +420,7 @@ test_that("spark.survreg", {
   #
   data <- list(list(4, 1, 0, 0), list(3, 1, 2, 0), list(1, 1, 1, 0),
           list(1, 0, 1, 0), list(2, 1, 1, 1), list(2, 1, 0, 1), list(3, 0, 0, 1))
-  df <- createDataFrame(sqlContext, data, c("time", "status", "x", "sex"))
+  df <- createDataFrame(data, c("time", "status", "x", "sex"))
   model <- spark.survreg(df, Surv(time, status) ~ x + sex)
   stats <- summary(model)
   coefs <- as.vector(stats$coefficients[, 1])

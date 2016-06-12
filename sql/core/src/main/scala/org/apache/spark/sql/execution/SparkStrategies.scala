@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import org.apache.spark.annotation.DeveloperApi
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, Strategy}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.encoders.RowEncoder
@@ -33,6 +35,28 @@ import org.apache.spark.sql.execution.exchange.ShuffleExchange
 import org.apache.spark.sql.execution.joins.{BuildLeft, BuildRight}
 import org.apache.spark.sql.execution.streaming.MemoryPlan
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.streaming.ContinuousQuery
+
+/**
+ * Converts a logical plan into zero or more SparkPlans.  This API is exposed for experimenting
+ * with the query planner and is not designed to be stable across spark releases.  Developers
+ * writing libraries should instead consider using the stable APIs provided in
+ * [[org.apache.spark.sql.sources]]
+ */
+@DeveloperApi
+abstract class SparkStrategy extends GenericStrategy[SparkPlan] {
+
+  override protected def planLater(plan: LogicalPlan): SparkPlan = PlanLater(plan)
+}
+
+private[sql] case class PlanLater(plan: LogicalPlan) extends LeafExecNode {
+
+  override def output: Seq[Attribute] = plan.output
+
+  protected override def doExecute(): RDD[InternalRow] = {
+    throw new UnsupportedOperationException()
+  }
+}
 
 private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   self: SparkPlanner =>
@@ -201,7 +225,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   /**
    * Used to plan aggregation queries that are computed incrementally as part of a
-   * [[org.apache.spark.sql.ContinuousQuery]]. Currently this rule is injected into the planner
+   * [[ContinuousQuery]]. Currently this rule is injected into the planner
    * on-demand, only when planning in a [[org.apache.spark.sql.execution.streaming.StreamExecution]]
    */
   object StatefulAggregationStrategy extends Strategy {
@@ -209,7 +233,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case PhysicalAggregation(
         namedGroupingExpressions, aggregateExpressions, rewrittenResultExpressions, child) =>
 
-        aggregate.Utils.planStreamingAggregation(
+        aggregate.AggUtils.planStreamingAggregation(
           namedGroupingExpressions,
           aggregateExpressions,
           rewrittenResultExpressions,
@@ -242,20 +266,20 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               sys.error("Distinct columns cannot exist in Aggregate operator containing " +
                 "aggregate functions which don't support partial aggregation.")
             } else {
-              aggregate.Utils.planAggregateWithoutPartial(
+              aggregate.AggUtils.planAggregateWithoutPartial(
                 groupingExpressions,
                 aggregateExpressions,
                 resultExpressions,
                 planLater(child))
             }
           } else if (functionsWithDistinct.isEmpty) {
-            aggregate.Utils.planAggregateWithoutDistinct(
+            aggregate.AggUtils.planAggregateWithoutDistinct(
               groupingExpressions,
               aggregateExpressions,
               resultExpressions,
               planLater(child))
           } else {
-            aggregate.Utils.planAggregateWithOneDistinct(
+            aggregate.AggUtils.planAggregateWithOneDistinct(
               groupingExpressions,
               functionsWithDistinct,
               functionsWithoutDistinct,
@@ -375,9 +399,12 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object DDLStrategy extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case c: CreateTableUsing if c.temporary && !c.allowExisting =>
+        logWarning(
+          s"CREATE TEMPORARY TABLE ${c.tableIdent.identifier} USING... is deprecated, " +
+            s"please use CREATE TEMPORARY VIEW viewName USING... instead")
         ExecutedCommandExec(
-          CreateTempTableUsing(
-            c.tableIdent, c.userSpecifiedSchema, c.provider, c.options)) :: Nil
+          CreateTempViewUsing(
+            c.tableIdent, c.userSpecifiedSchema, replace = true, c.provider, c.options)) :: Nil
 
       case c: CreateTableUsing if !c.temporary =>
         val cmd =
@@ -396,15 +423,7 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         throw new AnalysisException(
           "allowExisting should be set to false when creating a temporary table.")
 
-      case c: CreateTableUsingAsSelect if c.temporary && c.partitionColumns.nonEmpty =>
-        sys.error("Cannot create temporary partitioned table.")
-
-      case c: CreateTableUsingAsSelect if c.temporary =>
-        val cmd = CreateTempTableUsingAsSelectCommand(
-          c.tableIdent, c.provider, Array.empty[String], c.mode, c.options, c.child)
-        ExecutedCommandExec(cmd) :: Nil
-
-      case c: CreateTableUsingAsSelect if !c.temporary =>
+      case c: CreateTableUsingAsSelect =>
         val cmd =
           CreateDataSourceTableAsSelectCommand(
             c.tableIdent,
@@ -416,12 +435,8 @@ private[sql] abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             c.child)
         ExecutedCommandExec(cmd) :: Nil
 
-      case logical.ShowFunctions(db, pattern) =>
-        ExecutedCommandExec(ShowFunctionsCommand(db, pattern)) :: Nil
-
-      case logical.DescribeFunction(function, extended) =>
-        ExecutedCommandExec(DescribeFunctionCommand(function, extended)) :: Nil
-
+      case c: CreateTempViewUsing =>
+        ExecutedCommandExec(c) :: Nil
       case _ => Nil
     }
   }
