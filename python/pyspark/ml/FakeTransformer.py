@@ -28,8 +28,10 @@ from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql.functions import concat, col, lit
+from pyspark.sql import DataFrame
+from pyspark.ml.util import TransformerWrapper
 
-__all__ = ['Int2Str']
+__all__ = ['Int2Str', 'Int2StrJVM']
 
 
 @inherit_doc
@@ -79,3 +81,14 @@ class Int2Str(Transformer, HasInputCol, HasOutputCol):
         suff = self.getSuffix()
         return dataset.withColumn(ouc, concat(dataset[inc], lit(suff), lit(str(suff2))))
 
+
+class Int2StrJVM(object):
+    def __init__(self, suffix, inputCol, outputCol, df):
+        int2str = Int2Str(suffix=suffix, inputCol=inputCol, outputCol=outputCol)
+        wrapper = TransformerWrapper(df.sql_ctx, int2str)
+        self.jtransformer = _jvm().org.apache.spark.ml.api.python.PythonTransformer(wrapper)
+        self.df = df
+
+    def transform(self):
+        jdf = self.jtransformer.transform(self.df._jdf)
+        return DataFrame(jdf, self.df.sql_ctx)
