@@ -2843,4 +2843,19 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
   }
+
+  test("SPARK-15776: Type coercionn incorrect") {
+    Seq(
+      (1, 11),
+      (3, 25),
+      (5, 37)
+    ).toDF("k", "v").createOrReplaceTempView("tc")
+
+    // If Division is after FunctionArgumentConversion then for the first query it's output
+    // data type is bigint and second is double. But actually both these two query it's
+    // output data type should be double.
+    checkAnswer(
+      sql("SELECT SUM(CASE WHEN k in (3, 5) THEN v / 10 ELSE 0 END) FROM tc"),
+      sql("SELECT SUM(CASE WHEN k in (3, 5) THEN v / 10.0 ELSE 0 END) FROM tc"))
+  }
 }
