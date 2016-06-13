@@ -1245,7 +1245,7 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
-   * with `+=`. Only the driver can access the accumuable's `value`.
+   * with `+=`. Only the driver can access the accumulable's `value`.
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
@@ -1259,8 +1259,8 @@ class SparkContext(config: SparkConf) extends Logging with ExecutorAllocationCli
 
   /**
    * Create an [[org.apache.spark.Accumulable]] shared variable, with a name for display in the
-   * Spark UI. Tasks can add values to the accumuable using the `+=` operator. Only the driver can
-   * access the accumuable's `value`.
+   * Spark UI. Tasks can add values to the accumulable using the `+=` operator. Only the driver can
+   * access the accumulable's `value`.
    * @tparam R accumulator result type
    * @tparam T type that can be added to the accumulator
    */
@@ -2417,7 +2417,6 @@ object SparkContext extends Logging {
    * Create a task scheduler based on a given master URL.
    * Return a 2-tuple of the scheduler backend and the task scheduler.
    */
-  @tailrec
   private def createTaskScheduler(
       sc: SparkContext,
       master: String,
@@ -2494,11 +2493,6 @@ object SparkContext extends Logging {
         }
         scheduler.initialize(backend)
         (backend, scheduler)
-
-      case zkUrl if zkUrl.startsWith("zk://") =>
-        logWarning("Master URL for a multi-master Mesos cluster managed by ZooKeeper should be " +
-          "in the form mesos://zk://host:port. Current Master URL will stop working in Spark 2.0.")
-        createTaskScheduler(sc, "mesos://" + zkUrl, deployMode)
 
       case masterUrl =>
         val cm = getClusterManager(masterUrl) match {

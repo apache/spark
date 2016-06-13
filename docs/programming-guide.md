@@ -1394,7 +1394,7 @@ Note that, when programmers define their own type of AccumulatorV2, the resultin
 <div data-lang="java"  markdown="1">
 
 {% highlight java %}
-Accumulator<Integer> accum = sc.accumulator(0);
+LongAccumulator accum = sc.sc().longAccumulator();
 
 sc.parallelize(Arrays.asList(1, 2, 3, 4)).foreach(x -> accum.add(x));
 // ...
@@ -1485,7 +1485,7 @@ data.map { x => accum += x; x }
 
 <div data-lang="java"  markdown="1">
 {% highlight java %}
-Accumulator<Integer> accum = sc.accumulator(0);
+LongAccumulator accum = sc.sc().longAccumulator();
 data.map(x -> { accum.add(x); return f(x); });
 // Here, accum is still 0 because no actions have caused the `map` to be computed.
 {% endhighlight %}
