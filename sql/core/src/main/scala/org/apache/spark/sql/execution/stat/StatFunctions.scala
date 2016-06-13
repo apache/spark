@@ -439,15 +439,18 @@ private[sql] object StatFunctions extends Logging {
         (df, weightCol)
       )
 
-    val weights =
-      dfWithWeightColumn.select(weightCol).map{ row => row.getDouble(0)}.collect().toVector
-    val sumOfWeights: Double = weights.sum
-    val numberOfObservations: Double = weights.length.toDouble
+    dfWithWeightColumn.agg(sum(weightCol), count(weightCol))
+    .map{ row => (row.getDouble(0), row.getLong(1)) }
+    .collect().headOption
+    .fold(df) { case (sumOfWeights, numberOfObservations) =>
 
-    dfWithWeightColumn.groupBy(col1).agg(count(col1), sum(weightCol) as weightCol)
-      .withColumn(frequencyColumnName, col(weightCol) * numberOfObservations / sumOfWeights)
-      .withColumn(proportionColumnName, col(frequencyColumnName) / numberOfObservations)
-      .drop(weightCol)
+      dfWithWeightColumn.groupBy(col1).agg(count(col1), sum(weightCol) as weightCol)
+        .withColumn(frequencyColumnName, col(weightCol) * numberOfObservations / sumOfWeights)
+        .withColumn(proportionColumnName, col(frequencyColumnName) / numberOfObservations)
+        .drop(weightCol)
+
+    }
+
   }
 
   /** Generate a table of frequencies for the elements of two columns. */
