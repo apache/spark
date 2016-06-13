@@ -428,16 +428,17 @@ setMethod("coltypes<-",
             dataFrame(nx@sdf)
           })
 
-#' Register Temporary Table
+#' Creates a temporary view using the given name.
 #'
-#' Registers a SparkDataFrame as a Temporary Table in the SQLContext
+#' Creates a new temporary view using a SparkDataFrame in the SQLContext. If a
+#' temporary view with the same name already exists, replaces it.
 #'
 #' @param x A SparkDataFrame
-#' @param tableName A character vector containing the name of the table
+#' @param viewName A character vector containing the name of the table
 #'
 #' @family SparkDataFrame functions
-#' @rdname registerTempTable
-#' @name registerTempTable
+#' @rdname createOrReplaceTempView
+#' @name createOrReplaceTempView
 #' @export
 #' @examples
 #'\dontrun{
@@ -445,13 +446,13 @@ setMethod("coltypes<-",
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "json_df")
+#' createOrReplaceTempView(df, "json_df")
 #' new_df <- sql("SELECT * FROM json_df")
 #'}
-setMethod("registerTempTable",
-          signature(x = "SparkDataFrame", tableName = "character"),
-          function(x, tableName) {
-              invisible(callJMethod(x@sdf, "registerTempTable", tableName))
+setMethod("createOrReplaceTempView",
+          signature(x = "SparkDataFrame", viewName = "character"),
+          function(x, viewName) {
+              invisible(callJMethod(x@sdf, "createOrReplaceTempView", viewName))
           })
 
 #' insertInto
@@ -473,7 +474,7 @@ setMethod("registerTempTable",
 #' sqlContext <- sparkRSQL.init(sc)
 #' df <- read.df(path, "parquet")
 #' df2 <- read.df(path2, "parquet")
-#' registerTempTable(df, "table1")
+#' createOrReplaceTempView(df, "table1")
 #' insertInto(df2, "table1", overwrite = TRUE)
 #'}
 setMethod("insertInto",
