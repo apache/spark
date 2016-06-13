@@ -140,7 +140,7 @@ class FileStreamSinkSuite extends StreamTest {
       }
 
       val outputDf = spark.read.parquet(outputDir).as[Int]
-      checkDataset(outputDf, 1, 2, 3)
+      checkDatasetUnorderly(outputDf, 1, 2, 3)
 
     } finally {
       if (query != null) {
@@ -191,7 +191,7 @@ class FileStreamSinkSuite extends StreamTest {
       assert(hadoopdFsRelations.head.dataSchema.exists(_.name == "value"))
 
       // Verify the data is correctly read
-      checkDataset(
+      checkDatasetUnorderly(
         outputDf.as[(Int, Int)],
         (1000, 1), (2000, 2), (3000, 3))
 
