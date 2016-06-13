@@ -284,7 +284,7 @@ class DAGScheduler(
   /**
    * Get or create a shuffle map stage for the given shuffle dependency's map side.  If the
    * shuffle map stage doesn't already exist, this method will create the shuffle map stage in
-   * addition to an necessary ancestor shuffle map stages.
+   * addition to any missing ancestor shuffle map stages.
    */
   private def getOrCreateShuffleMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
@@ -328,7 +328,7 @@ class DAGScheduler(
         }
 
         // Create stages for all missing ancestor shuffle dependencies.
-        getAncestorShuffleDependencies(shuffleDep.rdd).foreach { dep =>
+        getMissingAncestorShuffleDependencies(shuffleDep.rdd).foreach { dep =>
           if (!shuffleIdToMapStage.contains(dep.shuffleId)) {
             createShuffleMapStage(dep)
           }
@@ -366,7 +366,8 @@ class DAGScheduler(
   }
 
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
-  private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
+  private def getMissingAncestorShuffleDependencies(
+      rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
     val ancestors = new Stack[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
