@@ -352,7 +352,7 @@ class AFTSurvivalRegressionSuite
     // the parallelism is bigger than that. Because the issue was about `AFTAggregator`s
     // being merged incorrectly when it has an empty partition, running the codes below
     // should not throw an exception.
-    val dataset = spark.createDataFrame(
+    val dataset = sqlContext.createDataFrame(
       sc.parallelize(generateAFTInput(
         1, Array(5.5), Array(0.8), 2, 42, 1.0, 2.0, 2.0), numSlices = 3))
     val trainer = new AFTSurvivalRegression()
