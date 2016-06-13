@@ -132,9 +132,9 @@ class TextSuite extends QueryTest with SharedSQLContext {
       ds1.write.text(s"$path/part=a")
       ds1.write.text(s"$path/part=b")
 
-      checkDataset(
+      checkAnswer(
         spark.read.format("text").load(path).select($"part"),
-        Row("a"), Row("b"))
+        Row("a") :: Row("b") :: Nil)
     }
   }
 
