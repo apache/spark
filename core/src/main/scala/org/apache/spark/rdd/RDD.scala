@@ -17,11 +17,11 @@
 
 package org.apache.spark.rdd
 
-import java.nio.charset.{Charset, StandardCharsets}
 import java.util.Random
 
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
+import scala.io.Codec
 import scala.language.implicitConversions
 import scala.reflect.{classTag, ClassTag}
 
@@ -738,7 +738,7 @@ abstract class RDD[T: ClassTag](
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false,
       bufferSize: Int = 8192,
-      encoding: Charset = StandardCharsets.UTF_8): RDD[String] = withScope {
+      encoding: Codec = Codec.defaultCharsetCodec): RDD[String] = withScope {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,
