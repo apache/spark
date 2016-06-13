@@ -100,8 +100,8 @@ object DateTimeUtils {
 
   // reverse of millisToDays
   def daysToMillis(days: SQLDate): Long = {
-    val millisUtc = days.toLong * MILLIS_PER_DAY
-    millisUtc - threadLocalLocalTimeZone.get().getOffset(millisUtc)
+    val millisLocal = days.toLong * MILLIS_PER_DAY
+    millisLocal - getOffsetFromLocalMillis(millisLocal, threadLocalLocalTimeZone.get())
   }
 
   def dateToString(days: SQLDate): String =
@@ -851,6 +851,20 @@ object DateTimeUtils {
   }
 
   /**
+   * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in a timezone.
+   */
+  private def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
+    val rawOffset = tz.getRawOffset
+    // the actual offset should be calculated based on milliseconds in UTC
+    var offset = tz.getOffset(millisLocal - rawOffset)
+    if (offset != rawOffset) {
+      // Could be in DST, try with best effort
+      offset = tz.getOffset(millisLocal - offset)
+    }
+    offset
+  }
+
+  /**
    * Returns a timestamp of given timezone from utc timestamp, with the same string
    * representation in their timezone.
    */
@@ -866,7 +880,7 @@ object DateTimeUtils {
    */
   def toUTCTime(time: SQLTimestamp, timeZone: String): SQLTimestamp = {
     val tz = TimeZone.getTimeZone(timeZone)
-    val offset = tz.getOffset(time / 1000L)
+    val offset = getOffsetFromLocalMillis(time / 1000L, tz)
     time - offset * 1000L
   }
 }
