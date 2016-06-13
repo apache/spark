@@ -65,6 +65,9 @@ case class AnalyzeTableCommand(tableName: String) extends RunnableCommand {
                 }
               }.sum
           } else {
+            // scalastyle:off println
+            println(s"Bytes[$path]: ${fileStatus.getLen}")
+            // scalastyle:on println
             fileStatus.getLen
           }
 

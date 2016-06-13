@@ -122,24 +122,13 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
 
     def checkSize(tableName: String, size: BigInt): Unit = {
       val relation = spark.sessionState.catalog.lookupRelation(TableIdentifier(tableName))
-      // scalastyle:off println
-      println(relation match {
-        case s: SimpleCatalogRelation => s.metadata
-        case m: MetastoreRelation => m.catalogTable
-        case other => other
-      })
-      // scalastyle:on println
       assert(relation.statistics.sizeInBytes === size)
     }
-
-    // Dump size of the src table.
-    sql("SELECT COUNT(*) FROM src").show()
 
     // Non-partitioned table
     sql("CREATE TABLE analyzeTable (key STRING, value STRING)").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
     sql("INSERT INTO TABLE analyzeTable SELECT * FROM src").collect()
-    sql("SELECT COUNT(*) FROM analyzeTable").show()
     sql("ANALYZE TABLE analyzeTable COMPUTE STATISTICS noscan")
 
     checkSize("analyzeTable", BigInt(11624))
@@ -166,7 +155,6 @@ class StatisticsSuite extends QueryTest with TestHiveSingleton with SQLTestUtils
         |INSERT INTO TABLE analyzeTable_part PARTITION (ds='2010-01-03')
         |SELECT * FROM src
       """.stripMargin).collect()
-    sql("SELECT COUNT(*) FROM analyzeTable_part").show()
     assert(queryTotalSize("analyzeTable_part") === spark.sessionState.conf.defaultSizeInBytes)
 
     sql("ANALYZE TABLE analyzeTable_part COMPUTE STATISTICS noscan")
