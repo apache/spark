@@ -23,6 +23,7 @@ import java.io.FilenameFilter
 import java.io.IOException
 import java.io.OutputStreamWriter
 import java.io.PrintWriter
+import java.nio.charset.{Charset, StandardCharsets}
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
 
@@ -47,7 +48,8 @@ private[spark] class PipedRDD[T: ClassTag](
     printPipeContext: (String => Unit) => Unit,
     printRDDElement: (T, String => Unit) => Unit,
     separateWorkingDir: Boolean,
-    bufferSize: Int)
+    bufferSize: Int,
+    encoding: Charset)
   extends RDD[String](prev) {
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
@@ -60,8 +62,7 @@ private[spark] class PipedRDD[T: ClassTag](
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false) =
     this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
-      separateWorkingDir, 8192)
-
+      separateWorkingDir, 8192, StandardCharsets.UTF_8)
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
@@ -123,13 +124,14 @@ private[spark] class PipedRDD[T: ClassTag](
     val proc = pb.start()
     val env = SparkEnv.get
     val childThreadException = new AtomicReference[Throwable](null)
+    val encodingCodec = new Codec(encoding)
 
     // Start a thread to print the process's stderr to ours
     new Thread(s"stderr reader for $command") {
       override def run(): Unit = {
         val err = proc.getErrorStream
         try {
-          for (line <- Source.fromInputStream(err).getLines) {
+          for (line <- Source.fromInputStream(err)(encodingCodec).getLines) {
             // scalastyle:off println
             System.err.println(line)
             // scalastyle:on println
@@ -147,7 +149,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run(): Unit = {
         TaskContext.setTaskContext(context)
         val out = new PrintWriter(new BufferedWriter(
-          new OutputStreamWriter(proc.getOutputStream), bufferSize))
+          new OutputStreamWriter(proc.getOutputStream, encoding), bufferSize))
         try {
           // scalastyle:off println
           // input the pipe context firstly
@@ -171,7 +173,7 @@ private[spark] class PipedRDD[T: ClassTag](
     }.start()
 
     // Return an iterator that read lines from the process's stdout
-    val lines = Source.fromInputStream(proc.getInputStream)(Codec.UTF8).getLines
+    val lines = Source.fromInputStream(proc.getInputStream)(encodingCodec).getLines
     new Iterator[String] {
       def next(): String = {
         if (!hasNext()) {

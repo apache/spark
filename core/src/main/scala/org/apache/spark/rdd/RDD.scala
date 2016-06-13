@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import java.nio.charset.{Charset, StandardCharsets}
 import java.util.Random
 
 import scala.collection.{mutable, Map}
@@ -726,6 +727,8 @@ abstract class RDD[T: ClassTag](
    *                          for (e &lt;- record._2) {f(e)}
    * @param separateWorkingDir Use separate working directories for each task.
    * @param bufferSize Buffer size for the stdin writer for the piped process.
+   * @param encoding Char encoding used for interacting (via stdin, stdout and stderr) with
+   *                 the piped process
    * @return the result RDD
    */
   def pipe(
@@ -734,12 +737,14 @@ abstract class RDD[T: ClassTag](
       printPipeContext: (String => Unit) => Unit = null,
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false,
-      bufferSize: Int = 8192): RDD[String] = withScope {
+      bufferSize: Int = 8192,
+      encoding: Charset = StandardCharsets.UTF_8): RDD[String] = withScope {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,
       separateWorkingDir,
-      bufferSize)
+      bufferSize,
+      encoding)
   }
 
   /**
