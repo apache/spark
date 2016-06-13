@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.datasources.csv
 
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{NullWritable, Text}
-import org.apache.hadoop.mapreduce.RecordWriter
-import org.apache.hadoop.mapreduce.TaskAttemptContext
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -31,8 +32,10 @@ import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
-import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
+import org.apache.spark.sql.execution.datasources._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.util.SerializableConfiguration
 
 object CSVRelation extends Logging {
 
@@ -143,21 +146,90 @@ object CSVRelation extends Logging {
       if (nonEmptyLines.hasNext) nonEmptyLines.drop(1)
     }
   }
+
+  /**
+   * Setup writing configurations into the given [[Configuration]], and then return the
+   * wrapped [[CSVOptions]].
+   * Both continuous-queries writing process and non-continuous-queries writing process will
+   * call this function.
+   */
+  private[csv] def prepareConfForWriting(
+      conf: Configuration,
+      options: Map[String, String]): CSVOptions = {
+    val csvOptions = new CSVOptions(options)
+    csvOptions.compressionCodec.foreach { codec =>
+      CompressionCodecs.setCodecConfiguration(conf, codec)
+    }
+    csvOptions
+  }
 }
 
-private[sql] class CSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
+/**
+ * A factory for generating OutputWriters for writing csv files. This is implemented different
+ * from the 'batch' CSVOutputWriter as this does not use any [[OutputCommitter]]. It simply
+ * writes the data to the path used to generate the output writer. Callers of this factory
+ * has to ensure which files are to be considered as committed.
+ */
+private[csv] class StreamingCSVOutputWriterFactory(
+  sqlConf: SQLConf,
+  dataSchema: StructType,
+  hadoopConf: Configuration,
+  options: Map[String, String]) extends StreamingOutputWriterFactory {
+
+  private val (csvOptions: CSVOptions, serializableConf: SerializableConfiguration) = {
+    val conf = Job.getInstance(hadoopConf).getConfiguration
+    val csvOptions = CSVRelation.prepareConfForWriting(conf, options)
+    (csvOptions, new SerializableConfiguration(conf))
+  }
+
+  /**
+   * Returns a [[OutputWriter]] that writes data to the give path without using an
+   * [[OutputCommitter]].
+   */
+  override private[sql] def newWriter(path: String): OutputWriter = {
+    val hadoopTaskAttempId = new TaskAttemptID(new TaskID(new JobID, TaskType.MAP, 0), 0)
+    val hadoopAttemptContext =
+      new TaskAttemptContextImpl(serializableConf.value, hadoopTaskAttempId)
+    // Returns a 'streaming' CSVOutputWriter
+    new CSVOutputWriterBase(dataSchema, hadoopAttemptContext, csvOptions) {
+      override private[csv] val recordWriter: RecordWriter[NullWritable, Text] =
+        createNoCommitterTextRecordWriter(
+          path,
+          hadoopAttemptContext,
+          (c: TaskAttemptContext, ext: String) => { new Path(s"$path.csv$ext") })
+    }
+  }
+}
+
+private[csv] class BatchCSVOutputWriterFactory(params: CSVOptions) extends OutputWriterFactory {
   override def newInstance(
       path: String,
       bucketId: Option[Int],
       dataSchema: StructType,
       context: TaskAttemptContext): OutputWriter = {
     if (bucketId.isDefined) sys.error("csv doesn't support bucketing")
-    new CsvOutputWriter(path, dataSchema, context, params)
+    // Returns a 'batch' CSVOutputWriter
+    new CSVOutputWriterBase(dataSchema, context, params) {
+      private[csv] override val recordWriter: RecordWriter[NullWritable, Text] = {
+        new TextOutputFormat[NullWritable, Text]() {
+          override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
+            val conf = context.getConfiguration
+            val uniqueWriteJobId = conf.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
+            val taskAttemptId = context.getTaskAttemptID
+            val split = taskAttemptId.getTaskID.getId
+            new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
+          }
+        }.getRecordWriter(context)
+      }
+    }
   }
 }
 
-private[sql] class CsvOutputWriter(
-    path: String,
+/**
+ * Base CSVOutputWriter class for 'batch' CSVOutputWriter and 'streaming' CSVOutputWriter. The
+ * writing logic to a single file resides in this base class.
+ */
+private[csv] abstract class CSVOutputWriterBase(
     dataSchema: StructType,
     context: TaskAttemptContext,
     params: CSVOptions) extends OutputWriter with Logging {
@@ -165,17 +237,8 @@ private[sql] class CsvOutputWriter(
   // create the Generator without separator inserted between 2 records
   private[this] val text = new Text()
 
-  private val recordWriter: RecordWriter[NullWritable, Text] = {
-    new TextOutputFormat[NullWritable, Text]() {
-      override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
-        val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
-        val taskAttemptId = context.getTaskAttemptID
-        val split = taskAttemptId.getTaskID.getId
-        new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
-      }
-    }.getRecordWriter(context)
-  }
+  // different subclass may provide different record writers
+  private[csv] val recordWriter: RecordWriter[NullWritable, Text]
 
   private val FLUSH_BATCH_SIZE = 1024L
   private var records: Long = 0L
