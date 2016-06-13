@@ -396,10 +396,7 @@ object FunctionRegistry {
     fr
   }
 
-  val functionSet: Set[String] = synchronized {
-    builtin.listFunction().toSet
-  }
-
+  val functionSet: Set[String] = builtin.listFunction().toSet
 
   /** See usage above. */
   private def expression[T <: Expression](name: String)
