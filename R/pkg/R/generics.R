@@ -549,7 +549,10 @@ setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
 #' @rdname createOrReplaceTempView
 #' @export
-setGeneric("createOrReplaceTempView", function(x, viewName) { standardGeneric("createOrReplaceTempView") })
+setGeneric("createOrReplaceTempView",
+           function(x, viewName) {
+             standardGeneric("createOrReplaceTempView")
+           })
 
 #' @rdname sample
 #' @export

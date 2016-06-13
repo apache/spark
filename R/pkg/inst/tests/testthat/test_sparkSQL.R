@@ -461,7 +461,8 @@ test_that("test tableNames and tables", {
   dropTempTable("table1")
 })
 
-test_that("createOrReplaceTempView() results in a queryable table and sql() results in a new DataFrame", {
+test_that(
+  "createOrReplaceTempView() results in a queryable table and sql() results in a new DataFrame", {
   df <- read.json(jsonPath)
   createOrReplaceTempView(df, "table1")
   newdf <- sql("SELECT * FROM table1 where name = 'Michael'")
