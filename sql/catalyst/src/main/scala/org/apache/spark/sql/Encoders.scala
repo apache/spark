@@ -212,7 +212,7 @@ object Encoders {
           UpCast(
             GetColumnByOrdinal(0, BinaryType),
             BinaryType,
-            Seq(s"root object (class: ${classOf[BinaryType]}, name: value}")),
+            Seq(s"input object to be serialized")),
           classTag[T],
           kryo = useKryo),
       clsTag = classTag[T]
