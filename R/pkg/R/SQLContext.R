@@ -411,7 +411,7 @@ read.text <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' new_df <- sql("SELECT * FROM table")
 #' }
 #' @name sql
@@ -443,7 +443,7 @@ sql <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' new_df <- tableToDF("table")
 #' }
 #' @note since 2.0.0
@@ -529,7 +529,7 @@ tableNames <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' cacheTable("table")
 #' }
 #' @name cacheTable
@@ -558,7 +558,7 @@ cacheTable <- function(x, ...) {
 #' sqlContext <- sparkRSQL.init(sc)
 #' path <- "path/to/file.json"
 #' df <- read.json(path)
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' uncacheTable("table")
 #' }
 #' @name uncacheTable
@@ -608,7 +608,7 @@ clearCache <- function() {
 #' sc <- sparkR.init()
 #' sqlContext <- sparkRSQL.init(sc)
 #' df <- read.df(path, "parquet")
-#' registerTempTable(df, "table")
+#' createOrReplaceTempView(df, "table")
 #' dropTempTable("table")
 #' }
 #' @name dropTempTable
