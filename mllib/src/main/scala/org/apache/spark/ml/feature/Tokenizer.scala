@@ -31,10 +31,10 @@ import org.apache.spark.sql.types.{ArrayType, DataType, StringType}
  */
 @Experimental
 @Since("1.2.0")
-class Tokenizer @Since("1.2.0") (@Since("1.4.0") override val uid: String)
+class Tokenizer @Since("1.4.0") (@Since("1.4.0") override val uid: String)
   extends UnaryTransformer[String, Seq[String], Tokenizer] with DefaultParamsWritable {
 
-  @Since("1.4.0")
+  @Since("1.2.0")
   def this() = this(Identifiable.randomUID("tok"))
 
   override protected def createTransformFunc: String => Seq[String] = {
