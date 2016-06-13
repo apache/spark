@@ -56,7 +56,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def mode(saveMode: SaveMode): DataFrameWriter[T] = {
     // mode() is used for non-continuous queries
     // outputMode() is used for continuous queries
-    assertNotStreaming("mode() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("mode() can only be called on non-continuous queries")
     this.mode = saveMode
     this
   }
@@ -73,7 +73,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def mode(saveMode: String): DataFrameWriter[T] = {
     // mode() is used for non-continuous queries
     // outputMode() is used for continuous queries
-    assertNotStreaming("mode() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("mode() can only be called on non-continuous queries")
     this.mode = saveMode.toLowerCase match {
       case "overwrite" => SaveMode.Overwrite
       case "append" => SaveMode.Append
@@ -86,33 +86,33 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   /**
-   * Specifies how data of a streaming Dataset/DataFrame is written to a streaming sink.
-   *   - `OutputMode.Append()`: only the new rows in the streaming Dataset/DataFrame will be
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `OutputMode.Append()`: only the new rows in the streaming DataFrame/Dataset will be
    *                            written to the sink
-   *   - `OutputMode.Complete()`: all the rows in the streaming Dataset/DataFrame will be written
+   *   - `OutputMode.Complete()`: all the rows in the streaming DataFrame/Dataset will be written
    *                              to the sink every time these is some updates
    *
    * @since 2.0.0
    */
   @Experimental
   def outputMode(outputMode: OutputMode): DataFrameWriter[T] = {
-    assertStreaming("outputMode() can only be called on streaming Datasets/DataFrames")
+    assertStreaming("outputMode() can only be called on continuous queries")
     this.outputMode = outputMode
     this
   }
 
   /**
-   * Specifies how data of a streaming Dataset/DataFrame is written to a streaming sink.
-   *   - `append`:   only the new rows in the streaming Dataset/DataFrame will be written to
+   * Specifies how data of a streaming DataFrame/Dataset is written to a streaming sink.
+   *   - `append`:   only the new rows in the streaming DataFrame/Dataset will be written to
    *                 the sink
-   *   - `complete`: all the rows in the streaming Dataset/DataFrame will be written to the sink
+   *   - `complete`: all the rows in the streaming DataFrame/Dataset will be written to the sink
    *                 every time these is some updates
    *
    * @since 2.0.0
    */
   @Experimental
   def outputMode(outputMode: String): DataFrameWriter[T] = {
-    assertStreaming("outputMode() can only be called on streaming Datasets/DataFrames")
+    assertStreaming("outputMode() can only be called on continuous queries")
     this.outputMode = outputMode.toLowerCase match {
       case "append" =>
         OutputMode.Append
@@ -150,7 +150,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Experimental
   def trigger(trigger: Trigger): DataFrameWriter[T] = {
-    assertStreaming("trigger() can only be called on streaming Datasets/DataFrames")
+    assertStreaming("trigger() can only be called on continuous queries")
     this.trigger = trigger
     this
   }
@@ -284,7 +284,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   def save(): Unit = {
     assertNotBucketed("save")
-    assertNotStreaming("save() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("save() can only be called on non-continuous queries")
     val dataSource = DataSource(
       df.sparkSession,
       className = source,
@@ -304,7 +304,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    */
   @Experimental
   def queryName(queryName: String): DataFrameWriter[T] = {
-    assertStreaming("queryName() can only be called on streaming Datasets/DataFrames")
+    assertStreaming("queryName() can only be called on continuous queries")
     this.extraOptions += ("queryName" -> queryName)
     this
   }
@@ -333,7 +333,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   @Experimental
   def startStream(): ContinuousQuery = {
     assertNotBucketed("startStream")
-    assertStreaming("startStream() can only be called on streaming Datasets/DataFrames")
+    assertStreaming("startStream() can only be called on continuous queries")
 
     if (source == "memory") {
       val queryName =
@@ -434,7 +434,8 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def foreach(writer: ForeachWriter[T]): ContinuousQuery = {
     assertNotPartitioned("foreach")
     assertNotBucketed("foreach")
-    assertStreaming("foreach() can only be called on streaming Datasets/DataFrames.")
+    assertStreaming(
+      "foreach() can only be called on streaming Datasets/DataFrames.")
 
     val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
     val sink = new ForeachSink[T](ds.sparkSession.sparkContext.clean(writer))(ds.exprEnc)
@@ -501,7 +502,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
 
   private def insertInto(tableIdent: TableIdentifier): Unit = {
     assertNotBucketed("insertInto")
-    assertNotStreaming("insertInto() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("insertInto() can only be called on non-continuous queries")
     val partitions = normalizedParCols.map(_.map(col => col -> (Option.empty[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
@@ -620,7 +621,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   }
 
   private def saveAsTable(tableIdent: TableIdentifier): Unit = {
-    assertNotStreaming("saveAsTable() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("saveAsTable() can only be called on non-continuous queries")
 
     val tableExists = df.sparkSession.sessionState.catalog.tableExists(tableIdent)
 
@@ -663,7 +664,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
   def jdbc(url: String, table: String, connectionProperties: Properties): Unit = {
     assertNotPartitioned("jdbc")
     assertNotBucketed("jdbc")
-    assertNotStreaming("jdbc() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("jdbc() can only be called on non-continuous queries")
 
     val props = new Properties()
     extraOptions.foreach { case (key, value) =>
@@ -722,7 +723,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def json(path: String): Unit = {
-    assertNotStreaming("json() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("json() can only be called on non-continuous queries")
     format("json").save(path)
   }
 
@@ -742,7 +743,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.4.0
    */
   def parquet(path: String): Unit = {
-    assertNotStreaming("parquet() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("parquet() can only be called on non-continuous queries")
     format("parquet").save(path)
   }
 
@@ -762,7 +763,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @note Currently, this method can only be used after enabling Hive support
    */
   def orc(path: String): Unit = {
-    assertNotStreaming("orc() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("orc() can only be called on non-continuous queries")
     format("orc").save(path)
   }
 
@@ -786,7 +787,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 1.6.0
    */
   def text(path: String): Unit = {
-    assertNotStreaming("text() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("text() can only be called on non-continuous queries")
     format("text").save(path)
   }
 
@@ -816,7 +817,7 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * @since 2.0.0
    */
   def csv(path: String): Unit = {
-    assertNotStreaming("csv() can only be called on non-streaming Datasets/DataFrames")
+    assertNotStreaming("csv() can only be called on non-continuous queries")
     format("csv").save(path)
   }
 

@@ -70,7 +70,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   /** How long to wait for an active stream to catch up when checking a result. */
   val streamingTimeout = 10.seconds
 
-  /** A trait for actions that can be performed while testing a streaming DataSet/DataFrame. */
+  /** A trait for actions that can be performed while testing a streaming DataFrame. */
   trait StreamAction
 
   /** A trait to mark actions that require the stream to be actively running. */
@@ -194,7 +194,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
   }
 
   /**
-   * Executes the specified actions on the given streaming DataSet/DataFrame and provides helpful
+   * Executes the specified actions on the given streaming DataFrame and provides helpful
    * error messages in the case of failures or incorrect answers.
    *
    * Note that if the stream is not explicitly started before an action that requires it to be
