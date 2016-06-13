@@ -28,10 +28,6 @@ test_that("Check masked functions", {
                      "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
                      "summary", "transform", "drop", "window", "as.data.frame")
   namesOfMaskedCompletely <- c("cov", "filter", "sample")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
-    namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
-    namesOfMaskedCompletely <- c("endsWith", "startsWith", namesOfMaskedCompletely)
-  }
   expect_equal(length(maskedBySparkR), length(namesOfMasked))
   expect_equal(sort(maskedBySparkR), sort(namesOfMasked))
   # above are those reported as masked when `library(SparkR)`
