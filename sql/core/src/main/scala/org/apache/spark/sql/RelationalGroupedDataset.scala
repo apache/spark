@@ -407,7 +407,7 @@ class RelationalGroupedDataset protected[sql](
   private[sql] def flatMapGroupsInR(
       f: Array[Byte],
       packageNames: Array[Byte],
-      broadcastVars: Array[Object],
+      broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
       val broadcastVarObj = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
       val groupingNamedExpressions = groupingExprs.map(alias)

@@ -41,7 +41,7 @@ private[spark] class RRunner[U](
     numPartitions: Int = -1,
     isDataFrame: Boolean = false,
     colNames: Array[String] = null,
-    mode: Int = 0)
+    mode: Int = RRunnerModes.RDD)
   extends Logging {
   private var bootTime: Double = _
   private var dataStream: DataInputStream = _
@@ -274,6 +274,12 @@ private[spark] class RRunner[U](
 
 private object SpecialLengths {
   val TIMING_DATA = -1
+}
+
+private[spark] object RRunnerModes {
+  val RDD = 0
+  val DATAFRAME_DAPPLY = 1
+  val DATAFRAME_GAPPLY = 2
 }
 
 private[r] class BufferedStreamThread(

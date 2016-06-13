@@ -20,8 +20,7 @@ package org.apache.spark.sql.execution
 import scala.language.existentials
 
 import org.apache.spark.api.java.function.MapFunction
-import org.apache.spark.api.r.RRunner
-import org.apache.spark.api.r.SerializationFormats
+import org.apache.spark.api.r._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.api.r.SQLUtils._
@@ -372,14 +371,15 @@ case class FlatMapGroupsInRExec(
       val outputObject = ObjectOperator.wrapObjectToRow(outputObjAttr.dataType)
       val runner = new RRunner[Array[Byte]](
         func, SerializationFormats.ROW, serializerForR, packageNames, broadcastVars,
-        isDataFrame = true, colNames = inputSchema.fieldNames, mode = 2)
+        isDataFrame = true, colNames = inputSchema.fieldNames,
+        mode = RRunnerModes.DATAFRAME_GAPPLY)
 
-      val groupedRBytes = grouped.flatMap { case (key, rowIter) =>
+      val groupedRBytes = grouped.map { case (key, rowIter) =>
         val deserializedIter = rowIter.map(getValue)
         val newIter =
           deserializedIter.asInstanceOf[Iterator[Row]].map { row => rowToRBytes(row) }
         val newKey = rowToRBytes(getKey(key).asInstanceOf[Row])
-        Iterator((newKey, newIter))
+        (newKey, newIter)
       }
 
       val outputIter = runner.compute(groupedRBytes, -1)

@@ -28,7 +28,7 @@ elapsedSecs <- function() {
 }
 
 compute <- function(mode, partition, serializer, deserializer, key,
-             colNames, computeFunc, outputCon, inputData) {
+             colNames, computeFunc, inputData) {
   if (mode > 0) {
     if (deserializer == "row") {
       # Transform the list of rows into a data.frame
@@ -156,23 +156,23 @@ if (isEmpty != 0) {
       dataWithKeys <- SparkR:::readMultipleObjectsWithKeys(inputCon)
       keys <- dataWithKeys$keys
       data <- dataWithKeys$data
-    } else if (deserializer == "row"){
+    } else if (deserializer == "row") {
       data <- SparkR:::readMultipleObjects(inputCon)
     }
 
+    # Timing reading input data for execution
     inputElap <- elapsedSecs()
     if (mode > 0) {
       if (mode == 1) {
-        # Timing reading input data for execution
         output <- compute(mode, partition, serializer, deserializer, NULL,
-                    colNames, computeFunc, outputCon, data)
+                    colNames, computeFunc, data)
        } else {
         # gapply mode
         for (i in 1:length(data)) {
           # Timing reading input data for execution
           inputElap <- elapsedSecs()
           output <- compute(mode, partition, serializer, deserializer, keys[[i]],
-                      colNames, computeFunc, outputCon, data[[i]])
+                      colNames, computeFunc, data[[i]])
           computeElap <- elapsedSecs()
           outputResult(serializer, output, outputCon)
           outputElap <- elapsedSecs()
@@ -183,7 +183,7 @@ if (isEmpty != 0) {
     } else {
       # Timing reading input data for execution
       output <- compute(mode, partition, serializer, deserializer, NULL,
-                  colNames, computeFunc, outputCon, data)
+                  colNames, computeFunc, data)
     }
     if (mode != 2) {
       # Not a gapply mode

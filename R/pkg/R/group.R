@@ -186,14 +186,18 @@ createMethods()
 setMethod("gapply",
           signature(x = "GroupedData"),
           function(x, func, schema) {
+            try(if (is.null(schema)) stop("schema cannot be NULL"))
             packageNamesArr <- serialize(.sparkREnv[[".packages"]],
                                  connection = NULL)
             broadcastArr <- lapply(ls(.broadcastNames),
                               function(name) { get(name, .broadcastNames) })
-            sdf <- callJMethod(x@sgd, "flatMapGroupsInR",
+            sdf <- callJStatic(
+                     "org.apache.spark.sql.api.r.SQLUtils",
+                     "gapply",
+                     x@sgd,
                      serialize(cleanClosure(func), connection = NULL),
                      packageNamesArr,
                      broadcastArr,
-                     if (is.null(schema)) { schema } else { schema$jobj })
+                     schema$jobj)
             dataFrame(sdf)
           })
