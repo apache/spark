@@ -42,9 +42,16 @@ private[sql] class SharedState(val sparkContext: SparkContext) {
    */
   val listener: SQLListener = createListenerAndUI(sparkContext)
 
+  /**
+   * The base hadoop configuration which is shared among all spark sessions. It is based on the
+   * default hadoop configuration of Spark, with custom configurations inside `hive-site.xml`.
+   */
   lazy val hadoopConf: Configuration = {
     val conf = sparkContext.hadoopConfiguration
-    conf.addResource(Utils.getContextOrSparkClassLoader.getResource("hive-site.xml"))
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      conf.addResource(configFile)
+    }
     conf
   }
 
