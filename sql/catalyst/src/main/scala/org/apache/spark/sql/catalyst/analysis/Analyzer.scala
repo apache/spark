@@ -480,10 +480,10 @@ class Analyzer(
                 inputPartCols.find(_.name == name).getOrElse(
                   throw new AnalysisException(s"Cannot find partition column $name"))
               }
+              // Assume partition columns are correctly placed at the end of the child's output
               i.copy(
                 table = EliminateSubqueryAliases(table),
-                partition = tablePartitionNames.map(_ -> None).toMap,
-                child = Project(columns ++ partColumns, child))
+                partition = tablePartitionNames.map(_ -> None).toMap)
             }
           case _ =>
             i.copy(table = EliminateSubqueryAliases(table))
