@@ -144,7 +144,7 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
       endpointName: String,
       message: InboxMessage,
       callbackIfStopped: (Exception) => Unit): Unit = {
-    val error: Option[Exception] = synchronized {
+    val error = synchronized {
       val data = endpoints.get(endpointName)
       if (stopped) {
         Some(new RpcEnvStoppedException())
@@ -156,10 +156,8 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
         None
       }
     }
-    if (error.isDefined) {
-      // We don't need to call `onStop` in the `synchronized` block
-      callbackIfStopped(error.get)
-    }
+    // We don't need to call `onStop` in the `synchronized` block
+    error.foreach(callbackIfStopped)
   }
 
   def stop(): Unit = {
