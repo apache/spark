@@ -20,7 +20,9 @@ package org.apache.spark.ui
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, mock, when}
+
+import org.mockito.Mockito.{mock, when, RETURNS_SMART_NULLS}
+
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
