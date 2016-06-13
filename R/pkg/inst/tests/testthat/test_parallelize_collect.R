@@ -109,4 +109,4 @@ test_that("parallelize() and collect() work for lists of pairs (pairwise data)",
   expect_equal(collect(strPairsRDDD2), strPairs)
 })
 
-#sparkR.session.stop()
+sparkR.session.stop()

@@ -57,4 +57,4 @@ test_that("use include package", {
   }
 })
 
-#sparkR.session.stop()
+sparkR.session.stop()

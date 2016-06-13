@@ -801,4 +801,4 @@ test_that("Test correct concurrency of RRDD.compute()", {
   expect_equal(count, 1000)
 })
 
-#sparkR.session.stop()
+sparkR.session.stop()

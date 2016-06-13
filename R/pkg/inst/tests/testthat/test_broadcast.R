@@ -48,4 +48,4 @@ test_that("without using broadcast variable", {
   expect_equal(actual, expected)
 })
 
-#sparkR.session.stop()
+sparkR.session.stop()

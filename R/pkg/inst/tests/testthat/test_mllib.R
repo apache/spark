@@ -454,4 +454,4 @@ test_that("spark.survreg", {
   }
 })
 
-#sparkR.session.stop()
+sparkR.session.stop()

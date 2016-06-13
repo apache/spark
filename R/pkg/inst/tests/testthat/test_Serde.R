@@ -76,4 +76,4 @@ test_that("SerDe of list of lists", {
   expect_equal(x, y)
 })
 
-#sparkR.session.stop()
+sparkR.session.stop()

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.api.r
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream, DataInputStream, DataOutputStream}
+import java.util.{Map => JMap}
 
 import scala.collection.JavaConverters._
 import scala.util.matching.Regex
@@ -36,16 +37,30 @@ import org.apache.spark.sql.types._
 private[sql] object SQLUtils {
   SerDe.registerSqlSerDe((readSqlObject, writeSqlObject))
 
-  def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
+  private[this] def withHiveExternalCatalog(sc: SparkContext): SparkContext = {
     sc.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
     sc
   }
 
-  def getOrCreateSparkSession(jsc: JavaSparkContext, enableHiveSupport: Boolean): SparkSession = {
-    if (SparkSession.hiveClassesArePresent && enableHiveSupport) {
+  def getOrCreateSparkSession(
+      jsc: JavaSparkContext,
+      sparkConfigMap: JMap[Object, Object],
+      enableHiveSupport: Boolean): SparkSession = {
+    val spark = if (SparkSession.hiveClassesArePresent && enableHiveSupport) {
       SparkSession.builder().sparkContext(withHiveExternalCatalog(jsc.sc)).getOrCreate()
     } else {
       SparkSession.builder().sparkContext(jsc.sc).getOrCreate()
+    }
+    setSparkContextSessionConf(spark, sparkConfigMap)
+    spark
+  }
+
+  def setSparkContextSessionConf(spark: SparkSession, sparkConfigMap: JMap[Object, Object]) = {
+    for ((name, value) <- sparkConfigMap.asScala) {
+      spark.conf.set(name.toString, value.toString)
+    }
+    for ((name, value) <- sparkConfigMap.asScala) {
+      spark.sparkContext.conf.set(name.toString, value.toString)
     }
   }
 

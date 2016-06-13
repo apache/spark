@@ -101,4 +101,4 @@ test_that("zipPartitions() on RDDs", {
   unlink(fileName)
 })
 
-#sparkR.session.stop()
+sparkR.session.stop()

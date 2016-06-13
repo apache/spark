@@ -122,7 +122,12 @@ sparkR.init <- function(
   sparkJars = "",
   sparkPackages = "") {
   .Deprecated("sparkR.session.getOrCreate")
-  sparkR.sparkContext(master, appName, sparkHome, sparkEnvir, sparkExecutorEnv, sparkJars,
+  sparkR.sparkContext(master,
+     appName,
+     sparkHome,
+     convertNamedListToEnv(sparkEnvir),
+     convertNamedListToEnv(sparkExecutorEnv),
+     sparkJars,
      sparkPackages)
 }
 
@@ -131,21 +136,19 @@ sparkR.sparkContext <- function(
   master = "",
   appName = "SparkR",
   sparkHome = Sys.getenv("SPARK_HOME"),
-  sparkEnvir = list(),
-  sparkExecutorEnv = list(),
+  sparkEnvirMap = new.env(),
+  sparkExecutorEnvMap = new.env(),
   sparkJars = "",
   sparkPackages = "") {
 
   if (exists(".sparkRjsc", envir = .sparkREnv)) {
     cat(paste("Re-using existing Spark Context.",
-              "Please stop SparkR with sparkR.session.stop() or restart R to create a new Spark Context\n"))
+              "Call sparkR.session.stop() or restart R to create a new Spark Context\n"))
     return(get(".sparkRjsc", envir = .sparkREnv))
   }
 
   jars <- processSparkJars(sparkJars)
   packages <- processSparkPackages(sparkPackages)
-
-  sparkEnvirMap <- convertNamedListToEnv(sparkEnvir)
 
   existingPort <- Sys.getenv("EXISTING_SPARKR_BACKEND_PORT", "")
   if (existingPort != "") {
@@ -204,7 +207,6 @@ sparkR.sparkContext <- function(
     sparkHome <- suppressWarnings(normalizePath(sparkHome))
   }
 
-  sparkExecutorEnvMap <- convertNamedListToEnv(sparkExecutorEnv)
   if (is.null(sparkExecutorEnvMap$LD_LIBRARY_PATH)) {
     sparkExecutorEnvMap[["LD_LIBRARY_PATH"]] <-
       paste0("$LD_LIBRARY_PATH:", Sys.getenv("LD_LIBRARY_PATH"))
@@ -298,6 +300,9 @@ sparkRHive.init <- function(jsc = NULL) {
 
 #' Get the existing SparkSession or initialize a new SparkSession.
 #'
+#' Additional Spark properties can be set (...), and these named parameters takes priority over
+#' over values in master, appName, named lists of sparkConfig.
+#'
 #' @param master The Spark master URL
 #' @param appName Application name to register with cluster manager
 #' @param sparkHome Spark Home directory
@@ -313,13 +318,13 @@ sparkRHive.init <- function(jsc = NULL) {
 #' df <- read.json(path)
 #'
 #' sparkR.session.getOrCreate("local[2]", "SparkR", "/home/spark")
-#' sparkR.session.getOrCreate("local[2]", "SparkR", "/home/spark",
-#'                            list(spark.executor.memory="1g"))
 #' sparkR.session.getOrCreate("yarn-client", "SparkR", "/home/spark",
 #'                            list(spark.executor.memory="4g"),
 #'                            list(LD_LIBRARY_PATH="/directory of JVM libraries (libjvm.so) on workers/"),
 #'                            c("one.jar", "two.jar", "three.jar"),
 #'                            c("com.databricks:spark-avro_2.10:2.0.1"))
+#' sparkR.session.getOrCreate(spark.master = "yarn-client",
+#'                            spark.executor.memory = "4g")
 #'}
 #' @note since 2.0.0
 
@@ -334,20 +339,39 @@ sparkR.session.getOrCreate <- function(
   enableHiveSupport = TRUE,
   ...) {
 
+  sparkConfigMap <- convertNamedListToEnv(sparkConfig)
+  namedParams <- list(...)
+  if (length(namedParams) > 0) {
+    paramMap <- convertNamedListToEnv(namedParams)
+    # Override for certain named parameters
+    if (exists("spark.master", envir = paramMap)) {
+      master = paramMap[["spark.master"]]
+    }
+    if (exists("spark.app.name", envir = paramMap)) {
+      appName = paramMap[["spark.app.name"]]
+    }
+    overrideEnvs(sparkConfigMap, paramMap)
+  }
+
+  sparkExecutorConfigMap <- convertNamedListToEnv(sparkExecutorConfig)
   if (!exists(".sparkRjsc", envir = .sparkREnv)) {
-    sparkR.sparkContext(master, appName, sparkHome, sparkConfig, sparkExecutorConfig, sparkJars,
-       sparkPackages)
+    sparkR.sparkContext(master, appName, sparkHome, sparkConfigMap, sparkExecutorConfigMap,
+       sparkJars, sparkPackages)
     stopifnot(exists(".sparkRjsc", envir = .sparkREnv))
   }
 
   if (exists(".sparkRsession", envir = .sparkREnv)) {
     sparkSession <- get(".sparkRsession", envir = .sparkREnv)
-    # TODO: apply config
+    # Apply config to Spark Context and Spark Session if already there
+    callJStatic("org.apache.spark.sql.api.r.SQLUtils",
+                "setSparkContextSessionConf",
+                sparkConfigMap)
   } else {
     jsc <- get(".sparkRjsc", envir = .sparkREnv)
     sparkSession <- callJStatic("org.apache.spark.sql.api.r.SQLUtils",
                                 "getOrCreateSparkSession",
                                 jsc,
+                                sparkConfigMap,
                                 enableHiveSupport)
     assign(".sparkRsession", sparkSession, envir = .sparkREnv)
   }
