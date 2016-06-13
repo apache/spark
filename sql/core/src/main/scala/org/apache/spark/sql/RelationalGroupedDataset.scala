@@ -409,19 +409,17 @@ class RelationalGroupedDataset protected[sql](
       packageNames: Array[Byte],
       broadcastVars: Array[Broadcast[Object]],
       outputSchema: StructType): DataFrame = {
-      val broadcastVarObj = broadcastVars.map(_.asInstanceOf[Broadcast[Object]])
       val groupingNamedExpressions = groupingExprs.map(alias)
       val groupingCols = groupingNamedExpressions.map(Column(_))
       val groupingDataFrame = df.select(groupingCols : _*)
       val groupingAttributes = groupingNamedExpressions.map(_.toAttribute)
-      val realOutputSchema = if (outputSchema == null) SERIALIZED_R_DATA_SCHEMA else outputSchema
       Dataset.ofRows(
         df.sparkSession,
         FlatMapGroupsInR(
           f,
           packageNames,
-          broadcastVarObj,
-          realOutputSchema,
+          broadcastVars,
+          outputSchema,
           groupingDataFrame.exprEnc.deserializer,
           df.exprEnc.deserializer,
           df.exprEnc.schema,
