@@ -47,7 +47,7 @@ private[sql] class SharedState(val sparkContext: SparkContext) {
    * default hadoop configuration of Spark, with custom configurations inside `hive-site.xml`.
    */
   lazy val hadoopConf: Configuration = {
-    val conf = sparkContext.hadoopConfiguration
+    val conf = new Configuration(sparkContext.hadoopConfiguration)
     val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
     if (configFile != null) {
       conf.addResource(configFile)
