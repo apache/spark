@@ -87,7 +87,8 @@ class Int2StrJVM(object):
         int2str = Int2Str(suffix=suffix, inputCol=inputCol, outputCol=outputCol)
         wrapper = TransformerWrapper(df.sql_ctx, int2str)
         sc = SparkContext._active_spark_context
-        self.jtransformer = sc._jvm.org.apache.spark.ml.api.python.PythonTransformer(wrapper)
+        self.jtransformer =\
+            sc._jvm.org.apache.spark.ml.api.python.PythonTransformer(wrapper, wrapper.getUid())
         self.df = df
 
     def transform(self):
