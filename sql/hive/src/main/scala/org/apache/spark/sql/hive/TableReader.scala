@@ -401,7 +401,8 @@ private[hive] object HadoopTableReader extends HiveInspectors with Logging {
           (value: Any, row: MutableRow, ordinal: Int) =>
             row.update(ordinal, oi.getPrimitiveJavaObject(value))
         case oi =>
-          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrap(value, oi)
+          val unwrapper = unwrapperFor(oi)
+          (value: Any, row: MutableRow, ordinal: Int) => row(ordinal) = unwrapper(value)
       }
     }
 
