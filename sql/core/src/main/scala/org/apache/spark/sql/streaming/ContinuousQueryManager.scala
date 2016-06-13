@@ -41,7 +41,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
   private val listenerBus = new ContinuousQueryListenerBus(sparkSession.sparkContext.listenerBus)
-  private val activeQueries = new mutable.HashMap[String, ContinuousQuery]
+  private val activeQueries = new mutable.HashMap[Long, ContinuousQuery]
   private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
 
@@ -57,13 +57,12 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   }
 
   /**
-   * Returns an active query from this SQLContext or throws exception if bad name
+   * Returns the query if there is an active query with the given id, or null.
    *
    * @since 2.0.0
    */
-  def get(name: String): ContinuousQuery = activeQueriesLock.synchronized {
-    activeQueries.getOrElse(name,
-      throw new IllegalArgumentException(s"There is no active query with name $name"))
+  def get(id: Long): ContinuousQuery = activeQueriesLock.synchronized {
+    activeQueries.get(id).orNull
   }
 
   /**
@@ -198,7 +197,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
     activeQueriesLock.synchronized {
       val id = StreamExecution.nextId
       val name = userSpecifiedName.getOrElse(s"query-$id")
-      if (activeQueries.contains(name)) {
+      if (activeQueries.values.exists(_.name == name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
@@ -260,7 +259,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
         triggerClock,
         outputMode)
       query.start()
-      activeQueries.put(name, query)
+      activeQueries.put(id, query)
       query
     }
   }
@@ -268,7 +267,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   /** Notify (by the ContinuousQuery) that the query has been terminated */
   private[sql] def notifyQueryTermination(terminatedQuery: ContinuousQuery): Unit = {
     activeQueriesLock.synchronized {
-      activeQueries -= terminatedQuery.name
+      activeQueries -= terminatedQuery.id
     }
     awaitTerminationLock.synchronized {
       if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {

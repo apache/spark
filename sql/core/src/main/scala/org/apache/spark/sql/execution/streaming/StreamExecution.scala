@@ -505,7 +505,7 @@ class StreamExecution(
 }
 
 private[sql] object StreamExecution {
-  private val _nextId = new AtomicLong()
+  private val _nextId = new AtomicLong(0)
 
-  def nextId: Long = _nextId.getAndDecrement()
+  def nextId: Long = _nextId.getAndIncrement()
 }
