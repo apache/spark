@@ -242,26 +242,6 @@ class SparkContext(object):
         Throws error if a SparkContext is already running.
         """
 
-        gw = SparkContext._gateway
-
-        # start callback server
-        # getattr will fallback to JVM, so we cannot test by hasattr()
-        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
-            gw.callback_server_parameters.eager_load = True
-            gw.callback_server_parameters.daemonize = True
-            gw.callback_server_parameters.daemonize_connections = True
-            gw.callback_server_parameters.port = 0
-            gw.start_callback_server(gw.callback_server_parameters)
-            cbport = gw._callback_server.server_socket.getsockname()[1]
-            gw._callback_server.port = cbport
-            # gateway with real port
-            gw._python_proxy_port = gw._callback_server.port
-            # get the GatewayServer object in JVM by ID
-            jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
-            # update the port of CallbackClient with real port
-            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
-
-        # Original _ensure_initialized:
         with SparkContext._lock:
             if not SparkContext._gateway:
                 SparkContext._gateway = gateway or launch_gateway()
@@ -283,6 +263,25 @@ class SparkContext(object):
                             callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
+
+        gw = SparkContext._gateway
+
+        # start callback server
+        # getattr will fallback to JVM, so we cannot test by hasattr()
+        if "_callback_server" not in gw.__dict__ or gw._callback_server is None:
+            gw.callback_server_parameters.eager_load = True
+            gw.callback_server_parameters.daemonize = True
+            gw.callback_server_parameters.daemonize_connections = True
+            gw.callback_server_parameters.port = 0
+            gw.start_callback_server(gw.callback_server_parameters)
+            cbport = gw._callback_server.server_socket.getsockname()[1]
+            gw._callback_server.port = cbport
+            # gateway with real port
+            gw._python_proxy_port = gw._callback_server.port
+            # get the GatewayServer object in JVM by ID
+            jgws = JavaObject("GATEWAY_SERVER", gw._gateway_client)
+            # update the port of CallbackClient with real port
+            jgws.resetCallbackClient(jgws.getCallbackClient().getAddress(), gw._python_proxy_port)
 
     def __getnewargs__(self):
         # This method is called when attempting to pickle SparkContext, which is always an error:
