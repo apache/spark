@@ -490,4 +490,85 @@ class SubquerySuite extends QueryTest with SharedSQLContext {
         """.stripMargin),
       Row(3) :: Nil)
   }
+
+  test("SPARK-15370: COUNT bug in WHERE clause (Filter)") {
+    // Case 1: Canonical example of the COUNT bug
+    checkAnswer(
+      sql("select l.a from l where (select count(*) from r where l.a = r.c) < l.a"),
+      Row(1) :: Row(1) :: Row(3) :: Row(6) :: Nil)
+    // Case 2: count(*) = 0; could be rewritten to NOT EXISTS but currently uses
+    // a rewrite that is vulnerable to the COUNT bug
+    checkAnswer(
+      sql("select l.a from l where (select count(*) from r where l.a = r.c) = 0"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+    // Case 3: COUNT bug without a COUNT aggregate
+    checkAnswer(
+      sql("select l.a from l where (select sum(r.d) is null from r where l.a = r.c)"),
+      Row(1) :: Row(1) ::Row(null) :: Row(null) :: Row(6) :: Nil)
+  }
+
+  test("SPARK-15370: COUNT bug in SELECT clause (Project)") {
+    checkAnswer(
+      sql("select a, (select count(*) from r where l.a = r.c) as cnt from l"),
+      Row(1, 0) :: Row(1, 0) :: Row(2, 2) :: Row(2, 2) :: Row(3, 1) :: Row(null, 0)
+        :: Row(null, 0) :: Row(6, 1) :: Nil)
+  }
+
+  test("SPARK-15370: COUNT bug in HAVING clause (Filter)") {
+    checkAnswer(
+      sql("select l.a as grp_a from l group by l.a " +
+        "having (select count(*) from r where grp_a = r.c) = 0 " +
+        "order by grp_a"),
+      Row(null) :: Row(1) :: Nil)
+  }
+
+  test("SPARK-15370: COUNT bug in Aggregate") {
+    checkAnswer(
+      sql("select l.a as aval, sum((select count(*) from r where l.a = r.c)) as cnt " +
+        "from l group by l.a order by aval"),
+      Row(null, 0) :: Row(1, 0) :: Row(2, 4) :: Row(3, 1) :: Row(6, 1)  :: Nil)
+  }
+
+  test("SPARK-15370: COUNT bug negative examples") {
+    // Case 1: Potential COUNT bug case that was working correctly prior to the fix
+    checkAnswer(
+      sql("select l.a from l where (select sum(r.d) from r where l.a = r.c) is null"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Row(6) :: Nil)
+    // Case 2: COUNT aggregate but no COUNT bug due to > 0 test.
+    checkAnswer(
+      sql("select l.a from l where (select count(*) from r where l.a = r.c) > 0"),
+      Row(2) :: Row(2) :: Row(3) :: Row(6) :: Nil)
+    // Case 3: COUNT inside aggregate expression but no COUNT bug.
+    checkAnswer(
+      sql("select l.a from l where (select count(*) + sum(r.d) from r where l.a = r.c) = 0"),
+      Nil)
+  }
+
+  test("SPARK-15370: COUNT bug in subquery in subquery in subquery") {
+    checkAnswer(
+      sql("""select l.a from l
+            |where (
+            |    select cntPlusOne + 1 as cntPlusTwo from (
+            |        select cnt + 1 as cntPlusOne from (
+            |            select sum(r.c) s, count(*) cnt from r where l.a = r.c having cnt = 0
+            |        )
+            |    )
+            |) = 2""".stripMargin),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-15370: COUNT bug with nasty predicate expr") {
+    checkAnswer(
+      sql("select l.a from l where " +
+        "(select case when count(*) = 1 then null else count(*) end as cnt " +
+        "from r where l.a = r.c) = 0"),
+      Row(1) :: Row(1) :: Row(null) :: Row(null) :: Nil)
+  }
+
+  test("SPARK-15370: COUNT bug with attribute ref in subquery input and output ") {
+    checkAnswer(
+      sql("select l.b, (select (r.c + count(*)) is null from r where l.a = r.c) from l"),
+      Row(1.0, false) :: Row(1.0, false) :: Row(2.0, true) :: Row(2.0, true) ::
+        Row(3.0, false) :: Row(5.0, true) :: Row(null, false) :: Row(null, true) :: Nil)
+  }
 }
