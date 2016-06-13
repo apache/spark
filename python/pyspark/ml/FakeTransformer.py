@@ -27,6 +27,7 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
+from pyspark.sql.functions import concat, col, lit
 
 __all__ = ['Int2Str']
 
@@ -76,5 +77,5 @@ class Int2Str(Transformer, HasInputCol, HasOutputCol):
         ouc = self.getOutputCol()
         suff2 = dataset.count()
         suff = self.getSuffix()
-        return dataset.withColumn(ouc, dataset[inc].cast("string") + suff + str(suff2))
+        return dataset.withColumn(ouc, concat(dataset[inc], lit(suff), lit(str(suff2))))
 
