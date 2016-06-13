@@ -128,10 +128,9 @@ class FileStreamSinkSuite extends StreamTest {
 
     try {
       query =
-        df.write
-          .format("parquet")
+        df.writeStream
           .option("checkpointLocation", checkpointDir)
-          .startStream(outputDir)
+          .parquet(outputDir)
 
       inputData.addData(1, 2, 3)
 
@@ -162,11 +161,10 @@ class FileStreamSinkSuite extends StreamTest {
       query =
         ds.map(i => (i, i * 1000))
           .toDF("id", "value")
-          .write
-          .format("parquet")
+          .writeStream
           .partitionBy("id")
           .option("checkpointLocation", checkpointDir)
-          .startStream(outputDir)
+          .parquet(outputDir)
 
       inputData.addData(1, 2, 3)
       failAfter(streamingTimeout) {
@@ -246,13 +244,13 @@ class FileStreamSinkSuite extends StreamTest {
         val writer =
           ds.map(i => (i, i * 1000))
             .toDF("id", "value")
-            .write
+            .writeStream
         if (format.nonEmpty) {
           writer.format(format.get)
         }
         query = writer
             .option("checkpointLocation", checkpointDir)
-            .startStream(outputDir)
+            .save(outputDir)
       } finally {
         if (query != null) {
           query.stop()
