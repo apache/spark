@@ -304,9 +304,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
-   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
-   * having malformed string created by `PERMISSIVE` mode. This overrides
-   * `spark.sql.columnNameOfCorruptRecord`.</li>
+   * <li>`columnNameOfCorruptRecord` (default is the value specified in
+   * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    *
    * @since 1.6.0
    */
@@ -361,8 +361,9 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads a CSV file and returns the result as a [[DataFrame]].
    *
-   * This function goes through the input once to determine the input schema. To avoid going
-   * through the entire data once, specify the schema explicitly using [[schema]].
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using [[schema]].
    *
    * You can set the following CSV-specific options to deal with CSV files:
    * <li>`sep` (default `,`): sets the single character as a separator for each
@@ -370,12 +371,16 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
    * type.</li>
    * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
-   * the separator can be part of the value.</li>
+   * the separator can be part of the value. If you would like to turn off quotations, you need to
+   * set not `null` but an empty string. This behaviour is different form
+   * `com.databricks.spark.csv`.</li>
    * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
    * an already quoted value.</li>
    * <li>`comment` (default empty string): sets the single character used for skipping lines
    * beginning with this character. By default, it is disabled.</li>
    * <li>`header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
+   * requires one extra pass over the data.</li>
    * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
    * from values being read should be skipped.</li>
    * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
@@ -412,6 +417,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
    * [[DataFrame]] if no paths are passed in.
    *
+   * You can set the following Parquet-specific option(s) for reading Parquet files:
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
+   * whether we should merge schemas collected from all Parquet part-files. This will override
+   * `spark.sql.parquet.mergeSchema`.</li>
+   *
    * @since 1.4.0
    */
   @scala.annotation.varargs
@@ -440,14 +450,10 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
+   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * "value", and followed by partitioned columns if there are any.
    *
-   * If the directory structure of the text files contains partitioning information, those are
-   * ignored in the resulting Dataset. To include partitioning information as columns, use
-   * `read.format("text").load("...")`.
-   *
-   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * Each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
    *   spark.read.text("/path/to/spark/README.md")
@@ -457,12 +463,33 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * }}}
    *
    * @param paths input path
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+
+  /**
+   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * If the directory structure of the text files contains partitioning information, those are
+   * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
+   *
+   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * {{{
+   *   // Scala:
+   *   spark.read.textFile("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   spark.read().textFile("/path/to/spark/README.md")
+   * }}}
+   *
+   * @param paths input path
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).select("value")
-      .as[String](sparkSession.implicits.newStringEncoder)
+  def textFile(paths: String*): Dataset[String] = {
+    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

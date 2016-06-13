@@ -46,7 +46,7 @@ public final class JavaWordCount {
       .appName("JavaWordCount")
       .getOrCreate();
 
-    JavaRDD<String> lines = spark.read().text(args[0]).javaRDD();
+    JavaRDD<String> lines = spark.read().textFile(args[0]).javaRDD();
 
     JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override

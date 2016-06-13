@@ -154,7 +154,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
           // OK
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(
+        PartitioningUtils.validatePartitionColumn(
           r.schema, part.keySet.toSeq, conf.caseSensitiveAnalysis)
 
         // Get all input data source relations of the query.
@@ -205,7 +205,7 @@ private[sql] case class PreWriteCheck(conf: SQLConf, catalog: SessionCatalog)
           // OK
         }
 
-        PartitioningUtils.validatePartitionColumnDataTypes(
+        PartitioningUtils.validatePartitionColumn(
           c.child.schema, c.partitionColumns, conf.caseSensitiveAnalysis)
 
         for {

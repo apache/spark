@@ -144,25 +144,20 @@ private[netty] class Dispatcher(nettyEnv: NettyRpcEnv) extends Logging {
       endpointName: String,
       message: InboxMessage,
       callbackIfStopped: (Exception) => Unit): Unit = {
-    val shouldCallOnStop = synchronized {
+    val error = synchronized {
       val data = endpoints.get(endpointName)
-      if (stopped || data == null) {
-        true
+      if (stopped) {
+        Some(new RpcEnvStoppedException())
+      } else if (data == null) {
+        Some(new SparkException(s"Could not find $endpointName."))
       } else {
         data.inbox.post(message)
         receivers.offer(data)
-        false
+        None
       }
     }
-    if (shouldCallOnStop) {
-      // We don't need to call `onStop` in the `synchronized` block
-      val error = if (stopped) {
-          new RpcEnvStoppedException()
-        } else {
-          new SparkException(s"Could not find $endpointName or it has been stopped.")
-        }
-      callbackIfStopped(error)
-    }
+    // We don't need to call `onStop` in the `synchronized` block
+    error.foreach(callbackIfStopped)
   }
 
   def stop(): Unit = {

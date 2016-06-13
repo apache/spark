@@ -115,10 +115,22 @@ object RowAgg extends Aggregator[Row, Int, Int] {
   override def outputEncoder: Encoder[Int] = Encoders.scalaInt
 }
 
+object NullResultAgg extends Aggregator[AggData, AggData, AggData] {
+  override def zero: AggData = AggData(0, "")
+  override def reduce(b: AggData, a: AggData): AggData = AggData(b.a + a.a, b.b + a.b)
+  override def finish(reduction: AggData): AggData = {
+    if (reduction.a % 2 == 0) null else reduction
+  }
+  override def merge(b1: AggData, b2: AggData): AggData = AggData(b1.a + b2.a, b1.b + b2.b)
+  override def bufferEncoder: Encoder[AggData] = Encoders.product[AggData]
+  override def outputEncoder: Encoder[AggData] = Encoders.product[AggData]
+}
+
 
 class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
-
   import testImplicits._
+
+  private implicit val ordering = Ordering.by((c: AggData) => c.a -> c.b)
 
   test("typed aggregation: TypedAggregator") {
     val ds = Seq(("a", 10), ("a", 20), ("b", 1), ("b", 2), ("c", 1)).toDS()
@@ -204,7 +216,7 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
       ds.select(expr("avg(a)").as[Double], ComplexBufferAgg.toColumn),
       (1.5, 2))
 
-    checkDataset(
+    checkDatasetUnorderly(
       ds.groupByKey(_.b).agg(ComplexBufferAgg.toColumn),
       ("one", 1), ("two", 1))
   }
@@ -270,5 +282,12 @@ class DatasetAggregatorSuite extends QueryTest with SharedSQLContext {
     assert(df.groupBy($"j").agg(RowAgg.toColumn).columns.last ==
       "RowAgg(org.apache.spark.sql.Row)")
     assert(df.groupBy($"j").agg(RowAgg.toColumn as "agg1").columns.last == "agg1")
+  }
+
+  test("SPARK-15814 Aggregator can return null result") {
+    val ds = Seq(AggData(1, "one"), AggData(2, "two")).toDS()
+    checkDatasetUnorderly(
+      ds.groupByKey(_.a).agg(NullResultAgg.toColumn),
+      1 -> AggData(1, "one"), 2 -> null)
   }
 }
