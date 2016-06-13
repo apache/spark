@@ -69,7 +69,7 @@ private[hive] trait HiveStrategies {
           predicate.references.subsetOf(partitionKeyIds)
         }
         val additionalPartPredicates =
-          PhysicalOperation.partitionPrunningFromDisjunction(
+          PhysicalOperation.extractPartitionKeyExpression(
             otherPredicates.foldLeft[Expression](Literal(true))(And(_, _)), partitionKeyIds)
 
         pruneFilterProject(

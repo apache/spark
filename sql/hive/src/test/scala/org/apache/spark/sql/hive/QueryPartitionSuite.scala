@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
-import org.apache.spark.sql._
+
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, Not}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -26,6 +26,7 @@ import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.QueryTest
 import org.apache.spark.util.Utils
 
 class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
@@ -73,19 +74,19 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
     withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "true")) {
       val testData = sparkContext.parallelize(
         (1 to 10).map(i => TestData(i, i.toString))).toDF()
-      testData.registerTempTable("testData")
+      testData.createOrReplaceTempView("testData")
 
       val testData2 = sparkContext.parallelize(
         (11 to 20).map(i => TestData(i, i.toString))).toDF()
-      testData2.registerTempTable("testData2")
+      testData2.createOrReplaceTempView("testData2")
 
       val testData3 = sparkContext.parallelize(
         (21 to 30).map(i => TestData(i, i.toString))).toDF()
-      testData3.registerTempTable("testData3")
+      testData3.createOrReplaceTempView("testData3")
 
       val testData4 = sparkContext.parallelize(
         (31 to 40).map(i => TestData(i, i.toString))).toDF()
-      testData4.registerTempTable("testData4")
+      testData4.createOrReplaceTempView("testData4")
 
       val tmpDir = Files.createTempDir()
       // create the table for test
@@ -103,7 +104,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       checkAnswer(sql("select key,value from table_with_partition"),
         testData.collect ++ testData2.collect ++ testData3.collect ++ testData4.collect)
 
-      sql("CREAT TABLE createAndInsertTest AS SELECT * FROM table_with_partition")
+      sql("CREATE TABLE createAndInsertTest AS SELECT * FROM table_with_partition")
       checkAnswer(sql("select key,value from createAndInsertTest"),
         testData.collect ++ testData2.collect ++ testData3.collect ++ testData4.collect)
 
@@ -126,10 +127,10 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       checkAnswer(
         sql(
           """select key,value from table_with_partition
-            | where !(key = 4 and ds > 5)""".stripMargin),
+            | where !(key = 4 and ds > 35)""".stripMargin),
         sql(
-          """select key,value from table_with_partition
-            | where !(key = 4 and ds > 5)""".stripMargin).collect())
+          """select key,value from createAndInsertTest
+            | where !(key = 4 and ds > 35)""".stripMargin).collect())
 
       sql("DROP TABLE table_with_partition")
       sql("DROP TABLE IF EXISTS createAndInsertTest")
@@ -139,7 +140,7 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
   test("extract partition expression from disjunction") {
     def check(partitionKeys: AttributeSet, predicate: Expression, expected: Option[Expression])
     : Unit = {
-      val answer = PhysicalOperation.partitionPrunningFromDisjunction(predicate, partitionKeys)
+      val answer = PhysicalOperation.extractPartitionKeyExpression(predicate, partitionKeys)
       assert(expected === answer, s"Expected: ${expected} but got ${answer} for ${predicate}")
     }
 

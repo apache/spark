@@ -94,19 +94,19 @@ object PhysicalOperation extends PredicateHelper {
   }
 
   /**
-   * Drop the non-partition key expression in the disjunctions, to optimize the partition pruning.
-   * For instances: (We assume part1 & part2 are the partition keys)
+   * Drop the non-partition key expression from the given expression, to optimize the
+   * partition pruning. For instances: (We assume part1 & part2 are the partition keys):
    * (part1 == 1 and a > 3) or (part2 == 2 and a < 5)  ==> (part1 == 1 or part1 == 2)
    * (part1 == 1 and a > 3) or (a < 100) => None
    * (a > 100 && b < 100) or (part1 = 10) => None
    * (a > 100 && b < 100 and part1 = 10) or (part1 == 2) => (part1 = 10 or part1 == 2)
-   * @param predicate disjunctions
+   * @param predicate The given expression
    * @param partitionKeyIds partition keys in attribute set
    * @return
    */
-  def partitionPrunningFromDisjunction(
+  def extractPartitionKeyExpression(
     predicate: Expression, partitionKeyIds: AttributeSet): Option[Expression] = {
-    // ignore the pure non-partition key expression in conjunction of the expression tree
+    // drop the non-partition key expression in conjunction of the expression tree
     val additionalPartPredicate = predicate transformUp {
       case a @ And(left, right) if a.deterministic &&
         left.references.intersect(partitionKeyIds).isEmpty => right
