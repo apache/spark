@@ -193,14 +193,13 @@ class RandomForestRegressionModel private[ml] (
 
     val varianceUDF = udf { (features: Any) =>
       val leafNodes = bcastModel.value.returnLeafNodes(features.asInstanceOf[Vector])
-      val variance = leafNodes.map(_.impurityStats.calculate()).sum / getNumTrees
-      val predSquared = leafNodes.map(x => math.pow(x.prediction, 2)).sum / getNumTrees
-      val pred = leafNodes.map(_.prediction).sum / getNumTrees
-      variance + predSquared - math.pow(pred, 2)
+      leafNodes.map { leafNode =>
+        leafNode.impurityStats.calculate() + math.pow(leafNode.prediction, 2)
+      }.sum / getNumTrees
     }
     val variance = varianceUDF(col($(featuresCol)))
 
-    output = output.withColumn($(varianceCol), variance)
+    output = output.withColumn($(varianceCol), variance - pow(predictions, 2))
     output.toDF
   }
 
