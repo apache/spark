@@ -19,7 +19,7 @@ import sys
 if sys.version > '3':
     basestring = str
 
-from pyspark import since, keyword_only
+from pyspark import since, keyword_only, SparkContext
 from pyspark.rdd import ignore_unicode_prefix
 from pyspark.ml import Transformer
 from pyspark.ml.linalg import _convert_to_vector
@@ -86,7 +86,8 @@ class Int2StrJVM(object):
     def __init__(self, suffix, inputCol, outputCol, df):
         int2str = Int2Str(suffix=suffix, inputCol=inputCol, outputCol=outputCol)
         wrapper = TransformerWrapper(df.sql_ctx, int2str)
-        self.jtransformer = _jvm().org.apache.spark.ml.api.python.PythonTransformer(wrapper)
+        sc = SparkContext._active_spark_context
+        self.jtransformer = sc._jvm.org.apache.spark.ml.api.python.PythonTransformer(wrapper)
         self.df = df
 
     def transform(self):
