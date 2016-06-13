@@ -428,7 +428,7 @@ class DAGScheduler(
         toVisit.dependencies.foreach {
           case shuffleDep: ShuffleDependency[_, _, _] =>
             parents += shuffleDep
-          case dependency: Any =>
+          case dependency =>
             waitingForVisit.push(dependency.rdd)
         }
       }
