@@ -139,7 +139,7 @@ object PowerIterationClusteringModel extends MLReadable[PowerIterationClustering
   @Since("2.0.0")
   override def load(path: String): PowerIterationClusteringModel = ???
 
-  /** [[MLWriter]] instance for [[KMeansModel]] */
+  /** [[MLWriter]] instance for [[PowerIterationClusteringModel]] */
   private[PowerIterationClusteringModel] class PowerIterationClusteringModelWriter
   (instance: PowerIterationClusteringModel) extends MLWriter {
 
