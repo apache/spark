@@ -36,7 +36,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
   }
 
   test("SQLContext.read.text() API") {
-    verifyFrame(spark.read.text(testFile).toDF())
+    verifyFrame(spark.read.text(testFile))
   }
 
   test("SPARK-12562 verify write.text() can handle column name beyond `value`") {
@@ -45,7 +45,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
     val tempFile = Utils.createTempDir()
     tempFile.delete()
     df.write.text(tempFile.getCanonicalPath)
-    verifyFrame(spark.read.text(tempFile.getCanonicalPath).toDF())
+    verifyFrame(spark.read.text(tempFile.getCanonicalPath))
 
     Utils.deleteRecursively(tempFile)
   }
@@ -64,20 +64,20 @@ class TextSuite extends QueryTest with SharedSQLContext {
     }
   }
 
-  test("reading partitioned data using read.text()") {
+  test("reading partitioned data using read.textFile()") {
     val partitionedData = Thread.currentThread().getContextClassLoader
       .getResource("text-partitioned").toString
-    val df = spark.read.text(partitionedData)
-    val data = df.collect()
+    val ds = spark.read.textFile(partitionedData)
+    val data = ds.collect()
 
-    assert(df.schema == new StructType().add("value", StringType))
+    assert(ds.schema == new StructType().add("value", StringType))
     assert(data.length == 2)
   }
 
-  test("support for partitioned reading") {
+  test("support for partitioned reading using read.text()") {
     val partitionedData = Thread.currentThread().getContextClassLoader
       .getResource("text-partitioned").toString
-    val df = spark.read.format("text").load(partitionedData)
+    val df = spark.read.text(partitionedData)
     val data = df.filter("year = '2015'").select("value").collect()
 
     assert(data(0) == Row("2015-test"))
@@ -94,7 +94,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
         testDf.write.option("compression", codecName).mode(SaveMode.Overwrite).text(tempDirPath)
         val compressedFiles = new File(tempDirPath).listFiles()
         assert(compressedFiles.exists(_.getName.endsWith(s".txt$extension")))
-        verifyFrame(spark.read.text(tempDirPath).toDF())
+        verifyFrame(spark.read.text(tempDirPath))
     }
 
     val errMsg = intercept[IllegalArgumentException] {
@@ -121,7 +121,7 @@ class TextSuite extends QueryTest with SharedSQLContext {
         .options(extraOptions).mode(SaveMode.Overwrite).text(tempDirPath)
       val compressedFiles = new File(tempDirPath).listFiles()
       assert(compressedFiles.exists(!_.getName.endsWith(".txt.gz")))
-      verifyFrame(spark.read.options(extraOptions).text(tempDirPath).toDF())
+      verifyFrame(spark.read.options(extraOptions).text(tempDirPath))
     }
   }
 

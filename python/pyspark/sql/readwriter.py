@@ -291,10 +291,10 @@ class DataFrameReader(object):
     @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths):
-        """Loads a text file and returns a :class:`DataFrame` with a single string column named "value".
-        If the directory structure of the text files contains partitioning information,
-        those are ignored in the resulting DataFrame. To include partitioning information as
-        columns, use ``read.format('text').load(...)``.
+        """
+        Loads text files and returns a :class:`DataFrame` whose schema starts with a
+        string column named "value", and followed by partitioned columns if there
+        are any.
 
         Each line in the text file is a new row in the resulting DataFrame.
 

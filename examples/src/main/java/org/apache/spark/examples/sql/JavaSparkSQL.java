@@ -59,7 +59,7 @@ public class JavaSparkSQL {
     System.out.println("=== Data source: RDD ===");
     // Load a text file and convert each line to a Java Bean.
     String file = "examples/src/main/resources/people.txt";
-    JavaRDD<Person> people = spark.read().text(file).javaRDD().map(
+    JavaRDD<Person> people = spark.read().textFile(file).javaRDD().map(
       new Function<String, Person>() {
         @Override
         public Person call(String line) {
