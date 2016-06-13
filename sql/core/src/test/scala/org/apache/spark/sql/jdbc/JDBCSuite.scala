@@ -233,6 +233,10 @@ class JDBCSuite extends SparkFunSuite
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE 'fr%'")).collect().size == 1)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%ed'")).collect().size == 1)
     assert(checkPushdown(sql("SELECT * FROM foobar WHERE NAME LIKE '%re%'")).collect().size == 1)
+    val orPrecedenceSql =
+      "SELECT * FROM foobar WHERE (NAME = 'fred' OR THEID = 100) AND THEID < 1"
+    assert(checkPushdown(sql(orPrecedenceSql)).collect().size == 0)
+
     assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NULL")).collect().size == 1)
     assert(checkPushdown(sql("SELECT * FROM nulltypes WHERE A IS NOT NULL")).collect().size == 0)
 
