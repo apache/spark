@@ -49,16 +49,6 @@ class SQLMetricsSuite extends SparkFunSuite with SharedSQLContext {
     assert(boxingFinder.boxingInvokes.isEmpty, s"Found boxing: ${boxingFinder.boxingInvokes}")
   }
 
-  test("Normal accumulator should do boxing") {
-    // We need this test to make sure BoxingFinder works.
-    val l = sparkContext.accumulator(0L)
-    val f = () => { l += 1L }
-    val cl = BoxingFinder.getClassReader(f.getClass)
-    val boxingFinder = new BoxingFinder()
-    cl.accept(boxingFinder, 0)
-    assert(boxingFinder.boxingInvokes.nonEmpty, "Found find boxing in this test")
-  }
-
   /**
    * Call `df.collect()` and verify if the collected metrics are same as "expectedMetrics".
    *
