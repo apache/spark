@@ -55,7 +55,9 @@ private[sql] object SQLUtils {
     spark
   }
 
-  def setSparkContextSessionConf(spark: SparkSession, sparkConfigMap: JMap[Object, Object]) = {
+  def setSparkContextSessionConf(
+      spark: SparkSession,
+      sparkConfigMap: JMap[Object, Object]): Unit = {
     for ((name, value) <- sparkConfigMap.asScala) {
       spark.conf.set(name.toString, value.toString)
     }
