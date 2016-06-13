@@ -18,10 +18,9 @@
 package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
-
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, Expression, Not}
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.hive.test.TestHiveSingleton
 import org.apache.spark.sql.internal.SQLConf
@@ -104,20 +103,36 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       checkAnswer(sql("select key,value from table_with_partition"),
         testData.collect ++ testData2.collect ++ testData3.collect ++ testData4.collect)
 
+      sql("CREAT TABLE createAndInsertTest AS SELECT * FROM table_with_partition")
+      checkAnswer(sql("select key,value from createAndInsertTest"),
+        testData.collect ++ testData2.collect ++ testData3.collect ++ testData4.collect)
+
       checkAnswer(
         sql(
           """select key,value from table_with_partition
             | where (ds='4' and key=38) or (ds='3' and key=22)""".stripMargin),
-          Row(38, "38") :: Row(22, "22") :: Nil)
+        sql(
+          """select key,value from createAndInsertTest
+            | where (ds='4' and key=38) or (ds='3' and key=22)""".stripMargin).collect())
 
       checkAnswer(
         sql(
           """select key,value from table_with_partition
             | where (key<40 and key>38) or (ds='3' and key=22)""".stripMargin),
-        Row(39, "39") :: Row(22, "22") :: Nil)
+        sql(
+          """select key,value from createAndInsertTest
+            | where (key<40 and key>38) or (ds='3' and key=22)""".stripMargin).collect())
+
+      checkAnswer(
+        sql(
+          """select key,value from table_with_partition
+            | where !(key = 4 and ds > 5)""".stripMargin),
+        sql(
+          """select key,value from table_with_partition
+            | where !(key = 4 and ds > 5)""".stripMargin).collect())
 
       sql("DROP TABLE table_with_partition")
-      sql("DROP TABLE createAndInsertTest")
+      sql("DROP TABLE IF EXISTS createAndInsertTest")
     }
   }
 
@@ -136,28 +151,25 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
 
     val partitionKeys = AttributeSet(part1 :: part2 :: Nil)
 
-    // (part1 == 1 and a > 3) or (part1 == 2 and a < 5)  ==> (part1 == 1 or part2 == 2)
     val p1 = ((part1 === 1) && (a > 3)) || ((part2 === 2) && (a < 5))
     check(partitionKeys, p1, Some((part1 === 1) || (part2 === 2)))
 
-    // (part1 == 1 and a > 3) or (a < 100) => None
     val p2 = ((part1 === 1) && (a > 3)) || (a < 100)
     check(partitionKeys, p2, None)
 
-    // (a > 100 and b < 100) or (part1 = 10) => None
     val p3 = ((a > 100) && b < 100) || (part1 === 10)
     check(partitionKeys, p3, None)
 
-    // (a > 100 and b < 100) and (part1 = 10) => (part1 = 10)
     val p4 = ((a > 100) && b < 100) && (part1 === 10)
     check(partitionKeys, p4, Some(part1 === 10))
 
-    // (a > 100 && b < 100 and part1 = 10) or (part1 == 2) => (part1 = 10 or part1 == 2)
     val p5 = ((a > 100) && (b < 100) && (part1 === 10)) || (part1 === 2)
     check(partitionKeys, p5, Some((part1 === 10) || (part1 === 2)))
 
-    // (a > 100 and b < 100) and (part1 = 10 or part2 = 5) => (part1 = 10 or part2 = 5)
     val p6 = ((a > 100) && b < 100) && (part1 === 10 || part2 === 5)
     check(partitionKeys, p6, Some(part1 === 10 || part2 === 5))
+
+    val p7 = !(part1 === 100 && a > 3)
+    check(partitionKeys, p7, Some(Not(part1 === 100)))
   }
 }
