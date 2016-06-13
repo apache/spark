@@ -38,7 +38,7 @@ public class JavaIsotonicRegressionExample {
     // Create a SparkSession.
     SparkSession spark = SparkSession
       .builder()
-      .appName("JavaIsotonicRegression")
+      .appName("JavaIsotonicRegressionExample")
       .getOrCreate();
 
     // $example on$
