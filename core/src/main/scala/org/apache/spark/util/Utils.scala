@@ -2352,6 +2352,31 @@ private[spark] object Utils extends Logging {
     log.info(s"Started daemon with process name: ${Utils.getProcessName()}")
     SignalUtils.registerLogger(log)
   }
+
+  /**
+   * Unions two comma-separated lists of files and filters out empty strings.
+   */
+  def unionFileLists(leftList: Option[String], rightList: Option[String]): Set[String] = {
+    var allFiles = Set[String]()
+    leftList.foreach { value => allFiles ++= value.split(",") }
+    rightList.foreach { value => allFiles ++= value.split(",") }
+    allFiles.filter { _.nonEmpty }
+  }
+
+  /**
+   * In YARN mode this method returns a union of the jar files pointed by "spark.jars" and the
+   * "spark.yarn.dist.jars" properties, while in other modes it returns the jar files pointed by
+   * only the "spark.jars" property.
+   */
+  def getUserJars(conf: SparkConf): Seq[String] = {
+    val sparkJars = conf.getOption("spark.jars")
+    if (conf.get("spark.master") == "yarn") {
+      val yarnJars = conf.getOption("spark.yarn.dist.jars")
+      unionFileLists(sparkJars, yarnJars).toSeq
+    } else {
+      sparkJars.map(_.split(",")).map(_.filter(_.nonEmpty)).toSeq.flatten
+    }
+  }
 }
 
 /**
