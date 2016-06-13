@@ -19,7 +19,6 @@ package org.apache.spark.api.java
 
 import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
-import java.nio.charset.Charset
 import java.util.{Comparator, Iterator => JIterator, List => JList, Map => JMap}
 
 import scala.collection.JavaConverters._
@@ -292,7 +291,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
            env: JMap[String, String],
            separateWorkingDir: Boolean,
            bufferSize: Int,
-           encoding: Charset): JavaRDD[String] = {
+           encoding: String): JavaRDD[String] = {
     rdd.pipe(command.asScala, env.asScala, null, null, separateWorkingDir, bufferSize, encoding)
   }
 

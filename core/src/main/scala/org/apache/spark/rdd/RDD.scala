@@ -738,7 +738,7 @@ abstract class RDD[T: ClassTag](
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false,
       bufferSize: Int = 8192,
-      encoding: Codec = Codec.defaultCharsetCodec): RDD[String] = withScope {
+      encoding: String = Codec.defaultCharsetCodec.name): RDD[String] = withScope {
     new PipedRDD(this, command, env,
       if (printPipeContext ne null) sc.clean(printPipeContext) else null,
       if (printRDDElement ne null) sc.clean(printRDDElement) else null,

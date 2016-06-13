@@ -48,7 +48,7 @@ private[spark] class PipedRDD[T: ClassTag](
     printRDDElement: (T, String => Unit) => Unit,
     separateWorkingDir: Boolean,
     bufferSize: Int,
-    encoding: Codec)
+    encoding: String)
   extends RDD[String](prev) {
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
@@ -61,7 +61,7 @@ private[spark] class PipedRDD[T: ClassTag](
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false) =
     this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
-      separateWorkingDir, 8192, Codec.defaultCharsetCodec)
+      separateWorkingDir, 8192, Codec.defaultCharsetCodec.name)
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
@@ -147,7 +147,7 @@ private[spark] class PipedRDD[T: ClassTag](
       override def run(): Unit = {
         TaskContext.setTaskContext(context)
         val out = new PrintWriter(new BufferedWriter(
-          new OutputStreamWriter(proc.getOutputStream, encoding.name), bufferSize))
+          new OutputStreamWriter(proc.getOutputStream, encoding), bufferSize))
         try {
           // scalastyle:off println
           // input the pipe context firstly
