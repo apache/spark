@@ -23,7 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.linalg._
-import org.apache.spark.ml.param.{DoubleParam, Param, ParamMap, ParamValidators}
+import org.apache.spark.ml.param._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.classification.{NaiveBayes => OldNaiveBayes}
 import org.apache.spark.mllib.classification.{NaiveBayesModel => OldNaiveBayesModel}
@@ -59,6 +59,21 @@ private[ml] trait NaiveBayesParams extends PredictorParams {
 
   /** @group getParam */
   final def getModelType: String = $(modelType)
+
+  /**
+   * Indicating it's complementary or not. Complementary Naive Bayse performs
+   * better when data has skew number of samples between classes according
+   * ([[http://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf]])
+   * (default = false).
+   * @group param
+   */
+  final val complementary: Param[Boolean] = new BooleanParam(this
+    , "complementary", "Indicating it's complementary or not. Complementary Naive Bayse performs " +
+      "better when data has skew number of samples between classes according" +
+      "([[http://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf]])")
+
+  /** @group getParam */
+  final def getComplementary: Boolean = $(complementary)
 }
 
 /**
@@ -101,10 +116,14 @@ class NaiveBayes @Since("1.5.0") (
   def setModelType(value: String): this.type = set(modelType, value)
   setDefault(modelType -> OldNaiveBayes.Multinomial)
 
+  @Since("1.6.1")
+  def setComplementary(value: Boolean): this.type = set(complementary, value)
+  setDefault(complementary -> false)
+
   override protected def train(dataset: Dataset[_]): NaiveBayesModel = {
     val oldDataset: RDD[OldLabeledPoint] =
       extractLabeledPoints(dataset).map(OldLabeledPoint.fromML)
-    val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType))
+    val oldModel = OldNaiveBayes.train(oldDataset, $(smoothing), $(modelType), $(complementary))
     NaiveBayesModel.fromOld(oldModel, this)
   }
 

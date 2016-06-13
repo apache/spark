@@ -309,15 +309,16 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
 @Since("0.9.0")
 class NaiveBayes private (
     private var lambda: Double,
-    private var modelType: String) extends Serializable with Logging {
+    private var modelType: String,
+    private var complementary: Boolean) extends Serializable with Logging {
 
   import NaiveBayes.{Bernoulli, Multinomial}
 
   @Since("1.4.0")
-  def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial)
+  def this(lambda: Double) = this(lambda, NaiveBayes.Multinomial, false)
 
   @Since("0.9.0")
-  def this() = this(1.0, NaiveBayes.Multinomial)
+  def this() = this(1.0, NaiveBayes.Multinomial, false)
 
   /** Set the smoothing parameter. Default: 1.0. */
   @Since("0.9.0")
@@ -340,6 +341,9 @@ class NaiveBayes private (
   def setModelType(modelType: String): NaiveBayes = {
     require(NaiveBayes.supportedModelTypes.contains(modelType),
       s"NaiveBayes was created with an unknown modelType: $modelType.")
+    require(modelType.contentEquals(Multinomial) ||
+      (modelType.contentEquals(Bernoulli) && !this.complementary),
+      s"Bernoulli Naive Bayes doesn't support complementary mode")
     this.modelType = modelType
     this
   }
@@ -347,6 +351,24 @@ class NaiveBayes private (
   /** Get the model type. */
   @Since("1.4.0")
   def getModelType: String = this.modelType
+
+  /**
+   * Set the model type using a string (case-sensitive).
+   * Supported options: "multinomial" (default) and "bernoulli".
+   */
+  @Since("1.6.1")
+  def setComplementary(complementary: Boolean): NaiveBayes = {
+    require(this.modelType.contentEquals(Multinomial) ||
+      (this.modelType.contentEquals(Bernoulli) && !complementary),
+      s"Bernoulli Naive Bayes doesn't support complementary mode")
+    this.complementary = complementary
+    this
+  }
+
+  /** Get if it's complementary. */
+  @Since("1.6.1")
+  def getComplementary: Boolean = this.complementary
+
 
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
@@ -364,6 +386,10 @@ class NaiveBayes private (
     }
     val numFeatures = aggregated.head match { case (_, (_, v)) => v.size }
 
+    val totoalTermFreqs = new DenseVector(
+      aggregated.map(data => data._2._2.values).transpose.map(_.sum)
+    )
+
     val labels = new Array[Double](numLabels)
     val pi = new Array[Double](numLabels)
     val theta = Array.fill(numLabels)(new Array[Double](numFeatures))
@@ -374,15 +400,33 @@ class NaiveBayes private (
       labels(i) = label
       pi(i) = math.log(n + lambda) - piLogDenom
       val thetaLogDenom = modelType match {
-        case Multinomial => math.log(sumTermFreqs.values.sum + numFeatures * lambda)
-        case Bernoulli => math.log(n + 2.0 * lambda)
+        case Multinomial => if (complementary) {
+          math.
+            log(totoalTermFreqs.values.sum - sumTermFreqs.values.sum + numFeatures * lambda)
+        } else {
+          math.log(sumTermFreqs.values.sum + numFeatures * lambda)
+        }
+        case Bernoulli =>
+          math.log(n + 2.0 * lambda)
         case _ =>
           // This should never happen.
           throw new UnknownError(s"Invalid modelType: $modelType.")
       }
       var j = 0
       while (j < numFeatures) {
-        theta(i)(j) = math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+        theta(i)(j) = modelType match {
+          case Multinomial => if (complementary) {
+            -1 *
+              (math.log(totoalTermFreqs(j) - sumTermFreqs(j) + lambda) - thetaLogDenom)
+          } else {
+            math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+          }
+          case Bernoulli =>
+            math.log(sumTermFreqs(j) + lambda) - thetaLogDenom
+          case _ =>
+            // This should never happen.
+            throw new UnknownError(s"Invalid modelType: $modelType.")
+        }
         j += 1
       }
       i += 1
@@ -484,7 +528,7 @@ object NaiveBayes {
    */
   @Since("0.9.0")
   def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
-    new NaiveBayes(lambda, Multinomial).run(input)
+    new NaiveBayes(lambda, Multinomial, false).run(input)
   }
 
   /**
@@ -501,7 +545,6 @@ object NaiveBayes {
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
    * @param lambda The smoothing parameter
-   *
    * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
    *              multinomial or bernoulli
    */
@@ -509,7 +552,42 @@ object NaiveBayes {
   def train(input: RDD[LabeledPoint], lambda: Double, modelType: String): NaiveBayesModel = {
     require(supportedModelTypes.contains(modelType),
       s"NaiveBayes was created with an unknown modelType: $modelType.")
-    new NaiveBayes(lambda, modelType).run(input)
+    new NaiveBayes(lambda, modelType, false).run(input)
+  }
+
+  /**
+   * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
+   *
+   * The model type can be set to either Multinomial NB ([[http://tinyurl.com/lsdw6p]])
+   * or Bernoulli NB ([[http://tinyurl.com/p7c96j6]]). The Multinomial NB can handle
+   * discrete count data and can be called by setting the model type to "multinomial".
+   * For example, it can be used with word counts or TF_IDF vectors of documents.
+   * The Bernoulli model fits presence or absence (0-1) counts. By making every vector a
+   * 0-1 vector and setting the model type to "bernoulli", the  fits and predicts as
+   * Bernoulli NB.
+   *
+   * The complementary parameter indicates it's complementary or not. Complementary Naive
+   * Bayes performs better when data has skew number of samples between classes according
+   * ([[http://people.csail.mit.edu/jrennie/papers/icml03-nb.pdf]])
+   *
+   * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
+   *              vector or a count vector.
+   * @param lambda The smoothing parameter
+   * @param modelType The type of NB model to fit from the enumeration NaiveBayesModels, can be
+   *              multinomial or bernoulli
+   * @param complementary The complementary parameter.
+   */
+  @Since("1.4.0")
+  def train(input: RDD[LabeledPoint],
+            lambda: Double,
+            modelType: String,
+            complementary: Boolean): NaiveBayesModel = {
+    require(supportedModelTypes.contains(modelType),
+      s"NaiveBayes was created with an unknown modelType: $modelType.")
+    require(modelType.contentEquals(Multinomial) ||
+      (modelType.contentEquals(Bernoulli) && !complementary),
+      s"Bernoulli Naive Bayes doesn't support complementary mode")
+    new NaiveBayes(lambda, modelType, complementary).run(input)
   }
 
 }
