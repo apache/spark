@@ -19,13 +19,15 @@ package org.apache.spark.sql.streaming
 
 import scala.collection.mutable
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.annotation.Experimental
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{AnalysisException, DataFrame, SparkSession}
 import org.apache.spark.sql.catalyst.analysis.UnsupportedOperationChecker
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.execution.streaming.state.StateStoreCoordinatorRef
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.util.{Clock, SystemClock}
+import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * :: Experimental ::
@@ -39,7 +41,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
   private val listenerBus = new ContinuousQueryListenerBus(sparkSession.sparkContext.listenerBus)
-  private val activeQueries = new mutable.HashMap[String, ContinuousQuery]
+  private val activeQueries = new mutable.HashMap[Long, ContinuousQuery]
   private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
 
@@ -55,13 +57,12 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   }
 
   /**
-   * Returns an active query from this SQLContext or throws exception if bad name
+   * Returns the query if there is an active query with the given id, or null.
    *
    * @since 2.0.0
    */
-  def get(name: String): ContinuousQuery = activeQueriesLock.synchronized {
-    activeQueries.getOrElse(name,
-      throw new IllegalArgumentException(s"There is no active query with name $name"))
+  def get(id: Long): ContinuousQuery = activeQueriesLock.synchronized {
+    activeQueries.get(id).orNull
   }
 
   /**
@@ -168,20 +169,66 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
     listenerBus.post(event)
   }
 
-  /** Start a query */
+  /**
+   * Start a [[ContinuousQuery]].
+   * @param userSpecifiedName Query name optionally specified by the user.
+   * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
+   * @param df Streaming DataFrame.
+   * @param sink  Sink to write the streaming outputs.
+   * @param outputMode  Output mode for the sink.
+   * @param useTempCheckpointLocation  Whether to use a temporary checkpoint location when the user
+   *                                   has not specified one. If false, then error will be thrown.
+   * @param recoverFromCheckpointLocation  Whether to recover query from the checkpoint location.
+   *                                       If false and the checkpoint location exists, then error
+   *                                       will be thrown.
+   * @param trigger [[Trigger]] for the query.
+   * @param triggerClock [[Clock]] to use for the triggering.
+   */
   private[sql] def startQuery(
-      name: String,
-      checkpointLocation: String,
+      userSpecifiedName: Option[String],
+      userSpecifiedCheckpointLocation: Option[String],
       df: DataFrame,
       sink: Sink,
       outputMode: OutputMode,
+      useTempCheckpointLocation: Boolean = false,
+      recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = ProcessingTime(0),
       triggerClock: Clock = new SystemClock()): ContinuousQuery = {
     activeQueriesLock.synchronized {
-      if (activeQueries.contains(name)) {
+      val id = StreamExecution.nextId
+      val name = userSpecifiedName.getOrElse(s"query-$id")
+      if (activeQueries.values.exists(_.name == name)) {
         throw new IllegalArgumentException(
           s"Cannot start query with name $name as a query with that name is already active")
       }
+      val checkpointLocation = userSpecifiedCheckpointLocation.map { userSpecified =>
+        new Path(userSpecified).toUri.toString
+      }.orElse {
+        df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION).map { location =>
+          new Path(location, name).toUri.toString
+        }
+      }.getOrElse {
+        if (useTempCheckpointLocation) {
+          Utils.createTempDir(namePrefix = s"temporary").getCanonicalPath
+        } else {
+          throw new AnalysisException(
+            "checkpointLocation must be specified either " +
+              """through option("checkpointLocation", ...) or """ +
+              s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
+        }
+      }
+
+      // If offsets have already been created, we trying to resume a query.
+      if (!recoverFromCheckpointLocation) {
+        val checkpointPath = new Path(checkpointLocation, "offsets")
+        val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
+        if (fs.exists(checkpointPath)) {
+          throw new AnalysisException(
+            s"This query does not support recovering from checkpoint location. " +
+              s"Delete $checkpointPath to start over.")
+        }
+      }
+
       val analyzedPlan = df.queryExecution.analyzed
       df.queryExecution.assertAnalyzed()
 
@@ -203,6 +250,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
       }
       val query = new StreamExecution(
         sparkSession,
+        id,
         name,
         checkpointLocation,
         logicalPlan,
@@ -211,7 +259,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
         triggerClock,
         outputMode)
       query.start()
-      activeQueries.put(name, query)
+      activeQueries.put(id, query)
       query
     }
   }
@@ -219,7 +267,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   /** Notify (by the ContinuousQuery) that the query has been terminated */
   private[sql] def notifyQueryTermination(terminatedQuery: ContinuousQuery): Unit = {
     activeQueriesLock.synchronized {
-      activeQueries -= terminatedQuery.name
+      activeQueries -= terminatedQuery.id
     }
     awaitTerminationLock.synchronized {
       if (lastTerminatedQuery == null || terminatedQuery.exception.nonEmpty) {
