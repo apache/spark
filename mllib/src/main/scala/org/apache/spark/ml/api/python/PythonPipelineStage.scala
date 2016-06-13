@@ -95,9 +95,9 @@ private[python] object PythonTransformerWrapperSerializer {
   }
 }
 
-class PythonTransformer(@transient var pfunc: PythonTransformerWrapper) extends Transformer {
-
-  override val uid: String = pfunc.getUid
+class PythonTransformer(
+    @transient var pfunc: PythonTransformerWrapper,
+    override val uid: String) extends Transformer {
 
   override def transformSchema(schema: StructType): StructType = {
     // TODO: Add transform schema in Python side.
