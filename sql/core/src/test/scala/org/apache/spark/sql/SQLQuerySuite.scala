@@ -2847,4 +2847,15 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
   test("SPARK-15887: hive-site.xml should be loaded") {
     assert(spark.sessionState.newHadoopConf().get("hive.in.test") == "true")
   }
+
+  test("SPARK-15776 Divide expression inside an Aggregation function should not " +
+    "be casted to wrong type") {
+    val doubleSchema = StructType(StructField("a", DoubleType, true) :: Nil)
+    assert(sql("select sum(4/3) as a").schema == doubleSchema)
+    assert(sql("select sum(cast(4.0 as double) / 3) as a").schema == doubleSchema)
+    assert(sql("select sum(cast(4.0 as float) / 3) as a").schema == doubleSchema)
+
+    val decimalSchema = StructType(StructField("a", DecimalType(31, 11), true) :: Nil)
+    assert(sql("select sum(cast(4.0 as decimal) / 3) as a").schema == decimalSchema)
+  }
 }

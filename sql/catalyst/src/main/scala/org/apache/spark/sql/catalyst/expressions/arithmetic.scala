@@ -213,7 +213,7 @@ case class Multiply(left: Expression, right: Expression)
 case class Divide(left: Expression, right: Expression)
     extends BinaryArithmetic with NullIntolerant {
 
-  override def inputType: AbstractDataType = NumericType
+  override def inputType: AbstractDataType = TypeCollection(DoubleType, DecimalType)
 
   override def symbol: String = "/"
   override def decimalMethod: String = "$div"

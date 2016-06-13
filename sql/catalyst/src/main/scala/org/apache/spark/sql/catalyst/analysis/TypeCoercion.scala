@@ -525,7 +525,7 @@ object TypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
-      case e if !e.resolved => e
+      case e if !e.childrenResolved => e
 
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
