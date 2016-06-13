@@ -371,80 +371,66 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
 
-  test("check trigger() can only be called on streaming Datasets/DataFrames") {
+  test("check trigger() can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.trigger(ProcessingTime("10 seconds")))
-    assert(e.getMessage == "trigger() can only be called on streaming Datasets/DataFrames;")
+    assert(e.getMessage == "trigger() can only be called on continuous queries;")
   }
 
-  test("check queryName() can only be called on streaming Datasets/DataFrames") {
+  test("check queryName() can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.queryName("queryName"))
-    assert(e.getMessage == "queryName() can only be called on streaming Datasets/DataFrames;")
+    assert(e.getMessage == "queryName() can only be called on continuous queries;")
   }
 
-  test("check startStream() can only be called on streaming Datasets/DataFrames") {
+  test("check startStream() can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.startStream())
-    assert(e.getMessage == "startStream() can only be called on streaming Datasets/DataFrames;")
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
   }
 
-  test("check startStream(path) can only be called on streaming Datasets/DataFrames") {
+  test("check startStream(path) can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.startStream("non_exist_path"))
-    assert(e.getMessage == "startStream() can only be called on streaming Datasets/DataFrames;")
+    assert(e.getMessage == "startStream() can only be called on continuous queries;")
   }
 
-  test("check foreach() can only be called on streaming Datasets/DataFrames") {
-    val df = spark.read.text(newTextInput)
-    val w = df.write.option("checkpointLocation", newMetadataDir)
-    val foreachWriter = new ForeachWriter[String] {
-      override def open(partitionId: Long, version: Long): Boolean = false
-      override def process(value: String): Unit = {}
-      override def close(errorOrNull: Throwable): Unit = {}
-    }
-    val e = intercept[AnalysisException](w.foreach(foreachWriter))
-    Seq("foreach()", "streaming Datasets/DataFrames").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-    }
-  }
-
-  test("check mode(SaveMode) can only be called on non-streaming Datasets/DataFrames") {
+  test("check mode(SaveMode) can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.mode(SaveMode.Append))
-    assert(e.getMessage == "mode() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
   }
 
-  test("check mode(string) can only be called on non-streaming Datasets/DataFrames") {
+  test("check mode(string) can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.mode("append"))
-    assert(e.getMessage == "mode() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
   }
 
-  test("check outputMode(OutputMode) can only be called on streaming Datasets/DataFrames") {
+  test("check outputMode(OutputMode) can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.outputMode(OutputMode.Append))
-    Seq("outputmode", "streaming Datasets/DataFrames").foreach { s =>
+    Seq("outputmode", "continuous queries").foreach { s =>
       assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
     }
   }
 
-  test("check outputMode(string) can only be called on streaming Datasets/DataFrames") {
+  test("check outputMode(string) can only be called on continuous queries") {
     val df = spark.read.text(newTextInput)
     val w = df.write.option("checkpointLocation", newMetadataDir)
     val e = intercept[AnalysisException](w.outputMode("append"))
-    Seq("outputmode", "streaming Datasets/DataFrames").foreach { s =>
+    Seq("outputmode", "continuous queries").foreach { s =>
       assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
     }
   }
@@ -464,7 +450,7 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     testError("Xyz")
   }
 
-  test("check bucketBy() can only be called on non-streaming Datasets/DataFrames") {
+  test("check bucketBy() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
@@ -473,7 +459,7 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(e.getMessage == "'startStream' does not support bucketing right now;")
   }
 
-  test("check sortBy() can only be called on non-streaming Datasets/DataFrames;") {
+  test("check sortBy() can only be called on non-continuous queries;") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
@@ -482,94 +468,94 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     assert(e.getMessage == "'startStream' does not support bucketing right now;")
   }
 
-  test("check save(path) can only be called on non-streaming Datasets/DataFrames") {
+  test("check save(path) can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.save("non_exist_path"))
-    assert(e.getMessage == "save() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "save() can only be called on non-continuous queries;")
   }
 
-  test("check save() can only be called on non-streaming Datasets/DataFrames") {
+  test("check save() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.save())
-    assert(e.getMessage == "save() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "save() can only be called on non-continuous queries;")
   }
 
-  test("check insertInto() can only be called on non-streaming Datasets/DataFrames") {
+  test("check insertInto() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.insertInto("non_exsit_table"))
-    assert(e.getMessage == "insertInto() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "insertInto() can only be called on non-continuous queries;")
   }
 
-  test("check saveAsTable() can only be called on non-streaming Datasets/DataFrames") {
+  test("check saveAsTable() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.saveAsTable("non_exsit_table"))
-    assert(e.getMessage == "saveAsTable() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "saveAsTable() can only be called on non-continuous queries;")
   }
 
-  test("check jdbc() can only be called on non-streaming Datasets/DataFrames") {
+  test("check jdbc() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.jdbc(null, null, null))
-    assert(e.getMessage == "jdbc() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "jdbc() can only be called on non-continuous queries;")
   }
 
-  test("check json() can only be called on non-streaming Datasets/DataFrames") {
+  test("check json() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.json("non_exist_path"))
-    assert(e.getMessage == "json() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "json() can only be called on non-continuous queries;")
   }
 
-  test("check parquet() can only be called on non-streaming Datasets/DataFrames") {
+  test("check parquet() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.parquet("non_exist_path"))
-    assert(e.getMessage == "parquet() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "parquet() can only be called on non-continuous queries;")
   }
 
-  test("check orc() can only be called on non-streaming Datasets/DataFrames") {
+  test("check orc() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.orc("non_exist_path"))
-    assert(e.getMessage == "orc() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "orc() can only be called on non-continuous queries;")
   }
 
-  test("check text() can only be called on non-streaming Datasets/DataFrames") {
+  test("check text() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.text("non_exist_path"))
-    assert(e.getMessage == "text() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "text() can only be called on non-continuous queries;")
   }
 
-  test("check csv() can only be called on non-streaming Datasets/DataFrames") {
+  test("check csv() can only be called on non-continuous queries") {
     val df = spark.read
       .format("org.apache.spark.sql.streaming.test")
       .stream()
     val w = df.write
     val e = intercept[AnalysisException](w.csv("non_exist_path"))
-    assert(e.getMessage == "csv() can only be called on non-streaming Datasets/DataFrames;")
+    assert(e.getMessage == "csv() can only be called on non-continuous queries;")
   }
 
   test("check foreach() does not support partitioning or bucketing") {
