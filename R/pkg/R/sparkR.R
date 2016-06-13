@@ -279,6 +279,9 @@ sparkRSQL.init <- function(jsc = NULL) {
 #'
 #' This function creates a HiveContext from an existing JavaSparkContext
 #'
+#' Starting SparkR 2.0, a SparkSession is initialized and returned instead.
+#' This API is deprecated and kept for backward compatibility only.
+#'
 #' @param jsc The existing JavaSparkContext created with SparkR.init()
 #' @export
 #' @examples
