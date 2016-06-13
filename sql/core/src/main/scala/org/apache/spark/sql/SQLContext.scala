@@ -746,7 +746,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rowRDD: RDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
@@ -754,7 +754,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rowRDD: JavaRDD[Row], schema: StructType): DataFrame = {
     createDataFrame(rowRDD, schema)
   }
@@ -762,7 +762,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
   }
@@ -770,7 +770,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   /**
    * @deprecated As of 1.3.0, replaced by `createDataFrame()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use createDataFrame. This will be removed in Spark 2.0.", "1.3.0")
+  @deprecated("Use createDataFrame instead.", "1.3.0")
   def applySchema(rdd: JavaRDD[_], beanClass: Class[_]): DataFrame = {
     createDataFrame(rdd, beanClass)
   }
@@ -782,7 +782,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().parquet()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.parquet(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.parquet() instead.", "1.4.0")
   @scala.annotation.varargs
   def parquetFile(paths: String*): DataFrame = {
     if (paths.isEmpty) {
@@ -799,7 +799,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonFile(path: String): DataFrame = {
     read.json(path)
   }
@@ -811,7 +811,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonFile(path: String, schema: StructType): DataFrame = {
     read.schema(schema).json(path)
   }
@@ -820,7 +820,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonFile(path: String, samplingRatio: Double): DataFrame = {
     read.option("samplingRatio", samplingRatio.toString).json(path)
   }
@@ -833,7 +833,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: RDD[String]): DataFrame = read.json(json)
 
   /**
@@ -844,7 +844,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: JavaRDD[String]): DataFrame = read.json(json)
 
   /**
@@ -854,7 +854,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: RDD[String], schema: StructType): DataFrame = {
     read.schema(schema).json(json)
   }
@@ -866,7 +866,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: JavaRDD[String], schema: StructType): DataFrame = {
     read.schema(schema).json(json)
   }
@@ -878,7 +878,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: RDD[String], samplingRatio: Double): DataFrame = {
     read.option("samplingRatio", samplingRatio.toString).json(json)
   }
@@ -890,7 +890,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().json()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.json(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.json() instead.", "1.4.0")
   def jsonRDD(json: JavaRDD[String], samplingRatio: Double): DataFrame = {
     read.option("samplingRatio", samplingRatio.toString).json(json)
   }
@@ -902,7 +902,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group genericdata
    * @deprecated As of 1.4.0, replaced by `read().load(path)`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.load(path). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.load(path) instead.", "1.4.0")
   def load(path: String): DataFrame = {
     read.load(path)
   }
@@ -914,7 +914,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @deprecated As of 1.4.0, replaced by `read().format(source).load(path)`.
    *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.format(source).load(path). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).load(path) instead.", "1.4.0")
   def load(path: String, source: String): DataFrame = {
     read.format(source).load(path)
   }
@@ -927,8 +927,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    *             This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.format(source).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
   def load(source: String, options: java.util.Map[String, String]): DataFrame = {
     read.options(options).format(source).load()
   }
@@ -940,8 +939,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group genericdata
    * @deprecated As of 1.4.0, replaced by `read().format(source).options(options).load()`.
    */
-  @deprecated("Use read.format(source).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).options(options).load() instead.", "1.4.0")
   def load(source: String, options: Map[String, String]): DataFrame = {
     read.options(options).format(source).load()
   }
@@ -954,8 +952,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @deprecated As of 1.4.0, replaced by
    *            `read().format(source).schema(schema).options(options).load()`.
    */
-  @deprecated("Use read.format(source).schema(schema).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
   def load(source: String, schema: StructType, options: java.util.Map[String, String]): DataFrame =
   {
     read.format(source).schema(schema).options(options).load()
@@ -969,8 +966,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @deprecated As of 1.4.0, replaced by
    *            `read().format(source).schema(schema).options(options).load()`.
    */
-  @deprecated("Use read.format(source).schema(schema).options(options).load(). " +
-    "This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.format(source).schema(schema).options(options).load() instead.", "1.4.0")
   def load(source: String, schema: StructType, options: Map[String, String]): DataFrame = {
     read.format(source).schema(schema).options(options).load()
   }
@@ -982,7 +978,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
   def jdbc(url: String, table: String): DataFrame = {
     read.jdbc(url, table, new Properties)
   }
@@ -1000,7 +996,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
   def jdbc(
     url: String,
     table: String,
@@ -1020,7 +1016,7 @@ class SQLContext private[sql](val sparkSession: SparkSession)
    * @group specificdata
    * @deprecated As of 1.4.0, replaced by `read().jdbc()`. This will be removed in Spark 2.0.
    */
-  @deprecated("Use read.jdbc(). This will be removed in Spark 2.0.", "1.4.0")
+  @deprecated("Use read.jdbc() instead.", "1.4.0")
   def jdbc(url: String, table: String, theParts: Array[String]): DataFrame = {
     read.jdbc(url, table, theParts, new Properties)
   }
