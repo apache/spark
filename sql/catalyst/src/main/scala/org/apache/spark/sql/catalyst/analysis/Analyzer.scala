@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
 /**
- * A trivial [[Analyzer]] with an dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
+ * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
@@ -1496,7 +1496,7 @@ class Analyzer(
    * This rule handles three cases:
    *  - A [[Project]] having [[WindowExpression]]s in its projectList;
    *  - An [[Aggregate]] having [[WindowExpression]]s in its aggregateExpressions.
-   *  - An [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
+   *  - A [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
    *    clause and the [[Aggregate]] has [[WindowExpression]]s in its aggregateExpressions.
    * Note: If there is a GROUP BY clause in the query, aggregations and corresponding
    * filters (expressions in the HAVING clause) should be evaluated before any
@@ -1656,7 +1656,7 @@ class Analyzer(
 
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
-        if (distinctWindowSpec.length == 0 ) {
+        if (distinctWindowSpec.isEmpty) {
           failAnalysis(s"$expr does not have any WindowExpression.")
         } else if (distinctWindowSpec.length > 1) {
           // newExpressionsWithWindowFunctions only have expressions with a single
@@ -1964,7 +1964,12 @@ class Analyzer(
      */
     private def validateNestedTupleFields(deserializer: Expression): Unit = {
       val structChildToOrdinals = deserializer
-        .collect { case g: GetStructField => g }
+        // There are 2 kinds of `GetStructField`:
+        //   1. resolved from `UnresolvedExtractValue`, and it will have a `name` property.
+        //   2. created when we build deserializer expression for nested tuple, no `name` property.
+        // Here we want to validate the ordinals of nested tuple, so we should only catch
+        // `GetStructField` without the name property.
+        .collect { case g: GetStructField if g.name.isEmpty => g }
         .groupBy(_.child)
         .mapValues(_.map(_.ordinal).distinct.sorted)
 

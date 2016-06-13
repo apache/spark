@@ -349,7 +349,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * Create an input stream from an queue of RDDs. In each batch,
+   * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
    * NOTE:
@@ -369,7 +369,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * Create an input stream from an queue of RDDs. In each batch,
+   * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
    * NOTE:
@@ -393,7 +393,7 @@ class JavaStreamingContext(val ssc: StreamingContext) extends Closeable {
   }
 
   /**
-   * Create an input stream from an queue of RDDs. In each batch,
+   * Create an input stream from a queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *
    * NOTE:

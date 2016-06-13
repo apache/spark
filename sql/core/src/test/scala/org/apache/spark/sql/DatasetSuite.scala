@@ -225,6 +225,12 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       "b")
   }
 
+  test("SPARK-15632: typed filter should preserve the underlying logical schema") {
+    val ds = spark.range(10)
+    val ds2 = ds.filter(_ > 3)
+    assert(ds.schema.equals(ds2.schema))
+  }
+
   test("foreach") {
     val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
     val acc = sparkContext.longAccumulator
@@ -789,6 +795,29 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
     }
     assert(e.getMessage.contains(
       "`abstract` is a reserved keyword and cannot be used as field name"))
+  }
+
+  test("Dataset should support flat input object to be null") {
+    checkDataset(Seq("a", null).toDS(), "a", null)
+  }
+
+  test("Dataset should throw RuntimeException if non-flat input object is null") {
+    val e = intercept[RuntimeException](Seq(ClassData("a", 1), null).toDS())
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level non-flat input object"))
+  }
+
+  test("dropDuplicates") {
+    val ds = Seq(("a", 1), ("a", 2), ("b", 1), ("a", 1)).toDS()
+    checkDataset(
+      ds.dropDuplicates("_1"),
+      ("a", 1), ("b", 1))
+    checkDataset(
+      ds.dropDuplicates("_2"),
+      ("a", 1), ("a", 2))
+    checkDataset(
+      ds.dropDuplicates("_1", "_2"),
+      ("a", 1), ("a", 2), ("b", 1))
   }
 }
 
