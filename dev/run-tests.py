@@ -537,7 +537,6 @@ def main():
         test_environ.update(m.environ)
     setup_test_environ(test_environ)
 
-    changed_modules = [modules.pyspark_sql]
     test_modules = determine_modules_to_test(changed_modules)
 
     # license checks
