@@ -146,7 +146,7 @@ class ContinuousQueryManager(object):
         >>> cq.stop()
         """
         if not isinstance(id, intlike):
-            raise ValueError("The id for the query must be an integer. Got: %d" % id)
+            raise ValueError("The id for the query must be an integer. Got: %s" % id)
         return ContinuousQuery(self._jcqm.get(id))
 
     @since(2.0)
