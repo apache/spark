@@ -914,8 +914,8 @@ class SQLTests(ReusedPySparkTestCase):
         bad_schema = StructType([StructField("test", IntegerType(), False)])
         schema = StructType([StructField("data", StringType(), False)])
         df = self.spark.readStream.format('csv').option('path', 'python/test_support/sql/fake') \
-            .schema(bad_schema).load(path='python/test_support/sql/streaming',
-                                       schema=schema, format='text')
+            .schema(bad_schema)\
+            .load(path='python/test_support/sql/streaming', schema=schema, format='text')
         self.assertTrue(df.isStreaming)
         self.assertEqual(df.schema.simpleString(), "struct<data:string>")
 
@@ -983,8 +983,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        cq = df.writeStream.save(path=out, format='parquet', queryName='this_query',
-                                  checkpointLocation=chk)
+        cq = df.writeStream\
+            .save(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
             self.assertTrue(cq.isActive)
             try:
@@ -1011,8 +1011,8 @@ class SQLTests(ReusedPySparkTestCase):
         self.assertTrue(df.isStreaming)
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
-        cq = df.writeStream.save(path=out, format='parquet', queryName='this_query',
-                                  checkpointLocation=chk)
+        cq = df.writeStream\
+            .save(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
             self.assertTrue(cq.isActive)
             try:
