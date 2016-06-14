@@ -50,9 +50,11 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
     withListenerAdded(listener) {
       testStream(input.toDS)(
         StartStream(),
-        Assert("Incorrect query status in onQueryStarted") {
+        AssertOnQuery("Incorrect query status in onQueryStarted") { query =>
           val status = listener.startStatus
           assert(status != null)
+          assert(status.name === query.name)
+          assert(status.id === query.id)
           assert(status.sourceStatuses.size === 1)
           assert(status.sourceStatuses(0).description.contains("Memory"))
 
@@ -67,13 +69,15 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
         },
         AddDataMemory(input, Seq(1, 2, 3)),
         CheckAnswer(1, 2, 3),
-        Assert("Incorrect query status in onQueryProgress") {
+        AssertOnQuery("Incorrect query status in onQueryProgress") { query =>
           eventually(Timeout(streamingTimeout)) {
 
             // There should be only on progress event as batch has been processed
             assert(listener.progressStatuses.size === 1)
             val status = listener.progressStatuses.peek()
             assert(status != null)
+            assert(status.name === query.name)
+            assert(status.id === query.id)
             assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
             assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
 
@@ -82,12 +86,16 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
           }
         },
         StopStream,
-        Assert("Incorrect query status in onQueryTerminated") {
+        AssertOnQuery("Incorrect query status in onQueryTerminated") { query =>
           eventually(Timeout(streamingTimeout)) {
             val status = listener.terminationStatus
             assert(status != null)
+            assert(status.name === query.name)
+            assert(status.id === query.id)
             assert(status.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString))
             assert(status.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString)
+            assert(listener.terminationStackTrace.isEmpty)
+            assert(listener.terminationException === None)
           }
           listener.checkAsyncErrors()
         }
@@ -161,6 +169,7 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("QueryStarted serialization") {
     val queryStartedInfo = new ContinuousQueryInfo(
       "name",
+      1,
       Seq(new SourceStatus("source1", None), new SourceStatus("source2", None)),
       new SinkStatus("sink", CompositeOffset(None :: None :: Nil).toString))
     val queryStarted = new ContinuousQueryListener.QueryStarted(queryStartedInfo)
@@ -173,6 +182,7 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("QueryProgress serialization") {
     val queryProcessInfo = new ContinuousQueryInfo(
       "name",
+      1,
       Seq(
         new SourceStatus("source1", Some(LongOffset(0).toString)),
         new SourceStatus("source2", Some(LongOffset(1).toString))),
@@ -187,6 +197,7 @@ class ContinuousQueryListenerSuite extends StreamTest with BeforeAndAfter {
   test("QueryTerminated serialization") {
     val queryTerminatedInfo = new ContinuousQueryInfo(
       "name",
+      1,
       Seq(
         new SourceStatus("source1", Some(LongOffset(0).toString)),
         new SourceStatus("source2", Some(LongOffset(1).toString))),

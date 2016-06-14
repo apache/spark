@@ -336,34 +336,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertStreaming("startStream() can only be called on continuous queries")
 
     if (source == "memory") {
-      val queryName =
-        extraOptions.getOrElse(
-          "queryName", throw new AnalysisException("queryName must be specified for memory sink"))
-      val checkpointLocation = getCheckpointLocation(queryName, failIfNotSet = false).getOrElse {
-        Utils.createTempDir(namePrefix = "memory.stream").getCanonicalPath
-      }
-
-      // If offsets have already been created, we trying to resume a query.
-      val checkpointPath = new Path(checkpointLocation, "offsets")
-      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
-      if (fs.exists(checkpointPath)) {
-        throw new AnalysisException(
-          s"Unable to resume query written to memory sink. Delete $checkpointPath to start over.")
-      } else {
-        checkpointPath.toUri.toString
+      if (extraOptions.get("queryName").isEmpty) {
+        throw new AnalysisException("queryName must be specified for memory sink")
       }
 
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
-      resultDf.createOrReplaceTempView(queryName)
-      val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
-        queryName,
-        checkpointLocation,
+      val query = df.sparkSession.sessionState.continuousQueryManager.startQuery(
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
         df,
         sink,
         outputMode,
-        trigger)
-      continuousQuery
+        useTempCheckpointLocation = true,
+        recoverFromCheckpointLocation = false,
+        trigger = trigger)
+      resultDf.createOrReplaceTempView(query.name)
+      query
     } else {
       val dataSource =
         DataSource(
@@ -371,14 +360,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           className = source,
           options = extraOptions.toMap,
           partitionColumns = normalizedParCols.getOrElse(Nil))
-      val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
       df.sparkSession.sessionState.continuousQueryManager.startQuery(
-        queryName,
-        getCheckpointLocation(queryName, failIfNotSet = true).get,
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
         df,
         dataSource.createSink(outputMode),
         outputMode,
-        trigger)
+        trigger = trigger)
     }
   }
 
@@ -437,38 +425,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertStreaming(
       "foreach() can only be called on streaming Datasets/DataFrames.")
 
-    val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
     val sink = new ForeachSink[T](ds.sparkSession.sparkContext.clean(writer))(ds.exprEnc)
     df.sparkSession.sessionState.continuousQueryManager.startQuery(
-      queryName,
-      getCheckpointLocation(queryName, failIfNotSet = false).getOrElse {
-        Utils.createTempDir(namePrefix = "foreach.stream").getCanonicalPath
-      },
+      extraOptions.get("queryName"),
+      extraOptions.get("checkpointLocation"),
       df,
       sink,
       outputMode,
-      trigger)
-  }
-
-  /**
-   * Returns the checkpointLocation for a query. If `failIfNotSet` is `true` but the checkpoint
-   * location is not set, [[AnalysisException]] will be thrown. If `failIfNotSet` is `false`, `None`
-   * will be returned if the checkpoint location is not set.
-   */
-  private def getCheckpointLocation(queryName: String, failIfNotSet: Boolean): Option[String] = {
-    val checkpointLocation = extraOptions.get("checkpointLocation").map { userSpecified =>
-      new Path(userSpecified).toUri.toString
-    }.orElse {
-      df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION).map { location =>
-        new Path(location, queryName).toUri.toString
-      }
-    }
-    if (failIfNotSet && checkpointLocation.isEmpty) {
-      throw new AnalysisException("checkpointLocation must be specified either " +
-        """through option("checkpointLocation", ...) or """ +
-        s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
-    }
-    checkpointLocation
+      useTempCheckpointLocation = true,
+      trigger = trigger)
   }
 
   /**
@@ -506,11 +471,21 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     val partitions = normalizedParCols.map(_.map(col => col -> (Option.empty[String])).toMap)
     val overwrite = mode == SaveMode.Overwrite
 
+    // A partitioned relation's schema can be different from the input logicalPlan, since
+    // partition columns are all moved after data columns. We Project to adjust the ordering.
+    // TODO: this belongs to the analyzer.
+    val input = normalizedParCols.map { parCols =>
+      val (inputPartCols, inputDataCols) = df.logicalPlan.output.partition { attr =>
+        parCols.contains(attr.name)
+      }
+      Project(inputDataCols ++ inputPartCols, df.logicalPlan)
+    }.getOrElse(df.logicalPlan)
+
     df.sparkSession.sessionState.executePlan(
       InsertIntoTable(
         UnresolvedRelation(tableIdent),
         partitions.getOrElse(Map.empty[String, Option[String]]),
-        df.logicalPlan,
+        input,
         overwrite,
         ifNotExists = false)).toRdd
   }
@@ -725,9 +700,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following Parquet-specific option(s) for writing Parquet files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
-   * one of the known case-insensitive shorten names(`none`, `snappy`, `gzip`, and `lzo`).
-   * This will overwrite `spark.sql.parquet.compression.codec`. </li>
+   * <li>`compression` (default is the value specified in `spark.sql.parquet.compression.codec`):
+   * compression codec to use when saving to file. This can be one of the known case-insensitive
+   * shorten names(none, `snappy`, `gzip`, and `lzo`). This will override
+   * `spark.sql.parquet.compression.codec`.</li>
    *
    * @since 1.4.0
    */
@@ -744,9 +720,9 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
    * }}}
    *
    * You can set the following ORC-specific option(s) for writing ORC files:
-   * <li>`compression` (default `null`): compression codec to use when saving to file. This can be
+   * <li>`compression` (default `snappy`): compression codec to use when saving to file. This can be
    * one of the known case-insensitive shorten names(`none`, `snappy`, `zlib`, and `lzo`).
-   * This will overwrite `orc.compress`. </li>
+   * This will override `orc.compress`.</li>
    *
    * @since 1.5.0
    * @note Currently, this method can only be used after enabling Hive support

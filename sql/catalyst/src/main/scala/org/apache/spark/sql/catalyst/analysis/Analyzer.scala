@@ -452,17 +452,6 @@ class Analyzer(
 
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
       case i @ InsertIntoTable(u: UnresolvedRelation, parts, child, _, _) if child.resolved =>
-        // A partitioned relation's schema can be different from the input logicalPlan, since
-        // partition columns are all moved after data columns. We Project to adjust the ordering.
-        val input = if (parts.nonEmpty) {
-          val (inputPartCols, inputDataCols) = child.output.partition { attr =>
-            parts.contains(attr.name)
-          }
-          Project(inputDataCols ++ inputPartCols, child)
-        } else {
-          child
-        }
-
         val table = lookupTableFromCatalog(u)
         // adding the table's partitions or validate the query's partition info
         table match {
@@ -478,8 +467,8 @@ class Analyzer(
                      |Requested partitions: ${parts.keys.mkString(",")}
                      |Table partitions: ${tablePartitionNames.mkString(",")}""".stripMargin)
               }
-              // Partition columns are already correctly placed at the end of the child's output
-              i.copy(table = EliminateSubqueryAliases(table), child = input)
+              // Assume partition columns are correctly placed at the end of the child's output
+              i.copy(table = EliminateSubqueryAliases(table))
             } else {
               // Set up the table's partition scheme with all dynamic partitions by moving partition
               // columns to the end of the column list, in partition order.
@@ -497,7 +486,7 @@ class Analyzer(
                 child = Project(columns ++ partColumns, child))
             }
           case _ =>
-            i.copy(table = EliminateSubqueryAliases(table), child = input)
+            i.copy(table = EliminateSubqueryAliases(table))
         }
       case u: UnresolvedRelation =>
         val table = u.tableIdentifier
