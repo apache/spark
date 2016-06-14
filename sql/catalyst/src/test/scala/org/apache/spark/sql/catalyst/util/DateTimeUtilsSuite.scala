@@ -524,11 +524,12 @@ class DateTimeUtilsSuite extends SparkFunSuite {
   }
 
   test("daysToMillis and millisToDays") {
-    (-1001 to 2000).foreach { d =>
-      assert(millisToDays(daysToMillis(d)) === d)
-      val date = toJavaTimestamp(daysToMillis(d) * 1000L)
-      assert(date.getHours === 0)
-      assert(date.getMinutes === 0)
+     for (tz <- DateTimeTestUtils.ALL_TIMEZONES) {
+      DateTimeTestUtils.withDefaultTimeZone(tz) {
+        (-2000 to 2000).foreach { d =>
+          assert(millisToDays(daysToMillis(d)) === d)
+        }
+      }
     }
   }
 }

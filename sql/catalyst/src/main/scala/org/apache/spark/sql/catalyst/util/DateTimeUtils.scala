@@ -854,14 +854,18 @@ object DateTimeUtils {
    * Lookup the offset for given millis seconds since 1970-01-01 00:00:00 in a timezone.
    */
   private def getOffsetFromLocalMillis(millisLocal: Long, tz: TimeZone): Long = {
-    val rawOffset = tz.getRawOffset
+    var guess = tz.getRawOffset
     // the actual offset should be calculated based on milliseconds in UTC
-    var offset = tz.getOffset(millisLocal - rawOffset)
-    if (offset != rawOffset) {
-      // Could be in DST, try with best effort
-      offset = tz.getOffset(millisLocal - offset)
+    var actual = tz.getOffset(millisLocal - guess)
+    // At the start of DST, the local time is forwarded by an hour, so it's OK to get the
+    // local time bigger than current one after an round trip (local -> UTC -> local).
+    // At the end of DST, the local time is backwarded by an hour, actual offset will be
+    // less than guess, we should decrease the guess and try again.
+    while (actual < guess) {
+      guess = actual
+      actual = tz.getOffset(millisLocal - guess)
     }
-    offset
+    guess
   }
 
   /**
@@ -882,5 +886,15 @@ object DateTimeUtils {
     val tz = TimeZone.getTimeZone(timeZone)
     val offset = getOffsetFromLocalMillis(time / 1000L, tz)
     time - offset * 1000L
+  }
+
+  /**
+   * Re-initialize the current thread's thread locals. Exposed for testing.
+   */
+  private[util] def resetThreadLocals(): Unit = {
+    threadLocalGmtCalendar.remove()
+    threadLocalLocalTimeZone.remove()
+    threadLocalTimestampFormat.remove()
+    threadLocalDateFormat.remove()
   }
 }
