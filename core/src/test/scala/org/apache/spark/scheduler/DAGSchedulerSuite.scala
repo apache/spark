@@ -1602,13 +1602,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
-    val acc = new Accumulator[Int](0, new AccumulatorParam[Int] {
-      override def addAccumulator(t1: Int, t2: Int): Int = t1 + t2
-      override def zero(initialValue: Int): Int = 0
-      override def addInPlace(r1: Int, r2: Int): Int = {
-        throw new DAGSchedulerSuiteDummyException
-      }
-    })
+    val acc = new LongAccumulator {
+      override def add(v: java.lang.Long): Unit = throw new DAGSchedulerSuiteDummyException
+      override def add(v: Long): Unit = throw new DAGSchedulerSuiteDummyException
+    }
+    sc.register(acc)
 
     // Run this on executors
     sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
