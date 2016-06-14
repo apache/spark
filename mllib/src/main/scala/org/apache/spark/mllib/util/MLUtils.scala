@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.ml.linalg.{VectorUDT => MLVectorUDT}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
@@ -36,7 +37,7 @@ import org.apache.spark.util.random.BernoulliCellSampler
  * Helper methods to load, save and pre-process data used in ML Lib.
  */
 @Since("0.8.0")
-object MLUtils {
+object MLUtils extends Logging {
 
   private[mllib] lazy val EPSILON = {
     var eps = 1.0
@@ -290,6 +291,9 @@ object MLUtils {
       return dataset.toDF()
     }
 
+    logWarning("Vector column conversion has serialization overhead. " +
+      "Please migrate your datasets and workflows to use the spark.ml package.")
+
     // TODO: This implementation has performance issues due to unnecessary serialization.
     // TODO: It is better (but trickier) if we can cast the old vector type to new type directly.
     val convertToML = udf { v: Vector => v.asML }
@@ -338,6 +342,9 @@ object MLUtils {
     if (colSet.isEmpty) {
       return dataset.toDF()
     }
+
+    logWarning("Vector column conversion has serialization overhead. " +
+      "Please migrate your datasets and workflows to use the spark.ml package.")
 
     // TODO: This implementation has performance issues due to unnecessary serialization.
     // TODO: It is better (but trickier) if we can cast the new vector type to old type directly.
