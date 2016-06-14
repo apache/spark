@@ -459,8 +459,8 @@ class DataFrameWriter(object):
         self._jwrite = df._jdf.write()
 
     def _cq(self, jcq):
-        from pyspark.sql.streaming import ContinuousQuery
-        return ContinuousQuery(jcq)
+        from pyspark.sql.streaming import StreamingQuery
+        return StreamingQuery(jcq)
 
     @since(1.4)
     def mode(self, saveMode):
@@ -1095,8 +1095,8 @@ class DataStreamWriter(object):
         self._jwrite = df._jdf.writeStream()
 
     def _cq(self, jcq):
-        from pyspark.sql.streaming import ContinuousQuery
-        return ContinuousQuery(jcq)
+        from pyspark.sql.streaming import StreamingQuery
+        return StreamingQuery(jcq)
 
     @since(2.0)
     def outputMode(self, outputMode):
@@ -1169,8 +1169,8 @@ class DataStreamWriter(object):
 
     @since(2.0)
     def queryName(self, queryName):
-        """Specifies the name of the :class:`ContinuousQuery` that can be started with
-        :func:`startStream`. This name must be unique among all the currently active queries
+        """Specifies the name of the :class:`StreamingQuery` that can be started with
+        :func:`start`. This name must be unique among all the currently active queries
         in the associated SparkSession.
 
         .. note:: Experimental.

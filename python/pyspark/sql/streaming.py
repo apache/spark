@@ -26,10 +26,10 @@ from abc import ABCMeta, abstractmethod
 from pyspark import since
 from pyspark.rdd import ignore_unicode_prefix
 
-__all__ = ["ContinuousQuery"]
+__all__ = ["StreamingQuery"]
 
 
-class ContinuousQuery(object):
+class StreamingQuery(object):
     """
     A handle to a query that is executing continuously in the background as new data arrives.
     All these methods are thread-safe.
@@ -45,7 +45,7 @@ class ContinuousQuery(object):
     @property
     @since(2.0)
     def id(self):
-        """The id of the continuous query. This id is unique across all queries that have been
+        """The id of the streaming query. This id is unique across all queries that have been
         started in the current process.
         """
         return self._jcq.id()
@@ -53,14 +53,14 @@ class ContinuousQuery(object):
     @property
     @since(2.0)
     def name(self):
-        """The name of the continuous query. This name is unique across all active queries.
+        """The name of the streaming query. This name is unique across all active queries.
         """
         return self._jcq.name()
 
     @property
     @since(2.0)
     def isActive(self):
-        """Whether this continuous query is currently active or not.
+        """Whether this streaming query is currently active or not.
         """
         return self._jcq.isActive()
 
@@ -75,7 +75,7 @@ class ContinuousQuery(object):
         immediately (if the query was terminated by :func:`stop()`), or throw the exception
         immediately (if the query has terminated with exception).
 
-        throws :class:`ContinuousQueryException`, if `this` query has terminated with an exception
+        throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
         """
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout < 0:
@@ -96,14 +96,13 @@ class ContinuousQuery(object):
 
     @since(2.0)
     def stop(self):
-        """Stop this continuous query.
+        """Stop this streaming query.
         """
         self._jcq.stop()
 
 
-class ContinuousQueryManager(object):
-    """A class to manage all the :class:`ContinuousQuery` ContinuousQueries active
-    on a :class:`SQLContext`.
+class StreamingQueryManager(object):
+    """A class to manage all the :class:`StreamingQuery` StreamingQueries active.
 
     .. note:: Experimental
 
@@ -119,14 +118,14 @@ class ContinuousQueryManager(object):
     def active(self):
         """Returns a list of active queries associated with this SQLContext
 
-        >>> cq = df.writeStream.format('memory').queryName('this_query').start()
+        >>> sq = df.writeStream.format('memory').queryName('this_query').start()
         >>> cqm = spark.streams
-        >>> # get the list of active continuous queries
+        >>> # get the list of active streaming queries
         >>> [q.name for q in cqm.active]
         [u'this_query']
-        >>> cq.stop()
+        >>> sq.stop()
         """
-        return [ContinuousQuery(jcq) for jcq in self._jcqm.active()]
+        return [StreamingQuery(jcq) for jcq in self._jcqm.active()]
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -134,20 +133,20 @@ class ContinuousQueryManager(object):
         """Returns an active query from this SQLContext or throws exception if an active query
         with this name doesn't exist.
 
-        >>> cq = df.writeStream.format('memory').queryName('this_query').start()
-        >>> cq.name
+        >>> sq = df.writeStream.format('memory').queryName('this_query').start()
+        >>> sq.name
         u'this_query'
-        >>> cq = spark.streams.get(cq.id)
-        >>> cq.isActive
+        >>> sq = spark.streams.get(sq.id)
+        >>> sq.isActive
         True
-        >>> cq = sqlContext.streams.get(cq.id)
-        >>> cq.isActive
+        >>> sq = sqlContext.streams.get(sq.id)
+        >>> sq.isActive
         True
-        >>> cq.stop()
+        >>> sq.stop()
         """
         if not isinstance(id, intlike):
             raise ValueError("The id for the query must be an integer. Got: %d" % id)
-        return ContinuousQuery(self._jcqm.get(id))
+        return StreamingQuery(self._jcqm.get(id))
 
     @since(2.0)
     def awaitAnyTermination(self, timeout=None):
@@ -168,7 +167,7 @@ class ContinuousQueryManager(object):
         queries, users need to stop all of them after any of them terminates with exception, and
         then check the `query.exception()` for each query.
 
-        throws :class:`ContinuousQueryException`, if `this` query has terminated with an exception
+        throws :class:`StreamingQueryException`, if `this` query has terminated with an exception
         """
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout < 0:
@@ -188,7 +187,7 @@ class ContinuousQueryManager(object):
 
 
 class Trigger(object):
-    """Used to indicate how often results should be produced by a :class:`ContinuousQuery`.
+    """Used to indicate how often results should be produced by a :class:`StreamingQuery`.
 
     .. note:: Experimental
 

@@ -27,7 +27,7 @@ import org.scalatest.BeforeAndAfter
 import org.apache.spark.sql._
 import org.apache.spark.sql.execution.streaming._
 import org.apache.spark.sql.sources.{StreamSinkProvider, StreamSourceProvider}
-import org.apache.spark.sql.streaming.{ContinuousQuery, OutputMode, ProcessingTime, StreamTest}
+import org.apache.spark.sql.streaming.{OutputMode, ProcessingTime, StreamingQuery, StreamTest}
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
@@ -265,7 +265,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
   test("unique query names") {
 
     /** Start a query with a specific name */
-    def startQueryWithName(name: String = ""): ContinuousQuery = {
+    def startQueryWithName(name: String = ""): StreamingQuery = {
       spark.readStream
         .format("org.apache.spark.sql.streaming.test")
         .load("/test")
@@ -277,7 +277,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     }
 
     /** Start a query without specifying a name */
-    def startQueryWithoutName(): ContinuousQuery = {
+    def startQueryWithoutName(): StreamingQuery = {
       spark.readStream
         .format("org.apache.spark.sql.streaming.test")
         .load("/test")

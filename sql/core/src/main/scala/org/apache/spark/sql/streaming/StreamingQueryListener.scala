@@ -22,22 +22,22 @@ import org.apache.spark.scheduler.SparkListenerEvent
 
 /**
  * :: Experimental ::
- * Interface for listening to events related to [[ContinuousQuery ContinuousQueries]].
+ * Interface for listening to events related to [[StreamingQuery StreamingQueries]].
  * @note The methods are not thread-safe as they may be called from different threads.
  *
  * @since 2.0.0
  */
 @Experimental
-abstract class ContinuousQueryListener {
+abstract class StreamingQueryListener {
 
-  import ContinuousQueryListener._
+  import StreamingQueryListener._
 
   /**
    * Called when a query is started.
    * @note This is called synchronously with
    *       [[org.apache.spark.sql.DataFrameWriter `DataFrameWriter.startStream()`]],
    *       that is, `onQueryStart` will be called on all listeners before
-   *       `DataFrameWriter.startStream()` returns the corresponding [[ContinuousQuery]]. Please
+   *       `DataFrameWriter.startStream()` returns the corresponding [[StreamingQuery]]. Please
    *       don't block this method as it will block your query.
    * @since 2.0.0
    */
@@ -46,9 +46,9 @@ abstract class ContinuousQueryListener {
   /**
    * Called when there is some status update (ingestion rate updated, etc.)
    *
-   * @note This method is asynchronous. The status in [[ContinuousQuery]] will always be
-   *       latest no matter when this method is called. Therefore, the status of [[ContinuousQuery]]
-   *       may be changed before/when you process the event. E.g., you may find [[ContinuousQuery]]
+   * @note This method is asynchronous. The status in [[StreamingQuery]] will always be
+   *       latest no matter when this method is called. Therefore, the status of [[StreamingQuery]]
+   *       may be changed before/when you process the event. E.g., you may find [[StreamingQuery]]
    *       is terminated when you are processing [[QueryProgress]].
    * @since 2.0.0
    */
@@ -64,15 +64,15 @@ abstract class ContinuousQueryListener {
 
 /**
  * :: Experimental ::
- * Companion object of [[ContinuousQueryListener]] that defines the listener events.
+ * Companion object of [[StreamingQueryListener]] that defines the listener events.
  * @since 2.0.0
  */
 @Experimental
-object ContinuousQueryListener {
+object StreamingQueryListener {
 
   /**
    * :: Experimental ::
-   * Base type of [[ContinuousQueryListener]] events
+   * Base type of [[StreamingQueryListener]] events
    * @since 2.0.0
    */
   @Experimental
@@ -84,7 +84,7 @@ object ContinuousQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryStarted private[sql](val queryInfo: ContinuousQueryInfo) extends Event
+  class QueryStarted private[sql](val queryInfo: StreamingQueryInfo) extends Event
 
   /**
    * :: Experimental ::
@@ -92,14 +92,14 @@ object ContinuousQueryListener {
    * @since 2.0.0
    */
   @Experimental
-  class QueryProgress private[sql](val queryInfo: ContinuousQueryInfo) extends Event
+  class QueryProgress private[sql](val queryInfo: StreamingQueryInfo) extends Event
 
   /**
    * :: Experimental ::
    * Event representing that termination of a query
    *
    * @param queryInfo Information about the status of the query.
-   * @param exception The exception message of the [[ContinuousQuery]] if the query was terminated
+   * @param exception The exception message of the [[StreamingQuery]] if the query was terminated
    *                  with an exception. Otherwise, it will be `None`.
    * @param stackTrace The stack trace of the exception if the query was terminated with an
    *                   exception. It will be empty if there was no error.
@@ -107,7 +107,7 @@ object ContinuousQueryListener {
    */
   @Experimental
   class QueryTerminated private[sql](
-      val queryInfo: ContinuousQueryInfo,
+      val queryInfo: StreamingQueryInfo,
       val exception: Option[String],
       val stackTrace: Seq[StackTraceElement]) extends Event
 }

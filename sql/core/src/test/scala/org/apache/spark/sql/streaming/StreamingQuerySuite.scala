@@ -24,7 +24,7 @@ import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, Me
 import org.apache.spark.util.Utils
 
 
-class ContinuousQuerySuite extends StreamTest with BeforeAndAfter {
+class StreamingQuerySuite extends StreamTest with BeforeAndAfter {
 
   import AwaitTerminationTester._
   import testImplicits._
@@ -37,7 +37,7 @@ class ContinuousQuerySuite extends StreamTest with BeforeAndAfter {
     val inputData = MemoryStream[Int]
     val mapped = inputData.toDS().map { 6 / _}
 
-    def startQuery(queryName: String): ContinuousQuery = {
+    def startQuery(queryName: String): StreamingQuery = {
       val metadataRoot = Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
       val writer = mapped.writeStream
       writer
@@ -126,7 +126,7 @@ class ContinuousQuerySuite extends StreamTest with BeforeAndAfter {
   }
 
   /**
-   * A [[StreamAction]] to test the behavior of `ContinuousQuery.awaitTermination()`.
+   * A [[StreamAction]] to test the behavior of `StreamingQuery.awaitTermination()`.
    *
    * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
    * @param timeoutMs         Timeout in milliseconds
@@ -151,7 +151,7 @@ class ContinuousQuerySuite extends StreamTest with BeforeAndAfter {
   object TestAwaitTermination {
 
     /**
-     * Tests the behavior of `ContinuousQuery.awaitTermination`.
+     * Tests the behavior of `StreamingQuery.awaitTermination`.
      *
      * @param expectedBehavior  Expected behavior (not blocked, blocked, or exception thrown)
      * @param timeoutMs         Timeout in milliseconds

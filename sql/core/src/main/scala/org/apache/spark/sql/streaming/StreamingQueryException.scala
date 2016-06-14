@@ -22,7 +22,7 @@ import org.apache.spark.sql.execution.streaming.{Offset, StreamExecution}
 
 /**
  * :: Experimental ::
- * Exception that stopped a [[ContinuousQuery]].
+ * Exception that stopped a [[StreamingQuery]].
  * @param query      Query that caused the exception
  * @param message     Message of this exception
  * @param cause       Internal cause of this exception
@@ -31,8 +31,8 @@ import org.apache.spark.sql.execution.streaming.{Offset, StreamExecution}
  * @since 2.0.0
  */
 @Experimental
-class ContinuousQueryException private[sql](
-    @transient val query: ContinuousQuery,
+class StreamingQueryException private[sql](
+    @transient val query: StreamingQuery,
     val message: String,
     val cause: Throwable,
     val startOffset: Option[Offset] = None,

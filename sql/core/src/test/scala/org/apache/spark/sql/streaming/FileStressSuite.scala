@@ -57,7 +57,7 @@ class FileStressSuite extends StreamTest {
     @volatile
     var continue = true
     @volatile
-    var stream: ContinuousQuery = null
+    var stream: StreamingQuery = null
 
     val writer = new Thread("stream writer") {
       override def run(): Unit = {
@@ -100,7 +100,7 @@ class FileStressSuite extends StreamTest {
 
     val input = spark.readStream.format("text").load(inputDir)
 
-    def startStream(): ContinuousQuery = {
+    def startStream(): StreamingQuery = {
       val output = input
         .repartition(5)
         .as[String]
@@ -139,7 +139,7 @@ class FileStressSuite extends StreamTest {
         try {
           stream.awaitTermination()
         } catch {
-          case ce: ContinuousQueryException =>
+          case ce: StreamingQueryException =>
             failures += 1
         }
       }

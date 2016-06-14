@@ -109,7 +109,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
   /**
    * :: Experimental ::
-   * Specifies the name of the [[ContinuousQuery]] that can be started with `startStream()`.
+   * Specifies the name of the [[StreamingQuery]] that can be started with `startStream()`.
    * This name must be unique among all the currently active queries in the associated SQLContext.
    *
    * @since 2.0.0
@@ -221,26 +221,26 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
   /**
    * :: Experimental ::
    * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
+   * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
    */
   @Experimental
-  def start(path: String): ContinuousQuery = {
+  def start(path: String): StreamingQuery = {
     option("path", path).start()
   }
 
   /**
    * :: Experimental ::
    * Starts the execution of the streaming query, which will continually output results to the given
-   * path as new data arrives. The returned [[ContinuousQuery]] object can be used to interact with
+   * path as new data arrives. The returned [[StreamingQuery]] object can be used to interact with
    * the stream.
    *
    * @since 2.0.0
    */
   @Experimental
-  def start(): ContinuousQuery = {
+  def start(): StreamingQuery = {
     if (source == "memory") {
       assertNotPartitioned("memory")
       if (extraOptions.get("queryName").isEmpty) {
@@ -249,7 +249,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
 
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
-      val query = df.sparkSession.sessionState.continuousQueryManager.startQuery(
+      val query = df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
@@ -263,7 +263,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
     } else if (source == "foreach") {
       assertNotPartitioned("foreach")
       val sink = new ForeachSink[T](foreachWriter)(ds.exprEnc)
-      df.sparkSession.sessionState.continuousQueryManager.startQuery(
+      df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
@@ -278,7 +278,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) {
           className = source,
           options = extraOptions.toMap,
           partitionColumns = normalizedParCols.getOrElse(Nil))
-      df.sparkSession.sessionState.continuousQueryManager.startQuery(
+      df.sparkSession.sessionState.streamingQueryManager.startQuery(
         extraOptions.get("queryName"),
         extraOptions.get("checkpointLocation"),
         df,
