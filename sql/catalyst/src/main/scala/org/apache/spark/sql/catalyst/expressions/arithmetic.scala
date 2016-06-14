@@ -221,7 +221,6 @@ case class Divide(left: Expression, right: Expression)
 
   private lazy val div: (Any, Any) => Any = dataType match {
     case ft: FractionalType => ft.fractional.asInstanceOf[Fractional[Any]].div
-    case it: IntegralType => it.integral.asInstanceOf[Integral[Any]].quot
   }
 
   override def eval(input: InternalRow): Any = {

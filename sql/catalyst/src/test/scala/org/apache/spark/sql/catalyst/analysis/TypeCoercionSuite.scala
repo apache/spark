@@ -19,10 +19,12 @@ package org.apache.spark.sql.catalyst.analysis
 
 import java.sql.Timestamp
 
+import org.apache.spark.sql.catalyst.analysis.TypeCoercion.{Division, FunctionArgumentConversion}
+import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.CalendarInterval
 
@@ -202,6 +204,14 @@ class TypeCoercionSuite extends PlanTest {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
     comparePlans(
       rule(Project(Seq(Alias(initial, "a")()), testRelation)),
+      Project(Seq(Alias(transformed, "a")()), testRelation))
+  }
+
+  private def ruleTest(
+      rule: RuleExecutor[LogicalPlan], initial: Expression, transformed: Expression): Unit = {
+    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+    comparePlans(
+      rule.execute(Project(Seq(Alias(initial, "a")()), testRelation)),
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
@@ -629,6 +639,25 @@ class TypeCoercionSuite extends PlanTest {
       In(Cast(Literal("a"), StringType),
         Seq(Cast(Literal(1), StringType), Cast(Literal("b"), StringType)))
     )
+  }
+
+  test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal") {
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches =
+        Seq(Batch("Resolution", FixedPoint(10), FunctionArgumentConversion, Division))
+    }
+
+    // Cast integer to double
+    ruleTest(analyzer, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
+    // left expression is already Double, skip
+    ruleTest(analyzer, sum(Divide(4.0, 3)), sum(Divide(4.0, 3)))
+    // Cast Float to Double
+    ruleTest(
+      analyzer,
+      sum(Divide(4.0f, 3)),
+      sum(Divide(Cast(4.0f, DoubleType), Cast(3, DoubleType))))
+    // left expression is already Decimal, skip
+    ruleTest(analyzer, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
   }
 }
 
