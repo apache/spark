@@ -201,17 +201,18 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   private def ruleTest(rule: Rule[LogicalPlan], initial: Expression, transformed: Expression) {
-    val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
-    comparePlans(
-      rule(Project(Seq(Alias(initial, "a")()), testRelation)),
-      Project(Seq(Alias(transformed, "a")()), testRelation))
+    ruleTest(Seq(rule), initial, transformed)
   }
 
   private def ruleTest(
-      rule: RuleExecutor[LogicalPlan], initial: Expression, transformed: Expression): Unit = {
+      rules: Seq[Rule[LogicalPlan]], initial: Expression, transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
+    val analyzer = new RuleExecutor[LogicalPlan] {
+      override val batches = Seq(Batch("Resolution", FixedPoint(3), rules: _*))
+    }
+
     comparePlans(
-      rule.execute(Project(Seq(Alias(initial, "a")()), testRelation)),
+      analyzer.execute(Project(Seq(Alias(initial, "a")()), testRelation)),
       Project(Seq(Alias(transformed, "a")()), testRelation))
   }
 
@@ -642,22 +643,18 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal") {
-    val analyzer = new RuleExecutor[LogicalPlan] {
-      override val batches =
-        Seq(Batch("Resolution", FixedPoint(10), FunctionArgumentConversion, Division))
-    }
-
-    // Cast integer to double
-    ruleTest(analyzer, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
-    // left expression is already Double, skip
-    ruleTest(analyzer, sum(Divide(4.0, 3)), sum(Divide(4.0, 3)))
-    // Cast Float to Double
+    val rules = Seq(FunctionArgumentConversion, Division)
+    // Casts integer to double
+    ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
+    // Left expression is already Double, skip
+    ruleTest(rules, sum(Divide(4.0, 3)), sum(Divide(4.0, 3)))
+    // Casts Float to Double
     ruleTest(
-      analyzer,
+      rules,
       sum(Divide(4.0f, 3)),
       sum(Divide(Cast(4.0f, DoubleType), Cast(3, DoubleType))))
-    // left expression is already Decimal, skip
-    ruleTest(analyzer, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
+    // Lefts expression is already Decimal, skip
+    ruleTest(rules, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
   }
 }
 
