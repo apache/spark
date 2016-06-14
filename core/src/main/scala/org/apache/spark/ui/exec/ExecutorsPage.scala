@@ -55,7 +55,7 @@ private[ui] class ExecutorsPage(
   private val GCTimePercent = 0.1
 
   // a safe String to Int for sorting ids (converts non-numeric Strings to -1)
-  private def strToInt(str: String) : Int = Try(str.toInt).getOrElse(-1)
+  private def idStrToInt(str: String) : Int = Try(str.toInt).getOrElse(-1)
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val (activeExecutorInfo, deadExecutorInfo) = listener.synchronized {
@@ -73,7 +73,8 @@ private[ui] class ExecutorsPage(
     }
 
     val execInfo = activeExecutorInfo ++ deadExecutorInfo
-    val execInfoSorted = execInfo.sortWith((a, b) => strToInt(a.id) > strToInt(b.id))
+    implicit val idOrder = Ordering[Int].on((s: String) => idStrToInt(s)).reverse
+    val execInfoSorted = execInfo.sortBy(_.id)
     val logsExist = execInfo.filter(_.executorLogs.nonEmpty).nonEmpty
 
     val execTable = {
@@ -140,7 +141,7 @@ private[ui] class ExecutorsPage(
       }
 
     <tr>
-      <td sorttable_customkey={strToInt(info.id).toString}>{info.id}</td>
+      <td sorttable_customkey={idStrToInt(info.id).toString}>{info.id}</td>
       <td>{info.hostPort}</td>
       <td sorttable_customkey={executorStatus.toString}>
         {executorStatus}
