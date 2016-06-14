@@ -26,6 +26,12 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
+/**
+ * Interface used to load a streaming [[Dataset]] from external storage systems (e.g. file systems,
+ * key-value stores, etc). Use [[SparkSession.readStream]] to access this.
+ *
+ * @since 2.0.0
+ */
 @Experimental
 final class DataStreamReader private[sql](sparkSession: SparkSession) extends Logging {
   /**

@@ -144,7 +144,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
       .format("memory")
       .outputMode("append")
       .queryName("memStream")
-      .save()
+      .start()
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
@@ -170,7 +170,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
       .format("memory")
       .outputMode("complete")
       .queryName("memStream")
-      .save()
+      .start()
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
@@ -194,7 +194,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
       val query = input.toDF().writeStream
         .format("memory")
         .queryName("memStream")
-        .save()
+        .start()
       input.addData(1, 2, 3)
       query.processAllAvailable()
 
@@ -217,7 +217,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
       val input = MemoryStream[Int]
       val query = input.toDF().writeStream
           .format("memory")
-          .save()
+          .start()
     }
 
     assert(error.message contains "queryName must be specified")
@@ -231,7 +231,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
         .format("memory")
         .queryName("memStream")
         .option("checkpointLocation", location)
-        .save()
+        .start()
     input.addData(1, 2, 3)
     query.processAllAvailable()
     query.stop()
@@ -241,7 +241,7 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
         .format("memory")
         .queryName("memStream")
         .option("checkpointLocation", location)
-        .save()
+        .start()
     }
   }
 

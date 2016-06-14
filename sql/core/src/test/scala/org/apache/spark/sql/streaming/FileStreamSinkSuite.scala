@@ -130,7 +130,8 @@ class FileStreamSinkSuite extends StreamTest {
       query =
         df.writeStream
           .option("checkpointLocation", checkpointDir)
-          .parquet(outputDir)
+          .format("parquet")
+          .start(outputDir)
 
       inputData.addData(1, 2, 3)
 
@@ -164,7 +165,8 @@ class FileStreamSinkSuite extends StreamTest {
           .writeStream
           .partitionBy("id")
           .option("checkpointLocation", checkpointDir)
-          .parquet(outputDir)
+          .format("parquet")
+          .start(outputDir)
 
       inputData.addData(1, 2, 3)
       failAfter(streamingTimeout) {
@@ -250,7 +252,7 @@ class FileStreamSinkSuite extends StreamTest {
         }
         query = writer
             .option("checkpointLocation", checkpointDir)
-            .save(outputDir)
+            .start(outputDir)
       } finally {
         if (query != null) {
           query.stop()

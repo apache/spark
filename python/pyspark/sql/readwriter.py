@@ -1211,7 +1211,7 @@ class DataStreamWriter(object):
 
     @ignore_unicode_prefix
     @since(2.0)
-    def save(self, path=None, format=None, partitionBy=None, queryName=None, **options):
+    def start(self, path=None, format=None, partitionBy=None, queryName=None, **options):
         """Streams the contents of the :class:`DataFrame` to a data source.
 
         The data source is specified by the ``format`` and a set of ``options``.
@@ -1232,7 +1232,7 @@ class DataStreamWriter(object):
         :param options: All other string options. You may want to provide a `checkpointLocation`
             for most streams, however it is not required for a `memory` stream.
 
-        >>> cq = sdf.writeStream.format('memory').queryName('this_query').save()
+        >>> cq = sdf.writeStream.format('memory').queryName('this_query').start()
         >>> cq.isActive
         True
         >>> cq.name
@@ -1240,7 +1240,7 @@ class DataStreamWriter(object):
         >>> cq.stop()
         >>> cq.isActive
         False
-        >>> cq = sdf.writeStream.trigger(processingTime='5 seconds').save(
+        >>> cq = sdf.writeStream.trigger(processingTime='5 seconds').start(
         ...     queryName='that_query', format='memory')
         >>> cq.name
         u'that_query'
@@ -1256,9 +1256,9 @@ class DataStreamWriter(object):
         if queryName is not None:
             self.queryName(queryName)
         if path is None:
-            return self._cq(self._jwrite.save())
+            return self._cq(self._jwrite.start())
         else:
-            return self._cq(self._jwrite.save(path))
+            return self._cq(self._jwrite.start(path))
 
 
 def _test():

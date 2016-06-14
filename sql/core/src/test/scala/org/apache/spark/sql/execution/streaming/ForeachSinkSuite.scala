@@ -41,6 +41,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
       val query = input.toDS().repartition(2).writeStream
         .option("checkpointLocation", checkpointDir.getCanonicalPath)
         .foreach(new TestForeachWriter())
+        .start()
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 
@@ -77,7 +78,7 @@ class ForeachSinkSuite extends StreamTest with SharedSQLContext with BeforeAndAf
             super.process(value)
             throw new RuntimeException("error")
           }
-        })
+        }).start()
       input.addData(1, 2, 3, 4)
       query.processAllAvailable()
 

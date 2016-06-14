@@ -91,7 +91,7 @@ class StreamSuite extends StreamTest {
         withTempDir { checkpointDir =>
           val query = df.writeStream.format("parquet")
             .option("checkpointLocation", checkpointDir.getAbsolutePath)
-            .save(outputDir.getAbsolutePath)
+            .start(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
             val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]

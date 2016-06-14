@@ -90,7 +90,7 @@ class DataFrameReaderWriterSuite extends QueryTest with SharedSQLContext {
         .format("org.apache.spark.sql.test")
         .load()
         .writeStream
-        .save()
+        .start()
     }
     Seq("'writeStream'", "only", "streaming Dataset/DataFrame").foreach { s =>
       assert(e.getMessage.toLowerCase.contains(s.toLowerCase))

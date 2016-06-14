@@ -44,7 +44,7 @@ class ContinuousQuerySuite extends StreamTest with BeforeAndAfter {
         .queryName(queryName)
         .format("memory")
         .option("checkpointLocation", metadataRoot)
-        .save()
+        .start()
     }
 
     val q1 = startQuery("q1")

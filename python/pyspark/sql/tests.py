@@ -929,7 +929,7 @@ class SQLTests(ReusedPySparkTestCase):
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
         cq = df.writeStream.option('checkpointLocation', chk).queryName('this_query') \
-            .format('parquet').outputMode('append').option('path', out).save()
+            .format('parquet').outputMode('append').option('path', out).start()
         try:
             self.assertEqual(cq.name, 'this_query')
             self.assertTrue(cq.isActive)
@@ -957,7 +957,7 @@ class SQLTests(ReusedPySparkTestCase):
         cq = df.writeStream.option('checkpointLocation', fake1)\
             .format('memory').option('path', fake2) \
             .queryName('fake_query').outputMode('append') \
-            .save(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
 
         try:
             self.assertEqual(cq.name, 'this_query')
@@ -984,7 +984,7 @@ class SQLTests(ReusedPySparkTestCase):
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
         cq = df.writeStream\
-            .save(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
             self.assertTrue(cq.isActive)
             try:
@@ -1012,7 +1012,7 @@ class SQLTests(ReusedPySparkTestCase):
         out = os.path.join(tmpPath, 'out')
         chk = os.path.join(tmpPath, 'chk')
         cq = df.writeStream\
-            .save(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
+            .start(path=out, format='parquet', queryName='this_query', checkpointLocation=chk)
         try:
             self.assertTrue(cq.isActive)
             try:

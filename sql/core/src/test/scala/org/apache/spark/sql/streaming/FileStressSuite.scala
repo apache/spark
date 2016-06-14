@@ -120,13 +120,13 @@ class FileStressSuite extends StreamTest {
           .partitionBy("id")
           .format("parquet")
           .option("checkpointLocation", checkpoint)
-          .save(outputDir)
+          .start(outputDir)
       } else {
         output
           .writeStream
           .format("parquet")
           .option("checkpointLocation", checkpoint)
-          .save(outputDir)
+          .start(outputDir)
       }
     }
 

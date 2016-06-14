@@ -230,7 +230,7 @@ class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
                 .queryName(s"query$i")
                 .option("checkpointLocation", metadataRoot)
                 .outputMode("append")
-                .save()
+                .start()
                 .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>

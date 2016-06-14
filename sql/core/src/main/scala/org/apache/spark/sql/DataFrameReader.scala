@@ -33,7 +33,7 @@ import org.apache.spark.sql.types.StructType
 
 /**
  * Interface used to load a [[Dataset]] from external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[SparkSession.read]] to access this.
+ * key-value stores, etc). Use [[SparkSession.read]] to access this.
  *
  * @since 1.4.0
  */

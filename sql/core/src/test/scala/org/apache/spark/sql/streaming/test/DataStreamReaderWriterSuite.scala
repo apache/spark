@@ -130,7 +130,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .save()
+      .start()
       .stop()
   }
 
@@ -141,7 +141,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .save()
+      .start()
       .stop()
   }
 
@@ -168,7 +168,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .options(Map("opt2" -> "2"))
       .options(map)
       .option("checkpointLocation", newMetadataDir)
-      .save()
+      .start()
       .stop()
 
     assert(LastOptions.parameters("opt1") == "1")
@@ -184,7 +184,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .save()
+      .start()
       .stop()
     assert(LastOptions.partitionColumns == Nil)
 
@@ -192,7 +192,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .partitionBy("a")
-      .save()
+      .start()
       .stop()
     assert(LastOptions.partitionColumns == Seq("a"))
 
@@ -201,7 +201,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("A")
-        .save()
+        .start()
         .stop()
       assert(LastOptions.partitionColumns == Seq("a"))
     }
@@ -211,7 +211,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("b")
-        .save()
+        .start()
         .stop()
     }
   }
@@ -229,7 +229,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .save("/test")
+      .start("/test")
       .stop()
 
     assert(LastOptions.parameters("path") == "/test")
@@ -254,7 +254,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
       .option("checkpointLocation", newMetadataDir)
-      .save("/test")
+      .start("/test")
       .stop()
 
     assert(LastOptions.parameters("intOpt") == "56")
@@ -273,7 +273,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .queryName(name)
-        .save()
+        .start()
     }
 
     /** Start a query without specifying a name */
@@ -284,7 +284,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
         .writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
-        .save()
+        .start()
     }
 
     /** Get the names of active streams */
@@ -332,7 +332,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime(10.seconds))
-      .save()
+      .start()
     q.stop()
 
     assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(10000))
@@ -341,7 +341,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
-      .save()
+      .start()
     q.stop()
 
     assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(100000))
@@ -364,7 +364,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation)
       .trigger(ProcessingTime(10.seconds))
-      .save()
+      .start()
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
@@ -399,13 +399,30 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     testError("Xyz")
   }
 
-  test("check foreach() does not support partitioning") {
+  test("check foreach() catches null writers") {
     val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
       .load()
 
+    var w = df.writeStream
+    var e = intercept[IllegalArgumentException](w.foreach(null))
+    Seq("foreach", "null").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
+
+  test("check foreach() does not support partitioning") {
+    val df = spark.readStream
+      .format("org.apache.spark.sql.streaming.test")
+      .load()
+    val foreachWriter = new ForeachWriter[Row] {
+      override def open(partitionId: Long, version: Long): Boolean = false
+      override def process(value: Row): Unit = {}
+      override def close(errorOrNull: Throwable): Unit = {}
+    }
     var w = df.writeStream.partitionBy("value")
-    var e = intercept[AnalysisException](w.foreach(null))
+    var e = intercept[AnalysisException](w.foreach(foreachWriter).start())
     Seq("foreach", "partitioning").foreach { s =>
       assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
     }
@@ -421,7 +438,7 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("console")
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime(2.seconds))
-      .save()
+      .start()
 
     cq.awaitTermination(2000L)
   }
@@ -430,7 +447,11 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       intercept[AnalysisException] {
-        spark.range(10).writeStream.outputMode("append").partitionBy("id").parquet(path)
+        spark.range(10).writeStream
+          .outputMode("append")
+          .partitionBy("id")
+          .format("parquet")
+          .start(path)
       }
     }
   }
