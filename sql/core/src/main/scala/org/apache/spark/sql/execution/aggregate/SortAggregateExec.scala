@@ -121,3 +121,6 @@ case class SortAggregateExec(
     }
   }
 }
+
+object SortAggregateExec
+

@@ -264,7 +264,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
               sys.error("Distinct columns cannot exist in Aggregate operator containing " +
                 "aggregate functions which don't support partial aggregation.")
             } else {
-              aggregate.AggUtils.planAggregateWithoutPartial(
+              aggregate.AggUtils.planAggregateWithoutDistinct(
                 groupingExpressions,
                 aggregateExpressions,
                 resultExpressions,

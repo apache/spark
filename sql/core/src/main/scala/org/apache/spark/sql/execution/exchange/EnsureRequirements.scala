@@ -21,6 +21,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.aggregate.AggUtils
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -151,11 +152,25 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
   private def ensureDistributionAndOrdering(operator: SparkPlan): SparkPlan = {
     val requiredChildDistributions: Seq[Distribution] = operator.requiredChildDistribution
     val requiredChildOrderings: Seq[Seq[SortOrder]] = operator.requiredChildOrdering
-    var children: Seq[SparkPlan] = operator.children
-    assert(requiredChildDistributions.length == children.length)
-    assert(requiredChildOrderings.length == children.length)
+    // var children: Seq[SparkPlan] = operator.children
+    // assert(requiredChildDistributions.length == children.length)
+    // assert(requiredChildOrderings.length == children.length)
 
     // Ensure that the operator's children satisfy their output distribution requirements:
+    val childrenWithDist = operator.children.zip(requiredChildDistributions)
+
+    // If necessary, add map-side aggregates
+    var (parent, children) = if (AggUtils.isAggregateExec(operator)) {
+      val (child, distribution) = childrenWithDist.head
+      if (!child.outputPartitioning.satisfies(distribution)) {
+        AggUtils.addMapSideAggregate(operator)
+      } else {
+        (operator, child :: Nil)
+      }
+    } else {
+      (operator, operator.children)
+    }
+
     children = children.zip(requiredChildDistributions).map {
       case (child, distribution) if child.outputPartitioning.satisfies(distribution) =>
         child
@@ -246,7 +261,7 @@ case class EnsureRequirements(conf: SQLConf) extends Rule[SparkPlan] {
       }
     }
 
-    operator.withNewChildren(children)
+    parent.withNewChildren(children)
   }
 
   def apply(plan: SparkPlan): SparkPlan = plan.transformUp {
