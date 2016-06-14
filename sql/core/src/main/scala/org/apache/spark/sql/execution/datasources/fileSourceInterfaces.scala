@@ -448,13 +448,22 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkContext: SparkContext): mutable.LinkedHashSet[FileStatus] = {
+      sparkSession: SparkSession): mutable.LinkedHashSet[FileStatus] = {
+    assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
+    val sparkContext = sparkSession.sparkContext
+    val sqlConf = sparkSession.sessionState.conf
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
 
-    val fakeStatuses = sparkContext.parallelize(serializedPaths).mapPartitions { paths =>
+    // Set the number of parallelism to prevent following file listing from generating many tasks
+    // in case of large #defaultParallelism.
+    val numParallelism = Math.min(paths.size, 10000)
+
+    val fakeStatuses = sparkContext
+        .parallelize(serializedPaths, numParallelism)
+        .mapPartitions { paths =>
       // Dummy jobconf to get to the pathFilter defined in configuration
       // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
       val jobConf = new JobConf(serializableConfiguration.value, this.getClass)
