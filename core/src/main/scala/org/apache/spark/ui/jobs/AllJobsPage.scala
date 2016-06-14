@@ -217,6 +217,10 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
       request: HttpServletRequest,
       jobTag: String,
       jobs: Seq[JobUIData]): Seq[Node] = {
+
+    val someJobHasJobGroup = jobs.exists(_.jobGroup.isDefined)
+    val jobIdTitle = if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
+
     val parameterJobPage = request.getParameter(jobTag + ".page")
     val parameterJobSortColumn = request.getParameter(jobTag + ".sort")
     val parameterJobSortDesc = request.getParameter(jobTag + ".desc")
@@ -226,8 +230,11 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
     val jobPage = Option(parameterJobPage).map(_.toInt).getOrElse(1)
     val jobSortColumn = Option(parameterJobSortColumn).map { sortColumn =>
       UIUtils.decodeURLParameter(sortColumn)
-    }.getOrElse("Job Id")
-    val jobSortDesc = Option(parameterJobSortDesc).map(_.toBoolean).getOrElse(false)
+    }.getOrElse(jobIdTitle)
+    val jobSortDesc = Option(parameterJobSortDesc).map(_.toBoolean).getOrElse(
+      // New jobs should be shown above old jobs by default.
+      if (jobSortColumn == jobIdTitle) true else false
+    )
     val jobPageSize = Option(parameterJobPageSize).map(_.toInt).getOrElse(100)
     val jobPrevPageSize = Option(parameterJobPrevPageSize).map(_.toInt).getOrElse(jobPageSize)
 
@@ -250,6 +257,7 @@ private[ui] class AllJobsPage(parent: JobsTab) extends WebUIPage("") {
         parent.jobProgresslistener.stageIdToInfo,
         parent.jobProgresslistener.stageIdToData,
         currentTime,
+        jobIdTitle,
         pageSize = jobPageSize,
         sortColumn = jobSortColumn,
         desc = jobSortDesc
@@ -397,8 +405,6 @@ private[ui] class JobDataSource(
     r
   }
 
-  def slicedJobIds: Set[Int] = _slicedJobIds
-
   private def getLastStageNameAndDescription(job: JobUIData): (String, String) = {
     val lastStageInfo = Option(job.stageIds)
       .filter(_.nonEmpty)
@@ -480,6 +486,7 @@ private[ui] class JobPagedTable(
     stageIdToInfo: HashMap[Int, StageInfo],
     stageIdToData: HashMap[(Int, Int), StageUIData],
     currentTime: Long,
+    jobIdTitle: String,
     pageSize: Int,
     sortColumn: String,
     desc: Boolean
@@ -521,12 +528,9 @@ private[ui] class JobPagedTable(
   }
 
   def headers: Seq[Node] = {
-    val someJobHasJobGroup = data.exists(_.jobGroup.isDefined)
     val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
       Seq(
-        ( {
-          if (someJobHasJobGroup) "Job Id (Job Group)" else "Job Id"
-        }, "", true),
+        (jobIdTitle, "", true),
         ("Description", "", true), ("Submitted", "", true), ("Duration", "", true),
         ("Stages: Succeeded/Total", "", false),
         ("Tasks (for all stages): Succeeded/Total", "", false)
