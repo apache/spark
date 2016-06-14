@@ -607,7 +607,7 @@ class SingleSessionSuite extends HiveThriftJdbcTest {
           }
 
           assert(rs2.next())
-          assert(rs2.getString(1) === "Usage: To be added.")
+          assert(rs2.getString(1) === "Usage: N/A.")
         } finally {
           statement.executeQuery("DROP TEMPORARY FUNCTION udtf_count2")
         }
