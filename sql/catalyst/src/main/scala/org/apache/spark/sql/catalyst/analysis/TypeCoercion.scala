@@ -73,7 +73,7 @@ object TypeCoercion {
       DoubleType)
 
   /**
-   * Case 1 type widening (see the classdoc comment above for HiveTypeCoercion).
+   * Case 1 type widening (see the classdoc comment above for TypeCoercion).
    *
    * Find the tightest common type of two types that might be used in a binary expression.
    * This handles all numeric types except fixed-precision decimals interacting with each other or
@@ -132,7 +132,7 @@ object TypeCoercion {
   }
 
   /**
-   * Case 2 type widening (see the classdoc comment above for HiveTypeCoercion).
+   * Case 2 type widening (see the classdoc comment above for TypeCoercion).
    *
    * i.e. the main difference with [[findTightestCommonTypeOfTwo]] is that here we allow some
    * loss of precision when widening decimal and double.
