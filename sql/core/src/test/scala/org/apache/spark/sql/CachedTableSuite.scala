@@ -552,4 +552,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       selectStar,
       Seq(Row(1, "1")))
   }
+
+  test("SPARK-15915 Logical plans should use canonicalized plan when override sameResult") {
+    val localRelation = Seq(1, 2, 3).toDF()
+    localRelation.createOrReplaceTempView("localRelation")
+
+    spark.catalog.cacheTable("localRelation")
+    assert(
+      localRelation.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i
+      }.size == 1)
+  }
 }
