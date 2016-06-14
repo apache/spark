@@ -49,7 +49,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val conf: SQLConf = new SQLConf
 
   def newHadoopConf(): Configuration = {
-    val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+    val hadoopConf = new Configuration(sparkSession.sharedState.hadoopConf)
     conf.getAllConfs.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
     hadoopConf
   }

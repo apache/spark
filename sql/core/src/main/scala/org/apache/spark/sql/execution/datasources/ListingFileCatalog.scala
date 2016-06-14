@@ -75,7 +75,7 @@ class ListingFileCatalog(
 
   protected def listLeafFiles(paths: Seq[Path]): mutable.LinkedHashSet[FileStatus] = {
     if (paths.length >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold) {
-      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession.sparkContext)
+      HadoopFsRelation.listLeafFilesInParallel(paths, hadoopConf, sparkSession)
     } else {
       // Dummy jobconf to get to the pathFilter defined in configuration
       val jobConf = new JobConf(hadoopConf, this.getClass)
