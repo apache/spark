@@ -17,14 +17,14 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList, Map => JMap}
+import java.{lang => jl}
 import java.lang.{Iterable => JIterable}
+import java.util.{Comparator, List => JList}
 
 import scala.collection.JavaConverters._
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
-import com.google.common.base.Optional
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
@@ -32,7 +32,6 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.Partitioner._
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
 import org.apache.spark.api.java.JavaUtils.mapAsSerializableJavaMap
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, PairFunction}
@@ -140,9 +139,12 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * math.ceil(numItems * samplingRate) over all key values.
    */
   def sampleByKey(withReplacement: Boolean,
-      fractions: JMap[K, Double],
+      fractions: java.util.Map[K, jl.Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKey(withReplacement, fractions.asScala, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKey(
+      withReplacement,
+      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      seed))
 
   /**
    * Return a subset of this RDD sampled by key (via stratified sampling).
@@ -155,11 +157,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Use Utils.random.nextLong as the default seed for the random number generator.
    */
   def sampleByKey(withReplacement: Boolean,
-      fractions: JMap[K, Double]): JavaPairRDD[K, V] =
+      fractions: java.util.Map[K, jl.Double]): JavaPairRDD[K, V] =
     sampleByKey(withReplacement, fractions, Utils.random.nextLong)
 
   /**
-   * ::Experimental::
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *
@@ -169,14 +170,15 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * additional pass over the RDD to guarantee sample size; when sampling with replacement, we need
    * two additional passes.
    */
-  @Experimental
   def sampleByKeyExact(withReplacement: Boolean,
-      fractions: JMap[K, Double],
+      fractions: java.util.Map[K, jl.Double],
       seed: Long): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.sampleByKeyExact(withReplacement, fractions.asScala, seed))
+    new JavaPairRDD[K, V](rdd.sampleByKeyExact(
+      withReplacement,
+      fractions.asScala.mapValues(_.toDouble).toMap, // map to Scala Double; toMap to serialize
+      seed))
 
   /**
-   * ::Experimental::
    * Return a subset of this RDD sampled by key (via stratified sampling) containing exactly
    * math.ceil(numItems * samplingRate) for each stratum (group of pairs with the same key).
    *
@@ -188,8 +190,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *
    * Use Utils.random.nextLong as the default seed for the random number generator.
    */
-  @Experimental
-  def sampleByKeyExact(withReplacement: Boolean, fractions: JMap[K, Double]): JavaPairRDD[K, V] =
+  def sampleByKeyExact(
+      withReplacement: Boolean,
+      fractions: java.util.Map[K, jl.Double]): JavaPairRDD[K, V] =
     sampleByKeyExact(withReplacement, fractions, Utils.random.nextLong)
 
   /**
@@ -220,13 +223,13 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C * Note that V and C can be different -- for example, one might group an
+   * "combined type" C. Note that V and C can be different -- for example, one might group an
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
-   * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
-   * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
-   * - `mergeCombiners`, to combine two C's into a single one.
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
+   *  - `mergeCombiners`, to combine two C's into a single one.
    *
    * In addition, users can control the partitioning of the output RDD, the serializer that is use
    * for the shuffle, and whether to perform map-side aggregation (if a mapper can produce multiple
@@ -252,13 +255,13 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   /**
    * Generic function to combine the elements for each key using a custom set of aggregation
    * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
-   * "combined type" C * Note that V and C can be different -- for example, one might group an
+   * "combined type" C. Note that V and C can be different -- for example, one might group an
    * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
    *
-   * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
-   * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
-   * - `mergeCombiners`, to combine two C's into a single one.
+   *  - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
+   *  - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
+   *  - `mergeCombiners`, to combine two C's into a single one.
    *
    * In addition, users can control the partitioning of the output RDD. This method automatically
    * uses map-side aggregation in shuffling the RDD.
@@ -281,39 +284,36 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numPartitions))
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce.
+   * Merge the values for each key using an associative and commutative reduce function. This will
+   * also perform the merging locally on each mapper before sending results to a reducer, similarly
+   * to a "combiner" in MapReduce.
    */
   def reduceByKey(partitioner: Partitioner, func: JFunction2[V, V, V]): JavaPairRDD[K, V] =
     fromRDD(rdd.reduceByKey(partitioner, func))
 
   /**
-   * Merge the values for each key using an associative reduce function, but return the results
-   * immediately to the master as a Map. This will also perform the merging locally on each mapper
-   * before sending results to a reducer, similarly to a "combiner" in MapReduce.
+   * Merge the values for each key using an associative and commutative reduce function, but return
+   * the result immediately to the master as a Map. This will also perform the merging locally on
+   * each mapper before sending results to a reducer, similarly to a "combiner" in MapReduce.
    */
   def reduceByKeyLocally(func: JFunction2[V, V, V]): java.util.Map[K, V] =
     mapAsSerializableJavaMap(rdd.reduceByKeyLocally(func))
 
   /** Count the number of elements for each key, and return the result to the master as a Map. */
-  def countByKey(): java.util.Map[K, Long] = mapAsSerializableJavaMap(rdd.countByKey())
+  def countByKey(): java.util.Map[K, jl.Long] =
+    mapAsSerializableJavaMap(rdd.countByKey()).asInstanceOf[java.util.Map[K, jl.Long]]
 
   /**
-   * :: Experimental ::
    * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
-  @Experimental
   def countByKeyApprox(timeout: Long): PartialResult[java.util.Map[K, BoundedDouble]] =
     rdd.countByKeyApprox(timeout).map(mapAsSerializableJavaMap)
 
   /**
-   * :: Experimental ::
    * Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
-  @Experimental
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
   : PartialResult[java.util.Map[K, BoundedDouble]] =
     rdd.countByKeyApprox(timeout, confidence).map(mapAsSerializableJavaMap)
@@ -387,9 +387,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(rdd.foldByKey(zeroValue)(func))
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
+   * Merge the values for each key using an associative and commutative reduce function. This will
+   * also perform the merging locally on each mapper before sending results to a reducer, similarly
+   * to a "combiner" in MapReduce. Output will be hash-partitioned with numPartitions partitions.
    */
   def reduceByKey(func: JFunction2[V, V, V], numPartitions: Int): JavaPairRDD[K, V] =
     fromRDD(rdd.reduceByKey(func, numPartitions))
@@ -467,9 +467,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
     fromRDD(rdd.partitionBy(partitioner))
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce.
+   * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
+   * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
+   * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
   def join[W](other: JavaPairRDD[K, W], partitioner: Partitioner): JavaPairRDD[K, (V, W)] =
     fromRDD(rdd.join(other, partitioner))
@@ -526,9 +526,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative reduce function. This will also perform
-   * the merging locally on each mapper before sending results to a reducer, similarly to a
-   * "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
+   * Merge the values for each key using an associative and commutative reduce function. This will
+   * also perform the merging locally on each mapper before sending results to a reducer, similarly
+   * to a "combiner" in MapReduce. Output will be hash-partitioned with the existing partitioner/
    * parallelism level.
    */
   def reduceByKey(func: JFunction2[V, V, V]): JavaPairRDD[K, V] = {
@@ -642,6 +642,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * Return the key-value pairs in this RDD to the master as a Map.
+   *
+   * @note this method should only be used if the resulting data is expected to be small, as
+   * all the data is loaded into the driver's memory.
    */
   def collectAsMap(): java.util.Map[K, V] = mapAsSerializableJavaMap(rdd.collectAsMap())
 
@@ -660,7 +663,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * keys; this also retains the original RDD's partitioning.
    */
   def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairRDD[K, U] = {
-    import scala.collection.JavaConverters._
     def fn: (V) => Iterable[U] = (x: V) => f.call(x).asScala
     implicit val ctag: ClassTag[U] = fakeClassTag
     fromRDD(rdd.flatMapValues(fn))
@@ -943,9 +945,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *                   It must be greater than 0.000017.
    * @param partitioner partitioner of the resulting RDD.
    */
-  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): JavaPairRDD[K, Long] =
-  {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD, partitioner))
+  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner)
+  : JavaPairRDD[K, jl.Long] = {
+    fromRDD(rdd.countApproxDistinctByKey(relativeSD, partitioner)).
+      asInstanceOf[JavaPairRDD[K, jl.Long]]
   }
 
   /**
@@ -959,8 +962,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    *                   It must be greater than 0.000017.
    * @param numPartitions number of partitions of the resulting RDD.
    */
-  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaPairRDD[K, Long] = {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD, numPartitions))
+  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaPairRDD[K, jl.Long] = {
+    fromRDD(rdd.countApproxDistinctByKey(relativeSD, numPartitions)).
+      asInstanceOf[JavaPairRDD[K, jl.Long]]
   }
 
   /**
@@ -973,8 +977,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * @param relativeSD Relative accuracy. Smaller values create counters that require more space.
    *                   It must be greater than 0.000017.
    */
-  def countApproxDistinctByKey(relativeSD: Double): JavaPairRDD[K, Long] = {
-    fromRDD(rdd.countApproxDistinctByKey(relativeSD))
+  def countApproxDistinctByKey(relativeSD: Double): JavaPairRDD[K, jl.Long] = {
+    fromRDD(rdd.countApproxDistinctByKey(relativeSD)).asInstanceOf[JavaPairRDD[K, jl.Long]]
   }
 
   /** Assign a name to this RDD */

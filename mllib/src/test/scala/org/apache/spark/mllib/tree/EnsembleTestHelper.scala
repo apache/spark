@@ -17,12 +17,12 @@
 
 package org.apache.spark.mllib.tree
 
+import scala.collection.mutable
+
 import org.apache.spark.mllib.linalg.Vectors
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.TreeEnsembleModel
 import org.apache.spark.util.StatCounter
-
-import scala.collection.mutable
 
 object EnsembleTestHelper {
 

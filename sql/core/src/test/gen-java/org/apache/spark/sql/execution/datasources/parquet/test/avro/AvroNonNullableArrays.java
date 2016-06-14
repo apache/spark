@@ -182,6 +182,7 @@ public class AvroNonNullableArrays extends org.apache.avro.specific.SpecificReco
     }
 
     @Override
+    @SuppressWarnings(value="unchecked")
     public AvroNonNullableArrays build() {
       try {
         AvroNonNullableArrays record = new AvroNonNullableArrays();

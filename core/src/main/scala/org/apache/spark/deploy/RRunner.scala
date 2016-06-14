@@ -24,8 +24,8 @@ import scala.collection.JavaConverters._
 
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.{SparkException, SparkUserAppException}
+import org.apache.spark.api.r.{RBackend, RUtils}
 import org.apache.spark.util.RedirectThread
 
 /**
@@ -82,9 +82,10 @@ object RRunner {
         val env = builder.environment()
         env.put("EXISTING_SPARKR_BACKEND_PORT", sparkRBackendPort.toString)
         val rPackageDir = RUtils.sparkRPackagePath(isDriver = true)
-        env.put("SPARKR_PACKAGE_DIR", rPackageDir)
+        // Put the R package directories into an env variable of comma-separated paths
+        env.put("SPARKR_PACKAGE_DIR", rPackageDir.mkString(","))
         env.put("R_PROFILE_USER",
-          Seq(rPackageDir, "SparkR", "profile", "general.R").mkString(File.separator))
+          Seq(rPackageDir(0), "SparkR", "profile", "general.R").mkString(File.separator))
         builder.redirectErrorStream(true) // Ugly but needed for stdout and stderr to synchronize
         val process = builder.start()
 

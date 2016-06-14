@@ -88,7 +88,7 @@ private object IDF {
       }
       doc match {
         case SparseVector(size, indices, values) =>
-          val nnz = indices.size
+          val nnz = indices.length
           var k = 0
           while (k < nnz) {
             if (values(k) > 0) {
@@ -97,7 +97,7 @@ private object IDF {
             k += 1
           }
         case DenseVector(values) =>
-          val n = values.size
+          val n = values.length
           var j = 0
           while (j < n) {
             if (values(j) > 0.0) {
@@ -204,14 +204,14 @@ private object IDFModel {
    * Transforms a term frequency (TF) vector to a TF-IDF vector with a IDF vector
    *
    * @param idf an IDF vector
-   * @param v a term frequence vector
+   * @param v a term frequency vector
    * @return a TF-IDF vector
    */
   def transform(idf: Vector, v: Vector): Vector = {
     val n = v.size
     v match {
       case SparseVector(size, indices, values) =>
-        val nnz = indices.size
+        val nnz = indices.length
         val newValues = new Array[Double](nnz)
         var k = 0
         while (k < nnz) {

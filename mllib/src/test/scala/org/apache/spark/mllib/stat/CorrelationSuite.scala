@@ -19,8 +19,10 @@ package org.apache.spark.mllib.stat
 
 import breeze.linalg.{DenseMatrix => BDM, Matrix => BM}
 
-import org.apache.spark.{Logging, SparkFunSuite}
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.random.RandomRDDs
 import org.apache.spark.mllib.stat.correlation.{Correlations, PearsonCorrelation,
   SpearmanCorrelation}
 import org.apache.spark.mllib.util.MLlibTestSparkContext
@@ -41,10 +43,10 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
   test("corr(x, y) pearson, 1 value in data") {
     val x = sc.parallelize(Array(1.0))
     val y = sc.parallelize(Array(4.0))
-    intercept[RuntimeException] {
+    intercept[IllegalArgumentException] {
       Statistics.corr(x, y, "pearson")
     }
-    intercept[RuntimeException] {
+    intercept[IllegalArgumentException] {
       Statistics.corr(x, y, "spearman")
     }
   }
@@ -102,8 +104,8 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
       (0.40047142, 0.91359586, Double.NaN, 1.0000000))
     // scalastyle:on
-    assert(matrixApproxEqual(defaultMat.toBreeze, expected))
-    assert(matrixApproxEqual(pearsonMat.toBreeze, expected))
+    assert(matrixApproxEqual(defaultMat.asBreeze, expected))
+    assert(matrixApproxEqual(pearsonMat.asBreeze, expected))
   }
 
   test("corr(X) spearman") {
@@ -116,7 +118,7 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
       (Double.NaN, Double.NaN, 1.00000000, Double.NaN),
       (0.4000000,  0.9486833,  Double.NaN, 1.0000000))
     // scalastyle:on
-    assert(matrixApproxEqual(spearmanMat.toBreeze, expected))
+    assert(matrixApproxEqual(spearmanMat.asBreeze, expected))
   }
 
   test("method identification") {
@@ -126,13 +128,20 @@ class CorrelationSuite extends SparkFunSuite with MLlibTestSparkContext with Log
     assert(Correlations.getCorrelationFromName("pearson") === pearson)
     assert(Correlations.getCorrelationFromName("spearman") === spearman)
 
-    // Should throw IllegalArgumentException
-    try {
+    intercept[IllegalArgumentException] {
       Correlations.getCorrelationFromName("kendall")
-      assert(false)
-    } catch {
-      case ie: IllegalArgumentException =>
     }
+  }
+
+  ignore("Pearson correlation of very large uncorrelated values (SPARK-14533)") {
+    // The two RDDs should have 0 correlation because they're random;
+    // this should stay the same after shifting them by any amount
+    // In practice a large shift produces very large values which can reveal
+    // round-off problems
+    val a = RandomRDDs.normalRDD(sc, 100000, 10).map(_ + 1000000000.0)
+    val b = RandomRDDs.normalRDD(sc, 100000, 10).map(_ + 1000000000.0)
+    val p = Statistics.corr(a, b, method = "pearson")
+    assert(approxEqual(p, 0.0, 0.01))
   }
 
   def approxEqual(v1: Double, v2: Double, threshold: Double = 1e-6): Boolean = {

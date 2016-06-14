@@ -34,10 +34,5 @@ class TestParams(override val uid: String) extends Params with HasHandleInvalid 
 
   def clearMaxIter(): this.type = clear(maxIter)
 
-  override def validateParams(): Unit = {
-    super.validateParams()
-    require(isDefined(inputCol))
-  }
-
   override def copy(extra: ParamMap): TestParams = defaultCopy(extra)
 }

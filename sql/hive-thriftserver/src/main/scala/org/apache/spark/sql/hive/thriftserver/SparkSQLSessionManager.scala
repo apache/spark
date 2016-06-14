@@ -27,12 +27,13 @@ import org.apache.hive.service.cli.session.SessionManager
 import org.apache.hive.service.cli.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
-import org.apache.spark.sql.hive.HiveContext
+import org.apache.spark.sql.SQLContext
+import org.apache.spark.sql.hive.{HiveSessionState, HiveUtils}
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
 
 
-private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext: HiveContext)
+private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sqlContext: SQLContext)
   extends SessionManager(hiveServer)
   with ReflectedCompositeService {
 
@@ -40,6 +41,11 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
 
   override def init(hiveConf: HiveConf) {
     setSuperField(this, "hiveConf", hiveConf)
+
+    // Create operation log root directory, if operation logging is enabled
+    if (hiveConf.getBoolVar(ConfVars.HIVE_SERVER2_LOGGING_OPERATION_ENABLED)) {
+      invoke(classOf[SessionManager], this, "initOperationLogRootDir")
+    }
 
     val backgroundPoolSize = hiveConf.getIntVar(ConfVars.HIVE_SERVER2_ASYNC_EXEC_THREADS)
     setSuperField(this, "backgroundOperationPool", Executors.newFixedThreadPool(backgroundPoolSize))
@@ -66,8 +72,13 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, hiveContext:
     val session = super.getSession(sessionHandle)
     HiveThriftServer2.listener.onSessionCreated(
       session.getIpAddress, sessionHandle.getSessionId.toString, session.getUsername)
-    val ctx = hiveContext.newSession()
-    ctx.setConf("spark.sql.hive.version", HiveContext.hiveExecutionVersion)
+    val sessionState = sqlContext.sessionState.asInstanceOf[HiveSessionState]
+    val ctx = if (sessionState.hiveThriftServerSingleSession) {
+      sqlContext
+    } else {
+      sqlContext.newSession()
+    }
+    ctx.setConf("spark.sql.hive.version", HiveUtils.hiveExecutionVersion)
     sparkSqlOperationManager.sessionToContexts += sessionHandle -> ctx
     sessionHandle
   }

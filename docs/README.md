@@ -10,14 +10,19 @@ whichever version of Spark you currently have checked out of revision control.
 
 ## Prerequisites
 The Spark documentation build uses a number of tools to build HTML docs and API docs in Scala,
-Python and R. To get started you can run the following commands
+Python and R.
 
-    $ sudo gem install jekyll
-    $ sudo gem install jekyll-redirect-from
+You need to have [Ruby](https://www.ruby-lang.org/en/documentation/installation/) and
+[Python](https://docs.python.org/2/using/unix.html#getting-and-installing-the-latest-version-of-python)
+installed. Also install the following libraries:
+```sh
+    $ sudo gem install jekyll jekyll-redirect-from pygments.rb
     $ sudo pip install Pygments
+    # Following is needed only for generating API docs
     $ sudo pip install sphinx
-    $ Rscript -e 'install.packages(c("knitr", "devtools"), repos="http://cran.stat.ucla.edu/")'
-
+    $ sudo Rscript -e 'install.packages(c("knitr", "devtools", "roxygen2", "testthat"), repos="http://cran.stat.ucla.edu/")'
+```
+(Note: If you are on a system with both Ruby 1.9 and Ruby 2.0 you may need to replace gem with gem2.0)
 
 ## Generating the Documentation HTML
 
@@ -38,14 +43,16 @@ compiled files.
     $ jekyll build
 
 You can modify the default Jekyll build as follows:
-
+```sh
     # Skip generating API docs (which takes a while)
     $ SKIP_API=1 jekyll build
+    
     # Serve content locally on port 4000
     $ jekyll serve --watch
+    
     # Build the site with extra features used on the live page
     $ PRODUCTION=1 jekyll build
-
+```
 
 ## API Docs (Scaladoc, Sphinx, roxygen2)
 
@@ -59,7 +66,7 @@ When you run `jekyll` in the `docs` directory, it will also copy over the scalad
 Spark subprojects into the `docs` directory (and then also into the `_site` directory). We use a
 jekyll plugin to run `build/sbt unidoc` before building the site so if you haven't run it (recently) it
 may take some time as it generates all of the scaladoc.  The jekyll plugin also generates the
-PySpark docs [Sphinx](http://sphinx-doc.org/).
+PySpark docs using [Sphinx](http://sphinx-doc.org/).
 
 NOTE: To skip the step of building and copying over the Scala, Python, R API docs, run `SKIP_API=1
 jekyll`.

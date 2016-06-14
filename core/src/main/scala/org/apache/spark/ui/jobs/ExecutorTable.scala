@@ -18,7 +18,7 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable
-import scala.xml.Node
+import scala.xml.{Node, Unparsed}
 
 import org.apache.spark.ui.{ToolTips, UIUtils}
 import org.apache.spark.ui.jobs.UIData.StageUIData
@@ -42,21 +42,22 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
     var hasShuffleWrite = false
     var hasShuffleRead = false
     var hasBytesSpilled = false
-    stageData.foreach(data => {
+    stageData.foreach { data =>
         hasInput = data.hasInput
         hasOutput = data.hasOutput
         hasShuffleRead = data.hasShuffleRead
         hasShuffleWrite = data.hasShuffleWrite
         hasBytesSpilled = data.hasBytesSpilled
-    })
+    }
 
     <table class={UIUtils.TABLE_CLASS_STRIPED_SORTABLE}>
       <thead>
-        <th>Executor ID</th>
+        <th id="executorid">Executor ID</th>
         <th>Address</th>
         <th>Task Time</th>
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
+        <th>Killed Tasks</th>
         <th>Succeeded Tasks</th>
         {if (hasInput) {
           <th>
@@ -89,6 +90,15 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
         {createExecutorTable()}
       </tbody>
     </table>
+    <script>
+      {Unparsed {
+        """
+          |      window.onload = function() {
+          |        sorttable.innerSortFunction.apply(document.getElementById('executorid'), [])
+          |      };
+        """.stripMargin
+      }}
+    </script>
   }
 
   private def createExecutorTable() : Seq[Node] = {
@@ -107,8 +117,9 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
             <td>{k}</td>
             <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
             <td sorttable_customkey={v.taskTime.toString}>{UIUtils.formatDuration(v.taskTime)}</td>
-            <td>{v.failedTasks + v.succeededTasks}</td>
+            <td>{v.failedTasks + v.succeededTasks + v.killedTasks}</td>
             <td>{v.failedTasks}</td>
+            <td>{v.killedTasks}</td>
             <td>{v.succeededTasks}</td>
             {if (stageData.hasInput) {
               <td sorttable_customkey={v.inputBytes.toString}>

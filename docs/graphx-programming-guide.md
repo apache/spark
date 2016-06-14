@@ -70,7 +70,7 @@ operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operato
 
 ## Migrating from Spark 1.1
 
-GraphX in Spark {{site.SPARK_VERSION}} contains a few user facing API changes:
+GraphX in Spark 1.2 contains a few user facing API changes:
 
 1. To improve performance we have introduced a new version of
 [`mapReduceTriplets`][Graph.mapReduceTriplets] called
@@ -132,7 +132,7 @@ var graph: Graph[VertexProperty, String] = null
 
 Like RDDs, property graphs are immutable, distributed, and fault-tolerant.  Changes to the values or
 structure of the graph are accomplished by producing a new graph with the desired changes.  Note
-that substantial parts of the original graph (i.e., unaffected structure, attributes, and indicies)
+that substantial parts of the original graph (i.e., unaffected structure, attributes, and indices)
 are reused in the new graph reducing the cost of this inherently functional data structure.  The
 graph is partitioned across the executors using a range of vertex partitioning heuristics.  As with
 RDDs, each partition of the graph can be recreated on a different machine in the event of a failure.

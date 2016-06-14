@@ -42,14 +42,14 @@ public class MyDoubleAvg extends UserDefinedAggregateFunction {
   private DataType _returnDataType;
 
   public MyDoubleAvg() {
-    List<StructField> inputFields = new ArrayList<StructField>();
+    List<StructField> inputFields = new ArrayList<>();
     inputFields.add(DataTypes.createStructField("inputDouble", DataTypes.DoubleType, true));
     _inputDataType = DataTypes.createStructType(inputFields);
 
     // The buffer has two values, bufferSum for storing the current sum and
     // bufferCount for storing the number of non-null input values that have been contribuetd
     // to the current sum.
-    List<StructField> bufferFields = new ArrayList<StructField>();
+    List<StructField> bufferFields = new ArrayList<>();
     bufferFields.add(DataTypes.createStructField("bufferSum", DataTypes.DoubleType, true));
     bufferFields.add(DataTypes.createStructField("bufferCount", DataTypes.LongType, true));
     _bufferSchema = DataTypes.createStructType(bufferFields);

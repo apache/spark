@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive.execution
 
 import java.io._
+import java.nio.charset.StandardCharsets
 import java.util.Properties
 import javax.annotation.Nullable
 
@@ -31,16 +32,17 @@ import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.io.Writable
 
+import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical.ScriptInputOutputSchema
-import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.hive.HiveInspectors
 import org.apache.spark.sql.hive.HiveShim._
-import org.apache.spark.sql.hive.{HiveContext, HiveInspectors}
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.{CircularBuffer, RedirectThread, SerializableConfiguration, Utils}
-import org.apache.spark.{Logging, TaskContext}
 
 /**
  * Transforms the input by forking and running the specified script.
@@ -55,15 +57,14 @@ case class ScriptTransformation(
     script: String,
     output: Seq[Attribute],
     child: SparkPlan,
-    ioschema: HiveScriptIOSchema)(@transient private val sc: HiveContext)
-  extends UnaryNode {
+    ioschema: HiveScriptIOSchema)
+  extends UnaryExecNode {
 
-  override def otherCopyArgs: Seq[HiveContext] = sc :: Nil
-
-  private val serializedHiveConf = new SerializableConfiguration(sc.hiveconf)
+  override def producedAttributes: AttributeSet = outputSet -- inputSet
 
   protected override def doExecute(): RDD[InternalRow] = {
-    def processIterator(inputIterator: Iterator[InternalRow]): Iterator[InternalRow] = {
+    def processIterator(inputIterator: Iterator[InternalRow], hadoopConf: Configuration)
+      : Iterator[InternalRow] = {
       val cmd = List("/bin/bash", "-c", script)
       val builder = new ProcessBuilder(cmd.asJava)
 
@@ -71,7 +72,6 @@ case class ScriptTransformation(
       val inputStream = proc.getInputStream
       val outputStream = proc.getOutputStream
       val errorStream = proc.getErrorStream
-      val localHiveConf = serializedHiveConf.value
 
       // In order to avoid deadlocks, we need to consume the error output of the child process.
       // To avoid issues caused by large error output, we use a circular buffer to limit the amount
@@ -102,7 +102,7 @@ case class ScriptTransformation(
         proc,
         stderrBuffer,
         TaskContext.get(),
-        localHiveConf
+        hadoopConf
       )
 
       // This nullability is a performance optimization in order to avoid an Option.foreach() call
@@ -111,13 +111,13 @@ case class ScriptTransformation(
         ioschema.initOutputSerDe(output).getOrElse((null, null))
       }
 
-      val reader = new BufferedReader(new InputStreamReader(inputStream))
+      val reader = new BufferedReader(new InputStreamReader(inputStream, StandardCharsets.UTF_8))
       val outputIterator: Iterator[InternalRow] = new Iterator[InternalRow] with HiveInspectors {
         var curLine: String = null
         val scriptOutputStream = new DataInputStream(inputStream)
 
         @Nullable val scriptOutputReader =
-          ioschema.recordReader(scriptOutputStream, localHiveConf).orNull
+          ioschema.recordReader(scriptOutputStream, hadoopConf).orNull
 
         var scriptOutputWritable: Writable = null
         val reusedWritableObject: Writable = if (null != outputSerde) {
@@ -127,45 +127,71 @@ case class ScriptTransformation(
         }
         val mutableRow = new SpecificMutableRow(output.map(_.dataType))
 
-        override def hasNext: Boolean = {
-          if (outputSerde == null) {
-            if (curLine == null) {
-              curLine = reader.readLine()
-              if (curLine == null) {
-                if (writerThread.exception.isDefined) {
-                  throw writerThread.exception.get
-                }
-                false
-              } else {
-                true
-              }
-            } else {
-              true
-            }
-          } else if (scriptOutputWritable == null) {
-            scriptOutputWritable = reusedWritableObject
+        private def checkFailureAndPropagate(cause: Throwable = null): Unit = {
+          if (writerThread.exception.isDefined) {
+            throw writerThread.exception.get
+          }
 
-            if (scriptOutputReader != null) {
-              if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
-                writerThread.exception.foreach(throw _)
-                false
-              } else {
-                true
+          // Checks if the proc is still alive (incase the command ran was bad)
+          // The ideal way to do this is to use Java 8's Process#isAlive()
+          // but it cannot be used because Spark still supports Java 7.
+          // Following is a workaround used to check if a process is alive in Java 7
+          // TODO: Once builds are switched to Java 8, this can be changed
+          try {
+            val exitCode = proc.exitValue()
+            if (exitCode != 0) {
+              logError(stderrBuffer.toString) // log the stderr circular buffer
+              throw new SparkException(s"Subprocess exited with status $exitCode. " +
+                s"Error: ${stderrBuffer.toString}", cause)
+            }
+          } catch {
+            case _: IllegalThreadStateException =>
+            // This means that the process is still alive. Move ahead
+          }
+        }
+
+        override def hasNext: Boolean = {
+          try {
+            if (outputSerde == null) {
+              if (curLine == null) {
+                curLine = reader.readLine()
+                if (curLine == null) {
+                  checkFailureAndPropagate()
+                  return false
+                }
               }
-            } else {
-              try {
-                scriptOutputWritable.readFields(scriptOutputStream)
-                true
-              } catch {
-                case _: EOFException =>
-                  if (writerThread.exception.isDefined) {
-                    throw writerThread.exception.get
-                  }
-                  false
+            } else if (scriptOutputWritable == null) {
+              scriptOutputWritable = reusedWritableObject
+
+              if (scriptOutputReader != null) {
+                if (scriptOutputReader.next(scriptOutputWritable) <= 0) {
+                  checkFailureAndPropagate()
+                  return false
+                }
+              } else {
+                try {
+                  scriptOutputWritable.readFields(scriptOutputStream)
+                } catch {
+                  case _: EOFException =>
+                    // This means that the stdout of `proc` (ie. TRANSFORM process) has exhausted.
+                    // Ideally the proc should *not* be alive at this point but
+                    // there can be a lag between EOF being written out and the process
+                    // being terminated. So explicitly waiting for the process to be done.
+                    proc.waitFor()
+                    checkFailureAndPropagate()
+                    return false
+                }
               }
             }
-          } else {
+
             true
+          } catch {
+            case NonFatal(e) =>
+              // If this exception is due to abrupt / unclean termination of `proc`,
+              // then detect it and propagate a better exception message for end users
+              checkFailureAndPropagate(e)
+
+              throw e
           }
         }
 
@@ -209,9 +235,13 @@ case class ScriptTransformation(
       outputIterator
     }
 
+    val broadcastedHadoopConf =
+      new SerializableConfiguration(sqlContext.sessionState.newHadoopConf())
+
     child.execute().mapPartitions { iter =>
       if (iter.hasNext) {
-        processIterator(iter)
+        val proj = UnsafeProjection.create(schema)
+        processIterator(iter, broadcastedHadoopConf.value).map(proj)
       } else {
         // If the input iterator has no rows then do not launch the external script.
         Iterator.empty
@@ -268,7 +298,7 @@ private class ScriptTransformationWriterThread(
             sb.append(ioschema.inputRowFormatMap("TOK_TABLEROWFORMATLINES"))
             sb.toString()
           }
-          outputStream.write(data.getBytes("utf-8"))
+          outputStream.write(data.getBytes(StandardCharsets.UTF_8))
         } else {
           val writable = inputSerde.serialize(
             row.asInstanceOf[GenericInternalRow].values, inputSoi)
@@ -280,7 +310,6 @@ private class ScriptTransformationWriterThread(
           }
         }
       }
-      outputStream.close()
       threwException = false
     } catch {
       case NonFatal(e) =>
@@ -291,6 +320,7 @@ private class ScriptTransformationWriterThread(
         throw e
     } finally {
       try {
+        outputStream.close()
         if (proc.waitFor() != 0) {
           logError(stderrBuffer.toString) // log the stderr circular buffer
         }
@@ -303,6 +333,22 @@ private class ScriptTransformationWriterThread(
           }
       }
     }
+  }
+}
+
+private[hive]
+object HiveScriptIOSchema {
+  def apply(input: ScriptInputOutputSchema): HiveScriptIOSchema = {
+    HiveScriptIOSchema(
+      input.inputRowFormat,
+      input.outputRowFormat,
+      input.inputSerdeClass,
+      input.outputSerdeClass,
+      input.inputSerdeProps,
+      input.outputSerdeProps,
+      input.recordReaderClass,
+      input.recordWriterClass,
+      input.schemaLess)
   }
 }
 
@@ -319,7 +365,8 @@ case class HiveScriptIOSchema (
     outputSerdeProps: Seq[(String, String)],
     recordReaderClass: Option[String],
     recordWriterClass: Option[String],
-    schemaLess: Boolean) extends ScriptInputOutputSchema with HiveInspectors {
+    schemaLess: Boolean)
+  extends HiveInspectors {
 
   private val defaultFormat = Map(
     ("TOK_TABLEROWFORMATFIELD", "\t"),

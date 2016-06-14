@@ -30,7 +30,6 @@ import org.apache.spark.Partitioner
 import org.apache.spark.ShuffleDependency
 import org.apache.spark.SparkEnv
 import org.apache.spark.TaskContext
-import org.apache.spark.serializer.Serializer
 
 /**
  * An optimized version of cogroup for set difference/subtraction.
@@ -54,13 +53,6 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     part: Partitioner)
   extends RDD[(K, V)](rdd1.context, Nil) {
 
-  private var serializer: Option[Serializer] = None
-
-  /** Set a serializer for this RDD's shuffle, or null to use the default (spark.serializer) */
-  def setSerializer(serializer: Serializer): SubtractedRDD[K, V, W] = {
-    this.serializer = Option(serializer)
-    this
-  }
 
   override def getDependencies: Seq[Dependency[_]] = {
     def rddDependency[T1: ClassTag, T2: ClassTag](rdd: RDD[_ <: Product2[T1, T2]])
@@ -70,7 +62,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
         new OneToOneDependency(rdd)
       } else {
         logDebug("Adding shuffle dependency with " + rdd)
-        new ShuffleDependency[T1, T2, Any](rdd, part, serializer)
+        new ShuffleDependency[T1, T2, Any](rdd, part)
       }
     }
     Seq(rddDependency[K, V](rdd1), rddDependency[K, W](rdd2))

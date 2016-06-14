@@ -21,14 +21,12 @@ import java.io.Serializable;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.api.java.JavaRDD;
-import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.Function;
 
-import org.apache.spark.sql.DataFrame;
+import org.apache.spark.sql.Dataset;
 import org.apache.spark.sql.Row;
-import org.apache.spark.sql.SQLContext;
+import org.apache.spark.sql.SparkSession;
 
 public class JavaSparkSQL {
   public static class Person implements Serializable {
@@ -53,13 +51,15 @@ public class JavaSparkSQL {
   }
 
   public static void main(String[] args) throws Exception {
-    SparkConf sparkConf = new SparkConf().setAppName("JavaSparkSQL");
-    JavaSparkContext ctx = new JavaSparkContext(sparkConf);
-    SQLContext sqlContext = new SQLContext(ctx);
+    SparkSession spark = SparkSession
+      .builder()
+      .appName("JavaSparkSQL")
+      .getOrCreate();
 
     System.out.println("=== Data source: RDD ===");
     // Load a text file and convert each line to a Java Bean.
-    JavaRDD<Person> people = ctx.textFile("examples/src/main/resources/people.txt").map(
+    String file = "examples/src/main/resources/people.txt";
+    JavaRDD<Person> people = spark.read().textFile(file).javaRDD().map(
       new Function<String, Person>() {
         @Override
         public Person call(String line) {
@@ -73,12 +73,12 @@ public class JavaSparkSQL {
         }
       });
 
-    // Apply a schema to an RDD of Java Beans and register it as a table.
-    DataFrame schemaPeople = sqlContext.createDataFrame(people, Person.class);
-    schemaPeople.registerTempTable("people");
+    // Apply a schema to an RDD of Java Beans and create a temporary view
+    Dataset<Row> schemaPeople = spark.createDataFrame(people, Person.class);
+    schemaPeople.createOrReplaceTempView("people");
 
-    // SQL can be run over RDDs that have been registered as tables.
-    DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
+    // SQL can be run over RDDs which backs a temporary view.
+    Dataset<Row> teenagers = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
     // The results of SQL queries are DataFrames and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
@@ -99,12 +99,12 @@ public class JavaSparkSQL {
     // Read in the parquet file created above.
     // Parquet files are self-describing so the schema is preserved.
     // The result of loading a parquet file is also a DataFrame.
-    DataFrame parquetFile = sqlContext.read().parquet("people.parquet");
+    Dataset<Row> parquetFile = spark.read().parquet("people.parquet");
 
-    //Parquet files can also be registered as tables and then used in SQL statements.
-    parquetFile.registerTempTable("parquetFile");
-    DataFrame teenagers2 =
-      sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
+    // A temporary view can be created by using Parquet files and then used in SQL statements.
+    parquetFile.createOrReplaceTempView("parquetFile");
+    Dataset<Row> teenagers2 =
+      spark.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
     teenagerNames = teenagers2.toJavaRDD().map(new Function<Row, String>() {
       @Override
       public String call(Row row) {
@@ -120,7 +120,7 @@ public class JavaSparkSQL {
     // The path can be either a single text file or a directory storing text files.
     String path = "examples/src/main/resources/people.json";
     // Create a DataFrame from the file(s) pointed by path
-    DataFrame peopleFromJsonFile = sqlContext.read().json(path);
+    Dataset<Row> peopleFromJsonFile = spark.read().json(path);
 
     // Because the schema of a JSON dataset is automatically inferred, to write queries,
     // it is better to take a look at what is the schema.
@@ -130,11 +130,11 @@ public class JavaSparkSQL {
     //  |-- age: IntegerType
     //  |-- name: StringType
 
-    // Register this DataFrame as a table.
-    peopleFromJsonFile.registerTempTable("people");
+    // Creates a temporary view using the DataFrame
+    peopleFromJsonFile.createOrReplaceTempView("people");
 
-    // SQL statements can be run by using the sql methods provided by sqlContext.
-    DataFrame teenagers3 = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
+    // SQL statements can be run by using the sql methods provided by `spark`
+    Dataset<Row> teenagers3 = spark.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
 
     // The results of SQL queries are DataFrame and support all the normal RDD operations.
     // The columns of a row in the result can be accessed by ordinal.
@@ -150,8 +150,9 @@ public class JavaSparkSQL {
     // a RDD[String] storing one JSON object per string.
     List<String> jsonData = Arrays.asList(
           "{\"name\":\"Yin\",\"address\":{\"city\":\"Columbus\",\"state\":\"Ohio\"}}");
-    JavaRDD<String> anotherPeopleRDD = ctx.parallelize(jsonData);
-    DataFrame peopleFromJsonRDD = sqlContext.read().json(anotherPeopleRDD.rdd());
+    JavaRDD<String> anotherPeopleRDD = spark
+      .createDataFrame(jsonData, String.class).toJSON().javaRDD();
+    Dataset<Row> peopleFromJsonRDD = spark.read().json(anotherPeopleRDD);
 
     // Take a look at the schema of this new DataFrame.
     peopleFromJsonRDD.printSchema();
@@ -162,9 +163,9 @@ public class JavaSparkSQL {
     //  |    |-- state: StringType
     //  |-- name: StringType
 
-    peopleFromJsonRDD.registerTempTable("people2");
+    peopleFromJsonRDD.createOrReplaceTempView("people2");
 
-    DataFrame peopleWithCity = sqlContext.sql("SELECT name, address.city FROM people2");
+    Dataset<Row> peopleWithCity = spark.sql("SELECT name, address.city FROM people2");
     List<String> nameAndCity = peopleWithCity.toJavaRDD().map(new Function<Row, String>() {
       @Override
       public String call(Row row) {
@@ -175,6 +176,6 @@ public class JavaSparkSQL {
       System.out.println(name);
     }
 
-    ctx.stop();
+    spark.stop();
   }
 }

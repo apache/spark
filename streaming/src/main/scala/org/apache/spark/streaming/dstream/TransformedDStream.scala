@@ -29,7 +29,7 @@ class TransformedDStream[U: ClassTag] (
     transformFunc: (Seq[RDD[_]], Time) => RDD[U]
   ) extends DStream[U](parents.head.ssc) {
 
-  require(parents.length > 0, "List of DStreams to transform is empty")
+  require(parents.nonEmpty, "List of DStreams to transform is empty")
   require(parents.map(_.ssc).distinct.size == 1, "Some of the DStreams have different contexts")
   require(parents.map(_.slideDuration).distinct.size == 1,
     "Some of the DStreams have different slide durations")
@@ -50,5 +50,18 @@ class TransformedDStream[U: ClassTag] (
         "as the result of transformation.")
     }
     Some(transformedRDD)
+  }
+
+  /**
+   * Wrap a body of code such that the call site and operation scope
+   * information are passed to the RDDs created in this body properly.
+   * This has been overridden to make sure that `displayInnerRDDOps` is always `true`, that is,
+   * the inner scopes and callsites of RDDs generated in `DStream.transform` are always
+   * displayed in the UI.
+   */
+  override protected[streaming] def createRDDWithLocalProperties[U](
+      time: Time,
+      displayInnerRDDOps: Boolean)(body: => U): U = {
+    super.createRDDWithLocalProperties(time, displayInnerRDDOps = true)(body)
   }
 }

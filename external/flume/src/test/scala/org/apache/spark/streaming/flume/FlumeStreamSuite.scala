@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.flume
 
+import java.util.concurrent.ConcurrentLinkedQueue
+
 import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-import com.google.common.base.Charsets
 import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.socket.SocketChannel
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
@@ -30,7 +30,9 @@ import org.jboss.netty.handler.codec.compression._
 import org.scalatest.{BeforeAndAfter, Matchers}
 import org.scalatest.concurrent.Eventually._
 
-import org.apache.spark.{Logging, SparkConf, SparkFunSuite}
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.Logging
+import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Milliseconds, StreamingContext, TestOutputStream}
 
@@ -51,19 +53,19 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
     val input = (1 to 100).map { _.toString }
     val utils = new FlumeTestUtils
     try {
-      val outputBuffer = startContext(utils.getTestPort(), testCompression)
+      val outputQueue = startContext(utils.getTestPort(), testCompression)
 
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
-        utils.writeInput(input, testCompression)
+        utils.writeInput(input.asJava, testCompression)
       }
 
       eventually(timeout(10 seconds), interval(100 milliseconds)) {
-        val outputEvents = outputBuffer.flatten.map { _.event }
+        val outputEvents = outputQueue.asScala.toSeq.flatten.map { _.event }
         outputEvents.foreach {
           event =>
             event.getHeaders.get("test") should be("header")
         }
-        val output = outputEvents.map(event => new String(event.getBody.array(), Charsets.UTF_8))
+        val output = outputEvents.map(event => JavaUtils.bytesToString(event.getBody))
         output should be (input)
       }
     } finally {
@@ -76,16 +78,15 @@ class FlumeStreamSuite extends SparkFunSuite with BeforeAndAfter with Matchers w
 
   /** Setup and start the streaming context */
   private def startContext(
-      testPort: Int, testCompression: Boolean): (ArrayBuffer[Seq[SparkFlumeEvent]]) = {
+      testPort: Int, testCompression: Boolean): (ConcurrentLinkedQueue[Seq[SparkFlumeEvent]]) = {
     ssc = new StreamingContext(conf, Milliseconds(200))
     val flumeStream = FlumeUtils.createStream(
       ssc, "localhost", testPort, StorageLevel.MEMORY_AND_DISK, testCompression)
-    val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
-      with SynchronizedBuffer[Seq[SparkFlumeEvent]]
-    val outputStream = new TestOutputStream(flumeStream, outputBuffer)
+    val outputQueue = new ConcurrentLinkedQueue[Seq[SparkFlumeEvent]]
+    val outputStream = new TestOutputStream(flumeStream, outputQueue)
     outputStream.register()
     ssc.start()
-    outputBuffer
+    outputQueue
   }
 
   /** Class to create socket channel with compression */

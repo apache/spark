@@ -17,19 +17,72 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
+import scala.util.Random
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.{RandomDataGenerator, Row}
+import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.types._
-import org.apache.spark.unsafe.types.UTF8String
+
+@SQLUserDefinedType(udt = classOf[ExamplePointUDT])
+class ExamplePoint(val x: Double, val y: Double) extends Serializable {
+  override def hashCode: Int = 41 * (41 + x.toInt) + y.toInt
+  override def equals(that: Any): Boolean = {
+    if (that.isInstanceOf[ExamplePoint]) {
+      val e = that.asInstanceOf[ExamplePoint]
+      (this.x == e.x || (this.x.isNaN && e.x.isNaN) || (this.x.isInfinity && e.x.isInfinity)) &&
+        (this.y == e.y || (this.y.isNaN && e.y.isNaN) || (this.y.isInfinity && e.y.isInfinity))
+    } else {
+      false
+    }
+  }
+}
+
+/**
+ * User-defined type for [[ExamplePoint]].
+ */
+class ExamplePointUDT extends UserDefinedType[ExamplePoint] {
+
+  override def sqlType: DataType = ArrayType(DoubleType, false)
+
+  override def pyUDT: String = "pyspark.sql.tests.ExamplePointUDT"
+
+  override def serialize(p: ExamplePoint): GenericArrayData = {
+    val output = new Array[Any](2)
+    output(0) = p.x
+    output(1) = p.y
+    new GenericArrayData(output)
+  }
+
+  override def deserialize(datum: Any): ExamplePoint = {
+    datum match {
+      case values: ArrayData =>
+        if (values.numElements() > 1) {
+          new ExamplePoint(values.getDouble(0), values.getDouble(1))
+        } else {
+          val random = new Random()
+          new ExamplePoint(random.nextDouble(), random.nextDouble())
+        }
+    }
+  }
+
+  override def userClass: Class[ExamplePoint] = classOf[ExamplePoint]
+
+  private[spark] override def asNullable: ExamplePointUDT = this
+}
 
 class RowEncoderSuite extends SparkFunSuite {
 
   private val structOfString = new StructType().add("str", StringType)
+  private val structOfUDT = new StructType().add("udt", new ExamplePointUDT, false)
   private val arrayOfString = ArrayType(StringType)
+  private val arrayOfNull = ArrayType(NullType)
   private val mapOfString = MapType(StringType, StringType)
+  private val arrayOfUDT = ArrayType(new ExamplePointUDT, false)
 
   encodeDecodeTest(
     new StructType()
+      .add("null", NullType)
       .add("boolean", BooleanType)
       .add("byte", ByteType)
       .add("short", ShortType)
@@ -41,15 +94,18 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("string", StringType)
       .add("binary", BinaryType)
       .add("date", DateType)
-      .add("timestamp", TimestampType))
+      .add("timestamp", TimestampType)
+      .add("udt", new ExamplePointUDT))
 
   encodeDecodeTest(
     new StructType()
+      .add("arrayOfNull", arrayOfNull)
       .add("arrayOfString", arrayOfString)
       .add("arrayOfArrayOfString", ArrayType(arrayOfString))
       .add("arrayOfArrayOfInt", ArrayType(ArrayType(IntegerType)))
       .add("arrayOfMap", ArrayType(mapOfString))
-      .add("arrayOfStruct", ArrayType(structOfString)))
+      .add("arrayOfStruct", ArrayType(structOfString))
+      .add("arrayOfUDT", arrayOfUDT))
 
   encodeDecodeTest(
     new StructType()
@@ -68,11 +124,132 @@ class RowEncoderSuite extends SparkFunSuite {
       .add("structOfArray", new StructType().add("array", arrayOfString))
       .add("structOfMap", new StructType().add("map", mapOfString))
       .add("structOfArrayAndMap",
-        new StructType().add("array", arrayOfString).add("map", mapOfString)))
+        new StructType().add("array", arrayOfString).add("map", mapOfString))
+      .add("structOfUDT", structOfUDT))
+
+  test("encode/decode decimal type") {
+    val schema = new StructType()
+      .add("int", IntegerType)
+      .add("string", StringType)
+      .add("double", DoubleType)
+      .add("java_decimal", DecimalType.SYSTEM_DEFAULT)
+      .add("scala_decimal", DecimalType.SYSTEM_DEFAULT)
+      .add("catalyst_decimal", DecimalType.SYSTEM_DEFAULT)
+
+    val encoder = RowEncoder(schema).resolveAndBind()
+
+    val javaDecimal = new java.math.BigDecimal("1234.5678")
+    val scalaDecimal = BigDecimal("1234.5678")
+    val catalystDecimal = Decimal("1234.5678")
+
+    val input = Row(100, "test", 0.123, javaDecimal, scalaDecimal, catalystDecimal)
+    val row = encoder.toRow(input)
+    val convertedBack = encoder.fromRow(row)
+    // Decimal will be converted back to Java BigDecimal when decoding.
+    assert(convertedBack.getDecimal(3).compareTo(javaDecimal) == 0)
+    assert(convertedBack.getDecimal(4).compareTo(scalaDecimal.bigDecimal) == 0)
+    assert(convertedBack.getDecimal(5).compareTo(catalystDecimal.toJavaBigDecimal) == 0)
+  }
+
+  test("RowEncoder should preserve decimal precision and scale") {
+    val schema = new StructType().add("decimal", DecimalType(10, 5), false)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val decimal = Decimal("67123.45")
+    val input = Row(decimal)
+    val row = encoder.toRow(input)
+
+    assert(row.toSeq(schema).head == decimal)
+  }
+
+  test("RowEncoder should preserve schema nullability") {
+    val schema = new StructType().add("int", IntegerType, nullable = false)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    assert(encoder.serializer.length == 1)
+    assert(encoder.serializer.head.dataType == IntegerType)
+    assert(encoder.serializer.head.nullable == false)
+  }
+
+  test("RowEncoder should preserve nested column name") {
+    val schema = new StructType().add(
+      "struct",
+      new StructType()
+        .add("i", IntegerType, nullable = false)
+        .add(
+          "s",
+          new StructType().add("int", IntegerType, nullable = false),
+          nullable = false),
+      nullable = false)
+    val encoder = RowEncoder(schema).resolveAndBind()
+    assert(encoder.serializer.length == 1)
+    assert(encoder.serializer.head.dataType ==
+      new StructType()
+      .add("i", IntegerType, nullable = false)
+      .add(
+        "s",
+        new StructType().add("int", IntegerType, nullable = false),
+        nullable = false))
+    assert(encoder.serializer.head.nullable == false)
+  }
+
+  test("RowEncoder should support array as the external type for ArrayType") {
+    val schema = new StructType()
+      .add("array", ArrayType(IntegerType))
+      .add("nestedArray", ArrayType(ArrayType(StringType)))
+      .add("deepNestedArray", ArrayType(ArrayType(ArrayType(LongType))))
+    val encoder = RowEncoder(schema).resolveAndBind()
+    val input = Row(
+      Array(1, 2, null),
+      Array(Array("abc", null), null),
+      Array(Seq(Array(0L, null), null), null))
+    val row = encoder.toRow(input)
+    val convertedBack = encoder.fromRow(row)
+    assert(convertedBack.getSeq(0) == Seq(1, 2, null))
+    assert(convertedBack.getSeq(1) == Seq(Seq("abc", null), null))
+    assert(convertedBack.getSeq(2) == Seq(Seq(Seq(0L, null), null), null))
+  }
+
+  test("RowEncoder should throw RuntimeException if input row object is null") {
+    val schema = new StructType().add("int", IntegerType)
+    val encoder = RowEncoder(schema)
+    val e = intercept[RuntimeException](encoder.toRow(null))
+    assert(e.getMessage.contains("Null value appeared in non-nullable field"))
+    assert(e.getMessage.contains("top level row object"))
+  }
+
+  test("RowEncoder should validate external type") {
+    val e1 = intercept[RuntimeException] {
+      val schema = new StructType().add("a", IntegerType)
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(1.toShort))
+    }
+    assert(e1.getMessage.contains("java.lang.Short is not a valid external type"))
+
+    val e2 = intercept[RuntimeException] {
+      val schema = new StructType().add("a", StringType)
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(1))
+    }
+    assert(e2.getMessage.contains("java.lang.Integer is not a valid external type"))
+
+    val e3 = intercept[RuntimeException] {
+      val schema = new StructType().add("a",
+        new StructType().add("b", IntegerType).add("c", StringType))
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(1 -> "a"))
+    }
+    assert(e3.getMessage.contains("scala.Tuple2 is not a valid external type"))
+
+    val e4 = intercept[RuntimeException] {
+      val schema = new StructType().add("a", ArrayType(TimestampType))
+      val encoder = RowEncoder(schema)
+      encoder.toRow(Row(Array("a")))
+    }
+    assert(e4.getMessage.contains("java.lang.String is not a valid external type"))
+  }
 
   private def encodeDecodeTest(schema: StructType): Unit = {
     test(s"encode/decode: ${schema.simpleString}") {
-      val encoder = RowEncoder(schema)
+      val encoder = RowEncoder(schema).resolveAndBind()
       val inputGenerator = RandomDataGenerator.forType(schema, nullable = false).get
 
       var input: Row = null

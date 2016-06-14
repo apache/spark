@@ -18,18 +18,19 @@
 package org.apache.spark.api.python
 
 import java.nio.ByteOrder
+import java.nio.charset.StandardCharsets
 import java.util.{ArrayList => JArrayList}
-
-import org.apache.spark.api.java.JavaRDD
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 import scala.util.Failure
 import scala.util.Try
 
-import net.razorvine.pickle.{Unpickler, Pickler}
+import net.razorvine.pickle.{Pickler, Unpickler}
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.SparkException
+import org.apache.spark.api.java.JavaRDD
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /** Utilities for serialization / deserialization between Python and Java, using Pickle. */
@@ -69,7 +70,8 @@ private[spark] object SerDeUtil extends Logging {
         construct(args ++ Array(""))
       } else if (args.length == 2 && args(1).isInstanceOf[String]) {
         val typecode = args(0).asInstanceOf[String].charAt(0)
-        val data: Array[Byte] = args(1).asInstanceOf[String].getBytes("ISO-8859-1")
+        // This must be ISO 8859-1 / Latin 1, not UTF-8, to interoperate correctly
+        val data = args(1).asInstanceOf[String].getBytes(StandardCharsets.ISO_8859_1)
         construct(typecode, machineCodes(typecode), data)
       } else {
         super.construct(args)
@@ -135,7 +137,7 @@ private[spark] object SerDeUtil extends Logging {
    * Convert an RDD of Java objects to an RDD of serialized Python objects, that is usable by
    * PySpark.
    */
-  private[spark] def javaToPython(jRDD: JavaRDD[_]): JavaRDD[Array[Byte]] = {
+  def javaToPython(jRDD: JavaRDD[_]): JavaRDD[Array[Byte]] = {
     jRDD.rdd.mapPartitions { iter => new AutoBatchedPickler(iter) }
   }
 

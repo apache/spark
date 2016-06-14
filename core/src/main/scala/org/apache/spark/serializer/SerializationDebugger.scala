@@ -25,7 +25,7 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.util.control.NonFatal
 
-import org.apache.spark.Logging
+import org.apache.spark.internal.Logging
 
 private[spark] object SerializationDebugger extends Logging {
 
@@ -53,12 +53,13 @@ private[spark] object SerializationDebugger extends Logging {
   /**
    * Find the path leading to a not serializable object. This method is modeled after OpenJDK's
    * serialization mechanism, and handles the following cases:
-   * - primitives
-   * - arrays of primitives
-   * - arrays of non-primitive objects
-   * - Serializable objects
-   * - Externalizable objects
-   * - writeReplace
+   *
+   *  - primitives
+   *  - arrays of primitives
+   *  - arrays of non-primitive objects
+   *  - Serializable objects
+   *  - Externalizable objects
+   *  - writeReplace
    *
    * It does not yet handle writeObject override, but that shouldn't be too hard to do either.
    */
@@ -265,7 +266,13 @@ private[spark] object SerializationDebugger extends Logging {
       (o, desc)
     } else {
       // write place
-      findObjectAndDescriptor(desc.invokeWriteReplace(o))
+      val replaced = desc.invokeWriteReplace(o)
+      // `writeReplace` may return the same object.
+      if (replaced eq o) {
+        (o, desc)
+      } else {
+        findObjectAndDescriptor(replaced)
+      }
     }
   }
 

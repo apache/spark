@@ -19,16 +19,17 @@ package org.apache.spark.streaming.flume
 
 import java.net.{InetSocketAddress, ServerSocket}
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
+import java.util.{List => JList}
 import java.util.Collections
 
 import scala.collection.JavaConverters._
 
-import com.google.common.base.Charsets.UTF_8
 import org.apache.avro.ipc.NettyTransceiver
 import org.apache.avro.ipc.specific.SpecificRequestor
 import org.apache.commons.lang3.RandomUtils
 import org.apache.flume.source.avro
-import org.apache.flume.source.avro.{AvroSourceProtocol, AvroFlumeEvent}
+import org.apache.flume.source.avro.{AvroFlumeEvent, AvroSourceProtocol}
 import org.jboss.netty.channel.ChannelPipeline
 import org.jboss.netty.channel.socket.SocketChannel
 import org.jboss.netty.channel.socket.nio.NioClientSocketChannelFactory
@@ -59,12 +60,12 @@ private[flume] class FlumeTestUtils {
   }
 
   /** Send data to the flume receiver */
-  def writeInput(input: Seq[String], enableCompression: Boolean): Unit = {
+  def writeInput(input: JList[String], enableCompression: Boolean): Unit = {
     val testAddress = new InetSocketAddress("localhost", testPort)
 
-    val inputEvents = input.map { item =>
+    val inputEvents = input.asScala.map { item =>
       val event = new AvroFlumeEvent
-      event.setBody(ByteBuffer.wrap(item.getBytes(UTF_8)))
+      event.setBody(ByteBuffer.wrap(item.getBytes(StandardCharsets.UTF_8)))
       event.setHeaders(Collections.singletonMap("test", "header"))
       event
     }

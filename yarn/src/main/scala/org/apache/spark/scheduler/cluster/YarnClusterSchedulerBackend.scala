@@ -21,7 +21,7 @@ import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 
 import org.apache.spark.SparkContext
-import org.apache.spark.deploy.yarn.YarnSparkHadoopUtil
+import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnSparkHadoopUtil}
 import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
@@ -31,25 +31,11 @@ private[spark] class YarnClusterSchedulerBackend(
   extends YarnSchedulerBackend(scheduler, sc) {
 
   override def start() {
+    val attemptId = ApplicationMaster.getAttemptId
+    bindToYarn(attemptId.getApplicationId(), Some(attemptId))
     super.start()
     totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(sc.conf)
   }
-
-  override def applicationId(): String =
-    // In YARN Cluster mode, the application ID is expected to be set, so log an error if it's
-    // not found.
-    sc.getConf.getOption("spark.yarn.app.id").getOrElse {
-      logError("Application ID is not set.")
-      super.applicationId
-    }
-
-  override def applicationAttemptId(): Option[String] =
-    // In YARN Cluster mode, the attempt ID is expected to be set, so log an error if it's
-    // not found.
-    sc.getConf.getOption("spark.yarn.app.attemptId").orElse {
-      logError("Application attempt ID is not set.")
-      super.applicationAttemptId
-    }
 
   override def getDriverLogUrls: Option[Map[String, String]] = {
     var driverLogs: Option[Map[String, String]] = None

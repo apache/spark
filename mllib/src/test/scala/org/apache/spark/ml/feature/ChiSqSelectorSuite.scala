@@ -18,17 +18,19 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.ml.linalg.{Vector, Vectors}
+import org.apache.spark.ml.util.{DefaultReadWriteTest, MLTestingUtils}
+import org.apache.spark.ml.util.TestingUtils._
+import org.apache.spark.mllib.feature
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.mllib.util.TestingUtils._
-import org.apache.spark.sql.{Row, SQLContext}
+import org.apache.spark.sql.Row
 
-class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
+class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext
+  with DefaultReadWriteTest {
+
   test("Test Chi-Square selector") {
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
-
+    val spark = this.spark
+    import spark.implicits._
     val data = Seq(
       LabeledPoint(0.0, Vectors.sparse(3, Array((0, 8.0), (1, 7.0)))),
       LabeledPoint(1.0, Vectors.sparse(3, Array((1, 9.0), (2, 6.0)))),
@@ -57,5 +59,29 @@ class ChiSqSelectorSuite extends SparkFunSuite with MLlibTestSparkContext {
       case Row(vec1: Vector, vec2: Vector) =>
         assert(vec1 ~== vec2 absTol 1e-1)
     }
+  }
+
+  test("ChiSqSelector read/write") {
+    val t = new ChiSqSelector()
+      .setFeaturesCol("myFeaturesCol")
+      .setLabelCol("myLabelCol")
+      .setOutputCol("myOutputCol")
+      .setNumTopFeatures(2)
+    testDefaultReadWrite(t)
+  }
+
+  test("ChiSqSelectorModel read/write") {
+    val oldModel = new feature.ChiSqSelectorModel(Array(1, 3))
+    val instance = new ChiSqSelectorModel("myChiSqSelectorModel", oldModel)
+    val newInstance = testDefaultReadWrite(instance)
+    assert(newInstance.selectedFeatures === instance.selectedFeatures)
+  }
+
+  test("should support all NumericType labels and not support other types") {
+    val css = new ChiSqSelector()
+    MLTestingUtils.checkNumericTypes[ChiSqSelectorModel, ChiSqSelector](
+      css, spark) { (expected, actual) =>
+        assert(expected.selectedFeatures === actual.selectedFeatures)
+      }
   }
 }

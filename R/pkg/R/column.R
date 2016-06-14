@@ -22,11 +22,11 @@ NULL
 
 setOldClass("jobj")
 
-#' @title S4 class that represents a DataFrame column
-#' @description The column class supports unary, binary operations on DataFrame columns
+#' @title S4 class that represents a SparkDataFrame column
+#' @description The column class supports unary, binary operations on SparkDataFrame columns
 #' @rdname column
 #'
-#' @slot jc reference to JVM DataFrame column
+#' @slot jc reference to JVM SparkDataFrame column
 #' @export
 setClass("Column",
          slots = list(jc = "jobj"))
@@ -56,8 +56,8 @@ operators <- list(
   "&" = "and", "|" = "or", #, "!" = "unary_$bang"
   "^" = "pow"
 )
-column_functions1 <- c("asc", "desc", "isNull", "isNotNull")
-column_functions2 <- c("like", "rlike", "startsWith", "endsWith", "getField", "getItem", "contains")
+column_functions1 <- c("asc", "desc", "isNaN", "isNull", "isNotNull")
+column_functions2 <- c("like", "rlike", "getField", "getItem", "contains")
 
 createOperator <- function(op) {
   setMethod(op,
@@ -151,6 +151,40 @@ setMethod("substr", signature(x = "Column"),
             column(jc)
           })
 
+#' startsWith
+#'
+#' Determines if entries of x start with string (entries of) prefix respectively,
+#' where strings are recycled to common lengths.
+#'
+#' @rdname startsWith
+#' @name startsWith
+#' @family colum_func
+#'
+#' @param x vector of character string whose “starts” are considered
+#' @param prefix character vector (often of length one)
+setMethod("startsWith", signature(x = "Column"),
+          function(x, prefix) {
+            jc <- callJMethod(x@jc, "startsWith", as.vector(prefix))
+            column(jc)
+          })
+
+#' endsWith
+#'
+#' Determines if entries of x end with string (entries of) suffix respectively,
+#' where strings are recycled to common lengths.
+#'
+#' @rdname endsWith
+#' @name endsWith
+#' @family colum_func
+#'
+#' @param x vector of character string whose “ends” are considered
+#' @param suffix character vector (often of length one)
+setMethod("endsWith", signature(x = "Column"),
+          function(x, suffix) {
+            jc <- callJMethod(x@jc, "endsWith", as.vector(suffix))
+            column(jc)
+          })
+
 #' between
 #'
 #' Test if the column is between the lower bound and upper bound, inclusive.
@@ -209,13 +243,13 @@ setMethod("cast",
 setMethod("%in%",
           signature(x = "Column"),
           function(x, table) {
-            jc <- callJMethod(x@jc, "in", as.list(table))
+            jc <- callJMethod(x@jc, "isin", as.list(table))
             return(column(jc))
           })
 
 #' otherwise
 #'
-#' If values in the specified column are null, returns the value. 
+#' If values in the specified column are null, returns the value.
 #' Can be used in conjunction with `when` to specify a default value for expressions.
 #'
 #' @rdname otherwise
@@ -225,7 +259,7 @@ setMethod("%in%",
 setMethod("otherwise",
           signature(x = "Column", value = "ANY"),
           function(x, value) {
-            value <- ifelse(class(value) == "Column", value@jc, value)
+            value <- if (class(value) == "Column") { value@jc } else { value }
             jc <- callJMethod(x@jc, "otherwise", value)
             column(jc)
           })

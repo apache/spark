@@ -16,11 +16,11 @@
 #
 
 # A set of S3 classes and methods that support the SparkSQL `StructType` and `StructField
-# datatypes. These are used to create and interact with DataFrame schemas.
+# datatypes. These are used to create and interact with SparkDataFrame schemas.
 
 #' structType
 #'
-#' Create a structType object that contains the metadata for a DataFrame. Intended for
+#' Create a structType object that contains the metadata for a SparkDataFrame. Intended for
 #' use with createDataFrame and toDF.
 #'
 #' @param x a structField object (created with the field() function)
@@ -115,20 +115,7 @@ structField.jobj <- function(x) {
 }
 
 checkType <- function(type) {
-  primtiveTypes <- c("byte",
-                     "integer",
-                     "float",
-                     "double",
-                     "numeric",
-                     "character",
-                     "string",
-                     "binary",
-                     "raw",
-                     "logical",
-                     "boolean",
-                     "timestamp",
-                     "date")
-  if (type %in% primtiveTypes) {
+  if (!is.null(PRIMITIVE_TYPES[[type]])) {
     return()
   } else {
     # Check complex types
@@ -184,7 +171,7 @@ checkType <- function(type) {
             })
   }
 
-  stop(paste("Unsupported type for Dataframe:", type))
+  stop(paste("Unsupported type for SparkDataframe:", type))
 }
 
 structField.character <- function(x, type, nullable = TRUE) {

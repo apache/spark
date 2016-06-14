@@ -17,16 +17,19 @@
 
 package org.apache.spark.ml.feature
 
-import org.apache.spark.annotation.Experimental
+import org.apache.hadoop.fs.Path
+
+import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml._
 import org.apache.spark.ml.attribute.{AttributeGroup, _}
+import org.apache.spark.ml.linalg.{Vector, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
-import org.apache.spark.ml.util.Identifiable
-import org.apache.spark.ml.util.SchemaUtils
+import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{Vector, VectorUDT}
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.linalg.{Vectors => OldVectors}
+import org.apache.spark.mllib.regression.{LabeledPoint => OldLabeledPoint}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{DoubleType, StructField, StructType}
@@ -60,7 +63,7 @@ private[feature] trait ChiSqSelectorParams extends Params
  */
 @Experimental
 final class ChiSqSelector(override val uid: String)
-  extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams {
+  extends Estimator[ChiSqSelectorModel] with ChiSqSelectorParams with DefaultParamsWritable {
 
   def this() = this(Identifiable.randomUID("chiSqSelector"))
 
@@ -76,23 +79,32 @@ final class ChiSqSelector(override val uid: String)
   /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  override def fit(dataset: DataFrame): ChiSqSelectorModel = {
+  @Since("2.0.0")
+  override def fit(dataset: Dataset[_]): ChiSqSelectorModel = {
     transformSchema(dataset.schema, logging = true)
-    val input = dataset.select($(labelCol), $(featuresCol)).map {
-      case Row(label: Double, features: Vector) =>
-        LabeledPoint(label, features)
-    }
+    val input: RDD[OldLabeledPoint] =
+      dataset.select(col($(labelCol)).cast(DoubleType), col($(featuresCol))).rdd.map {
+        case Row(label: Double, features: Vector) =>
+          OldLabeledPoint(label, OldVectors.fromML(features))
+      }
     val chiSqSelector = new feature.ChiSqSelector($(numTopFeatures)).fit(input)
     copyValues(new ChiSqSelectorModel(uid, chiSqSelector).setParent(this))
   }
 
   override def transformSchema(schema: StructType): StructType = {
     SchemaUtils.checkColumnType(schema, $(featuresCol), new VectorUDT)
-    SchemaUtils.checkColumnType(schema, $(labelCol), DoubleType)
+    SchemaUtils.checkNumericType(schema, $(labelCol))
     SchemaUtils.appendColumn(schema, $(outputCol), new VectorUDT)
   }
 
   override def copy(extra: ParamMap): ChiSqSelector = defaultCopy(extra)
+}
+
+@Since("1.6.0")
+object ChiSqSelector extends DefaultParamsReadable[ChiSqSelector] {
+
+  @Since("1.6.0")
+  override def load(path: String): ChiSqSelector = super.load(path)
 }
 
 /**
@@ -103,7 +115,12 @@ final class ChiSqSelector(override val uid: String)
 final class ChiSqSelectorModel private[ml] (
     override val uid: String,
     private val chiSqSelector: feature.ChiSqSelectorModel)
-  extends Model[ChiSqSelectorModel] with ChiSqSelectorParams {
+  extends Model[ChiSqSelectorModel] with ChiSqSelectorParams with MLWritable {
+
+  import ChiSqSelectorModel._
+
+  /** list of indices to select (filter). Must be ordered asc */
+  val selectedFeatures: Array[Int] = chiSqSelector.selectedFeatures
 
   /** @group setParam */
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -114,10 +131,15 @@ final class ChiSqSelectorModel private[ml] (
   /** @group setParam */
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
-  override def transform(dataset: DataFrame): DataFrame = {
+  @Since("2.0.0")
+  override def transform(dataset: Dataset[_]): DataFrame = {
     val transformedSchema = transformSchema(dataset.schema, logging = true)
     val newField = transformedSchema.last
-    val selector = udf { chiSqSelector.transform _ }
+
+    // TODO: Make the transformer natively in ml framework to avoid extra conversion.
+    val transformer: Vector => Vector = v => chiSqSelector.transform(OldVectors.fromML(v)).asML
+
+    val selector = udf(transformer)
     dataset.withColumn($(outputCol), selector(col($(featuresCol))), newField.metadata)
   }
 
@@ -147,4 +169,46 @@ final class ChiSqSelectorModel private[ml] (
     val copied = new ChiSqSelectorModel(uid, chiSqSelector)
     copyValues(copied, extra).setParent(parent)
   }
+
+  @Since("1.6.0")
+  override def write: MLWriter = new ChiSqSelectorModelWriter(this)
+}
+
+@Since("1.6.0")
+object ChiSqSelectorModel extends MLReadable[ChiSqSelectorModel] {
+
+  private[ChiSqSelectorModel]
+  class ChiSqSelectorModelWriter(instance: ChiSqSelectorModel) extends MLWriter {
+
+    private case class Data(selectedFeatures: Seq[Int])
+
+    override protected def saveImpl(path: String): Unit = {
+      DefaultParamsWriter.saveMetadata(instance, path, sc)
+      val data = Data(instance.selectedFeatures.toSeq)
+      val dataPath = new Path(path, "data").toString
+      sqlContext.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath)
+    }
+  }
+
+  private class ChiSqSelectorModelReader extends MLReader[ChiSqSelectorModel] {
+
+    private val className = classOf[ChiSqSelectorModel].getName
+
+    override def load(path: String): ChiSqSelectorModel = {
+      val metadata = DefaultParamsReader.loadMetadata(path, sc, className)
+      val dataPath = new Path(path, "data").toString
+      val data = sqlContext.read.parquet(dataPath).select("selectedFeatures").head()
+      val selectedFeatures = data.getAs[Seq[Int]](0).toArray
+      val oldModel = new feature.ChiSqSelectorModel(selectedFeatures)
+      val model = new ChiSqSelectorModel(metadata.uid, oldModel)
+      DefaultParamsReader.getAndSetParams(model, metadata)
+      model
+    }
+  }
+
+  @Since("1.6.0")
+  override def read: MLReader[ChiSqSelectorModel] = new ChiSqSelectorModelReader
+
+  @Since("1.6.0")
+  override def load(path: String): ChiSqSelectorModel = super.load(path)
 }

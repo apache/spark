@@ -18,14 +18,14 @@
 // scalastyle:off println
 package org.apache.spark.examples.mllib
 
+import org.apache.spark.{SparkConf, SparkContext}
 // $example on$
 import org.apache.spark.mllib.regression.{IsotonicRegression, IsotonicRegressionModel}
 // $example off$
-import org.apache.spark.{SparkConf, SparkContext}
 
 object IsotonicRegressionExample {
 
-  def main(args: Array[String]) : Unit = {
+  def main(args: Array[String]): Unit = {
 
     val conf = new SparkConf().setAppName("IsotonicRegressionExample")
     val sc = new SparkContext(conf)

@@ -23,18 +23,16 @@ import scala.util.{Failure, Success, Try}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io._
 
-import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.annotation.Experimental
+import org.apache.spark.SparkException
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.{SerializableConfiguration, Utils}
 
 /**
- * :: Experimental ::
  * A trait for use with reading custom classes in PySpark. Implement this trait and add custom
  * transformation code by overriding the convert method.
  */
-@Experimental
 trait Converter[T, + U] extends Serializable {
   def convert(obj: T): U
 }
@@ -136,11 +134,10 @@ private[python] class JavaToWritableConverter extends Converter[Any, Writable] {
           mapWritable.put(convertToWritable(k), convertToWritable(v))
         }
         mapWritable
-      case array: Array[Any] => {
+      case array: Array[Any] =>
         val arrayWriteable = new ArrayWritable(classOf[Writable])
         arrayWriteable.set(array.map(convertToWritable(_)))
         arrayWriteable
-      }
       case other => throw new SparkException(
         s"Data of type ${other.getClass.getName} cannot be used")
     }

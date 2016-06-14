@@ -18,11 +18,11 @@
 package org.apache.spark.mllib.util
 
 import java.io.File
+import java.nio.charset.StandardCharsets
 
 import scala.io.Source
 
 import breeze.linalg.{squaredDistance => breezeSquaredDistance}
-import com.google.common.base.Charsets
 import com.google.common.io.Files
 
 import org.apache.spark.SparkException
@@ -53,13 +53,13 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       val norm2 = Vectors.norm(v2, 2.0)
       val v3 = Vectors.sparse(n, indices, indices.map(i => a(i) + 0.5))
       val norm3 = Vectors.norm(v3, 2.0)
-      val squaredDist = breezeSquaredDistance(v1.toBreeze, v2.toBreeze)
+      val squaredDist = breezeSquaredDistance(v1.asBreeze, v2.asBreeze)
       val fastSquaredDist1 = fastSquaredDistance(v1, norm1, v2, norm2, precision)
       assert((fastSquaredDist1 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
       val fastSquaredDist2 =
         fastSquaredDistance(v1, norm1, Vectors.dense(v2.toArray), norm2, precision)
       assert((fastSquaredDist2 - squaredDist) <= precision * squaredDist, s"failed with m = $m")
-      val squaredDist2 = breezeSquaredDistance(v2.toBreeze, v3.toBreeze)
+      val squaredDist2 = breezeSquaredDistance(v2.asBreeze, v3.asBreeze)
       val fastSquaredDist3 =
         fastSquaredDistance(v2, norm2, v3, norm3, precision)
       assert((fastSquaredDist3 - squaredDist2) <= precision * squaredDist2, s"failed with m = $m")
@@ -67,7 +67,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
         val v4 = Vectors.sparse(n, indices.slice(0, m - 10),
           indices.map(i => a(i) + 0.5).slice(0, m - 10))
         val norm4 = Vectors.norm(v4, 2.0)
-        val squaredDist = breezeSquaredDistance(v2.toBreeze, v4.toBreeze)
+        val squaredDist = breezeSquaredDistance(v2.asBreeze, v4.asBreeze)
         val fastSquaredDist =
           fastSquaredDistance(v2, norm2, v4, norm4, precision)
         assert((fastSquaredDist - squaredDist) <= precision * squaredDist, s"failed with m = $m")
@@ -84,7 +84,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, Charsets.US_ASCII)
+    Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
 
     val pointsWithNumFeatures = loadLibSVMFile(sc, path, 6).collect()
@@ -117,7 +117,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, Charsets.US_ASCII)
+    Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -134,7 +134,7 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
       """.stripMargin
     val tempDir = Utils.createTempDir()
     val file = new File(tempDir.getPath, "part-00000")
-    Files.write(lines, file, Charsets.US_ASCII)
+    Files.write(lines, file, StandardCharsets.UTF_8)
     val path = tempDir.toURI.toString
 
     intercept[SparkException] {
@@ -182,8 +182,8 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
     for (folds <- 2 to 10) {
       for (seed <- 1 to 5) {
         val foldedRdds = kFold(data, folds, seed)
-        assert(foldedRdds.size === folds)
-        foldedRdds.map { case (training, validation) =>
+        assert(foldedRdds.length === folds)
+        foldedRdds.foreach { case (training, validation) =>
           val result = validation.union(training).collect().sorted
           val validationSize = validation.collect().size.toFloat
           assert(validationSize > 0, "empty validation data")

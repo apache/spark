@@ -19,13 +19,14 @@ package org.apache.spark.scheduler
 
 import java.util.Random
 
-import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+import org.mockito.Mockito.{mock, verify}
+
 import org.apache.spark._
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.util.ManualClock
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.{AccumulatorV2, ManualClock}
 
 class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
   extends DAGScheduler(sc) {
@@ -38,9 +39,8 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
       task: Task[_],
       reason: TaskEndReason,
       result: Any,
-      accumUpdates: Map[Long, Any],
-      taskInfo: TaskInfo,
-      taskMetrics: TaskMetrics) {
+      accumUpdates: Seq[AccumulatorV2[_, _]],
+      taskInfo: TaskInfo) {
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
@@ -139,7 +139,8 @@ class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* ex
 /**
  * A Task implementation that results in a large serialized task.
  */
-class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0, Seq.empty) {
+class LargeTask(stageId: Int) extends Task[Array[Byte]](stageId, 0, 0) {
+
   val randomBuffer = new Array[Byte](TaskSetManager.TASK_SIZE_TO_WARN_KB * 1024)
   val random = new Random(0)
   random.nextBytes(randomBuffer)
@@ -167,14 +168,15 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val taskSet = FakeTask.createTaskSet(1)
     val clock = new ManualClock
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
+    val accumUpdates = taskSet.tasks.head.metrics.internalAccums
 
     // Offer a host with NO_PREF as the constraint,
     // we should get a nopref task immediately since that's what we only have
-    var taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
+    val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
     assert(taskOption.isDefined)
 
     // Tell it the task has finished
-    manager.handleSuccessfulTask(0, createTaskResult(0))
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdates))
     assert(sched.endedTasks(0) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -184,10 +186,13 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = FakeTask.createTaskSet(3)
     val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
-      var taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
+      val taskOption = manager.resourceOffer("exec1", "host1", NO_PREF)
       assert(taskOption.isDefined)
       val task = taskOption.get
       assert(task.executorId === "exec1")
@@ -198,14 +203,14 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(manager.resourceOffer("exec1", "host1", NO_PREF) === None)
 
     // Finish the first two tasks
-    manager.handleSuccessfulTask(0, createTaskResult(0))
-    manager.handleSuccessfulTask(1, createTaskResult(1))
+    manager.handleSuccessfulTask(0, createTaskResult(0, accumUpdatesByTask(0)))
+    manager.handleSuccessfulTask(1, createTaskResult(1, accumUpdatesByTask(1)))
     assert(sched.endedTasks(0) === Success)
     assert(sched.endedTasks(1) === Success)
     assert(!sched.finishedManagers.contains(manager))
 
     // Finish the last task
-    manager.handleSuccessfulTask(2, createTaskResult(2))
+    manager.handleSuccessfulTask(2, createTaskResult(2, accumUpdatesByTask(2)))
     assert(sched.endedTasks(2) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -432,7 +437,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     val rescheduleDelay = 300L
     val conf = new SparkConf().
       set("spark.scheduler.executorTaskBlacklistTime", rescheduleDelay.toString).
-      // dont wait to jump locality levels in this test
+      // don't wait to jump locality levels in this test
       set("spark.locality.wait", "0")
 
     sc = new SparkContext("local", "test", conf)
@@ -658,7 +663,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
 
     // multiple 1k result
     val r = sc.makeRDD(0 until 10, 10).map(genBytes(1024)).collect()
-    assert(10 === r.size )
+    assert(10 === r.size)
 
     // single 10M result
     val thrown = intercept[SparkException] {sc.makeRDD(genBytes(10 << 20)(0), 1).collect()}
@@ -799,7 +804,7 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     // Regression test for SPARK-2931
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc,
-        ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
+      ("execA", "host1"), ("execB", "host2"), ("execC", "host3"))
     val taskSet = FakeTask.createTaskSet(3,
       Seq(TaskLocation("host1")),
       Seq(TaskLocation("host2")),
@@ -824,8 +829,58 @@ class TaskSetManagerSuite extends SparkFunSuite with LocalSparkContext with Logg
     assert(TaskLocation("executor_host1_3") === ExecutorCacheTaskLocation("host1", "3"))
   }
 
-  def createTaskResult(id: Int): DirectTaskResult[Int] = {
+  test("Kill other task attempts when one attempt belonging to the same task succeeds") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc, ("exec1", "host1"), ("exec2", "host2"))
+    val taskSet = FakeTask.createTaskSet(4)
+    // Set the speculation multiplier to be 0 so speculative tasks are launched immediately
+    sc.conf.set("spark.speculation.multiplier", "0.0")
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
+    val accumUpdatesByTask: Array[Seq[AccumulatorV2[_, _]]] = taskSet.tasks.map { task =>
+      task.metrics.internalAccums
+    }
+    // Offer resources for 4 tasks to start
+    for ((k, v) <- List(
+        "exec1" -> "host1",
+        "exec1" -> "host1",
+        "exec2" -> "host2",
+        "exec2" -> "host2")) {
+      val taskOption = manager.resourceOffer(k, v, NO_PREF)
+      assert(taskOption.isDefined)
+      val task = taskOption.get
+      assert(task.executorId === k)
+    }
+    assert(sched.startedTasks.toSet === Set(0, 1, 2, 3))
+    // Complete the 3 tasks and leave 1 task in running
+    for (id <- Set(0, 1, 2)) {
+      manager.handleSuccessfulTask(id, createTaskResult(id, accumUpdatesByTask(id)))
+      assert(sched.endedTasks(id) === Success)
+    }
+
+    assert(manager.checkSpeculatableTasks(0))
+    // Offer resource to start the speculative attempt for the running task
+    val taskOption5 = manager.resourceOffer("exec1", "host1", NO_PREF)
+    assert(taskOption5.isDefined)
+    val task5 = taskOption5.get
+    assert(task5.index === 3)
+    assert(task5.taskId === 4)
+    assert(task5.executorId === "exec1")
+    assert(task5.attemptNumber === 1)
+    sched.backend = mock(classOf[SchedulerBackend])
+    // Complete the speculative attempt for the running task
+    manager.handleSuccessfulTask(4, createTaskResult(3, accumUpdatesByTask(3)))
+    // Verify that it kills other running attempt
+    verify(sched.backend).killTask(3, "exec2", true)
+    // Because the SchedulerBackend was a mock, the 2nd copy of the task won't actually be
+    // killed, so the FakeTaskScheduler is only told about the successful completion
+    // of the speculated task.
+    assert(sched.endedTasks(3) === Success)
+  }
+
+  private def createTaskResult(
+      id: Int,
+      accumUpdates: Seq[AccumulatorV2[_, _]] = Seq.empty): DirectTaskResult[Int] = {
     val valueSer = SparkEnv.get.serializer.newInstance()
-    new DirectTaskResult[Int](valueSer.serialize(id), mutable.Map.empty, new TaskMetrics)
+    new DirectTaskResult[Int](valueSer.serialize(id), accumUpdates)
   }
 }

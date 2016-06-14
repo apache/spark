@@ -24,13 +24,14 @@ import scala.collection.JavaConverters._
 import org.json4s.JsonDSL._
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{Logging, SparkContext, SparkException}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.annotation.Since
+import org.apache.spark.internal.Logging
 import org.apache.spark.mllib.linalg.{BLAS, DenseMatrix, DenseVector, SparseVector, Vector}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.{Loader, Saveable}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.{DataFrame, SQLContext}
+import org.apache.spark.sql.SparkSession
 
 /**
  * Model for Naive Bayes Classifiers.
@@ -74,7 +75,7 @@ class NaiveBayesModel private[spark] (
     case Multinomial => (None, None)
     case Bernoulli =>
       val negTheta = thetaMatrix.map(value => math.log(1.0 - math.exp(value)))
-      val ones = new DenseVector(Array.fill(thetaMatrix.numCols){1.0})
+      val ones = new DenseVector(Array.fill(thetaMatrix.numCols) {1.0})
       val thetaMinusNegTheta = thetaMatrix.map { value =>
         value - math.log(1.0 - math.exp(value))
       }
@@ -192,8 +193,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         modelType: String)
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -202,15 +202,14 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath(path))
     }
 
     @Since("1.3.0")
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
-      val sqlContext = new SQLContext(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       // Load Parquet data.
-      val dataRDD = sqlContext.read.parquet(dataPath(path))
+      val dataRDD = spark.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta", "modelType").take(1)
@@ -239,8 +238,7 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
         theta: Array[Array[Double]])
 
     def save(sc: SparkContext, path: String, data: Data): Unit = {
-      val sqlContext = new SQLContext(sc)
-      import sqlContext.implicits._
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
 
       // Create JSON metadata.
       val metadata = compact(render(
@@ -249,14 +247,13 @@ object NaiveBayesModel extends Loader[NaiveBayesModel] {
       sc.parallelize(Seq(metadata), 1).saveAsTextFile(metadataPath(path))
 
       // Create Parquet data.
-      val dataRDD: DataFrame = sc.parallelize(Seq(data), 1).toDF()
-      dataRDD.write.parquet(dataPath(path))
+      spark.createDataFrame(Seq(data)).repartition(1).write.parquet(dataPath(path))
     }
 
     def load(sc: SparkContext, path: String): NaiveBayesModel = {
-      val sqlContext = new SQLContext(sc)
+      val spark = SparkSession.builder().sparkContext(sc).getOrCreate()
       // Load Parquet data.
-      val dataRDD = sqlContext.read.parquet(dataPath(path))
+      val dataRDD = spark.read.parquet(dataPath(path))
       // Check schema explicitly since erasure makes it hard to use match-case for checking.
       checkSchema[Data](dataRDD.schema)
       val dataArray = dataRDD.select("labels", "pi", "theta").take(1)
@@ -325,6 +322,8 @@ class NaiveBayes private (
   /** Set the smoothing parameter. Default: 1.0. */
   @Since("0.9.0")
   def setLambda(lambda: Double): NaiveBayes = {
+    require(lambda >= 0,
+      s"Smoothing parameter must be nonnegative but got $lambda")
     this.lambda = lambda
     this
   }

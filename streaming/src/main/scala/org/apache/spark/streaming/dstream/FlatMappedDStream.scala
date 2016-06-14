@@ -17,14 +17,15 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Duration, Time}
-import org.apache.spark.rdd.RDD
 import scala.reflect.ClassTag
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.streaming.{Duration, Time}
 
 private[streaming]
 class FlatMappedDStream[T: ClassTag, U: ClassTag](
     parent: DStream[T],
-    flatMapFunc: T => Traversable[U]
+    flatMapFunc: T => TraversableOnce[U]
   ) extends DStream[U](parent.ssc) {
 
   override def dependencies: List[DStream[_]] = List(parent)

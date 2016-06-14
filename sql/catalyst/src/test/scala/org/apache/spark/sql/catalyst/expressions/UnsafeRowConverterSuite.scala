@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.nio.charset.StandardCharsets
 import java.sql.{Date, Timestamp}
 
 import org.scalatest.Matchers
@@ -77,16 +78,16 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     val row = new SpecificMutableRow(fieldTypes)
     row.setLong(0, 0)
     row.update(1, UTF8String.fromString("Hello"))
-    row.update(2, "World".getBytes)
+    row.update(2, "World".getBytes(StandardCharsets.UTF_8))
 
     val unsafeRow: UnsafeRow = converter.apply(row)
     assert(unsafeRow.getSizeInBytes === 8 + (8 * 3) +
-      roundedSize("Hello".getBytes.length) +
-      roundedSize("World".getBytes.length))
+      roundedSize("Hello".getBytes(StandardCharsets.UTF_8).length) +
+      roundedSize("World".getBytes(StandardCharsets.UTF_8).length))
 
     assert(unsafeRow.getLong(0) === 0)
     assert(unsafeRow.getString(1) === "Hello")
-    assert(unsafeRow.getBinary(2) === "World".getBytes)
+    assert(unsafeRow.getBinary(2) === "World".getBytes(StandardCharsets.UTF_8))
   }
 
   test("basic conversion with primitive, string, date and timestamp types") {
@@ -100,7 +101,8 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
     row.update(3, DateTimeUtils.fromJavaTimestamp(Timestamp.valueOf("2015-05-08 08:10:25")))
 
     val unsafeRow: UnsafeRow = converter.apply(row)
-    assert(unsafeRow.getSizeInBytes === 8 + (8 * 4) + roundedSize("Hello".getBytes.length))
+    assert(unsafeRow.getSizeInBytes ===
+      8 + (8 * 4) + roundedSize("Hello".getBytes(StandardCharsets.UTF_8).length))
 
     assert(unsafeRow.getLong(0) === 0)
     assert(unsafeRow.getString(1) === "Hello")
@@ -175,7 +177,7 @@ class UnsafeRowConverterSuite extends SparkFunSuite with Matchers {
       r.setFloat(6, 600)
       r.setDouble(7, 700)
       r.update(8, UTF8String.fromString("hello"))
-      r.update(9, "world".getBytes)
+      r.update(9, "world".getBytes(StandardCharsets.UTF_8))
       r.setDecimal(10, Decimal(10), 10)
       r.setDecimal(11, Decimal(10.00, 38, 18), 38)
       // r.update(11, Array(11))

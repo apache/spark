@@ -17,21 +17,22 @@
 
 package org.apache.spark.sql.catalyst.encoders
 
-import org.apache.spark.sql.catalyst.analysis.{SimpleAnalyzer, UnresolvedExtractValue, UnresolvedAttribute}
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.util.Utils
-
 import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.{typeTag, TypeTag}
 
+import org.apache.spark.sql.Encoder
+import org.apache.spark.sql.catalyst.{InternalRow, JavaTypeInference, ScalaReflection}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, GetColumnByOrdinal, SimpleAnalyzer, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{GenerateSafeProjection, GenerateUnsafeProjection}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.types.{StructField, DataType, ObjectType, StructType}
+import org.apache.spark.sql.catalyst.expressions.objects.{AssertNotNull, Invoke, NewInstance}
+import org.apache.spark.sql.catalyst.optimizer.SimplifyCasts
+import org.apache.spark.sql.catalyst.plans.logical.{CatalystSerde, DeserializeToObject, LocalRelation}
+import org.apache.spark.sql.types.{ObjectType, StructField, StructType}
+import org.apache.spark.util.Utils
 
 /**
- * A factory for constructing encoders that convert objects and primitves to and from the
+ * A factory for constructing encoders that convert objects and primitives to and from the
  * internal row format using catalyst expressions and code generation.  By default, the
  * expressions used to retrieve values from an input row when producing an object will be created as
  * follows:
@@ -42,167 +43,247 @@ import org.apache.spark.sql.types.{StructField, DataType, ObjectType, StructType
  *    to the name `value`.
  */
 object ExpressionEncoder {
-  def apply[T : TypeTag](flat: Boolean = false): ExpressionEncoder[T] = {
+  def apply[T : TypeTag](): ExpressionEncoder[T] = {
     // We convert the not-serializable TypeTag into StructType and ClassTag.
     val mirror = typeTag[T].mirror
-    val cls = mirror.runtimeClass(typeTag[T].tpe)
+    val tpe = typeTag[T].tpe
+    val cls = mirror.runtimeClass(tpe)
+    val flat = !ScalaReflection.definedByConstructorParams(tpe)
 
-    val inputObject = BoundReference(0, ObjectType(cls), nullable = true)
-    val extractExpression = ScalaReflection.extractorsFor[T](inputObject)
-    val constructExpression = ScalaReflection.constructorFor[T]
+    val inputObject = BoundReference(0, ScalaReflection.dataTypeFor[T], nullable = true)
+    val nullSafeInput = if (flat) {
+      inputObject
+    } else {
+      // For input object of non-flat type, we can't encode it to row if it's null, as Spark SQL
+      // doesn't allow top-level row to be null, only its columns can be null.
+      AssertNotNull(inputObject, Seq("top level non-flat input object"))
+    }
+    val serializer = ScalaReflection.serializerFor[T](nullSafeInput)
+    val deserializer = ScalaReflection.deserializerFor[T]
+
+    val schema = ScalaReflection.schemaFor[T] match {
+      case ScalaReflection.Schema(s: StructType, _) => s
+      case ScalaReflection.Schema(dt, nullable) => new StructType().add("value", dt, nullable)
+    }
 
     new ExpressionEncoder[T](
-      extractExpression.dataType,
+      schema,
       flat,
-      extractExpression.flatten,
-      constructExpression,
+      serializer.flatten,
+      deserializer,
       ClassTag[T](cls))
+  }
+
+  // TODO: improve error message for java bean encoder.
+  def javaBean[T](beanClass: Class[T]): ExpressionEncoder[T] = {
+    val schema = JavaTypeInference.inferDataType(beanClass)._1
+    assert(schema.isInstanceOf[StructType])
+
+    val serializer = JavaTypeInference.serializerFor(beanClass)
+    val deserializer = JavaTypeInference.deserializerFor(beanClass)
+
+    new ExpressionEncoder[T](
+      schema.asInstanceOf[StructType],
+      flat = false,
+      serializer.flatten,
+      deserializer,
+      ClassTag[T](beanClass))
   }
 
   /**
    * Given a set of N encoders, constructs a new encoder that produce objects as items in an
-   * N-tuple.  Note that these encoders should first be bound correctly to the combined input
-   * schema.
+   * N-tuple.  Note that these encoders should be unresolved so that information about
+   * name/positional binding is preserved.
    */
   def tuple(encoders: Seq[ExpressionEncoder[_]]): ExpressionEncoder[_] = {
-    val schema =
-      StructType(
-        encoders.zipWithIndex.map { case (e, i) => StructField(s"_${i + 1}", e.schema)})
+    encoders.foreach(_.assertUnresolved())
+
+    val schema = StructType(encoders.zipWithIndex.map {
+      case (e, i) =>
+        val (dataType, nullable) = if (e.flat) {
+          e.schema.head.dataType -> e.schema.head.nullable
+        } else {
+          e.schema -> true
+        }
+        StructField(s"_${i + 1}", dataType, nullable)
+    })
+
     val cls = Utils.getContextOrSparkClassLoader.loadClass(s"scala.Tuple${encoders.size}")
-    val extractExpressions = encoders.map {
-      case e if e.flat => e.extractExpressions.head
-      case other => CreateStruct(other.extractExpressions)
+
+    val serializer = encoders.map {
+      case e if e.flat => e.serializer.head
+      case other => CreateStruct(other.serializer)
+    }.zipWithIndex.map { case (expr, index) =>
+      expr.transformUp {
+        case BoundReference(0, t, _) =>
+          Invoke(
+            BoundReference(0, ObjectType(cls), nullable = true),
+            s"_${index + 1}",
+            t)
+      }
     }
-    val constructExpression =
-      NewInstance(cls, encoders.map(_.constructExpression), false, ObjectType(cls))
+
+    val childrenDeserializers = encoders.zipWithIndex.map { case (enc, index) =>
+      if (enc.flat) {
+        enc.deserializer.transform {
+          case g: GetColumnByOrdinal => g.copy(ordinal = index)
+        }
+      } else {
+        val input = GetColumnByOrdinal(index, enc.schema)
+        val deserialized = enc.deserializer.transformUp {
+          case UnresolvedAttribute(nameParts) =>
+            assert(nameParts.length == 1)
+            UnresolvedExtractValue(input, Literal(nameParts.head))
+          case GetColumnByOrdinal(ordinal, _) => GetStructField(input, ordinal)
+        }
+        If(IsNull(input), Literal.create(null, deserialized.dataType), deserialized)
+      }
+    }
+
+    val deserializer =
+      NewInstance(cls, childrenDeserializers, ObjectType(cls), propagateNull = false)
 
     new ExpressionEncoder[Any](
       schema,
-      false,
-      extractExpressions,
-      constructExpression,
-      ClassTag.apply(cls))
+      flat = false,
+      serializer,
+      deserializer,
+      ClassTag(cls))
   }
 
-  /** A helper for producing encoders of Tuple2 from other encoders. */
   def tuple[T1, T2](
       e1: ExpressionEncoder[T1],
       e2: ExpressionEncoder[T2]): ExpressionEncoder[(T1, T2)] =
-    tuple(e1 :: e2 :: Nil).asInstanceOf[ExpressionEncoder[(T1, T2)]]
+    tuple(Seq(e1, e2)).asInstanceOf[ExpressionEncoder[(T1, T2)]]
+
+  def tuple[T1, T2, T3](
+      e1: ExpressionEncoder[T1],
+      e2: ExpressionEncoder[T2],
+      e3: ExpressionEncoder[T3]): ExpressionEncoder[(T1, T2, T3)] =
+    tuple(Seq(e1, e2, e3)).asInstanceOf[ExpressionEncoder[(T1, T2, T3)]]
+
+  def tuple[T1, T2, T3, T4](
+      e1: ExpressionEncoder[T1],
+      e2: ExpressionEncoder[T2],
+      e3: ExpressionEncoder[T3],
+      e4: ExpressionEncoder[T4]): ExpressionEncoder[(T1, T2, T3, T4)] =
+    tuple(Seq(e1, e2, e3, e4)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4)]]
+
+  def tuple[T1, T2, T3, T4, T5](
+      e1: ExpressionEncoder[T1],
+      e2: ExpressionEncoder[T2],
+      e3: ExpressionEncoder[T3],
+      e4: ExpressionEncoder[T4],
+      e5: ExpressionEncoder[T5]): ExpressionEncoder[(T1, T2, T3, T4, T5)] =
+    tuple(Seq(e1, e2, e3, e4, e5)).asInstanceOf[ExpressionEncoder[(T1, T2, T3, T4, T5)]]
 }
 
 /**
  * A generic encoder for JVM objects.
  *
  * @param schema The schema after converting `T` to a Spark SQL row.
- * @param extractExpressions A set of expressions, one for each top-level field that can be used to
- *                           extract the values from a raw object.
+ * @param serializer A set of expressions, one for each top-level field that can be used to
+ *                   extract the values from a raw object into an [[InternalRow]].
+ * @param deserializer An expression that will construct an object given an [[InternalRow]].
  * @param clsTag A classtag for `T`.
  */
 case class ExpressionEncoder[T](
     schema: StructType,
     flat: Boolean,
-    extractExpressions: Seq[Expression],
-    constructExpression: Expression,
+    serializer: Seq[Expression],
+    deserializer: Expression,
     clsTag: ClassTag[T])
   extends Encoder[T] {
 
-  if (flat) require(extractExpressions.size == 1)
+  if (flat) require(serializer.size == 1)
+
+  // serializer expressions are used to encode an object to a row, while the object is usually an
+  // intermediate value produced inside an operator, not from the output of the child operator. This
+  // is quite different from normal expressions, and `AttributeReference` doesn't work here
+  // (intermediate value is not an attribute). We assume that all serializer expressions use a same
+  // `BoundReference` to refer to the object, and throw exception if they don't.
+  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference to any attributes.")
+  assert(serializer.flatMap(_.collect { case b: BoundReference => b}).distinct.length <= 1,
+    "all serializer expressions must use the same BoundReference.")
+
+  /**
+   * Returns a new copy of this encoder, where the `deserializer` is resolved and bound to the
+   * given schema.
+   *
+   * Note that, ideally encoder is used as a container of serde expressions, the resolution and
+   * binding stuff should happen inside query framework.  However, in some cases we need to
+   * use encoder as a function to do serialization directly(e.g. Dataset.collect), then we can use
+   * this method to do resolution and binding outside of query framework.
+   */
+  def resolveAndBind(
+      attrs: Seq[Attribute] = schema.toAttributes,
+      analyzer: Analyzer = SimpleAnalyzer): ExpressionEncoder[T] = {
+    val dummyPlan = CatalystSerde.deserialize(LocalRelation(attrs))(this)
+    val analyzedPlan = analyzer.execute(dummyPlan)
+    analyzer.checkAnalysis(analyzedPlan)
+    val resolved = SimplifyCasts(analyzedPlan).asInstanceOf[DeserializeToObject].deserializer
+    val bound = BindReferences.bindReference(resolved, attrs)
+    copy(deserializer = bound)
+  }
 
   @transient
-  private lazy val extractProjection = GenerateUnsafeProjection.generate(extractExpressions)
-  private val inputRow = new GenericMutableRow(1)
+  private lazy val extractProjection = GenerateUnsafeProjection.generate(serializer)
 
   @transient
-  private lazy val constructProjection = GenerateSafeProjection.generate(constructExpression :: Nil)
+  private lazy val inputRow = new GenericMutableRow(1)
+
+  @transient
+  private lazy val constructProjection = GenerateSafeProjection.generate(deserializer :: Nil)
+
+  /**
+   * Returns a new set (with unique ids) of [[NamedExpression]] that represent the serialized form
+   * of this object.
+   */
+  def namedExpressions: Seq[NamedExpression] = schema.map(_.name).zip(serializer).map {
+    case (_, ne: NamedExpression) => ne.newInstance()
+    case (name, e) => Alias(e, name)()
+  }
 
   /**
    * Returns an encoded version of `t` as a Spark SQL row.  Note that multiple calls to
    * toRow are allowed to return the same actual [[InternalRow]] object.  Thus, the caller should
    * copy the result before making another call if required.
    */
-  def toRow(t: T): InternalRow = {
+  def toRow(t: T): InternalRow = try {
     inputRow(0) = t
     extractProjection(inputRow)
+  } catch {
+    case e: Exception =>
+      throw new RuntimeException(
+        s"Error while encoding: $e\n${serializer.map(_.treeString).mkString("\n")}", e)
   }
 
   /**
    * Returns an object of type `T`, extracting the required values from the provided row.  Note that
-   * you must `resolve` and `bind` an encoder to a specific schema before you can call this
+   * you must `resolveAndBind` an encoder to a specific schema before you can call this
    * function.
    */
   def fromRow(row: InternalRow): T = try {
     constructProjection(row).get(0, ObjectType(clsTag.runtimeClass)).asInstanceOf[T]
   } catch {
     case e: Exception =>
-      throw new RuntimeException(s"Error while decoding: $e\n${constructExpression.treeString}", e)
+      throw new RuntimeException(s"Error while decoding: $e\n${deserializer.treeString}", e)
   }
 
   /**
-   * Returns a new copy of this encoder, where the expressions used by `fromRow` are resolved to the
-   * given schema.
+   * The process of resolution to a given schema throws away information about where a given field
+   * is being bound by ordinal instead of by name.  This method checks to make sure this process
+   * has not been done already in places where we plan to do later composition of encoders.
    */
-  def resolve(schema: Seq[Attribute]): ExpressionEncoder[T] = {
-    val plan = Project(Alias(constructExpression, "")() :: Nil, LocalRelation(schema))
-    val analyzedPlan = SimpleAnalyzer.execute(plan)
-    copy(constructExpression = analyzedPlan.expressions.head.children.head)
-  }
-
-  /**
-   * Returns a copy of this encoder where the expressions used to construct an object from an input
-   * row have been bound to the ordinals of the given schema.  Note that you need to first call
-   * resolve before bind.
-   */
-  def bind(schema: Seq[Attribute]): ExpressionEncoder[T] = {
-    copy(constructExpression = BindReferences.bindReference(constructExpression, schema))
-  }
-
-  /**
-   * Replaces any bound references in the schema with the attributes at the corresponding ordinal
-   * in the provided schema.  This can be used to "relocate" a given encoder to pull values from
-   * a different schema than it was initially bound to.  It can also be used to assign attributes
-   * to ordinal based extraction (i.e. because the input data was a tuple).
-   */
-  def unbind(schema: Seq[Attribute]): ExpressionEncoder[T] = {
-    val positionToAttribute = AttributeMap.toIndex(schema)
-    copy(constructExpression = constructExpression transform {
-      case b: BoundReference => positionToAttribute(b.ordinal)
+  def assertUnresolved(): Unit = {
+    (deserializer +:  serializer).foreach(_.foreach {
+      case a: AttributeReference if a.name != "loopVar" =>
+        sys.error(s"Unresolved encoder expected, but $a was found.")
+      case _ =>
     })
   }
 
-  /**
-   * Given an encoder that has already been bound to a given schema, returns a new encoder
-   * where the positions are mapped from `oldSchema` to `newSchema`.  This can be used, for example,
-   * when you are trying to use an encoder on grouping keys that were originally part of a larger
-   * row, but now you have projected out only the key expressions.
-   */
-  def rebind(oldSchema: Seq[Attribute], newSchema: Seq[Attribute]): ExpressionEncoder[T] = {
-    val positionToAttribute = AttributeMap.toIndex(oldSchema)
-    val attributeToNewPosition = AttributeMap.byIndex(newSchema)
-    copy(constructExpression = constructExpression transform {
-      case r: BoundReference =>
-        r.copy(ordinal = attributeToNewPosition(positionToAttribute(r.ordinal)))
-    })
-  }
-
-  /**
-   * Returns a copy of this encoder where the expressions used to create an object given an
-   * input row have been modified to pull the object out from a nested struct, instead of the
-   * top level fields.
-   */
-  def nested(input: Expression = BoundReference(0, schema, true)): ExpressionEncoder[T] = {
-    copy(constructExpression = constructExpression transform {
-      case u: Attribute if u != input =>
-        UnresolvedExtractValue(input, Literal(u.name))
-      case b: BoundReference if b != input =>
-        GetStructField(
-          input,
-          StructField(s"i[${b.ordinal}]", b.dataType),
-          b.ordinal)
-    })
-  }
-
-  protected val attrs = extractExpressions.flatMap(_.collect {
+  protected val attrs = serializer.flatMap(_.collect {
     case _: UnresolvedAttribute => ""
     case a: Attribute => s"#${a.exprId}"
     case b: BoundReference => s"[${b.ordinal}]"

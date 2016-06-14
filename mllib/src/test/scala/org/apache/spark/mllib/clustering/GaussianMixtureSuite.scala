@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.clustering
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, Vectors, Matrices}
+import org.apache.spark.mllib.linalg.{Matrices, Vector, Vectors}
 import org.apache.spark.mllib.stat.distribution.MultivariateGaussian
 import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
@@ -182,7 +182,7 @@ class GaussianMixtureSuite extends SparkFunSuite with MLlibTestSparkContext {
       Vectors.dense( 4.5605), Vectors.dense( 5.2043), Vectors.dense( 6.2734)
     )
 
-    val data2: Array[Vector] = Array.tabulate(25){ i: Int =>
+    val data2: Array[Vector] = Array.tabulate(25) { i: Int =>
       Vectors.dense(Array.tabulate(50)(i + _.toDouble))
     }
 

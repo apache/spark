@@ -19,11 +19,11 @@ package org.apache.spark.mllib.util
 
 import scala.util.Random
 
-import org.apache.spark.annotation.{Since, DeveloperApi}
 import org.apache.spark.SparkContext
-import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.annotation.{DeveloperApi, Since}
 import org.apache.spark.mllib.linalg.Vectors
+import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.rdd.RDD
 
 /**
  * :: DeveloperApi ::

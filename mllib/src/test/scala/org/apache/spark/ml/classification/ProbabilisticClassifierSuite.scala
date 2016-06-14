@@ -18,7 +18,7 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.mllib.linalg.{Vector, Vectors}
+import org.apache.spark.ml.linalg.{Vector, Vectors}
 
 final class TestProbabilisticClassificationModel(
     override val uid: String,
@@ -56,4 +56,18 @@ class ProbabilisticClassifierSuite extends SparkFunSuite {
     val testModel = new TestProbabilisticClassificationModel("myuid", 2, 2)
     assert(testModel.friendlyPredict(Vectors.dense(Array(1.0, 2.0))) === 1.0)
   }
+}
+
+object ProbabilisticClassifierSuite {
+
+  /**
+   * Mapping from all Params to valid settings which differ from the defaults.
+   * This is useful for tests which need to exercise all Params, such as save/load.
+   * This excludes input columns to simplify some tests.
+   */
+  val allParamSettings: Map[String, Any] = ClassifierSuite.allParamSettings ++ Map(
+    "probabilityCol" -> "myProbability",
+    "thresholds" -> Array(0.4, 0.6)
+  )
+
 }

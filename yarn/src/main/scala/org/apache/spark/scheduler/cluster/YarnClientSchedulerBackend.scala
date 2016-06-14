@@ -19,10 +19,11 @@ package org.apache.spark.scheduler.cluster
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.hadoop.yarn.api.records.{ApplicationId, YarnApplicationState}
+import org.apache.hadoop.yarn.api.records.YarnApplicationState
 
-import org.apache.spark.{SparkException, Logging, SparkContext}
+import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.deploy.yarn.{Client, ClientArguments, YarnSparkHadoopUtil}
+import org.apache.spark.internal.Logging
 import org.apache.spark.launcher.SparkAppHandle
 import org.apache.spark.scheduler.TaskSchedulerImpl
 
@@ -33,7 +34,6 @@ private[spark] class YarnClientSchedulerBackend(
   with Logging {
 
   private var client: Client = null
-  private var appId: ApplicationId = null
   private var monitorThread: MonitorThread = null
 
   /**
@@ -48,19 +48,17 @@ private[spark] class YarnClientSchedulerBackend(
 
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += ("--arg", hostport)
-    argsArrayBuf ++= getExtraClientArguments
 
     logDebug("ClientArguments called with: " + argsArrayBuf.mkString(" "))
-    val args = new ClientArguments(argsArrayBuf.toArray, conf)
-    totalExpectedExecutors = args.numExecutors
+    val args = new ClientArguments(argsArrayBuf.toArray)
+    totalExpectedExecutors = YarnSparkHadoopUtil.getInitialTargetExecutorNumber(conf)
     client = new Client(args, conf)
-    appId = client.submitApplication()
+    bindToYarn(client.submitApplication(), None)
 
     // SPARK-8687: Ensure all necessary properties have already been set before
     // we initialize our driver scheduler backend, which serves these properties
     // to the executors
     super.start()
-
     waitForApplication()
 
     // SPARK-8851: In yarn-client mode, the AM still does the credentials refresh. The driver
@@ -74,50 +72,13 @@ private[spark] class YarnClientSchedulerBackend(
   }
 
   /**
-   * Return any extra command line arguments to be passed to Client provided in the form of
-   * environment variables or Spark properties.
-   */
-  private def getExtraClientArguments: Seq[String] = {
-    val extraArgs = new ArrayBuffer[String]
-    // List of (target Client argument, environment variable, Spark property)
-    val optionTuples =
-      List(
-        ("--executor-memory", "SPARK_WORKER_MEMORY", "spark.executor.memory"),
-        ("--executor-memory", "SPARK_EXECUTOR_MEMORY", "spark.executor.memory"),
-        ("--executor-cores", "SPARK_WORKER_CORES", "spark.executor.cores"),
-        ("--executor-cores", "SPARK_EXECUTOR_CORES", "spark.executor.cores"),
-        ("--queue", "SPARK_YARN_QUEUE", "spark.yarn.queue"),
-        ("--py-files", null, "spark.submit.pyFiles")
-      )
-    // Warn against the following deprecated environment variables: env var -> suggestion
-    val deprecatedEnvVars = Map(
-      "SPARK_WORKER_MEMORY" -> "SPARK_EXECUTOR_MEMORY or --executor-memory through spark-submit",
-      "SPARK_WORKER_CORES" -> "SPARK_EXECUTOR_CORES or --executor-cores through spark-submit")
-    optionTuples.foreach { case (optionName, envVar, sparkProp) =>
-      if (sc.getConf.contains(sparkProp)) {
-        extraArgs += (optionName, sc.getConf.get(sparkProp))
-      } else if (envVar != null && System.getenv(envVar) != null) {
-        extraArgs += (optionName, System.getenv(envVar))
-        if (deprecatedEnvVars.contains(envVar)) {
-          logWarning(s"NOTE: $envVar is deprecated. Use ${deprecatedEnvVars(envVar)} instead.")
-        }
-      }
-    }
-    // The app name is a special case because "spark.app.name" is required of all applications.
-    // As a result, the corresponding "SPARK_YARN_APP_NAME" is already handled preemptively in
-    // SparkSubmitArguments if "spark.app.name" is not explicitly set by the user. (SPARK-5222)
-    sc.getConf.getOption("spark.app.name").foreach(v => extraArgs += ("--name", v))
-    extraArgs
-  }
-
-  /**
    * Report the state of the application until it is running.
    * If the application has finished, failed or been killed in the process, throw an exception.
    * This assumes both `client` and `appId` have already been set.
    */
   private def waitForApplication(): Unit = {
-    assert(client != null && appId != null, "Application has not been submitted yet!")
-    val (state, _) = client.monitorApplication(appId, returnOnRunning = true) // blocking
+    assert(client != null && appId.isDefined, "Application has not been submitted yet!")
+    val (state, _) = client.monitorApplication(appId.get, returnOnRunning = true) // blocking
     if (state == YarnApplicationState.FINISHED ||
       state == YarnApplicationState.FAILED ||
       state == YarnApplicationState.KILLED) {
@@ -125,7 +86,7 @@ private[spark] class YarnClientSchedulerBackend(
         "It might have been killed or unable to launch application master.")
     }
     if (state == YarnApplicationState.RUNNING) {
-      logInfo(s"Application $appId has started running.")
+      logInfo(s"Application ${appId.get} has started running.")
     }
   }
 
@@ -141,7 +102,7 @@ private[spark] class YarnClientSchedulerBackend(
 
     override def run() {
       try {
-        val (state, _) = client.monitorApplication(appId, logApplicationReport = false)
+        val (state, _) = client.monitorApplication(appId.get, logApplicationReport = false)
         logError(s"Yarn application has already exited with state $state!")
         allowInterrupt = false
         sc.stop()
@@ -163,7 +124,7 @@ private[spark] class YarnClientSchedulerBackend(
    * This assumes both `client` and `appId` have already been set.
    */
   private def asyncMonitorApplication(): MonitorThread = {
-    assert(client != null && appId != null, "Application has not been submitted yet!")
+    assert(client != null && appId.isDefined, "Application has not been submitted yet!")
     val t = new MonitorThread
     t.setName("Yarn application state monitor")
     t.setDaemon(true)
@@ -193,10 +154,4 @@ private[spark] class YarnClientSchedulerBackend(
     logInfo("Stopped")
   }
 
-  override def applicationId(): String = {
-    Option(appId).map(_.toString).getOrElse {
-      logWarning("Application ID is not initialized yet.")
-      super.applicationId
-    }
-  }
 }

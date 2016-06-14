@@ -19,17 +19,22 @@ package org.apache.spark.ml
 
 import scala.collection.JavaConverters._
 
+import org.apache.hadoop.fs.Path
 import org.mockito.Matchers.{any, eq => meq}
 import org.mockito.Mockito.when
 import org.scalatest.mock.MockitoSugar.mock
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.ml.feature.HashingTF
-import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.MLTestingUtils
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.ml.Pipeline.SharedReadWrite
+import org.apache.spark.ml.feature.{HashingTF, MinMaxScaler}
+import org.apache.spark.ml.linalg.Vectors
+import org.apache.spark.ml.param.{IntParam, ParamMap}
+import org.apache.spark.ml.util._
+import org.apache.spark.mllib.util.MLlibTestSparkContext
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.types.StructType
 
-class PipelineSuite extends SparkFunSuite {
+class PipelineSuite extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
   abstract class MyModel extends Model[MyModel]
 
@@ -45,6 +50,12 @@ class PipelineSuite extends SparkFunSuite {
     val dataset2 = mock[DataFrame]
     val dataset3 = mock[DataFrame]
     val dataset4 = mock[DataFrame]
+
+    when(dataset0.toDF).thenReturn(dataset0)
+    when(dataset1.toDF).thenReturn(dataset1)
+    when(dataset2.toDF).thenReturn(dataset2)
+    when(dataset3.toDF).thenReturn(dataset3)
+    when(dataset4.toDF).thenReturn(dataset4)
 
     when(estimator0.copy(any[ParamMap])).thenReturn(estimator0)
     when(model0.copy(any[ParamMap])).thenReturn(model0)
@@ -111,4 +122,132 @@ class PipelineSuite extends SparkFunSuite {
     assert(pipelineModel1.uid === "pipeline1")
     assert(pipelineModel1.stages === stages)
   }
+
+  test("Pipeline read/write") {
+    val writableStage = new WritableStage("writableStage").setIntParam(56)
+    val pipeline = new Pipeline().setStages(Array(writableStage))
+
+    val pipeline2 = testDefaultReadWrite(pipeline, testParams = false)
+    assert(pipeline2.getStages.length === 1)
+    assert(pipeline2.getStages(0).isInstanceOf[WritableStage])
+    val writableStage2 = pipeline2.getStages(0).asInstanceOf[WritableStage]
+    assert(writableStage.getIntParam === writableStage2.getIntParam)
+  }
+
+  test("Pipeline read/write with non-Writable stage") {
+    val unWritableStage = new UnWritableStage("unwritableStage")
+    val unWritablePipeline = new Pipeline().setStages(Array(unWritableStage))
+    withClue("Pipeline.write should fail when Pipeline contains non-Writable stage") {
+      intercept[UnsupportedOperationException] {
+        unWritablePipeline.write
+      }
+    }
+  }
+
+  test("PipelineModel read/write") {
+    val writableStage = new WritableStage("writableStage").setIntParam(56)
+    val pipeline =
+      new PipelineModel("pipeline_89329327", Array(writableStage.asInstanceOf[Transformer]))
+
+    val pipeline2 = testDefaultReadWrite(pipeline, testParams = false)
+    assert(pipeline2.stages.length === 1)
+    assert(pipeline2.stages(0).isInstanceOf[WritableStage])
+    val writableStage2 = pipeline2.stages(0).asInstanceOf[WritableStage]
+    assert(writableStage.getIntParam === writableStage2.getIntParam)
+  }
+
+  test("PipelineModel read/write: getStagePath") {
+    val stageUid = "myStage"
+    val stagesDir = new Path("pipeline", "stages").toString
+    def testStage(stageIdx: Int, numStages: Int, expectedPrefix: String): Unit = {
+      val path = SharedReadWrite.getStagePath(stageUid, stageIdx, numStages, stagesDir)
+      val expected = new Path(stagesDir, expectedPrefix + "_" + stageUid).toString
+      assert(path === expected)
+    }
+    testStage(0, 1, "0")
+    testStage(0, 9, "0")
+    testStage(0, 10, "00")
+    testStage(1, 10, "01")
+    testStage(12, 999, "012")
+  }
+
+  test("PipelineModel read/write with non-Writable stage") {
+    val unWritableStage = new UnWritableStage("unwritableStage")
+    val unWritablePipeline =
+      new PipelineModel("pipeline_328957", Array(unWritableStage.asInstanceOf[Transformer]))
+    withClue("PipelineModel.write should fail when PipelineModel contains non-Writable stage") {
+      intercept[UnsupportedOperationException] {
+        unWritablePipeline.write
+      }
+    }
+  }
+
+  test("pipeline validateParams") {
+    val df = spark.createDataFrame(
+      Seq(
+        (1, Vectors.dense(0.0, 1.0, 4.0), 1.0),
+        (2, Vectors.dense(1.0, 0.0, 4.0), 2.0),
+        (3, Vectors.dense(1.0, 0.0, 5.0), 3.0),
+        (4, Vectors.dense(0.0, 0.0, 5.0), 4.0))
+    ).toDF("id", "features", "label")
+
+    intercept[IllegalArgumentException] {
+       val scaler = new MinMaxScaler()
+         .setInputCol("features")
+         .setOutputCol("features_scaled")
+         .setMin(10)
+         .setMax(0)
+       val pipeline = new Pipeline().setStages(Array(scaler))
+       pipeline.fit(df)
+    }
+  }
+
+  test("Pipeline.setStages should handle Java Arrays being non-covariant") {
+    val stages0 = Array(new UnWritableStage("b"))
+    val stages1 = Array(new WritableStage("a"))
+    val steps = stages0 ++ stages1
+    val p = new Pipeline().setStages(steps)
+  }
+}
+
+
+/** Used to test [[Pipeline]] with [[MLWritable]] stages */
+class WritableStage(override val uid: String) extends Transformer with MLWritable {
+
+  final val intParam: IntParam = new IntParam(this, "intParam", "doc")
+
+  def getIntParam: Int = $(intParam)
+
+  def setIntParam(value: Int): this.type = set(intParam, value)
+
+  setDefault(intParam -> 0)
+
+  override def copy(extra: ParamMap): WritableStage = defaultCopy(extra)
+
+  override def write: MLWriter = new DefaultParamsWriter(this)
+
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
+
+  override def transformSchema(schema: StructType): StructType = schema
+}
+
+object WritableStage extends MLReadable[WritableStage] {
+
+  override def read: MLReader[WritableStage] = new DefaultParamsReader[WritableStage]
+
+  override def load(path: String): WritableStage = super.load(path)
+}
+
+/** Used to test [[Pipeline]] with non-[[MLWritable]] stages */
+class UnWritableStage(override val uid: String) extends Transformer {
+
+  final val intParam: IntParam = new IntParam(this, "intParam", "doc")
+
+  setDefault(intParam -> 0)
+
+  override def copy(extra: ParamMap): UnWritableStage = defaultCopy(extra)
+
+  override def transform(dataset: Dataset[_]): DataFrame = dataset.toDF
+
+  override def transformSchema(schema: StructType): StructType = schema
 }

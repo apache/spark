@@ -18,13 +18,28 @@
 package org.apache.spark
 
 // scalastyle:off
-import org.scalatest.{FunSuite, Outcome}
+import org.scalatest.{BeforeAndAfterAll, FunSuite, Outcome}
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.util.AccumulatorContext
 
 /**
  * Base abstract class for all unit tests in Spark for handling common functionality.
  */
-private[spark] abstract class SparkFunSuite extends FunSuite with Logging {
+abstract class SparkFunSuite
+  extends FunSuite
+  with BeforeAndAfterAll
+  with Logging {
 // scalastyle:on
+
+  protected override def afterAll(): Unit = {
+    try {
+      // Avoid leaking map entries in tests that use accumulators without SparkContext
+      AccumulatorContext.clear()
+    } finally {
+      super.afterAll()
+    }
+  }
 
   /**
    * Log the suite name and the test name before and after each test.

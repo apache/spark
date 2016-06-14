@@ -60,7 +60,7 @@ _picklable_classes = [
 
 # this will call the MLlib version of pythonToJava()
 def _to_java_object_rdd(rdd):
-    """ Return an JavaRDD of Object by unpickling
+    """ Return a JavaRDD of Object by unpickling
 
     It will convert each Python object into Java object by Pyrolite, whenever the
     RDD is serialized in batch or not.
@@ -101,8 +101,8 @@ def _java2py(sc, r, encoding="bytes"):
             jrdd = sc._jvm.SerDe.javaToPython(r)
             return RDD(jrdd, sc)
 
-        if clsName == 'DataFrame':
-            return DataFrame(r, SQLContext(sc))
+        if clsName == 'Dataset':
+            return DataFrame(r, SQLContext.getOrCreate(sc))
 
         if clsName in _picklable_classes:
             r = sc._jvm.SerDe.dumps(r)
@@ -125,7 +125,7 @@ def callJavaFunc(sc, func, *args):
 
 def callMLlibFunc(name, *args):
     """ Call API in PythonMLLibAPI """
-    sc = SparkContext._active_spark_context
+    sc = SparkContext.getOrCreate()
     api = getattr(sc._jvm.PythonMLLibAPI(), name)
     return callJavaFunc(sc, api, *args)
 
@@ -135,7 +135,7 @@ class JavaModelWrapper(object):
     Wrapper for the model in JVM
     """
     def __init__(self, java_model):
-        self._sc = SparkContext._active_spark_context
+        self._sc = SparkContext.getOrCreate()
         self._java_model = java_model
 
     def __del__(self):

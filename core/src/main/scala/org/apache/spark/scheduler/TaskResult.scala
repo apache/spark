@@ -20,13 +20,11 @@ package org.apache.spark.scheduler
 import java.io._
 import java.nio.ByteBuffer
 
-import scala.collection.Map
-import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkEnv
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockId
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AccumulatorV2, Utils}
 
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]
@@ -36,31 +34,24 @@ private[spark] case class IndirectTaskResult[T](blockId: BlockId, size: Int)
   extends TaskResult[T] with Serializable
 
 /** A TaskResult that contains the task's return value and accumulator updates. */
-private[spark]
-class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long, Any],
-    var metrics: TaskMetrics)
+private[spark] class DirectTaskResult[T](
+    var valueBytes: ByteBuffer,
+    var accumUpdates: Seq[AccumulatorV2[_, _]])
   extends TaskResult[T] with Externalizable {
 
   private var valueObjectDeserialized = false
   private var valueObject: T = _
 
-  def this() = this(null.asInstanceOf[ByteBuffer], null, null)
+  def this() = this(null.asInstanceOf[ByteBuffer], null)
 
   override def writeExternal(out: ObjectOutput): Unit = Utils.tryOrIOException {
-
-    out.writeInt(valueBytes.remaining);
+    out.writeInt(valueBytes.remaining)
     Utils.writeByteBuffer(valueBytes, out)
-
     out.writeInt(accumUpdates.size)
-    for ((key, value) <- accumUpdates) {
-      out.writeLong(key)
-      out.writeObject(value)
-    }
-    out.writeObject(metrics)
+    accumUpdates.foreach(out.writeObject)
   }
 
   override def readExternal(in: ObjectInput): Unit = Utils.tryOrIOException {
-
     val blen = in.readInt()
     val byteVal = new Array[Byte](blen)
     in.readFully(byteVal)
@@ -68,15 +59,14 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
 
     val numUpdates = in.readInt
     if (numUpdates == 0) {
-      accumUpdates = null
+      accumUpdates = Seq()
     } else {
-      val _accumUpdates = mutable.Map[Long, Any]()
+      val _accumUpdates = new ArrayBuffer[AccumulatorV2[_, _]]
       for (i <- 0 until numUpdates) {
-        _accumUpdates(in.readLong()) = in.readObject()
+        _accumUpdates += in.readObject.asInstanceOf[AccumulatorV2[_, _]]
       }
       accumUpdates = _accumUpdates
     }
-    metrics = in.readObject().asInstanceOf[TaskMetrics]
     valueObjectDeserialized = false
   }
 

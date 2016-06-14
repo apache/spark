@@ -19,19 +19,20 @@ package org.apache.spark.sql.hive
 
 import com.google.common.io.Files
 
-import org.apache.spark.util.Utils
-import org.apache.spark.sql.{QueryTest, _}
+import org.apache.spark.sql._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SQLTestUtils
+import org.apache.spark.util.Utils
 
 class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
-  import hiveContext.implicits._
+  import spark.implicits._
 
   test("SPARK-5068: query data when path doesn't exist") {
     withSQLConf((SQLConf.HIVE_VERIFY_PARTITION_PATH.key, "true")) {
       val testData = sparkContext.parallelize(
         (1 to 10).map(i => TestData(i, i.toString))).toDF()
-      testData.registerTempTable("testData")
+      testData.createOrReplaceTempView("testData")
 
       val tmpDir = Files.createTempDir()
       // create the table for test
@@ -60,8 +61,8 @@ class QueryPartitionSuite extends QueryTest with SQLTestUtils with TestHiveSingl
       checkAnswer(sql("select key,value from table_with_partition"),
         testData.toDF.collect ++ testData.toDF.collect ++ testData.toDF.collect)
 
-      sql("DROP TABLE table_with_partition")
-      sql("DROP TABLE createAndInsertTest")
+      sql("DROP TABLE IF EXISTS table_with_partition")
+      sql("DROP TABLE IF EXISTS createAndInsertTest")
     }
   }
 }

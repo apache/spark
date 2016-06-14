@@ -20,11 +20,9 @@ from __future__ import print_function
 import pprint
 import sys
 
-from pyspark import SparkContext
 from pyspark.ml.classification import LogisticRegression
-from pyspark.mllib.linalg import DenseVector
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.sql import SQLContext
+from pyspark.ml.linalg import DenseVector
+from pyspark.sql import Row, SparkSession
 
 """
 A simple example demonstrating ways to specify parameters for Estimators and Transformers.
@@ -33,21 +31,20 @@ Run with:
 """
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        print("Usage: simple_params_example", file=sys.stderr)
-        exit(1)
-    sc = SparkContext(appName="PythonSimpleParamsExample")
-    sqlContext = SQLContext(sc)
+    spark = SparkSession \
+        .builder \
+        .appName("SimpleTextClassificationPipeline") \
+        .getOrCreate()
 
     # prepare training data.
     # We create an RDD of LabeledPoints and convert them into a DataFrame.
     # A LabeledPoint is an Object with two fields named label and features
     # and Spark SQL identifies these fields and creates the schema appropriately.
-    training = sc.parallelize([
-        LabeledPoint(1.0, DenseVector([0.0, 1.1, 0.1])),
-        LabeledPoint(0.0, DenseVector([2.0, 1.0, -1.0])),
-        LabeledPoint(0.0, DenseVector([2.0, 1.3, 1.0])),
-        LabeledPoint(1.0, DenseVector([0.0, 1.2, -0.5]))]).toDF()
+    training = spark.createDataFrame([
+        Row(label=1.0, features=DenseVector([0.0, 1.1, 0.1])),
+        Row(label=0.0, features=DenseVector([2.0, 1.0, -1.0])),
+        Row(label=0.0, features=DenseVector([2.0, 1.3, 1.0])),
+        Row(label=1.0, features=DenseVector([0.0, 1.2, -0.5]))])
 
     # Create a LogisticRegression instance with maxIter = 10.
     # This instance is an Estimator.
@@ -70,7 +67,7 @@ if __name__ == "__main__":
 
     # We may alternatively specify parameters using a parameter map.
     # paramMap overrides all lr parameters set earlier.
-    paramMap = {lr.maxIter: 20, lr.thresholds: [0.45, 0.55], lr.probabilityCol: "myProbability"}
+    paramMap = {lr.maxIter: 20, lr.thresholds: [0.5, 0.5], lr.probabilityCol: "myProbability"}
 
     # Now learn a new model using the new parameters.
     model2 = lr.fit(training, paramMap)
@@ -78,10 +75,10 @@ if __name__ == "__main__":
     pprint.pprint(model2.extractParamMap())
 
     # prepare test data.
-    test = sc.parallelize([
-        LabeledPoint(1.0, DenseVector([-1.0, 1.5, 1.3])),
-        LabeledPoint(0.0, DenseVector([3.0, 2.0, -0.1])),
-        LabeledPoint(0.0, DenseVector([0.0, 2.2, -1.5]))]).toDF()
+    test = spark.createDataFrame([
+        Row(label=1.0, features=DenseVector([-1.0, 1.5, 1.3])),
+        Row(label=0.0, features=DenseVector([3.0, 2.0, -0.1])),
+        Row(label=0.0, features=DenseVector([0.0, 2.2, -1.5]))])
 
     # Make predictions on test data using the Transformer.transform() method.
     # LogisticRegressionModel.transform will only use the 'features' column.
@@ -95,4 +92,4 @@ if __name__ == "__main__":
         print("features=%s,label=%s -> prob=%s, prediction=%s"
               % (row.features, row.label, row.myProbability, row.prediction))
 
-    sc.stop()
+    spark.stop()

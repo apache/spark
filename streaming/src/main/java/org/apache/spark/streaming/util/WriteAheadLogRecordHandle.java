@@ -23,7 +23,7 @@ package org.apache.spark.streaming.util;
  * This abstract class represents a handle that refers to a record written in a
  * {@link org.apache.spark.streaming.util.WriteAheadLog WriteAheadLog}.
  * It must contain all the information necessary for the record to be read and returned by
- * an implemenation of the WriteAheadLog class.
+ * an implementation of the WriteAheadLog class.
  *
  * @see org.apache.spark.streaming.util.WriteAheadLog
  */

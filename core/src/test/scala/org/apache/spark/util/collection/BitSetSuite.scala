@@ -17,10 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.io.{File, FileInputStream, FileOutputStream, ObjectInputStream, ObjectOutputStream}
-
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.util.{Utils => UUtils}
 
 class BitSetSuite extends SparkFunSuite {
 
@@ -154,51 +151,5 @@ class BitSetSuite extends SparkFunSuite {
     assert(bitsetDiff.nextSetBit(39) === 85)
     assert(bitsetDiff.nextSetBit(85) === 85)
     assert(bitsetDiff.nextSetBit(86) === -1)
-  }
-
-  test("read and write externally") {
-    val tempDir = UUtils.createTempDir()
-    val outputFile = File.createTempFile("bits", null, tempDir)
-
-    val fos = new FileOutputStream(outputFile)
-    val oos = new ObjectOutputStream(fos)
-
-    // Create BitSet
-    val setBits = Seq(0, 9, 1, 10, 90, 96)
-    val bitset = new BitSet(100)
-
-    for (i <- 0 until 100) {
-      assert(!bitset.get(i))
-    }
-
-    setBits.foreach(i => bitset.set(i))
-
-    for (i <- 0 until 100) {
-      if (setBits.contains(i)) {
-        assert(bitset.get(i))
-      } else {
-        assert(!bitset.get(i))
-      }
-    }
-    assert(bitset.cardinality() === setBits.size)
-
-    bitset.writeExternal(oos)
-    oos.close()
-
-    val fis = new FileInputStream(outputFile)
-    val ois = new ObjectInputStream(fis)
-
-    // Read BitSet from the file
-    val bitset2 = new BitSet(0)
-    bitset2.readExternal(ois)
-
-    for (i <- 0 until 100) {
-      if (setBits.contains(i)) {
-        assert(bitset2.get(i))
-      } else {
-        assert(!bitset2.get(i))
-      }
-    }
-    assert(bitset2.cardinality() === setBits.size)
   }
 }

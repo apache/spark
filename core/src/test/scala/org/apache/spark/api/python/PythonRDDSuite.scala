@@ -18,6 +18,7 @@
 package org.apache.spark.api.python
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
+import java.nio.charset.StandardCharsets
 
 import org.apache.spark.SparkFunSuite
 
@@ -35,10 +36,12 @@ class PythonRDDSuite extends SparkFunSuite {
     // The correctness will be tested in Python
     PythonRDD.writeIteratorToStream(Iterator("a", null), buffer)
     PythonRDD.writeIteratorToStream(Iterator(null, "a"), buffer)
-    PythonRDD.writeIteratorToStream(Iterator("a".getBytes, null), buffer)
-    PythonRDD.writeIteratorToStream(Iterator(null, "a".getBytes), buffer)
+    PythonRDD.writeIteratorToStream(Iterator("a".getBytes(StandardCharsets.UTF_8), null), buffer)
+    PythonRDD.writeIteratorToStream(Iterator(null, "a".getBytes(StandardCharsets.UTF_8)), buffer)
     PythonRDD.writeIteratorToStream(Iterator((null, null), ("a", null), (null, "b")), buffer)
-    PythonRDD.writeIteratorToStream(
-      Iterator((null, null), ("a".getBytes, null), (null, "b".getBytes)), buffer)
+    PythonRDD.writeIteratorToStream(Iterator(
+      (null, null),
+      ("a".getBytes(StandardCharsets.UTF_8), null),
+      (null, "b".getBytes(StandardCharsets.UTF_8))), buffer)
   }
 }

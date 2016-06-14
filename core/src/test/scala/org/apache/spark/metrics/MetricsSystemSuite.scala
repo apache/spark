@@ -17,15 +17,14 @@
 
 package org.apache.spark.metrics
 
+import scala.collection.mutable.ArrayBuffer
+
+import com.codahale.metrics.MetricRegistry
 import org.scalatest.{BeforeAndAfter, PrivateMethodTester}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.master.MasterSource
-import org.apache.spark.metrics.source.Source
-
-import com.codahale.metrics.MetricRegistry
-
-import scala.collection.mutable.ArrayBuffer
+import org.apache.spark.metrics.source.{Source, StaticSources}
 
 class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateMethodTester{
   var filePath: String = _
@@ -44,7 +43,7 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
     val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
 
-    assert(metricsSystem.invokePrivate(sources()).length === 0)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 0)
     assert(metricsSystem.getServletHandlers.nonEmpty)
   }
@@ -55,13 +54,13 @@ class MetricsSystemSuite extends SparkFunSuite with BeforeAndAfter with PrivateM
     val sources = PrivateMethod[ArrayBuffer[Source]]('sources)
     val sinks = PrivateMethod[ArrayBuffer[Source]]('sinks)
 
-    assert(metricsSystem.invokePrivate(sources()).length === 0)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length)
     assert(metricsSystem.invokePrivate(sinks()).length === 1)
     assert(metricsSystem.getServletHandlers.nonEmpty)
 
     val source = new MasterSource(null)
     metricsSystem.registerSource(source)
-    assert(metricsSystem.invokePrivate(sources()).length === 1)
+    assert(metricsSystem.invokePrivate(sources()).length === StaticSources.allSources.length + 1)
   }
 
   test("MetricsSystem with Driver instance") {

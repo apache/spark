@@ -84,25 +84,28 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 
   override def equals(obj: Any): Boolean = {
     obj match {
-      case that: Metadata =>
-        if (map.keySet == that.map.keySet) {
-          map.keys.forall { k =>
-            (map(k), that.map(k)) match {
-              case (v0: Array[_], v1: Array[_]) =>
-                v0.view == v1.view
-              case (v0, v1) =>
-                v0 == v1
-            }
+      case that: Metadata if map.size == that.map.size =>
+        map.keysIterator.forall { key =>
+          that.map.get(key) match {
+            case Some(otherValue) =>
+              val ourValue = map.get(key).get
+              (ourValue, otherValue) match {
+                case (v0: Array[Long], v1: Array[Long]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[Double], v1: Array[Double]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[Boolean], v1: Array[Boolean]) => java.util.Arrays.equals(v0, v1)
+                case (v0: Array[AnyRef], v1: Array[AnyRef]) => java.util.Arrays.equals(v0, v1)
+                case (v0, v1) => v0 == v1
+              }
+            case None => false
           }
-        } else {
-          false
         }
       case other =>
         false
     }
   }
 
-  override def hashCode: Int = Metadata.hash(this)
+  private lazy val _hashCode: Int = Metadata.hash(this)
+  override def hashCode: Int = _hashCode
 
   private def get[T](key: String): T = {
     map(key).asInstanceOf[T]
@@ -113,8 +116,10 @@ sealed class Metadata private[types] (private[types] val map: Map[String, Any])
 
 object Metadata {
 
+  private[this] val _empty = new Metadata(Map.empty)
+
   /** Returns an empty Metadata. */
-  def empty: Metadata = new Metadata(Map.empty)
+  def empty: Metadata = _empty
 
   /** Creates a Metadata instance from JSON. */
   def fromJson(json: String): Metadata = {
@@ -156,7 +161,9 @@ object Metadata {
               throw new RuntimeException(s"Do not support array of type ${other.getClass}.")
           }
         }
-      case other =>
+      case (key, JNull) =>
+        builder.putNull(key)
+      case (key, other) =>
         throw new RuntimeException(s"Do not support type ${other.getClass}.")
     }
     builder.build()
@@ -229,6 +236,9 @@ class MetadataBuilder {
     this
   }
 
+  /** Puts a null. */
+  def putNull(key: String): this.type = put(key, null)
+
   /** Puts a Long. */
   def putLong(key: String, value: Long): this.type = put(key, value)
 
@@ -266,6 +276,11 @@ class MetadataBuilder {
 
   private def put(key: String, value: Any): this.type = {
     map.put(key, value)
+    this
+  }
+
+  def remove(key: String): this.type = {
+    map.remove(key)
     this
   }
 }
