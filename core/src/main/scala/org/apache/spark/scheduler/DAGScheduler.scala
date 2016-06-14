@@ -385,7 +385,7 @@ class DAGScheduler(
 
   /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
   private def getAncestorShuffleDependencies(rdd: RDD[_]): Stack[ShuffleDependency[_, _, _]] = {
-    val parents = new Stack[ShuffleDependency[_, _, _]]
+    val ancestors = new Stack[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     // We are manually maintaining a stack here to prevent StackOverflowError
     // caused by recursively visiting
@@ -397,13 +397,13 @@ class DAGScheduler(
         visited += toVisit
         getShuffleDependencies(toVisit).foreach { shuffleDep =>
           if (!shuffleToMapStage.contains(shuffleDep.shuffleId)) {
-            parents.push(shuffleDep)
+            ancestors.push(shuffleDep)
             waitingForVisit.push(shuffleDep.rdd)
           } // Otherwise, the dependency and it's ancestors have already been registered.
         }
       }
     }
-    parents
+    ancestors
   }
 
   /**
@@ -415,8 +415,11 @@ class DAGScheduler(
    * A <-- B <-- C
    *
    * calling this function with rdd C will only return the B <-- C dependency.
+   *
+   * This function is scheduler-visible for the purpose of unit testing.
    */
-  private def getShuffleDependencies(rdd: RDD[_]): HashSet[ShuffleDependency[_, _, _]] = {
+  private[scheduler] def getShuffleDependencies(
+      rdd: RDD[_]): HashSet[ShuffleDependency[_, _, _]] = {
     val parents = new HashSet[ShuffleDependency[_, _, _]]
     val visited = new HashSet[RDD[_]]
     val waitingForVisit = new Stack[RDD[_]]
