@@ -87,7 +87,7 @@ private[sql] class CacheManager extends Logging {
       query: Dataset[_],
       tableName: Option[String] = None,
       storageLevel: StorageLevel = MEMORY_AND_DISK): Unit = writeLock {
-    val planToCache = query.queryExecution.analyzed.canonicalized
+    val planToCache = query.queryExecution.analyzed
     if (lookupCachedData(planToCache).nonEmpty) {
       logWarning("Asked to cache already cached data.")
     } else {
@@ -106,7 +106,7 @@ private[sql] class CacheManager extends Logging {
 
   /** Removes the data for the given [[Dataset]] from the cache */
   private[sql] def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
-    val planToCache = query.queryExecution.analyzed.canonicalized
+    val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     require(dataIndex >= 0, s"Table $query is not cached.")
     cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
@@ -120,7 +120,7 @@ private[sql] class CacheManager extends Logging {
   private[sql] def tryUncacheQuery(
       query: Dataset[_],
       blocking: Boolean = true): Boolean = writeLock {
-    val planToCache = query.queryExecution.analyzed.canonicalized
+    val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     val found = dataIndex >= 0
     if (found) {
@@ -137,8 +137,7 @@ private[sql] class CacheManager extends Logging {
 
   /** Optionally returns cached data for the given [[LogicalPlan]]. */
   private[sql] def lookupCachedData(plan: LogicalPlan): Option[CachedData] = readLock {
-    val canonicalized = plan.canonicalized
-    cachedData.find(cd => canonicalized.sameResult(cd.plan))
+    cachedData.find(cd => plan.sameResult(cd.plan))
   }
 
   /** Replaces segments of the given logical plan with cached versions where possible. */
@@ -156,9 +155,8 @@ private[sql] class CacheManager extends Logging {
    * function will over invalidate.
    */
   private[sql] def invalidateCache(plan: LogicalPlan): Unit = writeLock {
-    val canonicalized = plan.canonicalized
     cachedData.foreach {
-      case data if data.plan.collect { case p if p.sameResult(canonicalized) => p }.nonEmpty =>
+      case data if data.plan.collect { case p if p.sameResult(plan) => p }.nonEmpty =>
         data.cachedRepresentation.recache()
       case _ =>
     }
