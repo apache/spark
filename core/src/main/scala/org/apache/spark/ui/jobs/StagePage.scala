@@ -1201,7 +1201,7 @@ private[ui] class TaskDataSource(
         override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
           Ordering.String.compare(x.error, y.error)
       }
-      case "Logs" => new Ordering[TaskTableRowData] {
+      case "Executor Logs" => new Ordering[TaskTableRowData] {
         override def compare(x: TaskTableRowData, y: TaskTableRowData): Int =
           if (x.logs.isEmpty == y.logs.isEmpty) {
             return 0
@@ -1318,7 +1318,7 @@ private[ui] class TaskPagedTable(
           Nil
         }} ++
         Seq(("Errors", "")) ++
-        Seq(("Logs", ""))
+        Seq(("Executor Logs", ""))
 
     if (!taskHeadersAndCssClasses.map(_._1).contains(sortColumn)) {
       throw new IllegalArgumentException(s"Unknown column: $sortColumn")
@@ -1413,9 +1413,7 @@ private[ui] class TaskPagedTable(
       }}
       {errorMessageCell(task.error)}
       <td>
-      {if (task.logs.isEmpty) {
-        "No Logs Found"
-      } else task.logs.map {
+      {task.logs.map {
         case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
       }}
       </td>

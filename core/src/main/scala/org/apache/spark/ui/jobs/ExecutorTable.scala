@@ -152,9 +152,7 @@ private[ui] class ExecutorTable(stageId: Int, stageAttemptId: Int, parent: Stage
             }}
             <td>
               {val logs = parent.executorsListener.executorToLogUrls.getOrElse(k, Map.empty)
-               if (logs.isEmpty) {
-                 "No Logs Found"
-               } else logs.map {
+               logs.map {
                 case (logName, logUrl) => <div><a href={logUrl}>{logName}</a></div>
               }}
             </td>
