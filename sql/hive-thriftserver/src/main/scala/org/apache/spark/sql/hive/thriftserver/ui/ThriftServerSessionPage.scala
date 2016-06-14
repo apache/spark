@@ -29,7 +29,7 @@ import org.apache.spark.sql.hive.thriftserver.HiveThriftServer2.{ExecutionInfo, 
 import org.apache.spark.ui._
 import org.apache.spark.ui.UIUtils._
 
-/** Page for Spark Web UI that shows statistics of a streaming job */
+/** Page for Spark Web UI that shows statistics of jobs running in thrift server */
 private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
   extends WebUIPage("session") with Logging {
 
