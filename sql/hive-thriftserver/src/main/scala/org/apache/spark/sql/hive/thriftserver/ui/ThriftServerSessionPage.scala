@@ -60,7 +60,7 @@ private[ui] class ThriftServerSessionPage(parent: ThriftServerTab)
     UIUtils.headerSparkPage("JDBC/ODBC Session", content, parent, Some(5000))
   }
 
-  /** Generate basic stats of the streaming program */
+  /** Generate basic stats of the thrift server program */
   private def generateBasicStats(): Seq[Node] = {
     val timeSinceStart = System.currentTimeMillis() - startTime.getTime
     <ul class ="unstyled">
