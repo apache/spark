@@ -29,7 +29,7 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
-import scala.io.{Codec, Source}
+import scala.io.Source
 import scala.reflect.ClassTag
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
@@ -50,18 +50,6 @@ private[spark] class PipedRDD[T: ClassTag](
     bufferSize: Int,
     encoding: String)
   extends RDD[String](prev) {
-
-  // Similar to Runtime.exec(), if we are given a single string, split it into words
-  // using a standard StringTokenizer (i.e. by spaces)
-  def this(
-      prev: RDD[T],
-      command: String,
-      envVars: Map[String, String] = Map(),
-      printPipeContext: (String => Unit) => Unit = null,
-      printRDDElement: (T, String => Unit) => Unit = null,
-      separateWorkingDir: Boolean = false) =
-    this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
-      separateWorkingDir, 8192, Codec.defaultCharsetCodec.name)
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
 
