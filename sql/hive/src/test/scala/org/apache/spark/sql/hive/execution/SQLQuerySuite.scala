@@ -1610,6 +1610,38 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     assert(fs.exists(path), "This is an external table, so the data should not have been dropped")
   }
 
+  test("select partitioned table") {
+    val table = "table_with_partition"
+    withTable(table) {
+      sql(
+        s"""
+           |CREATE TABLE $table(c1 string)
+           |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+         """.stripMargin)
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE $table
+           |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+           |SELECT 'blarr'
+         """.stripMargin)
+
+      // project list is the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
+        Row("a", "b", "c", "d", "e", "blarr") :: Nil)
+
+      // project list does not have the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
+        Row("b", "c", "d", "a", "e", "blarr") :: Nil)
+
+      // project list contains partial partition columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p1, p5, c1 FROM $table"),
+        Row("b", "a", "e", "blarr") :: Nil)
+    }
+  }
+
   test("SPARK-14981: DESC not supported for sorting columns") {
     withTable("t") {
       val cause = intercept[ParseException] {
