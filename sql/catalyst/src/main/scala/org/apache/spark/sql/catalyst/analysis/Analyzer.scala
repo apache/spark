@@ -470,15 +470,11 @@ class Analyzer(
               // Assume partition columns are correctly placed at the end of the child's output
               i.copy(table = EliminateSubqueryAliases(table))
             } else {
-              // Set up the table's partition scheme with all dynamic partitions by moving partition
-              // columns to the end of the column list, in partition order.
-              val (inputPartCols, columns) = child.output.partition { attr =>
-                tablePartitionNames.contains(attr.name)
-              }
               // All partition columns are dynamic because this InsertIntoTable had no partitioning
-              val partColumns = tablePartitionNames.map { name =>
-                inputPartCols.find(_.name == name).getOrElse(
-                  throw new AnalysisException(s"Cannot find partition column $name"))
+              tablePartitionNames.filterNot { name =>
+                child.output.exists(_.name == name)
+              }.map { name =>
+                throw new AnalysisException(s"Cannot find partition column $name")
               }
               // Assume partition columns are correctly placed at the end of the child's output
               i.copy(
