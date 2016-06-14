@@ -15,6 +15,12 @@
 # limitations under the License.
 #
 
+import sys
+if sys.version >= '3':
+    intlike = int
+else:
+    intlike = (int, long)
+
 from abc import ABCMeta, abstractmethod
 
 from pyspark import since
@@ -134,17 +140,14 @@ class ContinuousQueryManager(object):
         >>> cq = spark.streams.get(cq.id)
         >>> cq.isActive
         True
+        >>> cq = sqlContext.streams.get(cq.id)
+        >>> cq.isActive
+        True
         >>> cq.stop()
         """
-        import sys
-        if sys.version >= '3':
-            if type(id) != int:
-                raise ValueError("The id for the query must be an int. Got: %d" % id)
-            return ContinuousQuery(self._jcqm.get(id))
-        else:
-            if type(id) != int and type(id) != long:
-                raise ValueError("The id for the query must be an int or long. Got: %d" % id)
-            return ContinuousQuery(self._jcqm.get(long(id)))
+        if not isinstance(id, intlike):
+            raise ValueError("The id for the query must be an integer. Got: %d" % id)
+        return ContinuousQuery(self._jcqm.get(id))
 
     @since(2.0)
     def awaitAnyTermination(self, timeout=None):
@@ -226,7 +229,7 @@ def _test():
     import doctest
     import os
     import tempfile
-    from pyspark.sql import Row, SparkSession, HiveContext
+    from pyspark.sql import Row, SparkSession, SQLContext
     import pyspark.sql.streaming
 
     os.chdir(os.environ["SPARK_HOME"])
@@ -240,6 +243,7 @@ def _test():
     globs['tempfile'] = tempfile
     globs['os'] = os
     globs['spark'] = spark
+    globs['sqlContext'] = SQLContext.getOrCreate(spark.sparkContext)
     globs['df'] = \
         globs['spark'].read.format('text').stream('python/test_support/sql/streaming')
 
