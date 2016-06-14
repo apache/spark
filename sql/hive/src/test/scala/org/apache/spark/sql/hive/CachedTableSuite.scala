@@ -20,12 +20,14 @@ package org.apache.spark.sql.hive
 import java.io.File
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, SaveMode}
+import org.apache.spark.sql.catalyst.analysis.NoSuchTableException
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.test.SQLTestUtils
 import org.apache.spark.storage.RDDBlockId
 import org.apache.spark.util.Utils
 
-class CachedTableSuite extends QueryTest with TestHiveSingleton {
+class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   import hiveContext._
 
   def rddIdOf(tableName: String): Int = {
@@ -95,9 +97,23 @@ class CachedTableSuite extends QueryTest with TestHiveSingleton {
     sql("DROP TABLE IF EXISTS nonexistantTable")
   }
 
-  test("correct error on uncache of non-cached table") {
-    intercept[IllegalArgumentException] {
-      spark.catalog.uncacheTable("src")
+  test("correct error on uncache of nonexistant tables") {
+    intercept[NoSuchTableException] {
+      spark.catalog.uncacheTable("nonexistantTable")
+    }
+    intercept[NoSuchTableException] {
+      sql("UNCACHE TABLE nonexistantTable")
+    }
+  }
+
+  test("no error on uncache of non-cached table") {
+    val tableName = "newTable"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName(a INT)")
+      // no error will be reported in the following three ways to uncache a table.
+      spark.catalog.uncacheTable(tableName)
+      sql("UNCACHE TABLE newTable")
+      sparkSession.table(tableName).unpersist()
     }
   }
 
