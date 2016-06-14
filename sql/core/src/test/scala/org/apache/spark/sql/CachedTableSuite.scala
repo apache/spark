@@ -553,7 +553,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       Seq(Row(1, "1")))
   }
 
-  test("SPARK-15915 CacheManager should use canonicalized plan for planToCache") {
+  test("SPARK-15915 Logical plans should use canonicalized plan when override sameResult") {
     val localRelation = Seq(1, 2, 3).toDF()
     localRelation.createOrReplaceTempView("localRelation")
 
