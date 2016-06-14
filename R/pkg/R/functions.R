@@ -249,7 +249,10 @@ col <- function(x) {
 #'
 #' Returns a Column based on the given column name.
 #'
+#' @rdname col
+#' @name column
 #' @family normal_funcs
+#' @export
 #' @examples \dontrun{column(df)}
 setMethod("column",
           signature(x = "character"),

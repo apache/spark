@@ -206,8 +206,6 @@ setMethod("between", signature(x = "Column"),
             }
           })
 
-#' cast
-#'
 #' Casts the column to a different data type.
 #'
 #' @rdname cast
