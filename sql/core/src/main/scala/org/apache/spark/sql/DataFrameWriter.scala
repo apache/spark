@@ -336,34 +336,23 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertStreaming("startStream() can only be called on continuous queries")
 
     if (source == "memory") {
-      val queryName =
-        extraOptions.getOrElse(
-          "queryName", throw new AnalysisException("queryName must be specified for memory sink"))
-      val checkpointLocation = getCheckpointLocation(queryName, failIfNotSet = false).getOrElse {
-        Utils.createTempDir(namePrefix = "memory.stream").getCanonicalPath
-      }
-
-      // If offsets have already been created, we trying to resume a query.
-      val checkpointPath = new Path(checkpointLocation, "offsets")
-      val fs = checkpointPath.getFileSystem(df.sparkSession.sessionState.newHadoopConf())
-      if (fs.exists(checkpointPath)) {
-        throw new AnalysisException(
-          s"Unable to resume query written to memory sink. Delete $checkpointPath to start over.")
-      } else {
-        checkpointPath.toUri.toString
+      if (extraOptions.get("queryName").isEmpty) {
+        throw new AnalysisException("queryName must be specified for memory sink")
       }
 
       val sink = new MemorySink(df.schema, outputMode)
       val resultDf = Dataset.ofRows(df.sparkSession, new MemoryPlan(sink))
-      resultDf.createOrReplaceTempView(queryName)
-      val continuousQuery = df.sparkSession.sessionState.continuousQueryManager.startQuery(
-        queryName,
-        checkpointLocation,
+      val query = df.sparkSession.sessionState.continuousQueryManager.startQuery(
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
         df,
         sink,
         outputMode,
-        trigger)
-      continuousQuery
+        useTempCheckpointLocation = true,
+        recoverFromCheckpointLocation = false,
+        trigger = trigger)
+      resultDf.createOrReplaceTempView(query.name)
+      query
     } else {
       val dataSource =
         DataSource(
@@ -371,14 +360,13 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
           className = source,
           options = extraOptions.toMap,
           partitionColumns = normalizedParCols.getOrElse(Nil))
-      val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
       df.sparkSession.sessionState.continuousQueryManager.startQuery(
-        queryName,
-        getCheckpointLocation(queryName, failIfNotSet = true).get,
+        extraOptions.get("queryName"),
+        extraOptions.get("checkpointLocation"),
         df,
         dataSource.createSink(outputMode),
         outputMode,
-        trigger)
+        trigger = trigger)
     }
   }
 
@@ -437,38 +425,15 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) {
     assertStreaming(
       "foreach() can only be called on streaming Datasets/DataFrames.")
 
-    val queryName = extraOptions.getOrElse("queryName", StreamExecution.nextName)
     val sink = new ForeachSink[T](ds.sparkSession.sparkContext.clean(writer))(ds.exprEnc)
     df.sparkSession.sessionState.continuousQueryManager.startQuery(
-      queryName,
-      getCheckpointLocation(queryName, failIfNotSet = false).getOrElse {
-        Utils.createTempDir(namePrefix = "foreach.stream").getCanonicalPath
-      },
+      extraOptions.get("queryName"),
+      extraOptions.get("checkpointLocation"),
       df,
       sink,
       outputMode,
-      trigger)
-  }
-
-  /**
-   * Returns the checkpointLocation for a query. If `failIfNotSet` is `true` but the checkpoint
-   * location is not set, [[AnalysisException]] will be thrown. If `failIfNotSet` is `false`, `None`
-   * will be returned if the checkpoint location is not set.
-   */
-  private def getCheckpointLocation(queryName: String, failIfNotSet: Boolean): Option[String] = {
-    val checkpointLocation = extraOptions.get("checkpointLocation").map { userSpecified =>
-      new Path(userSpecified).toUri.toString
-    }.orElse {
-      df.sparkSession.conf.get(SQLConf.CHECKPOINT_LOCATION).map { location =>
-        new Path(location, queryName).toUri.toString
-      }
-    }
-    if (failIfNotSet && checkpointLocation.isEmpty) {
-      throw new AnalysisException("checkpointLocation must be specified either " +
-        """through option("checkpointLocation", ...) or """ +
-        s"""SparkSession.conf.set("${SQLConf.CHECKPOINT_LOCATION.key}", ...)""")
-    }
-    checkpointLocation
+      useTempCheckpointLocation = true,
+      trigger = trigger)
   }
 
   /**

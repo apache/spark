@@ -30,10 +30,19 @@ import org.apache.spark.sql.SparkSession
 trait ContinuousQuery {
 
   /**
-   * Returns the name of the query.
+   * Returns the name of the query. This name is unique across all active queries. This can be
+   * set in the[[org.apache.spark.sql.DataFrameWriter DataFrameWriter]] as
+   * `dataframe.write().queryName("query").startStream()`.
    * @since 2.0.0
    */
   def name: String
+
+  /**
+   * Returns the unique id of this query. This id is automatically generated and is unique across
+   * all queries that have been started in the current process.
+   * @since 2.0.0
+   */
+  def id: Long
 
   /**
    * Returns the [[SparkSession]] associated with `this`.

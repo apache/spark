@@ -70,7 +70,7 @@ class SparkILoop(in0: Option[BufferedReader], out: JPrintWriter)
     echo("Type :help for more information.")
   }
 
-  private val blockedCommands = Set("implicits", "javap", "power", "type", "kind", "reset")
+  private val blockedCommands = Set[String]("reset")
 
   /** Standard commands */
   lazy val sparkStandardCommands: List[SparkILoop.this.LoopCommand] =

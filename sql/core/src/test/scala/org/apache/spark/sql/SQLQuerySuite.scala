@@ -2843,4 +2843,8 @@ class SQLQuerySuite extends QueryTest with SharedSQLContext {
       sql(s"SELECT '$literal' AS DUMMY"),
       Row(s"$expected") :: Nil)
   }
+
+  test("SPARK-15887: hive-site.xml should be loaded") {
+    assert(spark.sessionState.newHadoopConf().get("hive.in.test") == "true")
+  }
 }
