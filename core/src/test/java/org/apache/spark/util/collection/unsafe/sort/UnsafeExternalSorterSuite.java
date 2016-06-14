@@ -156,14 +156,14 @@ public class UnsafeExternalSorterSuite {
 
   private static void insertNumber(UnsafeExternalSorter sorter, int value) throws Exception {
     final int[] arr = new int[]{ value };
-    sorter.insertRecord(arr, Platform.INT_ARRAY_OFFSET, 4, value);
+    sorter.insertRecord(arr, Platform.INT_ARRAY_OFFSET, 4, value, false);
   }
 
   private static void insertRecord(
       UnsafeExternalSorter sorter,
       int[] record,
       long prefix) throws IOException {
-    sorter.insertRecord(record, Platform.INT_ARRAY_OFFSET, record.length * 4, prefix);
+    sorter.insertRecord(record, Platform.INT_ARRAY_OFFSET, record.length * 4, prefix, false);
   }
 
   private UnsafeExternalSorter newSorter() throws IOException {
@@ -206,13 +206,13 @@ public class UnsafeExternalSorterSuite {
   @Test
   public void testSortingEmptyArrays() throws Exception {
     final UnsafeExternalSorter sorter = newSorter();
-    sorter.insertRecord(null, 0, 0, 0);
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0, false);
+    sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
-    sorter.insertRecord(null, 0, 0, 0);
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0, false);
+    sorter.insertRecord(null, 0, 0, 0, false);
 
     UnsafeSorterIterator iter = sorter.getSortedIterator();
 
@@ -232,7 +232,7 @@ public class UnsafeExternalSorterSuite {
     long prevSortTime = sorter.getSortTimeNanos();
     assertEquals(prevSortTime, 0);
 
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0, false);
     sorter.spill();
     assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
     prevSortTime = sorter.getSortTimeNanos();
@@ -240,7 +240,7 @@ public class UnsafeExternalSorterSuite {
     sorter.spill();  // no sort needed
     assertEquals(sorter.getSortTimeNanos(), prevSortTime);
 
-    sorter.insertRecord(null, 0, 0, 0);
+    sorter.insertRecord(null, 0, 0, 0, false);
     UnsafeSorterIterator iter = sorter.getSortedIterator();
     assertThat(sorter.getSortTimeNanos(), greaterThan(prevSortTime));
   }
@@ -280,7 +280,7 @@ public class UnsafeExternalSorterSuite {
     final UnsafeExternalSorter sorter = newSorter();
     byte[] record = new byte[16];
     while (sorter.getNumberOfAllocatedPages() < 2) {
-      sorter.insertRecord(record, Platform.BYTE_ARRAY_OFFSET, record.length, 0);
+      sorter.insertRecord(record, Platform.BYTE_ARRAY_OFFSET, record.length, 0, false);
     }
     sorter.cleanupResources();
     assertSpillFilesWereCleanedUp();
@@ -340,7 +340,7 @@ public class UnsafeExternalSorterSuite {
     int n = (int) pageSizeBytes / recordSize * 3;
     for (int i = 0; i < n; i++) {
       record[0] = (long) i;
-      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
     }
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
     UnsafeExternalSorter.SpillableIterator iter =
@@ -372,7 +372,7 @@ public class UnsafeExternalSorterSuite {
     int n = (int) pageSizeBytes / recordSize * 3;
     for (int i = 0; i < n; i++) {
       record[0] = (long) i;
-      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
     }
     assertTrue(sorter.getNumberOfAllocatedPages() >= 2);
     UnsafeExternalSorter.SpillableIterator iter =
@@ -406,7 +406,7 @@ public class UnsafeExternalSorterSuite {
     int batch = n / 4;
     for (int i = 0; i < n; i++) {
       record[0] = (long) i;
-      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0);
+      sorter.insertRecord(record, Platform.LONG_ARRAY_OFFSET, recordSize, 0, false);
       if (i % batch == batch - 1) {
         sorter.spill();
       }

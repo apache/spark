@@ -51,7 +51,7 @@ import org.apache.spark.sql.util.ExecutionListenerManager
  * @groupname specificdata Specific Data Sources
  * @groupname config Configuration
  * @groupname dataframes Custom DataFrame Creation
- * @groupname dataset Custom DataFrame Creation
+ * @groupname dataset Custom Dataset Creation
  * @groupname Ungrouped Support functions for language integrated queries
  * @since 1.0.0
  */
@@ -346,15 +346,73 @@ class SQLContext private[sql](val sparkSession: SparkSession)
     sparkSession.createDataFrame(rowRDD, schema, needsConversion)
   }
 
-
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a local Seq of data of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Example ==
+   *
+   * {{{
+   *
+   *   import spark.implicits._
+   *   case class Person(name: String, age: Long)
+   *   val data = Seq(Person("Michael", 29), Person("Andy", 30), Person("Justin", 19))
+   *   val ds = spark.createDataset(data)
+   *
+   *   ds.show()
+   *   // +-------+---+
+   *   // |   name|age|
+   *   // +-------+---+
+   *   // |Michael| 29|
+   *   // |   Andy| 30|
+   *   // | Justin| 19|
+   *   // +-------+---+
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: Seq[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from an RDD of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
 
+  /**
+   * :: Experimental ::
+   * Creates a [[Dataset]] from a [[java.util.List]] of a given type. This method requires an
+   * encoder (to convert a JVM object of type `T` to and from the internal Spark SQL representation)
+   * that is generally created automatically through implicits from a `SparkSession`, or can be
+   * created explicitly by calling static methods on [[Encoders]].
+   *
+   * == Java Example ==
+   *
+   * {{{
+   *     List<String> data = Arrays.asList("hello", "world");
+   *     Dataset<String> ds = spark.createDataset(data, Encoders.STRING());
+   * }}}
+   *
+   * @since 2.0.0
+   * @group dataset
+   */
+  @Experimental
   def createDataset[T : Encoder](data: java.util.List[T]): Dataset[T] = {
     sparkSession.createDataset(data)
   }
@@ -551,51 +609,51 @@ class SQLContext private[sql](val sparkSession: SparkSession)
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in a range from 0 to `end` (exclusive) with step value 1.
    *
-   * @since 2.0.0
-   * @group dataset
+   * @since 1.4.1
+   * @group dataframe
    */
   @Experimental
-  def range(end: Long): Dataset[java.lang.Long] = sparkSession.range(end)
+  def range(end: Long): DataFrame = sparkSession.range(end).toDF()
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with step value 1.
    *
-   * @since 2.0.0
-   * @group dataset
+   * @since 1.4.0
+   * @group dataframe
    */
   @Experimental
-  def range(start: Long, end: Long): Dataset[java.lang.Long] = sparkSession.range(start, end)
+  def range(start: Long, end: Long): DataFrame = sparkSession.range(start, end).toDF()
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
    * in a range from `start` to `end` (exclusive) with a step value.
    *
    * @since 2.0.0
-   * @group dataset
+   * @group dataframe
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long): Dataset[java.lang.Long] = {
-    sparkSession.range(start, end, step)
+  def range(start: Long, end: Long, step: Long): DataFrame = {
+    sparkSession.range(start, end, step).toDF()
   }
 
   /**
    * :: Experimental ::
-   * Creates a [[Dataset]] with a single [[LongType]] column named `id`, containing elements
-   * in a range from `start` to `end` (exclusive) with a step value, with partition number
+   * Creates a [[DataFrame]] with a single [[LongType]] column named `id`, containing elements
+   * in an range from `start` to `end` (exclusive) with an step value, with partition number
    * specified.
    *
-   * @since 2.0.0
-   * @group dataset
+   * @since 1.4.0
+   * @group dataframe
    */
   @Experimental
-  def range(start: Long, end: Long, step: Long, numPartitions: Int): Dataset[java.lang.Long] = {
-    sparkSession.range(start, end, step, numPartitions)
+  def range(start: Long, end: Long, step: Long, numPartitions: Int): DataFrame = {
+    sparkSession.range(start, end, step, numPartitions).toDF()
   }
 
   /**

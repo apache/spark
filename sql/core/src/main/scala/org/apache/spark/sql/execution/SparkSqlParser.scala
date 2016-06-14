@@ -25,7 +25,6 @@ import org.antlr.v4.runtime.tree.TerminalNode
 
 import org.apache.spark.sql.SaveMode
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.catalog._
 import org.apache.spark.sql.catalyst.parser._
 import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
@@ -207,6 +206,14 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
    */
   override def visitRefreshTable(ctx: RefreshTableContext): LogicalPlan = withOrigin(ctx) {
     RefreshTable(visitTableIdentifier(ctx.tableIdentifier))
+  }
+
+  /**
+   * Create a [[RefreshTable]] logical plan.
+   */
+  override def visitRefreshResource(ctx: RefreshResourceContext): LogicalPlan = withOrigin(ctx) {
+    val resourcePath = remainder(ctx.REFRESH.getSymbol).trim
+    RefreshResource(resourcePath)
   }
 
   /**

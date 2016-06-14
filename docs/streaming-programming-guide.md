@@ -1452,13 +1452,13 @@ class JavaWordBlacklist {
 
 class JavaDroppedWordsCounter {
 
-  private static volatile Accumulator<Integer> instance = null;
+  private static volatile LongAccumulator instance = null;
 
-  public static Accumulator<Integer> getInstance(JavaSparkContext jsc) {
+  public static LongAccumulator getInstance(JavaSparkContext jsc) {
     if (instance == null) {
       synchronized (JavaDroppedWordsCounter.class) {
         if (instance == null) {
-          instance = jsc.accumulator(0, "WordsInBlacklistCounter");
+          instance = jsc.sc().longAccumulator("WordsInBlacklistCounter");
         }
       }
     }
@@ -1472,7 +1472,7 @@ wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() 
     // Get or register the blacklist Broadcast
     final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
     // Get or register the droppedWordsCounter Accumulator
-    final Accumulator<Integer> droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
+    final LongAccumulator droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
     // Use blacklist to drop words and use droppedWordsCounter to count them
     String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
       @Override

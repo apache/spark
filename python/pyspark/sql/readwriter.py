@@ -209,7 +209,8 @@ class DataFrameReader(object):
         :param columnNameOfCorruptRecord: allows renaming the new field having malformed string
                                           created by ``PERMISSIVE`` mode. This overrides
                                           ``spark.sql.columnNameOfCorruptRecord``. If None is set,
-                                          it uses the default value ``_corrupt_record``.
+                                          it uses the value specified in
+                                          ``spark.sql.columnNameOfCorruptRecord``.
 
         >>> df1 = spark.read.json('python/test_support/sql/people.json')
         >>> df1.dtypes
@@ -276,6 +277,11 @@ class DataFrameReader(object):
     def parquet(self, *paths):
         """Loads a Parquet file, returning the result as a :class:`DataFrame`.
 
+        You can set the following Parquet-specific option(s) for reading Parquet files:
+            * ``mergeSchema``: sets whether we should merge schemas collected from all \
+                Parquet part-files. This will override ``spark.sql.parquet.mergeSchema``. \
+                The default value is specified in ``spark.sql.parquet.mergeSchema``.
+
         >>> df = spark.read.parquet('python/test_support/sql/parquet_partitioned')
         >>> df.dtypes
         [('name', 'string'), ('year', 'int'), ('month', 'int'), ('day', 'int')]
@@ -285,10 +291,10 @@ class DataFrameReader(object):
     @ignore_unicode_prefix
     @since(1.6)
     def text(self, paths):
-        """Loads a text file and returns a [[DataFrame]] with a single string column named "value".
-        If the directory structure of the text files contains partitioning information,
-        those are ignored in the resulting DataFrame. To include partitioning information as
-        columns, use ``read.format('text').load(...)``.
+        """
+        Loads text files and returns a :class:`DataFrame` whose schema starts with a
+        string column named "value", and followed by partitioned columns if there
+        are any.
 
         Each line in the text file is a new row in the resulting DataFrame.
 
@@ -304,13 +310,14 @@ class DataFrameReader(object):
 
     @since(2.0)
     def csv(self, path, schema=None, sep=None, encoding=None, quote=None, escape=None,
-            comment=None, header=None, ignoreLeadingWhiteSpace=None, ignoreTrailingWhiteSpace=None,
-            nullValue=None, nanValue=None, positiveInf=None, negativeInf=None, dateFormat=None,
-            maxColumns=None, maxCharsPerColumn=None, mode=None):
-        """Loads a CSV file and returns the result as a [[DataFrame]].
+            comment=None, header=None, inferSchema=None, ignoreLeadingWhiteSpace=None,
+            ignoreTrailingWhiteSpace=None, nullValue=None, nanValue=None, positiveInf=None,
+            negativeInf=None, dateFormat=None, maxColumns=None, maxCharsPerColumn=None, mode=None):
+        """Loads a CSV file and returns the result as a  :class:`DataFrame`.
 
-        This function goes through the input once to determine the input schema. To avoid going
-        through the entire data once, specify the schema explicitly using [[schema]].
+        This function will go through the input once to determine the input schema if
+        ``inferSchema`` is enabled. To avoid going through the entire data once, disable
+        ``inferSchema`` option or specify the schema explicitly using ``schema``.
 
         :param path: string, or list of strings, for input path(s).
         :param schema: an optional :class:`StructType` for the input schema.
@@ -320,13 +327,16 @@ class DataFrameReader(object):
                          it uses the default value, ``UTF-8``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``.
+                      value, ``"``. If you would like to turn off quotations, you need to set an
+                      empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``.
         :param comment: sets the single character used for skipping lines beginning with this
                         character. By default (None), it is disabled.
         :param header: uses the first line as names of columns. If None is set, it uses the
                        default value, ``false``.
+        :param inferSchema: infers the input schema automatically from data. It requires one extra
+                       pass over the data. If None is set, it uses the default value, ``false``.
         :param ignoreLeadingWhiteSpace: defines whether or not leading whitespaces from values
                                         being read should be skipped. If None is set, it uses
                                         the default value, ``false``.
@@ -377,6 +387,8 @@ class DataFrameReader(object):
             self.option("comment", comment)
         if header is not None:
             self.option("header", header)
+        if inferSchema is not None:
+            self.option("inferSchema", inferSchema)
         if ignoreLeadingWhiteSpace is not None:
             self.option("ignoreLeadingWhiteSpace", ignoreLeadingWhiteSpace)
         if ignoreTrailingWhiteSpace is not None:
@@ -463,7 +475,7 @@ class DataFrameReader(object):
 
 class DataFrameWriter(object):
     """
-    Interface used to write a [[DataFrame]] to external storage systems
+    Interface used to write a :class:`DataFrame` to external storage systems
     (e.g. file systems, key-value stores, etc). Use :func:`DataFrame.write`
     to access this.
 
@@ -700,7 +712,7 @@ class DataFrameWriter(object):
 
         In the case the table already exists, behavior of this function depends on the
         save mode, specified by the `mode` function (default to throwing an exception).
-        When `mode` is `Overwrite`, the schema of the [[DataFrame]] does not need to be
+        When `mode` is `Overwrite`, the schema of the :class:`DataFrame` does not need to be
         the same as that of the existing table.
 
         * `append`: Append contents of this :class:`DataFrame` to existing data.
@@ -757,7 +769,9 @@ class DataFrameWriter(object):
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, gzip, and lzo).
-                            This will overwrite ``spark.sql.parquet.compression.codec``.
+                            This will override ``spark.sql.parquet.compression.codec``. If None
+                            is set, it uses the value specified in
+                            ``spark.sql.parquet.compression.codec``.
 
         >>> df.write.parquet(os.path.join(tempfile.mkdtemp(), 'data'))
         """
@@ -787,7 +801,7 @@ class DataFrameWriter(object):
     @since(2.0)
     def csv(self, path, mode=None, compression=None, sep=None, quote=None, escape=None,
             header=None, nullValue=None, escapeQuotes=None):
-        """Saves the content of the [[DataFrame]] in CSV format at the specified path.
+        """Saves the content of the :class:`DataFrame` in CSV format at the specified path.
 
         :param path: the path in any Hadoop supported file system
         :param mode: specifies the behavior of the save operation when data already exists.
@@ -804,7 +818,8 @@ class DataFrameWriter(object):
                     set, it uses the default value, ``,``.
         :param quote: sets the single character used for escaping quoted values where the
                       separator can be part of the value. If None is set, it uses the default
-                      value, ``"``.
+                      value, ``"``. If you would like to turn off quotations, you need to set an
+                      empty string.
         :param escape: sets the single character used for escaping quotes inside an already
                        quoted value. If None is set, it uses the default value, ``\``
         :param escapeQuotes: A flag indicating whether values containing quotes should always
@@ -850,7 +865,8 @@ class DataFrameWriter(object):
         :param partitionBy: names of partitioning columns
         :param compression: compression codec to use when saving to file. This can be one of the
                             known case-insensitive shorten names (none, snappy, zlib, and lzo).
-                            This will overwrite ``orc.compress``.
+                            This will override ``orc.compress``. If None is set, it uses the
+                            default value, ``snappy``.
 
         >>> orc_df = spark.read.orc('python/test_support/sql/orc_partitioned')
         >>> orc_df.write.orc(os.path.join(tempfile.mkdtemp(), 'data'))
