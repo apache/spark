@@ -68,7 +68,7 @@ class ALS(JavaEstimator, HasCheckpointInterval, HasMaxIter, HasPredictionCol, Ha
     >>> df = spark.createDataFrame(
     ...     [(0, 0, 4.0), (0, 1, 2.0), (1, 1, 3.0), (1, 2, 4.0), (2, 1, 1.0), (2, 2, 5.0)],
     ...     ["user", "item", "rating"])
-    >>> als = ALS(rank=10, maxIter=5)
+    >>> als = ALS(rank=10, maxIter=5, seed=0)
     >>> model = als.fit(df)
     >>> model.rank
     10
