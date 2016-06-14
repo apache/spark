@@ -17,77 +17,60 @@
 
 package org.apache.spark.storage
 
+import org.apache.spark.internal.Logging
+
 import scala.annotation.tailrec
 import scala.util.Random
 
 trait BlockReplicationObjective {
+  val weight = 1
   def isObjectiveMet(blockManagerId: BlockManagerId, peers: Set[BlockManagerId]): Boolean
-  def getPeersToMeetObjective(blockManagerId: BlockManagerId,
-    peers: Set[BlockManagerId]): Set[BlockManagerId]
+
 }
 
-object ReplicateToADifferentHost
+case object ReplicateToADifferentHost
   extends BlockReplicationObjective {
   override def isObjectiveMet(blockManagerId: BlockManagerId,
     peers: Set[BlockManagerId]): Boolean = {
     peers.exists(_.host != blockManagerId.host)
   }
-
-  override def getPeersToMeetObjective(blockManagerId: BlockManagerId,
-    peers: Set[BlockManagerId]): Set[BlockManagerId] = {
-    peers.filter(_.host != blockManagerId.host)
-  }
-
-  override def toString: String = "ReplicateToADifferentHost"
 }
 
-object ReplicateBlockWithinRack
+case object ReplicateBlockWithinRack
   extends BlockReplicationObjective {
 
   override def isObjectiveMet(blockManagerId: BlockManagerId,
     peers: Set[BlockManagerId]): Boolean = {
     peers.exists(_.topologyInfo == blockManagerId.topologyInfo)
   }
-
-  override def getPeersToMeetObjective(blockManagerId: BlockManagerId,
-    peers: Set[BlockManagerId]): Set[BlockManagerId] = {
-    peers.filter(_.topologyInfo == blockManagerId.topologyInfo)
-  }
-
-  override def toString: String = "ReplicateBlockWithinRack"
 }
 
-object ReplicateBlockOutsideRack
+case object ReplicateBlockOutsideRack
   extends BlockReplicationObjective {
   override def isObjectiveMet(blockManagerId: BlockManagerId,
     peers: Set[BlockManagerId]): Boolean = {
     peers.exists(_.topologyInfo != blockManagerId.topologyInfo)
   }
-
-  override def getPeersToMeetObjective(blockManagerId: BlockManagerId,
-    peers: Set[BlockManagerId]): Set[BlockManagerId] = {
-    peers.filter(_.topologyInfo != blockManagerId.topologyInfo)
-  }
-
-  override def toString: String = "ReplicateBlockOutsideRack"
 }
 
-object RandomlyReplicateBlock
+case object RandomlyReplicateBlock
   extends BlockReplicationObjective {
   override def isObjectiveMet(blockManagerId: BlockManagerId,
     peers: Set[BlockManagerId]): Boolean = {
     peers.nonEmpty
   }
-
-  override def getPeersToMeetObjective(blockManagerId: BlockManagerId,
-    peers: Set[BlockManagerId]): Set[BlockManagerId] = {
-    peers
-  }
-
-  override def toString: String = "RandomlyReplicateBlock"
 }
 
-object BlockReplicationOptimizer {
+case object NoTwoReplicasInSameRack
+  extends BlockReplicationObjective {
+  override def isObjectiveMet(blockManagerId: BlockManagerId,
+    peers: Set[BlockManagerId]): Boolean = {
+    val racksReplicatedTo = peers.map(_.topologyInfo).toSet.size
+    (peers.size == racksReplicatedTo)
+  }
+}
+
+object BlockReplicationOptimizer extends Logging {
   def getPeersToMeetObjectives(objectives: Set[BlockReplicationObjective],
     peers: Set[BlockManagerId],
     blockId: BlockId,
@@ -95,60 +78,81 @@ object BlockReplicationOptimizer {
     val peersMap =
       peers.map(p => p -> objectives.filter(_.isObjectiveMet(blockManagerId, Set(p)))).toMap
     val random = new Random(blockId.hashCode)
-    getOptimalPeers(peersMap, Set.empty, Set.empty, random)
+    getOptimalPeers(peers, objectives, Set.empty, Set.empty, random, blockManagerId)
   }
 
   /**
-   * Greedy solution for set-cover formulation of the problem to get minimal number of peers
-   * that meet all the objectives. Each peer satisfies a subset of objectives, and we need to
-   * find a set of peers that together satisfy all or most objectives. This is done by
-   * 1. greedily picking a peer that satisfies most objectives at a given stage. To make results
-   * randomized, we break ties by choosing one or the other randomly.
-   * 2. Once chosen, the set of objectives satisfied by the peer are removed from
-   * all the remaining peers.
-   * 3. Go back to step 1 until we exhaust all peers, or existing peers don't satisfy any more
-   * objectives.
-   *
-   * @param peersMap
+   * Greedy solution for set-cover like formulation.
+   * 1. We see how many objectives each peer satisfies
+   * 2. We choose a peer whose addition to optimal peers set satisfies the most objectives
+   * while making sure any previously satisfied objectives are still satisfied.
+   * 3. Once chosen, we remove this peer from the set of candidates
+   * 4. Repeat till we either run out of peers, or existing peers don't satify any more new
+   * objectives
+   * @param peers
+   * @param objectivesLeft
+   * @param objectivesMet
    * @param optimalPeers
+   * @param random
+   * @param blockManagerId
    * @return
    */
   @tailrec
-  private def getOptimalPeers(peersMap: Map[BlockManagerId, Set[BlockReplicationObjective]],
-    optimalPeers: Set[BlockManagerId],
-    objectivesMetSoFar: Set[BlockReplicationObjective],
-    random: Random): (Set[BlockManagerId], Set[BlockReplicationObjective]) = {
+  private def getOptimalPeers(peers: Set[BlockManagerId],
+                              objectivesLeft: Set[BlockReplicationObjective],
+                              objectivesMet: Set[BlockReplicationObjective],
+                              optimalPeers: Set[BlockManagerId],
+                              random: Random,
+                              blockManagerId: BlockManagerId
+                             ): (Set[BlockManagerId], Set[BlockReplicationObjective]) = {
 
-    if (peersMap.isEmpty) {
-      // we are done here, as no more peers left
-      (optimalPeers, objectivesMetSoFar)
+    logDebug(s"Objectives left : ${objectivesLeft.mkString(", ")}")
+    logDebug(s"Objectives met : ${objectivesMet.mkString(", ")}")
+
+    if (peers.isEmpty) {
+      // we are done
+      (optimalPeers, objectivesMet)
     } else {
-      val (maxPeer, objectivesMet) =
-        peersMap.reduce[(BlockManagerId, Set[BlockReplicationObjective])]
-        {case ((pmax, omax), (p, os)) =>
-        if (omax.size > os.size) {
-          (pmax, omax)
-        } else if (omax.size == os.size) {
-          // size are the same, we randomly choose between the two with equal probability
-          if (random.nextDouble > 0.5) (pmax, omax) else (p, os)
+      // we see how the addition of this peer to optimalPeers changes objectives left/met
+      // ideally, we want a peer whose addition, meets more objectives
+      // while making sure we still meet objectives met so far
+      val groupedPeers = peers.groupBy {p =>
+        val peersSet = optimalPeers + p
+        val allPreviousObjectivesMet =
+          objectivesMet.forall(_.isObjectiveMet(blockManagerId, peersSet))
+        if(allPreviousObjectivesMet) {
+          objectivesLeft.foldLeft(0) { case (c, o) =>
+            val weight = if (o.isObjectiveMet(blockManagerId, peersSet)) o.weight else 0
+            c + weight
+          }
         } else {
-          (p, os)
+          0
         }
       }
-      if(objectivesMet.isEmpty) {
+
+      val (maxCount, maxPeers) = groupedPeers.maxBy {case (k, v) => k}
+
+      logDebug(s"Peers ${maxPeers.mkString(", ")} meet $maxCount objective/s")
+
+      if(maxCount > 0) {
+        val maxPeer = maxPeers.toSeq(random.nextInt(maxPeers.size))
+        val newOptimalPeers = optimalPeers + maxPeer
+        val newObjectivesMet =
+          objectivesLeft.filter(_.isObjectiveMet(blockManagerId, newOptimalPeers))
+        val newObjectivesLeft = objectivesLeft diff newObjectivesMet
+        getOptimalPeers(
+          peers - maxPeer,
+          newObjectivesLeft,
+          objectivesMet ++ newObjectivesMet,
+          newOptimalPeers,
+          random,
+          blockManagerId)
+      } else {
         // we are done here since either no more objectives left, or
         // no more peers left that satisfy any objectives
-        (optimalPeers, objectivesMetSoFar)
-      } else {
-        val updatedPeersMap = (peersMap - maxPeer).map {case (peer, objectives) =>
-          peer -> (objectives diff objectivesMet)
-        }
-        getOptimalPeers(
-          updatedPeersMap,
-          optimalPeers + maxPeer,
-          objectivesMetSoFar ++ objectivesMet,
-          random)
+        (optimalPeers, objectivesMet)
       }
+
     }
   }
 }

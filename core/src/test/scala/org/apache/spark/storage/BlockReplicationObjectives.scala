@@ -24,10 +24,11 @@ import org.scalatest.Matchers
 import org.apache.spark.SparkFunSuite
 
 class BlockReplicationObjectives extends SparkFunSuite with Matchers {
-  val objectives = Set(
+  val objectives: Set[BlockReplicationObjective] = Set(
     ReplicateToADifferentHost,
     ReplicateBlockOutsideRack,
-    ReplicateBlockWithinRack
+    ReplicateBlockWithinRack,
+    NoTwoReplicasInSameRack
   )
 
   test("peers are all in the same rack") {
@@ -49,8 +50,9 @@ class BlockReplicationObjectives extends SparkFunSuite with Matchers {
   }
 
   test("peers in 3 racks") {
-    val blockManagerIds = generateBlockManagerIds(10, List("/Rack1", "/Rack2", "/Rack3"))
-    val candidateBMId = generateBlockManagerIds(1, List("/Rack1", "/Rack2", "/Rack3")).head
+    val racks = List("/Rack1", "/Rack2", "/Rack3")
+    val blockManagerIds = generateBlockManagerIds(10, racks)
+    val candidateBMId = generateBlockManagerIds(1, racks).head
     val blockId = BlockId("test_block")
     val (optimalPeers, objectivesMet) = BlockReplicationOptimizer.getPeersToMeetObjectives(
       objectives,
@@ -61,7 +63,7 @@ class BlockReplicationObjectives extends SparkFunSuite with Matchers {
     logInfo(s"Optimal peers : ${optimalPeers}")
     logInfo(s"Objectives met : ${objectivesMet}")
     assert(optimalPeers.size == 2)
-    assert(objectivesMet.size == 3)
+    assert(objectivesMet.size == 4)
     assert(objectives.forall(_.isObjectiveMet(candidateBMId, optimalPeers)))
   }
 

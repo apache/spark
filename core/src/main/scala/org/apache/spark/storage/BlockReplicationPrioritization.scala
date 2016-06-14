@@ -76,3 +76,42 @@ class DefaultBlockReplicationPrioritization
     ret
   }
 }
+
+@DeveloperApi
+class PrioritizationWithObjectives
+  extends BlockReplicationPrioritization
+  with Logging {
+  val objectives: Set[BlockReplicationObjective] = Set(
+    ReplicateToADifferentHost,
+    ReplicateBlockOutsideRack,
+    ReplicateBlockWithinRack,
+    NoTwoReplicasInSameRack
+  )
+  /**
+   * Method to prioritize a bunch of candidate peers of a block
+   *
+   * @param blockManagerId    Id of the current BlockManager for self identification
+   * @param peers             A list of peers of a BlockManager
+   * @param peersReplicatedTo Set of peers already replicated to
+   * @param blockId           BlockId of the block being replicated. This can be used as a source of
+   *                          randomness if needed.
+   * @return A prioritized list of peers. Lower the index of a peer, higher its priority
+   */
+  override def prioritize(blockManagerId: BlockManagerId,
+    peers: Seq[BlockManagerId],
+    peersReplicatedTo: Set[BlockManagerId],
+    blockId: BlockId): Seq[BlockManagerId] = {
+    val (optimalPeers, objectivesMet) = BlockReplicationOptimizer.getPeersToMeetObjectives(
+      objectives,
+      peers.toSet,
+      blockId,
+      blockManagerId
+    )
+    logInfo(s"BlockReplication objectives met : ${objectivesMet.mkString(", ")}")
+    logInfo(s"Optimal peers : ${optimalPeers.mkString(", ")}")
+    // outside of the peers, we don't care about the order of peers, so we randomly shuffle
+    val r = new Random(blockId.hashCode)
+    val remainingPeers = peers.filter(p => !optimalPeers.contains(p))
+    optimalPeers.toSeq ++ r.shuffle(remainingPeers)
+  }
+}
