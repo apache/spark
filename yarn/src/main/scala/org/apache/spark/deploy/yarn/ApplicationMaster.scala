@@ -523,7 +523,7 @@ private[spark] class ApplicationMaster(
           logError(("SparkContext did not initialize after waiting for %d ms. Please check earlier"
             + " log output for errors. Failing the application.").format(totalWaitTime))
         } else {
-          Some(sparkContext)
+          return Some(sparkContext)
         }
       }
       None
