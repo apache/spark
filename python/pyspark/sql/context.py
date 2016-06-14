@@ -430,6 +430,19 @@ class SQLContext(object):
 
     @property
     @since(2.0)
+    def readStream(self):
+        """
+        Returns a :class:`DataStreamReader` that can be used to read data streams
+        as a streaming :class:`DataFrame`.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamReader`
+        """
+        return DataStreamReader(self._wrapped)
+
+    @property
+    @since(2.0)
     def streams(self):
         """Returns a :class:`ContinuousQueryManager` that allows managing all the
         :class:`ContinuousQuery` ContinuousQueries active on `this` context.
