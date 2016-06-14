@@ -562,6 +562,18 @@ class SparkSession(object):
         """
         return DataStreamReader(self._wrapped)
 
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`ContinuousQueryManager` that allows managing all the
+        :class:`ContinuousQuery` ContinuousQueries active on `this` context.
+
+        .. note:: Experimental.
+        :return: :class:`ContinuousQueryManager`
+        """
+        from pyspark.sql.streaming import ContinuousQueryManager
+        return ContinuousQueryManager(self._jsparkSession.streams())
+
     @since(2.0)
     def stop(self):
         """Stop the underlying :class:`SparkContext`.

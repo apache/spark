@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration.{Duration, SECONDS}
+import scala.language.existentials
 import scala.reflect.ClassTag
 
 import org.scalactic.TripleEquals

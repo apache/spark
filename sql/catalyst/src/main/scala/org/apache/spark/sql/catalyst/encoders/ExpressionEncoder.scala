@@ -197,6 +197,15 @@ case class ExpressionEncoder[T](
 
   if (flat) require(serializer.size == 1)
 
+  // serializer expressions are used to encode an object to a row, while the object is usually an
+  // intermediate value produced inside an operator, not from the output of the child operator. This
+  // is quite different from normal expressions, and `AttributeReference` doesn't work here
+  // (intermediate value is not an attribute). We assume that all serializer expressions use a same
+  // `BoundReference` to refer to the object, and throw exception if they don't.
+  assert(serializer.forall(_.references.isEmpty), "serializer cannot reference to any attributes.")
+  assert(serializer.flatMap(_.collect { case b: BoundReference => b}).distinct.length <= 1,
+    "all serializer expressions must use the same BoundReference.")
+
   /**
    * Returns a new copy of this encoder, where the `deserializer` is resolved and bound to the
    * given schema.

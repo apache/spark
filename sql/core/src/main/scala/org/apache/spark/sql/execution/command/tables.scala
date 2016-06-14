@@ -374,7 +374,7 @@ case class TruncateTableCommand(
     spark.sessionState.invalidateTable(tableName.unquotedString)
     // Also try to drop the contents of the table from the columnar cache
     try {
-      spark.sharedState.cacheManager.tryUncacheQuery(spark.table(tableName.quotedString))
+      spark.sharedState.cacheManager.uncacheQuery(spark.table(tableName.quotedString))
     } catch {
       case NonFatal(e) =>
         log.warn(s"Exception when attempting to uncache table '$tableName'", e)
