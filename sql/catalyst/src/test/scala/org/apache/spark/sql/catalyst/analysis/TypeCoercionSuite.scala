@@ -642,19 +642,27 @@ class TypeCoercionSuite extends PlanTest {
     )
   }
 
-  test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal") {
+  test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
+    "in aggregation function") {
     val rules = Seq(FunctionArgumentConversion, Division)
-    // Casts integer to double
+    // Casts Integer to Double
     ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
-    // Left expression is already Double, skip
+    // Left expression is Double, right expression is Int
     ruleTest(rules, sum(Divide(4.0, 3)), sum(Divide(4.0, 3)))
+    // Left expression is Int, right expression is Double
+    ruleTest(rules, sum(Divide(4, 3.0)), sum(Divide(Cast(4, DoubleType), Cast(3.0, DoubleType))))
     // Casts Float to Double
     ruleTest(
       rules,
       sum(Divide(4.0f, 3)),
       sum(Divide(Cast(4.0f, DoubleType), Cast(3, DoubleType))))
-    // Lefts expression is already Decimal, skip
+    // Left expression is Decimal, right expression is Int
     ruleTest(rules, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
+    // Left expression is Int, right expression is Decimal
+    ruleTest(
+      rules,
+      sum(Divide(4, Decimal(3.0))),
+      sum(Divide(Cast(4, DoubleType), Cast(Decimal(3.0), DoubleType))))
   }
 }
 
