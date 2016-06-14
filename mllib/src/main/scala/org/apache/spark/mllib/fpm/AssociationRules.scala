@@ -120,6 +120,13 @@ object AssociationRules {
     @Since("1.5.0")
     def confidence: Double = freqUnion.toDouble / freqAntecedent
 
+    /**
+     * Returns the support of the rule. Current implementation would return the number of
+     * co-occurrence of antecedent and consequent.
+     */
+    @Since("2.1.0")
+    def support: Double = freqUnion.toDouble
+
     require(antecedent.toSet.intersect(consequent.toSet).isEmpty, {
       val sharedItems = antecedent.toSet.intersect(consequent.toSet)
       s"A valid association rule must have disjoint antecedent and " +
