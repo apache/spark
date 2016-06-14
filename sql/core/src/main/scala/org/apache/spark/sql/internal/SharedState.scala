@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.internal
 
+import org.apache.hadoop.conf.Configuration
+
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.{SparkSession, SQLContext}
 import org.apache.spark.sql.catalyst.catalog.{ExternalCatalog, InMemoryCatalog}
 import org.apache.spark.sql.execution.CacheManager
 import org.apache.spark.sql.execution.ui.{SQLListener, SQLTab}
-import org.apache.spark.util.MutableURLClassLoader
+import org.apache.spark.util.{MutableURLClassLoader, Utils}
 
 
 /**
@@ -41,9 +43,22 @@ private[sql] class SharedState(val sparkContext: SparkContext) {
   val listener: SQLListener = createListenerAndUI(sparkContext)
 
   /**
+   * The base hadoop configuration which is shared among all spark sessions. It is based on the
+   * default hadoop configuration of Spark, with custom configurations inside `hive-site.xml`.
+   */
+  lazy val hadoopConf: Configuration = {
+    val conf = new Configuration(sparkContext.hadoopConfiguration)
+    val configFile = Utils.getContextOrSparkClassLoader.getResource("hive-site.xml")
+    if (configFile != null) {
+      conf.addResource(configFile)
+    }
+    conf
+  }
+
+  /**
    * A catalog that interacts with external systems.
    */
-  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(sparkContext.hadoopConfiguration)
+  lazy val externalCatalog: ExternalCatalog = new InMemoryCatalog(hadoopConf)
 
   /**
    * A classloader used to load all user-added jar.

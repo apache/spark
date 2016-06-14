@@ -547,9 +547,12 @@ setGeneric("printSchema", function(x) { standardGeneric("printSchema") })
 #' @export
 setGeneric("rename", function(x, ...) { standardGeneric("rename") })
 
-#' @rdname registerTempTable
+#' @rdname createOrReplaceTempView
 #' @export
-setGeneric("registerTempTable", function(x, tableName) { standardGeneric("registerTempTable") })
+setGeneric("createOrReplaceTempView",
+           function(x, viewName) {
+             standardGeneric("createOrReplaceTempView")
+           })
 
 #' @rdname sample
 #' @export

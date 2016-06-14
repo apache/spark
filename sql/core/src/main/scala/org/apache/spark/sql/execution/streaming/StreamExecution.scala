@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.mutable.ArrayBuffer
@@ -44,6 +44,7 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
  */
 class StreamExecution(
     override val sparkSession: SparkSession,
+    override val id: Long,
     override val name: String,
     checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
@@ -492,6 +493,7 @@ class StreamExecution(
   private def toInfo: ContinuousQueryInfo = {
     new ContinuousQueryInfo(
       this.name,
+      this.id,
       this.sourceStatuses,
       this.sinkStatus)
   }
@@ -503,7 +505,7 @@ class StreamExecution(
 }
 
 private[sql] object StreamExecution {
-  private val nextId = new AtomicInteger()
+  private val _nextId = new AtomicLong(0)
 
-  def nextName: String = s"query-${nextId.getAndIncrement}"
+  def nextId: Long = _nextId.getAndIncrement()
 }

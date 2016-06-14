@@ -23,12 +23,15 @@ import org.apache.spark.annotation.Experimental
  * :: Experimental ::
  * A class used to report information about the progress of a [[ContinuousQuery]].
  *
- * @param name The [[ContinuousQuery]] name.
+ * @param name The [[ContinuousQuery]] name. This name is unique across all active queries.
+ * @param id The [[ContinuousQuery]] id. This id is unique across
+  *          all queries that have been started in the current process.
  * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
  * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
  */
 @Experimental
 class ContinuousQueryInfo private[sql](
   val name: String,
+  val id: Long,
   val sourceStatuses: Seq[SourceStatus],
   val sinkStatus: SinkStatus)
