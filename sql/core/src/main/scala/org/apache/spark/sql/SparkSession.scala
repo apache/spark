@@ -237,10 +237,8 @@ class SparkSession private(
   @Experimental
   def createDataFrame[A <: Product : TypeTag](rdd: RDD[A]): DataFrame = {
     SparkSession.setActiveSession(this)
-    val schema = ScalaReflection.schemaFor[A].dataType.asInstanceOf[StructType]
-    val attributeSeq = schema.toAttributes
-    val rowRDD = RDDConversions.productToRowRdd(rdd, schema.map(_.dataType))
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRDD)(self))
+    val encoder = Encoders.product[A]
+    Dataset.ofRows(self, ExistingRDD(rdd)(self)(encoder))
   }
 
   /**
@@ -328,14 +326,8 @@ class SparkSession private(
    * @since 2.0.0
    */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = {
-    val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
-    val className = beanClass.getName
-    val rowRdd = rdd.mapPartitions { iter =>
-    // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      val localBeanInfo = Introspector.getBeanInfo(Utils.classForName(className))
-      SQLContext.beansToRows(iter, localBeanInfo, attributeSeq)
-    }
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd)(self))
+    val encoder = Encoders.bean(beanClass).asInstanceOf[Encoder[AnyRef]]
+    Dataset.ofRows(self, ExistingRDD(rdd.asInstanceOf[RDD[AnyRef]])(self)(encoder))
   }
 
   /**
@@ -425,11 +417,7 @@ class SparkSession private(
    */
   @Experimental
   def createDataset[T : Encoder](data: RDD[T]): Dataset[T] = {
-    val enc = encoderFor[T]
-    val attributes = enc.schema.toAttributes
-    val encoded = data.map(d => enc.toRow(d))
-    val plan = LogicalRDD(attributes, encoded)(self)
-    Dataset[T](self, plan)
+    Dataset[T](self, ExistingRDD(data)(self))
   }
 
   /**
