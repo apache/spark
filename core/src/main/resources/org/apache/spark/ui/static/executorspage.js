@@ -119,24 +119,40 @@ $(document).ajaxStart(function(){
     $.blockUI({ message: '<h3>Loading Executors Page...</h3>'});
 });
 
-function createBaseURI() {
+function createTemplateURI() {
     var parser = document.createElement('a');
     var words = parser.baseURI.split('/');
     var ind = words.indexOf("proxy");
-    var appId = words[ind + 1];
-    var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId;
-    return baseURI;
+    if(ind > 0) {
+        var appId = words[ind + 1];
+        var baseURI = words.slice(0, ind + 1).join('/') + '/' + appId + '/static/executorspage-template.html';
+        return baseURI;
+    } else {
+        ind = words.indexOf("history");
+        var baseURI = words.slice(0, ind).join('/') + '/static/executorspage-template.html';
+        return baseURI;
+    }
 }
 
 function createRESTEndPoint() {
     var parser = document.createElement('a');
     var words = parser.baseURI.split('/');
     var ind = words.indexOf("proxy");
-    var appId = words[ind + 1];
-    var newBaseURI = words.slice(0, ind + 2).join('/');
-
-    return newBaseURI + "/api/v1/applications/" + appId +"/allexecutors"
-
+    if(ind > 0) {
+        var appId = words[ind + 1];
+        var newBaseURI = words.slice(0, ind + 2).join('/');
+        return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors"
+    } else {
+        ind = words.indexOf("history");
+        var appId = words[ind + 1];
+        var attemptId = words[ind + 2];
+        var newBaseURI = words.slice(0, ind).join('/');
+        if(isNaN(attemptId) ) {
+            return newBaseURI + "/api/v1/applications/" + appId + "/allexecutors";
+        } else {
+            return newBaseURI + "/api/v1/applications/" + appId + "/" + attemptId + "/allexecutors";
+        }
+    }
 }
 
 function formatLogsCells(execLogs, type) {
@@ -340,7 +356,7 @@ $(document).ready(function() {
             "allTotalShuffleRead" : deadTotalShuffleRead, "allTotalShuffleWrite" : deadTotalShuffleWrite };
 
       var data = {executors: response, "execSummary": [activeSummary, deadSummary, totalSummary]};
-      $.get(createBaseURI() + "/static/executorspage-template.html", function(template) {
+      $.get(createTemplateURI(), function(template) {
 
         executorsSummary.append(Mustache.render($(template).filter("#executors-summary-template").html(),data));
         var selector = "#active-executors-table";
