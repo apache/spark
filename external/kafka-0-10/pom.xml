@@ -26,9 +26,9 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-kafka-beta_2.11</artifactId>
+  <artifactId>spark-streaming-kafka-0-10_2.11</artifactId>
   <properties>
-    <sbt.project.name>streaming-kafka-beta</sbt.project.name>
+    <sbt.project.name>streaming-kafka-0-10</sbt.project.name>
   </properties>
   <packaging>jar</packaging>
   <name>Spark Integration for Kafka 0.10</name>

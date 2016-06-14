@@ -26,19 +26,19 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming-kafka-beta-assembly_2.11</artifactId>
+  <artifactId>spark-streaming-kafka-0-10-assembly_2.11</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project External Kafka Beta Assembly</name>
+  <name>Spark Integration for Kafka 0.10 Assembly</name>
   <url>http://spark.apache.org/</url>
 
   <properties>
-    <sbt.project.name>streaming-kafka-beta-assembly</sbt.project.name>
+    <sbt.project.name>streaming-kafka-0-10-assembly</sbt.project.name>
   </properties>
 
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming-kafka-beta_${scala.binary.version}</artifactId>
+      <artifactId>spark-streaming-kafka-0-10_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
