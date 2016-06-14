@@ -904,8 +904,28 @@ class ParquetPartitionDiscoverySuite extends QueryTest with ParquetTest with Sha
       val p0 = new File(path, "p0=0")
       val p1 = new File(p0, "p1=0")
 
+      // Builds the following directory layout by:
+      //
+      //  1. copying Parquet summary files we just wrote into `p0=0`, and
+      //  2. touching a dot-file `.dummy` under `p0=0`.
+      //
+      // <base>
+      // +- p0=0
+      //    |- _metadata
+      //    |- _common_metadata
+      //    |- .dummy
+      //    +- p1=0
+      //       |- _metadata
+      //       |- _common_metadata
+      //       |- part-00000.parquet
+      //       |- part-00001.parquet
+      //       +- ...
+      //
+      // The summary files and the dot-file under `p0=0` should not fail partition discovery.
+
       Files.copy(new File(p1, "_metadata"), new File(p0, "_metadata"))
       Files.copy(new File(p1, "_common_metadata"), new File(p0, "_common_metadata"))
+      Files.touch(new File(p0, ".dummy"))
 
       checkAnswer(spark.read.parquet(s"$path"), Seq(
         Row(0, 0, 0),

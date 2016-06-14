@@ -85,7 +85,7 @@ class ListingFileCatalog(
         logInfo(s"Listing $path on driver")
         Try {
           HadoopFsRelation.listLeafFiles(fs, fs.getFileStatus(path), pathFilter)
-        }.getOrElse(Array.empty)
+        }.getOrElse(Array.empty[FileStatus])
       }
       mutable.LinkedHashSet(statuses: _*)
     }
