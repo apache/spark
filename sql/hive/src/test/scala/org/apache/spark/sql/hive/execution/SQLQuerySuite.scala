@@ -187,28 +187,42 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("show functions") {
-    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
-    // The TestContext is shared by all the test cases, some functions may be registered before
-    // this, so we check that all the builtin functions are returned.
-    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
-    allBuiltinFunctions.foreach { f =>
-      assert(allFunctions.contains(f))
-    }
     withTempDatabase { db =>
-      checkAnswer(sql("SHOW functions abs"), Row("abs"))
-      checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions $db.abs"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql("SHOW functions `~`"), Row("~"))
+      def createFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(
+            s"""
+              |CREATE TEMPORARY FUNCTION $name
+              |AS '${classOf[PairUDF].getName}'
+            """.stripMargin)
+        }
+      }
+      def dropFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(s"DROP TEMPORARY FUNCTION $name")
+        }
+      }
+      createFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
+
+      checkAnswer(sql("SHOW functions temp_abs"), Row("temp_abs"))
+      checkAnswer(sql("SHOW functions 'temp_abs'"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-      checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
+      checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
+
       // this probably will failed if we add more function with `sha` prefixing.
-      checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+      checkAnswer(
+        sql("SHOW functions `temp_sha*`"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2")))
+
       // Test '|' for alternation.
       checkAnswer(
-        sql("SHOW functions 'sha*|weekofyea*'"),
-        Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+        sql("SHOW functions 'temp_sha*|temp_weekofyea*'"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2"), Row("temp_weekofyear")))
+
+      dropFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
     }
   }
 
