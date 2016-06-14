@@ -37,7 +37,7 @@ import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.types._
 
 /**
- * A trivial [[Analyzer]] with an dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
+ * A trivial [[Analyzer]] with a dummy [[SessionCatalog]] and [[EmptyFunctionRegistry]].
  * Used for testing when all relations are already filled in and the analyzer needs only
  * to resolve attribute references.
  */
@@ -722,6 +722,7 @@ class Analyzer(
     // Else, throw exception.
     try {
       expr transformUp {
+        case GetColumnByOrdinal(ordinal, _) => plan.output(ordinal)
         case u @ UnresolvedAttribute(nameParts) =>
           withPosition(u) { plan.resolve(nameParts, resolver).getOrElse(u) }
         case UnresolvedExtractValue(child, fieldName) if child.resolved =>
@@ -1495,7 +1496,7 @@ class Analyzer(
    * This rule handles three cases:
    *  - A [[Project]] having [[WindowExpression]]s in its projectList;
    *  - An [[Aggregate]] having [[WindowExpression]]s in its aggregateExpressions.
-   *  - An [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
+   *  - A [[Filter]]->[[Aggregate]] pattern representing GROUP BY with a HAVING
    *    clause and the [[Aggregate]] has [[WindowExpression]]s in its aggregateExpressions.
    * Note: If there is a GROUP BY clause in the query, aggregations and corresponding
    * filters (expressions in the HAVING clause) should be evaluated before any
@@ -1655,7 +1656,7 @@ class Analyzer(
 
         // We do a final check and see if we only have a single Window Spec defined in an
         // expressions.
-        if (distinctWindowSpec.length == 0 ) {
+        if (distinctWindowSpec.isEmpty) {
           failAnalysis(s"$expr does not have any WindowExpression.")
         } else if (distinctWindowSpec.length > 1) {
           // newExpressionsWithWindowFunctions only have expressions with a single
@@ -1924,10 +1925,59 @@ class Analyzer(
           } else {
             inputAttributes
           }
-          val unbound = deserializer transform {
-            case b: BoundReference => inputs(b.ordinal)
-          }
-          resolveExpression(unbound, LocalRelation(inputs), throws = true)
+
+          validateTopLevelTupleFields(deserializer, inputs)
+          val resolved = resolveExpression(
+            deserializer, LocalRelation(inputs), throws = true)
+          validateNestedTupleFields(resolved)
+          resolved
+      }
+    }
+
+    private def fail(schema: StructType, maxOrdinal: Int): Unit = {
+      throw new AnalysisException(s"Try to map ${schema.simpleString} to Tuple${maxOrdinal + 1}, " +
+        "but failed as the number of fields does not line up.")
+    }
+
+    /**
+     * For each top-level Tuple field, we use [[GetColumnByOrdinal]] to get its corresponding column
+     * by position.  However, the actual number of columns may be different from the number of Tuple
+     * fields.  This method is used to check the number of columns and fields, and throw an
+     * exception if they do not match.
+     */
+    private def validateTopLevelTupleFields(
+        deserializer: Expression, inputs: Seq[Attribute]): Unit = {
+      val ordinals = deserializer.collect {
+        case GetColumnByOrdinal(ordinal, _) => ordinal
+      }.distinct.sorted
+
+      if (ordinals.nonEmpty && ordinals != inputs.indices) {
+        fail(inputs.toStructType, ordinals.last)
+      }
+    }
+
+    /**
+     * For each nested Tuple field, we use [[GetStructField]] to get its corresponding struct field
+     * by position.  However, the actual number of struct fields may be different from the number
+     * of nested Tuple fields.  This method is used to check the number of struct fields and nested
+     * Tuple fields, and throw an exception if they do not match.
+     */
+    private def validateNestedTupleFields(deserializer: Expression): Unit = {
+      val structChildToOrdinals = deserializer
+        // There are 2 kinds of `GetStructField`:
+        //   1. resolved from `UnresolvedExtractValue`, and it will have a `name` property.
+        //   2. created when we build deserializer expression for nested tuple, no `name` property.
+        // Here we want to validate the ordinals of nested tuple, so we should only catch
+        // `GetStructField` without the name property.
+        .collect { case g: GetStructField if g.name.isEmpty => g }
+        .groupBy(_.child)
+        .mapValues(_.map(_.ordinal).distinct.sorted)
+
+      structChildToOrdinals.foreach { case (expr, ordinals) =>
+        val schema = expr.dataType.asInstanceOf[StructType]
+        if (ordinals != schema.indices) {
+          fail(schema, ordinals.last)
+        }
       }
     }
   }

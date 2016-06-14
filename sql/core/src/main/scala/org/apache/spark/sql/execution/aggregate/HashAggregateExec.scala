@@ -29,8 +29,12 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.types.{DecimalType, StringType, StructType}
 import org.apache.spark.unsafe.KVIterator
+import org.apache.spark.util.Utils
 
-case class TungstenAggregate(
+/**
+ * Hash-based aggregate operator that can also fallback to sorting when data exceeds memory size.
+ */
+case class HashAggregateExec(
     requiredChildDistributionExpressions: Option[Seq[Expression]],
     groupingExpressions: Seq[NamedExpression],
     aggregateExpressions: Seq[AggregateExpression],
@@ -44,9 +48,9 @@ case class TungstenAggregate(
     aggregateExpressions.flatMap(_.aggregateFunction.aggBufferAttributes)
   }
 
-  require(TungstenAggregate.supportsAggregate(aggregateBufferAttributes))
+  require(HashAggregateExec.supportsAggregate(aggregateBufferAttributes))
 
-  override lazy val allAttributes: Seq[Attribute] =
+  override lazy val allAttributes: AttributeSeq =
     child.output ++ aggregateBufferAttributes ++ aggregateAttributes ++
       aggregateExpressions.flatMap(_.aggregateFunction.inputAggBufferAttributes)
 
@@ -455,7 +459,7 @@ case class TungstenAggregate(
   }
 
   /**
-   * Using the vectorized hash map in TungstenAggregate is currently supported for all primitive
+   * Using the vectorized hash map in HashAggregate is currently supported for all primitive
    * data types during partial aggregation. However, we currently only enable the hash map for a
    * subset of cases that've been verified to show performance improvements on our benchmarks
    * subject to an internal conf that sets an upper limit on the maximum length of the aggregate
@@ -761,23 +765,31 @@ case class TungstenAggregate(
      """
   }
 
-  override def simpleString: String = {
+  override def verboseString: String = toString(verbose = true)
+
+  override def simpleString: String = toString(verbose = false)
+
+  private def toString(verbose: Boolean): String = {
     val allAggregateExpressions = aggregateExpressions
 
     testFallbackStartsAt match {
       case None =>
-        val keyString = groupingExpressions.mkString("[", ",", "]")
-        val functionString = allAggregateExpressions.mkString("[", ",", "]")
-        val outputString = output.mkString("[", ",", "]")
-        s"Aggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        val keyString = Utils.truncatedString(groupingExpressions, "[", ",", "]")
+        val functionString = Utils.truncatedString(allAggregateExpressions, "[", ",", "]")
+        val outputString = Utils.truncatedString(output, "[", ",", "]")
+        if (verbose) {
+          s"HashAggregate(key=$keyString, functions=$functionString, output=$outputString)"
+        } else {
+          s"HashAggregate(key=$keyString, functions=$functionString)"
+        }
       case Some(fallbackStartsAt) =>
-        s"AggregateWithControlledFallback $groupingExpressions " +
+        s"HashAggregateWithControlledFallback $groupingExpressions " +
           s"$allAggregateExpressions $resultExpressions fallbackStartsAt=$fallbackStartsAt"
     }
   }
 }
 
-object TungstenAggregate {
+object HashAggregateExec {
   def supportsAggregate(aggregateBufferAttributes: Seq[Attribute]): Boolean = {
     val aggregationBufferSchema = StructType.fromAttributes(aggregateBufferAttributes)
     UnsafeFixedWidthAggregationMap.supportsAggregationBufferSchema(aggregationBufferSchema)

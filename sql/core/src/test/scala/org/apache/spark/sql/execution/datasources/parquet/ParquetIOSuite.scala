@@ -515,17 +515,19 @@ class ParquetIOSuite extends QueryTest with ParquetTest with SharedSQLContext {
 
     val hadoopConf = spark.sessionState.newHadoopConfWithOptions(extraOptions)
 
-    withTempPath { dir =>
-      val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
-      spark.range(1 << 16).selectExpr("(id % 4) AS i")
-        .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
+    withSQLConf(ParquetOutputFormat.ENABLE_JOB_SUMMARY -> "true") {
+      withTempPath { dir =>
+        val path = s"${dir.getCanonicalPath}/part-r-0.parquet"
+        spark.range(1 << 16).selectExpr("(id % 4) AS i")
+          .coalesce(1).write.options(extraOptions).mode("overwrite").parquet(path)
 
-      val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
-      val columnChunkMetadata = blockMetadata.getColumns.asScala.head
+        val blockMetadata = readFooter(new Path(path), hadoopConf).getBlocks.asScala.head
+        val columnChunkMetadata = blockMetadata.getColumns.asScala.head
 
-      // If the file is written with version2, this should include
-      // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
-      assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
+        // If the file is written with version2, this should include
+        // Encoding.RLE_DICTIONARY type. For version1, it is Encoding.PLAIN_DICTIONARY
+        assert(columnChunkMetadata.getEncodings.contains(Encoding.RLE_DICTIONARY))
+      }
     }
   }
 

@@ -360,7 +360,7 @@ class SparkSession(object):
 
     def _createFromLocal(self, data, schema):
         """
-        Create an RDD for DataFrame from an list or pandas.DataFrame, returns
+        Create an RDD for DataFrame from a list or pandas.DataFrame, returns
         the RDD and schema.
         """
         # make sure data could consumed multiple times
@@ -548,6 +548,17 @@ class SparkSession(object):
         :return: :class:`DataFrameReader`
         """
         return DataFrameReader(self._wrapped)
+
+    @property
+    @since(2.0)
+    def streams(self):
+        """Returns a :class:`ContinuousQueryManager` that allows managing all the
+        :class:`ContinuousQuery` ContinuousQueries active on `this` context.
+
+        .. note:: Experimental.
+        """
+        from pyspark.sql.streaming import ContinuousQueryManager
+        return ContinuousQueryManager(self._jsparkSession.streams())
 
     @since(2.0)
     def stop(self):

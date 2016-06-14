@@ -15,14 +15,23 @@
  * limitations under the License.
  */
 
-import sbt._
-import sbt.Keys._
+package org.apache.spark.sql.streaming
+
+import org.apache.spark.annotation.Experimental
 
 /**
- * This plugin project is there because we use our custom fork of sbt-pom-reader plugin. This is
- * a plugin project so that this gets compiled first and is available on the classpath for SBT build.
+ * :: Experimental ::
+ * A class used to report information about the progress of a [[ContinuousQuery]].
+ *
+ * @param name The [[ContinuousQuery]] name. This name is unique across all active queries.
+ * @param id The [[ContinuousQuery]] id. This id is unique across
+  *          all queries that have been started in the current process.
+ * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
+ * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
  */
-object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(sbtPomReader)
-  lazy val sbtPomReader = uri("https://github.com/ScrapCodes/sbt-pom-reader.git#ignore_artifact_id")
-}
+@Experimental
+class ContinuousQueryInfo private[sql](
+  val name: String,
+  val id: Long,
+  val sourceStatuses: Seq[SourceStatus],
+  val sinkStatus: SinkStatus)

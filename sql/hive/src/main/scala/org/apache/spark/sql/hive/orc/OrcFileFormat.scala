@@ -95,6 +95,13 @@ private[sql] class OrcFileFormat
     }
   }
 
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    true
+  }
+
   override def buildReader(
       sparkSession: SparkSession,
       dataSchema: StructType,

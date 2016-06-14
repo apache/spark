@@ -53,7 +53,7 @@ case class CacheTableCommand(
 case class UncacheTableCommand(tableName: String) extends RunnableCommand {
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
-    sparkSession.table(tableName).unpersist(blocking = false)
+    sparkSession.catalog.uncacheTable(tableName)
     Seq.empty[Row]
   }
 

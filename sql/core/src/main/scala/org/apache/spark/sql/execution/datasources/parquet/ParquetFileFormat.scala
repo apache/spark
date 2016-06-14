@@ -124,6 +124,11 @@ private[sql] class ParquetFileFormat
     // Sets compression scheme
     conf.set(ParquetOutputFormat.COMPRESSION, parquetOptions.compressionCodec)
 
+    // SPARK-15719: Disables writing Parquet summary files by default.
+    if (conf.get(ParquetOutputFormat.ENABLE_JOB_SUMMARY) == null) {
+      conf.setBoolean(ParquetOutputFormat.ENABLE_JOB_SUMMARY, false)
+    }
+
     new OutputWriterFactory {
       override def newInstance(
           path: String,
@@ -139,12 +144,10 @@ private[sql] class ParquetFileFormat
       sparkSession: SparkSession,
       parameters: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
+    val parquetOptions = new ParquetOptions(parameters, sparkSession.sessionState.conf)
+
     // Should we merge schemas from all Parquet part-files?
-    val shouldMergeSchemas =
-      parameters
-          .get(ParquetFileFormat.MERGE_SCHEMA)
-          .map(_.toBoolean)
-          .getOrElse(sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_MERGING_ENABLED))
+    val shouldMergeSchemas = parquetOptions.mergeSchema
 
     val mergeRespectSummaries = sparkSession.conf.get(SQLConf.PARQUET_SCHEMA_RESPECT_SUMMARIES)
 
@@ -254,6 +257,13 @@ private[sql] class ParquetFileFormat
     conf.parquetVectorizedReaderEnabled && conf.wholeStageEnabled &&
       schema.length <= conf.wholeStageMaxNumFields &&
       schema.forall(_.dataType.isInstanceOf[AtomicType])
+  }
+
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    true
   }
 
   override private[sql] def buildReaderWithPartitionValues(
@@ -395,7 +405,7 @@ private[sql] class ParquetFileFormat
     new ParquetOutputWriterFactory(
       sqlContext.conf,
       dataSchema,
-      sqlContext.sparkContext.hadoopConfiguration,
+      sqlContext.sessionState.newHadoopConf(),
       options)
   }
 }
@@ -546,17 +556,6 @@ private[sql] class ParquetOutputWriter(
 }
 
 private[sql] object ParquetFileFormat extends Logging {
-  // Whether we should merge schemas collected from all Parquet part-files.
-  private[sql] val MERGE_SCHEMA = "mergeSchema"
-
-  // Hive Metastore schema, used when converting Metastore Parquet tables.  This option is only used
-  // internally.
-  private[sql] val METASTORE_SCHEMA = "metastoreSchema"
-
-  // If a ParquetRelation is converted from a Hive metastore table, this option is set to the
-  // original Hive table name.
-  private[sql] val METASTORE_TABLE_NAME = "metastoreTableName"
-
   /**
    * If parquet's block size (row group size) setting is larger than the min split size,
    * we use parquet's block size setting as the min split size. Otherwise, we will create
@@ -786,7 +785,7 @@ private[sql] object ParquetFileFormat extends Logging {
     //
     // Parquet requires `FileStatus`es to read footers.  Here we try to send cached `FileStatus`es
     // to executor side to avoid fetching them again.  However, `FileStatus` is not `Serializable`
-    // but only `Writable`.  What makes it worth, for some reason, `FileStatus` doesn't play well
+    // but only `Writable`.  What makes it worse, for some reason, `FileStatus` doesn't play well
     // with `SerializableWritable[T]` and always causes a weird `IllegalStateException`.  These
     // facts virtually prevents us to serialize `FileStatus`es.
     //
@@ -795,11 +794,16 @@ private[sql] object ParquetFileFormat extends Logging {
     // side, and resemble fake `FileStatus`es there.
     val partialFileStatusInfo = filesToTouch.map(f => (f.getPath.toString, f.getLen))
 
+    // Set the number of partitions to prevent following schema reads from generating many tasks
+    // in case of a small number of parquet files.
+    val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
+      sparkSession.sparkContext.defaultParallelism)
+
     // Issues a Spark job to read Parquet schema in parallel.
     val partiallyMergedSchemas =
       sparkSession
         .sparkContext
-        .parallelize(partialFileStatusInfo)
+        .parallelize(partialFileStatusInfo, numParallelism)
         .mapPartitions { iterator =>
           // Resembles fake `FileStatus`es with serialized path and length information.
           val fakeFileStatuses = iterator.map { case (path, length) =>

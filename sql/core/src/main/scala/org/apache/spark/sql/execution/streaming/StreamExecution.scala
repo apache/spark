@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming
 
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.locks.ReentrantLock
 
 import scala.collection.mutable.ArrayBuffer
@@ -44,6 +44,7 @@ import org.apache.spark.util.{Clock, UninterruptibleThread, Utils}
  */
 class StreamExecution(
     override val sparkSession: SparkSession,
+    override val id: Long,
     override val name: String,
     checkpointRoot: String,
     private[sql] val logicalPlan: LogicalPlan,
@@ -131,12 +132,13 @@ class StreamExecution(
   /** Returns current status of all the sources. */
   override def sourceStatuses: Array[SourceStatus] = {
     val localAvailableOffsets = availableOffsets
-    sources.map(s => new SourceStatus(s.toString, localAvailableOffsets.get(s))).toArray
+    sources.map(s =>
+      new SourceStatus(s.toString, localAvailableOffsets.get(s).map(_.toString))).toArray
   }
 
   /** Returns current status of the sink. */
   override def sinkStatus: SinkStatus =
-    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources))
+    new SinkStatus(sink.toString, committedOffsets.toCompositeOffset(sources).toString)
 
   /** Returns the [[ContinuousQueryException]] if the query was terminated by an exception. */
   override def exception: Option[ContinuousQueryException] = Option(streamDeathCause)
@@ -167,7 +169,7 @@ class StreamExecution(
       // Mark ACTIVE and then post the event. QueryStarted event is synchronously sent to listeners,
       // so must mark this as ACTIVE first.
       state = ACTIVE
-      postEvent(new QueryStarted(this)) // Assumption: Does not throw exception.
+      postEvent(new QueryStarted(this.toInfo)) // Assumption: Does not throw exception.
 
       // Unblock starting thread
       startLatch.countDown()
@@ -206,7 +208,10 @@ class StreamExecution(
     } finally {
       state = TERMINATED
       sparkSession.streams.notifyQueryTermination(StreamExecution.this)
-      postEvent(new QueryTerminated(this))
+      postEvent(new QueryTerminated(
+        this.toInfo,
+        exception.map(_.getMessage),
+        exception.map(_.getStackTrace.toSeq).getOrElse(Nil)))
       terminationLatch.countDown()
     }
   }
@@ -332,7 +337,8 @@ class StreamExecution(
         newData.get(source).map { data =>
           val newPlan = data.logicalPlan
           assert(output.size == newPlan.output.size,
-            s"Invalid batch: ${output.mkString(",")} != ${newPlan.output.mkString(",")}")
+            s"Invalid batch: ${Utils.truncatedString(output, ",")} != " +
+            s"${Utils.truncatedString(newPlan.output, ",")}")
           replacements ++= output.zip(newPlan.output)
           newPlan
         }.getOrElse {
@@ -374,7 +380,7 @@ class StreamExecution(
     logInfo(s"Completed up to $availableOffsets in ${batchTime}ms")
     // Update committed offsets.
     committedOffsets ++= availableOffsets
-    postEvent(new QueryProgress(this))
+    postEvent(new QueryProgress(this.toInfo))
   }
 
   private def postEvent(event: ContinuousQueryListener.Event) {
@@ -484,6 +490,14 @@ class StreamExecution(
      """.stripMargin
   }
 
+  private def toInfo: ContinuousQueryInfo = {
+    new ContinuousQueryInfo(
+      this.name,
+      this.id,
+      this.sourceStatuses,
+      this.sinkStatus)
+  }
+
   trait State
   case object INITIALIZED extends State
   case object ACTIVE extends State
@@ -491,7 +505,7 @@ class StreamExecution(
 }
 
 private[sql] object StreamExecution {
-  private val nextId = new AtomicInteger()
+  private val _nextId = new AtomicLong(0)
 
-  def nextName: String = s"query-${nextId.getAndIncrement}"
+  def nextId: Long = _nextId.getAndIncrement()
 }

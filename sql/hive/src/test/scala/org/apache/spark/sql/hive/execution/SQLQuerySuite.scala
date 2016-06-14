@@ -187,28 +187,42 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   }
 
   test("show functions") {
-    val allBuiltinFunctions = FunctionRegistry.builtin.listFunction().toSet[String].toList.sorted
-    // The TestContext is shared by all the test cases, some functions may be registered before
-    // this, so we check that all the builtin functions are returned.
-    val allFunctions = sql("SHOW functions").collect().map(r => r(0))
-    allBuiltinFunctions.foreach { f =>
-      assert(allFunctions.contains(f))
-    }
     withTempDatabase { db =>
-      checkAnswer(sql("SHOW functions abs"), Row("abs"))
-      checkAnswer(sql("SHOW functions 'abs'"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions $db.abs"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql(s"SHOW functions `$db`.`abs`"), Row("abs"))
-      checkAnswer(sql("SHOW functions `~`"), Row("~"))
+      def createFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(
+            s"""
+              |CREATE TEMPORARY FUNCTION $name
+              |AS '${classOf[PairUDF].getName}'
+            """.stripMargin)
+        }
+      }
+      def dropFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(s"DROP TEMPORARY FUNCTION $name")
+        }
+      }
+      createFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
+
+      checkAnswer(sql("SHOW functions temp_abs"), Row("temp_abs"))
+      checkAnswer(sql("SHOW functions 'temp_abs'"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions $db.temp_abs"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
+      checkAnswer(sql(s"SHOW functions `$db`.`temp_abs`"), Row("temp_abs"))
       checkAnswer(sql("SHOW functions `a function doens't exist`"), Nil)
-      checkAnswer(sql("SHOW functions `weekofyea*`"), Row("weekofyear"))
+      checkAnswer(sql("SHOW functions `temp_weekofyea*`"), Row("temp_weekofyear"))
+
       // this probably will failed if we add more function with `sha` prefixing.
-      checkAnswer(sql("SHOW functions `sha*`"), Row("sha") :: Row("sha1") :: Row("sha2") :: Nil)
+      checkAnswer(
+        sql("SHOW functions `temp_sha*`"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2")))
+
       // Test '|' for alternation.
       checkAnswer(
-        sql("SHOW functions 'sha*|weekofyea*'"),
-        Row("sha") :: Row("sha1") :: Row("sha2") :: Row("weekofyear") :: Nil)
+        sql("SHOW functions 'temp_sha*|temp_weekofyea*'"),
+        List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2"), Row("temp_weekofyear")))
+
+      dropFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
     }
   }
 
@@ -608,17 +622,15 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("specifying the column list for CTAS") {
     Seq((1, "111111"), (2, "222222")).toDF("key", "value").createOrReplaceTempView("mytable1")
 
-    sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+    sql("create table gen__tmp as select key as a, value as b from mytable1")
     checkAnswer(
       sql("SELECT a, b from gen__tmp"),
       sql("select key, value from mytable1").collect())
     sql("DROP TABLE gen__tmp")
 
-    sql("create table gen__tmp(a double, b double) as select key, value from mytable1")
-    checkAnswer(
-      sql("SELECT a, b from gen__tmp"),
-      sql("select cast(key as double), cast(value as double) from mytable1").collect())
-    sql("DROP TABLE gen__tmp")
+    intercept[AnalysisException] {
+      sql("create table gen__tmp(a int, b string) as select key, value from mytable1")
+    }
 
     sql("drop table mytable1")
   }
@@ -1225,8 +1237,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
   test("SPARK-10741: Sort on Aggregate using parquet") {
     withTable("test10741") {
       withTempTable("src") {
-        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF().createOrReplaceTempView("src")
-        sql("CREATE TABLE test10741(c1 STRING, c2 INT) STORED AS PARQUET AS SELECT * FROM src")
+        Seq("a" -> 5, "a" -> 9, "b" -> 6).toDF("c1", "c2").createOrReplaceTempView("src")
+        sql("CREATE TABLE test10741 STORED AS PARQUET AS SELECT * FROM src")
       }
 
       checkAnswer(sql(
@@ -1247,15 +1259,59 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test("run sql directly on files") {
+  test("run sql directly on files - parquet") {
     val df = spark.range(100).toDF()
     withTempPath(f => {
       df.write.parquet(f.getCanonicalPath)
-      checkAnswer(sql(s"select id from parquet.`${f.getCanonicalPath}`"),
+      // data source type is case insensitive
+      checkAnswer(sql(s"select id from Parquet.`${f.getCanonicalPath}`"),
         df)
       checkAnswer(sql(s"select id from `org.apache.spark.sql.parquet`.`${f.getCanonicalPath}`"),
         df)
       checkAnswer(sql(s"select a.id from parquet.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+  }
+
+  test("run sql directly on files - orc") {
+    val df = spark.range(100).toDF()
+    withTempPath(f => {
+      df.write.orc(f.getCanonicalPath)
+      // data source type is case insensitive
+      checkAnswer(sql(s"select id from ORC.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.hive.orc`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from orc.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+  }
+
+  test("run sql directly on files - csv") {
+    val df = spark.range(100).toDF()
+    withTempPath(f => {
+      df.write.csv(f.getCanonicalPath)
+      // data source type is case insensitive
+      checkAnswer(sql(s"select cast(_c0 as int) id from CSV.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(
+        sql(s"select cast(_c0 as int) id from `com.databricks.spark.csv`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select cast(a._c0 as int) id from csv.`${f.getCanonicalPath}` as a"),
+        df)
+    })
+  }
+
+  test("run sql directly on files - json") {
+    val df = spark.range(100).toDF()
+    withTempPath(f => {
+      df.write.json(f.getCanonicalPath)
+      // data source type is case insensitive
+      checkAnswer(sql(s"select id from jsoN.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select id from `org.apache.spark.sql.json`.`${f.getCanonicalPath}`"),
+        df)
+      checkAnswer(sql(s"select a.id from json.`${f.getCanonicalPath}` as a"),
         df)
     })
   }
@@ -1462,52 +1518,6 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
     }
   }
 
-  test(
-    "SPARK-14488 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
-    "shouldn't create persisted table"
-  ) {
-    withTempPath { dir =>
-      withTempTable("t1", "t2") {
-        val path = dir.getCanonicalPath
-        val ds = spark.range(10)
-        ds.createOrReplaceTempView("t1")
-
-        sql(
-          s"""CREATE TEMPORARY TABLE t2
-             |USING PARQUET
-             |OPTIONS (PATH '$path')
-             |AS SELECT * FROM t1
-           """.stripMargin)
-
-        checkAnswer(
-          spark.sql("SHOW TABLES").select('isTemporary).filter('tableName === "t2"),
-          Row(true)
-        )
-
-        checkAnswer(table("t2"), table("t1"))
-      }
-    }
-  }
-
-  test(
-    "SPARK-14493 \"CREATE TEMPORARY TABLE ... USING ... AS SELECT ...\" " +
-    "shouldn always be used together with PATH data source option"
-  ) {
-    withTempTable("t") {
-      spark.range(10).createOrReplaceTempView("t")
-
-      val message = intercept[IllegalArgumentException] {
-        sql(
-          s"""CREATE TEMPORARY TABLE t1
-             |USING PARQUET
-             |AS SELECT * FROM t
-           """.stripMargin)
-      }.getMessage
-
-      assert(message == "'path' is not specified")
-    }
-  }
-
   test("derived from Hive query file: drop_database_removes_partition_dirs.q") {
     // This test verifies that if a partition exists outside a table's current location when the
     // database is dropped the partition's location is dropped as well.
@@ -1598,6 +1608,38 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
 
     sql("drop table test_table")
     assert(fs.exists(path), "This is an external table, so the data should not have been dropped")
+  }
+
+  test("select partitioned table") {
+    val table = "table_with_partition"
+    withTable(table) {
+      sql(
+        s"""
+           |CREATE TABLE $table(c1 string)
+           |PARTITIONED BY (p1 string,p2 string,p3 string,p4 string,p5 string)
+         """.stripMargin)
+      sql(
+        s"""
+           |INSERT OVERWRITE TABLE $table
+           |PARTITION (p1='a',p2='b',p3='c',p4='d',p5='e')
+           |SELECT 'blarr'
+         """.stripMargin)
+
+      // project list is the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p1, p2, p3, p4, p5, c1 FROM $table"),
+        Row("a", "b", "c", "d", "e", "blarr") :: Nil)
+
+      // project list does not have the same order of paritioning columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p3, p4, p1, p5, c1 FROM $table"),
+        Row("b", "c", "d", "a", "e", "blarr") :: Nil)
+
+      // project list contains partial partition columns in table definition
+      checkAnswer(
+        sql(s"SELECT p2, p1, p5, c1 FROM $table"),
+        Row("b", "a", "e", "blarr") :: Nil)
+    }
   }
 
   test("SPARK-14981: DESC not supported for sorting columns") {

@@ -271,4 +271,19 @@ class InnerJoinSuite extends SparkPlanTest with SharedSQLContext {
       )
     )
   }
+
+  {
+    def df: DataFrame = spark.range(3).selectExpr("struct(id, id) as key", "id as value")
+    lazy val left = df.selectExpr("key", "concat('L', value) as value").alias("left")
+    lazy val right = df.selectExpr("key", "concat('R', value) as value").alias("right")
+    testInnerJoin(
+      "SPARK-15822 - test structs as keys",
+      left,
+      right,
+      () => (left.col("key") === right.col("key")).expr,
+      Seq(
+        (Row(0, 0), "L0", Row(0, 0), "R0"),
+        (Row(1, 1), "L1", Row(1, 1), "R1"),
+        (Row(2, 2), "L2", Row(2, 2), "R2")))
+  }
 }

@@ -174,13 +174,13 @@ class MemorySinkSuite extends StreamTest with BeforeAndAfter {
     input.addData(1, 2, 3)
     query.processAllAvailable()
 
-    checkDataset(
+    checkDatasetUnorderly(
       spark.table("memStream").as[(Int, Long)],
       (1, 1L), (2, 1L), (3, 1L))
 
     input.addData(4, 5, 6)
     query.processAllAvailable()
-    checkDataset(
+    checkDatasetUnorderly(
       spark.table("memStream").as[(Int, Long)],
       (1, 1L), (2, 1L), (3, 1L), (4, 1L), (5, 1L), (6, 1L))
 

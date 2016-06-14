@@ -73,6 +73,8 @@ public final class UnsafeKVExternalSorter {
     PrefixComparator prefixComparator = SortPrefixUtils.getPrefixComparator(keySchema);
     BaseOrdering ordering = GenerateOrdering.create(keySchema);
     KVComparator recordComparator = new KVComparator(ordering, keySchema.length());
+    boolean canUseRadixSort = keySchema.length() == 1 &&
+      SortPrefixUtils.canSortFullyWithPrefix(keySchema.apply(0));
 
     TaskMemoryManager taskMemoryManager = taskContext.taskMemoryManager();
 
@@ -86,14 +88,16 @@ public final class UnsafeKVExternalSorter {
         prefixComparator,
         /* initialSize */ 4096,
         pageSizeBytes,
-        keySchema.length() == 1 && SortPrefixUtils.canSortFullyWithPrefix(keySchema.apply(0)));
+        canUseRadixSort);
     } else {
+      // The array will be used to do in-place sort, which require half of the space to be empty.
+      assert(map.numKeys() <= map.getArray().size() / 2);
       // During spilling, the array in map will not be used, so we can borrow that and use it
       // as the underline array for in-memory sorter (it's always large enough).
       // Since we will not grow the array, it's fine to pass `null` as consumer.
       final UnsafeInMemorySorter inMemSorter = new UnsafeInMemorySorter(
         null, taskMemoryManager, recordComparator, prefixComparator, map.getArray(),
-        false /* TODO(ekl) we can only radix sort if the BytesToBytes load factor is <= 0.5 */);
+        canUseRadixSort);
 
       // We cannot use the destructive iterator here because we are reusing the existing memory
       // pages in BytesToBytesMap to hold records during sorting.
@@ -114,9 +118,10 @@ public final class UnsafeKVExternalSorter {
 
         // Compute prefix
         row.pointTo(baseObject, baseOffset, loc.getKeyLength());
-        final long prefix = prefixComputer.computePrefix(row);
+        final UnsafeExternalRowSorter.PrefixComputer.Prefix prefix =
+          prefixComputer.computePrefix(row);
 
-        inMemSorter.insertRecord(address, prefix);
+        inMemSorter.insertRecord(address, prefix.value, prefix.isNull);
       }
 
       sorter = UnsafeExternalSorter.createWithExistingInMemorySorter(
@@ -142,10 +147,12 @@ public final class UnsafeKVExternalSorter {
    * sorted runs, and then reallocates memory to hold the new record.
    */
   public void insertKV(UnsafeRow key, UnsafeRow value) throws IOException {
-    final long prefix = prefixComputer.computePrefix(key);
+    final UnsafeExternalRowSorter.PrefixComputer.Prefix prefix =
+      prefixComputer.computePrefix(key);
     sorter.insertKVRecord(
       key.getBaseObject(), key.getBaseOffset(), key.getSizeInBytes(),
-      value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(), prefix);
+      value.getBaseObject(), value.getBaseOffset(), value.getSizeInBytes(),
+      prefix.value, prefix.isNull);
   }
 
   /**

@@ -21,9 +21,8 @@ import pprint
 import sys
 
 from pyspark.ml.classification import LogisticRegression
-from pyspark.mllib.linalg import DenseVector
-from pyspark.mllib.regression import LabeledPoint
-from pyspark.sql import SparkSession
+from pyspark.ml.linalg import DenseVector
+from pyspark.sql import Row, SparkSession
 
 """
 A simple example demonstrating ways to specify parameters for Estimators and Transformers.
@@ -42,10 +41,10 @@ if __name__ == "__main__":
     # A LabeledPoint is an Object with two fields named label and features
     # and Spark SQL identifies these fields and creates the schema appropriately.
     training = spark.createDataFrame([
-        LabeledPoint(1.0, DenseVector([0.0, 1.1, 0.1])),
-        LabeledPoint(0.0, DenseVector([2.0, 1.0, -1.0])),
-        LabeledPoint(0.0, DenseVector([2.0, 1.3, 1.0])),
-        LabeledPoint(1.0, DenseVector([0.0, 1.2, -0.5]))])
+        Row(label=1.0, features=DenseVector([0.0, 1.1, 0.1])),
+        Row(label=0.0, features=DenseVector([2.0, 1.0, -1.0])),
+        Row(label=0.0, features=DenseVector([2.0, 1.3, 1.0])),
+        Row(label=1.0, features=DenseVector([0.0, 1.2, -0.5]))])
 
     # Create a LogisticRegression instance with maxIter = 10.
     # This instance is an Estimator.
@@ -77,9 +76,9 @@ if __name__ == "__main__":
 
     # prepare test data.
     test = spark.createDataFrame([
-        LabeledPoint(1.0, DenseVector([-1.0, 1.5, 1.3])),
-        LabeledPoint(0.0, DenseVector([3.0, 2.0, -0.1])),
-        LabeledPoint(0.0, DenseVector([0.0, 2.2, -1.5]))])
+        Row(label=1.0, features=DenseVector([-1.0, 1.5, 1.3])),
+        Row(label=0.0, features=DenseVector([3.0, 2.0, -0.1])),
+        Row(label=0.0, features=DenseVector([0.0, 2.2, -1.5]))])
 
     # Make predictions on test data using the Transformer.transform() method.
     # LogisticRegressionModel.transform will only use the 'features' column.

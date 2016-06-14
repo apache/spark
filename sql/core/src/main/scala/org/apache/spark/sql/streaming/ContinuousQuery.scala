@@ -30,10 +30,19 @@ import org.apache.spark.sql.SparkSession
 trait ContinuousQuery {
 
   /**
-   * Returns the name of the query.
+   * Returns the name of the query. This name is unique across all active queries. This can be
+   * set in the[[org.apache.spark.sql.DataFrameWriter DataFrameWriter]] as
+   * `dataframe.write().queryName("query").startStream()`.
    * @since 2.0.0
    */
   def name: String
+
+  /**
+   * Returns the unique id of this query. This id is automatically generated and is unique across
+   * all queries that have been started in the current process.
+   * @since 2.0.0
+   */
+  def id: Long
 
   /**
    * Returns the [[SparkSession]] associated with `this`.
@@ -93,7 +102,7 @@ trait ContinuousQuery {
   def awaitTermination(timeoutMs: Long): Boolean
 
   /**
-   * Blocks until all available data in the source has been processed an committed to the sink.
+   * Blocks until all available data in the source has been processed and committed to the sink.
    * This method is intended for testing. Note that in the case of continually arriving data, this
    * method may block forever. Additionally, this method is only guaranteed to block until data that
    * has been synchronously appended data to a [[org.apache.spark.sql.execution.streaming.Source]]

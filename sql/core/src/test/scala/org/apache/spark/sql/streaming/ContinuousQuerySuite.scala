@@ -17,14 +17,55 @@
 
 package org.apache.spark.sql.streaming
 
+import org.scalatest.BeforeAndAfter
+
 import org.apache.spark.SparkException
 import org.apache.spark.sql.execution.streaming.{CompositeOffset, LongOffset, MemoryStream, StreamExecution}
+import org.apache.spark.util.Utils
 
 
-class ContinuousQuerySuite extends StreamTest {
+class ContinuousQuerySuite extends StreamTest with BeforeAndAfter {
 
   import AwaitTerminationTester._
   import testImplicits._
+
+  after {
+    sqlContext.streams.active.foreach(_.stop())
+  }
+
+  test("names unique across active queries, ids unique across all started queries") {
+    val inputData = MemoryStream[Int]
+    val mapped = inputData.toDS().map { 6 / _}
+
+    def startQuery(queryName: String): ContinuousQuery = {
+      val metadataRoot = Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
+      val writer = mapped.write
+      writer
+        .queryName(queryName)
+        .format("memory")
+        .option("checkpointLocation", metadataRoot)
+        .startStream()
+    }
+
+    val q1 = startQuery("q1")
+    assert(q1.name === "q1")
+
+    // Verify that another query with same name cannot be started
+    val e1 = intercept[IllegalArgumentException] {
+      startQuery("q1")
+    }
+    Seq("q1", "already active").foreach { s => assert(e1.getMessage.contains(s)) }
+
+    // Verify q1 was unaffected by the above exception and stop it
+    assert(q1.isActive)
+    q1.stop()
+
+    // Verify another query can be started with name q1, but will have different id
+    val q2 = startQuery("q1")
+    assert(q2.name === "q1")
+    assert(q2.id !== q1.id)
+    q2.stop()
+  }
 
   testQuietly("lifecycle states and awaitTermination") {
     val inputData = MemoryStream[Int]
@@ -66,21 +107,21 @@ class ContinuousQuerySuite extends StreamTest {
     testStream(mapped)(
       AssertOnQuery(_.sourceStatuses.length === 1),
       AssertOnQuery(_.sourceStatuses(0).description.contains("Memory")),
-      AssertOnQuery(_.sourceStatuses(0).offset === None),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === None),
       AssertOnQuery(_.sinkStatus.description.contains("Memory")),
-      AssertOnQuery(_.sinkStatus.offset === new CompositeOffset(None :: Nil)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === new CompositeOffset(None :: Nil).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(0))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(0))),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(0).toString)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(0)).toString),
       AddData(inputData, 1, 2),
       CheckAnswer(6, 3, 6, 3),
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(1))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1))),
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(1).toString)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString),
       AddData(inputData, 0),
       ExpectFailure[SparkException],
-      AssertOnQuery(_.sourceStatuses(0).offset === Some(LongOffset(2))),
-      AssertOnQuery(_.sinkStatus.offset === CompositeOffset.fill(LongOffset(1)))
+      AssertOnQuery(_.sourceStatuses(0).offsetDesc === Some(LongOffset(2).toString)),
+      AssertOnQuery(_.sinkStatus.offsetDesc === CompositeOffset.fill(LongOffset(1)).toString)
     )
   }
 
