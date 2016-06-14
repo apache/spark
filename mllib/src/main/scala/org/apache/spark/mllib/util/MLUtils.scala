@@ -22,6 +22,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
+import org.apache.spark.ml.linalg.{VectorUDT => MLVectorUDT}
 import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
@@ -255,37 +256,96 @@ object MLUtils {
   }
 
   /**
-   * Converts vector columns in an input Dataset from old [[org.apache.spark.mllib.linalg.Vector]]
-   * type to new [[org.apache.spark.ml.linalg.Vector]] type.
+   * Converts vector columns in an input Dataset from the [[org.apache.spark.mllib.linalg.Vector]]
+   * type to the new [[org.apache.spark.ml.linalg.Vector]] type under the `spark.ml` package.
    * @param dataset input dataset
-   * @param cols a list of vector columns to be converted. If unspecified, all old vector columns
-   *             will be converted except nested ones.
-   * @return the input [[DataFrame]] with old vector columns converted to new vector type
+   * @param cols a list of vector columns to be converted. New vector columns will be ignored. If
+   *             unspecified, all old vector columns will be converted except nested ones.
+   * @return the input [[DataFrame]] with old vector columns converted to the new vector type
    */
   @Since("2.0.0")
   @varargs
-  def convertOldVectorColumnsToNew(dataset: Dataset[_], cols: String*): DataFrame = {
+  def convertVectorColumnsToML(dataset: Dataset[_], cols: String*): DataFrame = {
     val schema = dataset.schema
     val colSet = if (cols.nonEmpty) {
-      cols.foreach { c =>
+      cols.flatMap { c =>
         val dataType = schema(c).dataType
-        require(dataType.getClass == classOf[VectorUDT],
-          s"Column $c must be old Vector type to be converted to new type but got $dataType.")
-      }
-      cols.toSet
+        if (dataType.getClass == classOf[VectorUDT]) {
+          Some(c)
+        } else {
+          // ignore new vector columns and raise an exception on other column types
+          require(dataType.getClass == classOf[MLVectorUDT],
+            s"Column $c must be old Vector type to be converted to new type but got $dataType.")
+          None
+        }
+      }.toSet
     } else {
       schema.fields
         .filter(_.dataType.getClass == classOf[VectorUDT])
         .map(_.name)
         .toSet
     }
+
+    if (colSet.isEmpty) {
+      return dataset.toDF()
+    }
+
     // TODO: This implementation has performance issues due to unnecessary serialization.
     // TODO: It is better (but trickier) if we can cast the old vector type to new type directly.
-    val convertOldToNew = udf { v: Vector => v.asML }
+    val convertToML = udf { v: Vector => v.asML }
     val exprs = schema.fields.map { field =>
       val c = field.name
       if (colSet.contains(c)) {
-        convertOldToNew(col(c)).as(c, field.metadata)
+        convertToML(col(c)).as(c, field.metadata)
+      } else {
+        col(c)
+      }
+    }
+    dataset.select(exprs: _*)
+  }
+
+  /**
+   * Converts vector columns in an input Dataset to the [[org.apache.spark.ml.linalg.Vector]] type
+   * from the new [[org.apache.spark.mllib.linalg.Vector]] type under the `spark.ml` package.
+   * @param dataset input dataset
+   * @param cols a list of vector columns to be converted. Old vector columns will be ignored. If
+   *             unspecified, all new vector columns will be converted except nested ones.
+   * @return the input [[DataFrame]] with new vector columns converted to the old vector type
+   */
+  @Since("2.0.0")
+  @varargs
+  def convertVectorColumnsFromML(dataset: Dataset[_], cols: String*): DataFrame = {
+    val schema = dataset.schema
+    val colSet = if (cols.nonEmpty) {
+      cols.flatMap { c =>
+        val dataType = schema(c).dataType
+        if (dataType.getClass == classOf[MLVectorUDT]) {
+          Some(c)
+        } else {
+          // ignore old vector columns and raise an exception on other column types
+          require(dataType.getClass == classOf[VectorUDT],
+            s"Column $c must be new Vector type to be converted to old type but got $dataType.")
+          None
+        }
+      }.toSet
+    } else {
+      schema.fields
+        .filter(_.dataType.getClass == classOf[MLVectorUDT])
+        .map(_.name)
+        .toSet
+    }
+
+    if (colSet.isEmpty) {
+      return dataset.toDF()
+    }
+
+    // TODO: This implementation has performance issues due to unnecessary serialization.
+    // TODO: It is better (but trickier) if we can cast the new vector type to old type directly.
+    val convertFromML = udf { Vectors.fromML _ }
+    val exprs = schema.fields.map { field =>
+      val c = field.name
+      if (colSet.contains(c)) {
+        convertFromML(col(c)).as(c, field.metadata)
       } else {
         col(c)
       }

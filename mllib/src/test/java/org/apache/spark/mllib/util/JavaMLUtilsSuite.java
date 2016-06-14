@@ -33,20 +33,17 @@ import org.apache.spark.sql.RowFactory;
 public class JavaMLUtilsSuite extends SharedSparkSession {
 
   @Test
-  public void testConvertOldVectorColumnToNew() {
+  public void testConvertVectorColumnsToAndFromML() {
     Vector x = Vectors.dense(2.0);
     Dataset<Row> dataset = spark.createDataFrame(
       Collections.singletonList(new LabeledPoint(1.0, x)), LabeledPoint.class
     ).select("label", "features");
-    Row new1 = MLUtils.convertOldVectorColumnsToNew(dataset).first();
+    Dataset<Row> newDataset1 = MLUtils.convertVectorColumnsToML(dataset);
+    Row new1 = newDataset1.first();
     Assert.assertEquals(RowFactory.create(1.0, x.asML()), new1);
-    Row new2 = MLUtils.convertOldVectorColumnsToNew(dataset, "features").first();
+    Row new2 = MLUtils.convertVectorColumnsToML(dataset, "features").first();
     Assert.assertEquals(new1, new2);
-    try {
-      MLUtils.convertOldVectorColumnsToNew(dataset, "label");
-      Assert.fail("Should throw an exception on converting non-vector columns.");
-    } catch (IllegalArgumentException ex) {
-      // pass
-    }
+    Row old1 = MLUtils.convertVectorColumnsFromML(newDataset1).first();
+    Assert.assertEquals(RowFactory.create(1.0, x), old1);
   }
 }
