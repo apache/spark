@@ -569,6 +569,7 @@ class SparkSession(object):
         :class:`ContinuousQuery` ContinuousQueries active on `this` context.
 
         .. note:: Experimental.
+
         :return: :class:`ContinuousQueryManager`
         """
         from pyspark.sql.streaming import ContinuousQueryManager
