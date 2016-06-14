@@ -197,6 +197,11 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
             """.stripMargin)
         }
       }
+      def dropFunction(names: Seq[String]): Unit = {
+        names.foreach { name =>
+          sql(s"DROP TEMPORARY FUNCTION $name")
+        }
+      }
       createFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
 
       checkAnswer(sql("SHOW functions temp_abs"), Row("temp_abs"))
@@ -216,6 +221,8 @@ class SQLQuerySuite extends QueryTest with SQLTestUtils with TestHiveSingleton {
       checkAnswer(
         sql("SHOW functions 'temp_sha*|temp_weekofyea*'"),
         List(Row("temp_sha"), Row("temp_sha1"), Row("temp_sha2"), Row("temp_weekofyear")))
+
+      dropFunction(Seq("temp_abs", "temp_weekofyear", "temp_sha", "temp_sha1", "temp_sha2"))
     }
   }
 
