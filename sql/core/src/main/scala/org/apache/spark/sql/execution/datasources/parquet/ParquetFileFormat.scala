@@ -794,11 +794,16 @@ private[sql] object ParquetFileFormat extends Logging {
     // side, and resemble fake `FileStatus`es there.
     val partialFileStatusInfo = filesToTouch.map(f => (f.getPath.toString, f.getLen))
 
+    // Set the number of partitions to prevent following schema reads from generating many tasks
+    // in case of a small number of parquet files.
+    val numParallelism = Math.min(Math.max(partialFileStatusInfo.size, 1),
+      sparkSession.sparkContext.defaultParallelism)
+
     // Issues a Spark job to read Parquet schema in parallel.
     val partiallyMergedSchemas =
       sparkSession
         .sparkContext
-        .parallelize(partialFileStatusInfo)
+        .parallelize(partialFileStatusInfo, numParallelism)
         .mapPartitions { iterator =>
           // Resembles fake `FileStatus`es with serialized path and length information.
           val fakeFileStatuses = iterator.map { case (path, length) =>
