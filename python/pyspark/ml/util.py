@@ -258,7 +258,7 @@ class TransformerWrapper(object):
     def __init__(self, ctx, transformer):
         self.ctx = ctx
         self.transformer = transformer
-        self.df_wrap_func = lambda jdf, ctx: DataFrame(ctx, jdf)
+        self.df_wrap_func = lambda jdf, ctx: DataFrame(jdf, ctx)
         self.failure = None
 
     def df_wrapper(self, func):
