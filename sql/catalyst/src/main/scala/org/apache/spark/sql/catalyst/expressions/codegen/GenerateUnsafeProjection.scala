@@ -56,13 +56,17 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       ExprCode(code, isNull, fieldName)
     }
 
-    s"""
-      if ($input instanceof UnsafeRow) {
-        ${writeUnsafeData(ctx, s"((UnsafeRow) $input)", bufferHolder)}
-      } else {
-        ${writeExpressionsToBuffer(ctx, input, fieldEvals, fieldTypes, bufferHolder)}
-      }
-    """
+    if (ctx.genericWriteBuffer) {
+      s"${writeExpressionsToBuffer(ctx, input, fieldEvals, fieldTypes, bufferHolder)}"
+    } else {
+      s"""
+        if ($input instanceof UnsafeRow) {
+          ${writeUnsafeData(ctx, s"((UnsafeRow) $input)", bufferHolder)}
+        } else {
+          ${writeExpressionsToBuffer(ctx, input, fieldEvals, fieldTypes, bufferHolder)}
+        }
+      """
+    }
   }
 
   private def writeExpressionsToBuffer(
@@ -222,23 +226,31 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
       case _ => s"$arrayWriter.write($index, $element);"
     }
 
-    s"""
-      if ($input instanceof UnsafeArrayData) {
-        ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
-      } else {
-        final int $numElements = $input.numElements();
-        $arrayWriter.initialize($bufferHolder, $numElements, $fixedElementSize);
 
-        for (int $index = 0; $index < $numElements; $index++) {
-          if ($input.isNullAt($index)) {
-            $arrayWriter.setNullAt($index);
-          } else {
-            final $jt $element = ${ctx.getValue(input, et, index)};
-            $writeElement
-          }
+    val writeSafeArrayToBuffer = s"""
+      final int $numElements = $input.numElements();
+      $arrayWriter.initialize($bufferHolder, $numElements, $fixedElementSize);
+
+      for (int $index = 0; $index < $numElements; $index++) {
+        if ($input.isNullAt($index)) {
+          $arrayWriter.setNullAt($index);
+        } else {
+          final $jt $element = ${ctx.getValue(input, et, index)};
+          $writeElement
         }
       }
-    """
+     """
+    if (ctx.genericWriteBuffer) {
+      writeSafeArrayToBuffer
+    } else {
+      s"""
+       if ($input instanceof UnsafeArrayData) {
+         ${writeUnsafeData(ctx, s"((UnsafeArrayData) $input)", bufferHolder)}
+       } else {
+         ${writeSafeArrayToBuffer}
+       }
+     """
+    }
   }
 
   // TODO: if the nullability of value element is correct, we can use it to save null check.
@@ -254,27 +266,34 @@ object GenerateUnsafeProjection extends CodeGenerator[Seq[Expression], UnsafePro
 
 
     // Writes out unsafe map according to the format described in `UnsafeMapData`.
-    s"""
-      if ($input instanceof UnsafeMapData) {
-        ${writeUnsafeData(ctx, s"((UnsafeMapData) $input)", bufferHolder)}
-      } else {
-        final ArrayData $keys = $input.keyArray();
-        final ArrayData $values = $input.valueArray();
+    val writeSafeMapToBuffer = s"""
+      final ArrayData $keys = $input.keyArray();
+      final ArrayData $values = $input.valueArray();
 
-        // preserve 4 bytes to write the key array numBytes later.
-        $bufferHolder.grow(4);
-        $bufferHolder.cursor += 4;
+      // preserve 4 bytes to write the key array numBytes later.
+      $bufferHolder.grow(4);
+      $bufferHolder.cursor += 4;
 
-        // Remember the current cursor so that we can write numBytes of key array later.
-        final int $tmpCursor = $bufferHolder.cursor;
+      // Remember the current cursor so that we can write numBytes of key array later.
+      final int $tmpCursor = $bufferHolder.cursor;
 
-        ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
-        // Write the numBytes of key array into the first 4 bytes.
-        Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
+      ${writeArrayToBuffer(ctx, keys, keyType, bufferHolder)}
+      // Write the numBytes of key array into the first 4 bytes.
+      Platform.putInt($bufferHolder.buffer, $tmpCursor - 4, $bufferHolder.cursor - $tmpCursor);
 
-        ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
-      }
+      ${writeArrayToBuffer(ctx, values, valueType, bufferHolder)}
     """
+    if (ctx.genericWriteBuffer) {
+      writeSafeMapToBuffer
+    } else {
+      s"""
+       if ($input instanceof UnsafeMapData) {
+         ${writeUnsafeData(ctx, s"((UnsafeMapData) $input)", bufferHolder)}
+       } else {
+         ${writeSafeMapToBuffer}
+       }
+      """
+    }
   }
 
   /**

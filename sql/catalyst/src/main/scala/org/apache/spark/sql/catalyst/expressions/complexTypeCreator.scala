@@ -50,6 +50,7 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
+    ctx.genericWriteBuffer = true
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
@@ -60,18 +61,24 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         children.zipWithIndex.map { case (e, i) =>
           val eval = e.genCode(ctx)
-          eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
+          eval.code + (
+            if (eval.isNull == "false") {
+              s"\n$values[$i] = ${eval.value};"
             } else {
-              $values[$i] = ${eval.value};
-            }
-           """
+              s"""
+              if (${eval.isNull}) {
+                $values[$i] = null;
+              } else {
+                $values[$i] = ${eval.value};
+              }
+             """
+            })
         }) +
       s"""
         final ArrayData ${ev.value} = new $arrayClass($values);
         this.$values = null;
-      """)
+      """,
+      isNull = "false")
   }
 
   override def prettyName: String = "array"
@@ -124,6 +131,7 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val mapClass = classOf[ArrayBasedMapData].getName
+    ctx.genericWriteBuffer = true
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
     ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
@@ -152,20 +160,25 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         values.zipWithIndex.map { case (value, i) =>
           val eval = value.genCode(ctx)
-          s"""
-            ${eval.code}
-            if (${eval.isNull}) {
-              $valueArray[$i] = null;
+          eval.code + (
+            if (eval.isNull == "false") {
+              s"\n$valueArray[$i] = ${eval.value};"
             } else {
-              $valueArray[$i] = ${eval.value};
-            }
-          """
+              s"""
+              if (${eval.isNull}) {
+                $valueArray[$i] = null;
+              } else {
+                $valueArray[$i] = ${eval.value};
+              }
+             """
+            })
         }) +
       s"""
         final MapData ${ev.value} = new $mapClass($keyData, $valueData);
         this.$keyArray = null;
         this.$valueArray = null;
-      """)
+      """,
+      isNull = "false")
   }
 
   override def prettyName: String = "map"
@@ -200,6 +213,7 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
+    ctx.genericWriteBuffer = true
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
@@ -210,17 +224,24 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         children.zipWithIndex.map { case (e, i) =>
           val eval = e.genCode(ctx)
-          eval.code + s"""
-            if (${eval.isNull}) {
-              $values[$i] = null;
+          eval.code + (
+            if (eval.isNull == "false") {
+              s"\n$values[$i] = ${eval.value};"
             } else {
-              $values[$i] = ${eval.value};
-            }"""
+              s"""
+              if (${eval.isNull}) {
+                $values[$i] = null;
+              } else {
+                $values[$i] = ${eval.value};
+              }
+             """
+            })
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
         this.$values = null;
-      """)
+      """,
+      isNull = "false")
   }
 
   override def prettyName: String = "struct"
@@ -290,6 +311,7 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
+    ctx.genericWriteBuffer = true
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
@@ -300,17 +322,24 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         valExprs.zipWithIndex.map { case (e, i) =>
           val eval = e.genCode(ctx)
-          eval.code + s"""
-          if (${eval.isNull}) {
-            $values[$i] = null;
-          } else {
-            $values[$i] = ${eval.value};
-          }"""
+          eval.code + (
+            if (eval.isNull == "false") {
+              s"\n$values[$i] = ${eval.value};"
+            } else {
+              s"""
+              if (${eval.isNull}) {
+                $values[$i] = null;
+              } else {
+                $values[$i] = ${eval.value};
+              }
+             """
+            })
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
         this.$values = null;
-      """)
+      """,
+      isNull = "false")
   }
 
   override def prettyName: String = "named_struct"
