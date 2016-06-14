@@ -53,8 +53,8 @@ public final class UnsafeMapData extends MapData {
    * to a null pointer.
    */
   public UnsafeMapData() {
-    keys = new UnsafeArrayData();
-    values = new UnsafeArrayData();
+    keys = UnsafeArrayData.allocate(UnsafeArrayData.Format.Sparse);
+    values = UnsafeArrayData.allocate(UnsafeArrayData.Format.Sparse);
   }
 
   /**

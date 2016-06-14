@@ -614,7 +614,7 @@ private[columnar] case class ARRAY(dataType: ArrayType)
     assert(buffer.hasArray)
     val cursor = buffer.position()
     buffer.position(cursor + numBytes)
-    val array = new UnsafeArrayData
+    val array = UnsafeArrayData.allocate(UnsafeArrayData.Format.Sparse);
     array.pointTo(
       buffer.array(),
       Platform.BYTE_ARRAY_OFFSET + buffer.arrayOffset() + cursor,

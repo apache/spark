@@ -473,7 +473,7 @@ public final class UnsafeRow extends MutableRow implements Externalizable, KryoS
       final long offsetAndSize = getLong(ordinal);
       final int offset = (int) (offsetAndSize >> 32);
       final int size = (int) offsetAndSize;
-      final UnsafeArrayData array = new UnsafeArrayData();
+      final UnsafeArrayData array = UnsafeArrayData.allocate(UnsafeArrayData.Format.Sparse);
       array.pointTo(baseObject, baseOffset + offset, size);
       return array;
     }
