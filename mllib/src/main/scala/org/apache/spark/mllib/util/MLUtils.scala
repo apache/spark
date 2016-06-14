@@ -17,14 +17,17 @@
 
 package org.apache.spark.mllib.util
 
+import scala.annotation.varargs
 import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Since
-import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vector, Vectors}
+import org.apache.spark.mllib.linalg._
 import org.apache.spark.mllib.linalg.BLAS.dot
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.{PartitionwiseSampledRDD, RDD}
+import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.random.BernoulliCellSampler
 
@@ -50,7 +53,6 @@ object MLUtils {
    * where the indices are one-based and in ascending order.
    * This method parses each line into a [[org.apache.spark.mllib.regression.LabeledPoint]],
    * where the feature indices are converted to zero-based.
-   *
    * @param sc Spark context
    * @param path file or directory path in any Hadoop-supported file system URI
    * @param numFeatures number of features, which will be determined from the input data if a
@@ -145,7 +147,6 @@ object MLUtils {
    * Save labeled data in LIBSVM format.
    * @param data an RDD of LabeledPoint to be saved
    * @param dir directory to save the data
-   *
    * @see [[org.apache.spark.mllib.util.MLUtils#loadLibSVMFile]]
    */
   @Since("1.0.0")
@@ -254,6 +255,45 @@ object MLUtils {
   }
 
   /**
+   * Converts vector columns in an input Dataset from old [[org.apache.spark.mllib.linalg.Vector]]
+   * type to new [[org.apache.spark.ml.linalg.Vector]] type.
+   * @param dataset input dataset
+   * @param cols a list of vector columns to be converted. If unspecified, all old vector columns
+   *             will be converted except nested ones.
+   * @return the input [[DataFrame]] with old vector columns converted to new vector type
+   */
+  @Since("2.0.0")
+  @varargs
+  def convertOldVectorColumnsToNew(dataset: Dataset[_], cols: String*): DataFrame = {
+    val schema = dataset.schema
+    val colSet = if (cols.nonEmpty) {
+      cols.foreach { c =>
+        val dataType = schema(c).dataType
+        require(dataType.getClass == classOf[VectorUDT],
+          s"Column $c must be old Vector type to be converted to new type but got $dataType.")
+      }
+      cols.toSet
+    } else {
+      schema.fields
+        .filter(_.dataType.getClass == classOf[VectorUDT])
+        .map(_.name)
+        .toSet
+    }
+    // TODO: This implementation has performance issues due to unnecessary serialization.
+    // TODO: It is better (but trickier) if we can cast the old vector type to new type directly.
+    val convertOldToNew = udf { v: Vector => v.asML }
+    val exprs = schema.fields.map { field =>
+      val c = field.name
+      if (colSet.contains(c)) {
+        convertOldToNew(col(c)).as(c, field.metadata)
+      } else {
+        col(c)
+      }
+    }
+    dataset.select(exprs: _*)
+  }
+
+  /**
    * Returns the squared Euclidean distance between two vectors. The following formula will be used
    * if it does not introduce too much numerical error:
    * <pre>
@@ -261,7 +301,6 @@ object MLUtils {
    * </pre>
    * When both vector norms are given, this is faster than computing the squared distance directly,
    * especially when one of the vectors is a sparse vector.
-   *
    * @param v1 the first vector
    * @param norm1 the norm of the first vector, non-negative
    * @param v2 the second vector
@@ -314,7 +353,6 @@ object MLUtils {
    * When `x` is positive and large, computing `math.log(1 + math.exp(x))` will lead to arithmetic
    * overflow. This will happen when `x > 709.78` which is not a very large number.
    * It can be addressed by rewriting the formula into `x + math.log1p(math.exp(-x))` when `x > 0`.
-   *
    * @param x a floating-point value as input.
    * @return the result of `math.log(1 + math.exp(x))`.
    */

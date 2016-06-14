@@ -25,12 +25,12 @@ import scala.io.Source
 import breeze.linalg.{squaredDistance => breezeSquaredDistance}
 import com.google.common.io.Files
 
-import org.apache.spark.SparkException
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.mllib.linalg.{DenseVector, SparseVector, Vectors}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.util.MLUtils._
 import org.apache.spark.mllib.util.TestingUtils._
+import org.apache.spark.sql.Row
 import org.apache.spark.util.Utils
 
 class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
@@ -244,5 +244,27 @@ class MLUtilsSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     assert(log1pExp(-13.8) ~== math.log1p(math.exp(-13.8)) absTol 1E-10)
     assert(log1pExp(-238423789.865) ~== math.log1p(math.exp(-238423789.865)) absTol 1E-10)
+  }
+
+  test("convertOldVectorColumnsToNew") {
+    val x = Vectors.sparse(2, Array(1), Array(1.0))
+    val y = Vectors.dense(2.0, 3.0)
+    val z = Vectors.dense(4.0)
+    val p = LabeledPoint(5.0, z)
+    val df = spark.createDataFrame(Seq(
+      (0, x, y, p)
+    )).toDF("id", "x", "y", "p")
+    val new1 = convertOldVectorColumnsToNew(df).first()
+    assert(new1 === Row(0, x.asML, y.asML, Row(5.0, z)))
+    val new2 = convertOldVectorColumnsToNew(df, "x", "y").first()
+    assert(new2 === new1)
+    val new3 = convertOldVectorColumnsToNew(df, "y").first()
+    assert(new3 === Row(0, x, y.asML, Row(5.0, z)))
+    intercept[IllegalArgumentException] {
+      convertOldVectorColumnsToNew(df, "p")
+    }
+    intercept[IllegalArgumentException] {
+      convertOldVectorColumnsToNew(df, "p.features")
+    }
   }
 }
