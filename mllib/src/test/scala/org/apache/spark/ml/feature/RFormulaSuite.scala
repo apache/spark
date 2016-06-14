@@ -57,13 +57,21 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
-  test("label column already exists") {
+  test("label column already exists and indexLabel was set as false") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = Seq((0, 1.0), (2, 2.0)).toDF("x", "y")
     val model = formula.fit(original)
     val resultSchema = model.transformSchema(original.schema)
     assert(resultSchema.length == 3)
     assert(resultSchema.toString == model.transform(original).schema.toString)
+  }
+
+  test("label column already exists but indexLabel was set as true") {
+    val formula = new RFormula().setFormula("y ~ x").setLabelCol("y").setIndexLabel(true)
+    val original = spark.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
+    intercept[IllegalArgumentException] {
+      formula.fit(original)
+    }
   }
 
   test("label column already exists but is not numeric type") {
@@ -134,6 +142,23 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
         ("male", "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 1.0)
     ).toDF("id", "a", "b", "features", "label")
     // assert(result.schema.toString == resultSchema.toString)
+    assert(result.collect() === expected.collect())
+  }
+
+  test("Force to index label") {
+    val formula = new RFormula().setFormula("id ~ a + b").setIndexLabel(true)
+    val original = spark.createDataFrame(
+      Seq((1.0, "foo", 4), (1.0, "bar", 4), (0.0, "bar", 5), (1.0, "baz", 5))
+    ).toDF("id", "a", "b")
+    val model = formula.fit(original)
+    val result = model.transform(original)
+    val expected = spark.createDataFrame(
+      Seq(
+        (1.0, "foo", 4, Vectors.dense(0.0, 1.0, 4.0), 0.0),
+        (1.0, "bar", 4, Vectors.dense(1.0, 0.0, 4.0), 0.0),
+        (0.0, "bar", 5, Vectors.dense(1.0, 0.0, 5.0), 1.0),
+        (1.0, "baz", 5, Vectors.dense(0.0, 0.0, 5.0), 0.0))
+    ).toDF("id", "a", "b", "features", "label")
     assert(result.collect() === expected.collect())
   }
 
