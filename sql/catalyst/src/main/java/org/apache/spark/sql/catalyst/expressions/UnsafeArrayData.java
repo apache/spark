@@ -36,6 +36,17 @@ public abstract class UnsafeArrayData extends ArrayData {
 
   public final Format getFormat() { return format; }
 
+  protected static final int DenseID = 1;
+
+  public  static Format getFormat(Object baseObject, long baseOffset) {
+    // Read the number of elements from the first 4 bytes.
+    final int numElements = Platform.getInt(baseObject, baseOffset);
+    assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
+    // Read the next 4 bytes to check its format id ( != 1)
+    int formatId = Platform.getInt(baseObject, baseOffset + 4);
+    return (formatId == DenseID) ? Format.Dense : Format.Sparse;
+  }
+
   protected Object baseObject;
   protected long baseOffset;
 

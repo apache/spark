@@ -26,11 +26,11 @@ import org.apache.spark.unsafe.types.UTF8String;
  * An Unsafe implementation of Array which is backed by raw memory instead of Java objects.
  * This array assumes that each element is non-null
  *
- * Each tuple has three parts: [numElements] [0] [values]
+ * Each tuple has three parts: [numElements] [1] [values]
  *
  * The `numElements` is 4 bytes storing the number of elements of this array.
  *
- * [0] is a 4-byte identifier for a dense array
+ * [1] is a 4-byte identifier for a dense array
  *
  * In the `values` region, we store the content of elements. As we can get length info, so elements
  * can be variable-length.
@@ -47,7 +47,8 @@ public final class UnsafeArrayDataDense extends UnsafeArrayData {
     // Read the number of elements from the first 4 bytes.
     final int numElements = Platform.getInt(baseObject, baseOffset);
     assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
-    assert(Platform.getInt(baseObject, baseOffset + 4) == 0);
+    // Read format id ( == DenseID)
+    assert(Platform.getInt(baseObject, baseOffset + 4) == DenseID);
 
     this.numElements = numElements;
     this.baseObject = baseObject;
@@ -159,6 +160,69 @@ public final class UnsafeArrayDataDense extends UnsafeArrayData {
     return arrayCopy;
   }
 
+  @Override
+  public boolean[] toBooleanArray() {
+    int size = numElements();
+    boolean[] values = new boolean[size];
+    Platform.copyMemory(
+      baseObject, baseOffset + 8, values, Platform.BYTE_ARRAY_OFFSET, size);
+    return values;
+  }
+
+  @Override
+  public byte[] toByteArray() {
+    int size = numElements();
+    byte[] values = new byte[size];
+    Platform.copyMemory(
+            baseObject, baseOffset + 8, values, Platform.BYTE_ARRAY_OFFSET, size);
+    return values;
+  }
+
+  @Override
+  public short[] toShortArray() {
+    int size = numElements();
+    short[] values = new short[size];
+    Platform.copyMemory(
+            baseObject, baseOffset + 8, values, Platform.BYTE_ARRAY_OFFSET, size * 2);
+    return values;
+  }
+
+  @Override
+  public int[] toIntArray() {
+    int size = numElements();
+    int[] values = new int[size];
+    Platform.copyMemory(
+            baseObject, baseOffset + 8, values, Platform.BYTE_ARRAY_OFFSET, size * 4);
+    return values;
+  }
+
+  @Override
+  public long[] toLongArray() {
+    int size = numElements();
+    long[] values = new long[size];
+    Platform.copyMemory(
+            baseObject, baseOffset + 8, values, Platform.BYTE_ARRAY_OFFSET, size * 8);
+    return values;
+  }
+
+  @Override
+  public float[] toFloatArray() {
+    int size = numElements();
+    float[] values = new float[size];
+    Platform.copyMemory(
+            baseObject, baseOffset + 8, values, Platform.BYTE_ARRAY_OFFSET, size * 4);
+    return values;
+  }
+
+  @Override
+  public double[] toDoubleArray() {
+    int size = numElements();
+    double[] values = new double[size];
+    Platform.copyMemory(
+            baseObject, baseOffset + 8, values, Platform.BYTE_ARRAY_OFFSET, size * 8);
+    return values;
+  }
+
   protected static UnsafeArrayData _fromPrimitiveArray(int[] arr) {
     if (arr.length > (Integer.MAX_VALUE - 8) / 4) {
       throw new UnsupportedOperationException("Cannot convert this array to unsafe format as " +
@@ -170,7 +234,7 @@ public final class UnsafeArrayDataDense extends UnsafeArrayData {
     final byte[] data = new byte[totalSize];
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
-    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4, 0);
+    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4, DenseID);
 
     Platform.copyMemory(arr, Platform.INT_ARRAY_OFFSET, data,
             Platform.BYTE_ARRAY_OFFSET + 8, valueRegionSize);
@@ -191,7 +255,7 @@ public final class UnsafeArrayDataDense extends UnsafeArrayData {
     final byte[] data = new byte[totalSize];
 
     Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET, arr.length);
-    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4, 0);
+    Platform.putInt(data, Platform.BYTE_ARRAY_OFFSET + 4, DenseID);
 
     Platform.copyMemory(arr, Platform.DOUBLE_ARRAY_OFFSET, data,
             Platform.BYTE_ARRAY_OFFSET + 8, valueRegionSize);
