@@ -470,12 +470,6 @@ class Analyzer(
               // Assume partition columns are correctly placed at the end of the child's output
               i.copy(table = EliminateSubqueryAliases(table))
             } else {
-              // All partition columns are dynamic because this InsertIntoTable had no partitioning
-              tablePartitionNames.filterNot { name =>
-                child.output.exists(_.name == name)
-              }.map { name =>
-                throw new AnalysisException(s"Cannot find partition column $name")
-              }
               // Assume partition columns are correctly placed at the end of the child's output
               i.copy(
                 table = EliminateSubqueryAliases(table),
