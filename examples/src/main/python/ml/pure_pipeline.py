@@ -35,11 +35,7 @@ if __name__ == "__main__":
 
     # $example on$
     # Prepare training documents from a list of (id, text, label) tuples.
-    training = spark.createDataFrame([
-        (1,),
-        (2,),
-        (3,),
-        (4,)], ["text"])
+    training = spark.createDataFrame([(1,), (2,), (3,), (4,)], ["text"])
 
     # Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     int2str = Int2Str(suffix="xxx", inputCol="text", outputCol="sentence")

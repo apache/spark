@@ -194,6 +194,7 @@ class Pipeline(PipelineWrapper, JavaEstimator, MLReadable, MLWritable):
         :return: the pipeline instance
         """
         self._paramMap[self.stages] = value
+        self._java_stages = self._transfer_stages_to_java(value)
         return self
 
     @since("1.3.0")
