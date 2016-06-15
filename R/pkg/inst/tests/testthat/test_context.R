@@ -50,7 +50,8 @@ test_that("Check masked functions", {
   l <- max(length(maskedCompletely), length(namesOfMaskedCompletely))
   length(maskedCompletely) <- l
   length(namesOfMaskedCompletely) <- l
-  expect_equal(sort(maskedCompletely), sort(namesOfMaskedCompletely))
+  expect_equal(sort(maskedCompletely, na.last = TRUE),
+               sort(namesOfMaskedCompletely, na.last = TRUE))
 })
 
 test_that("repeatedly starting and stopping SparkR", {
