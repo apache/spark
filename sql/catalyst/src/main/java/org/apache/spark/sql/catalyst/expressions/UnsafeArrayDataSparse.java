@@ -52,7 +52,10 @@ public final class UnsafeArrayDataSparse extends UnsafeArrayData {
     // Read the number of elements from the first 4 bytes.
     final int numElements = Platform.getInt(baseObject, baseOffset);
     assert numElements >= 0 : "numElements (" + numElements + ") should >= 0";
-    assert(Platform.getInt(baseObject, baseOffset + 4) != 0);
+    // Read the first element of offset to check its format id ( != DenseID
+    assert numElements == 0 || Platform.getInt(baseObject, baseOffset + 4) != DenseID:
+            "numElements (" + numElements + ") should == 0 or " +
+            "first offset (" + Platform.getInt(baseObject, baseOffset + 4) + ") should != DenseID";
 
     this.numElements = numElements;
     this.baseObject = baseObject;
