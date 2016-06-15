@@ -57,7 +57,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     }
   }
 
-  test("label column already exists and indexLabel was set as false") {
+  test("label column already exists and indexLabel was set with false") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y")
     val original = Seq((0, 1.0), (2, 2.0)).toDF("x", "y")
     val model = formula.fit(original)
@@ -66,7 +66,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(resultSchema.toString == model.transform(original).schema.toString)
   }
 
-  test("label column already exists but indexLabel was set as true") {
+  test("label column already exists but indexLabel was set with true") {
     val formula = new RFormula().setFormula("y ~ x").setLabelCol("y").setIndexLabel(true)
     val original = spark.createDataFrame(Seq((0, 1.0), (2, 2.0))).toDF("x", "y")
     intercept[IllegalArgumentException] {
@@ -145,7 +145,7 @@ class RFormulaSuite extends SparkFunSuite with MLlibTestSparkContext with Defaul
     assert(result.collect() === expected.collect())
   }
 
-  test("Force to index label") {
+  test("force to index label even it is numeric type") {
     val formula = new RFormula().setFormula("id ~ a + b").setIndexLabel(true)
     val original = spark.createDataFrame(
       Seq((1.0, "foo", 4), (1.0, "bar", 4), (0.0, "bar", 5), (1.0, "baz", 5))

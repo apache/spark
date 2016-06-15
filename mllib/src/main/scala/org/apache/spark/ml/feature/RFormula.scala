@@ -105,18 +105,23 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   def setLabelCol(value: String): this.type = set(labelCol, value)
 
   /**
-   * Force to index label whether it is numeric or string.
-   * For classification algorithms, we force to index label by setting it with true.
+   * Force to index label whether it is numeric or string type.
+   * Usually we index label only when it is string type.
+   * If the formula was used by classification algorithms,
+   * we can force to index label even it is numeric type by setting this param with true.
    * Default: false.
    */
+  @Since("2.0.0")
   val indexLabel: BooleanParam = new BooleanParam(this, "indexLabel",
     "Force to index label whether it is numeric or string")
   setDefault(indexLabel -> false)
 
   /** @group getParam */
+  @Since("2.0.0")
   def getIndexLabel: Boolean = $(indexLabel)
 
   /** @group setParam */
+  @Since("2.0.0")
   def setIndexLabel(value: Boolean): this.type = set(indexLabel, value)
 
   /** Whether the formula specifies fitting an intercept. */
@@ -197,7 +202,7 @@ class RFormula @Since("1.5.0") (@Since("1.5.0") override val uid: String)
   // optimistic schema; does not contain any ML attributes
   override def transformSchema(schema: StructType): StructType = {
     require(!hasLabelCol(schema) || !$(indexLabel),
-      "If label column already exists, indexLabel can not be set as true.")
+      "If label column already exists, indexLabel can not be set with true.")
     if (hasLabelCol(schema)) {
       StructType(schema.fields :+ StructField($(featuresCol), new VectorUDT, true))
     } else {
