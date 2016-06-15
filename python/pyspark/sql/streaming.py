@@ -39,8 +39,8 @@ class StreamingQuery(object):
     .. versionadded:: 2.0
     """
 
-    def __init__(self, jcq):
-        self._jcq = jcq
+    def __init__(self, jsq):
+        self._jsq = jsq
 
     @property
     @since(2.0)
@@ -48,21 +48,21 @@ class StreamingQuery(object):
         """The id of the streaming query. This id is unique across all queries that have been
         started in the current process.
         """
-        return self._jcq.id()
+        return self._jsq.id()
 
     @property
     @since(2.0)
     def name(self):
         """The name of the streaming query. This name is unique across all active queries.
         """
-        return self._jcq.name()
+        return self._jsq.name()
 
     @property
     @since(2.0)
     def isActive(self):
         """Whether this streaming query is currently active or not.
         """
-        return self._jcq.isActive()
+        return self._jsq.isActive()
 
     @since(2.0)
     def awaitTermination(self, timeout=None):
@@ -80,9 +80,9 @@ class StreamingQuery(object):
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout < 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
-            return self._jcq.awaitTermination(int(timeout * 1000))
+            return self._jsq.awaitTermination(int(timeout * 1000))
         else:
-            return self._jcq.awaitTermination()
+            return self._jsq.awaitTermination()
 
     @since(2.0)
     def processAllAvailable(self):
@@ -92,13 +92,13 @@ class StreamingQuery(object):
         until data that has been synchronously appended data to a stream source prior to invocation.
         (i.e. `getOffset` must immediately reflect the addition).
         """
-        return self._jcq.processAllAvailable()
+        return self._jsq.processAllAvailable()
 
     @since(2.0)
     def stop(self):
         """Stop this streaming query.
         """
-        self._jcq.stop()
+        self._jsq.stop()
 
 
 class StreamingQueryManager(object):
@@ -109,8 +109,8 @@ class StreamingQueryManager(object):
     .. versionadded:: 2.0
     """
 
-    def __init__(self, jcqm):
-        self._jcqm = jcqm
+    def __init__(self, jsqm):
+        self._jsqm = jsqm
 
     @property
     @ignore_unicode_prefix
@@ -119,13 +119,13 @@ class StreamingQueryManager(object):
         """Returns a list of active queries associated with this SQLContext
 
         >>> sq = df.writeStream.format('memory').queryName('this_query').start()
-        >>> cqm = spark.streams
+        >>> sqm = spark.streams
         >>> # get the list of active streaming queries
-        >>> [q.name for q in cqm.active]
+        >>> [q.name for q in sqm.active]
         [u'this_query']
         >>> sq.stop()
         """
-        return [StreamingQuery(jcq) for jcq in self._jcqm.active()]
+        return [StreamingQuery(jsq) for jsq in self._jsqm.active()]
 
     @ignore_unicode_prefix
     @since(2.0)
@@ -146,7 +146,7 @@ class StreamingQueryManager(object):
         """
         if not isinstance(id, intlike):
             raise ValueError("The id for the query must be an integer. Got: %d" % id)
-        return StreamingQuery(self._jcqm.get(id))
+        return StreamingQuery(self._jsqm.get(id))
 
     @since(2.0)
     def awaitAnyTermination(self, timeout=None):
@@ -172,9 +172,9 @@ class StreamingQueryManager(object):
         if timeout is not None:
             if not isinstance(timeout, (int, float)) or timeout < 0:
                 raise ValueError("timeout must be a positive integer or float. Got %s" % timeout)
-            return self._jcqm.awaitAnyTermination(int(timeout * 1000))
+            return self._jsqm.awaitAnyTermination(int(timeout * 1000))
         else:
-            return self._jcqm.awaitAnyTermination()
+            return self._jsqm.awaitAnyTermination()
 
     @since(2.0)
     def resetTerminated(self):
@@ -183,7 +183,7 @@ class StreamingQueryManager(object):
 
         >>> spark.streams.resetTerminated()
         """
-        self._jcqm.resetTerminated()
+        self._jsqm.resetTerminated()
 
 
 class Trigger(object):

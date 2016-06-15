@@ -434,13 +434,13 @@ class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
       .format("org.apache.spark.sql.streaming.test")
       .load()
 
-    val cq = df.writeStream
+    val sq = df.writeStream
       .format("console")
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime(2.seconds))
       .start()
 
-    cq.awaitTermination(2000L)
+    sq.awaitTermination(2000L)
   }
 
   test("prevent all column partitioning") {

@@ -458,9 +458,9 @@ class DataFrameWriter(object):
         self._spark = df.sql_ctx
         self._jwrite = df._jdf.write()
 
-    def _cq(self, jcq):
+    def _sq(self, jsq):
         from pyspark.sql.streaming import StreamingQuery
-        return StreamingQuery(jcq)
+        return StreamingQuery(jsq)
 
     @since(1.4)
     def mode(self, saveMode):
@@ -1094,9 +1094,9 @@ class DataStreamWriter(object):
         self._spark = df.sql_ctx
         self._jwrite = df._jdf.writeStream()
 
-    def _cq(self, jcq):
+    def _sq(self, jsq):
         from pyspark.sql.streaming import StreamingQuery
-        return StreamingQuery(jcq)
+        return StreamingQuery(jsq)
 
     @since(2.0)
     def outputMode(self, outputMode):
@@ -1232,21 +1232,21 @@ class DataStreamWriter(object):
         :param options: All other string options. You may want to provide a `checkpointLocation`
             for most streams, however it is not required for a `memory` stream.
 
-        >>> cq = sdf.writeStream.format('memory').queryName('this_query').start()
-        >>> cq.isActive
+        >>> sq = sdf.writeStream.format('memory').queryName('this_query').start()
+        >>> sq.isActive
         True
-        >>> cq.name
+        >>> sq.name
         u'this_query'
-        >>> cq.stop()
-        >>> cq.isActive
+        >>> sq.stop()
+        >>> sq.isActive
         False
-        >>> cq = sdf.writeStream.trigger(processingTime='5 seconds').start(
+        >>> sq = sdf.writeStream.trigger(processingTime='5 seconds').start(
         ...     queryName='that_query', format='memory')
-        >>> cq.name
+        >>> sq.name
         u'that_query'
-        >>> cq.isActive
+        >>> sq.isActive
         True
-        >>> cq.stop()
+        >>> sq.stop()
         """
         self.options(**options)
         if partitionBy is not None:
@@ -1256,9 +1256,9 @@ class DataStreamWriter(object):
         if queryName is not None:
             self.queryName(queryName)
         if path is None:
-            return self._cq(self._jwrite.start())
+            return self._sq(self._jwrite.start())
         else:
-            return self._cq(self._jwrite.start(path))
+            return self._sq(self._jwrite.start(path))
 
 
 def _test():
