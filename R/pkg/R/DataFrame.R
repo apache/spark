@@ -2655,7 +2655,7 @@ setMethod("drop",
             base::drop(x)
           })
 
-#' Histogram
+#' Compute histogram statistics for given column
 #'
 #' This function computes a histogram for a given SparkR Column.
 #'

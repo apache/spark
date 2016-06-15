@@ -201,7 +201,7 @@ print.summary.GeneralizedLinearRegressionModel <- function(x, ...) {
   invisible(x)
   }
 
-#' predict
+#' Predicted values based on model
 #'
 #' Makes predictions from a generalized linear model produced by glm() or spark.glm(),
 #' similarly to R's predict().
@@ -222,7 +222,7 @@ setMethod("predict", signature(object = "GeneralizedLinearRegressionModel"),
             return(dataFrame(callJMethod(object@jobj, "transform", newData@sdf)))
           })
 
-#' predict
+#' Predicted values based on model
 #'
 #' Makes predictions from a naive Bayes model or a model produced by spark.naiveBayes(),
 #' similarly to R package e1071's predict.
@@ -361,7 +361,7 @@ setMethod("summary", signature(object = "KMeansModel"),
                    cluster = cluster, is.loaded = is.loaded))
           })
 
-#' predict
+#' Predicted values based on model
 #'
 #' Makes predictions from a k-means model or a model produced by spark.kmeans().
 #'
@@ -406,6 +406,8 @@ setMethod("spark.naiveBayes", signature(data = "SparkDataFrame", formula = "form
         return(new("NaiveBayesModel", jobj = jobj))
     })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the Bernoulli naive Bayes model to the input path.
 #'
 #' @param object A fitted Bernoulli naive Bayes model
@@ -432,6 +434,8 @@ setMethod("write.ml", signature(object = "NaiveBayesModel", path = "character"),
             invisible(callJMethod(writer, "save", path))
           })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the AFT survival regression model to the input path.
 #'
 #' @param object A fitted AFT survival regression model
@@ -457,6 +461,8 @@ setMethod("write.ml", signature(object = "AFTSurvivalRegressionModel", path = "c
             invisible(callJMethod(writer, "save", path))
           })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the generalized linear model to the input path.
 #'
 #' @param object A fitted generalized linear model
@@ -482,6 +488,8 @@ setMethod("write.ml", signature(object = "GeneralizedLinearRegressionModel", pat
             invisible(callJMethod(writer, "save", path))
           })
 
+#' Save fitted MLlib model to the input path
+#'
 #' Save the k-means model to the input path.
 #'
 #' @param object A fitted k-means model
@@ -586,7 +594,7 @@ setMethod("summary", signature(object = "AFTSurvivalRegressionModel"),
             return(list(coefficients = coefficients))
           })
 
-#' predict
+#' Predicted values based on model
 #'
 #' Makes predictions from an AFT survival regression model or a model produced by spark.survreg(),
 #' similarly to R package survival's predict.
