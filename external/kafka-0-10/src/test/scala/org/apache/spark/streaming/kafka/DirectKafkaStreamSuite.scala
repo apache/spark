@@ -319,14 +319,15 @@ class DirectKafkaStreamSuite
       ssc.graph.getInputStreams().head.asInstanceOf[DStream[ConsumerRecord[String, String]]]
 
     // Verify offset ranges have been recovered
-    val recoveredOffsetRanges = getOffsetRanges(recoveredStream)
+    val recoveredOffsetRanges = getOffsetRanges(recoveredStream).map { x => (x._1, x._2.toSet) }
     assert(recoveredOffsetRanges.size > 0, "No offset ranges recovered")
-    val earlierOffsetRangesAsSets = offsetRangesBeforeStop.map { x => (x._1, x._2.toSet) }
+    val earlierOffsetRanges = offsetRangesBeforeStop.map { x => (x._1, x._2.toSet) }
     assert(
       recoveredOffsetRanges.forall { or =>
-        earlierOffsetRangesAsSets.contains((or._1, or._2.toSet))
+        earlierOffsetRanges.contains((or._1, or._2))
       },
-      "Recovered ranges are not the same as the ones generated"
+      "Recovered ranges are not the same as the ones generated\n" +
+        earlierOffsetRanges + "\n" + recoveredOffsetRanges
     )
     // Restart context, give more data and verify the total at the end
     // If the total is write that means each records has been received only once
