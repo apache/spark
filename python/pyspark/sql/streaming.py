@@ -1,4 +1,4 @@
-#
+git ad#
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
 # this work for additional information regarding copyright ownership.
@@ -145,7 +145,7 @@ class StreamingQueryManager(object):
         >>> sq.stop()
         """
         if not isinstance(id, intlike):
-            raise ValueError("The id for the query must be an integer. Got: %d" % id)
+            raise ValueError("The id for the query must be an integer. Got: %s" % id)
         return StreamingQuery(self._jsqm.get(id))
 
     @since(2.0)
