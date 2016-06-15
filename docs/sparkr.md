@@ -304,7 +304,11 @@ It produces the similar result compared with R summary function.
 
 Model persistence is supported for all Machine Learning algorithms for all families.
 
-The examples below show the use of building glm with Gaussian family,glm with Binomial family, survreg, naiveBayes, kmeans models using SparkR
+The examples below show how to build several models:
+* GLM using the Gaussian and Binomial model families
+* AFT survival regression model
+* Naive Bayes model
+* K-Means model
 
 {% include_example r/ml.R %}
 
