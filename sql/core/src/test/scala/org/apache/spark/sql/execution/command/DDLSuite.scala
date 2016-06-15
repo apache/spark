@@ -708,11 +708,11 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
   }
 
   test("show databases") {
-    sql("CREATE DATABASE showdb1A")
     sql("CREATE DATABASE showdb2B")
+    sql("CREATE DATABASE showdb1A")
 
-    assert(
-      sql("SHOW DATABASES").count() >= 2)
+    // check the result as well as its order
+    checkDataset(sql("SHOW DATABASES"), Row("default"), Row("showdb1a"), Row("showdb2b"))
 
     checkAnswer(
       sql("SHOW DATABASES LIKE '*db1A'"),

@@ -178,7 +178,7 @@ class InMemoryCatalog(hadoopConfig: Configuration = new Configuration) extends E
   }
 
   override def listDatabases(): Seq[String] = synchronized {
-    catalog.keySet.toSeq
+    catalog.keySet.toSeq.sorted
   }
 
   override def listDatabases(pattern: String): Seq[String] = synchronized {
