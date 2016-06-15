@@ -266,7 +266,8 @@ class SparkContext(object):
 
         cls.__ensure_callback_server()
 
-    def __ensure_callback_server(self):
+    @classmethod
+    def __ensure_callback_server(cls):
         gw = SparkContext._gateway
 
         # start callback server
