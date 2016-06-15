@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.optimizer.CombineUnions
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.usePrettyExpression
-import org.apache.spark.sql.execution.{FileRelation, LogicalRDD, QueryExecution, SQLExecution}
+import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.{CreateTableUsingAsSelect, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.json.JacksonGenerator
@@ -2292,6 +2292,19 @@ class Dataset[T] private[sql](
    * @since 1.6.0
    */
   def cache(): this.type = persist()
+
+  /**
+   * Get the Dataset's current storage level, or StorageLevel.NONE if not persisted.
+   *
+   * @group basic
+   * @since 2.0.0
+   */
+  def getStorageLevel(): StorageLevel = {
+    sparkSession.sharedState.cacheManager.lookupCachedData(this).map {
+      case CachedData(_, relation) =>
+        relation.storageLevel
+    }.getOrElse(StorageLevel.NONE)
+  }
 
   /**
    * Persist this Dataset with the given storage level.
