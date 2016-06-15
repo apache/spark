@@ -30,6 +30,7 @@ import org.apache.spark.mllib.util.{LocalClusterSparkContext, MLlibTestSparkCont
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.util.Utils
 
+
 object NaiveBayesSuite {
 
   import NaiveBayes.{Multinomial, Bernoulli}
@@ -103,24 +104,37 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
   def validateModelFit(
       piData: Array[Double],
       thetaData: Array[Array[Double]],
-      model: NaiveBayesModel): Unit = {
+      model: NaiveBayesModel,
+      complementary: Boolean = false): Unit = {
+    val _pi = piData.map(math.exp)
+    val _modelPi = model.pi.map(math.exp)
+    val _theta = thetaData.map(row => row.map(math.exp))
+    val _modelTheta = model.theta.map(row => row.map(math.exp))
+    val _posteriorTheta = _pi.zip(_theta).map((r) => r._2.map(_ * r._1))
+    val _totalForEachPosteriorFeature = _posteriorTheta.transpose.map(_.sum)
     val modelIndex = piData.indices.zip(model.labels.map(_.toInt))
     try {
       for (i <- modelIndex) {
-        assert(math.exp(piData(i._2)) ~== math.exp(model.pi(i._1)) absTol 0.05)
+        assert(_pi(i._2) ~== _modelPi(i._1) absTol 0.05)
         for (j <- thetaData(i._2).indices) {
-          assert(math.exp(thetaData(i._2)(j)) ~== math.exp(model.theta(i._1)(j)) absTol 0.05)
+          if (complementary) {
+            assert(((_totalForEachPosteriorFeature(j) - _posteriorTheta(i._2)(j)) /
+              (_totalForEachPosteriorFeature.sum - _posteriorTheta(i._2).sum)) ~==
+              (1.0 / _modelTheta(i._1)(j)) absTol 0.05)
+          } else {
+            assert(_theta(i._2)(j) ~== _modelTheta(i._1)(j) absTol 0.05)
+          }
         }
       }
     } catch {
       case e: TestFailedException =>
         def arr2str(a: Array[Double]): String = a.mkString("[", ", ", "]")
         def msg(orig: String): String = orig + "\nvalidateModelFit:\n" +
-          " piData: " + arr2str(piData) + "\n" +
-          " thetaData: " + thetaData.map(arr2str).mkString("\n") + "\n" +
+          " piData: " + arr2str(_pi) + "\n" +
+          " thetaData: " + _theta.map(arr2str).mkString("\n") + "\n" +
           " model.labels: " + arr2str(model.labels) + "\n" +
-          " model.pi: " + arr2str(model.pi) + "\n" +
-          " model.theta: " + model.theta.map(arr2str).mkString("\n")
+          " model.pi: " + arr2str(_modelPi) + "\n" +
+          " model.theta: " + _modelTheta.map(arr2str).mkString("\n")
         throw e.modifyMessage(_.map(msg))
     }
   }
@@ -130,12 +144,26 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
     assert(Bernoulli === "bernoulli")
   }
 
+  test("Bernoulli Naive Bayes doesn't support complementary mode") {
+    val nb = new NaiveBayes()
+    nb.setModelType("bernoulli")
+    intercept[IllegalArgumentException] {
+      nb.setComplementary(true)
+    }
+    val rdd = sc.emptyRDD[LabeledPoint]
+    intercept[IllegalArgumentException] {
+      NaiveBayes.train(rdd, 0, "bernoulli", true)
+    }
+  }
+
   test("get, set params") {
     val nb = new NaiveBayes()
     nb.setLambda(2.0)
     assert(nb.getLambda === 2.0)
     nb.setLambda(3.0)
     assert(nb.getLambda === 3.0)
+    nb.setComplementary(true)
+    assert(nb.getComplementary === true)
   }
 
   test("Naive Bayes Multinomial") {
@@ -153,6 +181,41 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val model = NaiveBayes.train(testRDD, 1.0, Multinomial)
     validateModelFit(pi, theta, model)
+
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(
+      pi, theta, nPoints, 17, Multinomial)
+    val validationRDD = sc.parallelize(validationData, 2)
+
+    // Test prediction on RDD.
+    validatePrediction(model.predict(validationRDD.map(_.features)).collect(), validationData)
+
+    // Test prediction on Array.
+    validatePrediction(validationData.map(row => model.predict(row.features)), validationData)
+
+    // Test posteriors
+    validationData.map(_.features).foreach { features =>
+      val predicted = model.predictProbabilities(features).toArray
+      assert(predicted.sum ~== 1.0 relTol 1.0e-10)
+      val expected = expectedMultinomialProbabilities(model, features)
+      expected.zip(predicted).foreach { case (e, p) => assert(e ~== p relTol 1.0e-10) }
+    }
+  }
+
+  test("Complementary Naive Bayes Multinomial") {
+    val nPoints = 1000
+    val pi = Array(0.5, 0.1, 0.4).map(math.log)
+    val theta = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42, Multinomial)
+    val testRDD = sc.parallelize(testData, 2)
+    testRDD.cache()
+
+    val model = NaiveBayes.train(testRDD, 1.0, Multinomial, true)
+    validateModelFit(pi, theta, model, true)
 
     val validationData = NaiveBayesSuite.generateNaiveBayesInput(
       pi, theta, nPoints, 17, Multinomial)

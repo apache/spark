@@ -62,10 +62,32 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
   def validateModelFit(
       piData: Vector,
       thetaData: Matrix,
-      model: NaiveBayesModel): Unit = {
+      model: NaiveBayesModel,
+      complementary: Boolean = false): Unit = {
     assert(Vectors.dense(model.pi.toArray.map(math.exp)) ~==
       Vectors.dense(piData.toArray.map(math.exp)) absTol 0.05, "pi mismatch")
-    assert(model.theta.map(math.exp) ~== thetaData.map(math.exp) absTol 0.05, "theta mismatch")
+    if (complementary) {
+      val _pi = piData.toArray.map(math.exp)
+      val _theta = Array.tabulate(
+        thetaData.numRows, thetaData.numCols)(
+        (i, j) => thetaData(i, j)).map(row => row.map(math.exp))
+      val _posteriorTheta = _pi.zip(_theta).map((r) => r._2.map(_ * r._1))
+      val totalForEachFeature = _posteriorTheta.transpose.map(_.sum)
+      val complementaryTheta = Array.fill(thetaData.numRows, thetaData.numCols)(0d)
+        for (i <- _theta.indices) {
+        for (j <- _theta(i).indices) {
+          complementaryTheta(i)(j) = -1 *
+            math.log((totalForEachFeature(j) - _posteriorTheta(i)(j)) /
+            (totalForEachFeature.sum - _posteriorTheta(i).sum))
+        }
+      }
+      val complementaryThetaMatrix =
+        new DenseMatrix(thetaData.numRows, thetaData.numCols, complementaryTheta.flatten, true)
+      assert(model.theta ~==
+        complementaryThetaMatrix.asInstanceOf[Matrix] absTol 0.5, "theta mismatch")
+    } else {
+      assert(model.theta.map(math.exp) ~== thetaData.map(math.exp) absTol 0.05, "theta mismatch")
+    }
   }
 
   def expectedMultinomialProbabilities(model: NaiveBayesModel, feature: Vector): Vector = {
@@ -137,6 +159,36 @@ class NaiveBayesSuite extends SparkFunSuite with MLlibTestSparkContext with Defa
     val model = nb.fit(testDataset)
 
     validateModelFit(pi, theta, model)
+    assert(model.hasParent)
+
+    val validationDataset = spark.createDataFrame(generateNaiveBayesInput(
+      piArray, thetaArray, nPoints, 17, "multinomial"))
+
+    val predictionAndLabels = model.transform(validationDataset).select("prediction", "label")
+    validatePrediction(predictionAndLabels)
+
+    val featureAndProbabilities = model.transform(validationDataset)
+      .select("features", "probability")
+    validateProbabilities(featureAndProbabilities, model, "multinomial")
+  }
+
+  test("Complementary Naive Bayes Multinomial") {
+    val nPoints = 1000
+    val piArray = Array(0.5, 0.1, 0.4).map(math.log)
+    val thetaArray = Array(
+      Array(0.70, 0.10, 0.10, 0.10), // label 0
+      Array(0.10, 0.70, 0.10, 0.10), // label 1
+      Array(0.10, 0.10, 0.70, 0.10)  // label 2
+    ).map(_.map(math.log))
+    val pi = Vectors.dense(piArray)
+    val theta = new DenseMatrix(3, 4, thetaArray.flatten, true)
+
+    val testDataset = spark.createDataFrame(generateNaiveBayesInput(
+      piArray, thetaArray, nPoints, 42, "multinomial"))
+    val nb = new NaiveBayes().setSmoothing(1.0).setModelType("multinomial").setComplementary(true)
+    val model = nb.fit(testDataset)
+
+    validateModelFit(pi, theta, model, true)
     assert(model.hasParent)
 
     val validationDataset = spark.createDataFrame(generateNaiveBayesInput(
