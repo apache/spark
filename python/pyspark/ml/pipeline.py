@@ -18,8 +18,8 @@
 from pyspark import SparkContext
 from pyspark import keyword_only, since
 from pyspark.ml.param import Param, Params
-from pyspark.ml.util import MLReadable, MLWritable
-from pyspark.ml.wrapper import JavaEstimator, JavaModel
+from pyspark.ml.util import MLReadable, MLWritable, TransformerWrapper
+from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.mllib.common import inherit_doc, _py2java, _java2py
 
 
@@ -32,11 +32,21 @@ class PipelineWrapper(object):
     def _transfer_stages_to_java(self, py_stages):
         """
         Transforms the parameter of Python stages to a list of Java stages.
+        For pure Python stage, we use its Java wrapper as proxy.
         """
 
+        sc = SparkContext._active_spark_context
+        sql_ctx = SQLContext.getOrCreate(sc)
         def __transfer_stage_to_java(py_stage):
-            py_stage._transfer_params_to_java()
-            return py_stage._java_obj
+            if isinstance(py_stage, JavaWrapper):
+                py_stage._transfer_params_to_java()
+                return py_stage._java_obj
+            else:
+                wrapper = TransformerWrapper(sql_ctx, py_stage)
+                jtransformer =\
+                    sc._jvm.org.apache.spark.ml.api.python.\
+                        PythonTransformer(wrapper, wrapper.getUid())
+                return jtransformer
 
         return [__transfer_stage_to_java(stage) for stage in py_stages]
 
