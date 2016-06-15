@@ -259,4 +259,15 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
 
     spark.catalog.dropTempView("oneToTen")
   }
+
+  test("SPARK-15824 - Execute an INSERT wrapped in a WITH statement immediately") {
+    withTable("target") {
+      sql("CREATE TABLE target(a INT, b STRING) USING JSON")
+      sql("WITH tbl AS (SELECT 1, 'a') INSERT OVERWRITE TABLE target SELECT a, b FROM jt")
+      checkAnswer(
+        sql("SELECT a, b FROM target"),
+        (1 to 10).map(i => Row(i, s"str$i"))
+      )
+    }
+  }
 }
