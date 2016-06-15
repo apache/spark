@@ -19,21 +19,26 @@ context("test functions in sparkR.R")
 
 test_that("Check masked functions", {
   # Check that we are not masking any new function from base, stats, testthat unexpectedly
+  # NOTE: We should avoid adding entries to *namesOfMaskedCompletely* as masked functions make it
+  # hard for users to use base R functions. Please check when in doubt.
+  namesOfMaskedCompletely <- c("cov", "filter", "sample")
+  namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
+                     "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
+                     "summary", "transform", "drop", "window", "as.data.frame")
+  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+    namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
+  }
   masked <- conflicts(detail = TRUE)$`package:SparkR`
   expect_true("describe" %in% masked)  # only when with testthat..
   func <- lapply(masked, function(x) { capture.output(showMethods(x))[[1]] })
   funcSparkROrEmpty <- grepl("\\(package SparkR\\)$|^$", func)
   maskedBySparkR <- masked[funcSparkROrEmpty]
-  namesOfMasked <- c("describe", "cov", "filter", "lag", "na.omit", "predict", "sd", "var",
-                     "colnames", "colnames<-", "intersect", "rank", "rbind", "sample", "subset",
-                     "summary", "transform", "drop", "window", "as.data.frame")
-  namesOfMaskedCompletely <- c("cov", "filter", "sample")
-  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
-    namesOfMasked <- c("endsWith", "startsWith", namesOfMasked)
-    namesOfMaskedCompletely <- c("endsWith", "startsWith", namesOfMaskedCompletely)
-  }
   expect_equal(length(maskedBySparkR), length(namesOfMasked))
-  expect_equal(sort(maskedBySparkR), sort(namesOfMasked))
+  # make the 2 lists the same length so expect_equal will print their content
+  l <- max(length(maskedBySparkR), length(namesOfMasked))
+  length(maskedBySparkR) <- l
+  length(namesOfMasked) <- l
+  expect_equal(sort(maskedBySparkR, na.last = TRUE), sort(namesOfMasked, na.last = TRUE))
   # above are those reported as masked when `library(SparkR)`
   # note that many of these methods are still callable without base:: or stats:: prefix
   # there should be a test for each of these, except followings, which are currently "broken"
@@ -42,7 +47,11 @@ test_that("Check masked functions", {
                                       }))
   maskedCompletely <- masked[!funcHasAny]
   expect_equal(length(maskedCompletely), length(namesOfMaskedCompletely))
-  expect_equal(sort(maskedCompletely), sort(namesOfMaskedCompletely))
+  l <- max(length(maskedCompletely), length(namesOfMaskedCompletely))
+  length(maskedCompletely) <- l
+  length(namesOfMaskedCompletely) <- l
+  expect_equal(sort(maskedCompletely, na.last = TRUE),
+               sort(namesOfMaskedCompletely, na.last = TRUE))
 })
 
 test_that("repeatedly starting and stopping SparkR", {
