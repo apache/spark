@@ -1204,6 +1204,21 @@ class DDLSuite extends QueryTest with SharedSQLContext with BeforeAndAfterEach {
     )
   }
 
+  test("create datasource table with in-memory catalog") {
+    assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
+    val tabName = "t1"
+    withTable(tabName) {
+      // create a datasource table that seems to be hive compatible
+      // but it is created as SparkSQL specific CatalogTable object and stored
+      // in InMemoryCatalog
+      sql(s"CREATE TABLE $tabName (c1 INT) USING PARQUET")
+      val catalogTable =
+        spark.sessionState.catalog.getTableMetadata(TableIdentifier(tabName, Some("default")))
+      // SparkSQL specific CatalogTable object does not have locationUri populated
+      assert(!catalogTable.storage.locationUri.isEmpty)
+    }
+  }
+
   test("select/insert into the managed table") {
     assume(spark.sparkContext.conf.get(CATALOG_IMPLEMENTATION) == "in-memory")
     val tabName = "tbl"

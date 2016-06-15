@@ -23,6 +23,7 @@ import scala.collection.mutable
 import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.config._
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
@@ -417,83 +418,92 @@ object CreateDataSourceTableUtils extends Logging {
     }
 
     // TODO: Support persisting partitioned data source relations in Hive compatible format
-    val qualifiedTableName = tableIdent.quotedString
-    val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
-    val resolvedRelation = dataSource.resolveRelation(checkPathExist = false)
-    val (hiveCompatibleTable, logMessage) = (maybeSerDe, resolvedRelation) match {
-      case _ if skipHiveMetadata =>
-        val message =
-          s"Persisting partitioned data source relation $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
-        (None, message)
 
-      case (Some(serde), relation: HadoopFsRelation) if relation.location.paths.length == 1 &&
-        relation.partitionSchema.isEmpty && relation.bucketSpec.isEmpty =>
-        val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
-        val message =
-          s"Persisting data source relation $qualifiedTableName with a single input path " +
-            s"into Hive metastore in Hive compatible format. Input path: " +
-            s"${relation.location.paths.head}."
-        (Some(hiveTable), message)
+    // For In-Memory catalog case, we don't need to find out whether the data source table
+    // is hive compatible or not.
+    if (sparkSession.sessionState.conf.getConfString(CATALOG_IMPLEMENTATION.key, "hive") ==
+      "hive") {
+      val qualifiedTableName = tableIdent.quotedString
+      val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
+      val resolvedRelation = dataSource.resolveRelation(checkPathExist = false)
+      val (hiveCompatibleTable, logMessage) = (maybeSerDe, resolvedRelation) match {
+        case _ if skipHiveMetadata =>
+          val message =
+            s"Persisting partitioned data source relation $qualifiedTableName into " +
+              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
+          (None, message)
 
-      case (Some(serde), relation: HadoopFsRelation) if relation.partitionSchema.nonEmpty =>
-        val message =
-          s"Persisting partitioned data source relation $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-            "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
-        (None, message)
+        case (Some(serde), relation: HadoopFsRelation) if relation.location.paths.length == 1 &&
+          relation.partitionSchema.isEmpty && relation.bucketSpec.isEmpty =>
+          val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
+          val message =
+            s"Persisting data source relation $qualifiedTableName with a single input path " +
+              s"into Hive metastore in Hive compatible format. Input path: " +
+              s"${relation.location.paths.head}."
+          (Some(hiveTable), message)
 
-      case (Some(serde), relation: HadoopFsRelation) if relation.bucketSpec.nonEmpty =>
-        val message =
-          s"Persisting bucketed data source relation $qualifiedTableName into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-            "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
-        (None, message)
+        case (Some(serde), relation: HadoopFsRelation) if relation.partitionSchema.nonEmpty =>
+          val message =
+            s"Persisting partitioned data source relation $qualifiedTableName into " +
+              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+              "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
+          (None, message)
 
-      case (Some(serde), relation: HadoopFsRelation) =>
-        val message =
-          s"Persisting data source relation $qualifiedTableName with multiple input paths into " +
-            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
-            s"Input paths: " + relation.location.paths.mkString("\n", "\n", "")
-        (None, message)
+        case (Some(serde), relation: HadoopFsRelation) if relation.bucketSpec.nonEmpty =>
+          val message =
+            s"Persisting bucketed data source relation $qualifiedTableName into " +
+              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+              "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
+          (None, message)
 
-      case (Some(serde), _) =>
-        val message =
-          s"Data source relation $qualifiedTableName is not a " +
-            s"${classOf[HadoopFsRelation].getSimpleName}. Persisting it into Hive metastore " +
-            "in Spark SQL specific format, which is NOT compatible with Hive."
-        (None, message)
+        case (Some(serde), relation: HadoopFsRelation) =>
+          val message =
+            s"Persisting data source relation $qualifiedTableName with multiple input paths into " +
+              "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+              s"Input paths: " + relation.location.paths.mkString("\n", "\n", "")
+          (None, message)
 
-      case _ =>
-        val message =
-          s"Couldn't find corresponding Hive SerDe for data source provider $provider. " +
-            s"Persisting data source relation $qualifiedTableName into Hive metastore in " +
-            s"Spark SQL specific format, which is NOT compatible with Hive."
-        (None, message)
-    }
+        case (Some(serde), _) =>
+          val message =
+            s"Data source relation $qualifiedTableName is not a " +
+              s"${classOf[HadoopFsRelation].getSimpleName}. Persisting it into Hive metastore " +
+              "in Spark SQL specific format, which is NOT compatible with Hive."
+          (None, message)
 
-    (hiveCompatibleTable, logMessage) match {
-      case (Some(table), message) =>
-        // We first try to save the metadata of the table in a Hive compatible way.
-        // If Hive throws an error, we fall back to save its metadata in the Spark SQL
-        // specific way.
-        try {
-          logInfo(message)
-          sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
-        } catch {
-          case NonFatal(e) =>
-            val warningMessage =
-              s"Could not persist $qualifiedTableName in a Hive compatible way. Persisting " +
-                s"it into Hive metastore in Spark SQL specific format."
-            logWarning(warningMessage, e)
-            val table = newSparkSQLSpecificMetastoreTable()
+        case _ =>
+          val message =
+            s"Couldn't find corresponding Hive SerDe for data source provider $provider. " +
+              s"Persisting data source relation $qualifiedTableName into Hive metastore in " +
+              s"Spark SQL specific format, which is NOT compatible with Hive."
+          (None, message)
+      }
+
+      (hiveCompatibleTable, logMessage) match {
+        case (Some(table), message) =>
+          // We first try to save the metadata of the table in a Hive compatible way.
+          // If Hive throws an error, we fall back to save its metadata in the Spark SQL
+          // specific way.
+          try {
+            logInfo(message)
             sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
-        }
+          } catch {
+            case NonFatal(e) =>
+              val warningMessage =
+                s"Could not persist $qualifiedTableName in a Hive compatible way. Persisting " +
+                  s"it into Hive metastore in Spark SQL specific format."
+              logWarning(warningMessage, e)
+              val table = newSparkSQLSpecificMetastoreTable()
+              sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
+          }
 
-      case (None, message) =>
-        logWarning(message)
-        val table = newSparkSQLSpecificMetastoreTable()
-        sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
+        case (None, message) =>
+          logWarning(message)
+          val table = newSparkSQLSpecificMetastoreTable()
+          sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
+      }
+    } else {
+      val table = newSparkSQLSpecificMetastoreTable()
+      sparkSession.sessionState.catalog.createTable(table, ignoreIfExists = false)
     }
   }
 }
