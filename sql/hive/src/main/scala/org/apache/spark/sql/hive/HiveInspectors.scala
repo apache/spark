@@ -239,20 +239,6 @@ private[hive] trait HiveInspectors {
   }
 
   /**
-   * Converts hive types to native catalyst types.
-   * @param data the data in Hive type
-   * @param oi   the ObjectInspector associated with the Hive Type
-   * @return     convert the data into catalyst type
-   *
-   * Use unwrapperFor's (data => Any) instead for performance consideration.
-   */
-  def unwrap(data: Any, oi: ObjectInspector): Any = {
-    val unwrapper = unwrapperFor(oi)
-    unwrapper(data)
-  }
-
-
-  /**
    * Wraps with Hive types based on object inspector.
    * TODO: Consolidate all hive OI/data interface code.
    */
@@ -354,6 +340,9 @@ private[hive] trait HiveInspectors {
   }
 
   /**
+   * Builds unwrappers ahead of time according to object inspector
+   * types to avoid pattern matching and branching costs per row.
+   *
    * Strictly follows the following order in unwrapping (constant OI has the higher priority):
    * Constant Null object inspector =>
    *   return null
@@ -364,6 +353,10 @@ private[hive] trait HiveInspectors {
    * Extract the java object directly from the object inspector
    *
    * NOTICE: the complex data type requires recursive unwrapping.
+   *
+   * @param objectInspector the ObjectInspector used to create an unwrapper.
+   * @return A function that unwraps data objects.
+   *         Use the overloaded HiveStructField version for in-place updating of a MutableRow.
    */
   def unwrapperFor(objectInspector: ObjectInspector): Any => Any =
     objectInspector match {
@@ -636,6 +629,10 @@ private[hive] trait HiveInspectors {
   /**
    * Builds unwrappers ahead of time according to object inspector
    * types to avoid pattern matching and branching costs per row.
+   *
+   * @param field The HiveStructField to create an unwrapper for.
+   * @return A function that performs in-place updating of a MutableRow.
+   *         Use the overloaded ObjectInspector version for assignments.
    */
   def unwrapperFor(field: HiveStructField): (Any, MutableRow, Int) => Unit =
     field.getFieldObjectInspector match {
