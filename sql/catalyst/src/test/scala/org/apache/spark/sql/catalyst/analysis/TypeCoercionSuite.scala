@@ -205,7 +205,9 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   private def ruleTest(
-      rules: Seq[Rule[LogicalPlan]], initial: Expression, transformed: Expression): Unit = {
+      rules: Seq[Rule[LogicalPlan]],
+      initial: Expression,
+      transformed: Expression): Unit = {
     val testRelation = LocalRelation(AttributeReference("a", IntegerType)())
     val analyzer = new RuleExecutor[LogicalPlan] {
       override val batches = Seq(Batch("Resolution", FixedPoint(3), rules: _*))
@@ -643,11 +645,12 @@ class TypeCoercionSuite extends PlanTest {
   }
 
   test("SPARK-15776 Divide expression's dataType should be casted to Double or Decimal " +
-    "in aggregation function") {
+    "in aggregation function like sum") {
     val rules = Seq(FunctionArgumentConversion, Division)
     // Casts Integer to Double
     ruleTest(rules, sum(Divide(4, 3)), sum(Divide(Cast(4, DoubleType), Cast(3, DoubleType))))
-    // Left expression is Double, right expression is Int
+    // Left expression is Double, right expression is Int. Another rule ImplicitTypeCasts will
+    // cast the right expression to Double.
     ruleTest(rules, sum(Divide(4.0, 3)), sum(Divide(4.0, 3)))
     // Left expression is Int, right expression is Double
     ruleTest(rules, sum(Divide(4, 3.0)), sum(Divide(Cast(4, DoubleType), Cast(3.0, DoubleType))))
@@ -656,13 +659,9 @@ class TypeCoercionSuite extends PlanTest {
       rules,
       sum(Divide(4.0f, 3)),
       sum(Divide(Cast(4.0f, DoubleType), Cast(3, DoubleType))))
-    // Left expression is Decimal, right expression is Int
+    // Left expression is Decimal, right expression is Int. Another rule DecimalPrecision will cast
+    // the right expression to Decimal.
     ruleTest(rules, sum(Divide(Decimal(4.0), 3)), sum(Divide(Decimal(4.0), 3)))
-    // Left expression is Int, right expression is Decimal
-    ruleTest(
-      rules,
-      sum(Divide(4, Decimal(3.0))),
-      sum(Divide(Cast(4, DoubleType), Cast(Decimal(3.0), DoubleType))))
   }
 }
 

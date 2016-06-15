@@ -138,19 +138,6 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
     }
   }
 
-  test("SPARK-15776: Divide report unresolved when children's data type is " +
-    "neither DecimalType nor DoubleType") {
-    assert(!(Divide(Literal(1.toByte), Literal(2.toByte)).resolved))
-    assert(!(Divide(Literal(1.toShort), Literal(2.toShort)).resolved))
-    assert(!(Divide(Literal(1), Literal(2)).resolved))
-    assert(!(Divide(Literal(1L), Literal(2L)).resolved))
-    assert(!(Divide(Literal(1.0f), Literal(2.0f)).resolved))
-
-    // Resolved if children's dataType is DoubleType or DecimalType
-    assert(Divide(Literal(1.0), Literal(2.0)).resolved)
-    assert(Divide(Literal(Decimal(1.0)), Literal(Decimal(2.0))).resolved)
-  }
-
   // By fixing SPARK-15776, Divide's inputType is required to be DoubleType of DecimalType.
   // TODO: in future release, we should add a IntegerDivide to support integral types.
   ignore("/ (Divide) for integral type") {
