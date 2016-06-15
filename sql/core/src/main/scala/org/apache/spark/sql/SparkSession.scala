@@ -574,7 +574,8 @@ class SparkSession private(
   }
 
   /**
-   * Returns a [[DataFrameReader]] that can be used to read data and streams in as a [[DataFrame]].
+   * Returns a [[DataFrameReader]] that can be used to read non-streaming data in as a
+   * [[DataFrame]].
    * {{{
    *   sparkSession.read.parquet("/path/to/file.parquet")
    *   sparkSession.read.schema(schema).json("/path/to/file.json")
@@ -583,6 +584,19 @@ class SparkSession private(
    * @since 2.0.0
    */
   def read: DataFrameReader = new DataFrameReader(self)
+
+  /**
+   * :: Experimental ::
+   * Returns a [[DataStreamReader]] that can be used to read streaming data in as a [[DataFrame]].
+   * {{{
+   *   sparkSession.readStream.parquet("/path/to/directory/of/parquet/files")
+   *   sparkSession.readStream.schema(schema).json("/path/to/directory/of/json/files")
+   * }}}
+   *
+   * @since 2.0.0
+   */
+  @Experimental
+  def readStream: DataStreamReader = new DataStreamReader(self)
 
 
   // scalastyle:off

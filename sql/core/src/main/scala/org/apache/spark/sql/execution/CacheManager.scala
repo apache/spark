@@ -104,22 +104,11 @@ private[sql] class CacheManager extends Logging {
     }
   }
 
-  /** Removes the data for the given [[Dataset]] from the cache */
-  private[sql] def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Unit = writeLock {
-    val planToCache = query.queryExecution.analyzed
-    val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
-    require(dataIndex >= 0, s"Table $query is not cached.")
-    cachedData(dataIndex).cachedRepresentation.cachedColumnBuffers.unpersist(blocking)
-    cachedData.remove(dataIndex)
-  }
-
   /**
-   * Tries to remove the data for the given [[Dataset]] from the cache
-   * if it's cached
+   * Tries to remove the data for the given [[Dataset]] from the cache.
+   * No operation, if it's already uncached.
    */
-  private[sql] def tryUncacheQuery(
-      query: Dataset[_],
-      blocking: Boolean = true): Boolean = writeLock {
+  private[sql] def uncacheQuery(query: Dataset[_], blocking: Boolean = true): Boolean = writeLock {
     val planToCache = query.queryExecution.analyzed
     val dataIndex = cachedData.indexWhere(cd => planToCache.sameResult(cd.plan))
     val found = dataIndex >= 0

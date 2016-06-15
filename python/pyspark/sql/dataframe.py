@@ -33,7 +33,7 @@ from pyspark.storagelevel import StorageLevel
 from pyspark.traceback_utils import SCCallSiteSync
 from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql.column import Column, _to_seq, _to_list, _to_java_column
-from pyspark.sql.readwriter import DataFrameWriter
+from pyspark.sql.readwriter import DataFrameWriter, DataStreamWriter
 from pyspark.sql.types import *
 
 __all__ = ["DataFrame", "DataFrameNaFunctions", "DataFrameStatFunctions"]
@@ -172,11 +172,25 @@ class DataFrame(object):
     @since(1.4)
     def write(self):
         """
-        Interface for saving the content of the :class:`DataFrame` out into external storage.
+        Interface for saving the content of the non-streaming :class:`DataFrame` out into external
+        storage.
 
         :return: :class:`DataFrameWriter`
         """
         return DataFrameWriter(self)
+
+    @property
+    @since(2.0)
+    def writeStream(self):
+        """
+        Interface for saving the content of the streaming :class:`DataFrame` out into external
+        storage.
+
+        .. note:: Experimental.
+
+        :return: :class:`DataStreamWriter`
+        """
+        return DataStreamWriter(self)
 
     @property
     @since(1.3)

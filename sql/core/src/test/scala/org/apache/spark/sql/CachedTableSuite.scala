@@ -186,12 +186,6 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     assertCached(spark.table("testData"), 0)
   }
 
-  test("correct error on uncache of non-cached table") {
-    intercept[IllegalArgumentException] {
-      spark.catalog.uncacheTable("testData")
-    }
-  }
-
   test("SELECT star from cached table") {
     sql("SELECT * FROM testData").createOrReplaceTempView("selectStar")
     spark.catalog.cacheTable("selectStar")
@@ -551,5 +545,16 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
     checkAnswer(
       selectStar,
       Seq(Row(1, "1")))
+  }
+
+  test("SPARK-15915 Logical plans should use canonicalized plan when override sameResult") {
+    val localRelation = Seq(1, 2, 3).toDF()
+    localRelation.createOrReplaceTempView("localRelation")
+
+    spark.catalog.cacheTable("localRelation")
+    assert(
+      localRelation.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i
+      }.size == 1)
   }
 }
