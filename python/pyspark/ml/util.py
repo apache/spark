@@ -276,7 +276,7 @@ class TransformerWrapper(object):
     def transformSchema(self, jschema):
         schema = _parse_datatype_json_string(jschema.json())
         converted = self.transformer.transformSchema(schema)
-        return _jvm().org.apache.spark.sql.types.StructType.fromString(converted.json())
+        return _jvm().org.apache.spark.sql.types.StructType.fromJson(converted.json())
 
     def transform(self, jdf):
         # Clear the failure
