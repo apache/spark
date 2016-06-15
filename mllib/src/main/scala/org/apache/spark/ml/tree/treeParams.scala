@@ -18,12 +18,13 @@
 package org.apache.spark.ml.tree
 
 import scala.util.Try
+
 import org.apache.spark.ml.PredictorParams
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util.SchemaUtils
 import org.apache.spark.mllib.tree.configuration.{Algo => OldAlgo, BoostingStrategy => OldBoostingStrategy, Strategy => OldStrategy}
-import org.apache.spark.mllib.tree.impurity.{WeightedGini, Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance}
+import org.apache.spark.mllib.tree.impurity.{Entropy => OldEntropy, Gini => OldGini, Impurity => OldImpurity, Variance => OldVariance, WeightedGini}
 import org.apache.spark.mllib.tree.loss.{AbsoluteError => OldAbsoluteError, LogLoss => OldLogLoss, Loss => OldLoss, SquaredError => OldSquaredError}
 import org.apache.spark.sql.types.{DataType, DoubleType, StructType}
 
@@ -185,16 +186,16 @@ private[ml] trait DecisionTreeParams extends PredictorParams
 private[ml] trait TreeClassifierParams extends Params {
 
   /**
-    * An array that stores the weights of class labels. All elements must be non-negative.
-    * (default = Array(1, 1))
-    * @group expertParam
-    */
+   * An array that stores the weights of class labels. All elements must be non-negative.
+   * (default = Array(1, 1))
+   * @group expertParam
+   */
   final val classWeights: DoubleArrayParam = new DoubleArrayParam(this, "classWeights", "An array" +
     " that stores the weights of class labels. All elements must be non-negative.")
 
   /**
    * Criterion used for information gain calculation (case-insensitive).
-   * Supported: "entropy" and "gini".
+   * Supported: "entropy", "gini" and "weightedgini".
    * (default = gini)
    * @group param
    */
@@ -233,7 +234,8 @@ private[ml] trait TreeClassifierParams extends Params {
 
 private[ml] object TreeClassifierParams {
   // These options should be lowercase.
-  final val supportedImpurities: Array[String] = Array("entropy", "gini", "weightedgini").map(_.toLowerCase)
+  final val supportedImpurities: Array[String] = Array("entropy", "gini", "weightedgini")
+    .map(_.toLowerCase)
 }
 
 private[ml] trait DecisionTreeClassifierParams

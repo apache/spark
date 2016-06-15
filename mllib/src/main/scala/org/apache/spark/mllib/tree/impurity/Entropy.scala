@@ -139,8 +139,8 @@ private[spark] class EntropyCalculator(stats: Array[Double]) extends ImpurityCal
   def count: Long = stats.sum.toLong
 
   /**
-    * Weighted summary statistics of data points, which in this case assume uniform class weights
-    */
+   * Weighted summary statistics of data points, which in this case assume uniform class weights
+   */
   def weightedCount: Double = stats.sum
 
   /**

@@ -447,8 +447,9 @@ private[ml] object EnsembleModelReadWrite {
 
     val classWeights: Array[Double] = {
       val classWeightsJson: JValue = metadata.getParamValue("classWeights")
-      val classWeightsVector = Param.jsonDecode[Vector](compact(render(classWeightsJson)))
-      classWeightsVector.toArray
+      val classWeightsArray = compact(render(classWeightsJson)).split("\\[|,|\\]")
+        .filter((s: String) => s.length() != 0).map((s: String) => s.toDouble)
+      classWeightsArray
     }
 
     val treesMetadataPath = new Path(path, "treesMetadata").toString
@@ -468,7 +469,8 @@ private[ml] object EnsembleModelReadWrite {
     val rootNodesRDD: RDD[(Int, Node)] =
       nodeData.rdd.map(d => (d.treeID, d.nodeData)).groupByKey().map {
         case (treeID: Int, nodeData: Iterable[NodeData]) =>
-          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray, impurityType, classWeights)
+          treeID -> DecisionTreeModelReadWrite.buildTreeFromNodes(nodeData.toArray,
+            impurityType, classWeights)
       }
     val rootNodes: Array[Node] = rootNodesRDD.sortByKey().values.collect()
     (metadata, treesMetadata.zip(rootNodes), treesWeights)

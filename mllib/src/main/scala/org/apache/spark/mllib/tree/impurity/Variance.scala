@@ -123,8 +123,8 @@ private[spark] class VarianceCalculator(stats: Array[Double]) extends ImpurityCa
   def count: Long = stats(0).toLong
 
   /**
-    * Weighted summary statistics of data points, which in this case assume uniform class weights
-    */
+   * Weighted summary statistics of data points, which in this case assume uniform class weights
+   */
   def weightedCount: Double = stats(0)
 
   /**
