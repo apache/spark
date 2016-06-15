@@ -506,4 +506,15 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with SharedSQLContext
       sqlContext.uncacheTable("t2")
     }
   }
+
+  test("SPARK-15915 Logical plans should use subqueries eliminated plan when override sameResult") {
+    val localRelation = sqlContext.createDataset(Seq(1, 2, 3)).toDF()
+    localRelation.registerTempTable("localRelation")
+
+    sqlContext.cacheTable("localRelation")
+    assert(
+      localRelation.queryExecution.withCachedData.collect {
+        case i: InMemoryRelation => i
+      }.size == 1)
+  }
 }

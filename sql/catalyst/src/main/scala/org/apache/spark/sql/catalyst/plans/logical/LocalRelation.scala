@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.analysis.EliminateSubQueries
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow, analysis}
 import org.apache.spark.sql.types.{StructField, StructType}
@@ -56,10 +57,12 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[InternalRow] = Nil)
 
   override protected def stringArgs = Iterator(output)
 
-  override def sameResult(plan: LogicalPlan): Boolean = plan match {
-    case LocalRelation(otherOutput, otherData) =>
-      otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
-    case _ => false
+  override def sameResult(plan: LogicalPlan): Boolean = {
+    EliminateSubQueries(plan) match {
+      case LocalRelation(otherOutput, otherData) =>
+        otherOutput.map(_.dataType) == output.map(_.dataType) && otherData == data
+      case _ => false
+    }
   }
 
   override lazy val statistics =
