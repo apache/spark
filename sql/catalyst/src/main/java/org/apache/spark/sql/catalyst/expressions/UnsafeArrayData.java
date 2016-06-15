@@ -34,6 +34,8 @@ public abstract class UnsafeArrayData extends ArrayData {
 
   protected Format format;
 
+  public final Format getFormat() { return format; }
+
   protected Object baseObject;
   protected long baseOffset;
 

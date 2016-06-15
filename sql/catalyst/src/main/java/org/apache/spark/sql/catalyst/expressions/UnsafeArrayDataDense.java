@@ -68,43 +68,43 @@ public final class UnsafeArrayDataDense extends UnsafeArrayData {
   @Override
   public boolean getBoolean(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getBoolean(baseObject, baseOffset + 4 + ordinal);
+    return Platform.getBoolean(baseObject, baseOffset + 8 + ordinal);
   }
 
   @Override
   public byte getByte(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getByte(baseObject, baseOffset + 4 + ordinal);
+    return Platform.getByte(baseObject, baseOffset + 8 + ordinal);
   }
 
   @Override
   public short getShort(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getShort(baseObject, baseOffset + 4 + ordinal * 2);
+    return Platform.getShort(baseObject, baseOffset + 8 + ordinal * 2);
   }
 
   @Override
   public int getInt(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getInt(baseObject, baseOffset + 4 + ordinal * 4);
+    return Platform.getInt(baseObject, baseOffset + 8 + ordinal * 4);
   }
 
   @Override
   public long getLong(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getLong(baseObject, baseOffset + 4 + ordinal * 8);
+    return Platform.getLong(baseObject, baseOffset + 8 + ordinal * 8);
   }
 
   @Override
   public float getFloat(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getFloat(baseObject, baseOffset + 4 + ordinal * 4);
+    return Platform.getFloat(baseObject, baseOffset + 8 + ordinal * 4);
   }
 
   @Override
   public double getDouble(int ordinal) {
     assertIndexIsValid(ordinal);
-    return Platform.getDouble(baseObject, baseOffset + 4 + ordinal * 8);
+    return Platform.getDouble(baseObject, baseOffset + 8 + ordinal * 8);
   }
 
   @Override
