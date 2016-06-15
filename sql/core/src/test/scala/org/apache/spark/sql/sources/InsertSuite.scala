@@ -279,7 +279,7 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
           |INSERT INTO target2 SELECT a, b WHERE a > 5
         """.stripMargin)
       checkAnswer(
-        sql("SELECT a, b FROM target"),
+        sql("SELECT a, b FROM target2"),
         sql("SELECT a, b FROM jt")
       )
     }
