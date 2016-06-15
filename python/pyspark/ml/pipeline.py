@@ -21,6 +21,7 @@ from pyspark.ml.param import Param, Params
 from pyspark.ml.util import MLReadable, MLWritable, TransformerWrapper
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaWrapper
 from pyspark.mllib.common import inherit_doc, _py2java, _java2py
+from pyspark.sql import SQLContext
 
 
 class PipelineWrapper(object):
