@@ -119,7 +119,7 @@ class ContinuousQueryManager(object):
     def active(self):
         """Returns a list of active queries associated with this SQLContext
 
-        >>> cq = df.write.format('memory').queryName('this_query').startStream()
+        >>> cq = df.writeStream.format('memory').queryName('this_query').start()
         >>> cqm = spark.streams
         >>> # get the list of active continuous queries
         >>> [q.name for q in cqm.active]
@@ -134,7 +134,7 @@ class ContinuousQueryManager(object):
         """Returns an active query from this SQLContext or throws exception if an active query
         with this name doesn't exist.
 
-        >>> cq = df.write.format('memory').queryName('this_query').startStream()
+        >>> cq = df.writeStream.format('memory').queryName('this_query').start()
         >>> cq.name
         u'this_query'
         >>> cq = spark.streams.get(cq.id)
@@ -236,7 +236,7 @@ def _test():
 
     globs = pyspark.sql.streaming.__dict__.copy()
     try:
-        spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+        spark = SparkSession.builder.getOrCreate()
     except py4j.protocol.Py4JError:
         spark = SparkSession(sc)
 
@@ -245,7 +245,7 @@ def _test():
     globs['spark'] = spark
     globs['sqlContext'] = SQLContext.getOrCreate(spark.sparkContext)
     globs['df'] = \
-        globs['spark'].read.format('text').stream('python/test_support/sql/streaming')
+        globs['spark'].readStream.format('text').load('python/test_support/sql/streaming')
 
     (failure_count, test_count) = doctest.testmod(
         pyspark.sql.streaming, globs=globs,

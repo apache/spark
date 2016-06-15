@@ -101,7 +101,7 @@ class DefaultSource extends StreamSourceProvider with StreamSinkProvider {
   }
 }
 
-class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
+class DataStreamReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   private def newMetadataDir =
     Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
@@ -110,25 +110,38 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     spark.streams.active.foreach(_.stop())
   }
 
+  test("write cannot be called on streaming datasets") {
+    val e = intercept[AnalysisException] {
+      spark.readStream
+        .format("org.apache.spark.sql.streaming.test")
+        .load()
+        .write
+        .save()
+    }
+    Seq("'write'", "not", "streaming Dataset/DataFrame").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
+  }
+
   test("resolve default source") {
-    spark.read
+    spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
-      .write
+      .load()
+      .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .startStream()
+      .start()
       .stop()
   }
 
   test("resolve full class") {
-    spark.read
+    spark.readStream
       .format("org.apache.spark.sql.streaming.test.DefaultSource")
-      .stream()
-      .write
+      .load()
+      .writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .startStream()
+      .start()
       .stop()
   }
 
@@ -136,12 +149,12 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     val map = new java.util.HashMap[String, String]
     map.put("opt3", "3")
 
-    val df = spark.read
+    val df = spark.readStream
         .format("org.apache.spark.sql.streaming.test")
         .option("opt1", "1")
         .options(Map("opt2" -> "2"))
         .options(map)
-        .stream()
+        .load()
 
     assert(LastOptions.parameters("opt1") == "1")
     assert(LastOptions.parameters("opt2") == "2")
@@ -149,13 +162,13 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     LastOptions.clear()
 
-    df.write
+    df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("opt1", "1")
       .options(Map("opt2" -> "2"))
       .options(map)
       .option("checkpointLocation", newMetadataDir)
-      .startStream()
+      .start()
       .stop()
 
     assert(LastOptions.parameters("opt1") == "1")
@@ -164,84 +177,84 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("partitioning") {
-    val df = spark.read
+    val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .load()
 
-    df.write
+    df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .startStream()
+      .start()
       .stop()
     assert(LastOptions.partitionColumns == Nil)
 
-    df.write
+    df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .partitionBy("a")
-      .startStream()
+      .start()
       .stop()
     assert(LastOptions.partitionColumns == Seq("a"))
 
     withSQLConf("spark.sql.caseSensitive" -> "false") {
-      df.write
+      df.writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("A")
-        .startStream()
+        .start()
         .stop()
       assert(LastOptions.partitionColumns == Seq("a"))
     }
 
     intercept[AnalysisException] {
-      df.write
+      df.writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .partitionBy("b")
-        .startStream()
+        .start()
         .stop()
     }
   }
 
   test("stream paths") {
-    val df = spark.read
+    val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .stream("/test")
+      .load("/test")
 
     assert(LastOptions.parameters("path") == "/test")
 
     LastOptions.clear()
 
-    df.write
+    df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
-      .startStream("/test")
+      .start("/test")
       .stop()
 
     assert(LastOptions.parameters("path") == "/test")
   }
 
   test("test different data types for options") {
-    val df = spark.read
+    val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
       .option("intOpt", 56)
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
-      .stream("/test")
+      .load("/test")
 
     assert(LastOptions.parameters("intOpt") == "56")
     assert(LastOptions.parameters("boolOpt") == "false")
     assert(LastOptions.parameters("doubleOpt") == "6.7")
 
     LastOptions.clear()
-    df.write
+    df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("intOpt", 56)
       .option("boolOpt", false)
       .option("doubleOpt", 6.7)
       .option("checkpointLocation", newMetadataDir)
-      .startStream("/test")
+      .start("/test")
       .stop()
 
     assert(LastOptions.parameters("intOpt") == "56")
@@ -253,25 +266,25 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     /** Start a query with a specific name */
     def startQueryWithName(name: String = ""): ContinuousQuery = {
-      spark.read
+      spark.readStream
         .format("org.apache.spark.sql.streaming.test")
-        .stream("/test")
-        .write
+        .load("/test")
+        .writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
         .queryName(name)
-        .startStream()
+        .start()
     }
 
     /** Start a query without specifying a name */
     def startQueryWithoutName(): ContinuousQuery = {
-      spark.read
+      spark.readStream
         .format("org.apache.spark.sql.streaming.test")
-        .stream("/test")
-        .write
+        .load("/test")
+        .writeStream
         .format("org.apache.spark.sql.streaming.test")
         .option("checkpointLocation", newMetadataDir)
-        .startStream()
+        .start()
     }
 
     /** Get the names of active streams */
@@ -311,24 +324,24 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
   }
 
   test("trigger") {
-    val df = spark.read
+    val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream("/test")
+      .load("/test")
 
-    var q = df.write
+    var q = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime(10.seconds))
-      .startStream()
+      .start()
     q.stop()
 
     assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(10000))
 
-    q = df.write
+    q = df.writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime.create(100, TimeUnit.SECONDS))
-      .startStream()
+      .start()
     q.stop()
 
     assert(q.asInstanceOf[StreamExecution].trigger == ProcessingTime(100000))
@@ -339,19 +352,19 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
     val checkpointLocation = newMetadataDir
 
-    val df1 = spark.read
+    val df1 = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .load()
 
-    val df2 = spark.read
+    val df2 = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .load()
 
-    val q = df1.union(df2).write
+    val q = df1.union(df2).writeStream
       .format("org.apache.spark.sql.streaming.test")
       .option("checkpointLocation", checkpointLocation)
       .trigger(ProcessingTime(10.seconds))
-      .startStream()
+      .start()
     q.stop()
 
     verify(LastOptions.mockStreamSourceProvider).createSource(
@@ -371,76 +384,12 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
 
   private def newTextInput = Utils.createTempDir(namePrefix = "text").getCanonicalPath
 
-  test("check trigger() can only be called on continuous queries") {
-    val df = spark.read.text(newTextInput)
-    val w = df.write.option("checkpointLocation", newMetadataDir)
-    val e = intercept[AnalysisException](w.trigger(ProcessingTime("10 seconds")))
-    assert(e.getMessage == "trigger() can only be called on continuous queries;")
-  }
-
-  test("check queryName() can only be called on continuous queries") {
-    val df = spark.read.text(newTextInput)
-    val w = df.write.option("checkpointLocation", newMetadataDir)
-    val e = intercept[AnalysisException](w.queryName("queryName"))
-    assert(e.getMessage == "queryName() can only be called on continuous queries;")
-  }
-
-  test("check startStream() can only be called on continuous queries") {
-    val df = spark.read.text(newTextInput)
-    val w = df.write.option("checkpointLocation", newMetadataDir)
-    val e = intercept[AnalysisException](w.startStream())
-    assert(e.getMessage == "startStream() can only be called on continuous queries;")
-  }
-
-  test("check startStream(path) can only be called on continuous queries") {
-    val df = spark.read.text(newTextInput)
-    val w = df.write.option("checkpointLocation", newMetadataDir)
-    val e = intercept[AnalysisException](w.startStream("non_exist_path"))
-    assert(e.getMessage == "startStream() can only be called on continuous queries;")
-  }
-
-  test("check mode(SaveMode) can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.mode(SaveMode.Append))
-    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
-  }
-
-  test("check mode(string) can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.mode("append"))
-    assert(e.getMessage == "mode() can only be called on non-continuous queries;")
-  }
-
-  test("check outputMode(OutputMode) can only be called on continuous queries") {
-    val df = spark.read.text(newTextInput)
-    val w = df.write.option("checkpointLocation", newMetadataDir)
-    val e = intercept[AnalysisException](w.outputMode(OutputMode.Append))
-    Seq("outputmode", "continuous queries").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-    }
-  }
-
-  test("check outputMode(string) can only be called on continuous queries") {
-    val df = spark.read.text(newTextInput)
-    val w = df.write.option("checkpointLocation", newMetadataDir)
-    val e = intercept[AnalysisException](w.outputMode("append"))
-    Seq("outputmode", "continuous queries").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-    }
-  }
-
   test("check outputMode(string) throws exception on unsupported modes") {
     def testError(outputMode: String): Unit = {
-      val df = spark.read
+      val df = spark.readStream
         .format("org.apache.spark.sql.streaming.test")
-        .stream()
-      val w = df.write
+        .load()
+      val w = df.writeStream
       val e = intercept[IllegalArgumentException](w.outputMode(outputMode))
       Seq("output mode", "unknown", outputMode).foreach { s =>
         assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
@@ -450,159 +399,46 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     testError("Xyz")
   }
 
-  test("check bucketBy() can only be called on non-continuous queries") {
-    val df = spark.read
+  test("check foreach() catches null writers") {
+    val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.bucketBy(1, "text").startStream())
-    assert(e.getMessage == "'startStream' does not support bucketing right now;")
+      .load()
+
+    var w = df.writeStream
+    var e = intercept[IllegalArgumentException](w.foreach(null))
+    Seq("foreach", "null").foreach { s =>
+      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
+    }
   }
 
-  test("check sortBy() can only be called on non-continuous queries;") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.sortBy("text").startStream())
-    assert(e.getMessage == "'startStream' does not support bucketing right now;")
-  }
 
-  test("check save(path) can only be called on non-continuous queries") {
-    val df = spark.read
+  test("check foreach() does not support partitioning") {
+    val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.save("non_exist_path"))
-    assert(e.getMessage == "save() can only be called on non-continuous queries;")
-  }
-
-  test("check save() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.save())
-    assert(e.getMessage == "save() can only be called on non-continuous queries;")
-  }
-
-  test("check insertInto() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.insertInto("non_exsit_table"))
-    assert(e.getMessage == "insertInto() can only be called on non-continuous queries;")
-  }
-
-  test("check saveAsTable() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.saveAsTable("non_exsit_table"))
-    assert(e.getMessage == "saveAsTable() can only be called on non-continuous queries;")
-  }
-
-  test("check jdbc() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.jdbc(null, null, null))
-    assert(e.getMessage == "jdbc() can only be called on non-continuous queries;")
-  }
-
-  test("check json() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.json("non_exist_path"))
-    assert(e.getMessage == "json() can only be called on non-continuous queries;")
-  }
-
-  test("check parquet() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.parquet("non_exist_path"))
-    assert(e.getMessage == "parquet() can only be called on non-continuous queries;")
-  }
-
-  test("check orc() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.orc("non_exist_path"))
-    assert(e.getMessage == "orc() can only be called on non-continuous queries;")
-  }
-
-  test("check text() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.text("non_exist_path"))
-    assert(e.getMessage == "text() can only be called on non-continuous queries;")
-  }
-
-  test("check csv() can only be called on non-continuous queries") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-    val w = df.write
-    val e = intercept[AnalysisException](w.csv("non_exist_path"))
-    assert(e.getMessage == "csv() can only be called on non-continuous queries;")
-  }
-
-  test("check foreach() does not support partitioning or bucketing") {
-    val df = spark.read
-      .format("org.apache.spark.sql.streaming.test")
-      .stream()
-
-    var w = df.write.partitionBy("value")
-    var e = intercept[AnalysisException](w.foreach(null))
+      .load()
+    val foreachWriter = new ForeachWriter[Row] {
+      override def open(partitionId: Long, version: Long): Boolean = false
+      override def process(value: Row): Unit = {}
+      override def close(errorOrNull: Throwable): Unit = {}
+    }
+    var w = df.writeStream.partitionBy("value")
+    var e = intercept[AnalysisException](w.foreach(foreachWriter).start())
     Seq("foreach", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-    }
-
-    w = df.write.bucketBy(2, "value")
-    e = intercept[AnalysisException](w.foreach(null))
-    Seq("foreach", "bucketing").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-    }
-  }
-
-  test("check jdbc() does not support partitioning or bucketing") {
-    val df = spark.read.text(newTextInput)
-
-    var w = df.write.partitionBy("value")
-    var e = intercept[AnalysisException](w.jdbc(null, null, null))
-    Seq("jdbc", "partitioning").foreach { s =>
-      assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
-    }
-
-    w = df.write.bucketBy(2, "value")
-    e = intercept[AnalysisException](w.jdbc(null, null, null))
-    Seq("jdbc", "bucketing").foreach { s =>
       assert(e.getMessage.toLowerCase.contains(s.toLowerCase))
     }
   }
 
   test("ConsoleSink can be correctly loaded") {
     LastOptions.clear()
-    val df = spark.read
+    val df = spark.readStream
       .format("org.apache.spark.sql.streaming.test")
-      .stream()
+      .load()
 
-    val cq = df.write
+    val cq = df.writeStream
       .format("console")
       .option("checkpointLocation", newMetadataDir)
       .trigger(ProcessingTime(2.seconds))
-      .startStream()
+      .start()
 
     cq.awaitTermination(2000L)
   }
@@ -611,10 +447,11 @@ class DataFrameReaderWriterSuite extends StreamTest with BeforeAndAfter {
     withTempDir { dir =>
       val path = dir.getCanonicalPath
       intercept[AnalysisException] {
-        spark.range(10).write.format("parquet").mode("overwrite").partitionBy("id").save(path)
-      }
-      intercept[AnalysisException] {
-        spark.range(10).write.format("orc").mode("overwrite").partitionBy("id").save(path)
+        spark.range(10).writeStream
+          .outputMode("append")
+          .partitionBy("id")
+          .format("parquet")
+          .start(path)
       }
     }
   }

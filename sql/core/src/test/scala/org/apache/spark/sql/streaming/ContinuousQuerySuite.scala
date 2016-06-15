@@ -39,12 +39,12 @@ class ContinuousQuerySuite extends StreamTest with BeforeAndAfter {
 
     def startQuery(queryName: String): ContinuousQuery = {
       val metadataRoot = Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
-      val writer = mapped.write
+      val writer = mapped.writeStream
       writer
         .queryName(queryName)
         .format("memory")
         .option("checkpointLocation", metadataRoot)
-        .startStream()
+        .start()
     }
 
     val q1 = startQuery("q1")
