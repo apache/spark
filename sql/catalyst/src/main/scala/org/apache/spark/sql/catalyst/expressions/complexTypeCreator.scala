@@ -60,18 +60,13 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         children.zipWithIndex.map { case (e, i) =>
           val eval = e.genCode(ctx)
-          eval.code + (
-            if (eval.isNull == "false") {
-              s"\n$values[$i] = ${eval.value};"
+          eval.code + s"""
+            if (${eval.isNull}) {
+              $values[$i] = null;
             } else {
-              s"""
-              if (${eval.isNull}) {
-                $values[$i] = null;
-              } else {
-                $values[$i] = ${eval.value};
-              }
-             """
-            })
+              $values[$i] = ${eval.value};
+            }
+           """
         }) +
       s"""
         final ArrayData ${ev.value} = new $arrayClass($values);
@@ -158,18 +153,14 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         values.zipWithIndex.map { case (value, i) =>
           val eval = value.genCode(ctx)
-          eval.code + (
-            if (eval.isNull == "false") {
-              s"\n$valueArray[$i] = ${eval.value};"
+          s"""
+            ${eval.code}
+            if (${eval.isNull}) {
+              $valueArray[$i] = null;
             } else {
-              s"""
-              if (${eval.isNull}) {
-                $valueArray[$i] = null;
-              } else {
-                $valueArray[$i] = ${eval.value};
-              }
-             """
-            })
+              $valueArray[$i] = ${eval.value};
+            }
+          """
         }) +
       s"""
         final MapData ${ev.value} = new $mapClass($keyData, $valueData);
@@ -221,18 +212,12 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         children.zipWithIndex.map { case (e, i) =>
           val eval = e.genCode(ctx)
-          eval.code + (
-            if (eval.isNull == "false") {
-              s"\n$values[$i] = ${eval.value};"
+          eval.code + s"""
+            if (${eval.isNull}) {
+              $values[$i] = null;
             } else {
-              s"""
-              if (${eval.isNull}) {
-                $values[$i] = null;
-              } else {
-                $values[$i] = ${eval.value};
-              }
-             """
-            })
+              $values[$i] = ${eval.value};
+            }"""
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
@@ -318,18 +303,12 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
         ctx.INPUT_ROW,
         valExprs.zipWithIndex.map { case (e, i) =>
           val eval = e.genCode(ctx)
-          eval.code + (
-            if (eval.isNull == "false") {
-              s"\n$values[$i] = ${eval.value};"
-            } else {
-              s"""
-              if (${eval.isNull}) {
-                $values[$i] = null;
-              } else {
-                $values[$i] = ${eval.value};
-              }
-             """
-            })
+          eval.code + s"""
+          if (${eval.isNull}) {
+            $values[$i] = null;
+          } else {
+            $values[$i] = ${eval.value};
+          }"""
         }) +
       s"""
         final InternalRow ${ev.value} = new $rowClass($values);
