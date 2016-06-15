@@ -32,6 +32,8 @@ trait PythonTransformerWrapper {
 
   def transform(dataset: Dataset[_]): DataFrame
 
+  def transformSchema(schema: StructType): StructType
+
   def copy(extra: ParamMap): PythonTransformerWrapper
 
   def getLastFailure: String
@@ -100,8 +102,7 @@ class PythonTransformer(
     override val uid: String) extends Transformer {
 
   override def transformSchema(schema: StructType): StructType = {
-    // TODO: Add transform schema in Python side.
-    schema
+    pfunc.transformSchema(schema)
   }
 
   override def transform(dataset: Dataset[_]): DataFrame = {

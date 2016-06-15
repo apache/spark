@@ -29,6 +29,7 @@ from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql.functions import concat, col, lit
 from pyspark.sql import DataFrame
+from pyspark.sql.types import StructField, StructType, StringType
 from pyspark.ml.util import TransformerWrapper
 
 __all__ = ['Int2Str', 'Int2StrJVM']
@@ -49,6 +50,10 @@ class Int2Str(Transformer, HasInputCol, HasOutputCol):
         self._setDefault(suffix="")
         kwargs = self.__init__._input_kwargs
         self.setParams(**kwargs)
+
+    def transformSchema(self, schema):
+        outSchema = StructField(self.getOutputCol(), StringType(), True)
+        return schema.add(outSchema)
 
     @keyword_only
     @since("1.4.0")
@@ -80,18 +85,3 @@ class Int2Str(Transformer, HasInputCol, HasOutputCol):
         suff2 = dataset.count()
         suff = self.getSuffix()
         return dataset.withColumn(ouc, concat(dataset[inc], lit(suff), lit(str(suff2))))
-
-
-class JavaProxyWrapper(object):
-    def __init__(self):
-        super(JavaProxyWrapper, self).__init__()
-        int2str = Int2Str(suffix=suffix, inputCol=inputCol, outputCol=outputCol)
-        wrapper = TransformerWrapper(df.sql_ctx, int2str)
-        sc = SparkContext._active_spark_context
-        self.jtransformer =\
-            sc._jvm.org.apache.spark.ml.api.python.PythonTransformer(wrapper, wrapper.getUid())
-        self.df = df
-
-    def transform(self):
-        jdf = self.jtransformer.transform(self.df._jdf)
-        return DataFrame(jdf, self.df.sql_ctx)

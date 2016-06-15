@@ -27,6 +27,7 @@ import traceback
 from pyspark import SparkContext, since
 from pyspark.mllib.common import inherit_doc
 from pyspark.sql.dataframe import DataFrame
+from pyspark.sql.types import _parse_datatype_json_string
 from pyspark.sql import SQLContext
 
 
@@ -271,6 +272,11 @@ class TransformerWrapper(object):
     def copy(self, extra):
         self.transformer = self.transformer.copy(extra)
         return self
+
+    def transformSchema(self, jschema):
+        schema = _parse_datatype_json_string(jschema.json())
+        converted = self.transformer.transformSchema(schema)
+        return _jvm().org.apache.spark.sql.types.StructType.fromString(converted.jsonValue())
 
     def transform(self, jdf):
         # Clear the failure
