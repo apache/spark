@@ -199,7 +199,8 @@ class RandomForestClassificationModel private[ml] (
     // Ignore the tree weights since all are 1.0 for now.
     val votes = Array.fill[Double](numClasses)(0.0)
     _trees.view.foreach { tree =>
-      val classCounts: Array[Double] = tree.rootNode.predictImpl(features).impurityStats.stats
+      val classCounts: Array[Double] =
+        tree.rootNode.predictImpl(features).impurityStats.weightedStats
       val total = classCounts.sum
       if (total != 0) {
         var i = 0

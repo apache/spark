@@ -17,6 +17,8 @@
 
 package org.apache.spark.ml.classification
 
+import scala.io.Source
+
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
@@ -31,6 +33,7 @@ import org.apache.spark.mllib.util.MLlibTestSparkContext
 import org.apache.spark.mllib.util.TestingUtils._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, Row}
+
 
 /**
  * Test suite for [[RandomForestClassifier]].
@@ -74,6 +77,43 @@ class RandomForestClassifierSuite
     val model = new RandomForestClassificationModel("rfc",
       Array(new DecisionTreeClassificationModel("dtc", new LeafNode(0.0, 0.0, null), 1, 2)), 2, 2)
     ParamsSuite.checkParams(model)
+  }
+
+  test("classification with class weights") {
+    val buf = Source.fromFile("/Users/yueweina/Documents/spark/data/mllib/unbalenced_train.csv")
+      .getLines
+    val header = buf.take(1).next()
+    var data = new Array[LabeledPoint](1000)
+    var idx : Int = 0
+    for (row <- buf) {
+      val cols = row.split(",").map(_.trim)
+      // scala style: off println
+      // println(s"${cols(0)}|${cols(1)}|${cols(2)}|${cols(3)}|${cols(4)}")
+      // println( cols(0).getClass)
+      // scala style: on println
+      data(idx) = new LabeledPoint(cols(0).toDouble,
+        Vectors.dense(cols(1).toDouble, cols(2).toDouble))
+      idx += 1
+    }
+    // scalastyle:off println
+    // println(data)
+    // scalastyle:on println
+    val IrIsRDD = sc.parallelize(data)
+    val rf = new RandomForestClassifier()
+      .setImpurity("weightedgini")
+      .setMaxDepth(3)
+      .setMaxBins(400)
+      .setMinInstancesPerNode(1)
+      .setClassWeights(Array(1, 1000))
+      .setSubsamplingRate(1)
+    val categoricalFeatures: Map[Int, Int] = Map()
+    val newData: DataFrame = TreeTests.setMetadata(IrIsRDD, categoricalFeatures, 2)
+    val newTree = rf.fit(newData)
+    val predoutput = newTree.transform(newData)
+    // scalastyle:off println
+    predoutput.show(1000)
+    //println(newTree.toDebugString)
+    // scalastyle:on println
   }
 
   test("Binary classification with continuous features:" +

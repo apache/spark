@@ -99,13 +99,13 @@ class DecisionTreeClassifierSuite
       .setMaxDepth(3)
       .setMaxBins(400)
       .setMinInstancesPerNode(1)
-      .setClassWeights(Array(1, 1))
+      .setClassWeights(Array(1, 1000))
     val categoricalFeatures: Map[Int, Int] = Map()
     val newData: DataFrame = TreeTests.setMetadata(IrIsRDD, categoricalFeatures, 2)
     val newTree = dt.fit(newData)
     val predoutput = newTree.transform(newData)
     // scalastyle:off println
-    // predoutput.show(1000)
+    predoutput.show(1000)
     // println(newTree.toDebugString)
     // scalastyle:on println
   }
