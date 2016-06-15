@@ -27,12 +27,12 @@ from pyspark.ml.param.shared import *
 from pyspark.ml.util import JavaMLReadable, JavaMLWritable
 from pyspark.ml.wrapper import JavaEstimator, JavaModel, JavaTransformer, _jvm
 from pyspark.mllib.common import inherit_doc
-from pyspark.sql.functions import concat, col, lit
+from pyspark.sql.functions import concat, col, lit, split
 from pyspark.sql import DataFrame
-from pyspark.sql.types import StructField, StructType, StringType
+from pyspark.sql.types import StructField, StructType, StringType, ArrayType
 from pyspark.ml.util import TransformerWrapper
 
-__all__ = ['Int2Str', 'Int2StrJVM']
+__all__ = ['Int2Str', 'Str2Array']
 
 
 @inherit_doc
@@ -84,4 +84,56 @@ class Int2Str(Transformer, HasInputCol, HasOutputCol):
         ouc = self.getOutputCol()
         suff2 = dataset.count()
         suff = self.getSuffix()
-        return dataset.withColumn(ouc, concat(dataset[inc], lit(suff), lit(str(suff2))))
+        return dataset.withColumn(
+            ouc, concat(dataset[inc], lit(" "), lit(suff), lit(" "), lit(str(suff2))))
+
+
+@inherit_doc
+class Str2Array(Transformer, HasInputCol, HasOutputCol):
+    split = Param(Params._dummy(), "split",
+                   "Suffix adds to an Integer",
+                   typeConverter=TypeConverters.toString)
+
+    @keyword_only
+    def __init__(self, split="", inputCol=None, outputCol=None):
+        """
+        __init__(self, split="", inputCol=None, outputCol=None)
+        """
+        super(Str2Array, self).__init__()
+        self._setDefault(split="")
+        kwargs = self.__init__._input_kwargs
+        self.setParams(**kwargs)
+
+    def transformSchema(self, schema):
+        outSchema = StructField(self.getOutputCol(), ArrayType(StringType()), True)
+        return schema.add(outSchema)
+
+    @keyword_only
+    @since("1.4.0")
+    def setParams(self, split="", inputCol=None, outputCol=None):
+        """
+        setParams(self, split=0.0, inputCol=None, outputCol=None)
+        Sets params for this Binarizer.
+        """
+        kwargs = self.setParams._input_kwargs
+        return self._set(**kwargs)
+
+    @since("1.4.0")
+    def setSplit(self, value):
+        """
+        Sets the value of :py:attr:`threshold`.
+        """
+        return self._set(split=value)
+
+    @since("1.4.0")
+    def getSplit(self):
+        """
+        Gets the value of threshold or its default value.
+        """
+        return self.getOrDefault(self.split)
+
+    def _transform(self, dataset):
+        inc = self.getInputCol()
+        ouc = self.getOutputCol()
+        splt = self.getSplit()
+        return dataset.withColumn(ouc, split(dataset[inc], splt))

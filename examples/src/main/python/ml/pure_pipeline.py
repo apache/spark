@@ -23,7 +23,7 @@ Pipeline Example.
 from pyspark.ml import Pipeline
 from pyspark.ml.classification import LogisticRegression
 from pyspark.ml.feature import Word2Vec
-from pyspark.ml.FakeTransformer import Int2Str
+from pyspark.ml.FakeTransformer import Int2Str, Str2Array
 # $example off$
 from pyspark.sql import SparkSession
 
@@ -39,7 +39,8 @@ if __name__ == "__main__":
 
     # Configure an ML pipeline, which consists of three stages: tokenizer, hashingTF, and lr.
     int2str = Int2Str(suffix="xxx", inputCol="text", outputCol="sentence")
-    word2vec = Word2Vec(vectorSize=5, seed=42, inputCol="sentence", outputCol="model")
+    str2ary = Str2Array(split=" ", inputCol=int2str.getOutputCol(), outputCol="ary_of_sentence")
+    word2vec = Word2Vec(vectorSize=5, seed=42, inputCol=str2ary.getOutputCol(), outputCol="model")
     pipeline = Pipeline(stages=[int2str, word2vec])
 
     # Fit the pipeline to training documents.
