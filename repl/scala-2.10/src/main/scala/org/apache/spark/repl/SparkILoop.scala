@@ -1067,19 +1067,12 @@ object SparkILoop extends Logging {
   private def echo(msg: String) = Console println msg
 
   def getAddedJars: Array[String] = {
-    val conf = new SparkConf().setMaster(getMaster())
     val envJars = sys.env.get("ADD_JARS")
     if (envJars.isDefined) {
       logWarning("ADD_JARS environment variable is deprecated, use --jar spark submit argument instead")
     }
-    val jars = {
-      val userJars = Utils.getUserJars(conf)
-      if (userJars.isEmpty) {
-        envJars.getOrElse("")
-      } else {
-        userJars.mkString(",")
-      }
-    }
+    val propJars = sys.props.get("spark.jars").flatMap { p => if (p == "") None else Some(p) }
+    val jars = propJars.orElse(envJars).getOrElse("")
     Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
 
