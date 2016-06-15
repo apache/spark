@@ -796,6 +796,14 @@ test_that("distinct(), unique() and dropDuplicates() on DataFrames", {
     result[order(result$key, result$value1, result$value2), ],
     expected)
 
+  result <- collect(dropDuplicates(df, "key", "value1"))
+  expected <- rbind.data.frame(
+    c(1, 1, 1), c(1, 2, 1), c(2, 1, 2), c(2, 2, 2))
+  names(expected) <- c("key", "value1", "value2")
+  expect_equivalent(
+    result[order(result$key, result$value1, result$value2), ],
+    expected)
+
   result <- collect(dropDuplicates(df, "key"))
   expected <- rbind.data.frame(
     c(1, 1, 1), c(2, 1, 2))
