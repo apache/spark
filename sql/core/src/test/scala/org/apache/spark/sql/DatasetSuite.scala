@@ -227,6 +227,13 @@ class DatasetSuite extends QueryTest with SharedSQLContext {
       "b")
   }
 
+  test("map and filter") {
+    val ds = Seq(("a", 1), ("b", 2), ("c", 3)).toDS()
+    checkDataset(
+      ds.map(v => (v._1, v._2 + 1)).filter(_._1 == "b"),
+      ("b", 3))
+  }
+
   test("SPARK-15632: typed filter should preserve the underlying logical schema") {
     val ds = spark.range(10)
     val ds2 = ds.filter(_ > 3)
