@@ -525,14 +525,16 @@ object TypeCoercion {
     def apply(plan: LogicalPlan): LogicalPlan = plan resolveExpressions {
       // Skip nodes who has not been resolved yet,
       // as this is an extra rule which should be applied at last.
-      case e if !e.resolved => e
+      case e if !e.childrenResolved => e
 
       // Decimal and Double remain the same
       case d: Divide if d.dataType == DoubleType => d
       case d: Divide if d.dataType.isInstanceOf[DecimalType] => d
-
-      case Divide(left, right) => Divide(Cast(left, DoubleType), Cast(right, DoubleType))
+      case Divide(left, right) if isNumeric(left) && isNumeric(right) =>
+        Divide(Cast(left, DoubleType), Cast(right, DoubleType))
     }
+
+    private def isNumeric(ex: Expression): Boolean = ex.dataType.isInstanceOf[NumericType]
   }
 
   /**
