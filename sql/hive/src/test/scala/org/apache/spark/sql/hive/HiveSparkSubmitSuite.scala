@@ -204,8 +204,8 @@ class HiveSparkSubmitSuite
   test("set spark.sql.warehouse.dir") {
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
-      "--class", SetSparkWarehouseLocationTest.getClass.getName.stripSuffix("$"),
-      "--name", "SetWarehouseLocationTest",
+      "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
+      "--name", "SetSparkWarehouseLocationTest",
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
       "--conf", "spark.master.rest.enabled=false",
@@ -241,7 +241,7 @@ class HiveSparkSubmitSuite
 
     val unusedJar = TestUtils.createJarWithClasses(Seq.empty)
     val args = Seq(
-      "--class", SetSparkWarehouseLocationTest.getClass.getName.stripSuffix("$"),
+      "--class", SetWarehouseLocationTest.getClass.getName.stripSuffix("$"),
       "--name", "SetHiveWarehouseLocationTest",
       "--master", "local-cluster[2,1,1024]",
       "--conf", "spark.ui.enabled=false",
@@ -313,7 +313,7 @@ class HiveSparkSubmitSuite
   }
 }
 
-object SetSparkWarehouseLocationTest extends Logging {
+object SetWarehouseLocationTest extends Logging {
   def main(args: Array[String]): Unit = {
     Utils.configTestLog4j("INFO")
 
