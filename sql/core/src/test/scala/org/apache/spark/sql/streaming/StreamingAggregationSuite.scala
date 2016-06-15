@@ -40,8 +40,6 @@ class StreamingAggregationSuite extends StreamTest with BeforeAndAfterAll {
 
   import testImplicits._
 
-
-
   test("simple count, update mode") {
     val inputData = MemoryStream[Int]
 

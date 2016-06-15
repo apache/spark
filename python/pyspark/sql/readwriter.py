@@ -28,7 +28,7 @@ from pyspark.sql.column import _to_seq
 from pyspark.sql.types import *
 from pyspark.sql import utils
 
-__all__ = ["DataFrameReader", "DataFrameWriter"]
+__all__ = ["DataFrameReader", "DataFrameWriter", "DataStreamReader", "DataStreamWriter"]
 
 
 def to_str(value):
