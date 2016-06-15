@@ -857,13 +857,18 @@ object DateTimeUtils {
     var guess = tz.getRawOffset
     // the actual offset should be calculated based on milliseconds in UTC
     var actual = tz.getOffset(millisLocal - guess)
-    // At the start of DST, the local time is forwarded by an hour, so it's OK to get the
-    // local time bigger than current one after an round trip (local -> UTC -> local).
-    // At the end of DST, the local time is backwarded by an hour, actual offset will be
-    // less than guess, we should decrease the guess and try again.
-    while (actual < guess) {
+    if (actual != guess) {
+      // try with the result as guess
       guess = actual
       actual = tz.getOffset(millisLocal - guess)
+      // At the start of DST, the local time is forwarded by an hour, so it's OK to get the
+      // local time bigger than current one after an round trip (local -> UTC -> local).
+      // At the end of DST, the local time is backwarded by an hour, actual offset will be
+      // less than guess, we should decrease the guess and try again.
+      while (actual < guess) {
+        guess = actual
+        actual = tz.getOffset(millisLocal - guess)
+      }
     }
     guess
   }
