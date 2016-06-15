@@ -303,6 +303,8 @@ class DirectKafkaStreamSuite
       assert(DirectKafkaStreamSuite.total.get === (1 to 10).sum)
     }
 
+    ssc.stop()
+
     // Verify that offset ranges were generated
     val offsetRangesBeforeStop = getOffsetRanges(kafkaStream)
     assert(offsetRangesBeforeStop.size >= 1, "No offset ranges generated")
@@ -310,7 +312,7 @@ class DirectKafkaStreamSuite
       offsetRangesBeforeStop.head._2.forall { _.fromOffset === 0 },
       "starting offset not zero"
     )
-    ssc.stop()
+
     logInfo("====== RESTARTING ========")
 
     // Recover context from checkpoints
