@@ -181,7 +181,6 @@ if (isEmpty != 0) {
         }
       }
     } else {
-      # Timing reading input data for execution
       output <- compute(mode, partition, serializer, deserializer, NULL,
                   colNames, computeFunc, data)
     }
