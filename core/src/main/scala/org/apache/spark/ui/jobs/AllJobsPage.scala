@@ -482,7 +482,6 @@ private[ui] class JobPagedTable(
     data: Seq[JobUIData],
     jobTag: String,
     basePath: String,
-    // TODO: Should use StageID instead of Int below, but cannot resolve. How?
     stageIdToInfo: HashMap[Int, StageInfo],
     stageIdToData: HashMap[(Int, Int), StageUIData],
     currentTime: Long,
@@ -527,7 +526,7 @@ private[ui] class JobPagedTable(
     s"$basePath?$jobTag.sort=$encodedSortColumn&$jobTag.desc=$desc"
   }
 
-  def headers: Seq[Node] = {
+  override def headers: Seq[Node] = {
     val jobHeadersAndCssClasses: Seq[(String, String, Boolean)] =
       Seq(
         (jobIdTitle, "", true),
@@ -580,7 +579,7 @@ private[ui] class JobPagedTable(
     <thead>{headerRow}</thead>
   }
 
-  def row(jobTableRow: JobTableRowData): Seq[Node] = {
+  override def row(jobTableRow: JobTableRowData): Seq[Node] = {
     val job = jobTableRow.jobData
 
     <tr id={"job-" + job.jobId}>
