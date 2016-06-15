@@ -109,13 +109,6 @@ class CodegenContext {
   var copyResult: Boolean = false
 
   /**
-   * Whether should we write complex type data only to generic structure
-   *
-   * If we write complex type data only to a generic structure at projection, set true to this var
-   */
-  var genericWriteBuffer: Boolean = false
-
-  /**
    * Holding expressions' mutable states like `MonotonicallyIncreasingID.count` as a
    * 3-tuple: java type, variable name, code to init it.
    * As an example, ("int", "count", "count = 0;") will produce code:

@@ -50,7 +50,6 @@ case class CreateArray(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
-    ctx.genericWriteBuffer = true
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
@@ -131,7 +130,6 @@ case class CreateMap(children: Seq[Expression]) extends Expression {
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val arrayClass = classOf[GenericArrayData].getName
     val mapClass = classOf[ArrayBasedMapData].getName
-    ctx.genericWriteBuffer = true
     val keyArray = ctx.freshName("keyArray")
     val valueArray = ctx.freshName("valueArray")
     ctx.addMutableState("Object[]", keyArray, s"this.$keyArray = null;")
@@ -213,7 +211,6 @@ case class CreateStruct(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
-    ctx.genericWriteBuffer = true
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
@@ -311,7 +308,6 @@ case class CreateNamedStruct(children: Seq[Expression]) extends Expression {
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val rowClass = classOf[GenericInternalRow].getName
-    ctx.genericWriteBuffer = true
     val values = ctx.freshName("values")
     ctx.addMutableState("Object[]", values, s"this.$values = null;")
 
