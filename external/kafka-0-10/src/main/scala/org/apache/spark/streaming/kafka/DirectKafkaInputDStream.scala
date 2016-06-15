@@ -29,6 +29,7 @@ import scala.reflect.ClassTag
 import org.apache.kafka.clients.consumer._
 import org.apache.kafka.common.{ PartitionInfo, TopicPartition }
 
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.SparkException
 import org.apache.spark.internal.Logging
 import org.apache.spark.storage.StorageLevel
@@ -43,15 +44,22 @@ import org.apache.spark.streaming.scheduler.rate.RateEstimator
  * The spark configuration spark.streaming.kafka.maxRatePerPartition gives the maximum number
  *  of messages
  * per second that each '''partition''' will accept.
- * Starting offsets are specified in advance,
- * and this DStream is not responsible for committing offsets,
- * so that you can control exactly-once semantics.
- * @param kafkaParams Kafka <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+ * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
+ * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
+ * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+ * @param executorKafkaParams Kafka
+ * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
  * configuration parameters</a>.
  *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
  *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+ * @param driverConsumer zero-argument function for you to construct a Kafka Consumer,
+ *  and subscribe topics or assign partitions.
+ *  This consumer will be used on the driver to query for offsets only, not messages.
+ *  See <a href="http://kafka.apache.org/documentation.html#newconsumerapi">Consumer doc</a>
+ * @tparam K type of Kafka message key
+ * @tparam V type of Kafka message value
  */
-
+@Experimental
 class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
     _ssc: StreamingContext,
     preferredHosts: ju.Map[TopicPartition, String],
@@ -299,6 +307,10 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
   }
 }
 
+/**
+ * Companion object that provides methods to create instances of [[DirectKafkaInputDStream]]
+ */
+@Experimental
 object DirectKafkaInputDStream extends Logging {
   import org.apache.spark.streaming.api.java.{ JavaInputDStream, JavaStreamingContext }
   import org.apache.spark.api.java.function.{ Function0 => JFunction0 }
@@ -308,7 +320,23 @@ object DirectKafkaInputDStream extends Logging {
   /** Prefer a consistent executor per TopicPartition, evenly from all executors */
   val preferConsistent: ju.Map[TopicPartition, String] = ju.Collections.emptyMap()
 
-  /** Scala constructor */
+  /**
+   * Scala constructor
+   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
+   * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
+   * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+   * @param executorKafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * configuration parameters</a>.
+   *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param driverConsumer zero-argument function for you to construct a Kafka Consumer,
+   *  and subscribe topics or assign partitions.
+   *  This consumer will be used on the driver to query for offsets only, not messages.
+   *  See <a href="http://kafka.apache.org/documentation.html#newconsumerapi">Consumer doc</a>
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   */
   def apply[K: ClassTag, V: ClassTag](
       ssc: StreamingContext,
       preferredHosts: ju.Map[TopicPartition, String],
@@ -327,7 +355,25 @@ object DirectKafkaInputDStream extends Logging {
     new DirectKafkaInputDStream[K, V](ssc, ph, ekp, cleaned)
   }
 
-  /** Java constructor */
+  /**
+   * Java constructor
+   * @param keyClass Class of the keys in the Kafka records
+   * @param valueClass Class of the values in the Kafka records
+   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
+   * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
+   * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+   * @param executorKafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.html#newconsumerconfigs">
+   * configuration parameters</a>.
+   *   Requires  "bootstrap.servers" to be set with Kafka broker(s),
+   *   NOT zookeeper servers, specified in host1:port1,host2:port2 form.
+   * @param driverConsumer zero-argument function for you to construct a Kafka Consumer,
+   *  and subscribe topics or assign partitions.
+   *  This consumer will be used on the driver to query for offsets only, not messages.
+   *  See <a href="http://kafka.apache.org/documentation.html#newconsumerapi">Consumer doc</a>
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   */
   def create[K, V](
       jssc: JavaStreamingContext,
       keyClass: Class[K],

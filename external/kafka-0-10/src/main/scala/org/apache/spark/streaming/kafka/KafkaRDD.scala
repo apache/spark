@@ -26,6 +26,7 @@ import org.apache.kafka.clients.consumer.{ ConsumerConfig, ConsumerRecord }
 import org.apache.kafka.common.TopicPartition
 
 import org.apache.spark.{Partition, SparkContext, SparkException, TaskContext}
+import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.RDD
@@ -41,8 +42,13 @@ import org.apache.spark.storage.StorageLevel
  * configuration parameters</a>. Requires "bootstrap.servers" to be set
  * with Kafka broker(s) specified in host1:port1,host2:port2 form.
  * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+ * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
+ * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
+ * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+ * @tparam K type of Kafka message key
+ * @tparam V type of Kafka message value
  */
-
+@Experimental
 class KafkaRDD[
   K: ClassTag,
   V: ClassTag] private[spark] (
@@ -201,6 +207,10 @@ class KafkaRDD[
   }
 }
 
+/**
+ * Companion object that provides methods to create instances of [[KafkaRDD]]
+ */
+@Experimental
 object KafkaRDD extends Logging {
   import org.apache.spark.api.java.{ JavaRDD, JavaSparkContext }
 
@@ -224,6 +234,19 @@ object KafkaRDD extends Logging {
     }
   }
 
+  /**
+   * Scala constructor
+   * @param kafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * configuration parameters</a>. Requires "bootstrap.servers" to be set
+   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
+   * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
+   * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   */
   def apply[K: ClassTag, V: ClassTag](
       sc: SparkContext,
       kafkaParams: ju.Map[String, Object],
@@ -242,6 +265,21 @@ object KafkaRDD extends Logging {
     new KafkaRDD[K, V](sc, kp, osr, ph)
   }
 
+  /**
+   * Java constructor
+   * @param keyClass Class of the keys in the Kafka records
+   * @param valueClass Class of the values in the Kafka records
+   * @param kafkaParams Kafka
+   * <a href="http://kafka.apache.org/documentation.htmll#newconsumerconfigs">
+   * configuration parameters</a>. Requires "bootstrap.servers" to be set
+   * with Kafka broker(s) specified in host1:port1,host2:port2 form.
+   * @param offsetRanges offset ranges that define the Kafka data belonging to this RDD
+   * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
+   * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
+   * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+   * @tparam K type of Kafka message key
+   * @tparam V type of Kafka message value
+   */
   def create[K, V](
       jsc: JavaSparkContext,
       keyClass: Class[K],
