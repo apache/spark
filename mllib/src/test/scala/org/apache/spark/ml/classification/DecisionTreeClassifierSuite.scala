@@ -33,6 +33,7 @@ import org.apache.spark.sql.{DataFrame, Row}
 import scala.io.Source
 import org.apache.spark.mllib.evaluation.MulticlassMetrics
 
+
 class DecisionTreeClassifierSuite
   extends SparkFunSuite with MLlibTestSparkContext with DefaultReadWriteTest {
 
@@ -96,14 +97,14 @@ class DecisionTreeClassifierSuite
       .setMaxDepth(3)
       .setMaxBins(400)
       .setMinInstancesPerNode(1)
-      .setClassWeights(Array(1, 1000))
+      .setClassWeights(Array(1, 1))
     val categoricalFeatures: Map[Int, Int] = Map()
     val newData: DataFrame = TreeTests.setMetadata(IrIsRDD, categoricalFeatures, 2)
     val newTree = dt.fit(newData)
     val predoutput = newTree.transform(newData)
     // scalastyle:off println
-    predoutput.show(1000)
-    println(newTree.toDebugString)
+    //predoutput.show(1000)
+    //println(newTree.toDebugString)
     // scalastyle:on println
     /*
     val predictionsAndLabels = predoutput.select("prediction", "label")
@@ -148,7 +149,7 @@ class DecisionTreeClassifierSuite
     val numClasses = 2
     compareAPIs(categoricalDataPointsRDD, dt, categoricalFeatures, numClasses)
   }
-/*
+
   test("Binary classification stump with fixed labels 0,1 for Entropy,Gini") {
     val dt = new DecisionTreeClassifier()
       .setMaxDepth(3)
@@ -160,7 +161,7 @@ class DecisionTreeClassifierSuite
         compareAPIs(rdd, dt, categoricalFeatures = Map.empty[Int, Int], numClasses)
       }
     }
-  }*/
+  }
 
   test("Multiclass classification stump with 3-ary (unordered) categorical features") {
     val rdd = categoricalDataPointsForMulticlassRDD

@@ -210,7 +210,7 @@ class RandomForestClassifierSuite
       assert(model.numClasses === model2.numClasses)
     }
 
-    val rf = new RandomForestClassifier().setNumTrees(2)
+    val rf = new RandomForestClassifier().setNumTrees(2).setClassWeights(Array())
     val rdd = TreeTests.getTreeReadWriteData(sc)
 
     val allParamSettings = TreeTests.allParamSettings ++ Map("impurity" -> "entropy")
