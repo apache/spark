@@ -201,10 +201,10 @@ class SparkILoop(
       if (Utils.isWindows) {
         // Strip any URI scheme prefix so we can add the correct path to the classpath
         // e.g. file:/C:/my/path.jar -> C:/my/path.jar
-        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath.stripPrefix("/") }
+        getAddedJars().map { jar => new URI(jar).getPath.stripPrefix("/") }
       } else {
         // We need new URI(jar).getPath here for the case that `jar` includes encoded white space (%20).
-        SparkILoop.getAddedJars.map { jar => new URI(jar).getPath }
+        getAddedJars().map { jar => new URI(jar).getPath }
       }
     // work around for Scala bug
     val totalClassPath = addedJars.foldLeft(
@@ -1005,7 +1005,7 @@ class SparkILoop(
   @DeveloperApi
   def createSparkSession(): SparkSession = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val jars = SparkILoop.getAddedJars
+    val jars = getAddedJars()
     val conf = new SparkConf()
       .setMaster(getMaster())
       .setJars(jars)
@@ -1060,13 +1060,8 @@ class SparkILoop(
 
   @deprecated("Use `process` instead", "2.9.0")
   private def main(settings: Settings): Unit = process(settings)
-}
 
-object SparkILoop extends Logging {
-  implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
-  private def echo(msg: String) = Console println msg
-
-  def getAddedJars: Array[String] = {
+  private[repl] def getAddedJars(): Array[String] = {
     val conf = new SparkConf().setMaster(getMaster())
     val envJars = sys.env.get("ADD_JARS")
     if (envJars.isDefined) {
@@ -1082,6 +1077,12 @@ object SparkILoop extends Logging {
     }
     Utils.resolveURIs(jars).split(",").filter(_.nonEmpty)
   }
+
+}
+
+object SparkILoop extends Logging {
+  implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
+  private def echo(msg: String) = Console println msg
 
   // Designed primarily for use by test code: take a String with a
   // bunch of code, and prints out a transcript of what it would look
@@ -1116,7 +1117,7 @@ object SparkILoop extends Logging {
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
 
-        getAddedJars.map(jar => new URI(jar).getPath).foreach(settings.classpath.append(_))
+        repl.getAddedJars().map(jar => new URI(jar).getPath).foreach(settings.classpath.append(_))
 
         repl process settings
       }
