@@ -133,7 +133,7 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       checkEvaluation(Divide(left, Literal(convert(0))), null)  // divide by zero
     }
 
-    DataTypeTestUtils.numericTypeWithoutDecimal.foreach { tpe =>
+    Seq(DoubleType, DecimalType.SYSTEM_DEFAULT).foreach { tpe =>
       checkConsistencyBetweenInterpretedAndCodegen(Divide, tpe, tpe)
     }
   }
