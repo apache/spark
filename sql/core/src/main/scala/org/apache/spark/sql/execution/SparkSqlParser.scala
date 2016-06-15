@@ -225,7 +225,7 @@ class SparkSqlAstBuilder(conf: SQLConf) extends AstBuilder {
     if (query.isDefined && tableIdent.database.isDefined) {
       val database = tableIdent.database.get
       throw new ParseException(s"It is not allowed to add database prefix `$database` to " +
-        s"the table name in Cache Table As Select", ctx)
+        s"the table name in CACHE TABLE AS SELECT", ctx)
     }
     CacheTableCommand(tableIdent, query, ctx.LAZY != null)
   }

@@ -28,7 +28,7 @@ case class CacheTableCommand(
     plan: Option[LogicalPlan],
     isLazy: Boolean) extends RunnableCommand {
   require(plan.isEmpty || tableIdent.database.isEmpty,
-    "Database name is not allowed in Cache Table As Select")
+    "Database name is not allowed in CACHE TABLE AS SELECT")
 
   override protected def innerChildren: Seq[QueryPlan[_]] = {
     plan.toSeq
