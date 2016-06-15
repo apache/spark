@@ -41,7 +41,7 @@ if __name__ == "__main__":
     int2str = Int2Str(suffix="xxx", inputCol="text", outputCol="sentence")
     str2ary = Str2Array(split=" ", inputCol=int2str.getOutputCol(), outputCol="ary_of_sentence")
     word2vec = Word2Vec(vectorSize=5, seed=42, inputCol=str2ary.getOutputCol(), outputCol="model")
-    pipeline = Pipeline(stages=[int2str, word2vec])
+    pipeline = Pipeline(stages=[int2str, str2ary, word2vec])
 
     # Fit the pipeline to training documents.
     model = pipeline.fit(training)
