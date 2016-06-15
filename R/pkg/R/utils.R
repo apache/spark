@@ -157,8 +157,11 @@ wrapInt <- function(value) {
 
 # Multiply `val` by 31 and add `addVal` to the result. Ensures that
 # integer-overflows are handled at every step.
+#
+# TODO: this function does not handle integer overflow well
 mult31AndAdd <- function(val, addVal) {
   vec <- c(bitwShiftL(val, c(4, 3, 2, 1, 0)), addVal)
+  vec[is.na(vec)] <- 0
   Reduce(function(a, b) {
           wrapInt(as.numeric(a) + as.numeric(b))
          },
@@ -486,7 +489,7 @@ processClosure <- function(node, oldEnv, defVars, checkedFuncs, newEnv) {
 #   checkedFunc An environment of function objects examined during cleanClosure. It can be
 #               considered as a "name"-to-"list of functions" mapping.
 # return value
-#   a new version of func that has an correct environment (closure).
+#   a new version of func that has a correct environment (closure).
 cleanClosure <- function(func, checkedFuncs = new.env()) {
   if (is.function(func)) {
     newEnv <- new.env(parent = .GlobalEnv)
@@ -632,7 +635,7 @@ assignNewEnv <- function(data) {
 
   env <- new.env()
   for (i in 1:length(cols)) {
-    assign(x = cols[i], value = data[, cols[i]], envir = env)
+    assign(x = cols[i], value = data[, cols[i], drop = F], envir = env)
   }
   env
 }
@@ -660,4 +663,13 @@ varargsToJProperties <- function(...) {
     })
   }
   props
+}
+
+launchScript <- function(script, combinedArgs, capture = FALSE) {
+  if (.Platform$OS.type == "windows") {
+    scriptWithArgs <- paste(script, combinedArgs, sep = " ")
+    shell(scriptWithArgs, translate = TRUE, wait = capture, intern = capture) # nolint
+  } else {
+    system2(script, combinedArgs, wait = capture, stdout = capture)
+  }
 }

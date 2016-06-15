@@ -296,7 +296,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.executor.logs.rolling.maxSize</code></td>
   <td>(none)</td>
   <td>
-    Set the max size of the file by which the executor logs will be rolled over.
+    Set the max size of the file in bytes by which the executor logs will be rolled over.
     Rolling is disabled by default. See <code>spark.executor.logs.rolling.maxRetainedFiles</code>
     for automatic cleaning of old logs.
   </td>
@@ -308,7 +308,7 @@ Apart from these, the following properties are also available, and may be useful
     Set the strategy of rolling of executor logs. By default it is disabled. It can
     be set to "time" (time-based rolling) or "size" (size-based rolling). For "time",
     use <code>spark.executor.logs.rolling.time.interval</code> to set the rolling interval.
-    For "size", use <code>spark.executor.logs.rolling.size.maxBytes</code> to set
+    For "size", use <code>spark.executor.logs.rolling.maxSize</code> to set
     the maximum file size for rolling.
   </td>
 </tr>
@@ -378,6 +378,53 @@ Apart from these, the following properties are also available, and may be useful
     does not need to fork() a Python process for every tasks. It will be very useful
     if there is large broadcast, then the broadcast will not be needed to transferred
     from JVM to Python worker for every task.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.files</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of files to be placed in the working directory of each executor.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.submit.pyFiles</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of .zip, .egg, or .py files to place on the PYTHONPATH for Python apps.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of local jars to include on the driver and executor classpaths.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.packages</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of maven coordinates of jars to include on the driver and executor
+    classpaths. Will search the local maven repo, then maven central and any additional remote
+    repositories given by <code>spark.jars.ivy</code>. The format for the coordinates should be
+    groupId:artifactId:version.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.excludes</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of groupId:artifactId, to exclude while resolving the dependencies
+    provided in <code>spark.jars.packages</code> to avoid dependency conflicts.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.jars.ivy</code></td>
+  <td></td>
+  <td>
+    Comma-separated list of additional remote repositories to search for the coordinates given
+    with <code>spark.jars.packages</code>.
   </td>
 </tr>
 </table>
@@ -1231,7 +1278,7 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.acls.enable</code></td>
   <td>false</td>
   <td>
-    Whether Spark acls should are enabled. If enabled, this checks to see if the user has
+    Whether Spark acls should be enabled. If enabled, this checks to see if the user has
     access permissions to view or modify the job.  Note this requires the user to be known,
     so if the user comes across as null no checks are done. Filters can be used with the UI
     to authenticate and set the user.
@@ -1243,8 +1290,33 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of users/administrators that have view and modify access to all Spark jobs.
     This can be used if you run on a shared cluster and have a set of administrators or devs who
-    help debug when things work. Putting a "*" in the list means any user can have the privilege
-    of admin.
+    help debug when things do not work. Putting a "*" in the list means any user can have the
+    privilege of admin.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.admin.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have view and modify access to all Spark jobs.
+    This can be used if you have a set of administrators or developers who help maintain and debug
+    the underlying infrastructure. Putting a "*" in the list means any user in any group can have
+    the privilege of admin. The user groups are obtained from the instance of the groups mapping
+    provider specified by <code>spark.user.groups.mapping</code>. Check the entry
+    <code>spark.user.groups.mapping</code> for more details.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.user.groups.mapping</code></td>
+  <td><code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code></td>
+  <td>
+    The list of groups for a user are determined by a group mapping service defined by the trait
+    org.apache.spark.security.GroupMappingServiceProvider which can configured by this property.
+    A default unix shell based implementation is provided <code>org.apache.spark.security.ShellBasedGroupsMappingProvider</code>
+    which can be specified to resolve a list of groups for a user.
+    <em>Note:</em> This implementation supports only a Unix/Linux based environment. Windows environment is
+    currently <b>not</b> supported. However, a new platform/protocol can be supported by implementing
+    the trait <code>org.apache.spark.security.GroupMappingServiceProvider</code>.
   </td>
 </tr>
 <tr>
@@ -1306,6 +1378,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td><code>spark.modify.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have modify access to the Spark job. This can be used if you
+    have a set of administrators or developers from the same team to have access to control the job.
+    Putting a "*" in the list means any user in any group has the access to modify the Spark job.
+    The user groups are obtained from the instance of the groups mapping provider specified by
+    <code>spark.user.groups.mapping</code>. Check the entry <code>spark.user.groups.mapping</code>
+    for more details.
+  </td>
+</tr>
+<tr>
   <td><code>spark.ui.filters</code></td>
   <td>None</td>
   <td>
@@ -1326,6 +1410,18 @@ Apart from these, the following properties are also available, and may be useful
     Comma separated list of users that have view access to the Spark web ui. By default only the
     user that started the Spark job has view access. Putting a "*" in the list means any user can
     have view access to this Spark job.
+  </td>
+</tr>
+<tr>
+  <td><code>spark.ui.view.acls.groups</code></td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of groups that have view access to the Spark web ui to view the Spark Job
+    details. This can be used if you have a set of administrators or developers or users who can
+    monitor the Spark job submitted. Putting a "*" in the list means any user in any group can view
+    the Spark job details on the Spark web ui. The user groups are obtained from the instance of the
+    groups mapping provider specified by <code>spark.user.groups.mapping</code>. Check the entry
+    <code>spark.user.groups.mapping</code> for more details.
   </td>
 </tr>
 </table>
@@ -1429,6 +1525,48 @@ Apart from these, the following properties are also available, and may be useful
         </td>
     </tr>
 </table>
+
+
+#### Spark SQL
+Running the <code>SET -v</code> command will show the entire list of the SQL configuration.
+
+<div class="codetabs">
+<div data-lang="scala"  markdown="1">
+
+{% highlight scala %}
+// spark is an existing SparkSession
+spark.sql("SET -v").show(numRows = 200, truncate = false)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="java"  markdown="1">
+
+{% highlight java %}
+// spark is an existing SparkSession
+spark.sql("SET -v").show(200, false);
+{% endhighlight %}
+</div>
+
+<div data-lang="python"  markdown="1">
+
+{% highlight python %}
+# spark is an existing SparkSession
+spark.sql("SET -v").show(n=200, truncate=False)
+{% endhighlight %}
+
+</div>
+
+<div data-lang="r"  markdown="1">
+
+{% highlight r %}
+# sqlContext is an existing sqlContext.
+properties <- sql(sqlContext, "SET -v")
+showDF(properties, numRows = 200, truncate = FALSE)
+{% endhighlight %}
+
+</div>
+</div>
 
 
 #### Spark Streaming

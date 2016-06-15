@@ -16,6 +16,7 @@
 #
 
 from math import exp
+import warnings
 
 import numpy
 from numpy import array
@@ -51,7 +52,7 @@ class LinearClassificationModel(LinearModel):
 
         Sets the threshold that separates positive predictions from
         negative predictions. An example with prediction score greater
-        than or equal to this threshold is identified as an positive,
+        than or equal to this threshold is identified as a positive,
         and negative otherwise. It is used for binary classification
         only.
         """
@@ -266,6 +267,8 @@ class LogisticRegressionModel(LinearClassificationModel):
 class LogisticRegressionWithSGD(object):
     """
     .. versionadded:: 0.9.0
+    .. note:: Deprecated in 2.0.0. Use ml.classification.LogisticRegression or
+            LogisticRegressionWithLBFGS.
     """
     @classmethod
     @since('0.9.0')
@@ -312,6 +315,10 @@ class LogisticRegressionWithSGD(object):
           A condition which decides iteration termination.
           (default: 0.001)
         """
+        warnings.warn(
+            "Deprecated in 2.0.0. Use ml.classification.LogisticRegression or "
+            "LogisticRegressionWithLBFGS.")
+
         def train(rdd, i):
             return callMLlibFunc("trainLogisticRegressionModelWithSGD", rdd, int(iterations),
                                  float(step), float(miniBatchFraction), i, float(regParam), regType,
@@ -749,12 +756,16 @@ class StreamingLogisticRegressionWithSGD(StreamingLinearAlgorithm):
 
 def _test():
     import doctest
-    from pyspark import SparkContext
+    from pyspark.sql import SparkSession
     import pyspark.mllib.classification
     globs = pyspark.mllib.classification.__dict__.copy()
-    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    spark = SparkSession.builder\
+        .master("local[4]")\
+        .appName("mllib.classification tests")\
+        .getOrCreate()
+    globs['sc'] = spark.sparkContext
     (failure_count, test_count) = doctest.testmod(globs=globs, optionflags=doctest.ELLIPSIS)
-    globs['sc'].stop()
+    spark.stop()
     if failure_count:
         exit(-1)
 

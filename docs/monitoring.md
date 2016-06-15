@@ -27,11 +27,6 @@ in the UI to persisted storage.
 
 ## Viewing After the Fact
 
-Spark's Standalone Mode cluster manager also has its own
-[web UI](spark-standalone.html#monitoring-and-logging). If an application has logged events over
-the course of its lifetime, then the Standalone master's web UI will automatically re-render the
-application's UI after the application has finished.
-
 If Spark is run on Mesos or YARN, it is still possible to construct the UI of an
 application through Spark's history server, provided that the application's event logs exist.
 You can start the history server by executing:
@@ -162,8 +157,8 @@ The history server can be configured as follows:
       If enabled, access control checks are made regardless of what the individual application had
       set for <code>spark.ui.acls.enable</code> when the application was run. The application owner
       will always have authorization to view their own application and any users specified via
-      <code>spark.ui.view.acls</code> when the application was run will also have authorization
-      to view that application.
+      <code>spark.ui.view.acls</code> and groups specified via <code>spark.ui.view.acls.groups<code>
+      when the application was run will also have authorization to view that application.
       If disabled, no access control checks are made.
     </td>
   </tr>
@@ -341,7 +336,7 @@ keep the paths consistent in both modes.
 # Metrics
 
 Spark has a configurable metrics system based on the
-[Coda Hale Metrics Library](http://metrics.codahale.com/).
+[Dropwizard Metrics Library](http://metrics.dropwizard.io/).
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV
 files. The metrics system is configured via a configuration file that Spark expects to be present
 at `$SPARK_HOME/conf/metrics.properties`. A custom file location can be specified via the

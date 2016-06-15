@@ -22,12 +22,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.SparkContext
 import org.apache.spark.annotation.{Experimental, Since}
 import org.apache.spark.ml.{Estimator, Model}
+import org.apache.spark.ml.linalg.{BLAS, Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.feature
-import org.apache.spark.mllib.linalg.{BLAS, Vector, Vectors, VectorUDT}
-import org.apache.spark.sql.{DataFrame, Dataset, SQLContext}
+import org.apache.spark.mllib.linalg.VectorImplicits._
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
@@ -50,7 +51,8 @@ private[feature] trait Word2VecBase extends Params
   def getVectorSize: Int = $(vectorSize)
 
   /**
-   * The window size (context words from [-window, window]) default 5.
+   * The window size (context words from [-window, window]).
+   * Default: 5
    * @group expertParam
    */
   final val windowSize = new IntParam(
@@ -84,6 +86,21 @@ private[feature] trait Word2VecBase extends Params
 
   /** @group getParam */
   def getMinCount: Int = $(minCount)
+
+  /**
+   * Sets the maximum length (in words) of each sentence in the input data.
+   * Any sentence longer than this threshold will be divided into chunks of
+   * up to `maxSentenceLength` size.
+   * Default: 1000
+   * @group param
+   */
+  final val maxSentenceLength = new IntParam(this, "maxSentenceLength", "Maximum length " +
+    "(in words) of each sentence in the input data. Any sentence longer than this threshold will " +
+    "be divided into chunks up to the size.")
+  setDefault(maxSentenceLength -> 1000)
+
+  /** @group getParam */
+  def getMaxSentenceLength: Int = $(maxSentenceLength)
 
   setDefault(stepSize -> 0.025)
   setDefault(maxIter -> 1)
@@ -135,6 +152,9 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
   /** @group setParam */
   def setMinCount(value: Int): this.type = set(minCount, value)
 
+  /** @group setParam */
+  def setMaxSentenceLength(value: Int): this.type = set(maxSentenceLength, value)
+
   @Since("2.0.0")
   override def fit(dataset: Dataset[_]): Word2VecModel = {
     transformSchema(dataset.schema, logging = true)
@@ -147,6 +167,7 @@ final class Word2Vec(override val uid: String) extends Estimator[Word2VecModel] 
       .setSeed($(seed))
       .setVectorSize($(vectorSize))
       .setWindowSize($(windowSize))
+      .setMaxSentenceLength($(maxSentenceLength))
       .fit(input)
     copyValues(new Word2VecModel(uid, wordVectors).setParent(this))
   }
@@ -182,11 +203,9 @@ class Word2VecModel private[ml] (
    * and the vector the DenseVector that it is mapped to.
    */
   @transient lazy val getVectors: DataFrame = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
+    val spark = SparkSession.builder().getOrCreate()
     val wordVec = wordVectors.getVectors.mapValues(vec => Vectors.dense(vec.map(_.toDouble)))
-    sc.parallelize(wordVec.toSeq).toDF("word", "vector")
+    spark.createDataFrame(wordVec.toSeq).toDF("word", "vector")
   }
 
   /**
@@ -204,10 +223,8 @@ class Word2VecModel private[ml] (
    * synonyms and the given word vector.
    */
   def findSynonyms(word: Vector, num: Int): DataFrame = {
-    val sc = SparkContext.getOrCreate()
-    val sqlContext = SQLContext.getOrCreate(sc)
-    import sqlContext.implicits._
-    sc.parallelize(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
+    val spark = SparkSession.builder().getOrCreate()
+    spark.createDataFrame(wordVectors.findSynonyms(word, num)).toDF("word", "similarity")
   }
 
   /** @group setParam */
@@ -229,7 +246,7 @@ class Word2VecModel private[ml] (
     val bVectors = dataset.sparkSession.sparkContext.broadcast(vectors)
     val d = $(vectorSize)
     val word2Vec = udf { sentence: Seq[String] =>
-      if (sentence.size == 0) {
+      if (sentence.isEmpty) {
         Vectors.sparse(d, Array.empty[Int], Array.empty[Double])
       } else {
         val sum = Vectors.zeros(d)

@@ -26,9 +26,10 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
-import org.apache.spark.sql.catalyst.catalog.{CatalogColumn, CatalogStorageFormat, CatalogTable, CatalogTableType}
+import org.apache.spark.sql.catalyst.catalog._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.execution.datasources.{BucketSpec, DataSource, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.internal.HiveSerDe
 import org.apache.spark.sql.sources.InsertableRelation
 import org.apache.spark.sql.types._
@@ -36,7 +37,7 @@ import org.apache.spark.sql.types._
 /**
  * A command used to create a data source table.
  *
- * Note: This is different from [[CreateTable]]. Please check the syntax for difference.
+ * Note: This is different from [[CreateTableCommand]]. Please check the syntax for difference.
  * This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
@@ -51,6 +52,8 @@ case class CreateDataSourceTableCommand(
     userSpecifiedSchema: Option[StructType],
     provider: String,
     options: Map[String, String],
+    partitionColumns: Array[String],
+    bucketSpec: Option[BucketSpec],
     ignoreIfExists: Boolean,
     managedIfNoPath: Boolean)
   extends RunnableCommand {
@@ -84,7 +87,7 @@ case class CreateDataSourceTableCommand(
 
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path") && managedIfNoPath) {
+      if (!new CaseInsensitiveMap(options).contains("path") && managedIfNoPath) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
@@ -97,14 +100,14 @@ case class CreateDataSourceTableCommand(
       userSpecifiedSchema = userSpecifiedSchema,
       className = provider,
       bucketSpec = None,
-      options = optionsWithPath).resolveRelation()
+      options = optionsWithPath).resolveRelation(checkPathExist = false)
 
     CreateDataSourceTableUtils.createDataSourceTable(
       sparkSession = sparkSession,
       tableIdent = tableIdent,
       userSpecifiedSchema = userSpecifiedSchema,
-      partitionColumns = Array.empty[String],
-      bucketSpec = None,
+      partitionColumns = partitionColumns,
+      bucketSpec = bucketSpec,
       provider = provider,
       options = optionsWithPath,
       isExternal = isExternal)
@@ -116,8 +119,8 @@ case class CreateDataSourceTableCommand(
 /**
  * A command used to create a data source table using the result of a query.
  *
- * Note: This is different from [[CreateTableAsSelect]]. Please check the syntax for difference.
- * This is not intended for temporary tables.
+ * Note: This is different from [[CreateTableAsSelectLogicalPlan]]. Please check the syntax for
+ * difference. This is not intended for temporary tables.
  *
  * The syntax of using this command in SQL is:
  * {{{
@@ -135,6 +138,8 @@ case class CreateDataSourceTableAsSelectCommand(
     options: Map[String, String],
     query: LogicalPlan)
   extends RunnableCommand {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(query)
 
   override def run(sparkSession: SparkSession): Seq[Row] = {
     // Since we are saving metadata to metastore, we need to check if metastore supports
@@ -157,14 +162,14 @@ case class CreateDataSourceTableAsSelectCommand(
     var createMetastoreTable = false
     var isExternal = true
     val optionsWithPath =
-      if (!options.contains("path")) {
+      if (!new CaseInsensitiveMap(options).contains("path")) {
         isExternal = false
         options + ("path" -> sessionState.catalog.defaultTablePath(tableIdent))
       } else {
         options
       }
 
-    var existingSchema = None: Option[StructType]
+    var existingSchema = Option.empty[StructType]
     if (sparkSession.sessionState.catalog.tableExists(tableIdent)) {
       // Check if we need to throw an exception or just return.
       mode match {
@@ -192,7 +197,23 @@ case class CreateDataSourceTableAsSelectCommand(
           EliminateSubqueryAliases(
             sessionState.catalog.lookupRelation(tableIdent)) match {
             case l @ LogicalRelation(_: InsertableRelation | _: HadoopFsRelation, _, _) =>
+              // check if the file formats match
+              l.relation match {
+                case r: HadoopFsRelation if r.fileFormat.getClass != dataSource.providingClass =>
+                  throw new AnalysisException(
+                    s"The file format of the existing table $tableIdent is " +
+                      s"`${r.fileFormat.getClass.getName}`. It doesn't match the specified " +
+                      s"format `$provider`")
+                case _ =>
+              }
+              if (query.schema.size != l.schema.size) {
+                throw new AnalysisException(
+                  s"The column number of the existing schema[${l.schema}] " +
+                    s"doesn't match the data schema[${query.schema}]'s")
+              }
               existingSchema = Some(l.schema)
+            case s: SimpleCatalogRelation if DDLUtils.isDatasourceTable(s.metadata) =>
+              existingSchema = DDLUtils.getSchemaFromTableProperties(s.metadata)
             case o =>
               throw new AnalysisException(s"Saving data in ${o.toString} is not supported.")
           }
@@ -244,7 +265,25 @@ case class CreateDataSourceTableAsSelectCommand(
   }
 }
 
+
 object CreateDataSourceTableUtils extends Logging {
+
+  val DATASOURCE_PREFIX = "spark.sql.sources."
+  val DATASOURCE_PROVIDER = DATASOURCE_PREFIX + "provider"
+  val DATASOURCE_WRITEJOBUUID = DATASOURCE_PREFIX + "writeJobUUID"
+  val DATASOURCE_OUTPUTPATH = DATASOURCE_PREFIX + "output.path"
+  val DATASOURCE_SCHEMA = DATASOURCE_PREFIX + "schema"
+  val DATASOURCE_SCHEMA_PREFIX = DATASOURCE_SCHEMA + "."
+  val DATASOURCE_SCHEMA_NUMPARTS = DATASOURCE_SCHEMA_PREFIX + "numParts"
+  val DATASOURCE_SCHEMA_NUMPARTCOLS = DATASOURCE_SCHEMA_PREFIX + "numPartCols"
+  val DATASOURCE_SCHEMA_NUMSORTCOLS = DATASOURCE_SCHEMA_PREFIX + "numSortCols"
+  val DATASOURCE_SCHEMA_NUMBUCKETS = DATASOURCE_SCHEMA_PREFIX + "numBuckets"
+  val DATASOURCE_SCHEMA_NUMBUCKETCOLS = DATASOURCE_SCHEMA_PREFIX + "numBucketCols"
+  val DATASOURCE_SCHEMA_PART_PREFIX = DATASOURCE_SCHEMA_PREFIX + "part."
+  val DATASOURCE_SCHEMA_PARTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "partCol."
+  val DATASOURCE_SCHEMA_BUCKETCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "bucketCol."
+  val DATASOURCE_SCHEMA_SORTCOL_PREFIX = DATASOURCE_SCHEMA_PREFIX + "sortCol."
+
   /**
    * Checks if the given name conforms the Hive standard ("[a-zA-z_0-9]+"),
    * i.e. if this name only contains characters, numbers, and _.
@@ -269,7 +308,7 @@ object CreateDataSourceTableUtils extends Logging {
       options: Map[String, String],
       isExternal: Boolean): Unit = {
     val tableProperties = new mutable.HashMap[String, String]
-    tableProperties.put("spark.sql.sources.provider", provider)
+    tableProperties.put(DATASOURCE_PROVIDER, provider)
 
     // Saves optional user specified schema.  Serialized JSON schema string may be too long to be
     // stored into a single metastore SerDe property.  In this case, we split the JSON string and
@@ -279,34 +318,32 @@ object CreateDataSourceTableUtils extends Logging {
       val schemaJsonString = schema.json
       // Split the JSON string.
       val parts = schemaJsonString.grouped(threshold).toSeq
-      tableProperties.put("spark.sql.sources.schema.numParts", parts.size.toString)
+      tableProperties.put(DATASOURCE_SCHEMA_NUMPARTS, parts.size.toString)
       parts.zipWithIndex.foreach { case (part, index) =>
-        tableProperties.put(s"spark.sql.sources.schema.part.$index", part)
+        tableProperties.put(s"$DATASOURCE_SCHEMA_PART_PREFIX$index", part)
       }
     }
 
     if (userSpecifiedSchema.isDefined && partitionColumns.length > 0) {
-      tableProperties.put("spark.sql.sources.schema.numPartCols", partitionColumns.length.toString)
+      tableProperties.put(DATASOURCE_SCHEMA_NUMPARTCOLS, partitionColumns.length.toString)
       partitionColumns.zipWithIndex.foreach { case (partCol, index) =>
-        tableProperties.put(s"spark.sql.sources.schema.partCol.$index", partCol)
+        tableProperties.put(s"$DATASOURCE_SCHEMA_PARTCOL_PREFIX$index", partCol)
       }
     }
 
     if (userSpecifiedSchema.isDefined && bucketSpec.isDefined) {
       val BucketSpec(numBuckets, bucketColumnNames, sortColumnNames) = bucketSpec.get
 
-      tableProperties.put("spark.sql.sources.schema.numBuckets", numBuckets.toString)
-      tableProperties.put("spark.sql.sources.schema.numBucketCols",
-        bucketColumnNames.length.toString)
+      tableProperties.put(DATASOURCE_SCHEMA_NUMBUCKETS, numBuckets.toString)
+      tableProperties.put(DATASOURCE_SCHEMA_NUMBUCKETCOLS, bucketColumnNames.length.toString)
       bucketColumnNames.zipWithIndex.foreach { case (bucketCol, index) =>
-        tableProperties.put(s"spark.sql.sources.schema.bucketCol.$index", bucketCol)
+        tableProperties.put(s"$DATASOURCE_SCHEMA_BUCKETCOL_PREFIX$index", bucketCol)
       }
 
       if (sortColumnNames.nonEmpty) {
-        tableProperties.put("spark.sql.sources.schema.numSortCols",
-          sortColumnNames.length.toString)
+        tableProperties.put(DATASOURCE_SCHEMA_NUMSORTCOLS, sortColumnNames.length.toString)
         sortColumnNames.zipWithIndex.foreach { case (sortCol, index) =>
-          tableProperties.put(s"spark.sql.sources.schema.sortCol.$index", sortCol)
+          tableProperties.put(s"$DATASOURCE_SCHEMA_SORTCOL_PREFIX$index", sortCol)
         }
       }
     }
@@ -349,6 +386,7 @@ object CreateDataSourceTableUtils extends Logging {
           inputFormat = None,
           outputFormat = None,
           serde = None,
+          compressed = false,
           serdeProperties = options
         ),
         properties = tableProperties.toMap)
@@ -368,6 +406,7 @@ object CreateDataSourceTableUtils extends Logging {
           inputFormat = serde.inputFormat,
           outputFormat = serde.outputFormat,
           serde = serde.serde,
+          compressed = false,
           serdeProperties = options
         ),
         schema = relation.schema.map { f =>
@@ -380,15 +419,16 @@ object CreateDataSourceTableUtils extends Logging {
     // TODO: Support persisting partitioned data source relations in Hive compatible format
     val qualifiedTableName = tableIdent.quotedString
     val skipHiveMetadata = options.getOrElse("skipHiveMetadata", "false").toBoolean
-    val (hiveCompatibleTable, logMessage) = (maybeSerDe, dataSource.resolveRelation()) match {
+    val resolvedRelation = dataSource.resolveRelation(checkPathExist = false)
+    val (hiveCompatibleTable, logMessage) = (maybeSerDe, resolvedRelation) match {
       case _ if skipHiveMetadata =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive."
         (None, message)
 
-      case (Some(serde), relation: HadoopFsRelation)
-        if relation.location.paths.length == 1 && relation.partitionSchema.isEmpty =>
+      case (Some(serde), relation: HadoopFsRelation) if relation.location.paths.length == 1 &&
+        relation.partitionSchema.isEmpty && relation.bucketSpec.isEmpty =>
         val hiveTable = newHiveCompatibleMetastoreTable(relation, serde)
         val message =
           s"Persisting data source relation $qualifiedTableName with a single input path " +
@@ -399,6 +439,13 @@ object CreateDataSourceTableUtils extends Logging {
       case (Some(serde), relation: HadoopFsRelation) if relation.partitionSchema.nonEmpty =>
         val message =
           s"Persisting partitioned data source relation $qualifiedTableName into " +
+            "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
+            "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
+        (None, message)
+
+      case (Some(serde), relation: HadoopFsRelation) if relation.bucketSpec.nonEmpty =>
+        val message =
+          s"Persisting bucketed data source relation $qualifiedTableName into " +
             "Hive metastore in Spark SQL specific format, which is NOT compatible with Hive. " +
             "Input path(s): " + relation.location.paths.mkString("\n", "\n", "")
         (None, message)

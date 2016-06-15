@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.execution.columnar
 
-import scala.collection.mutable.ArrayBuffer
+import scala.collection.JavaConverters._
 
-import org.apache.spark.{Accumulable, Accumulator, Accumulators}
+import org.apache.commons.lang.StringUtils
+
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.Statistics
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -33,6 +35,8 @@ import org.apache.spark.sql.execution.{LeafExecNode, SparkPlan}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.types.UserDefinedType
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.{AccumulatorContext, CollectionAccumulator, LongAccumulator}
+
 
 private[sql] object InMemoryRelation {
   def apply(
@@ -63,14 +67,16 @@ private[sql] case class InMemoryRelation(
     tableName: Option[String])(
     @transient private[sql] var _cachedColumnBuffers: RDD[CachedBatch] = null,
     @transient private[sql] var _statistics: Statistics = null,
-    private[sql] var _batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] = null)
+    private[sql] var _batchStats: CollectionAccumulator[InternalRow] = null)
   extends logical.LeafNode with MultiInstanceRelation {
+
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(child)
 
   override def producedAttributes: AttributeSet = outputSet
 
-  private val batchStats: Accumulable[ArrayBuffer[InternalRow], InternalRow] =
+  private[sql] val batchStats: CollectionAccumulator[InternalRow] =
     if (_batchStats == null) {
-      child.sqlContext.sparkContext.accumulableCollection(ArrayBuffer.empty[InternalRow])
+      child.sqlContext.sparkContext.collectionAccumulator[InternalRow]
     } else {
       _batchStats
     }
@@ -83,7 +89,7 @@ private[sql] case class InMemoryRelation(
         output.map(a => partitionStatistics.forAttribute(a).sizeInBytes).reduce(Add),
         partitionStatistics.schema)
 
-    batchStats.value.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
+    batchStats.value.asScala.map(row => sizeOfRow.eval(row).asInstanceOf[Long]).sum
   }
 
   // Statistics propagation contracts:
@@ -165,7 +171,7 @@ private[sql] case class InMemoryRelation(
           val stats = InternalRow.fromSeq(columnBuilders.map(_.columnStats.collectedStatistics)
                         .flatMap(_.values))
 
-          batchStats += stats
+          batchStats.add(stats)
           CachedBatch(rowCount, columnBuilders.map { builder =>
             JavaUtils.bufferToArray(builder.build())
           }, stats)
@@ -175,7 +181,9 @@ private[sql] case class InMemoryRelation(
       }
     }.persist(storageLevel)
 
-    cached.setName(tableName.map(n => s"In-memory table $n").getOrElse(child.toString))
+    cached.setName(
+      tableName.map(n => s"In-memory table $n")
+        .getOrElse(StringUtils.abbreviate(child.toString, 1024)))
     _cachedColumnBuffers = cached
   }
 
@@ -202,12 +210,6 @@ private[sql] case class InMemoryRelation(
 
   override protected def otherCopyArgs: Seq[AnyRef] =
     Seq(_cachedColumnBuffers, statisticsToBePropagated, batchStats)
-
-  private[sql] def uncache(blocking: Boolean): Unit = {
-    Accumulators.remove(batchStats.id)
-    cachedColumnBuffers.unpersist(blocking)
-    _cachedColumnBuffers = null
-  }
 }
 
 private[sql] case class InMemoryTableScanExec(
@@ -216,8 +218,10 @@ private[sql] case class InMemoryTableScanExec(
     @transient relation: InMemoryRelation)
   extends LeafExecNode {
 
+  override protected def innerChildren: Seq[QueryPlan[_]] = Seq(relation) ++ super.innerChildren
+
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   override def output: Seq[Attribute] = attributes
 
@@ -283,8 +287,8 @@ private[sql] case class InMemoryTableScanExec(
     sqlContext.getConf("spark.sql.inMemoryTableScanStatistics.enable", "false").toBoolean
 
   // Accumulators used for testing purposes
-  lazy val readPartitions: Accumulator[Int] = sparkContext.accumulator(0)
-  lazy val readBatches: Accumulator[Int] = sparkContext.accumulator(0)
+  lazy val readPartitions = sparkContext.longAccumulator
+  lazy val readBatches = sparkContext.longAccumulator
 
   private val inMemoryPartitionPruningEnabled = sqlContext.conf.inMemoryPartitionPruning
 
@@ -300,7 +304,7 @@ private[sql] case class InMemoryTableScanExec(
     // within the map Partitions closure.
     val schema = relation.partitionStatistics.schema
     val schemaIndex = schema.zipWithIndex
-    val relOutput = relation.output
+    val relOutput: AttributeSeq = relation.output
     val buffers = relation.cachedColumnBuffers
 
     buffers.mapPartitionsInternal { cachedBatchIterator =>
@@ -311,7 +315,7 @@ private[sql] case class InMemoryTableScanExec(
       // Find the ordinals and data types of the requested columns.
       val (requestedColumnIndices, requestedColumnDataTypes) =
         attributes.map { a =>
-          relOutput.indexWhere(_.exprId == a.exprId) -> a.dataType
+          relOutput.indexOf(a.exprId) -> a.dataType
         }.unzip
 
       // Do partition batch pruning if enabled
@@ -328,7 +332,7 @@ private[sql] case class InMemoryTableScanExec(
               false
             } else {
               if (enableAccumulators) {
-                readBatches += 1
+                readBatches.add(1)
               }
               true
             }
@@ -350,7 +354,7 @@ private[sql] case class InMemoryTableScanExec(
       val columnarIterator = GenerateColumnAccessor.generate(columnTypes)
       columnarIterator.initialize(withMetrics, columnTypes, requestedColumnIndices.toArray)
       if (enableAccumulators && columnarIterator.hasNext) {
-        readPartitions += 1
+        readPartitions.add(1)
       }
       columnarIterator
     }

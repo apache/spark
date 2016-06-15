@@ -266,7 +266,13 @@ private[spark] object SerializationDebugger extends Logging {
       (o, desc)
     } else {
       // write place
-      findObjectAndDescriptor(desc.invokeWriteReplace(o))
+      val replaced = desc.invokeWriteReplace(o)
+      // `writeReplace` may return the same object.
+      if (replaced eq o) {
+        (o, desc)
+      } else {
+        findObjectAndDescriptor(replaced)
+      }
     }
   }
 

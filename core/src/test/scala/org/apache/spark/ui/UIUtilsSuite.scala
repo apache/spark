@@ -110,7 +110,7 @@ class UIUtilsSuite extends SparkFunSuite {
   }
 
   test("SPARK-11906: Progress bar should not overflow because of speculative tasks") {
-    val generated = makeProgressBar(2, 3, 0, 0, 4).head.child.filter(_.label == "div")
+    val generated = makeProgressBar(2, 3, 0, 0, 0, 4).head.child.filter(_.label == "div")
     val expected = Seq(
       <div class="bar bar-completed" style="width: 75.0%"></div>,
       <div class="bar bar-running" style="width: 25.0%"></div>

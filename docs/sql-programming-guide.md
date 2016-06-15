@@ -529,7 +529,7 @@ case class Person(name: String, age: Int)
 
 // Create an RDD of Person objects and register it as a table.
 val people = sc.textFile("examples/src/main/resources/people.txt").map(_.split(",")).map(p => Person(p(0), p(1).trim.toInt)).toDF()
-people.registerTempTable("people")
+people.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name, age FROM people WHERE age >= 13 AND age <= 19")
@@ -605,7 +605,7 @@ JavaRDD<Person> people = sc.textFile("examples/src/main/resources/people.txt").m
 
 // Apply a schema to an RDD of JavaBeans and register it as a table.
 DataFrame schemaPeople = sqlContext.createDataFrame(people, Person.class);
-schemaPeople.registerTempTable("people");
+schemaPeople.createOrReplaceTempView("people");
 
 // SQL can be run over RDDs that have been registered as tables.
 DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -643,7 +643,7 @@ people = parts.map(lambda p: Row(name=p[0], age=int(p[1])))
 
 # Infer the schema, and register the DataFrame as a table.
 schemaPeople = sqlContext.createDataFrame(people)
-schemaPeople.registerTempTable("people")
+schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -703,8 +703,8 @@ val rowRDD = people.map(_.split(",")).map(p => Row(p(0), p(1).trim))
 // Apply the schema to the RDD.
 val peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema)
 
-// Register the DataFrames as a table.
-peopleDataFrame.registerTempTable("people")
+// Creates a temporary view using the DataFrame.
+peopleDataFrame.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val results = sqlContext.sql("SELECT name FROM people")
@@ -771,10 +771,10 @@ JavaRDD<Row> rowRDD = people.map(
 // Apply the schema to the RDD.
 DataFrame peopleDataFrame = sqlContext.createDataFrame(rowRDD, schema);
 
-// Register the DataFrame as a table.
-peopleDataFrame.registerTempTable("people");
+// Creates a temporary view using the DataFrame.
+peopleDataFrame.createOrReplaceTempView("people");
 
-// SQL can be run over RDDs that have been registered as tables.
+// SQL can be run over a temporary view created using DataFrames.
 DataFrame results = sqlContext.sql("SELECT name FROM people");
 
 // The results of SQL queries are DataFrames and support all the normal RDD operations.
@@ -824,8 +824,8 @@ schema = StructType(fields)
 # Apply the schema to the RDD.
 schemaPeople = sqlContext.createDataFrame(people, schema)
 
-# Register the DataFrame as a table.
-schemaPeople.registerTempTable("people")
+# Creates a temporary view using the DataFrame
+schemaPeople.createOrReplaceTempView("people")
 
 # SQL can be run over DataFrames that have been registered as a table.
 results = sqlContext.sql("SELECT name FROM people")
@@ -844,7 +844,7 @@ for name in names.collect():
 # Data Sources
 
 Spark SQL supports operating on a variety of data sources through the `DataFrame` interface.
-A DataFrame can be operated on as normal RDDs and can also be registered as a temporary table.
+A DataFrame can be operated on as normal RDDs and can also be used to create a temporary view.
 Registering a DataFrame as a table allows you to run SQL queries over its data. This section
 describes the general methods for loading and saving data using the Spark Data Sources and then
 goes into specific options that are available for the built-in data sources.
@@ -1072,8 +1072,8 @@ people.write.parquet("people.parquet")
 // The result of loading a Parquet file is also a DataFrame.
 val parquetFile = sqlContext.read.parquet("people.parquet")
 
-//Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile")
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile")
 val teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
@@ -1094,8 +1094,8 @@ schemaPeople.write().parquet("people.parquet");
 // The result of loading a parquet file is also a DataFrame.
 DataFrame parquetFile = sqlContext.read().parquet("people.parquet");
 
-// Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile");
+// Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile");
 DataFrame teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19");
 List<String> teenagerNames = teenagers.javaRDD().map(new Function<Row, String>() {
   public String call(Row row) {
@@ -1120,8 +1120,8 @@ schemaPeople.write.parquet("people.parquet")
 # The result of loading a parquet file is also a DataFrame.
 parquetFile = sqlContext.read.parquet("people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
-parquetFile.registerTempTable("parquetFile");
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
+parquetFile.createOrReplaceTempView("parquetFile");
 teenagers = sqlContext.sql("SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
 teenNames = teenagers.map(lambda p: "Name: " + p.name)
 for teenName in teenNames.collect():
@@ -1144,9 +1144,14 @@ write.parquet(schemaPeople, "people.parquet")
 # The result of loading a parquet file is also a DataFrame.
 parquetFile <- read.parquet(sqlContext, "people.parquet")
 
-# Parquet files can also be registered as tables and then used in SQL statements.
+# Parquet files can also be used to create a temporary view and then used in SQL statements.
 registerTempTable(parquetFile, "parquetFile")
 teenagers <- sql(sqlContext, "SELECT name FROM parquetFile WHERE age >= 13 AND age <= 19")
+schema <- structType(structField("name", "string"))
+teenNames <- dapply(df, function(p) { cbind(paste("Name:", p$name)) }, schema)
+for (teenName in collect(teenNames)$name) {
+  cat(teenName, "\n")
+}
 {% endhighlight %}
 
 </div>
@@ -1501,8 +1506,8 @@ people.printSchema()
 //  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
-people.registerTempTable("people")
+// Creates a temporary view using the DataFrame
+people.createOrReplaceTempView("people")
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 val teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -1539,8 +1544,8 @@ people.printSchema();
 //  |-- age: long (nullable = true)
 //  |-- name: string (nullable = true)
 
-// Register this DataFrame as a table.
-people.registerTempTable("people");
+// Creates a temporary view using the DataFrame
+people.createOrReplaceTempView("people");
 
 // SQL statements can be run by using the sql methods provided by sqlContext.
 DataFrame teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19");
@@ -1577,8 +1582,8 @@ people.printSchema()
 #  |-- age: long (nullable = true)
 #  |-- name: string (nullable = true)
 
-# Register this DataFrame as a table.
-people.registerTempTable("people")
+# Creates a temporary view using the DataFrame.
+people.createOrReplaceTempView("people")
 
 # SQL statements can be run by using the sql methods provided by `sqlContext`.
 teenagers = sqlContext.sql("SELECT name FROM people WHERE age >= 13 AND age <= 19")
@@ -1658,43 +1663,50 @@ Configuration of Hive is done by placing your `hive-site.xml`, `core-site.xml` (
 
 <div data-lang="scala"  markdown="1">
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL. Users who do
-not have an existing Hive deployment can still create a `HiveContext`. When not configured by the
-hive-site.xml, the context automatically creates `metastore_db` in the current directory and
-creates `warehouse` directory indicated by HiveConf, which defaults to `/user/hive/warehouse`.
-Note that you may need to grant write privilege on `/user/hive/warehouse` to the user who starts
-the spark application.
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
 
 {% highlight scala %}
-// sc is an existing SparkContext.
-val sqlContext = new org.apache.spark.sql.hive.HiveContext(sc)
+// warehouse_location points to the default location for managed databases and tables
+val conf = new SparkConf().setAppName("HiveFromSpark").set("spark.sql.warehouse.dir", warehouse_location)
+val spark = SparkSession.builder.config(conf).enableHiveSupport().getOrCreate()
 
-sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-sqlContext.sql("FROM src SELECT key, value").collect().foreach(println)
+spark.sql("FROM src SELECT key, value").collect().foreach(println)
 {% endhighlight %}
 
 </div>
 
 <div data-lang="java"  markdown="1">
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL. In addition to
-the `sql` method a `HiveContext` also provides an `hql` method, which allows queries to be
-expressed in HiveQL.
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
 
 {% highlight java %}
-// sc is an existing JavaSparkContext.
-HiveContext sqlContext = new org.apache.spark.sql.hive.HiveContext(sc.sc);
+SparkSession spark = SparkSession.builder().appName("JavaSparkSQL").getOrCreate();
 
-sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
-sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
+spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)");
+spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src");
 
 // Queries are expressed in HiveQL.
-Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
+Row[] results = spark.sql("FROM src SELECT key, value").collect();
 
 {% endhighlight %}
 
@@ -1702,18 +1714,25 @@ Row[] results = sqlContext.sql("FROM src SELECT key, value").collect();
 
 <div data-lang="python"  markdown="1">
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
-adds support for finding tables in the MetaStore and writing queries using HiveQL.
-{% highlight python %}
-# sc is an existing SparkContext.
-from pyspark.sql import HiveContext
-sqlContext = HiveContext(sc)
+When working with Hive, one must instantiate `SparkSession` with Hive support, including
+connectivity to a persistent Hive metastore, support for Hive serdes, and Hive user-defined functions.
+Users who do not have an existing Hive deployment can still enable Hive support. When not configured
+by the `hive-site.xml`, the context automatically creates `metastore_db` in the current directory and
+creates a directory configured by `spark.sql.warehouse.dir`, which defaults to the directory
+`spark-warehouse` in the current directory that the spark application is started. Note that 
+the `hive.metastore.warehouse.dir` property in `hive-site.xml` is deprecated since Spark 2.0.0.
+Instead, use `spark.sql.warehouse.dir` to specify the default location of database in warehouse.
+You may need to grant write privilege to the user who starts the spark application.
 
-sqlContext.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
-sqlContext.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
+{% highlight python %}
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.enableHiveSupport().getOrCreate()
+
+spark.sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
+spark.sql("LOAD DATA LOCAL INPATH 'examples/src/main/resources/kv1.txt' INTO TABLE src")
 
 # Queries can be expressed in HiveQL.
-results = sqlContext.sql("FROM src SELECT key, value").collect()
+results = spark.sql("FROM src SELECT key, value").collect()
 
 {% endhighlight %}
 
@@ -2202,7 +2221,7 @@ import pyspark.sql.functions as func
 
 # In 1.3.x, in order for the grouping column "department" to show up,
 # it must be included explicitly as part of the agg function call.
-df.groupBy("department").agg("department"), func.max("age"), func.sum("expense"))
+df.groupBy("department").agg(df["department"], func.max("age"), func.sum("expense"))
 
 # In 1.4+, grouping column "department" is included automatically.
 df.groupBy("department").agg(func.max("age"), func.sum("expense"))

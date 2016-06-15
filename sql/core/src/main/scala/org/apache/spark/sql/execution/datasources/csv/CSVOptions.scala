@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources.csv
 
 import java.nio.charset.StandardCharsets
+import java.text.SimpleDateFormat
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.execution.datasources.{CompressionCodecs, ParseModes}
@@ -89,18 +90,41 @@ private[sql] class CSVOptions(@transient private val parameters: Map[String, Str
 
   val nullValue = parameters.getOrElse("nullValue", "")
 
+  val nanValue = parameters.getOrElse("nanValue", "NaN")
+
+  val positiveInf = parameters.getOrElse("positiveInf", "Inf")
+  val negativeInf = parameters.getOrElse("negativeInf", "-Inf")
+
+
   val compressionCodec: Option[String] = {
     val name = parameters.get("compression").orElse(parameters.get("codec"))
     name.map(CompressionCodecs.getCodecClassName)
+  }
+
+  // Share date format object as it is expensive to parse date pattern.
+  val dateFormat: SimpleDateFormat = {
+    val dateFormat = parameters.get("dateFormat")
+    dateFormat.map(new SimpleDateFormat(_)).orNull
   }
 
   val maxColumns = getInt("maxColumns", 20480)
 
   val maxCharsPerColumn = getInt("maxCharsPerColumn", 1000000)
 
+  val escapeQuotes = getBool("escapeQuotes", true)
+
   val inputBufferSize = 128
 
   val isCommentSet = this.comment != '\u0000'
 
   val rowSeparator = "\n"
+}
+
+object CSVOptions {
+
+  def apply(): CSVOptions = new CSVOptions(Map.empty)
+
+  def apply(paramName: String, paramValue: String): CSVOptions = {
+    new CSVOptions(Map(paramName -> paramValue))
+  }
 }

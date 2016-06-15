@@ -28,12 +28,11 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
   import AwaitTerminationTester._
   import testImplicits._
@@ -41,13 +40,13 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
   override val streamingTimeout = 20.seconds
 
   before {
-    assert(sqlContext.streams.active.isEmpty)
-    sqlContext.streams.resetTerminated()
+    assert(spark.streams.active.isEmpty)
+    spark.streams.resetTerminated()
   }
 
   after {
-    assert(sqlContext.streams.active.isEmpty)
-    sqlContext.streams.resetTerminated()
+    assert(spark.streams.active.isEmpty)
+    spark.streams.resetTerminated()
   }
 
   testQuietly("listing") {
@@ -57,26 +56,18 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
     withQueriesOn(ds1, ds2, ds3) { queries =>
       require(queries.size === 3)
-      assert(sqlContext.streams.active.toSet === queries.toSet)
+      assert(spark.streams.active.toSet === queries.toSet)
       val (q1, q2, q3) = (queries(0), queries(1), queries(2))
 
-      assert(sqlContext.streams.get(q1.name).eq(q1))
-      assert(sqlContext.streams.get(q2.name).eq(q2))
-      assert(sqlContext.streams.get(q3.name).eq(q3))
-      intercept[IllegalArgumentException] {
-        sqlContext.streams.get("non-existent-name")
-      }
-
+      assert(spark.streams.get(q1.id).eq(q1))
+      assert(spark.streams.get(q2.id).eq(q2))
+      assert(spark.streams.get(q3.id).eq(q3))
+      assert(spark.streams.get(-1) === null) // non-existent id
       q1.stop()
 
-      assert(sqlContext.streams.active.toSet === Set(q2, q3))
-      val ex1 = withClue("no error while getting non-active query") {
-        intercept[IllegalArgumentException] {
-          sqlContext.streams.get(q1.name)
-        }
-      }
-      assert(ex1.getMessage.contains(q1.name), "error does not contain name of query to be fetched")
-      assert(sqlContext.streams.get(q2.name).eq(q2))
+      assert(spark.streams.active.toSet === Set(q2, q3))
+      assert(spark.streams.get(q1.id) === null)
+      assert(spark.streams.get(q2.id).eq(q2))
 
       m2.addData(0)   // q2 should terminate with error
 
@@ -84,13 +75,8 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         require(!q2.isActive)
         require(q2.exception.isDefined)
       }
-      withClue("no error while getting non-active query") {
-        intercept[IllegalArgumentException] {
-          sqlContext.streams.get(q2.name).eq(q2)
-        }
-      }
-
-      assert(sqlContext.streams.active.toSet === Set(q3))
+      assert(spark.streams.get(q2.id) === null)
+      assert(spark.streams.active.toSet === Set(q3))
     }
   }
 
@@ -98,7 +84,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     val datasets = Seq.fill(5)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
-      assert(sqlContext.streams.active.toSet === queries.toSet)
+      assert(spark.streams.active.toSet === queries.toSet)
 
       // awaitAnyTermination should be blocking
       testAwaitAnyTermination(ExpectBlocked)
@@ -112,7 +98,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       testAwaitAnyTermination(ExpectNotBlocked)
 
       // Resetting termination should make awaitAnyTermination() blocking again
-      sqlContext.streams.resetTerminated()
+      spark.streams.resetTerminated()
       testAwaitAnyTermination(ExpectBlocked)
 
       // Terminate a query asynchronously with exception and see awaitAnyTermination throws
@@ -125,7 +111,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       testAwaitAnyTermination(ExpectException[SparkException])
 
       // Resetting termination should make awaitAnyTermination() blocking again
-      sqlContext.streams.resetTerminated()
+      spark.streams.resetTerminated()
       testAwaitAnyTermination(ExpectBlocked)
 
       // Terminate multiple queries, one with failure and see whether awaitAnyTermination throws
@@ -144,7 +130,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
     val datasets = Seq.fill(6)(makeDataset._2)
     withQueriesOn(datasets: _*) { queries =>
       require(queries.size === datasets.size)
-      assert(sqlContext.streams.active.toSet === queries.toSet)
+      assert(spark.streams.active.toSet === queries.toSet)
 
       // awaitAnyTermination should be blocking or non-blocking depending on timeout values
       testAwaitAnyTermination(
@@ -173,7 +159,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         ExpectNotBlocked, awaitTimeout = 4 seconds, expectedReturnedValue = true)
 
       // Resetting termination should make awaitAnyTermination() blocking again
-      sqlContext.streams.resetTerminated()
+      spark.streams.resetTerminated()
       testAwaitAnyTermination(
         ExpectBlocked,
         awaitTimeout = 4 seconds,
@@ -196,7 +182,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         testBehaviorFor = 4 seconds)
 
       // Terminate a query asynchronously outside the timeout, awaitAnyTerm should be blocked
-      sqlContext.streams.resetTerminated()
+      spark.streams.resetTerminated()
       val q3 = stopRandomQueryAsync(2 seconds, withError = true)
       testAwaitAnyTermination(
         ExpectNotBlocked,
@@ -214,7 +200,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
       // Terminate multiple queries, one with failure and see whether awaitAnyTermination throws
       // the exception
-      sqlContext.streams.resetTerminated()
+      spark.streams.resetTerminated()
 
       val q4 = stopRandomQueryAsync(10 milliseconds, withError = false)
       testAwaitAnyTermination(
@@ -228,24 +214,24 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
   }
 
 
-  /** Run a body of code by defining a query each on multiple datasets */
+  /** Run a body of code by defining a query on each dataset */
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
-        datasets.map { ds =>
+        datasets.zipWithIndex.map { case (ds, i) =>
           @volatile var query: StreamExecution = null
           try {
             val df = ds.toDF
             val metadataRoot =
-              Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-            query = sqlContext
-              .streams
-              .startQuery(
-                StreamExecution.nextName,
-                metadataRoot,
-                df,
-                new MemorySink(df.schema))
-              .asInstanceOf[StreamExecution]
+              Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
+            query =
+              df.writeStream
+                .format("memory")
+                .queryName(s"query$i")
+                .option("checkpointLocation", metadataRoot)
+                .outputMode("append")
+                .start()
+                .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
               if (query != null) query.stop()
@@ -272,10 +258,10 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
     def awaitTermFunc(): Unit = {
       if (awaitTimeout != null && awaitTimeout.toMillis > 0) {
-        val returnedValue = sqlContext.streams.awaitAnyTermination(awaitTimeout.toMillis)
+        val returnedValue = spark.streams.awaitAnyTermination(awaitTimeout.toMillis)
         assert(returnedValue === expectedReturnedValue, "Returned value does not match expected")
       } else {
-        sqlContext.streams.awaitAnyTermination()
+        spark.streams.awaitAnyTermination()
       }
     }
 
@@ -287,7 +273,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
 
     import scala.concurrent.ExecutionContext.Implicits.global
 
-    val activeQueries = sqlContext.streams.active
+    val activeQueries = spark.streams.active
     val queryToStop = activeQueries(Random.nextInt(activeQueries.length))
     Future {
       Thread.sleep(stopAfter.toMillis)

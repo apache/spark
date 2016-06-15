@@ -26,6 +26,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.util.{Locale, Properties, Random, UUID}
 import java.util.concurrent._
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.net.ssl.HttpsURLConnection
 
 import scala.annotation.tailrec
@@ -78,6 +79,52 @@ private[spark] object Utils extends Logging {
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   @volatile private var localRootDirs: Array[String] = null
 
+  /**
+   * The performance overhead of creating and logging strings for wide schemas can be large. To
+   * limit the impact, we bound the number of fields to include by default. This can be overriden
+   * by setting the 'spark.debug.maxToStringFields' conf in SparkEnv.
+   */
+  val DEFAULT_MAX_TO_STRING_FIELDS = 25
+
+  private def maxNumToStringFields = {
+    if (SparkEnv.get != null) {
+      SparkEnv.get.conf.getInt("spark.debug.maxToStringFields", DEFAULT_MAX_TO_STRING_FIELDS)
+    } else {
+      DEFAULT_MAX_TO_STRING_FIELDS
+    }
+  }
+
+  /** Whether we have warned about plan string truncation yet. */
+  private val truncationWarningPrinted = new AtomicBoolean(false)
+
+  /**
+   * Format a sequence with semantics similar to calling .mkString(). Any elements beyond
+   * maxNumToStringFields will be dropped and replaced by a "... N more fields" placeholder.
+   *
+   * @return the trimmed and formatted string.
+   */
+  def truncatedString[T](
+      seq: Seq[T],
+      start: String,
+      sep: String,
+      end: String,
+      maxNumFields: Int = maxNumToStringFields): String = {
+    if (seq.length > maxNumFields) {
+      if (truncationWarningPrinted.compareAndSet(false, true)) {
+        logWarning(
+          "Truncated the string representation of a plan since it was too large. This " +
+          "behavior can be adjusted by setting 'spark.debug.maxToStringFields' in SparkEnv.conf.")
+      }
+      val numFields = math.max(0, maxNumFields - 1)
+      seq.take(numFields).mkString(
+        start, sep, sep + "... " + (seq.length - numFields) + " more fields" + end)
+    } else {
+      seq.mkString(start, sep, end)
+    }
+  }
+
+  /** Shorthand for calling truncatedString() without start or end strings. */
+  def truncatedString[T](seq: Seq[T], sep: String): String = truncatedString(seq, "", sep, "")
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -1169,7 +1216,7 @@ private[spark] object Utils extends Logging {
   }
 
   /**
-   * Execute a block of code that evaluates to Unit, stop SparkContext is there is any uncaught
+   * Execute a block of code that evaluates to Unit, stop SparkContext if there is any uncaught
    * exception
    *
    * NOTE: This method is to be called by the driver-side components to avoid stopping the
@@ -2181,6 +2228,25 @@ private[spark] object Utils extends Logging {
       .getOrElse(UserGroupInformation.getCurrentUser().getShortUserName())
   }
 
+  val EMPTY_USER_GROUPS = Set[String]()
+
+  // Returns the groups to which the current user belongs.
+  def getCurrentUserGroups(sparkConf: SparkConf, username: String): Set[String] = {
+    val groupProviderClassName = sparkConf.get("spark.user.groups.mapping",
+      "org.apache.spark.security.ShellBasedGroupsMappingProvider")
+    if (groupProviderClassName != "") {
+      try {
+        val groupMappingServiceProvider = classForName(groupProviderClassName).newInstance.
+          asInstanceOf[org.apache.spark.security.GroupMappingServiceProvider]
+        val currentUserGroups = groupMappingServiceProvider.getGroups(username)
+        return currentUserGroups
+      } catch {
+        case e: Exception => logError(s"Error getting groups for user=$username", e)
+      }
+    }
+    EMPTY_USER_GROUPS
+  }
+
   /**
    * Split the comma delimited string of master URLs into a list.
    * For instance, "spark://abc,def" becomes [spark://abc, spark://def].
@@ -2325,29 +2391,24 @@ private[spark] class RedirectThread(
  * the toString method.
  */
 private[spark] class CircularBuffer(sizeInBytes: Int = 10240) extends java.io.OutputStream {
-  var pos: Int = 0
-  var buffer = new Array[Int](sizeInBytes)
+  private var pos: Int = 0
+  private var isBufferFull = false
+  private val buffer = new Array[Byte](sizeInBytes)
 
-  def write(i: Int): Unit = {
-    buffer(pos) = i
+  def write(input: Int): Unit = {
+    buffer(pos) = input.toByte
     pos = (pos + 1) % buffer.length
+    isBufferFull = isBufferFull || (pos == 0)
   }
 
   override def toString: String = {
-    val (end, start) = buffer.splitAt(pos)
-    val input = new java.io.InputStream {
-      val iterator = (start ++ end).iterator
+    if (!isBufferFull) {
+      return new String(buffer, 0, pos, StandardCharsets.UTF_8)
+    }
 
-      def read(): Int = if (iterator.hasNext) iterator.next() else -1
-    }
-    val reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))
-    val stringBuilder = new StringBuilder
-    var line = reader.readLine()
-    while (line != null) {
-      stringBuilder.append(line)
-      stringBuilder.append("\n")
-      line = reader.readLine()
-    }
-    stringBuilder.toString()
+    val nonCircularBuffer = new Array[Byte](sizeInBytes)
+    System.arraycopy(buffer, pos, nonCircularBuffer, 0, buffer.length - pos)
+    System.arraycopy(buffer, 0, nonCircularBuffer, buffer.length - pos, pos)
+    new String(nonCircularBuffer, StandardCharsets.UTF_8)
   }
 }

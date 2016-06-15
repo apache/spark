@@ -17,9 +17,11 @@
 
 package org.apache.spark.rdd
 
+import java.io.BufferedWriter
 import java.io.File
 import java.io.FilenameFilter
 import java.io.IOException
+import java.io.OutputStreamWriter
 import java.io.PrintWriter
 import java.util.StringTokenizer
 import java.util.concurrent.atomic.AtomicReference
@@ -29,7 +31,6 @@ import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.util.control.NonFatal
 
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 import org.apache.spark.util.Utils
@@ -45,7 +46,8 @@ private[spark] class PipedRDD[T: ClassTag](
     envVars: Map[String, String],
     printPipeContext: (String => Unit) => Unit,
     printRDDElement: (T, String => Unit) => Unit,
-    separateWorkingDir: Boolean)
+    separateWorkingDir: Boolean,
+    bufferSize: Int)
   extends RDD[String](prev) {
 
   // Similar to Runtime.exec(), if we are given a single string, split it into words
@@ -58,7 +60,7 @@ private[spark] class PipedRDD[T: ClassTag](
       printRDDElement: (T, String => Unit) => Unit = null,
       separateWorkingDir: Boolean = false) =
     this(prev, PipedRDD.tokenize(command), envVars, printPipeContext, printRDDElement,
-      separateWorkingDir)
+      separateWorkingDir, 8192)
 
 
   override def getPartitions: Array[Partition] = firstParent[T].partitions
@@ -144,7 +146,8 @@ private[spark] class PipedRDD[T: ClassTag](
     new Thread(s"stdin writer for $command") {
       override def run(): Unit = {
         TaskContext.setTaskContext(context)
-        val out = new PrintWriter(proc.getOutputStream)
+        val out = new PrintWriter(new BufferedWriter(
+          new OutputStreamWriter(proc.getOutputStream), bufferSize))
         try {
           // scalastyle:off println
           // input the pipe context firstly

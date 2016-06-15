@@ -12,12 +12,13 @@ export("print.jobj")
 
 # MLlib integration
 exportMethods("glm",
+              "spark.glm",
               "predict",
               "summary",
-              "kmeans",
+              "spark.kmeans",
               "fitted",
-              "naiveBayes",
-              "survreg")
+              "spark.naiveBayes",
+              "spark.survreg")
 
 # Job group lifecycle management methods
 export("setJobGroup",
@@ -44,7 +45,10 @@ exportMethods("arrange",
               "corr",
               "covar_samp",
               "covar_pop",
+              "createOrReplaceTempView",
               "crosstab",
+              "dapply",
+              "dapplyCollect",
               "describe",
               "dim",
               "distinct",
@@ -77,7 +81,6 @@ exportMethods("arrange",
               "persist",
               "printSchema",
               "rbind",
-              "registerTempTable",
               "rename",
               "repartition",
               "sample",
@@ -108,7 +111,7 @@ exportMethods("arrange",
               "write.json",
               "write.parquet",
               "write.text",
-              "ml.save")
+              "write.ml")
 
 exportClasses("Column")
 
@@ -182,6 +185,8 @@ exportMethods("%in%",
               "isNaN",
               "isNotNull",
               "isNull",
+              "is.nan",
+              "isnan",
               "kurtosis",
               "lag",
               "last",
@@ -214,6 +219,7 @@ exportMethods("%in%",
               "next_day",
               "ntile",
               "otherwise",
+              "over",
               "percent_rank",
               "pmod",
               "quarter",
@@ -295,6 +301,7 @@ export("as.DataFrame",
        "read.json",
        "read.parquet",
        "read.text",
+       "spark.lapply",
        "sql",
        "str",
        "tableToDF",
@@ -302,7 +309,7 @@ export("as.DataFrame",
        "tables",
        "uncacheTable",
        "print.summary.GeneralizedLinearRegressionModel",
-       "ml.load")
+       "read.ml")
 
 export("structField",
        "structField.jobj",
@@ -312,3 +319,12 @@ export("structField",
        "structType.jobj",
        "structType.structField",
        "print.structType")
+
+exportClasses("WindowSpec")
+
+export("partitionBy",
+       "rowsBetween",
+       "rangeBetween")
+
+export("window.partitionBy",
+       "window.orderBy")

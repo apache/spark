@@ -22,7 +22,6 @@ import java.util.Properties
 import scala.collection.JavaConverters._
 
 import org.apache.spark.Partition
-import org.apache.spark.annotation.Experimental
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
@@ -30,17 +29,14 @@ import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCPartition, JDBCPartitioningInfo, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.json.{InferSchema, JacksonParser, JSONOptions}
-import org.apache.spark.sql.execution.streaming.StreamingRelation
 import org.apache.spark.sql.types.StructType
 
 /**
- * :: Experimental ::
- * Interface used to load a [[DataFrame]] from external storage systems (e.g. file systems,
- * key-value stores, etc) or data streams. Use [[SparkSession.read]] to access this.
+ * Interface used to load a [[Dataset]] from external storage systems (e.g. file systems,
+ * key-value stores, etc). Use [[SparkSession.read]] to access this.
  *
  * @since 1.4.0
  */
-@Experimental
 class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
 
   /**
@@ -162,32 +158,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
           options = extraOptions.toMap).resolveRelation())
     }
   }
-
-  /**
-   * Loads input data stream in as a [[DataFrame]], for data streams that don't require a path
-   * (e.g. external key-value stores).
-   *
-   * @since 2.0.0
-   */
-  def stream(): DataFrame = {
-    val dataSource =
-      DataSource(
-        sparkSession,
-        userSpecifiedSchema = userSpecifiedSchema,
-        className = source,
-        options = extraOptions.toMap)
-    Dataset.ofRows(sparkSession, StreamingRelation(dataSource))
-  }
-
-  /**
-   * Loads input in as a [[DataFrame]], for data streams that read from some path.
-   *
-   * @since 2.0.0
-   */
-  def stream(path: String): DataFrame = {
-    option("path", path).stream()
-  }
-
   /**
    * Construct a [[DataFrame]] representing the database table accessible via JDBC URL
    * url named table and connection properties.
@@ -283,38 +253,6 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * You can set the following JSON-specific options to deal with non-standard JSON files:
    * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
-   * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
-   * <li>`allowUnquotedFieldNames` (default `false`): allows unquoted JSON field names</li>
-   * <li>`allowSingleQuotes` (default `true`): allows single quotes in addition to double quotes
-   * </li>
-   * <li>`allowNumericLeadingZeros` (default `false`): allows leading zeros in numbers
-   * (e.g. 00012)</li>
-   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   * during parsing.<li>
-   * <ul>
-   *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
-   *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
-   *  a schema is set by user, it sets `null` for extra fields.</li>
-   *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
-   *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
-   * </ul>
-   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
-   * having malformed string created by `PERMISSIVE` mode. This overrides
-   * `spark.sql.columnNameOfCorruptRecord`.<li>
-   *
-   * @since 1.4.0
-   */
-  // TODO: Remove this one in Spark 2.0.
-  def json(path: String): DataFrame = format("json").load(path)
-
-  /**
-   * Loads a JSON file (one object per line) and returns the result as a [[DataFrame]].
-   *
-   * This function goes through the input once to determine the input schema. If you know the
-   * schema in advance, use the version that specifies the schema to avoid the extra scan.
-   *
-   * You can set the following JSON-specific options to deal with non-standard JSON files:
-   * <li>`primitivesAsString` (default `false`): infers all primitive values as a string type</li>
    * <li>`prefersDecimal` (default `false`): infers all floating-point values as a decimal
    * type. If the values do not fit in decimal, then it infers them as doubles.</li>
    * <li>`allowComments` (default `false`): ignores Java/C++ style comment in JSON records</li>
@@ -326,7 +264,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    * <li>`allowBackslashEscapingAnyCharacter` (default `false`): allows accepting quoting of all
    * character using backslash quoting mechanism</li>
    * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
-   * during parsing.<li>
+   * during parsing.</li>
    * <ul>
    *  <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record, and puts the
    *  malformed string into a new field configured by `columnNameOfCorruptRecord`. When
@@ -334,16 +272,17 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *  <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
    *  <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
    * </ul>
-   * <li>`columnNameOfCorruptRecord` (default `_corrupt_record`): allows renaming the new field
-   * having malformed string created by `PERMISSIVE` mode. This overrides
-   * `spark.sql.columnNameOfCorruptRecord`.<li>
+   * <li>`columnNameOfCorruptRecord` (default is the value specified in
+   * `spark.sql.columnNameOfCorruptRecord`): allows renaming the new field having malformed string
+   * created by `PERMISSIVE` mode. This overrides `spark.sql.columnNameOfCorruptRecord`.</li>
    *
    * @since 1.6.0
    */
+  @scala.annotation.varargs
   def json(paths: String*): DataFrame = format("json").load(paths : _*)
 
   /**
-   * Loads an `JavaRDD[String]` storing JSON objects (one object per record) and
+   * Loads a `JavaRDD[String]` storing JSON objects (one object per record) and
    * returns the result as a [[DataFrame]].
    *
    * Unless the schema is specified using [[schema]] function, this function goes through the
@@ -390,8 +329,52 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads a CSV file and returns the result as a [[DataFrame]].
    *
-   * This function goes through the input once to determine the input schema. To avoid going
-   * through the entire data once, specify the schema explicitly using [[schema]].
+   * This function will go through the input once to determine the input schema if `inferSchema`
+   * is enabled. To avoid going through the entire data once, disable `inferSchema` option or
+   * specify the schema explicitly using [[schema]].
+   *
+   * You can set the following CSV-specific options to deal with CSV files:
+   * <li>`sep` (default `,`): sets the single character as a separator for each
+   * field and value.</li>
+   * <li>`encoding` (default `UTF-8`): decodes the CSV files by the given encoding
+   * type.</li>
+   * <li>`quote` (default `"`): sets the single character used for escaping quoted values where
+   * the separator can be part of the value. If you would like to turn off quotations, you need to
+   * set not `null` but an empty string. This behaviour is different form
+   * `com.databricks.spark.csv`.</li>
+   * <li>`escape` (default `\`): sets the single character used for escaping quotes inside
+   * an already quoted value.</li>
+   * <li>`comment` (default empty string): sets the single character used for skipping lines
+   * beginning with this character. By default, it is disabled.</li>
+   * <li>`header` (default `false`): uses the first line as names of columns.</li>
+   * <li>`inferSchema` (default `false`): infers the input schema automatically from data. It
+   * requires one extra pass over the data.</li>
+   * <li>`ignoreLeadingWhiteSpace` (default `false`): defines whether or not leading whitespaces
+   * from values being read should be skipped.</li>
+   * <li>`ignoreTrailingWhiteSpace` (default `false`): defines whether or not trailing
+   * whitespaces from values being read should be skipped.</li>
+   * <li>`nullValue` (default empty string): sets the string representation of a null value.</li>
+   * <li>`nanValue` (default `NaN`): sets the string representation of a non-number" value.</li>
+   * <li>`positiveInf` (default `Inf`): sets the string representation of a positive infinity
+   * value.</li>
+   * <li>`negativeInf` (default `-Inf`): sets the string representation of a negative infinity
+   * value.</li>
+   * <li>`dateFormat` (default `null`): sets the string that indicates a date format. Custom date
+   * formats follow the formats at `java.text.SimpleDateFormat`. This applies to both date type
+   * and timestamp type. By default, it is `null` which means trying to parse times and date by
+   * `java.sql.Timestamp.valueOf()` and `java.sql.Date.valueOf()`.</li>
+   * <li>`maxColumns` (default `20480`): defines a hard limit of how many columns
+   * a record can have.</li>
+   * <li>`maxCharsPerColumn` (default `1000000`): defines the maximum number of characters allowed
+   * for any given value being read.</li>
+   * <li>`mode` (default `PERMISSIVE`): allows a mode for dealing with corrupt records
+   *    during parsing.</li>
+   * <ul>
+   *   <li>`PERMISSIVE` : sets other fields to `null` when it meets a corrupted record. When
+   *     a schema is set by user, it sets `null` for extra fields.</li>
+   *   <li>`DROPMALFORMED` : ignores the whole corrupted records.</li>
+   *   <li>`FAILFAST` : throws an exception when it meets corrupted records.</li>
+   * </ul>
    *
    * @since 2.0.0
    */
@@ -401,6 +384,11 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   /**
    * Loads a Parquet file, returning the result as a [[DataFrame]]. This function returns an empty
    * [[DataFrame]] if no paths are passed in.
+   *
+   * You can set the following Parquet-specific option(s) for reading Parquet files:
+   * <li>`mergeSchema` (default is the value specified in `spark.sql.parquet.mergeSchema`): sets
+   * whether we should merge schemas collected from all Parquet part-files. This will override
+   * `spark.sql.parquet.mergeSchema`.</li>
    *
    * @since 1.4.0
    */
@@ -414,7 +402,7 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
    *
    * @param path input path
    * @since 1.5.0
-   * @note Currently, this method can only be used together with `HiveContext`.
+   * @note Currently, this method can only be used after enabling Hive support.
    */
   def orc(path: String): DataFrame = format("orc").load(path)
 
@@ -430,24 +418,46 @@ class DataFrameReader private[sql](sparkSession: SparkSession) extends Logging {
   }
 
   /**
-   * Loads a text file and returns a [[Dataset]] of String. The underlying schema of the Dataset
-   * contains a single string column named "value".
+   * Loads text files and returns a [[DataFrame]] whose schema starts with a string column named
+   * "value", and followed by partitioned columns if there are any.
    *
-   * Each line in the text file is a new row in the resulting Dataset. For example:
+   * Each line in the text files is a new row in the resulting DataFrame. For example:
    * {{{
    *   // Scala:
-   *   sqlContext.read.text("/path/to/spark/README.md")
+   *   spark.read.text("/path/to/spark/README.md")
    *
    *   // Java:
-   *   sqlContext.read().text("/path/to/spark/README.md")
+   *   spark.read().text("/path/to/spark/README.md")
+   * }}}
+   *
+   * @param paths input path
+   * @since 1.6.0
+   */
+  @scala.annotation.varargs
+  def text(paths: String*): DataFrame = format("text").load(paths : _*)
+
+  /**
+   * Loads text files and returns a [[Dataset]] of String. The underlying schema of the Dataset
+   * contains a single string column named "value".
+   *
+   * If the directory structure of the text files contains partitioning information, those are
+   * ignored in the resulting Dataset. To include partitioning information as columns, use `text`.
+   *
+   * Each line in the text files is a new element in the resulting Dataset. For example:
+   * {{{
+   *   // Scala:
+   *   spark.read.textFile("/path/to/spark/README.md")
+   *
+   *   // Java:
+   *   spark.read().textFile("/path/to/spark/README.md")
    * }}}
    *
    * @param paths input path
    * @since 2.0.0
    */
   @scala.annotation.varargs
-  def text(paths: String*): Dataset[String] = {
-    format("text").load(paths : _*).as[String](sparkSession.implicits.newStringEncoder)
+  def textFile(paths: String*): Dataset[String] = {
+    text(paths : _*).select("value").as[String](sparkSession.implicits.newStringEncoder)
   }
 
   ///////////////////////////////////////////////////////////////////////////////////////

@@ -26,8 +26,8 @@ import org.apache.spark.sql.catalyst.plans.physical.{Partitioning, UnknownPartit
 import org.apache.spark.sql.execution.metric.SQLMetrics
 
 /**
- * Apply the all of the GroupExpressions to every input row, hence we will get
- * multiple output rows for a input row.
+ * Apply all of the GroupExpressions to every input row, hence we will get
+ * multiple output rows for an input row.
  * @param projections The group of expressions, all of the group expressions should
  *                    output the same schema specified bye the parameter `output`
  * @param output      The output Schema
@@ -40,7 +40,7 @@ case class ExpandExec(
   extends UnaryExecNode with CodegenSupport {
 
   private[sql] override lazy val metrics = Map(
-    "numOutputRows" -> SQLMetrics.createLongMetric(sparkContext, "number of output rows"))
+    "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"))
 
   // The GroupExpressions can output data with arbitrary partitioning, so set it
   // as UNKNOWN partitioning

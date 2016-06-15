@@ -32,8 +32,8 @@ import org.apache.spark.util.Utils
 private[spark] class ParallelCollectionPartition[T: ClassTag](
     var rddId: Long,
     var slice: Int,
-    var values: Seq[T])
-    extends Partition with Serializable {
+    var values: Seq[T]
+  ) extends Partition with Serializable {
 
   def iterator: Iterator[T] = values.iterator
 

@@ -17,13 +17,11 @@
 
 package org.apache.spark.sql.internal
 
-import java.util.Properties
-
-import scala.collection.JavaConverters._
+import java.io.File
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
 
-import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, FunctionRegistry}
 import org.apache.spark.sql.catalyst.catalog.{ArchiveResource, _}
@@ -31,8 +29,9 @@ import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.execution._
-import org.apache.spark.sql.execution.command.AnalyzeTable
-import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, PreInsertCastAndRename, ResolveDataSource}
+import org.apache.spark.sql.execution.command.AnalyzeTableCommand
+import org.apache.spark.sql.execution.datasources.{DataSourceAnalysis, FindDataSourceTable, PreInsertCastAndRename, ResolveDataSource}
+import org.apache.spark.sql.streaming.{ContinuousQuery, ContinuousQueryManager}
 import org.apache.spark.sql.util.ExecutionListenerManager
 
 
@@ -50,7 +49,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val conf: SQLConf = new SQLConf
 
   def newHadoopConf(): Configuration = {
-    val hadoopConf = new Configuration(sparkSession.sparkContext.hadoopConfiguration)
+    val hadoopConf = new Configuration(sparkSession.sharedState.hadoopConf)
     conf.getAllConfs.foreach { case (k, v) => if (v ne null) hadoopConf.set(k, v) }
     hadoopConf
   }
@@ -64,9 +63,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     }
     hadoopConf
   }
-
-  // Automatically extract `spark.sql.*` entries and put it in our SQLConf
-  setConf(SQLContext.getSQLProperties(sparkSession.sparkContext.getConf))
 
   lazy val experimentalMethods = new ExperimentalMethods
 
@@ -97,13 +93,15 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * Internal catalog for managing table and database states.
    */
   lazy val catalog = new SessionCatalog(
-    sparkSession.externalCatalog,
+    sparkSession.sharedState.externalCatalog,
     functionResourceLoader,
     functionRegistry,
-    conf)
+    conf,
+    newHadoopConf())
 
   /**
    * Interface exposed to the user for registering user-defined functions.
+   * Note that the user-defined functions must be deterministic.
    */
   lazy val udf: UDFRegistration = new UDFRegistration(functionRegistry)
 
@@ -114,6 +112,7 @@ private[sql] class SessionState(sparkSession: SparkSession) {
     new Analyzer(catalog, conf) {
       override val extendedResolutionRules =
         PreInsertCastAndRename ::
+        new FindDataSourceTable(sparkSession) ::
         DataSourceAnalysis ::
         (if (conf.runSQLonFile) new ResolveDataSource(sparkSession) :: Nil else Nil)
 
@@ -144,42 +143,46 @@ private[sql] class SessionState(sparkSession: SparkSession) {
   lazy val listenerManager: ExecutionListenerManager = new ExecutionListenerManager
 
   /**
-   * Interface to start and stop [[org.apache.spark.sql.ContinuousQuery]]s.
+   * Interface to start and stop [[ContinuousQuery]]s.
    */
   lazy val continuousQueryManager: ContinuousQueryManager = {
     new ContinuousQueryManager(sparkSession)
   }
 
+  private val jarClassLoader: NonClosableMutableURLClassLoader =
+    sparkSession.sharedState.jarClassLoader
+
+  // Automatically extract all entries and put it in our SQLConf
+  // We need to call it after all of vals have been initialized.
+  sparkSession.sparkContext.getConf.getAll.foreach { case (k, v) =>
+    conf.setConfString(k, v)
+  }
 
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
 
-  def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
+  def executeSql(sql: String): QueryExecution = executePlan(sqlParser.parsePlan(sql))
 
-  def refreshTable(tableName: String): Unit = {
-    catalog.refreshTable(sqlParser.parseTableIdentifier(tableName))
-  }
+  def executePlan(plan: LogicalPlan): QueryExecution = new QueryExecution(sparkSession, plan)
 
   def invalidateTable(tableName: String): Unit = {
     catalog.invalidateTable(sqlParser.parseTableIdentifier(tableName))
   }
 
-  final def setConf(properties: Properties): Unit = {
-    properties.asScala.foreach { case (k, v) => setConf(k, v) }
-  }
-
-  final def setConf[T](entry: ConfigEntry[T], value: T): Unit = {
-    conf.setConf(entry, value)
-    setConf(entry.key, entry.stringConverter(value))
-  }
-
-  def setConf(key: String, value: String): Unit = {
-    conf.setConfString(key, value)
-  }
-
   def addJar(path: String): Unit = {
     sparkSession.sparkContext.addJar(path)
+
+    val uri = new Path(path).toUri
+    val jarURL = if (uri.getScheme == null) {
+      // `path` is a local file path without a URL scheme
+      new File(path).toURI.toURL
+    } else {
+      // `path` is a URL with a scheme
+      uri.toURL
+    }
+    jarClassLoader.addURL(jarURL)
+    Thread.currentThread().setContextClassLoader(jarClassLoader)
   }
 
   /**
@@ -190,11 +193,6 @@ private[sql] class SessionState(sparkSession: SparkSession) {
    * in the external catalog.
    */
   def analyze(tableName: String): Unit = {
-    AnalyzeTable(tableName).run(sparkSession)
+    AnalyzeTableCommand(tableName).run(sparkSession)
   }
-
-  def runNativeSql(sql: String): Seq[String] = {
-    throw new AnalysisException("Unsupported query: " + sql)
-  }
-
 }

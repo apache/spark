@@ -20,8 +20,7 @@ package org.apache.spark.sql.hive
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.hive.ql.exec.{UDAF, UDF}
 import org.apache.hadoop.hive.ql.exec.{FunctionRegistry => HiveFunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{AbstractGenericUDAFResolver, GenericUDF, GenericUDTF}
@@ -47,8 +46,13 @@ private[sql] class HiveSessionCatalog(
     functionResourceLoader: FunctionResourceLoader,
     functionRegistry: FunctionRegistry,
     conf: SQLConf,
-    hiveconf: HiveConf)
-  extends SessionCatalog(externalCatalog, functionResourceLoader, functionRegistry, conf) {
+    hadoopConf: Configuration)
+  extends SessionCatalog(
+    externalCatalog,
+    functionResourceLoader,
+    functionRegistry,
+    conf,
+    hadoopConf) {
 
   override def setCurrentDatabase(db: String): Unit = {
     super.setCurrentDatabase(db)
@@ -58,7 +62,8 @@ private[sql] class HiveSessionCatalog(
   override def lookupRelation(name: TableIdentifier, alias: Option[String]): LogicalPlan = {
     val table = formatTableName(name.table)
     if (name.database.isDefined || !tempTables.contains(table)) {
-      val newName = name.copy(table = table)
+      val database = name.database.map(formatDatabaseName)
+      val newName = name.copy(database = database, table = table)
       metastoreCatalog.lookupRelation(newName, alias)
     } else {
       val relation = tempTables(table)
@@ -72,11 +77,6 @@ private[sql] class HiveSessionCatalog(
   // ----------------------------------------------------------------
   // | Methods and fields for interacting with HiveMetastoreCatalog |
   // ----------------------------------------------------------------
-
-  override def getDefaultDBPath(db: String): String = {
-    val defaultPath = hiveconf.getVar(HiveConf.ConfVars.METASTOREWAREHOUSE)
-    new Path(new Path(defaultPath), db + ".db").toString
-  }
 
   // Catalog for handling data source tables. TODO: This really doesn't belong here since it is
   // essentially a cache for metastore tables. However, it relies on a lot of session-specific
@@ -146,7 +146,7 @@ private[sql] class HiveSessionCatalog(
           udaf
         } else if (classOf[GenericUDTF].isAssignableFrom(clazz)) {
           val udtf = HiveGenericUDTF(name, new HiveFunctionWrapper(clazz.getName), children)
-          udtf.elementTypes // Force it to check input data types.
+          udtf.elementSchema // Force it to check input data types.
           udtf
         } else {
           throw new AnalysisException(s"No handler for Hive UDF '${clazz.getCanonicalName}'")
@@ -182,10 +182,12 @@ private[sql] class HiveSessionCatalog(
     //   // This function is a Hive builtin function.
     //   ...
     // }
-    Try(super.lookupFunction(name, children)) match {
+    val database = name.database.map(formatDatabaseName)
+    val funcName = name.copy(database = database)
+    Try(super.lookupFunction(funcName, children)) match {
       case Success(expr) => expr
       case Failure(error) =>
-        if (functionRegistry.functionExists(name.unquotedString)) {
+        if (functionRegistry.functionExists(funcName.unquotedString)) {
           // If the function actually exists in functionRegistry, it means that there is an
           // error when we create the Expression using the given children.
           // We need to throw the original exception.
@@ -194,7 +196,7 @@ private[sql] class HiveSessionCatalog(
           // This function is not in functionRegistry, let's try to load it as a Hive's
           // built-in function.
           // Hive is case insensitive.
-          val functionName = name.unquotedString.toLowerCase
+          val functionName = funcName.unquotedString.toLowerCase
           // TODO: This may not really work for current_user because current_user is not evaluated
           // with session info.
           // We do not need to use executionHive at here because we only load
@@ -202,12 +204,12 @@ private[sql] class HiveSessionCatalog(
           val functionInfo = {
             try {
               Option(HiveFunctionRegistry.getFunctionInfo(functionName)).getOrElse(
-                failFunctionLookup(name.unquotedString))
+                failFunctionLookup(funcName.unquotedString))
             } catch {
               // If HiveFunctionRegistry.getFunctionInfo throws an exception,
               // we are failing to load a Hive builtin function, which means that
               // the given function is not a Hive builtin function.
-              case NonFatal(e) => failFunctionLookup(name.unquotedString)
+              case NonFatal(e) => failFunctionLookup(funcName.unquotedString)
             }
           }
           val className = functionInfo.getFunctionClass.getName
@@ -220,20 +222,4 @@ private[sql] class HiveSessionCatalog(
         }
     }
   }
-
-  // Pre-load a few commonly used Hive built-in functions.
-  HiveSessionCatalog.preloadedHiveBuiltinFunctions.foreach {
-    case (functionName, clazz) =>
-      val builder = makeFunctionBuilder(functionName, clazz)
-      val info = new ExpressionInfo(clazz.getCanonicalName, functionName)
-      createTempFunction(functionName, info, builder, ignoreIfExists = false)
-  }
-}
-
-private[sql] object HiveSessionCatalog {
-  // This is the list of Hive's built-in functions that are commonly used and we want to
-  // pre-load when we create the FunctionRegistry.
-  val preloadedHiveBuiltinFunctions =
-    ("collect_set", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectSet]) ::
-    ("collect_list", classOf[org.apache.hadoop.hive.ql.udf.generic.GenericUDAFCollectList]) :: Nil
 }

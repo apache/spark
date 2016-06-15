@@ -62,6 +62,8 @@ For more background and more details about the implementation, refer to the docu
 
   > The current implementation of logistic regression in `spark.ml` only supports binary classes. Support for multiclass regression will be added in the future.
 
+  > When fitting LogisticRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
+
 **Example**
 
 The following example shows how to train a logistic regression model
@@ -236,9 +238,9 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 
 Multilayer perceptron classifier (MLPC) is a classifier based on the [feedforward artificial neural network](https://en.wikipedia.org/wiki/Feedforward_neural_network). 
 MLPC consists of multiple layers of nodes. 
-Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes maps inputs to the outputs 
-by performing linear combination of the inputs with the node's weights `$\wv$` and bias `$\bv$` and applying an activation function. 
-It can be written in matrix form for MLPC with `$K+1$` layers as follows:
+Each layer is fully connected to the next layer in the network. Nodes in the input layer represent the input data. All other nodes map inputs to outputs 
+by a linear combination of the inputs with the node's weights `$\wv$` and bias `$\bv$` and applying an activation function. 
+This can be written in matrix form for MLPC with `$K+1$` layers as follows:
 `\[
 \mathrm{y}(\x) = \mathrm{f_K}(...\mathrm{f_2}(\wv_2^T\mathrm{f_1}(\wv_1^T \x+b_1)+b_2)...+b_K)
 \]`
@@ -252,7 +254,7 @@ Nodes in the output layer use softmax function:
 \]`
 The number of nodes `$N$` in the output layer corresponds to the number of classes. 
 
-MLPC employs backpropagation for learning the model. We use logistic loss function for optimization and L-BFGS as optimization routine.
+MLPC employs backpropagation for learning the model. We use the logistic loss function for optimization and L-BFGS as an optimization routine.
 
 **Example**
 
@@ -300,13 +302,20 @@ Refer to the [Java API docs](api/java/org/apache/spark/ml/classification/OneVsRe
 
 {% include_example java/org/apache/spark/examples/ml/JavaOneVsRestExample.java %}
 </div>
+
+<div data-lang="python" markdown="1">
+
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classification.OneVsRest) for more details.
+
+{% include_example python/ml/one_vs_rest_example.py %}
+</div>
 </div>
 
 ## Naive Bayes
 
-[Naive Bayes](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
+[Naive Bayes classifiers](http://en.wikipedia.org/wiki/Naive_Bayes_classifier) are a family of simple 
 probabilistic classifiers based on applying Bayes' theorem with strong (naive) independence 
-assumptions between the features. The spark.ml implementation currently supports both [multinomial
+assumptions between the features. The `spark.ml` implementation currently supports both [multinomial
 naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/naive-bayes-text-classification-1.html)
 and [Bernoulli naive Bayes](http://nlp.stanford.edu/IR-book/html/htmledition/the-bernoulli-model-1.html).
 More information can be found in the section on [Naive Bayes in MLlib](mllib-naive-bayes.html#naive-bayes-sparkmllib).
@@ -344,6 +353,8 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.classificat
 The interface for working with linear regression models and model
 summaries is similar to the logistic regression case.
 
+  > When fitting LinearRegressionModel without intercept on dataset with constant nonzero column by "l-bfgs" solver, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is the same as R glmnet but different from LIBSVM.
+
 **Example**
 
 The following
@@ -363,6 +374,138 @@ regression model and extracting model summary statistics.
 <div data-lang="python" markdown="1">
 <!--- TODO: Add python model summaries once implemented -->
 {% include_example python/ml/linear_regression_with_elastic_net.py %}
+</div>
+
+</div>
+
+## Generalized linear regression
+
+Contrasted with linear regression where the output is assumed to follow a Gaussian
+distribution, [generalized linear models](https://en.wikipedia.org/wiki/Generalized_linear_model) (GLMs) are specifications of linear models where the response variable $Y_i$ follows some
+distribution from the [exponential family of distributions](https://en.wikipedia.org/wiki/Exponential_family).
+Spark's `GeneralizedLinearRegression` interface
+allows for flexible specification of GLMs which can be used for various types of
+prediction problems including linear regression, Poisson regression, logistic regression, and others.
+Currently in `spark.ml`, only a subset of the exponential family distributions are supported and they are listed
+[below](#available-families).
+
+**NOTE**: Spark currently only supports up to 4096 features through its `GeneralizedLinearRegression`
+interface, and will throw an exception if this constraint is exceeded. See the [advanced section](ml-advanced) for more details.
+ Still, for linear and logistic regression, models with an increased number of features can be trained 
+ using the `LinearRegression` and `LogisticRegression` estimators.
+
+GLMs require exponential family distributions that can be written in their "canonical" or "natural" form, aka
+[natural exponential family distributions](https://en.wikipedia.org/wiki/Natural_exponential_family). The form of a natural exponential family distribution is given as:
+
+$$
+f_Y(y|\theta, \tau) = h(y, \tau)\exp{\left( \frac{\theta \cdot y - A(\theta)}{d(\tau)} \right)}
+$$
+
+where $\theta$ is the parameter of interest and $\tau$ is a dispersion parameter. In a GLM the response variable $Y_i$ is assumed to be drawn from a natural exponential family distribution:
+
+$$
+Y_i \sim f\left(\cdot|\theta_i, \tau \right)
+$$
+
+where the parameter of interest $\theta_i$ is related to the expected value of the response variable $\mu_i$ by
+
+$$
+\mu_i = A'(\theta_i)
+$$
+
+Here, $A'(\theta_i)$ is defined by the form of the distribution selected. GLMs also allow specification
+of a link function, which defines the relationship between the expected value of the response variable $\mu_i$
+and the so called _linear predictor_ $\eta_i$:
+
+$$
+g(\mu_i) = \eta_i = \vec{x_i}^T \cdot \vec{\beta}
+$$
+
+Often, the link function is chosen such that $A' = g^{-1}$, which yields a simplified relationship
+between the parameter of interest $\theta$ and the linear predictor $\eta$. In this case, the link
+function $g(\mu)$ is said to be the "canonical" link function.
+
+$$
+\theta_i = A'^{-1}(\mu_i) = g(g^{-1}(\eta_i)) = \eta_i
+$$
+
+A GLM finds the regression coefficients $\vec{\beta}$ which maximize the likelihood function.
+
+$$
+\max_{\vec{\beta}} \mathcal{L}(\vec{\theta}|\vec{y},X) =
+\prod_{i=1}^{N} h(y_i, \tau) \exp{\left(\frac{y_i\theta_i - A(\theta_i)}{d(\tau)}\right)}
+$$
+
+where the parameter of interest $\theta_i$ is related to the regression coefficients $\vec{\beta}$
+by
+
+$$
+\theta_i = A'^{-1}(g^{-1}(\vec{x_i} \cdot \vec{\beta}))
+$$
+
+Spark's generalized linear regression interface also provides summary statistics for diagnosing the
+fit of GLM models, including residuals, p-values, deviances, the Akaike information criterion, and
+others.
+
+[See here](http://data.princeton.edu/wws509/notes/) for a more comprehensive review of GLMs and their applications.
+
+###  Available families
+
+<table class="table">
+  <thead>
+    <tr>
+      <th>Family</th>
+      <th>Response Type</th>
+      <th>Supported Links</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Gaussian</td>
+      <td>Continuous</td>
+      <td>Identity*, Log, Inverse</td>
+    </tr>
+    <tr>
+      <td>Binomial</td>
+      <td>Binary</td>
+      <td>Logit*, Probit, CLogLog</td>
+    </tr>
+    <tr>
+      <td>Poisson</td>
+      <td>Count</td>
+      <td>Log*, Identity, Sqrt</td>
+    </tr>
+    <tr>
+      <td>Gamma</td>
+      <td>Continuous</td>
+      <td>Inverse*, Idenity, Log</td>
+    </tr>
+    <tfoot><tr><td colspan="4">* Canonical Link</td></tr></tfoot>
+  </tbody>
+</table>
+
+**Example**
+
+The following example demonstrates training a GLM with a Gaussian response and identity link
+function and extracting model summary statistics.
+
+<div class="codetabs">
+
+<div data-lang="scala" markdown="1">
+Refer to the [Scala API docs](api/scala/index.html#org.apache.spark.ml.regression.GeneralizedLinearRegression) for more details.
+
+{% include_example scala/org/apache/spark/examples/ml/GeneralizedLinearRegressionExample.scala %}
+</div>
+
+<div data-lang="java" markdown="1">
+Refer to the [Java API docs](api/java/org/apache/spark/ml/regression/GeneralizedLinearRegression.html) for more details.
+
+{% include_example java/org/apache/spark/examples/ml/JavaGeneralizedLinearRegressionExample.java %}
+</div>
+
+<div data-lang="python" markdown="1">
+Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.GeneralizedLinearRegression) for more details.
+
+{% include_example python/ml/generalized_linear_regression_example.py %}
 </div>
 
 </div>
@@ -475,11 +618,11 @@ Refer to the [Python API docs](api/python/pyspark.ml.html#pyspark.ml.regression.
 
 In `spark.ml`, we implement the [Accelerated failure time (AFT)](https://en.wikipedia.org/wiki/Accelerated_failure_time_model) 
 model which is a parametric survival regression model for censored data. 
-It describes a model for the log of survival time, so it's often called 
-log-linear model for survival analysis. Different from 
+It describes a model for the log of survival time, so it's often called a 
+log-linear model for survival analysis. Different from a
 [Proportional hazards](https://en.wikipedia.org/wiki/Proportional_hazards_model) model
-designed for the same purpose, the AFT model is more easily to parallelize 
-because each instance contribute to the objective function independently.
+designed for the same purpose, the AFT model is easier to parallelize 
+because each instance contributes to the objective function independently.
 
 Given the values of the covariates $x^{'}$, for random lifetime $t_{i}$ of 
 subjects i = 1, ..., n, with possible right-censoring, 
@@ -494,10 +637,10 @@ assumes the form:
 \iota(\beta,\sigma)=\sum_{i=1}^{n}[-\delta_{i}\log\sigma+\delta_{i}\log{f_{0}}(\epsilon_{i})+(1-\delta_{i})\log{S_{0}(\epsilon_{i})}]
 \]`
 Where $S_{0}(\epsilon_{i})$ is the baseline survivor function,
-and $f_{0}(\epsilon_{i})$ is corresponding density function.
+and $f_{0}(\epsilon_{i})$ is the corresponding density function.
 
 The most commonly used AFT model is based on the Weibull distribution of the survival time. 
-The Weibull distribution for lifetime corresponding to extreme value distribution for 
+The Weibull distribution for lifetime corresponds to the extreme value distribution for the 
 log of the lifetime, and the $S_{0}(\epsilon)$ function is:
 `\[   
 S_{0}(\epsilon_{i})=\exp(-e^{\epsilon_{i}})
@@ -506,7 +649,7 @@ the $f_{0}(\epsilon_{i})$ function is:
 `\[
 f_{0}(\epsilon_{i})=e^{\epsilon_{i}}\exp(-e^{\epsilon_{i}})
 \]`
-The log-likelihood function for AFT model with Weibull distribution of lifetime is:
+The log-likelihood function for AFT model with a Weibull distribution of lifetime is:
 `\[
 \iota(\beta,\sigma)= -\sum_{i=1}^n[\delta_{i}\log\sigma-\delta_{i}\epsilon_{i}+e^{\epsilon_{i}}]
 \]`
@@ -522,10 +665,12 @@ The gradient functions for $\beta$ and $\log\sigma$ respectively are:
 
 The AFT model can be formulated as a convex optimization problem, 
 i.e. the task of finding a minimizer of a convex function $-\iota(\beta,\sigma)$ 
-that depends coefficients vector $\beta$ and the log of scale parameter $\log\sigma$.
+that depends on the coefficients vector $\beta$ and the log of scale parameter $\log\sigma$.
 The optimization algorithm underlying the implementation is L-BFGS.
 The implementation matches the result from R's survival function 
 [survreg](https://stat.ethz.ch/R-manual/R-devel/library/survival/html/survreg.html)
+
+  > When fitting AFTSurvivalRegressionModel without intercept on dataset with constant nonzero column, Spark MLlib outputs zero coefficients for constant nonzero columns. This behavior is different from R survival::survreg.
 
 **Example**
 
@@ -670,7 +815,7 @@ The main differences between this API and the [original MLlib ensembles API](mll
 ## Random Forests
 
 [Random forests](http://en.wikipedia.org/wiki/Random_forest)
-are ensembles of [decision trees](ml-decision-tree.html).
+are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 Random forests combine many decision trees in order to reduce the risk of overfitting.
 The `spark.ml` implementation supports random forests for binary and multiclass classification and for regression,
 using both continuous and categorical features.
@@ -751,7 +896,7 @@ All output columns are optional; to exclude an output column, set its correspond
 ## Gradient-Boosted Trees (GBTs)
 
 [Gradient-Boosted Trees (GBTs)](http://en.wikipedia.org/wiki/Gradient_boosting)
-are ensembles of [decision trees](ml-decision-tree.html).
+are ensembles of [decision trees](ml-classification-regression.html#decision-trees).
 GBTs iteratively train decision trees in order to minimize a loss function.
 The `spark.ml` implementation supports GBTs for binary classification and for regression,
 using both continuous and categorical features.

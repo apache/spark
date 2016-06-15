@@ -30,6 +30,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericMutableRow
+import org.apache.spark.sql.execution.command.CreateDataSourceTableUtils
 import org.apache.spark.sql.execution.datasources.{OutputWriter, OutputWriterFactory, PartitionedFile}
 import org.apache.spark.sql.types._
 
@@ -99,7 +100,7 @@ object CSVRelation extends Logging {
               indexSafeTokens(index),
               field.dataType,
               field.nullable,
-              params.nullValue)
+              params)
             if (subIndex < requiredSize) {
               row(subIndex) = value
             }
@@ -168,7 +169,7 @@ private[sql] class CsvOutputWriter(
     new TextOutputFormat[NullWritable, Text]() {
       override def getDefaultWorkFile(context: TaskAttemptContext, extension: String): Path = {
         val configuration = context.getConfiguration
-        val uniqueWriteJobId = configuration.get("spark.sql.sources.writeJobUUID")
+        val uniqueWriteJobId = configuration.get(CreateDataSourceTableUtils.DATASOURCE_WRITEJOBUUID)
         val taskAttemptId = context.getTaskAttemptID
         val split = taskAttemptId.getTaskID.getId
         new Path(path, f"part-r-$split%05d-$uniqueWriteJobId.csv$extension")
@@ -176,8 +177,8 @@ private[sql] class CsvOutputWriter(
     }.getRecordWriter(context)
   }
 
-  private var firstRow: Boolean = params.headerFlag
-
+  private val FLUSH_BATCH_SIZE = 1024L
+  private var records: Long = 0L
   private val csvWriter = new LineCsvWriter(params, dataSchema.fieldNames.toSeq)
 
   private def rowToString(row: Seq[Any]): Seq[String] = row.map { field =>
@@ -191,16 +192,23 @@ private[sql] class CsvOutputWriter(
   override def write(row: Row): Unit = throw new UnsupportedOperationException("call writeInternal")
 
   override protected[sql] def writeInternal(row: InternalRow): Unit = {
-    // TODO: Instead of converting and writing every row, we should use the univocity buffer
-    val resultString = csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), firstRow)
-    if (firstRow) {
-      firstRow = false
+    csvWriter.writeRow(rowToString(row.toSeq(dataSchema)), records == 0L && params.headerFlag)
+    records += 1
+    if (records % FLUSH_BATCH_SIZE == 0) {
+      flush()
     }
-    text.set(resultString)
-    recordWriter.write(NullWritable.get(), text)
+  }
+
+  private def flush(): Unit = {
+    val lines = csvWriter.flush()
+    if (lines.nonEmpty) {
+      text.set(lines)
+      recordWriter.write(NullWritable.get(), text)
+    }
   }
 
   override def close(): Unit = {
+    flush()
     recordWriter.close(context)
   }
 }

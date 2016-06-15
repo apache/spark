@@ -280,6 +280,7 @@ private[spark] object JsonProtocol {
     ("Getting Result Time" -> taskInfo.gettingResultTime) ~
     ("Finish Time" -> taskInfo.finishTime) ~
     ("Failed" -> taskInfo.failed) ~
+    ("Killed" -> taskInfo.killed) ~
     ("Accumulables" -> JArray(taskInfo.accumulables.map(accumulableInfoToJson).toList))
   }
 
@@ -697,6 +698,7 @@ private[spark] object JsonProtocol {
     val gettingResultTime = (json \ "Getting Result Time").extract[Long]
     val finishTime = (json \ "Finish Time").extract[Long]
     val failed = (json \ "Failed").extract[Boolean]
+    val killed = (json \ "Killed").extractOpt[Boolean].getOrElse(false)
     val accumulables = (json \ "Accumulables").extractOpt[Seq[JValue]] match {
       case Some(values) => values.map(accumulableInfoFromJson)
       case None => Seq[AccumulableInfo]()
@@ -707,6 +709,7 @@ private[spark] object JsonProtocol {
     taskInfo.gettingResultTime = gettingResultTime
     taskInfo.finishTime = finishTime
     taskInfo.failed = failed
+    taskInfo.killed = killed
     accumulables.foreach { taskInfo.accumulables += _ }
     taskInfo
   }
@@ -840,7 +843,9 @@ private[spark] object JsonProtocol {
         // Fallback on getting accumulator updates from TaskMetrics, which was logged in Spark 1.x
         val accumUpdates = Utils.jsonOption(json \ "Accumulator Updates")
           .map(_.extract[List[JValue]].map(accumulableInfoFromJson))
-          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulatorUpdates())
+          .getOrElse(taskMetricsFromJson(json \ "Metrics").accumulators().map(acc => {
+            acc.toInfo(Some(acc.value), None)
+          }))
         ExceptionFailure(className, description, stackTrace, fullStackTrace, None, accumUpdates)
       case `taskResultLost` => TaskResultLost
       case `taskKilled` => TaskKilled

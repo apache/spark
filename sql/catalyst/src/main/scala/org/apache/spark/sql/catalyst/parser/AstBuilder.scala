@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.sql.catalyst.parser
 
 import java.sql.{Date, Timestamp}
@@ -82,49 +83,6 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   protected def plan(tree: ParserRuleContext): LogicalPlan = typedVisit(tree)
 
   /**
-   * Make sure we do not try to create a plan for a native command.
-   */
-  override def visitExecuteNativeCommand(ctx: ExecuteNativeCommandContext): LogicalPlan = null
-
-  /**
-   * Create a plan for a SHOW FUNCTIONS command.
-   */
-  override def visitShowFunctions(ctx: ShowFunctionsContext): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    if (qualifiedName != null) {
-      val names = qualifiedName().identifier().asScala.map(_.getText).toList
-      names match {
-        case db :: name :: Nil =>
-          ShowFunctions(Some(db), Some(name))
-        case name :: Nil =>
-          ShowFunctions(None, Some(name))
-        case _ =>
-          throw new ParseException("SHOW FUNCTIONS unsupported name", ctx)
-      }
-    } else if (pattern != null) {
-      ShowFunctions(None, Some(string(pattern)))
-    } else {
-      ShowFunctions(None, None)
-    }
-  }
-
-  /**
-   * Create a plan for a DESCRIBE FUNCTION command.
-   */
-  override def visitDescribeFunction(ctx: DescribeFunctionContext): LogicalPlan = withOrigin(ctx) {
-    import ctx._
-    val functionName =
-      if (describeFuncName.STRING() != null) {
-        string(describeFuncName.STRING())
-      } else if (describeFuncName.qualifiedName() != null) {
-        describeFuncName.qualifiedName().identifier().asScala.map(_.getText).mkString(".")
-      } else {
-        describeFuncName.getText
-      }
-    DescribeFunction(functionName, EXTENDED != null)
-  }
-
-  /**
    * Create a top-level plan with Common Table Expressions.
    */
   override def visitQuery(ctx: QueryContext): LogicalPlan = withOrigin(ctx) {
@@ -137,14 +95,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           val namedQuery = visitNamedQuery(nCtx)
           (namedQuery.alias, namedQuery)
       }
-
       // Check for duplicate names.
-      ctes.groupBy(_._1).filter(_._2.size > 1).foreach {
-        case (name, _) =>
-          throw new ParseException(
-            s"Name '$name' is used for multiple common table expressions", ctx)
-      }
-
+      checkDuplicateKeys(ctes, ctx)
       With(query, ctes.toMap)
     }
   }
@@ -232,11 +184,14 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    */
   override def visitPartitionSpec(
       ctx: PartitionSpecContext): Map[String, Option[String]] = withOrigin(ctx) {
-    ctx.partitionVal.asScala.map { pVal =>
+    val parts = ctx.partitionVal.asScala.map { pVal =>
       val name = pVal.identifier.getText.toLowerCase
       val value = Option(pVal.constant).map(visitStringConstant)
       name -> value
-    }.toMap
+    }
+    // Check for duplicate partition columns in one spec.
+    checkDuplicateKeys(parts, ctx)
+    parts.toMap
   }
 
   /**
@@ -554,19 +509,8 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
       query: LogicalPlan,
       ctx: LateralViewContext): LogicalPlan = withOrigin(ctx) {
     val expressions = expressionList(ctx.expression)
-
-    // Create the generator.
-    val generator = ctx.qualifiedName.getText.toLowerCase match {
-      case "explode" if expressions.size == 1 =>
-        Explode(expressions.head)
-      case "json_tuple" =>
-        JsonTuple(expressions)
-      case name =>
-        UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions)
-    }
-
     Generate(
-      generator,
+      UnresolvedGenerator(visitFunctionName(ctx.qualifiedName), expressions),
       join = true,
       outer = ctx.OUTER != null,
       Some(ctx.tblName.getText.toLowerCase),
@@ -655,8 +599,18 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
         val fraction = ctx.percentage.getText.toDouble
         sample(fraction / 100.0d)
 
+      case SqlBaseParser.BYTELENGTH_LITERAL =>
+        throw new ParseException(
+          "TABLESAMPLE(byteLengthLiteral) is not supported", ctx)
+
       case SqlBaseParser.BUCKET if ctx.ON != null =>
-        throw new ParseException("TABLESAMPLE(BUCKET x OUT OF y ON id) is not supported", ctx)
+        if (ctx.identifier != null) {
+          throw new ParseException(
+            "TABLESAMPLE(BUCKET x OUT OF y ON colname) is not supported", ctx)
+        } else {
+          throw new ParseException(
+            "TABLESAMPLE(BUCKET x OUT OF y ON function) is not supported", ctx)
+        }
 
       case SqlBaseParser.BUCKET =>
         sample(ctx.numerator.getText.toDouble / ctx.denominator.getText.toDouble)
@@ -688,7 +642,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
   override def visitTableName(ctx: TableNameContext): LogicalPlan = withOrigin(ctx) {
     val table = UnresolvedRelation(
       visitTableIdentifier(ctx.tableIdentifier),
-      Option(ctx.identifier).map(_.getText))
+      Option(ctx.strictIdentifier).map(_.getText))
     table.optionalMap(ctx.sample)(withSample)
   }
 
@@ -738,7 +692,9 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedRelation(ctx: AliasedRelationContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.relation).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.relation)
+      .optionalMap(ctx.sample)(withSample)
+      .optionalMap(ctx.strictIdentifier)(aliasPlan)
   }
 
   /**
@@ -747,13 +703,15 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * hooks.
    */
   override def visitAliasedQuery(ctx: AliasedQueryContext): LogicalPlan = withOrigin(ctx) {
-    plan(ctx.queryNoWith).optionalMap(ctx.sample)(withSample).optionalMap(ctx.identifier)(aliasPlan)
+    plan(ctx.queryNoWith)
+      .optionalMap(ctx.sample)(withSample)
+      .optionalMap(ctx.strictIdentifier)(aliasPlan)
   }
 
   /**
    * Create an alias (SubqueryAlias) for a LogicalPlan.
    */
-  private def aliasPlan(alias: IdentifierContext, plan: LogicalPlan): LogicalPlan = {
+  private def aliasPlan(alias: ParserRuleContext, plan: LogicalPlan): LogicalPlan = {
     SubqueryAlias(alias.getText, plan)
   }
 
@@ -787,7 +745,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
    * ******************************************************************************************** */
   /**
    * Create an expression from the given context. This method just passes the context on to the
-   * vistor and only takes care of typing (We assume that the visitor returns an Expression here).
+   * visitor and only takes care of typing (We assume that the visitor returns an Expression here).
    */
   protected def expression(ctx: ParserRuleContext): Expression = typedVisit(ctx)
 
@@ -956,7 +914,7 @@ class AstBuilder extends SqlBaseBaseVisitor[AnyRef] with Logging {
           GreaterThanOrEqual(e, expression(ctx.lower)),
           LessThanOrEqual(e, expression(ctx.upper))))
       case SqlBaseParser.IN if ctx.query != null =>
-        invertIfNotDefined(InSubQuery(e, plan(ctx.query)))
+        invertIfNotDefined(In(e, Seq(ListQuery(plan(ctx.query)))))
       case SqlBaseParser.IN =>
         invertIfNotDefined(In(e, ctx.expression.asScala.map(expression)))
       case SqlBaseParser.LIKE =>
