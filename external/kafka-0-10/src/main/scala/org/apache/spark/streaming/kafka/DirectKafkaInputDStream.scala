@@ -196,7 +196,7 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
       OffsetRange(tp.topic, tp.partition, fo, uo)
     }
     val rdd = new KafkaRDD[K, V](
-      context.sparkContext, executorKafkaParams, offsetRanges.toArray, getPreferredHosts)
+      context.sparkContext, executorKafkaParams, offsetRanges.toArray, getPreferredHosts, true)
 
     // Report the record number and metadata of this batch interval to InputInfoTracker.
     val description = offsetRanges.filter { offsetRange =>
@@ -293,7 +293,14 @@ class DirectKafkaInputDStream[K: ClassTag, V: ClassTag] private[spark] (
       batchForTime.toSeq.sortBy(_._1)(Time.ordering).foreach { case (t, b) =>
          logInfo(s"Restoring KafkaRDD for time $t ${b.mkString("[", ", ", "]")}")
          generatedRDDs += t -> new KafkaRDD[K, V](
-           context.sparkContext, executorKafkaParams, b.map(OffsetRange(_)), getPreferredHosts)
+           context.sparkContext,
+           executorKafkaParams,
+           b.map(OffsetRange(_)),
+           getPreferredHosts,
+           // during restore, it's possible same partition will be consumed from multiple
+           // threads, so dont use cache
+           false
+         )
       }
     }
   }

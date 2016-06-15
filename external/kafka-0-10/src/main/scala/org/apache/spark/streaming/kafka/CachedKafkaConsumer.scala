@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 /**
  * Consumer of single topicpartition, intended for cached reuse.
  * Underlying consumer is not threadsafe, so neither is this,
- * but processing the same topicpartition and group id in multiple threads would be bad anyway.
+ * but processing the same topicpartition and group id in multiple threads is usually bad anyway.
  */
 private[kafka]
 class CachedKafkaConsumer[K, V] private(
@@ -55,6 +55,8 @@ class CachedKafkaConsumer[K, V] private(
   // could possibly optimize re-calculating of an RDD in the same batch
   protected var buffer = ju.Collections.emptyList[ConsumerRecord[K, V]]().iterator
   protected var nextOffset = -2L
+
+  def close(): Unit = consumer.close()
 
   /**
    * Get the record for the given offset, waiting up to timeout ms if IO is necessary.
@@ -156,6 +158,17 @@ object CachedKafkaConsumer extends Logging {
       }
     }
 
+  /**
+   * Get a fresh new instance, unassociated with the global cache.
+   * Caller is responsible for closing
+   */
+  def getUncached[K, V](
+    groupId: String,
+    topic: String,
+    partition: Int,
+    kafkaParams: ju.Map[String, Object]): CachedKafkaConsumer[K, V] =
+    new CachedKafkaConsumer[K, V](groupId, topic, partition, kafkaParams)
+
   /** remove consumer for given groupId, topic, and partition, if it exists */
   def remove(groupId: String, topic: String, partition: Int): Unit =
     CachedKafkaConsumer.synchronized {
@@ -163,8 +176,9 @@ object CachedKafkaConsumer extends Logging {
       log.info(s"Removing $k from cache")
       val v = cache.get(k)
       if (null != v) {
-        v.consumer.close()
+        v.close()
         cache.remove(k)
+        log.info(s"Removed $k from cache")
       }
     }
 }

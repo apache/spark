@@ -45,6 +45,7 @@ import org.apache.spark.storage.StorageLevel
  * @param preferredHosts map from TopicPartition to preferred host for processing that partition.
  * In most cases, use [[DirectKafkaInputDStream.preferConsistent]]
  * Use [[DirectKafkaInputDStream.preferBrokers]] if your executors are on same nodes as brokers.
+ * @param useConsumerCache whether to use a consumer from a per-jvm cache
  * @tparam K type of Kafka message key
  * @tparam V type of Kafka message value
  */
@@ -55,7 +56,8 @@ class KafkaRDD[
     sc: SparkContext,
     val kafkaParams: ju.Map[String, Object],
     val offsetRanges: Array[OffsetRange],
-    val preferredHosts: ju.Map[TopicPartition, String]
+    val preferredHosts: ju.Map[TopicPartition, String],
+    useConsumerCache: Boolean
 ) extends RDD[ConsumerRecord[K, V]](sc, Nil) with Logging with HasOffsetRanges {
 
   assert("none" ==
@@ -185,16 +187,26 @@ class KafkaRDD[
 
     val groupId = kafkaParams.get(ConsumerConfig.GROUP_ID_CONFIG).asInstanceOf[String]
 
-    val consumer = {
+    context.addTaskCompletionListener{ context => closeIfNeeded() }
+
+    val consumer = if (useConsumerCache) {
       CachedKafkaConsumer.init(cacheInitialCapacity, cacheMaxCapacity, cacheLoadFactor)
       if (context.attemptNumber > 1) {
         // just in case the prior attempt failures were cache related
         CachedKafkaConsumer.remove(groupId, part.topic, part.partition)
       }
       CachedKafkaConsumer.get[K, V](groupId, part.topic, part.partition, kafkaParams)
+    } else {
+      CachedKafkaConsumer.getUncached[K, V](groupId, part.topic, part.partition, kafkaParams)
     }
 
     var requestOffset = part.fromOffset
+
+    def closeIfNeeded(): Unit = {
+      if (!useConsumerCache && consumer != null) {
+        consumer.close
+      }
+    }
 
     override def hasNext(): Boolean = requestOffset < part.untilOffset
 
@@ -262,7 +274,7 @@ object KafkaRDD extends Logging {
     val osr = offsetRanges.clone()
     val ph = new ju.HashMap[TopicPartition, String](preferredHosts)
 
-    new KafkaRDD[K, V](sc, kp, osr, ph)
+    new KafkaRDD[K, V](sc, kp, osr, ph, true)
   }
 
   /**
