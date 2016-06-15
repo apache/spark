@@ -303,7 +303,7 @@ class CachedTableSuite extends QueryTest with SQLTestUtils with TestHiveSingleto
           sql(s"CACHE TABLE $db.cachedTable AS SELECT 1")
         }.getMessage
         assert(e.contains("It is not allowed to add database prefix ") &&
-          e.contains("to the table name in Cache Table As Select"))
+          e.contains("to the table name in CACHE TABLE AS SELECT"))
       }
     }
   }
