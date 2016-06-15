@@ -353,7 +353,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
           case ef: ExpectFailure[_] =>
             verify(currentStream != null, "can not expect failure when stream is not running")
             try failAfter(streamingTimeout) {
-              val thrownException = intercept[ContinuousQueryException] {
+              val thrownException = intercept[StreamingQueryException] {
                 currentStream.awaitTermination()
               }
               eventually("microbatch thread not stopped after termination with failure") {
@@ -563,7 +563,7 @@ trait StreamTest extends QueryTest with SharedSQLContext with Timeouts {
         case e: ExpectException[_] =>
           val thrownException =
             withClue(s"Did not throw ${e.t.runtimeClass.getSimpleName} when expected.") {
-              intercept[ContinuousQueryException] {
+              intercept[StreamingQueryException] {
                 failAfter(testTimeout) {
                   awaitTermFunc()
                 }

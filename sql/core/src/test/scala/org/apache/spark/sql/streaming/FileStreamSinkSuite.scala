@@ -124,7 +124,7 @@ class FileStreamSinkSuite extends StreamTest {
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    var query: ContinuousQuery = null
+    var query: StreamingQuery = null
 
     try {
       query =
@@ -156,7 +156,7 @@ class FileStreamSinkSuite extends StreamTest {
     val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
     val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-    var query: ContinuousQuery = null
+    var query: StreamingQuery = null
 
     try {
       query =
@@ -240,7 +240,7 @@ class FileStreamSinkSuite extends StreamTest {
       val outputDir = Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath
       val checkpointDir = Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath
 
-      var query: ContinuousQuery = null
+      var query: StreamingQuery = null
 
       try {
         val writer =

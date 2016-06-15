@@ -484,14 +484,14 @@ object SQLConf {
       .createWithDefault(2)
 
   val CHECKPOINT_LOCATION = SQLConfigBuilder("spark.sql.streaming.checkpointLocation")
-    .doc("The default location for storing checkpoint data for continuously executing queries.")
+    .doc("The default location for storing checkpoint data for streaming queries.")
     .stringConf
     .createOptional
 
   val UNSUPPORTED_OPERATION_CHECK_ENABLED =
     SQLConfigBuilder("spark.sql.streaming.unsupportedOperationCheck")
       .internal()
-      .doc("When true, the logical plan for continuous query will be checked for unsupported" +
+      .doc("When true, the logical plan for streaming query will be checked for unsupported" +
         " operations.")
       .booleanConf
       .createWithDefault(true)

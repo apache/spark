@@ -21,16 +21,16 @@ import org.apache.spark.annotation.Experimental
 
 /**
  * :: Experimental ::
- * A class used to report information about the progress of a [[ContinuousQuery]].
+ * A class used to report information about the progress of a [[StreamingQuery]].
  *
- * @param name The [[ContinuousQuery]] name. This name is unique across all active queries.
- * @param id The [[ContinuousQuery]] id. This id is unique across
+ * @param name The [[StreamingQuery]] name. This name is unique across all active queries.
+ * @param id The [[StreamingQuery]] id. This id is unique across
   *          all queries that have been started in the current process.
- * @param sourceStatuses The current statuses of the [[ContinuousQuery]]'s sources.
- * @param sinkStatus The current status of the [[ContinuousQuery]]'s sink.
+ * @param sourceStatuses The current statuses of the [[StreamingQuery]]'s sources.
+ * @param sinkStatus The current status of the [[StreamingQuery]]'s sink.
  */
 @Experimental
-class ContinuousQueryInfo private[sql](
+class StreamingQueryInfo private[sql](
   val name: String,
   val id: Long,
   val sourceStatuses: Seq[SourceStatus],
