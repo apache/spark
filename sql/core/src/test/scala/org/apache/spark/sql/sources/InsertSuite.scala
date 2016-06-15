@@ -263,10 +263,10 @@ class InsertSuite extends DataSourceTest with SharedSQLContext {
   test("SPARK-15824 - Execute an INSERT wrapped in a WITH statement immediately") {
     withTable("target") {
       sql("CREATE TABLE target(a INT, b STRING) USING JSON")
-      sql("WITH tbl AS (SELECT 1, 'a') INSERT OVERWRITE TABLE target SELECT a, b FROM jt")
+      sql("WITH tbl AS (SELECT * FROM jt) INSERT OVERWRITE TABLE target SELECT a, b FROM tbl")
       checkAnswer(
         sql("SELECT a, b FROM target"),
-        (1 to 10).map(i => Row(i, s"str$i"))
+        sql("SELECT a, b FROM jt")
       )
     }
   }
