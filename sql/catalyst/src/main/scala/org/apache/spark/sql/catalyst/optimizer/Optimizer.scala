@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.catalog.{InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
+import org.apache.spark.sql.catalyst.expressions.objects._
 import org.apache.spark.sql.catalyst.planning.{ExtractFiltersAndInnerJoins, Unions}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -79,6 +80,7 @@ abstract class Optimizer(sessionCatalog: SessionCatalog, conf: CatalystConf)
       ReorderJoin,
       OuterJoinElimination,
       PushPredicateThroughJoin,
+      PushPredicateThroughObjectConsumer,
       PushDownPredicate,
       LimitPushDown,
       ColumnPruning,
@@ -1159,6 +1161,9 @@ object PushDownPredicate extends Rule[LogicalPlan] with PredicateHelper {
     // should not push predicates through sample, or will generate different results.
     case filter @ Filter(_, _: Sample) => filter
 
+    // should not push predicates through ObjectConsumer or will be handled by other rules
+    case filter @ Filter(_, _: ObjectConsumer) => filter
+
     case filter @ Filter(condition, u: UnaryNode) if u.expressions.forall(_.deterministic) =>
       pushDownPredicate(filter, u.child) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
@@ -1407,6 +1412,41 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case FullOuter => f
         case NaturalJoin(_) => sys.error("Untransformed NaturalJoin node")
         case UsingJoin(_, _) => sys.error("Untransformed Using join node")
+      }
+  }
+}
+
+/**
+ * Pushes down [[Filter]] operators through [[ObjectConsumer]].
+ */
+object PushPredicateThroughObjectConsumer extends Rule[LogicalPlan] with PredicateHelper {
+
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+
+    // Pushes down if the child is [[SerializeFromObject]] and the condition is a function
+    // applying to the serialized object.
+    case filter @ Filter(condition, sfo @ SerializeFromObject(serializer, grandchild)) =>
+      val (pushDown, stayUp) = splitConjunctivePredicates(condition).partition {
+        case cond @ Invoke(_, _, _, deserializer :: Nil, _) =>
+          cond.deterministic && deserializer.dataType == sfo.inputObjectType
+        case _ => false
+      }
+      if (pushDown.nonEmpty) {
+        val newChild = SerializeFromObject(
+          serializer,
+          Filter(
+            pushDown.map {
+              case Invoke(function, name, returnType, _, propergateNull) =>
+                Invoke(function, name, returnType, grandchild.output.head :: Nil, propergateNull)
+            }.reduceLeft(And),
+            grandchild))
+        if (stayUp.nonEmpty) {
+          Filter(stayUp.reduceLeft(And), newChild)
+        } else {
+          newChild
+        }
+      } else {
+        filter
       }
   }
 }

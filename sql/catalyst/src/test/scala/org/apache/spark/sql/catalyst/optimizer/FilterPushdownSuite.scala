@@ -17,15 +17,17 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
+import org.apache.spark.sql.Encoders
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
+import org.apache.spark.sql.catalyst.analysis.{EliminateSubqueryAliases, UnresolvedDeserializer}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
+import org.apache.spark.sql.catalyst.encoders._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BooleanType, IntegerType}
 
 class FilterPushdownSuite extends PlanTest {
 
@@ -39,6 +41,7 @@ class FilterPushdownSuite extends PlanTest {
         PushDownPredicate,
         BooleanSimplification,
         PushPredicateThroughJoin,
+        PushPredicateThroughObjectConsumer,
         CollapseProject) :: Nil
   }
 
@@ -979,5 +982,104 @@ class FilterPushdownSuite extends PlanTest {
       .where('a - 'b > 1).select('a, 'b, 'c, 'window).analyze
 
     comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer)
+  }
+
+  test("ObjectConsumer: can't push down expression filter through ObjectConsumer") {
+    implicit val tEncoder =
+      Encoders.tuple(Encoders.scalaInt, Encoders.scalaInt, Encoders.scalaInt)
+    implicit val uEncoder = Encoders.scalaBoolean
+    val mapFunc: (Int, Int, Int) => Boolean = { (a, _, _) => a == 0 }
+
+    // testRelation.map(mapFunc).where('value === true)
+    val originalQuery = {
+      val deserialized = CatalystSerde.deserialize[(Int, Int, Int)](testRelation)
+      val mapped = MapElements(
+        mapFunc,
+        CatalystSerde.generateObjAttr[Boolean],
+        deserialized)
+      val serialized = CatalystSerde.serialize[Boolean](mapped)
+      Filter('value === true, serialized)
+    }
+
+    val correctAnswer = originalQuery
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("ObjectConsumer: can push down function filter through SerializeFromObject") {
+    implicit val tEncoder =
+      Encoders.tuple(Encoders.scalaInt, Encoders.scalaInt, Encoders.scalaInt)
+    implicit val uEncoder = Encoders.scalaBoolean
+    val mapFunc: (Int, Int, Int) => Boolean = { (a, _, _) => a == 0 }
+    val filterFunc: Boolean => Boolean = { _ == true }
+
+    // testRelation.map(mapFunc).filter(filterFunc)
+    val originalQuery = {
+      val deserialized = CatalystSerde.deserialize[(Int, Int, Int)](testRelation)
+      val mapped = MapElements(
+        mapFunc,
+        CatalystSerde.generateObjAttr[Boolean],
+        deserialized)
+      val serialized = CatalystSerde.serialize[Boolean](mapped)
+
+      val deserializer = UnresolvedDeserializer(encoderFor[Boolean].deserializer)
+      val condition = callFunction(filterFunc, BooleanType, deserializer)
+      Filter(condition, serialized)
+    }
+
+    val correctAnswer = {
+      val deserialized = CatalystSerde.deserialize[(Int, Int, Int)](testRelation)
+      val mapped = MapElements(
+        mapFunc,
+        CatalystSerde.generateObjAttr[Boolean],
+        deserialized)
+      val filtered = Filter(callFunction(filterFunc, BooleanType, mapped.outputObjAttr), mapped)
+      CatalystSerde.serialize[Boolean](filtered)
+    }
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("ObjectConsumer: can push down complex filter through SerializeFromObject") {
+    implicit val tEncoder =
+      Encoders.tuple(Encoders.scalaInt, Encoders.scalaInt, Encoders.scalaInt)
+    implicit val uEncoder = Encoders.scalaBoolean
+    val mapFunc: (Int, Int, Int) => Boolean = { (a, _, _) => a == 0 }
+    val filterFunc1: Boolean => Boolean = { _ == true }
+    val filterFunc2: Boolean => Boolean = { _ == false }
+
+    // testRelation.map(mapFunc).filter(filterFunc1).where('value === true).filter(filterFunc2)
+    val originalQuery = {
+      val deserialized = CatalystSerde.deserialize[(Int, Int, Int)](testRelation)
+      val mapped = MapElements(
+        mapFunc,
+        CatalystSerde.generateObjAttr[Boolean],
+        deserialized)
+      val serialized = CatalystSerde.serialize[Boolean](mapped)
+
+      val deserializer = UnresolvedDeserializer(encoderFor[Boolean].deserializer)
+      val condition1 = callFunction(filterFunc1, BooleanType, deserializer)
+      val filtered1 = Filter(condition1, serialized)
+
+      val where = Filter('value === true, filtered1)
+
+      val condition2 = callFunction(filterFunc2, BooleanType, deserializer)
+      Filter(condition2, where)
+    }
+
+    val correctAnswer = {
+      val deserialized = CatalystSerde.deserialize[(Int, Int, Int)](testRelation)
+      val mapped = MapElements(
+        mapFunc,
+        CatalystSerde.generateObjAttr[Boolean],
+        deserialized)
+      val cond1 = callFunction(filterFunc1, BooleanType, mapped.outputObjAttr)
+      val cond2 = callFunction(filterFunc2, BooleanType, mapped.outputObjAttr)
+      val filtered = Filter(cond1 && cond2, mapped)
+      val serialized = CatalystSerde.serialize[Boolean](filtered)
+      Filter('value === true, serialized)
+    }
+
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
   }
 }
