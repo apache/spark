@@ -282,7 +282,7 @@ class DAGScheduler(
   }
 
   /**
-   * Get or create a shuffle map stage for the given shuffle dependency's map side.  If the
+   * Gets a shuffle map stage if one exists in shuffleIdToMapStage. Otherwise, if the
    * shuffle map stage doesn't already exist, this method will create the shuffle map stage in
    * addition to any missing ancestor shuffle map stages.
    */
@@ -294,48 +294,53 @@ class DAGScheduler(
         stage
 
       case None =>
-        /** Creates a ShuffleMapStage that generates the given shuffle dependency's partitions. */
-        def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _]): ShuffleMapStage = {
-          val rdd = shuffleDep.rdd
-          val numTasks = rdd.partitions.length
-          val id = nextStageId.getAndIncrement()
-          val stage = new ShuffleMapStage(id, rdd, numTasks,
-            getOrCreateParentStages(rdd, firstJobId), firstJobId, rdd.creationSite, shuffleDep)
-
-          stageIdToStage(id) = stage
-          shuffleIdToMapStage(shuffleDep.shuffleId) = stage
-          updateJobIdStageIdMaps(firstJobId, stage)
-
-          if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
-            // A previously run stage generated partitions for this shuffle, so for each output
-            // that's still available, copy information about that output location to the new stage
-            // (so we don't unnecessarily re-compute that data).
-            val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
-            val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-            (0 until locs.length).foreach { i =>
-              if (locs(i) ne null) {
-                // locs(i) will be null if missing
-                stage.addOutputLoc(i, locs(i))
-              }
-            }
-          } else {
-            // Kind of ugly: need to register RDDs with the cache and map output tracker here
-            // since we can't do it in the RDD constructor because # of partitions is unknown
-            logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
-            mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
-          }
-          stage
-        }
-
         // Create stages for all missing ancestor shuffle dependencies.
         getMissingAncestorShuffleDependencies(shuffleDep.rdd).foreach { dep =>
           if (!shuffleIdToMapStage.contains(dep.shuffleId)) {
-            createShuffleMapStage(dep)
+            createShuffleMapStage(dep, firstJobId)
           }
         }
         // Finally, create a stage for the given shuffle dependency.
-        createShuffleMapStage(shuffleDep)
+        createShuffleMapStage(shuffleDep, firstJobId)
     }
+  }
+
+  /**
+   * Creates a ShuffleMapStage that generates the given shuffle dependency's partitions. If a
+   * previously run stage generated the same shuffle data, this function will copy the output
+   * locations that are still available from the previous shuffle to avoid unnecessarily
+   * regenerating data.
+   */
+  def createShuffleMapStage(shuffleDep: ShuffleDependency[_, _, _], jobId: Int): ShuffleMapStage = {
+    val rdd = shuffleDep.rdd
+    val numTasks = rdd.partitions.length
+    val id = nextStageId.getAndIncrement()
+    val stage = new ShuffleMapStage(id, rdd, numTasks,
+      getOrCreateParentStages(rdd, jobId), jobId, rdd.creationSite, shuffleDep)
+
+    stageIdToStage(id) = stage
+    shuffleIdToMapStage(shuffleDep.shuffleId) = stage
+    updateJobIdStageIdMaps(jobId, stage)
+
+    if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
+      // A previously run stage generated partitions for this shuffle, so for each output
+      // that's still available, copy information about that output location to the new stage
+      // (so we don't unnecessarily re-compute that data).
+      val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
+      val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
+      (0 until locs.length).foreach { i =>
+        if (locs(i) ne null) {
+          // locs(i) will be null if missing
+          stage.addOutputLoc(i, locs(i))
+        }
+      }
+    } else {
+      // Kind of ugly: need to register RDDs with the cache and map output tracker here
+      // since we can't do it in the RDD constructor because # of partitions is unknown
+      logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
+      mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.length)
+    }
+    stage
   }
 
   /**
