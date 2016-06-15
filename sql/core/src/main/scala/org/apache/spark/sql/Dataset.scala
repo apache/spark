@@ -182,12 +182,11 @@ class Dataset[T] private[sql](
     def materialize: LogicalPlan = {
       LogicalRDD(queryExecution.analyzed.output, queryExecution.toRdd)(sparkSession)
     }
-    queryExecution.logical match {
+    queryExecution.analyzed match {
       // For various commands (like DDL) and queries with side effects, we force query execution
       // to happen right away to let these side effects take place eagerly.
       case p if hasSideEffects(p) => materialize
       case Union(children) if children.forall(hasSideEffects) => materialize
-      case With(p, _) if hasSideEffects(p) => materialize
       case _ => queryExecution.analyzed
     }
   }
