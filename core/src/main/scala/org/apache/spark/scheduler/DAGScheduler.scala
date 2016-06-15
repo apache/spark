@@ -141,7 +141,7 @@ class DAGScheduler(
 
   private[scheduler] val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
   private[scheduler] val stageIdToStage = new HashMap[Int, Stage]
-  private[scheduler] val shuffleToMapStage = new HashMap[Int, ShuffleMapStage]
+  private[scheduler] val shuffleIdToMapStage = new HashMap[Int, ShuffleMapStage]
   private[scheduler] val jobIdToActiveJob = new HashMap[Int, ActiveJob]
 
   // Stages we need to run whose parents aren't done
@@ -281,18 +281,18 @@ class DAGScheduler(
   private def getShuffleMapStage(
       shuffleDep: ShuffleDependency[_, _, _],
       firstJobId: Int): ShuffleMapStage = {
-    shuffleToMapStage.get(shuffleDep.shuffleId) match {
+    shuffleIdToMapStage.get(shuffleDep.shuffleId) match {
       case Some(stage) => stage
       case None =>
         // We are going to register ancestor shuffle dependencies
         getAncestorShuffleDependencies(shuffleDep.rdd).foreach { dep =>
-          if (!shuffleToMapStage.contains(dep.shuffleId)) {
-            shuffleToMapStage(dep.shuffleId) = newOrUsedShuffleStage(dep, firstJobId)
+          if (!shuffleIdToMapStage.contains(dep.shuffleId)) {
+            shuffleIdToMapStage(dep.shuffleId) = newOrUsedShuffleStage(dep, firstJobId)
           }
         }
         // Then register current shuffleDep
         val stage = newOrUsedShuffleStage(shuffleDep, firstJobId)
-        shuffleToMapStage(shuffleDep.shuffleId) = stage
+        shuffleIdToMapStage(shuffleDep.shuffleId) = stage
         stage
     }
   }
@@ -396,7 +396,7 @@ class DAGScheduler(
       if (!visited(toVisit)) {
         visited += toVisit
         getShuffleDependencies(toVisit).foreach { shuffleDep =>
-          if (!shuffleToMapStage.contains(shuffleDep.shuffleId)) {
+          if (!shuffleIdToMapStage.contains(shuffleDep.shuffleId)) {
             ancestors.push(shuffleDep)
             waitingForVisit.push(shuffleDep.rdd)
           } // Otherwise, the dependency and its ancestors have already been registered.
@@ -516,8 +516,8 @@ class DAGScheduler(
                   logDebug("Removing running stage %d".format(stageId))
                   runningStages -= stage
                 }
-                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
-                  shuffleToMapStage.remove(k)
+                for ((k, v) <- shuffleIdToMapStage.find(_._2 == stage)) {
+                  shuffleIdToMapStage.remove(k)
                 }
                 if (waitingStages.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
@@ -1244,7 +1244,7 @@ class DAGScheduler(
 
       case FetchFailed(bmAddress, shuffleId, mapId, reduceId, failureMessage) =>
         val failedStage = stageIdToStage(task.stageId)
-        val mapStage = shuffleToMapStage(shuffleId)
+        val mapStage = shuffleIdToMapStage(shuffleId)
 
         if (failedStage.latestInfo.attemptId != task.stageAttemptId) {
           logInfo(s"Ignoring fetch failure from $task as it's from $failedStage attempt" +
@@ -1334,14 +1334,14 @@ class DAGScheduler(
 
       if (!env.blockManager.externalShuffleServiceEnabled || fetchFailed) {
         // TODO: This will be really slow if we keep accumulating shuffle map stages
-        for ((shuffleId, stage) <- shuffleToMapStage) {
+        for ((shuffleId, stage) <- shuffleIdToMapStage) {
           stage.removeOutputsOnExecutor(execId)
           mapOutputTracker.registerMapOutputs(
             shuffleId,
             stage.outputLocInMapOutputTrackerFormat(),
             changeEpoch = true)
         }
-        if (shuffleToMapStage.isEmpty) {
+        if (shuffleIdToMapStage.isEmpty) {
           mapOutputTracker.incrementEpoch()
         }
         clearCacheLocs()
