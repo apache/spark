@@ -152,7 +152,7 @@ class BlockMatrixSuite extends SparkFunSuite with MLlibTestSparkContext {
 
     val C = B.toIndexedRowMatrix.rows.collect
 
-    (C(0).vector.toBreeze, C(1).vector.toBreeze) match {
+    (C(0).vector.asBreeze, C(1).vector.asBreeze) match {
       case (denseVector: BDV[Double], sparseVector: BSV[Double]) =>
         assert(denseVector.length === sparseVector.length)
 

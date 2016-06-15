@@ -22,6 +22,7 @@ import scala.util.Try
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs._
+import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
 import org.apache.hadoop.mapreduce.{Job, TaskAttemptContext}
 
@@ -29,12 +30,12 @@ import org.apache.spark.SparkContext
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql._
-import org.apache.spark.sql.catalyst.{expressions, CatalystTypeConverters, InternalRow}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.execution.FileRelation
 import org.apache.spark.sql.sources.{BaseRelation, DataSourceRegister, Filter}
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.SerializableConfiguration
 
 /**
@@ -215,6 +216,16 @@ trait FileFormat {
   }
 
   /**
+   * Returns whether a file with `path` could be splitted or not.
+   */
+  def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    false
+  }
+
+  /**
    * Returns a function that can be used to read a single file in as an Iterator of InternalRow.
    *
    * @param dataSchema The global data schema. It can be either specified by the user, or
@@ -294,6 +305,24 @@ trait FileFormat {
       options: Map[String, String]): OutputWriterFactory = {
     // TODO: Remove this default implementation when the other formats have been ported
     throw new UnsupportedOperationException(s"buildWriter is not supported for $this")
+  }
+}
+
+/**
+ * The base class file format that is based on text file.
+ */
+abstract class TextBasedFileFormat extends FileFormat {
+  private var codecFactory: CompressionCodecFactory = null
+  override def isSplitable(
+      sparkSession: SparkSession,
+      options: Map[String, String],
+      path: Path): Boolean = {
+    if (codecFactory == null) {
+      codecFactory = new CompressionCodecFactory(
+        sparkSession.sessionState.newHadoopConfWithOptions(options))
+    }
+    val codec = codecFactory.getCodec(path)
+    codec == null || codec.isInstanceOf[SplittableCompressionCodec]
   }
 }
 
@@ -381,6 +410,16 @@ private[sql] object HadoopFsRelation extends Logging {
       }
       statuses.filterNot(status => shouldFilterOut(status.getPath.getName)).map {
         case f: LocatedFileStatus => f
+
+        // NOTE:
+        //
+        // - Although S3/S3A/S3N file system can be quite slow for remote file metadata
+        //   operations, calling `getFileBlockLocations` does no harm here since these file system
+        //   implementations don't actually issue RPC for this method.
+        //
+        // - Here we are calling `getFileBlockLocations` in a sequential manner, but it should not
+        //   be a big deal since we always use to `listLeafFilesInParallel` when the number of
+        //   paths exceeds threshold.
         case f => createLocatedFileStatus(f, fs.getFileBlockLocations(f, 0, f.getLen))
       }
     }
@@ -409,13 +448,22 @@ private[sql] object HadoopFsRelation extends Logging {
   def listLeafFilesInParallel(
       paths: Seq[Path],
       hadoopConf: Configuration,
-      sparkContext: SparkContext): mutable.LinkedHashSet[FileStatus] = {
+      sparkSession: SparkSession): mutable.LinkedHashSet[FileStatus] = {
+    assert(paths.size >= sparkSession.sessionState.conf.parallelPartitionDiscoveryThreshold)
     logInfo(s"Listing leaf files and directories in parallel under: ${paths.mkString(", ")}")
 
+    val sparkContext = sparkSession.sparkContext
+    val sqlConf = sparkSession.sessionState.conf
     val serializableConfiguration = new SerializableConfiguration(hadoopConf)
     val serializedPaths = paths.map(_.toString)
 
-    val fakeStatuses = sparkContext.parallelize(serializedPaths).mapPartitions { paths =>
+    // Set the number of parallelism to prevent following file listing from generating many tasks
+    // in case of large #defaultParallelism.
+    val numParallelism = Math.min(paths.size, 10000)
+
+    val fakeStatuses = sparkContext
+        .parallelize(serializedPaths, numParallelism)
+        .mapPartitions { paths =>
       // Dummy jobconf to get to the pathFilter defined in configuration
       // It's very expensive to create a JobConf(ClassUtil.findContainingJar() is slow)
       val jobConf = new JobConf(serializableConfiguration.value, this.getClass)

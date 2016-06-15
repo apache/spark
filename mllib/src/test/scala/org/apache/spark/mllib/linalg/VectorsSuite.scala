@@ -269,7 +269,7 @@ class VectorsSuite extends SparkFunSuite with Logging {
       val denseVector1 = Vectors.dense(sparseVector1.toArray)
       val denseVector2 = Vectors.dense(sparseVector2.toArray)
 
-      val squaredDist = breezeSquaredDistance(sparseVector1.toBreeze, sparseVector2.toBreeze)
+      val squaredDist = breezeSquaredDistance(sparseVector1.asBreeze, sparseVector2.asBreeze)
 
       // SparseVector vs. SparseVector
       assert(Vectors.sqdist(sparseVector1, sparseVector2) ~== squaredDist relTol 1E-8)

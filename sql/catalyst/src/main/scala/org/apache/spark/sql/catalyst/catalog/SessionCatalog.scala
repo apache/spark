@@ -22,7 +22,7 @@ import javax.annotation.concurrent.GuardedBy
 import scala.collection.mutable
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
@@ -241,7 +241,7 @@ class SessionCatalog(
   /**
    * Retrieve the metadata of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def getTableMetadata(name: TableIdentifier): CatalogTable = {
     val db = formatDatabaseName(name.database.getOrElse(getCurrentDatabase))
@@ -266,7 +266,7 @@ class SessionCatalog(
   /**
    * Load files stored in given path into an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def loadTable(
       name: TableIdentifier,
@@ -283,7 +283,7 @@ class SessionCatalog(
   /**
    * Load files stored in given path into the partition of an existing metastore table.
    * If no database is specified, assume the table is in the current database.
-   * If the specified table is not found in the database then an [[NoSuchTableException]] is thrown.
+   * If the specified table is not found in the database then a [[NoSuchTableException]] is thrown.
    */
   def loadPartition(
       name: TableIdentifier,
@@ -855,7 +855,8 @@ class SessionCatalog(
       .map { f => FunctionIdentifier(f, Some(dbName)) }
     val loadedFunctions = StringUtils.filterPattern(functionRegistry.listFunction(), pattern)
       .map { f => FunctionIdentifier(f) }
-    dbFunctions ++ loadedFunctions
+    (dbFunctions ++ loadedFunctions)
+      .filterNot(f => FunctionRegistry.functionSet.contains(f.funcName))
   }
 
 

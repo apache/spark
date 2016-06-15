@@ -382,6 +382,8 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       // See HIVE-2742 for more detail.
       catalog.setCurrentDatabase("db2")
       val newLocation = newUriForDatabase()
+      val newSerde = "com.sparkbricks.text.EasySerde"
+      val newSerdeProps = Map("spark" -> "bricks", "compressed" -> "false")
       // alter but keep spec the same
       val oldPart1 = catalog.getPartition("db2", "tbl2", part1.spec)
       val oldPart2 = catalog.getPartition("db2", "tbl2", part2.spec)
@@ -394,6 +396,14 @@ abstract class ExternalCatalogSuite extends SparkFunSuite with BeforeAndAfterEac
       assert(newPart2.storage.locationUri == Some(newLocation))
       assert(oldPart1.storage.locationUri != Some(newLocation))
       assert(oldPart2.storage.locationUri != Some(newLocation))
+      // alter other storage information
+      catalog.alterPartitions("db2", "tbl2", Seq(
+        oldPart1.copy(storage = storageFormat.copy(serde = Some(newSerde))),
+        oldPart2.copy(storage = storageFormat.copy(serdeProperties = newSerdeProps))))
+      val newPart1b = catalog.getPartition("db2", "tbl2", part1.spec)
+      val newPart2b = catalog.getPartition("db2", "tbl2", part2.spec)
+      assert(newPart1b.storage.serde == Some(newSerde))
+      assert(newPart2b.storage.serdeProperties == newSerdeProps)
       // alter but change spec, should fail because new partition specs do not exist yet
       val badPart1 = part1.copy(spec = Map("a" -> "v1", "b" -> "v2"))
       val badPart2 = part2.copy(spec = Map("a" -> "v3", "b" -> "v4"))

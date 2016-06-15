@@ -55,7 +55,7 @@ object SQLConf {
   val WAREHOUSE_PATH = SQLConfigBuilder("spark.sql.warehouse.dir")
     .doc("The default location for managed databases and tables.")
     .stringConf
-    .createWithDefault("${system:user.dir}/spark-warehouse")
+    .createWithDefault("file:${system:user.dir}/spark-warehouse")
 
   val OPTIMIZER_MAX_ITERATIONS = SQLConfigBuilder("spark.sql.optimizer.maxIterations")
     .internal()
@@ -310,6 +310,14 @@ object SQLConf {
     .stringConf
     .createWithDefault("parquet")
 
+  val CONVERT_CTAS = SQLConfigBuilder("spark.sql.hive.convertCTAS")
+    .internal()
+    .doc("When true, a table created by a Hive CTAS statement (no USING clause) " +
+      "without specifying any storage property will be converted to a data source table, " +
+      "using the data source set by spark.sql.sources.default.")
+    .booleanConf
+    .createWithDefault(false)
+
   // This is used to control the when we will split a schema's JSON string to multiple pieces
   // in order to fit the JSON string in metastore's table property (by default, the value has
   // a length restriction of 4000 characters). We will split the JSON string of a schema
@@ -425,7 +433,14 @@ object SQLConf {
     .doc("The maximum number of fields (including nested fields) that will be supported before" +
       " deactivating whole-stage codegen.")
     .intConf
-    .createWithDefault(200)
+    .createWithDefault(100)
+
+  val WHOLESTAGE_FALLBACK = SQLConfigBuilder("spark.sql.codegen.fallback")
+    .internal()
+    .doc("When true, whole stage codegen could be temporary disabled for the part of query that" +
+      " fail to compile generated code")
+    .booleanConf
+    .createWithDefault(true)
 
   val MAX_CASES_BRANCHES = SQLConfigBuilder("spark.sql.codegen.maxCaseBranches")
     .internal()
@@ -597,6 +612,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
 
   def wholeStageMaxNumFields: Int = getConf(WHOLESTAGE_MAX_NUM_FIELDS)
 
+  def wholeStageFallback: Boolean = getConf(WHOLESTAGE_FALLBACK)
+
   def maxCaseBranchesForCodegen: Int = getConf(MAX_CASES_BRANCHES)
 
   def exchangeReuseEnabled: Boolean = getConf(EXCHANGE_REUSE_ENABLED)
@@ -631,6 +648,8 @@ private[sql] class SQLConf extends Serializable with CatalystConf with Logging {
   def broadcastTimeout: Int = getConf(BROADCAST_TIMEOUT)
 
   def defaultDataSourceName: String = getConf(DEFAULT_DATA_SOURCE_NAME)
+
+  def convertCTAS: Boolean = getConf(CONVERT_CTAS)
 
   def partitionDiscoveryEnabled(): Boolean =
     getConf(SQLConf.PARTITION_DISCOVERY_ENABLED)

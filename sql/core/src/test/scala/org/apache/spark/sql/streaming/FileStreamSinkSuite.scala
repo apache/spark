@@ -32,7 +32,7 @@ import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
 import org.apache.spark.util.Utils
 
-class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
+class FileStreamSinkSuite extends StreamTest {
   import testImplicits._
 
 
@@ -128,10 +128,10 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
 
     try {
       query =
-        df.write
-          .format("parquet")
+        df.writeStream
           .option("checkpointLocation", checkpointDir)
-          .startStream(outputDir)
+          .format("parquet")
+          .start(outputDir)
 
       inputData.addData(1, 2, 3)
 
@@ -140,7 +140,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
       }
 
       val outputDf = spark.read.parquet(outputDir).as[Int]
-      checkDataset(outputDf, 1, 2, 3)
+      checkDatasetUnorderly(outputDf, 1, 2, 3)
 
     } finally {
       if (query != null) {
@@ -162,11 +162,11 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
       query =
         ds.map(i => (i, i * 1000))
           .toDF("id", "value")
-          .write
-          .format("parquet")
+          .writeStream
           .partitionBy("id")
           .option("checkpointLocation", checkpointDir)
-          .startStream(outputDir)
+          .format("parquet")
+          .start(outputDir)
 
       inputData.addData(1, 2, 3)
       failAfter(streamingTimeout) {
@@ -191,7 +191,7 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
       assert(hadoopdFsRelations.head.dataSchema.exists(_.name == "value"))
 
       // Verify the data is correctly read
-      checkDataset(
+      checkDatasetUnorderly(
         outputDf.as[(Int, Int)],
         (1000, 1), (2000, 2), (3000, 3))
 
@@ -246,13 +246,13 @@ class FileStreamSinkSuite extends StreamTest with SharedSQLContext {
         val writer =
           ds.map(i => (i, i * 1000))
             .toDF("id", "value")
-            .write
+            .writeStream
         if (format.nonEmpty) {
           writer.format(format.get)
         }
         query = writer
             .option("checkpointLocation", checkpointDir)
-            .startStream(outputDir)
+            .start(outputDir)
       } finally {
         if (query != null) {
           query.stop()

@@ -243,7 +243,6 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       new FetchFailed(null, 0, 0, 0, "ignored"),
       ExceptionFailure("Exception", "description", null, null, None),
       TaskResultLost,
-      TaskKilled,
       ExecutorLostFailure("0", true, Some("Induced failure")),
       UnknownReason)
     var failCount = 0
@@ -254,6 +253,11 @@ class JobProgressListenerSuite extends SparkFunSuite with LocalSparkContext with
       assert(listener.stageIdToData((task.stageId, 0)).numCompleteTasks === 0)
       assert(listener.stageIdToData((task.stageId, 0)).numFailedTasks === failCount)
     }
+
+    // Make sure killed tasks are accounted for correctly.
+    listener.onTaskEnd(
+      SparkListenerTaskEnd(task.stageId, 0, taskType, TaskKilled, taskInfo, metrics))
+    assert(listener.stageIdToData((task.stageId, 0)).numKilledTasks === 1)
 
     // Make sure we count success as success.
     listener.onTaskEnd(

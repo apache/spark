@@ -445,7 +445,7 @@ test_that("jsonRDD() on a RDD with json string", {
 
 test_that("test cache, uncache and clearCache", {
   df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
+  createOrReplaceTempView(df, "table1")
   cacheTable("table1")
   uncacheTable("table1")
   clearCache()
@@ -454,16 +454,17 @@ test_that("test cache, uncache and clearCache", {
 
 test_that("test tableNames and tables", {
   df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
+  createOrReplaceTempView(df, "table1")
   expect_equal(length(tableNames()), 1)
   df <- tables()
   expect_equal(count(df), 1)
   dropTempTable("table1")
 })
 
-test_that("registerTempTable() results in a queryable table and sql() results in a new DataFrame", {
+test_that(
+  "createOrReplaceTempView() results in a queryable table and sql() results in a new DataFrame", {
   df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
+  createOrReplaceTempView(df, "table1")
   newdf <- sql("SELECT * FROM table1 where name = 'Michael'")
   expect_is(newdf, "SparkDataFrame")
   expect_equal(count(newdf), 1)
@@ -484,13 +485,13 @@ test_that("insertInto() on a registered table", {
   write.df(df2, parquetPath2, "parquet", "overwrite")
   dfParquet2 <- read.df(parquetPath2, "parquet")
 
-  registerTempTable(dfParquet, "table1")
+  createOrReplaceTempView(dfParquet, "table1")
   insertInto(dfParquet2, "table1")
   expect_equal(count(sql("select * from table1")), 5)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Michael")
   dropTempTable("table1")
 
-  registerTempTable(dfParquet, "table1")
+  createOrReplaceTempView(dfParquet, "table1")
   insertInto(dfParquet2, "table1", overwrite = TRUE)
   expect_equal(count(sql("select * from table1")), 2)
   expect_equal(first(sql("select * from table1 order by age"))$name, "Bob")
@@ -502,7 +503,7 @@ test_that("insertInto() on a registered table", {
 
 test_that("tableToDF() returns a new DataFrame", {
   df <- read.json(jsonPath)
-  registerTempTable(df, "table1")
+  createOrReplaceTempView(df, "table1")
   tabledf <- tableToDF("table1")
   expect_is(tabledf, "SparkDataFrame")
   expect_equal(count(tabledf), 3)
@@ -1136,7 +1137,14 @@ test_that("string operators", {
   df <- read.json(jsonPath)
   expect_equal(count(where(df, like(df$name, "A%"))), 1)
   expect_equal(count(where(df, startsWith(df$name, "A"))), 1)
+  expect_true(first(select(df, startsWith(df$name, "M")))[[1]])
+  expect_false(first(select(df, startsWith(df$name, "m")))[[1]])
+  expect_true(first(select(df, endsWith(df$name, "el")))[[1]])
   expect_equal(first(select(df, substr(df$name, 1, 2)))[[1]], "Mi")
+  if (as.numeric(R.version$major) >= 3 && as.numeric(R.version$minor) >= 3) {
+    expect_true(startsWith("Hello World", "Hello"))
+    expect_false(endsWith("Hello World", "a"))
+  }
   expect_equal(collect(select(df, cast(df$age, "string")))[[2, 1]], "30")
   expect_equal(collect(select(df, concat(df$name, lit(":"), df$age)))[[2, 1]], "Andy:30")
   expect_equal(collect(select(df, concat_ws(":", df$name)))[[2, 1]], "Andy")

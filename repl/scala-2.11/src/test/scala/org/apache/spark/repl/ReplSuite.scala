@@ -21,9 +21,11 @@ import java.io._
 import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
-
 import org.apache.commons.lang3.StringEscapeUtils
+import org.apache.log4j.{Level, LogManager}
 import org.apache.spark.{SparkContext, SparkFunSuite}
+import org.apache.spark.internal.config._
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.util.Utils
 
 class ReplSuite extends SparkFunSuite {
@@ -99,16 +101,62 @@ class ReplSuite extends SparkFunSuite {
     System.clearProperty("spark.driver.port")
   }
 
+  test("SPARK-15236: use Hive catalog") {
+    // turn on the INFO log so that it is possible the code will dump INFO
+    // entry for using "HiveMetastore"
+    val rootLogger = LogManager.getRootLogger()
+    val logLevel = rootLogger.getLevel
+    rootLogger.setLevel(Level.INFO)
+    try {
+      Main.conf.set(CATALOG_IMPLEMENTATION.key, "hive")
+      val output = runInterpreter("local",
+        """
+      |spark.sql("drop table if exists t_15236")
+    """.stripMargin)
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+      // only when the config is set to hive and
+      // hive classes are built, we will use hive catalog.
+      // Then log INFO entry will show things using HiveMetastore
+      if (SparkSession.hiveClassesArePresent) {
+        assertContains("HiveMetaStore", output)
+      } else {
+        // If hive classes are not built, in-memory catalog will be used
+        assertDoesNotContain("HiveMetaStore", output)
+      }
+    } finally {
+      rootLogger.setLevel(logLevel)
+    }
+  }
+
+  test("SPARK-15236: use in-memory catalog") {
+    val rootLogger = LogManager.getRootLogger()
+    val logLevel = rootLogger.getLevel
+    rootLogger.setLevel(Level.INFO)
+    try {
+      Main.conf.set(CATALOG_IMPLEMENTATION.key, "in-memory")
+      val output = runInterpreter("local",
+        """
+          |spark.sql("drop table if exists t_16236")
+        """.stripMargin)
+      assertDoesNotContain("error:", output)
+      assertDoesNotContain("Exception", output)
+      assertDoesNotContain("HiveMetaStore", output)
+    } finally {
+      rootLogger.setLevel(logLevel)
+    }
+  }
+
   test("simple foreach with accumulator") {
     val output = runInterpreter("local",
       """
-        |val accum = sc.accumulator(0)
-        |sc.parallelize(1 to 10).foreach(x => accum += x)
+        |val accum = sc.longAccumulator
+        |sc.parallelize(1 to 10).foreach(x => accum.add(x))
         |accum.value
       """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
-    assertContains("res1: Int = 55", output)
+    assertContains("res1: Long = 55", output)
   }
 
   test("external vars") {
@@ -228,7 +276,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-1199 two instances of same class don't type check.") {
-    val output = runInterpreter("local-cluster[1,1,1024]",
+    val output = runInterpreter("local",
       """
         |case class Sum(exp: String, exp2: String)
         |val a = Sum("A", "B")
@@ -288,7 +336,7 @@ class ReplSuite extends SparkFunSuite {
   }
 
   test("SPARK-2632 importing a method from non serializable class and not using it.") {
-    val output = runInterpreter("local",
+    val output = runInterpreter("local-cluster[1,1,1024]",
       """
       |class TestClass() { def testMethod = 3 }
       |val t = new TestClass

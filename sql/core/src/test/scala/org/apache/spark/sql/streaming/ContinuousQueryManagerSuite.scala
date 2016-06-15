@@ -28,12 +28,11 @@ import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{ContinuousQuery, Dataset, StreamTest}
+import org.apache.spark.sql.Dataset
 import org.apache.spark.sql.execution.streaming._
-import org.apache.spark.sql.test.SharedSQLContext
 import org.apache.spark.util.Utils
 
-class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with BeforeAndAfter {
+class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
 
   import AwaitTerminationTester._
   import testImplicits._
@@ -60,23 +59,15 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
       assert(spark.streams.active.toSet === queries.toSet)
       val (q1, q2, q3) = (queries(0), queries(1), queries(2))
 
-      assert(spark.streams.get(q1.name).eq(q1))
-      assert(spark.streams.get(q2.name).eq(q2))
-      assert(spark.streams.get(q3.name).eq(q3))
-      intercept[IllegalArgumentException] {
-        spark.streams.get("non-existent-name")
-      }
-
+      assert(spark.streams.get(q1.id).eq(q1))
+      assert(spark.streams.get(q2.id).eq(q2))
+      assert(spark.streams.get(q3.id).eq(q3))
+      assert(spark.streams.get(-1) === null) // non-existent id
       q1.stop()
 
       assert(spark.streams.active.toSet === Set(q2, q3))
-      val ex1 = withClue("no error while getting non-active query") {
-        intercept[IllegalArgumentException] {
-          spark.streams.get(q1.name)
-        }
-      }
-      assert(ex1.getMessage.contains(q1.name), "error does not contain name of query to be fetched")
-      assert(spark.streams.get(q2.name).eq(q2))
+      assert(spark.streams.get(q1.id) === null)
+      assert(spark.streams.get(q2.id).eq(q2))
 
       m2.addData(0)   // q2 should terminate with error
 
@@ -84,12 +75,7 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
         require(!q2.isActive)
         require(q2.exception.isDefined)
       }
-      withClue("no error while getting non-active query") {
-        intercept[IllegalArgumentException] {
-          spark.streams.get(q2.name).eq(q2)
-        }
-      }
-
+      assert(spark.streams.get(q2.id) === null)
       assert(spark.streams.active.toSet === Set(q3))
     }
   }
@@ -228,24 +214,24 @@ class ContinuousQueryManagerSuite extends StreamTest with SharedSQLContext with 
   }
 
 
-  /** Run a body of code by defining a query each on multiple datasets */
+  /** Run a body of code by defining a query on each dataset */
   private def withQueriesOn(datasets: Dataset[_]*)(body: Seq[ContinuousQuery] => Unit): Unit = {
     failAfter(streamingTimeout) {
       val queries = withClue("Error starting queries") {
-        datasets.map { ds =>
+        datasets.zipWithIndex.map { case (ds, i) =>
           @volatile var query: StreamExecution = null
           try {
             val df = ds.toDF
             val metadataRoot =
-              Utils.createTempDir(namePrefix = "streaming.metadata").getCanonicalPath
-            query = spark
-              .streams
-              .startQuery(
-                StreamExecution.nextName,
-                metadataRoot,
-                df,
-                new MemorySink(df.schema))
-              .asInstanceOf[StreamExecution]
+              Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
+            query =
+              df.writeStream
+                .format("memory")
+                .queryName(s"query$i")
+                .option("checkpointLocation", metadataRoot)
+                .outputMode("append")
+                .start()
+                .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
               if (query != null) query.stop()

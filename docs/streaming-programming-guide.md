@@ -145,8 +145,8 @@ import org.apache.spark.streaming.api.java.*;
 import scala.Tuple2;
 
 // Create a local StreamingContext with two working thread and batch interval of 1 second
-SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount")
-JavaStreamingContext jssc = new JavaStreamingContext(conf, Durations.seconds(1))
+SparkConf conf = new SparkConf().setMaster("local[2]").setAppName("NetworkWordCount");
+JavaStreamingContext jssc = new JavaStreamingContext(conf, Durations.seconds(1));
 {% endhighlight %}
 
 Using this context, we can create a DStream that represents streaming data from a TCP
@@ -1259,7 +1259,7 @@ dstream.foreachRDD(sendRecord)
 </div>
 
 This is incorrect as this requires the connection object to be serialized and sent from the
-driver to the worker. Such connection objects are rarely transferrable across machines. This
+driver to the worker. Such connection objects are rarely transferable across machines. This
 error may manifest as serialization errors (connection object not serializable), initialization
 errors (connection object needs to be initialized at the workers), etc. The correct solution is
 to create the connection object at the worker.
@@ -1395,13 +1395,13 @@ object WordBlacklist {
 
 object DroppedWordsCounter {
 
-  @volatile private var instance: Accumulator[Long] = null
+  @volatile private var instance: LongAccumulator = null
 
-  def getInstance(sc: SparkContext): Accumulator[Long] = {
+  def getInstance(sc: SparkContext): LongAccumulator = {
     if (instance == null) {
       synchronized {
         if (instance == null) {
-          instance = sc.accumulator(0L, "WordsInBlacklistCounter")
+          instance = sc.longAccumulator("WordsInBlacklistCounter")
         }
       }
     }
@@ -1409,7 +1409,7 @@ object DroppedWordsCounter {
   }
 }
 
-wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
+wordCounts.foreachRDD { (rdd: RDD[(String, Int)], time: Time) =>
   // Get or register the blacklist Broadcast
   val blacklist = WordBlacklist.getInstance(rdd.sparkContext)
   // Get or register the droppedWordsCounter Accumulator
@@ -1417,12 +1417,12 @@ wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
   // Use blacklist to drop words and use droppedWordsCounter to count them
   val counts = rdd.filter { case (word, count) =>
     if (blacklist.value.contains(word)) {
-      droppedWordsCounter += count
+      droppedWordsCounter.add(count)
       false
     } else {
       true
     }
-  }.collect()
+  }.collect().mkString("[", ", ", "]")
   val output = "Counts at time " + time + " " + counts
 })
 
@@ -1452,13 +1452,13 @@ class JavaWordBlacklist {
 
 class JavaDroppedWordsCounter {
 
-  private static volatile Accumulator<Integer> instance = null;
+  private static volatile LongAccumulator instance = null;
 
-  public static Accumulator<Integer> getInstance(JavaSparkContext jsc) {
+  public static LongAccumulator getInstance(JavaSparkContext jsc) {
     if (instance == null) {
       synchronized (JavaDroppedWordsCounter.class) {
         if (instance == null) {
-          instance = jsc.accumulator(0, "WordsInBlacklistCounter");
+          instance = jsc.sc().longAccumulator("WordsInBlacklistCounter");
         }
       }
     }
@@ -1472,7 +1472,7 @@ wordCounts.foreachRDD(new Function2<JavaPairRDD<String, Integer>, Time, Void>() 
     // Get or register the blacklist Broadcast
     final Broadcast<List<String>> blacklist = JavaWordBlacklist.getInstance(new JavaSparkContext(rdd.context()));
     // Get or register the droppedWordsCounter Accumulator
-    final Accumulator<Integer> droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
+    final LongAccumulator droppedWordsCounter = JavaDroppedWordsCounter.getInstance(new JavaSparkContext(rdd.context()));
     // Use blacklist to drop words and use droppedWordsCounter to count them
     String counts = rdd.filter(new Function<Tuple2<String, Integer>, Boolean>() {
       @Override

@@ -28,7 +28,6 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.rdd.RDD
 
 /**
- * ::Experimental::
  * Evaluator for ranking algorithms.
  *
  * Java users should use [[RankingMetrics$.of]] to create a [[RankingMetrics]] instance.

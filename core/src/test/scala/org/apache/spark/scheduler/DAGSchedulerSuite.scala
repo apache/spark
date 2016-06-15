@@ -1602,13 +1602,11 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("misbehaved accumulator should not crash DAGScheduler and SparkContext") {
-    val acc = new Accumulator[Int](0, new AccumulatorParam[Int] {
-      override def addAccumulator(t1: Int, t2: Int): Int = t1 + t2
-      override def zero(initialValue: Int): Int = 0
-      override def addInPlace(r1: Int, r2: Int): Int = {
-        throw new DAGSchedulerSuiteDummyException
-      }
-    })
+    val acc = new LongAccumulator {
+      override def add(v: java.lang.Long): Unit = throw new DAGSchedulerSuiteDummyException
+      override def add(v: Long): Unit = throw new DAGSchedulerSuiteDummyException
+    }
+    sc.register(acc)
 
     // Run this on executors
     sc.parallelize(1 to 10, 2).foreach { item => acc.add(1) }
@@ -1712,7 +1710,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
   }
 
   test("reduce tasks should be placed locally with map output") {
-    // Create an shuffleMapRdd with 1 partition
+    // Create a shuffleMapRdd with 1 partition
     val shuffleMapRdd = new MyRDD(sc, 1, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(2))
     val shuffleId = shuffleDep.shuffleId
@@ -1733,7 +1731,7 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
 
   test("reduce task locality preferences should only include machines with largest map outputs") {
     val numMapTasks = 4
-    // Create an shuffleMapRdd with more partitions
+    // Create a shuffleMapRdd with more partitions
     val shuffleMapRdd = new MyRDD(sc, numMapTasks, Nil)
     val shuffleDep = new ShuffleDependency(shuffleMapRdd, new HashPartitioner(1))
     val shuffleId = shuffleDep.shuffleId
@@ -2023,6 +2021,37 @@ class DAGSchedulerSuite extends SparkFunSuite with LocalSparkContext with Timeou
     assert(results === Map(0 -> 42, 1 -> 43))
     results.clear()
     assertDataStructuresEmpty()
+  }
+
+  /**
+   * Checks the DAGScheduler's internal logic for traversing a RDD DAG by making sure that
+   * getShuffleDependencies correctly returns the direct shuffle dependencies of a particular
+   * RDD. The test creates the following RDD graph (where n denotes a narrow dependency and s
+   * denotes a shuffle dependency):
+   *
+   * A <------------s---------,
+   *                           \
+   * B <--s-- C <--s-- D <--n---`-- E
+   *
+   * Here, the direct shuffle dependency of C is just the shuffle dependency on B. The direct
+   * shuffle dependencies of E are the shuffle dependency on A and the shuffle dependency on C.
+   */
+  test("getShuffleDependencies correctly returns only direct shuffle parents") {
+    val rddA = new MyRDD(sc, 2, Nil)
+    val shuffleDepA = new ShuffleDependency(rddA, new HashPartitioner(1))
+    val rddB = new MyRDD(sc, 2, Nil)
+    val shuffleDepB = new ShuffleDependency(rddB, new HashPartitioner(1))
+    val rddC = new MyRDD(sc, 1, List(shuffleDepB))
+    val shuffleDepC = new ShuffleDependency(rddC, new HashPartitioner(1))
+    val rddD = new MyRDD(sc, 1, List(shuffleDepC))
+    val narrowDepD = new OneToOneDependency(rddD)
+    val rddE = new MyRDD(sc, 1, List(shuffleDepA, narrowDepD), tracker = mapOutputTracker)
+
+    assert(scheduler.getShuffleDependencies(rddA) === Set())
+    assert(scheduler.getShuffleDependencies(rddB) === Set())
+    assert(scheduler.getShuffleDependencies(rddC) === Set(shuffleDepB))
+    assert(scheduler.getShuffleDependencies(rddD) === Set(shuffleDepC))
+    assert(scheduler.getShuffleDependencies(rddE) === Set(shuffleDepA, shuffleDepC))
   }
 
   /**

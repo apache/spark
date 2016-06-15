@@ -238,7 +238,9 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       shuffleLeft: Boolean,
       shuffleRight: Boolean): Unit = {
     withTable("bucketed_table1", "bucketed_table2") {
-      def withBucket(writer: DataFrameWriter, bucketSpec: Option[BucketSpec]): DataFrameWriter = {
+      def withBucket(
+          writer: DataFrameWriter[Row],
+          bucketSpec: Option[BucketSpec]): DataFrameWriter[Row] = {
         bucketSpec.map { spec =>
           writer.bucketBy(
             spec.numBuckets,
@@ -360,6 +362,17 @@ class BucketedReadSuite extends QueryTest with SQLTestUtils with TestHiveSinglet
       }
 
       assert(error.toString contains "Invalid bucket file")
+    }
+  }
+
+  test("disable bucketing when the output doesn't contain all bucketing columns") {
+    withTable("bucketed_table") {
+      df1.write.format("parquet").bucketBy(8, "i").saveAsTable("bucketed_table")
+
+      checkAnswer(hiveContext.table("bucketed_table").select("j"), df1.select("j"))
+
+      checkAnswer(hiveContext.table("bucketed_table").groupBy("j").agg(max("k")),
+        df1.groupBy("j").agg(max("k")))
     }
   }
 }

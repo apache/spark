@@ -42,9 +42,10 @@ private[ml] object TreeTests extends SparkFunSuite {
       data: RDD[LabeledPoint],
       categoricalFeatures: Map[Int, Int],
       numClasses: Int): DataFrame = {
-    val spark = SparkSession.builder
+    val spark = SparkSession.builder()
       .master("local[2]")
       .appName("TreeTests")
+      .sparkContext(data.sparkContext)
       .getOrCreate()
     import spark.implicits._
 

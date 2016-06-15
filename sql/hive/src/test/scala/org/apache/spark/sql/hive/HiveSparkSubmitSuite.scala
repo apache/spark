@@ -31,7 +31,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
 import org.apache.spark.internal.Logging
-import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.{QueryTest, Row, SparkSession}
 import org.apache.spark.sql.catalyst.{FunctionIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.catalog.{CatalogFunction, FunctionResource, JarResource}
 import org.apache.spark.sql.expressions.Window
@@ -282,15 +282,12 @@ object SetWarehouseLocationTest extends Logging {
     val hiveWarehouseLocation = Utils.createTempDir()
     hiveWarehouseLocation.delete()
 
-    val conf = new SparkConf()
-    conf.set("spark.ui.enabled", "false")
     // We will use the value of spark.sql.warehouse.dir override the
     // value of hive.metastore.warehouse.dir.
-    conf.set("spark.sql.warehouse.dir", warehouseLocation.toString)
-    conf.set("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
-
-    val sparkSession = SparkSession.builder
-      .config(conf)
+    val sparkSession = SparkSession.builder()
+      .config("spark.ui.enabled", "false")
+      .config("spark.sql.warehouse.dir", warehouseLocation.toString)
+      .config("hive.metastore.warehouse.dir", hiveWarehouseLocation.toString)
       .enableHiveSupport()
       .getOrCreate()
 

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.internal
 
 import org.apache.spark.sql.{QueryTest, Row, SparkSession, SQLContext}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.test.{SharedSQLContext, TestSQLContext}
 
 class SQLConfSuite extends QueryTest with SharedSQLContext {
@@ -207,4 +208,44 @@ class SQLConfSuite extends QueryTest with SharedSQLContext {
     }
   }
 
+  test("default value of WAREHOUSE_PATH") {
+    val original = spark.conf.get(SQLConf.WAREHOUSE_PATH)
+    try {
+      // to get the default value, always unset it
+      spark.conf.unset(SQLConf.WAREHOUSE_PATH.key)
+      assert(spark.sessionState.conf.warehousePath
+        === s"file:${System.getProperty("user.dir")}/spark-warehouse")
+    } finally {
+      sql(s"set ${SQLConf.WAREHOUSE_PATH}=$original")
+    }
+  }
+
+  test("MAX_CASES_BRANCHES") {
+    withTable("tab1") {
+      spark.range(10).write.saveAsTable("tab1")
+      val sql_one_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 END FROM tab1"
+      val sql_two_branch_caseWhen = "SELECT CASE WHEN id = 1 THEN 1 ELSE 0 END FROM tab1"
+
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "0") {
+        assert(!sql(sql_one_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+        assert(!sql(sql_two_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
+
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "1") {
+        assert(sql(sql_one_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+        assert(!sql(sql_two_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
+
+      withSQLConf(SQLConf.MAX_CASES_BRANCHES.key -> "2") {
+        assert(sql(sql_one_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+        assert(sql(sql_two_branch_caseWhen)
+          .queryExecution.executedPlan.isInstanceOf[WholeStageCodegenExec])
+      }
+    }
+  }
 }

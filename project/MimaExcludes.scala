@@ -775,6 +775,18 @@ object MimaExcludes {
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.AlphaComponent"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.Experimental"),
         ProblemFilters.exclude[MissingClassProblem]("org.apache.spark.annotation.DeveloperApi")
+      ) ++ Seq(
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Vector.asBreeze"),
+        ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.mllib.linalg.Matrix.asBreeze")
+      ) ++ Seq(
+        // [SPARK-15914] Binary compatibility is broken since consolidation of Dataset and DataFrame
+        // in Spark 2.0. However, source level compatibility is still maintained.
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.load"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.jsonRDD"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.jsonFile"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.jdbc"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.parquetFile"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("org.apache.spark.sql.SQLContext.applySchema")
       )
     case v if v.startsWith("1.6") =>
       Seq(
