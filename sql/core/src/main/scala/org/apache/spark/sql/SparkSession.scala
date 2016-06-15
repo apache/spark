@@ -178,13 +178,13 @@ class SparkSession private(
 
   /**
    * :: Experimental ::
-   * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[ContinuousQuery ContinuousQueries]] active on `this`.
+   * Returns a [[StreamingQueryManager]] that allows managing all the
+   * [[StreamingQuery StreamingQueries]] active on `this`.
    *
    * @since 2.0.0
    */
   @Experimental
-  def streams: ContinuousQueryManager = sessionState.continuousQueryManager
+  def streams: StreamingQueryManager = sessionState.streamingQueryManager
 
   /**
    * Start a new session with isolated SQL configurations, temporary tables, registered

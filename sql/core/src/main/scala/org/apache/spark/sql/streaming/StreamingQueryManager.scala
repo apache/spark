@@ -31,28 +31,28 @@ import org.apache.spark.util.{Clock, SystemClock, Utils}
 
 /**
  * :: Experimental ::
- * A class to manage all the [[ContinuousQuery]] active on a [[SparkSession]].
+ * A class to manage all the [[StreamingQuery]] active on a [[SparkSession]].
  *
  * @since 2.0.0
  */
 @Experimental
-class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
+class StreamingQueryManager private[sql] (sparkSession: SparkSession) {
 
   private[sql] val stateStoreCoordinator =
     StateStoreCoordinatorRef.forDriver(sparkSession.sparkContext.env)
-  private val listenerBus = new ContinuousQueryListenerBus(sparkSession.sparkContext.listenerBus)
-  private val activeQueries = new mutable.HashMap[Long, ContinuousQuery]
+  private val listenerBus = new StreamingQueryListenerBus(sparkSession.sparkContext.listenerBus)
+  private val activeQueries = new mutable.HashMap[Long, StreamingQuery]
   private val activeQueriesLock = new Object
   private val awaitTerminationLock = new Object
 
-  private var lastTerminatedQuery: ContinuousQuery = null
+  private var lastTerminatedQuery: StreamingQuery = null
 
   /**
    * Returns a list of active queries associated with this SQLContext
    *
    * @since 2.0.0
    */
-  def active: Array[ContinuousQuery] = activeQueriesLock.synchronized {
+  def active: Array[StreamingQuery] = activeQueriesLock.synchronized {
     activeQueries.values.toArray
   }
 
@@ -61,7 +61,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
    *
    * @since 2.0.0
    */
-  def get(id: Long): ContinuousQuery = activeQueriesLock.synchronized {
+  def get(id: Long): StreamingQuery = activeQueriesLock.synchronized {
     activeQueries.get(id).orNull
   }
 
@@ -81,7 +81,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws ContinuousQueryException, if any query has terminated with an exception
+   * @throws StreamingQueryException, if any query has terminated with an exception
    *
    * @since 2.0.0
    */
@@ -113,7 +113,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
    * users need to stop all of them after any of them terminates with exception, and then check the
    * `query.exception()` for each query.
    *
-   * @throws ContinuousQueryException, if any query has terminated with an exception
+   * @throws StreamingQueryException, if any query has terminated with an exception
    *
    * @since 2.0.0
    */
@@ -146,31 +146,31 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
   }
 
   /**
-   * Register a [[ContinuousQueryListener]] to receive up-calls for life cycle events of
-   * [[ContinuousQuery]].
+   * Register a [[StreamingQueryListener]] to receive up-calls for life cycle events of
+   * [[StreamingQuery]].
    *
    * @since 2.0.0
    */
-  def addListener(listener: ContinuousQueryListener): Unit = {
+  def addListener(listener: StreamingQueryListener): Unit = {
     listenerBus.addListener(listener)
   }
 
   /**
-   * Deregister a [[ContinuousQueryListener]].
+   * Deregister a [[StreamingQueryListener]].
    *
    * @since 2.0.0
    */
-  def removeListener(listener: ContinuousQueryListener): Unit = {
+  def removeListener(listener: StreamingQueryListener): Unit = {
     listenerBus.removeListener(listener)
   }
 
   /** Post a listener event */
-  private[sql] def postListenerEvent(event: ContinuousQueryListener.Event): Unit = {
+  private[sql] def postListenerEvent(event: StreamingQueryListener.Event): Unit = {
     listenerBus.post(event)
   }
 
   /**
-   * Start a [[ContinuousQuery]].
+   * Start a [[StreamingQuery]].
    * @param userSpecifiedName Query name optionally specified by the user.
    * @param userSpecifiedCheckpointLocation  Checkpoint location optionally specified by the user.
    * @param df Streaming DataFrame.
@@ -193,7 +193,7 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
       useTempCheckpointLocation: Boolean = false,
       recoverFromCheckpointLocation: Boolean = true,
       trigger: Trigger = ProcessingTime(0),
-      triggerClock: Clock = new SystemClock()): ContinuousQuery = {
+      triggerClock: Clock = new SystemClock()): StreamingQuery = {
     activeQueriesLock.synchronized {
       val id = StreamExecution.nextId
       val name = userSpecifiedName.getOrElse(s"query-$id")
@@ -264,8 +264,8 @@ class ContinuousQueryManager private[sql] (sparkSession: SparkSession) {
     }
   }
 
-  /** Notify (by the ContinuousQuery) that the query has been terminated */
-  private[sql] def notifyQueryTermination(terminatedQuery: ContinuousQuery): Unit = {
+  /** Notify (by the StreamingQuery) that the query has been terminated */
+  private[sql] def notifyQueryTermination(terminatedQuery: StreamingQuery): Unit = {
     activeQueriesLock.synchronized {
       activeQueries -= terminatedQuery.id
     }

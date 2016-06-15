@@ -34,7 +34,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.execution.command.ShowTablesCommand
 import org.apache.spark.sql.internal.{SessionState, SharedState, SQLConf}
 import org.apache.spark.sql.sources.BaseRelation
-import org.apache.spark.sql.streaming.{ContinuousQueryManager, DataStreamReader}
+import org.apache.spark.sql.streaming.{DataStreamReader, StreamingQueryManager}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ExecutionListenerManager
 
@@ -716,12 +716,12 @@ class SQLContext private[sql](val sparkSession: SparkSession)
   }
 
   /**
-   * Returns a [[ContinuousQueryManager]] that allows managing all the
-   * [[org.apache.spark.sql.streaming.ContinuousQuery ContinuousQueries]] active on `this` context.
+   * Returns a [[StreamingQueryManager]] that allows managing all the
+   * [[org.apache.spark.sql.streaming.StreamingQuery StreamingQueries]] active on `this` context.
    *
    * @since 2.0.0
    */
-  def streams: ContinuousQueryManager = sparkSession.streams
+  def streams: StreamingQueryManager = sparkSession.streams
 
   /**
    * Returns the names of tables in the current database as an array.

@@ -444,13 +444,13 @@ class SQLContext(object):
     @property
     @since(2.0)
     def streams(self):
-        """Returns a :class:`ContinuousQueryManager` that allows managing all the
-        :class:`ContinuousQuery` ContinuousQueries active on `this` context.
+        """Returns a :class:`StreamingQueryManager` that allows managing all the
+        :class:`StreamingQuery` StreamingQueries active on `this` context.
 
         .. note:: Experimental.
         """
-        from pyspark.sql.streaming import ContinuousQueryManager
-        return ContinuousQueryManager(self._ssql_ctx.streams())
+        from pyspark.sql.streaming import StreamingQueryManager
+        return StreamingQueryManager(self._ssql_ctx.streams())
 
 
 class HiveContext(SQLContext):

@@ -257,7 +257,7 @@ class DataFrame(object):
     def isStreaming(self):
         """Returns true if this :class:`Dataset` contains one or more sources that continuously
         return data as it arrives. A :class:`Dataset` that reads data from a streaming source
-        must be executed as a :class:`ContinuousQuery` using the :func:`startStream` method in
+        must be executed as a :class:`StreamingQuery` using the :func:`startStream` method in
         :class:`DataFrameWriter`.  Methods that return a single answer, (e.g., :func:`count` or
         :func:`collect`) will throw an :class:`AnalysisException` when there is a streaming
         source present.
