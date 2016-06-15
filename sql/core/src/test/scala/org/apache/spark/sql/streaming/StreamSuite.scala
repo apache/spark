@@ -89,9 +89,9 @@ class StreamSuite extends StreamTest {
     def assertDF(df: DataFrame) {
       withTempDir { outputDir =>
         withTempDir { checkpointDir =>
-          val query = df.write.format("parquet")
+          val query = df.writeStream.format("parquet")
             .option("checkpointLocation", checkpointDir.getAbsolutePath)
-            .startStream(outputDir.getAbsolutePath)
+            .start(outputDir.getAbsolutePath)
           try {
             query.processAllAvailable()
             val outputDf = spark.read.parquet(outputDir.getAbsolutePath).as[Long]
@@ -103,7 +103,7 @@ class StreamSuite extends StreamTest {
       }
     }
 
-    val df = spark.read.format(classOf[FakeDefaultSource].getName).stream()
+    val df = spark.readStream.format(classOf[FakeDefaultSource].getName).load()
     assertDF(df)
     assertDF(df)
   }

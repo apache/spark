@@ -225,12 +225,12 @@ class ContinuousQueryManagerSuite extends StreamTest with BeforeAndAfter {
             val metadataRoot =
               Utils.createTempDir(namePrefix = "streaming.checkpoint").getCanonicalPath
             query =
-              df.write
+              df.writeStream
                 .format("memory")
                 .queryName(s"query$i")
                 .option("checkpointLocation", metadataRoot)
                 .outputMode("append")
-                .startStream()
+                .start()
                 .asInstanceOf[StreamExecution]
           } catch {
             case NonFatal(e) =>
