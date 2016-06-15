@@ -36,7 +36,23 @@ private[hive] class HiveSharedState(override val sparkContext: SparkContext)
     // Set the Hive metastore warehouse path to the one we use
     val tempConf = new SQLConf
     sparkContext.conf.getAll.foreach { case (k, v) => tempConf.setConfString(k, v) }
-    sparkContext.conf.set("hive.metastore.warehouse.dir", tempConf.warehousePath)
+    val hiveWarehouseDir = hadoopConf.get("hive.metastore.warehouse.dir")
+    if (hiveWarehouseDir != null && !tempConf.contains(SQLConf.WAREHOUSE_PATH.key)) {
+      // If hive.metastore.warehouse.dir is set and spark.sql.warehouse.dir is not set,
+      // we will respect the value of hive.metastore.warehouse.dir.
+      tempConf.setConfString(SQLConf.WAREHOUSE_PATH.key, hiveWarehouseDir)
+      sparkContext.conf.set(SQLConf.WAREHOUSE_PATH.key, hiveWarehouseDir)
+      logInfo(s"${SQLConf.WAREHOUSE_PATH.key} is not set, but hive.metastore.warehouse.dir " +
+        s"is set. Setting ${SQLConf.WAREHOUSE_PATH.key} to the value of " +
+        s"hive.metastore.warehouse.dir ($hiveWarehouseDir).")
+    } else {
+      // If spark.sql.warehouse.dir is set, we will override hive.metastore.warehouse.dir using
+      // the value of spark.sql.warehouse.dir.
+      // When neither spark.sql.warehouse.dir nor hive.metastore.warehouse.dir is set,
+      // we will set hive.metastore.warehouse.dir to the default value of spark.sql.warehouse.dir.
+      sparkContext.conf.set("hive.metastore.warehouse.dir", tempConf.warehousePath)
+    }
+
     logInfo(s"Setting Hive metastore warehouse path to '${tempConf.warehousePath}'")
   }
 
