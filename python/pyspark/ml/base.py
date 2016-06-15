@@ -89,6 +89,12 @@ class Transformer(Params):
 
     @since("2.1.0")
     def transformSchema(self, schema):
+        """
+        Transform input schema to output schema.
+
+        :param schema:
+        :return: schema
+        """
         return schema
 
     @since("1.3.0")
